@@ -403,7 +403,7 @@ pub struct StringSource<C:CharType> {
 }
 impl<C:CharType> StringSource<C> {
     /// Create a new [`StringSource`] from a [`String`] and an optional source reference.
-    /// `source` is usually a filename, used to construct [`SourceReference`]s for [`Token`]s.
+    /// `source` is usually a filename, used to construct [`crate::tex::token::SourceReference`]s for [`Token`]s.
     /// The [`StringSource`] keeps track of the current line and column number.
     pub fn new(string:Vec<u8>,source:Option<Ptr<String>>) -> StringSource<C> {
         StringSource {

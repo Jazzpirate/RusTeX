@@ -41,7 +41,7 @@ pub enum Command<T:Token>{
     Gullet{name:&'static str,index:usize},
     /// A character; the result of e.g. `\let\foo=a`
     Char{char:T::Char,catcode:CategoryCode},
-    /// A command producing a [`Whatsit`], executed during shipout or `\immediate`ly
+    /// A command producing a [`crate::tex::boxes::Whatsit`], executed during shipout or `\immediate`ly
     Whatsit {name:&'static str,index:usize},
     /// `\relax`
     Relax

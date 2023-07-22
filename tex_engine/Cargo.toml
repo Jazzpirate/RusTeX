@@ -2,6 +2,13 @@
 name = "tex_engine"
 version = "0.0.1"
 edition = "2021"
+authors = ["Dennis Müller <d.mueller@kwarc.info>"]
+description = "A modular crate for building TeX engines"
+readme = "README.md"
+repository = "https://github.com/Jazzpirate/RusTeX/tree/main/rust_engine"
+license = "GPL-3.0-or-later"
+keywords = ["tex", "latex","rustex"]
+categories = ["compilers","data-structures"]
 
 [lib]
 crate-type = ["lib"]
