@@ -9,7 +9,7 @@ repository = "https://github.com/Jazzpirate/RusTeX/tree/main/tex_engine"
 license = "GPL-3.0-or-later"
 keywords = ["tex", "latex","rustex"]
 categories = ["compilers","data-structures"]
-exclude = [".idea/*","build.rs","resources/*"]
+exclude = [".idea/*","build.rs","resources/*","target/*"]
 
 [lib]
 crate-type = ["lib"]
