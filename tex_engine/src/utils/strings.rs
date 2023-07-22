@@ -1,0 +1,404 @@
+/*!
+Plain TeX parses source files as a sequence of [`u8`]s, but other engines might use bigger types, e.g. XeTeX.
+
+The [`CharType`] trait allows us to abstract over the character type, and the trait [`TeXStr`]`<Char:`[`CharType`]`>`
+abstracts over the string type.
+*/
+
+use std::convert::Into;
+use std::fmt::{Display, Formatter, Debug};
+use std::hash::Hash;
+use std::marker::PhantomData;
+use std::vec::IntoIter;
+use crate::tex::catcodes::{CategoryCodeScheme, STARTING_SCHEME_U8};
+use crate::utils::Ptr;
+
+
+
+/**
+Plain TeX parses source files as a sequence of [`u8`]s, but other engines might use bigger types, e.g. XeTeX.
+This trait allows us to abstract over the character type, by providing the relevant data needed to treat them
+(essentially) like [`u8`]s.
+ */
+pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default {
+    /// The type of the array/vec/whatever of all possible characters. For [`u8`], this is `[A;256]`.
+    type Allchars<A:Default> : AllCharsTrait<Self,A>;
+
+    /// The maximum value of the character type. For [`u8`], this is `255`.
+    const MAX:Self;
+
+    /// Parses a character from a byte iterator. For [`u8`], this is just `iter.next()`.
+    fn from_u8_iter(iter:&mut IntoIter<u8>) -> Option<Self>;
+    /// Convert a `&`[`str`] into a [`TeXStr`]`<Self>`.
+    fn from_str(s:&str) -> TeXStr<Self>;
+
+    /** Whether the character is an end-of-line character.
+     *
+     * Should return:
+     * - `Some(true)`: is end of line (e.g. `\n`).
+     * - `Some(false)`: is not end of line.
+     * - `None`: might be, depending on the next character - e.g. `\r`, in which case the next
+     *    character should be checked to be `\n`.
+     */
+    fn is_eol(self) -> Option<bool>;
+
+    /** Should return:
+     * - `true`: if the pair (`self`,`next`) represents an end of line (e.g. `\r\n`).
+     * - `false`: if not; in which case `self` itself is considered to be an end of line (e.g. `\r`).
+     */
+    fn is_eol_pair(self,next:Self) -> bool;
+
+    /// The string "par" as a [`TeXStr`]`<Self>`.
+    fn par_token() -> TeXStr<Self>;
+
+    /// The string "relax" as a [`TeXStr`]`<Self>`.
+    fn relax_token() -> TeXStr<Self>;
+
+    /// The empty string as a [`TeXStr`]`<Self>`.
+    fn empty_str() -> TeXStr<Self>;
+
+    /// The starting category code scheme for this character type, see [`struct@STARTING_SCHEME_U8`].
+    fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
+
+    fn newline() -> Self;
+    fn carriage_return() -> Self;
+    fn backslash() -> Self;
+    fn zeros() -> Self::Allchars<Self>;
+    fn ident() -> Self::Allchars<Self>;
+    fn rep_field<A:Clone+Default>(a:A) -> Self::Allchars<A>;
+
+    /// How to display a [`TeXStr`]`<Self>`.
+    fn display_str(str:&TeXStr<Self>, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for u in &*str.0 { write!(f,"{}",u.char_str())?; }
+        Ok(())
+    }
+    fn char_str(&self) -> String;
+    fn as_bytes(&self) -> Vec<u8>;
+
+    fn from_i64(i:i64) -> Option<Self>;
+    fn to_usize(self) -> usize;
+}
+
+thread_local! {
+    /// "par" as a [`TeXStr`]`<u8>`.
+    pub static PAR_U8: TeXStr<u8> = "par".into();
+    /// "relax" as a [`TeXStr`]`<u8>`.
+    pub static RELAX_U8: TeXStr<u8> = "relax".into();
+    /// The empty string as a [`TeXStr`]`<u8>`.
+    pub static EMPTY_U8: TeXStr<u8> = "".into();
+}
+
+impl CharType for u8 {
+    type Allchars<A:Default> = [A;256];
+    const MAX:Self=255;
+    fn from_u8_iter(iter: &mut IntoIter<u8>) -> Option<Self> { iter.next() }
+    fn newline() -> Self { b'\n' }
+    fn carriage_return() -> Self {b'\r'}
+    fn backslash() -> Self { b'\\' }
+    // #[inline(always)]
+    fn is_eol(self) -> Option<bool> {
+        match self {
+            b'\n' => Some(true),
+            b'\r' => None,
+            _ => Some(false)
+        }
+    }
+    fn from_str(s: &str) -> TeXStr<Self> {
+        TeXStr(Ptr::new(s.as_bytes().to_vec()))
+    }
+    // #[inline(always)]
+    fn is_eol_pair(self, next: Self) -> bool {
+        // invariant: self == \r
+        next == b'\n'
+    }
+    fn par_token() -> TeXStr<Self> { PAR_U8.with(|p| p.clone()) }
+    fn relax_token() -> TeXStr<Self> { RELAX_U8.with(|p| p.clone()) }
+    fn empty_str() -> TeXStr<Self> {EMPTY_U8.with(|p| p.clone()) }
+    // #[inline(always)]
+    fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
+        STARTING_SCHEME_U8.clone()
+    }
+    fn as_bytes(&self) -> Vec<u8> { vec![*self] }
+
+    // #[inline(always)]
+    fn char_str(&self) -> String {
+        match *self {
+            0 => "\\u0000".to_string(),
+            b'\n' => "\\n".to_string(),
+            b'\r' => "\\r".to_string(),
+            o if is_ascii(o) => (o as char).to_string(), //f.write_char((o).into()),
+            o => format!("\\u00{:X}",o)
+        }
+    }
+    fn zeros() -> Self::Allchars<Self> {
+        [0;256]
+    }
+    fn ident() -> Self::Allchars<Self> {
+        let mut a = [0;256];
+        for i in 0..256 { a[i] = i as u8; }
+        a
+    }
+    fn rep_field<A: Clone+Default>(a: A) -> Self::Allchars<A> {
+        [ // UTTERLY RIDICULOUS
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
+            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone()
+        ]
+    }
+
+    fn from_i64(i: i64) -> Option<Self> {
+        if i == -1 {Some(255)} else if i < 0 || i > 255 { None } else { Some(i as u8) }
+    }
+    fn to_usize(self) -> usize { self as usize }
+}
+
+/** A trait for arrays of all possible characters. For [`u8`], this is `[A;256]`.
+*/
+pub trait AllCharsTrait<C:CharType,A> {
+    /// Returns the value for character `u`.
+    fn get(&self, u: C) -> &A;
+    /// Sets the value for character `u` to `v`.
+    fn set(&mut self, u: C, v:A);
+    /// Replaces the value for character `u` with `v`, returning the old value.
+    fn replace(&mut self, u: C, v:A) -> A;
+}
+impl<A> AllCharsTrait<u8,A> for [A;256] {
+    //#[inline(always)]
+    fn get(&self, u:u8) -> &A { &self[u as usize] }
+   // #[inline(always)]
+    fn set(&mut self, u:u8,v:A) { self[u as usize] = v }
+    // #[inline(always)]
+    fn replace(&mut self, u: u8, v: A) -> A {
+        std::mem::replace(&mut self[u as usize], v)
+    }
+}
+
+/** A "string" in TeX is a sequence of characters of some [`CharType`]. [`TeXStr`]
+* abstracts away the character type, e.g. for control sequence names.
+*/
+#[derive(Clone,PartialEq,Hash,Eq)]
+pub struct TeXStr<C:CharType>(Ptr<Vec<C>>);
+impl<C:CharType> TeXStr<C> {
+    pub fn len(&self) -> usize { self.0.len() }
+    pub fn as_vec(&self) -> &Vec<C> { &self.0 }
+}
+
+//#[inline(always)]
+fn is_ascii(u:u8) -> bool { 32 <= u && u <= 126 }
+
+impl<C:CharType> Display for TeXStr<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        C::display_str(self, f)
+    }
+}
+impl From<&str> for TeXStr<u8> {
+    fn from(s: &str) -> Self {
+        TeXStr(Ptr::new(s.as_bytes().to_vec()))
+    }
+}
+impl From<String> for TeXStr<u8> {
+    fn from(s: String) -> Self {
+        TeXStr(Ptr::new(s.into_bytes()))
+    }
+}
+impl<C:CharType> From<Vec<C>> for TeXStr<C> {
+    fn from(v: Vec<C>) -> Self {
+        TeXStr(Ptr::new(v))
+    }
+}
+
+
+
+impl CharType for char {
+    const MAX: Self = 255 as char;
+    type Allchars<A: Default> = AllUnicodeChars<A>; // TODO
+    fn from_i64(i: i64) -> Option<Self> { if i > 0 && i < 0x110000 { Some(char::from_u32(i as u32).unwrap()) } else { None } }
+    fn to_usize(self) -> usize { self as usize }
+    fn from_str(s: &str) -> TeXStr<Self> {
+        TeXStr(Ptr::new(s.chars().collect()))
+    }
+    fn display_str(str: &TeXStr<Self>, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let str : String = str.0.iter().collect();
+        write!(f,"{}",str)
+    }
+
+    fn backslash() -> Self { '\\' }
+    fn carriage_return() -> Self { '\r' }
+    fn newline() -> Self { '\n' }
+    fn char_str(&self) -> String { self.to_string() }
+    fn is_eol(self) -> Option<bool> {
+        match self {
+            '\n' => Some(true),
+            '\r' => None,
+            _ => Some(false)
+        }
+    }
+    fn is_eol_pair(self, next: Self) -> bool {
+        next == '\n' // self == '\r'
+    }
+    fn as_bytes(&self) -> Vec<u8> {
+        self.to_string().as_bytes().into_iter().map(|u| *u).collect()
+    }
+
+    fn ident() -> Self::Allchars<Self> {
+        todo!()
+    }
+    fn empty_str() -> TeXStr<Self> {
+        todo!()
+    }
+    fn par_token() -> TeXStr<Self> {
+        todo!()
+    }
+    fn relax_token() -> TeXStr<Self> {
+        todo!()
+    }
+    fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
+        todo!()
+    }
+    fn from_u8_iter(iter: &mut IntoIter<u8>) -> Option<Self> {
+        todo!()
+    }
+    fn rep_field<A: Clone + Default>(a: A) -> Self::Allchars<A> {
+        todo!()
+    }
+    fn zeros() -> Self::Allchars<Self> {
+        todo!()
+    }
+}
+
+pub struct AllUnicodeChars<A:Default>(PhantomData<A>);
+impl<A:Default> AllCharsTrait<char,A> for AllUnicodeChars<A> {
+    fn get(&self, u: char) -> &A {
+        todo!()
+    }
+
+    fn set(&mut self, u: char, v: A) {
+        todo!()
+    }
+
+    fn replace(&mut self, u: char, v: A) -> A {
+        todo!()
+    }
+}
+
+/*
+impl CharType for char {
+
+}
+
+#[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
+pub struct Unicode(char);
+
+impl Default for Unicode {
+    fn default() -> Self {
+        Self(0 as char)
+    }
+}
+impl Display for Unicode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.0)
+    }
+}
+
+impl Into<usize> for Unicode {
+    fn into(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<u8> for Unicode {
+    fn from(value: u8) -> Self {
+        Self(char::from_u32(value as u32).unwrap())
+    }
+}
+
+impl TryFrom<i64> for Unicode {
+    type Error = ();
+
+    fn try_from(val: i64) -> Result<Self, Self::Error> {
+        if val > 0 && val < 0x10FFFF && (val <= 0xD800 || val > 0xDFFF) {
+            Ok(Self(char::from_u32(val as u32).unwrap()))
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl Into<i64> for Unicode {
+    fn into(self) -> i64 {
+        self.0 as i64
+    }
+}
+
+impl CharType for Unicode {
+    type Allchars<A:Default> = Vec<A>;
+    const MAX:Unicode = Unicode(-1 as char);
+    fn display_str(str: &TeXStr<Self>, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let str : String = str.0.iter().map(|c| c.0).collect();
+        write!(f,"{}",str)
+    }
+    fn from_str(s: &str) -> TeXStr<Self> {
+        TeXStr(Ptr::new(s.chars().map(|c| Unicode(c)).collect()))
+    }
+    fn backslash() -> Self { Unicode('\\') }
+    fn carriage_return() -> Self { Unicode('\r') }
+    fn char_str(&self) -> String { self.0.to_string() }
+    fn is_eol(self) -> Option<bool> {
+        match self.0 {
+            '\r' => None,
+            '\n' => Some(true),
+            _ => Some(false)
+        }
+    }
+    fn is_eol_pair(self, next: Self) -> bool {
+        self.0 == '\r' && next.0 == '\n'
+    }
+    fn par_token() -> TeXStr<Self> {
+        todo!()//TeXStr(Ptr::new(vec![Unicode('p'),Unicode('a'),Unicode('r')]))
+    }
+    fn relax_token() -> TeXStr<Self> {
+        todo!()//TeXStr(Ptr::new(vec![Unicode('r'),Unicode('e'),Unicode('l'),Unicode('a'),Unicode('x')]))
+    }
+    fn empty_str() -> TeXStr<Self> {
+        todo!()//TeXStr(Ptr::new(vec![]))
+    }
+    fn ident() -> Self::Allchars<Self> {
+        todo!()
+    }
+
+}
+impl<A:Default> AllCharsTrait<Unicode,A> for Vec<A> {
+    fn get(&self, u: Unicode) -> &A { &self[u.0 as usize] }
+    fn set(&mut self, u: Unicode, v:A) { self[u.0 as usize] = v }
+    fn replace(&mut self, u: Unicode, v:A) -> A { std::mem::replace(&mut self[u.0 as usize],v) }
+}
+ */

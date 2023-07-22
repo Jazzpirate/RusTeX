@@ -1,0 +1,29 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+\usepackage{multicol}
+
+\countdef\fontcounter240
+
+\def\testfont#1{
+	\font\testfontfont=#1\relax
+	\font\originalfont=\fontname\font\relax
+	\fontcounter=0
+	\begin{multicols}{3}
+	\halign{##\hskip1cm\relax &\texttt{>>}##\texttt{<<}\cr%
+		\testfontloop%
+	}
+	\end{multicols}
+}
+
+\def\testfontloop{%
+  \the\fontcounter &\testfontfont\char\fontcounter\originalfont%
+  \global\advance\fontcounter1\relax\expandafter\cr%
+  \ifnum\fontcounter>255\else\expandafter\testfontloop\fi\crcr
+}
+
+\begin{document}
+    \section{%%FONTNAME%%}
+	\testfont{%%FONTNAME%%}
+\end{document}

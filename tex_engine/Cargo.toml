@@ -1,0 +1,38 @@
+[package]
+name = "tex_engine"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+crate-type = ["lib"]
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 2
+lto = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+#[build-dependencies]
+#bindgen = "0.59"
+#pkg-config = "0.3"
+
+[dev-dependencies]
+env_logger = "0.10.0"
+
+[dependencies]
+paste="1.0.13"
+lazy_static = "1.4.0"
+ansi_term = "0.12.1"
+backtrace = "0.3.68"
+chrono = "0.4.23"
+log={version="0.4.19",features=["kv_unstable"]}
+ahash = "0.8.3" # compare with FxHash at some point
+include_dir = "0.7.3"
+#regex = "1.7.1"
+#md5 = "0.7.0"
+#image = "0.24.5"
+#base64 =  "0.21.0"
+#clap = { version = "4.1.4", features = ["derive"] }
+#pdfium-render = "0.8.1" #, features = ["static"] }
+# serde = { version = "1.0.152", features = ["derive"] }

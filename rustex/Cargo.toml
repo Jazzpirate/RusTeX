@@ -1,0 +1,22 @@
+[package]
+name = "RusTeX"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+crate-type = ["lib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "RusTeX"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 2
+lto = true
+
+
+[dependencies]
+tex_engine = { path = "../tex_engine" }
+env_logger = "0.10.0"
+log={version="0.4.19",features=["kv_unstable"]}
