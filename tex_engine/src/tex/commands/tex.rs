@@ -206,7 +206,6 @@ afterassignment
 aftergroup
 uppercase
 lowercase
-message
 special
 penalty
 kern
@@ -387,7 +386,6 @@ mathord
 mathpunct
 mathrel
 medskip
-message
 mkern
 moveleft
 moveright
@@ -1443,6 +1441,15 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
     }
 }
 
+pub fn message<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(debug=>"message");
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("message",cmd));
+    let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("message",cmd));
+    let msg = tokens_to_string(ret,state.get_escapechar());
+    (state.outputs().message)(&msg);
+    Ok(())
+}
+
 pub fn month<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(
         state.get_start_time().month() as i64
@@ -1805,6 +1812,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_(s,gu,cmd,global));
     register_int_assign!(mag,state,stomach,gullet);
     register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning(s,g,c));
+    register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message(s,gu,cmd));
     register_int!(month,state,stomach,gullet,(s,g,c) => month(s,g,c));
     register_assign!(multiply,state,stomach,gullet,(s,gu,_,cmd,global) =>multiply(s,gu,cmd,global));
     register_value_assign_int!(newlinechar,state,stomach,gullet);
