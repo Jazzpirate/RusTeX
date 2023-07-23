@@ -53,6 +53,9 @@ pub trait Mouth<T:Token>:Sized+'static {
     /// Insert a [`File`] into the [`Mouth`], to be processed next
     fn push_file<F:File<T::Char>>(&mut self,file:&F);
 
+    /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
+    fn push_noexpand(&mut self,tk:T);
+
     /// Insert a single [`Token`] into the [`Mouth`], to be processed next
     /// (for implementations with a peek buffer)
     fn requeue(&mut self,tk:T);
@@ -170,12 +173,28 @@ impl<T:Token> Mouth<T> for NoTracingMouth<T> {
         NoTracingMouth { sources:Vec::new(),buffer:None}
     }
     //#[inline(always)]
-    fn push_tokens(&mut self,tks:Vec<T>) {
+    fn push_tokens(&mut self,mut tks:Vec<T>) {
+        match self.buffer.take() {
+            Some(tk2) => tks.push(tk2),
+            None => ()
+        }
         self.sources.push(TeXMouthSource::Token(TokenSource::new(tks)))
+    }
+
+    fn push_noexpand(&mut self, tk: T) {
+        match self.buffer.take() {
+            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
+            None => ()
+        }
+        self.sources.push(TeXMouthSource::NoExpand(tk))
     }
 
     fn push_file<F: File<T::Char>>(&mut self, file: &F) {
         debug!("Pushing file {:?}", file.path());
+        match self.buffer.take() {
+            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
+            None => ()
+        }
         self.sources.push(TeXMouthSource::String(StringSource::new(
             file.content_string().clone(),
             Some(Ptr::new(file.path().to_str().unwrap().to_string()))
@@ -223,8 +242,20 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
         self.sources.push(TeXMouthSource::Token(TokenSource::new(tks)))
     }
 
+    fn push_noexpand(&mut self, tk: TokenWithSourceref<Char>) {
+        match self.buffer.take() {
+            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
+            None => ()
+        }
+        self.sources.push(TeXMouthSource::NoExpand(tk))
+    }
+
     fn push_file<F: File<Char>>(&mut self, file: &F) {
         debug!("Pushing file {:?}", file.path());
+        match self.buffer.take() {
+            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
+            None => ()
+        }
         self.sources.push(TeXMouthSource::String(StringSource::new(
             file.content_string(),
             Some(Ptr::new(file.path().to_str().unwrap().to_string()))

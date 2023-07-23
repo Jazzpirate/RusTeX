@@ -4,13 +4,13 @@ use std::marker::PhantomData;
 use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{tokens_to_string,do_expandable,do_conditional};
+use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::GroupType;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, StomachCommand, StomachCommandInner};
+use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, NumSet};
 use crate::tex::token::{BaseToken, Token};
@@ -334,7 +334,6 @@ endcsname
 endinput
 eqno
 errorstopmode
-expandafter
 firstmark
 font
 fontdimen
@@ -387,7 +386,6 @@ mathopen
 mathord
 mathpunct
 mathrel
-meaning
 medskip
 message
 mkern
@@ -398,7 +396,6 @@ muskip
 muskipdef
 noboundary
 noalign
-noexpand
 noindent
 nolimits
 nonscript
@@ -963,17 +960,56 @@ pub fn escapechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gulle
     state.set_escapechar(c,global);
     Ok(())
 }
-pub fn escapechar_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn escapechar_get<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<<Gu::S as State<T>>::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     debug_log!(trace=>"Getting \\escapechar");
     let c = match state.get_escapechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\escapechar == {}",c);
-    Ok(<S::NumSet as NumSet>::Int::from_i64::<T>(c).unwrap())
+    Ok(<<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64::<T>(c).unwrap())
 }
 
-pub fn fi<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_state:&mut S,gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn expandafter<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"expandafter");
+    let (first,exp) = match catch_prim!(gullet.mouth().get_next(state) => ("expandafter",cmd)){
+        None => file_end_prim!("expandafter",cmd),
+        Some((t,b)) => (t,b)
+    };
+    match catch_prim!(gullet.mouth().get_next(state) => ("expandafter",cmd)){
+        None => file_end_prim!("expandafter",cmd),
+        Some((t,false)) => {
+            gullet.mouth().push_noexpand(t);
+        }
+        Some((t,_)) => {
+            if let Some(ncmd) = match t.base() {
+                BaseToken::CS(n) => Some(catch_prim!(state.need_command(&n) => ("expandafter",cmd))),
+                BaseToken::Char(c, CategoryCode::Active) =>
+                    Some(catch_prim!(state.need_ac_command(*c) => ("expandafter",cmd))),
+                _ => {
+                    gullet.mouth().requeue(t.clone());
+                    None
+                }
+            } {
+                match &*ncmd {
+                    Command::Conditional{name,index} =>
+                        catch_prim!(crate::engine::gullet::methods::do_conditional(gullet,state,t,name,*index) => ("expandafter",cmd)),
+                    Command::Gullet {name,index} =>
+                        catch_prim!(crate::engine::gullet::methods::do_expandable(gullet,state,t,name,*index) => ("expandafter",cmd)),
+                    _ => gullet.mouth().requeue(t)
+                }
+            }
+        }
+    };
+    if exp {
+        gullet.mouth().requeue(first);
+    } else {
+        gullet.mouth().push_noexpand(first);
+    }
+    Ok(vec!())
+}
+
+pub fn fi<T:Token,Gu:Gullet<T>>(_state:&mut Gu::S,gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"...end of conditional.");
     gullet.pop_conditional();
     Ok(vec![])
@@ -1202,6 +1238,211 @@ pub fn long<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&
 
 // \mag           : Int
 
+pub fn meaning<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"meaning");
+    match catch_prim!(gullet.mouth().get_next(state) => ("meaning",cmd)) {
+        None => file_end_prim!("meaning",cmd),
+        Some((_,false)) => {
+            match state.get_escapechar() {
+                None => Ok(string_to_tokens("relax".as_bytes())),
+                Some(c) => {
+                    let mut string = vec!();
+                    for u in c.as_bytes() {string.push(u)}
+                    for u in "relax".as_bytes() {string.push(*u)}
+                    Ok(string_to_tokens(&string))
+                }
+            }
+        }
+        Some((t,_)) => match t.base() {
+            BaseToken::CS(name) => Ok(meaning_cmd(state.get_command(name),state.get_escapechar())),
+            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd(state.get_ac_command(*c),state.get_escapechar())),
+            BaseToken::Char(c,cc) => Ok(meaning_char(*c,*cc)),
+        }
+    }
+}
+
+pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
+    match cc {
+        CategoryCode::BeginGroup => string_to_tokens(&format!("begin-group character {}",c.char_str()).as_bytes()),
+        CategoryCode::EndGroup => string_to_tokens(&format!("end-group character {}",c.char_str()).as_bytes()),
+        CategoryCode::MathShift => string_to_tokens(&format!("math shift character {}",c.char_str()).as_bytes()),
+        CategoryCode::AlignmentTab => string_to_tokens(&format!("alignment tab character {}",c.char_str()).as_bytes()),
+        CategoryCode::Parameter => string_to_tokens(&format!("macro parameter character {}",c.char_str()).as_bytes()),
+        CategoryCode::Superscript => string_to_tokens(&format!("superscript character {}",c.char_str()).as_bytes()),
+        CategoryCode::Subscript => string_to_tokens(&format!("subscript character {}",c.char_str()).as_bytes()),
+        CategoryCode::Space => string_to_tokens(&format!("blank space {}",c.char_str()).as_bytes()),
+        CategoryCode::Letter => string_to_tokens(&format!("the letter {}",c.char_str()).as_bytes()),
+        _ => string_to_tokens(&format!("the character {}",c).as_bytes()),
+    }
+}
+
+pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Char>) -> Vec<T> {
+    match cmd {
+        None => string_to_tokens("undefined".as_bytes()),
+        Some(cmd) => {
+            match &*cmd {
+                Command::Def(d) => {
+                    let esc = match escapechar {
+                        None => vec!(),
+                        Some(c) => c.as_bytes()
+                    };
+                    let mut ret = vec!();
+                    if d.protected {
+                        ret.extend(esc.clone());
+                        ret.extend("protected ".as_bytes());
+                    }
+                    if d.long {
+                        ret.extend(esc.clone());
+                        ret.extend("long ".as_bytes());
+                    }
+                    if d.outer {
+                        ret.extend(esc.clone());
+                        ret.extend("outer ".as_bytes());
+                    }
+                    ret.extend("macro:".as_bytes());
+                    let mut i = 0;
+                    for s in &d.signature {
+                        match s {
+                            ParamToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar).as_bytes()),
+                            ParamToken::Param => {
+                                i += 1;
+                                ret.extend(format!("#{}",i).as_bytes());
+                            }
+                        }
+                    }
+                    if d.endswithbrace { ret.push(b'#'); }
+                    ret.push(b'-'); ret.push(b'>');
+                    for t in &d.replacement {
+                        match t {
+                            ExpToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar).as_bytes()),
+                            ExpToken::ParamToken(t) => ret.extend(tokens_to_string(vec!(t.clone(),t.clone()),escapechar).as_bytes()),
+                            ExpToken::Param(t,i) => {
+                                ret.extend(tokens_to_string(vec!(t.clone()),escapechar).as_bytes());
+                                ret.extend(i.to_string().as_bytes());
+                            }
+                        }
+                    }
+                    debug_log!(debug=>"meaning_cmd: {}",std::str::from_utf8(&ret).unwrap());
+                    string_to_tokens(&ret)
+                }
+                Command::Stomach {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::AssignableValue {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::Value {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::ValueRegister {tp:Assignable::Int,index} => {
+                    let mut string = vec!();
+                    match escapechar {
+                        None => (),
+                        Some(c) => {
+                            for u in c.as_bytes() {string.push(u)}
+                        }
+                    }
+                    for u in "count".as_bytes() {string.push(*u)}
+                    for u in index.to_string().as_bytes() {string.push(*u)}
+                    string_to_tokens(&string)
+                }
+                Command::ValueRegister {..} => todo!("meaning_cmd: ValueRegister"),
+                Command::ValueAssignment {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::Assignment {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::Relax => {
+                    match escapechar {
+                        None => string_to_tokens("relax".as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in "relax".as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::Conditional {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::Gullet {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::Char {char,catcode} => meaning_char(*char,*catcode),
+                Command::Whatsit {name,..} => {
+                    match escapechar {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn month<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(
         state.get_start_time().month() as i64
@@ -1237,6 +1478,45 @@ pub fn newlinechar_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:
     };
     debug_log!(debug=>"\\newlinechar == {}",c);
     Ok(<S::NumSet as NumSet>::Int::from_i64::<T>(c).unwrap())
+}
+
+// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
+// in the first place
+pub fn noexpand<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"\\noexpand");
+    match catch_prim!(gullet.mouth().get_next(state) => ("noexpand",cmd)) {
+        None => file_end_prim!("noexpand",cmd),
+        Some((t,_)) => match t.base() {
+            BaseToken::Char(c,CategoryCode::Active) => {
+                match state.get_ac_command(*c) {
+                    None => gullet.mouth().requeue(t),
+                    Some(ac) => {
+                        match &*ac {
+                            Command::Def(_) => gullet.mouth().push_noexpand(t),
+                            Command::Gullet {..} => gullet.mouth().push_noexpand(t),
+                            Command::Conditional {..} => gullet.mouth().push_noexpand(t),
+                            _ => gullet.mouth().requeue(t)
+                        }
+                    }
+                }
+            }
+            BaseToken::CS(name) => {
+                match state.get_command(name) {
+                    None => gullet.mouth().requeue(t),
+                    Some(ac) => {
+                        match &*ac {
+                            Command::Def(_) => gullet.mouth().push_noexpand(t),
+                            Command::Gullet {..} => gullet.mouth().push_noexpand(t),
+                            Command::Conditional {..} => gullet.mouth().push_noexpand(t),
+                            _ => gullet.mouth().requeue(t)
+                        }
+                    }
+                }
+            }
+            _ => gullet.mouth().requeue(t)
+        }
+    }
+    Ok(vec!())
 }
 
 pub fn number<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
@@ -1354,7 +1634,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                 let val = state.get_int_register(i);
                 let str = format!("{}",val);
                 debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<T>(&str);
+                let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
                 Ok(ret)
             }
             StomachCommandInner::ValueRegister(_,_) => todo!(),
@@ -1368,7 +1648,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str);
+                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -1382,7 +1662,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str);
+                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -1490,6 +1770,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     })),true);
 
     register_value_assign_int!(escapechar,state,stomach,gullet);
+    register_gullet!(expandafter,state,stomach,gullet,(s,g,c) => expandafter(s,g,c));
     register_gullet!(fi,state,stomach,gullet,(s,gu,cmd) =>fi(s,gu,cmd));
     register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef(s,gu,cmd,global,false,false,false));
     register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global(sto,s,gu,cmd,g,false,false,false));
@@ -1523,9 +1804,11 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long(sto,s,gu,cmd,g,false,false,false));
     register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_(s,gu,cmd,global));
     register_int_assign!(mag,state,stomach,gullet);
+    register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning(s,g,c));
     register_int!(month,state,stomach,gullet,(s,g,c) => month(s,g,c));
     register_assign!(multiply,state,stomach,gullet,(s,gu,_,cmd,global) =>multiply(s,gu,cmd,global));
     register_value_assign_int!(newlinechar,state,stomach,gullet);
+    register_gullet!(noexpand,state,stomach,gullet,(s,g,c) => noexpand(s,g,c));
     register_gullet!(number,state,stomach,gullet,(s,g,c) => number(s,g,c));
     register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin(s,gu,sto,cmd));
     register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout(s,gu,sto,cmd));

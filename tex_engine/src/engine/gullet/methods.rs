@@ -761,9 +761,9 @@ pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>) -> String 
     String::from_utf8(s).unwrap()
 }
 
-pub fn string_to_tokens<T:Token>(str:&str) -> Vec<T> {
+pub fn string_to_tokens<T:Token>(str:&[u8]) -> Vec<T> {
     let mut ret = vec!();
-    for u in str.as_bytes() {
+    for u in str {
         let c = T::Char::from(*u);
         ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None));
     }
