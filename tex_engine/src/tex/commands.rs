@@ -72,7 +72,9 @@ impl<T:Token> PartialEq for Command<T> {
 
 #[derive(Copy,Clone,Debug,PartialEq)]
 pub enum Assignable {
-    Int,Dim,Glue,MuGlue,Font,Toks
+    Int,Dim,
+    Skip,
+    MuSkip,Font,Toks
 }
 
 impl<T:Token> Debug for Command<T> {

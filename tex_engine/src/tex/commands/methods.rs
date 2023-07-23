@@ -194,6 +194,42 @@ macro_rules! register_value_assign_int {
     }};
 }
 
+#[macro_export]
+macro_rules! register_value_assign_dim {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+            name:stringify!($name),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_dim(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            tp:Assignable::Dim
+        })),true);
+    }};
+}
+
+#[macro_export]
+macro_rules! register_value_assign_skip {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+            name:stringify!($name),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_skip(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            tp:Assignable::Skip
+        })),true);
+    }};
+}
+
+#[macro_export]
+macro_rules! register_value_assign_muskip {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+            name:stringify!($name),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_muskip(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            tp:Assignable::MuSkip
+        })),true);
+    }};
+}
+
 pub fn assign_primitive_int<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str, global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning {}",name);
     catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));

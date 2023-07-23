@@ -52,6 +52,16 @@ pub trait Gullet<T:Token>:Sized+'static {
         methods::get_dim(self, state)
     }
 
+    /// Reads a skip from the input stream.
+    fn get_skip(&mut self, state:&mut Self::S) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,Box<dyn TeXError<T>>> {
+        methods::get_skip(self, state)
+    }
+
+    /// Reads a muskip from the input stream.
+    fn get_muskip(&mut self, state:&mut Self::S) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip,Box<dyn TeXError<T>>> {
+        methods::get_muskip(self, state)
+    }
+
     fn get_expanded_group(&mut self, state:&mut Self::S, expand_protected:bool, keep_the:bool, err_on_unknowns:bool) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
         methods::get_expanded_group(self, state, expand_protected, keep_the, err_on_unknowns)
     }
@@ -97,9 +107,18 @@ pub trait Gullet<T:Token>:Sized+'static {
     fn primitive_dim(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim,ErrorInPrimitive<T>>>;
     fn primitive_dim_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim,ErrorInPrimitive<T>>>;
 
+    fn register_primitive_skip(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>) -> usize;
+    fn primitive_skip(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>>;
+    fn primitive_skip_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>>;
+
+    fn register_primitive_muskip(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>) -> usize;
+    fn primitive_muskip(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>>;
+    fn primitive_muskip_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>>;
+
     fn register_primitive_toks(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>) -> usize;
     fn primitive_toks(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>;
     fn primitive_toks_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>;
+
 }
 
 pub struct TeXGullet<T:Token,M:Mouth<T>,S:State<T>> {
@@ -109,6 +128,8 @@ pub struct TeXGullet<T:Token,M:Mouth<T>,S:State<T>> {
     primitives:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>,
     ints:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Int,ErrorInPrimitive<T>>>,
     dims:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Dim,ErrorInPrimitive<T>>>,
+    skips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>>,
+    muskips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>>,
     toks:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>,
     phantom_char:std::marker::PhantomData<T>,
     phantom_state:std::marker::PhantomData<S>
@@ -121,6 +142,8 @@ impl<T:Token,M:Mouth<T>,S:State<T>> TeXGullet<T,M,S> {
             primitives:Map::default(),
             ints:Map::default(),
             dims:Map::default(),
+            skips:Map::default(),
+            muskips:Map::default(),
             toks:Map::default(),
             phantom_char:std::marker::PhantomData,
             phantom_state:std::marker::PhantomData
@@ -151,6 +174,12 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     fn register_primitive_dim(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim, ErrorInPrimitive<T>>) -> usize {
         self.dims.insert(name,cmd)
     }
+    fn register_primitive_skip(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip, ErrorInPrimitive<T>>) -> usize {
+        self.skips.insert(name,cmd)
+    }
+    fn register_primitive_muskip(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip, ErrorInPrimitive<T>>) -> usize {
+        self.muskips.insert(name,cmd)
+    }
     fn register_primitive_toks(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Vec<T>, ErrorInPrimitive<T>>) -> usize {
         self.toks.insert(name,cmd)
     }
@@ -177,6 +206,18 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     }
     fn primitive_dim_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim, ErrorInPrimitive<T>>> {
         self.dims.get_from_name(name).copied()
+    }
+    fn primitive_skip(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip, ErrorInPrimitive<T>>> {
+        self.skips.get(idx).copied()
+    }
+    fn primitive_skip_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip, ErrorInPrimitive<T>>> {
+        self.skips.get_from_name(name).copied()
+    }
+    fn primitive_muskip(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip, ErrorInPrimitive<T>>> {
+        self.muskips.get(idx).copied()
+    }
+    fn primitive_muskip_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip, ErrorInPrimitive<T>>> {
+        self.muskips.get_from_name(name).copied()
     }
     fn primitive_toks(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Vec<T>, ErrorInPrimitive<T>>> {
         self.toks.get(idx).copied()

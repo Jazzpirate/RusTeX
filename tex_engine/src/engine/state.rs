@@ -102,8 +102,25 @@ pub trait State<T:Token>:Sized+'static {
     /// set the value of an integer register
     fn set_int_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Int,globally:bool);
 
+    /// get the value of a dimension register
+    fn get_dim_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::Dim;
+    /// set the value of a dimension register
+    fn set_dim_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Dim,globally:bool);
 
+    /// get the value of a skip register
+    fn get_skip_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::Skip;
+    /// set the value of a skip register
+    fn set_skip_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Skip,globally:bool);
 
+    /// get the value of a skip register
+    fn get_muskip_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::MuSkip;
+    /// set the value of a skip register
+    fn set_muskip_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::MuSkip,globally:bool);
+
+    /// get the value of a skip register
+    fn get_toks_register(&self,i:usize) -> Vec<T>;
+    /// set the value of a skip register
+    fn set_toks_register(&mut self,i:usize,v:Vec<T>,globally:bool);
     /// get a primitive integer value
     fn get_primitive_int(&self,name:&'static str) -> <<Self as State<T>>::NumSet as NumSet>::Int;
     /// set a primitive integer value
@@ -146,6 +163,10 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
     lcchar: CharField<T::Char, T::Char>,
 
     intregisters: VecField<NS::Int>,
+    dimregisters: VecField<NS::Dim>,
+    skipregisters: VecField<NS::Skip>,
+    muskipregisters: VecField<NS::MuSkip>,
+    toksregisters:VecField<Vec<T>>,
 
     primitive_intregisters: HashMapField<&'static str,NS::Int>,
     primitive_dimregisters: HashMapField<&'static str,NS::Dim>,
@@ -175,6 +196,10 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> TeXState<T,FS,NS> {
             ucchar: CharField::new(T::Char::ident()),
             lcchar: CharField::new(T::Char::ident()),
             intregisters: VecField::new(),
+            dimregisters: VecField::new(),
+            skipregisters: VecField::new(),
+            muskipregisters: VecField::new(),
+            toksregisters: VecField::new(),
 
             primitive_intregisters: HashMapField::new(),
             primitive_dimregisters: HashMapField::new(),
@@ -280,6 +305,10 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.lcchar.push_stack();
 
         self.intregisters.push_stack();
+        self.dimregisters.push_stack();
+        self.skipregisters.push_stack();
+        self.muskipregisters.push_stack();
+        self.toksregisters.push_stack();
 
         self.primitive_intregisters.push_stack();
         self.primitive_dimregisters.push_stack();
@@ -304,6 +333,10 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.lcchar.pop_stack();
 
         self.intregisters.pop_stack();
+        self.dimregisters.pop_stack();
+        self.skipregisters.pop_stack();
+        self.muskipregisters.pop_stack();
+        self.toksregisters.pop_stack();
 
         self.primitive_intregisters.pop_stack();
         self.primitive_dimregisters.pop_stack();
@@ -421,6 +454,42 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
             self.intregisters.set_globally(i,v)
         } else {
             self.intregisters.set_locally(i,v)
+        }
+    }
+
+    fn get_dim_register(&self, i: usize) -> NS::Dim { self.dimregisters.get(&i) }
+    fn set_dim_register(&mut self, i: usize, v: NS::Dim, globally: bool) {
+        if globally {
+            self.dimregisters.set_globally(i,v)
+        } else {
+            self.dimregisters.set_locally(i,v)
+        }
+    }
+
+    fn get_skip_register(&self, i: usize) -> NS::Skip { self.skipregisters.get(&i) }
+    fn set_skip_register(&mut self, i: usize, v: NS::Skip, globally: bool) {
+        if globally {
+            self.skipregisters.set_globally(i,v)
+        } else {
+            self.skipregisters.set_locally(i,v)
+        }
+    }
+
+    fn get_muskip_register(&self, i: usize) -> NS::MuSkip { self.muskipregisters.get(&i) }
+    fn set_muskip_register(&mut self, i: usize, v: NS::MuSkip, globally: bool) {
+        if globally {
+            self.muskipregisters.set_globally(i,v)
+        } else {
+            self.muskipregisters.set_locally(i,v)
+        }
+    }
+
+    fn get_toks_register(&self, i: usize) -> Vec<T> { self.toksregisters.get(&i) }
+    fn set_toks_register(&mut self, i: usize, v: Vec<T>, globally: bool) {
+        if globally {
+            self.toksregisters.set_globally(i,v)
+        } else {
+            self.toksregisters.set_locally(i,v)
         }
     }
 

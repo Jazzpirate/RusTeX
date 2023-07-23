@@ -1,7 +1,7 @@
 //! TeX primitive [`Command`]s
 
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
@@ -13,7 +13,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, NumSet};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType};
@@ -47,7 +47,6 @@ textfont
 scriptfont
 scriptscriptfont
 lastkern
-dimen
 fontdimen
 prevdepth
 pagegoal
@@ -62,8 +61,6 @@ ht
 wd
 dp
 lastskip
-skip
-muskip
 
 pretolerance
 tolerance
@@ -166,15 +163,7 @@ everycr
 
 setbox
 font
-dimen
-skip
-muskip
-toks
 futurelet
-dimendef
-skipdef
-muskipdef
-toksdef
 
 fontdimen
 hyphenchar
@@ -320,8 +309,6 @@ crcr
 delcode
 delimiter
 detokenize
-dimen
-dimendef
 discretionary
 displaylimits
 displaystyle
@@ -387,8 +374,6 @@ mkern
 moveleft
 moveright
 mskip
-muskip
-muskipdef
 noboundary
 noalign
 noindent
@@ -423,8 +408,6 @@ showbox
 showlists
 showthe
 skewchar
-skip
-skipdef
 smallskip
 span
 special
@@ -433,8 +416,6 @@ splitfirstmark
 string
 textfont
 textstyle
-toks
-toksdef
 topmark
 uccode
 underline
@@ -723,6 +704,63 @@ pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
         }
     });
     file_end_prim!("def",cmd)
+}
+
+
+pub fn dimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\dimen");
+    let i = catch_prim!(gullet.get_int(state) => ("dimen",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"dimen",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("dimen",cmd));
+    let v = catch_prim!(gullet.get_dim(state) => ("dimen",cmd));
+    debug_log!(debug=>"\\dimen{} = {}",i,v);
+    state.set_dim_register(i,v,global);
+    Ok(())
+}
+pub fn dimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting \\dimen");
+    let i = catch_prim!(gullet.get_int(state) => ("dimen",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"dimen",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = state.get_dim_register(i);
+    debug_log!(debug=>"\\dimen{} == {}",i,v);
+    Ok(v)
+}
+
+pub fn dimendef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
+                                                     -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"dimendef");
+    let name = catch_prim!(gullet.get_control_sequence(state) => ("dimendef",cmd));
+    match &name {
+        BaseToken::Char(c,_) => {
+            state.set_ac_command(*c,Some(Ptr::new(Command::Relax)),false)
+        }
+        BaseToken::CS(name) => {
+            state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
+        }
+    }
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("dimendef",cmd));
+    let num = catch_prim!(gullet.get_int(state) => ("dimendef",cmd));
+    if num.to_i64() < 0 {
+        return Err(ErrorInPrimitive{name:"dimendef",msg:Some(format!("Invalid dimen register index: {}",num)),cause:Some(cmd.cause),source:None})
+    }
+    let num = num.to_i64() as usize;
+    match name {
+        BaseToken::Char(c,_) => {
+            debug_log!(debug=>"\\dimendef: {} = \\dimen{}",c.char_str(),num);
+            state.set_ac_command(c, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::Dim})), global);
+        }
+        BaseToken::CS(name) => {
+            debug_log!(debug=>"\\dimendef: \\{} = {}",name,num);
+            state.set_command(name, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::Dim})), global);
+        }
+    }
+    Ok(())
 }
 
 pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
@@ -1495,6 +1533,63 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
 }
 
 
+pub fn muskip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\muskip");
+    let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"muskip",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("muskip",cmd));
+    let v = catch_prim!(gullet.get_muskip(state) => ("muskip",cmd));
+    debug_log!(debug=>"\\muskip{} = {}",i,v);
+    state.set_muskip_register(i,v,global);
+    Ok(())
+}
+pub fn muskip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting \\muskip");
+    let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"muskip",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = state.get_muskip_register(i);
+    debug_log!(debug=>"\\muskip{} == {}",i,v);
+    Ok(v)
+}
+
+pub fn muskipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
+                                                     -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"muskipdef");
+    let name = catch_prim!(gullet.get_control_sequence(state) => ("muskipdef",cmd));
+    match &name {
+        BaseToken::Char(c,_) => {
+            state.set_ac_command(*c,Some(Ptr::new(Command::Relax)),false)
+        }
+        BaseToken::CS(name) => {
+            state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
+        }
+    }
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("muskipdef",cmd));
+    let num = catch_prim!(gullet.get_int(state) => ("muskipdef",cmd));
+    if num.to_i64() < 0 {
+        return Err(ErrorInPrimitive{name:"muskipdef",msg:Some(format!("Invalid muskip register index: {}",num)),cause:Some(cmd.cause),source:None})
+    }
+    let num = num.to_i64() as usize;
+    match name {
+        BaseToken::Char(c,_) => {
+            debug_log!(debug=>"\\muskipdef: {} = \\muskip{}",c.char_str(),num);
+            state.set_ac_command(c, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::MuSkip })), global);
+        }
+        BaseToken::CS(name) => {
+            debug_log!(debug=>"\\muskipdef: \\{} = {}",name,num);
+            state.set_command(name, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::MuSkip})), global);
+        }
+    }
+    Ok(())
+}
+
+
 pub fn newlinechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning \\newlinechar");
     catch_prim!(gullet.mouth().skip_eq_char(state) => ("newlinechar",cmd));
@@ -1664,6 +1759,63 @@ pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
     Ok(())
 }
 
+
+pub fn skip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\skip");
+    let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"skip",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("skip",cmd));
+    let v = catch_prim!(gullet.get_skip(state) => ("skip",cmd));
+    debug_log!(debug=>"\\skip{} = {}",i,v);
+    state.set_skip_register(i,v,global);
+    Ok(())
+}
+pub fn skip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Skip,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting \\skip");
+    let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"skip",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = state.get_skip_register(i);
+    debug_log!(debug=>"\\skip{} == {}",i,v);
+    Ok(v)
+}
+
+pub fn skipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
+                                                     -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"skipdef");
+    let name = catch_prim!(gullet.get_control_sequence(state) => ("skipdef",cmd));
+    match &name {
+        BaseToken::Char(c,_) => {
+            state.set_ac_command(*c,Some(Ptr::new(Command::Relax)),false)
+        }
+        BaseToken::CS(name) => {
+            state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
+        }
+    }
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("skipdef",cmd));
+    let num = catch_prim!(gullet.get_int(state) => ("skipdef",cmd));
+    if num.to_i64() < 0 {
+        return Err(ErrorInPrimitive{name:"skipdef",msg:Some(format!("Invalid skip register index: {}",num)),cause:Some(cmd.cause),source:None})
+    }
+    let num = num.to_i64() as usize;
+    match name {
+        BaseToken::Char(c,_) => {
+            debug_log!(debug=>"\\skipdef: {} = \\skip{}",c.char_str(),num);
+            state.set_ac_command(c, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::Skip })), global);
+        }
+        BaseToken::CS(name) => {
+            debug_log!(debug=>"\\skipdef: \\{} = {}",name,num);
+            state.set_command(name, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::Skip})), global);
+        }
+    }
+    Ok(())
+}
+
 pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace => "\\the");
     let next = catch_prim!(gullet.get_next_stomach_command(state) => ("the",cmd));
@@ -1707,6 +1859,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                     }
                 }
             }
+            StomachCommandInner::Assignment {name:"toks",..} => todo!("toks in \\the"),
             StomachCommandInner::Value {name,index,tp:_} => {
                 todo!()
             }
@@ -1719,6 +1872,57 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
 pub fn time<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     let t = state.get_start_time();
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
+}
+
+
+pub fn toks<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\toks");
+    let i = catch_prim!(gullet.get_int(state) => ("toks",cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("toks",cmd));
+    match catch_prim!(gullet.mouth().get_next(state) => ("toks",cmd)) {
+        None => file_end_prim!("toks",cmd),
+        Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
+        Some((o,_)) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Expected begin group token after \\toks, got: {}",o)),cause:Some(cmd.cause),source:None})
+    }
+    let v = catch_prim!(gullet.mouth().read_until_endgroup(state) => ("toks",cmd));
+    debug_log!(debug=>"\\toks{} = {}",i,TokenList(v.clone()));
+    state.set_toks_register(i,v,global);
+    Ok(())
+}
+
+pub fn toksdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
+                                                      -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"toksdef");
+    let name = catch_prim!(gullet.get_control_sequence(state) => ("toksdef",cmd));
+    match &name {
+        BaseToken::Char(c,_) => {
+            state.set_ac_command(*c,Some(Ptr::new(Command::Relax)),false)
+        }
+        BaseToken::CS(name) => {
+            state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
+        }
+    }
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("toksdef",cmd));
+    let num = catch_prim!(gullet.get_int(state) => ("toksdef",cmd));
+    if num.to_i64() < 0 {
+        return Err(ErrorInPrimitive{name:"toksdef",msg:Some(format!("Invalid toks register index: {}",num)),cause:Some(cmd.cause),source:None})
+    }
+    let num = num.to_i64() as usize;
+    match name {
+        BaseToken::Char(c,_) => {
+            debug_log!(debug=>"\\toksdef: {} = \\toks{}",c.char_str(),num);
+            state.set_ac_command(c, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::Toks })), global);
+        }
+        BaseToken::CS(name) => {
+            debug_log!(debug=>"\\toksdef: \\{} = {}",name,num);
+            state.set_command(name, Some(Ptr::new(Command::ValueRegister{index:num,tp:Assignable::Toks})), global);
+        }
+    }
+    Ok(())
 }
 
 
@@ -1790,6 +1994,8 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_assign!(countdef,state,stomach,gullet,(s,gu,_,cmd,global) =>countdef(s,gu,cmd,global));
     register_int!(day,state,stomach,gullet,(s,g,c) => day(s,g,c));
     register_assign!(def,state,stomach,gullet,(s,gu,_,cmd,global) =>def(s,gu,cmd,global,false,false,false));
+    register_value_assign_dim!(dimen,state,stomach,gullet);
+    register_assign!(dimendef,state,stomach,gullet,(s,gu,_,cmd,global) =>dimendef(s,gu,cmd,global));
     register_assign!(divide,state,stomach,gullet,(s,gu,_,cmd,global) =>divide(s,gu,cmd,global));
     register_assign!(edef,state,stomach,gullet,(s,gu,_,cmd,global) =>edef(s,gu,cmd,global,false,false,false));
     register_gullet!(else,state,stomach,gullet,(s,gu,cmd) =>else_(s,gu,cmd));
@@ -1849,6 +2055,8 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message(s,gu,cmd));
     register_int!(month,state,stomach,gullet,(s,g,c) => month(s,g,c));
     register_assign!(multiply,state,stomach,gullet,(s,gu,_,cmd,global) =>multiply(s,gu,cmd,global));
+    register_value_assign_muskip!(muskip,state,stomach,gullet);
+    register_assign!(muskipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>muskipdef(s,gu,cmd,global));
     register_value_assign_int!(newlinechar,state,stomach,gullet);
     register_gullet!(noexpand,state,stomach,gullet,(s,g,c) => noexpand(s,g,c));
     register_gullet!(number,state,stomach,gullet,(s,g,c) => number(s,g,c));
@@ -1863,8 +2071,12 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
 
     register_assign!(read,state,stomach,gullet,(s,gu,_,cmd,global) =>read(s,gu,cmd,global));
     state.set_command(T::Char::relax_token(),Some(Ptr::new(Command::Relax)),true);
+    register_value_assign_skip!(skip,state,stomach,gullet);
+    register_assign!(skipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>skipdef(s,gu,cmd,global));
     register_gullet!(the,state,stomach,gullet,(s,g,c) => the(s,g,c));
     register_int!(time,state,stomach,gullet,(s,g,c) => time(s,g,c));
+    register_assign!(toks,state,stomach,gullet,(s,gu,_,cmd,global) =>toks(s,gu,cmd,global));
+    register_assign!(toksdef,state,stomach,gullet,(s,gu,_,cmd,global) =>toksdef(s,gu,cmd,global));
     register_whatsit!(write,state,stomach,gullet,(s,gu,sto,cmd) =>write(s,gu,sto,cmd));
     register_assign!(xdef,state,stomach,gullet,(s,gu,_,cmd,global) =>xdef(s,gu,cmd,global,false,false,false));
     register_int!(year,state,stomach,gullet,(s,g,c) => year(s,g,c));

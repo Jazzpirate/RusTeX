@@ -624,6 +624,14 @@ pub fn get_dim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&
     file_end!()
 }
 
+pub fn get_skip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S) -> Result<NS::Skip,Box<dyn TeXError<T>>> {
+    todo!("get_skip")
+}
+
+pub fn get_muskip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S) -> Result<NS::MuSkip,Box<dyn TeXError<T>>> {
+    todo!("get_muskip")
+}
+
 
 pub fn read_float<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,firstchar:u8,isnegative:bool) -> Result<f64,Box<dyn TeXError<T>>> {
     debug_log!(trace=>"Reading float {}...",(firstchar as char));

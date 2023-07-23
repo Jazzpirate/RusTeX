@@ -8,8 +8,8 @@ use crate::utils::errors::NumericalError;
 pub trait NumSet:'static {
     type Int:Int;
     type Dim:Dim;
-    type Glue:Glue;
-    type MuGlue:MuGlue;
+    type Skip: Skip;
+    type MuSkip: MuSkip;
 }
 
 pub trait Int:Default+Display+Clone+IsDefault+PartialOrd+TryInto<usize>+From<u8>+
@@ -21,15 +21,15 @@ pub trait Dim:Default+Display+Clone+IsDefault+Neg<Output=Self> {
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
 }
-pub trait Glue:Default {}
-pub trait MuGlue:Default {}
+pub trait Skip:Default+Display+Clone+IsDefault {}
+pub trait MuSkip:Default+Display+Clone+IsDefault {}
 
 pub struct DefaultNumSet;
 impl NumSet for DefaultNumSet {
     type Int = i32;
     type Dim = Dimi32;
-    type Glue = Gluei32;
-    type MuGlue = MuGluei32;
+    type Skip = Skipi32;
+    type MuSkip = MuSkipi32;
 }
 
 impl Int for i32 {
@@ -108,18 +108,40 @@ impl Neg for Dimi32 {
     }
 }
 
-pub struct Gluei32;
-impl Default for Gluei32 {
+#[derive(Clone,Copy)]
+pub struct Skipi32{dim:Dimi32}
+impl Default for Skipi32 {
     fn default() -> Self {
         todo!()
     }
 }
-impl Glue for Gluei32 {}
+impl IsDefault for Skipi32 {
+    fn is_default(&self) -> bool {
+        self.dim.is_default()
+    }
+}
+impl Display for Skipi32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"skip {}",self.dim)
+    }
+}
+impl Skip for Skipi32 {}
 
-pub struct MuGluei32;
-impl Default for MuGluei32 {
+#[derive(Clone,Copy)]
+pub struct MuSkipi32{dim:Dimi32}
+impl Default for MuSkipi32 {
     fn default() -> Self {
         todo!()
     }
 }
-impl MuGlue for MuGluei32 {}
+impl IsDefault for MuSkipi32 {
+    fn is_default(&self) -> bool {
+        self.dim.is_default()
+    }
+}
+impl Display for MuSkipi32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"skip {}",self.dim)
+    }
+}
+impl MuSkip for MuSkipi32 {}
