@@ -60,7 +60,7 @@ macro_rules! expand_group_without_unknowns {
                                 Command::Gullet {name,index} => {
                                     do_expandable($gullet,$state,$tk,name,*index)?;
                                 }
-                                Command::Def(def) => {
+                                Command::Def(def,_) => {
                                     let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
                                     if !v.is_empty() {
                                         $gullet.mouth().push_tokens(v);
@@ -79,7 +79,7 @@ macro_rules! expand_group_without_unknowns {
                                 Command::Gullet {name,index} => {
                                     do_expandable($gullet,$state,$tk,name,*index)?;
                                 }
-                                Command::Def(def) => {
+                                Command::Def(def,_) => {
                                     let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
                                     if !v.is_empty() {
                                         $gullet.mouth().push_tokens(v);
@@ -134,7 +134,7 @@ macro_rules! expand_group_with_unknowns {
                                     Command::Gullet {name,index} => {
                                         do_expandable($gullet,$state,$tk,name,*index)?;
                                     }
-                                    Command::Def(def) => {
+                                    Command::Def(def,_) => {
                                         let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
                                         if !v.is_empty() {
                                             $gullet.mouth().push_tokens(v);
@@ -156,7 +156,7 @@ macro_rules! expand_group_with_unknowns {
                                     Command::Gullet {name,index} => {
                                         do_expandable($gullet,$state,$tk,name,*index)?;
                                     }
-                                    Command::Def(def) => {
+                                    Command::Def(def,_) => {
                                         let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
                                         if !v.is_empty() {
                                             $gullet.mouth().push_tokens(v);
@@ -190,7 +190,7 @@ pub fn get_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &m
                 match cmd.as_deref() {
                     Some(Command::Gullet {name,index}) =>
                         do_expandable(gullet,state,tk,name,*index)?,
-                    Some(Command::Def(def)) => {
+                    Some(Command::Def(def,_)) => {
                         let v = def.expand(state,gullet.mouth(),unsafe {cmd.clone().unwrap_unchecked()},Ptr::new(tk))?;
                         if !v.is_empty() {
                             gullet.mouth().push_tokens(v);
@@ -208,7 +208,7 @@ pub fn get_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &m
                 match cmd.as_deref() {
                     Some(Command::Gullet {name,index}) =>
                         do_expandable(gullet,state,tk,name,*index)?,
-                    Some(Command::Def(def)) => {
+                    Some(Command::Def(def,_)) => {
                         let v = def.expand(state,gullet.mouth(),unsafe {cmd.clone().unwrap_unchecked()},Ptr::new(tk))?;
                         if !v.is_empty() {
                             gullet.mouth().push_tokens(v);
@@ -251,7 +251,7 @@ pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, s
                     None => return Err(UnexpectedEndgroup(tk).into())
                 }
             }
-            Command::Def(def) if def.protected && !expand_protected => tks.push(tk)
+            Command::Def(def,_) if def.protected && !expand_protected => tks.push(tk)
         );
     } else {
         expand_group_with_unknowns!(state,gullet,return Ok(tks),(tk,expand) => tks.push(tk);
@@ -263,7 +263,7 @@ pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, s
                     None => return Err(UnexpectedEndgroup(tk).into())
                 }
             }
-            Command::Def(def) if def.protected && !expand_protected => tks.push(tk)
+            Command::Def(def,_) if def.protected && !expand_protected => tks.push(tk)
         );
     }
 }
@@ -289,7 +289,7 @@ pub fn process_token_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mu
 pub fn process_cmd_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &mut S, cause:T, cmd:Ptr<Command<T>>) -> Result<Option<StomachCommand<T>>,Box<dyn TeXError<T>>> {
     match &*cmd {
         Command::Relax => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Relax})),
-        Command::Def(ref def) => {
+        Command::Def(ref def,_) => {
             let v = def.expand(state,gullet.mouth(),cmd.clone(),Ptr::new(cause.clone()))?;
             if !v.is_empty() {
                 gullet.mouth().push_tokens(v);
@@ -304,6 +304,7 @@ pub fn process_cmd_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut 
             do_expandable(gullet,state,cause,name,*index)?;
             Ok(None)
         }
+        Command::MathChar(i) => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::MathChar(*i)})),
         Command::Whatsit {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Whatsit{name,index:*index}})),
         Command::Value{name,index,tp,..} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Value{name,tp:*tp,index:*index}})),
         Command::ValueRegister{index,tp} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::ValueRegister(*index,*tp)})),
@@ -524,7 +525,11 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                 let c = <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(c.to_usize() as i64)?;
                 debug_log!(trace=>"Returning {}",c);
                 return Ok(c)
-
+            }
+            StomachCommandInner::MathChar(u) => {
+                let c = <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(u as i64)?;
+                debug_log!(trace=>"Returning {}",c);
+                return Ok(c)
             }
             o => todo!("Non-char in read_number: {:?}",o)
         }

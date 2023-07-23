@@ -15,10 +15,10 @@ use crate::utils::strings::CharType;
 
 /// A command to be expanded in the [`crate::engine::gullet::Gullet`]
 /// or processed in the [`crate::engine::stomach::Stomach`].
-#[derive(Clone,PartialEq)]
+#[derive(Clone)]
 pub enum Command<T:Token>{
     /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
-    Def(Def<T>),
+    Def(Def<T>,T),
     /// A primitive command to be processed in the [`crate::engine::stomach::Stomach`]
     Stomach{name:&'static str,index:usize},
 
@@ -41,11 +41,33 @@ pub enum Command<T:Token>{
     Gullet{name:&'static str,index:usize},
     /// A character; the result of e.g. `\let\foo=a`
     Char{char:T::Char,catcode:CategoryCode},
+    /// A math character; the result of e.g. `\mathchardef\sum="1350`
+    MathChar(u32),
     /// A command producing a [`crate::tex::boxes::Whatsit`], executed during shipout or `\immediate`ly
     Whatsit {name:&'static str,index:usize},
     /// `\relax`
     Relax
     // ...
+}
+impl<T:Token> PartialEq for Command<T> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self,other) {
+            (Command::Def(a,_),Command::Def(b,_)) => a == b,
+            (Command::Stomach{index:a,..},Command::Stomach{index:b,..}) => a == b,
+            (Command::AssignableValue{tp:a,name:b},Command::AssignableValue{tp:c,name:d}) => a == c && b == d,
+            (Command::Value{tp:a,name:b,index:c},Command::Value{tp:d,name:e,index:f}) => a == d && b == e && c == f,
+            (Command::ValueRegister{tp:a,index:b},Command::ValueRegister{tp:c,index:d}) => a == c && b == d,
+            (Command::ValueAssignment{tp:a,name:b,assignment_index:c,value_index:d},Command::ValueAssignment{tp:e,name:f,assignment_index:g,value_index:h}) => a == e && b == f && c == g && d == h,
+            (Command::Assignment{name:a,index:b},Command::Assignment{name:c,index:d}) => a == c && b == d,
+            (Command::Conditional{name:a,index:b},Command::Conditional{name:c,index:d}) => a == c && b == d,
+            (Command::Gullet{name:a,index:b},Command::Gullet{name:c,index:d}) => a == c && b == d,
+            (Command::Char{char:a,catcode:b},Command::Char{char:c,catcode:d}) => a == c && b == d,
+            (Command::MathChar(a),Command::MathChar(b)) => a == b,
+            (Command::Whatsit{name:a,index:b},Command::Whatsit{name:c,index:d}) => a == c && b == d,
+            (Command::Relax,Command::Relax) => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Copy,Clone,Debug,PartialEq)]
@@ -56,7 +78,7 @@ pub enum Assignable {
 impl<T:Token> Debug for Command<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Command::Def(def) => <Def<T> as Debug>::fmt(def,f),
+            Command::Def(def,T) => <Def<T> as Debug>::fmt(def,f),
             Command::ValueRegister{index,tp} => write!(f, "{:?} register {}",tp, index),
             Command::Relax => write!(f, "Relax"),
             Command::Stomach {name,..} => write!(f, "Stomach Command {}", name),
@@ -66,6 +88,7 @@ impl<T:Token> Debug for Command<T> {
             Command::Conditional{name,..} => write!(f, "Conditional {}", name),
             Command::Gullet{name,..} => write!(f, "Gullet Command {}", name),
             Command::Char{char,catcode} => write!(f, "Character '{}' (catcode {})", (char as &T::Char).char_str(), catcode),
+            Command::MathChar(n) => write!(f, "Math Character {:X}", n),
             Command::Value {name,tp,..} => write!(f, "{:?} Command {}",tp, name),
             Command::Whatsit {name,index} => write!(f,"Whatsit {}",name),
         }
@@ -86,6 +109,7 @@ pub enum StomachCommandInner<C:CharType> {
     Whatsit {name:&'static str,index:usize},
     Relax,
     Char(C,bool),
+    MathChar(u32),
     Superscript,
     Subscript,
     Space,
@@ -109,6 +133,7 @@ impl<C:CharType> Debug for StomachCommandInner<C> {
             StomachCommandInner::ValueRegister(u,tp) => write!(f, "{:?} register {}",tp, u),
             StomachCommandInner::Whatsit {name,index} => write!(f,"Whatsit {}",name),
             StomachCommandInner::Char(c,_) => write!(f,"Character '{}'",c),
+            StomachCommandInner::MathChar(n) => write!(f,"Math Character {:X}",n),
             StomachCommandInner::Superscript => write!(f,"Superscript Token"),
             StomachCommandInner::Subscript => write!(f,"Subscript Token"),
             StomachCommandInner::Space => write!(f,"Space Token"),

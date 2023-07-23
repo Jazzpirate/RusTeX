@@ -171,7 +171,6 @@ skip
 muskip
 toks
 futurelet
-mathchardef
 dimendef
 skipdef
 muskipdef
@@ -259,7 +258,6 @@ setlanguage
 
 mathchar
 delimiter
-mathchardef
 mathcode
 fam
 nonscript
@@ -375,7 +373,6 @@ mark
 mathaccent
 mathbin
 mathchar
-mathchardef
 mathchoice
 mathclose
 mathcode
@@ -690,7 +687,7 @@ pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
     let (endswithbrace,arity,signature) = parse_signature(state,gullet,cmd.clone(),"def")?;
     let mut replacement: Vec<ExpToken<T>> = Vec::with_capacity(50);
     map_group!("def",cmd,state,gullet.mouth(),{
-        let def = Command::Def(Def{protected,long,outer,endswithbrace,arity,signature,replacement});
+        let def = Command::Def(Def{protected,long,outer,endswithbrace,arity,signature,replacement},cmd.cause.clone());
         match cs {
             BaseToken::Char(c,_) => {
                 debug_log!(debug=>"\\def: {} = {:?}",c,def);
@@ -788,7 +785,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                                         Command::Gullet {name,index} => {
                                             catch_prim!(do_expandable($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
-                                        Command::Def(def) => {
+                                        Command::Def(def,_) => {
                                             let v = catch_prim!(def.expand($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
                                             if !v.is_empty() {
                                                 $gullet.mouth().push_tokens(v);
@@ -810,7 +807,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                                         Command::Gullet {name,index} => {
                                             catch_prim!(do_expandable($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
-                                        Command::Def(def) => {
+                                        Command::Def(def,_) => {
                                             let v = catch_prim!(def.expand($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
                                             if !v.is_empty() {
                                                 $gullet.mouth().push_tokens(v);
@@ -833,7 +830,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
     }
 
     expand_group_with_unknowns!(state,gullet,{
-        let def = Command::Def(Def{protected,long,outer,endswithbrace,arity,signature,replacement});
+        let def = Command::Def(Def{protected,long,outer,endswithbrace,arity,signature,replacement},cmd.cause.clone());
         match cs {
             BaseToken::Char(c,_) => {
                 debug_log!(debug=>"\\edef: {} = {:?}",c,def);
@@ -882,7 +879,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                     )})
                 }
             }
-            Command::Def(def) if def.protected => replacement.push(ExpToken::Token(tk))
+            Command::Def(def,_) if def.protected => replacement.push(ExpToken::Token(tk))
     );
     file_end_prim!("edef",cmd)
 }
@@ -1236,6 +1233,30 @@ pub fn long<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&
 
 // \mag           : Int
 
+pub fn mathchardef<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"mathchardef");
+    let csO = catch_prim!(gullet.mouth().get_next(state) => ("mathchardef",cmd));
+    let cs = match &csO {
+        None => file_end_prim!("mathchardef",cmd),
+        Some((t,_)) => t.base()
+    };
+    match cs {
+        BaseToken::Char(_,CategoryCode::Active) => (),
+        BaseToken::CS(_) => (),
+        _ => return Err(ErrorInPrimitive{name:"mathchardef",msg:Some(format!("Command expected after \\mathchardef")),cause:Some(csO.unwrap().0),source:None})
+    }
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("mathchardef",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("mathchardef",cmd)).to_i64();
+    if i < 0 {
+        return Err(ErrorInPrimitive{name:"mathchardef",msg:Some(format!("Invalid math char: {}",i)),cause:Some(csO.unwrap().0),source:None})
+    }
+    match cs {
+        BaseToken::Char(c,_) => state.set_ac_command(*c,Some(Ptr::new(Command::MathChar(i as u32))),globally),
+        BaseToken::CS(name) => state.set_command(name.clone(),Some(Ptr::new(Command::MathChar(i as u32))),globally)
+    }
+    Ok(())
+}
+
 pub fn meaning<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"meaning");
     match catch_prim!(gullet.mouth().get_next(state) => ("meaning",cmd)) {
@@ -1279,7 +1300,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
         None => string_to_tokens("undefined".as_bytes()),
         Some(cmd) => {
             match &*cmd {
-                Command::Def(d) => {
+                Command::Def(d,_) => {
                     let esc = match escapechar {
                         None => vec!(),
                         Some(c) => c.as_bytes()
@@ -1425,6 +1446,18 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::Char {char,catcode} => meaning_char(*char,*catcode),
+                Command::MathChar(index) => {
+                    let mut string = vec!();
+                    match escapechar {
+                        None => (),
+                        Some(c) => {
+                            for u in c.as_bytes() {string.push(u)}
+                        }
+                    }
+                    for u in "mathchar\"".as_bytes() {string.push(*u)}
+                    for u in format!("{:X}", index).as_bytes() {string.push(*u)}
+                    string_to_tokens(&string)
+                }
                 Command::Whatsit {name,..} => {
                     match escapechar {
                         None => string_to_tokens(name.as_bytes()),
@@ -1499,7 +1532,7 @@ pub fn noexpand<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gullet
                     None => gullet.mouth().requeue(t),
                     Some(ac) => {
                         match &*ac {
-                            Command::Def(_) => gullet.mouth().push_noexpand(t),
+                            Command::Def(_,_) => gullet.mouth().push_noexpand(t),
                             Command::Gullet {..} => gullet.mouth().push_noexpand(t),
                             Command::Conditional {..} => gullet.mouth().push_noexpand(t),
                             _ => gullet.mouth().requeue(t)
@@ -1512,7 +1545,7 @@ pub fn noexpand<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gullet
                     None => gullet.mouth().requeue(t),
                     Some(ac) => {
                         match &*ac {
-                            Command::Def(_) => gullet.mouth().push_noexpand(t),
+                            Command::Def(_,_) => gullet.mouth().push_noexpand(t),
                             Command::Gullet {..} => gullet.mouth().push_noexpand(t),
                             Command::Conditional {..} => gullet.mouth().push_noexpand(t),
                             _ => gullet.mouth().requeue(t)
@@ -1622,10 +1655,10 @@ pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
     };
     match newcmd {
         BaseToken::CS(name) => state.set_command(name,Some(Ptr::new(
-            Command::Def(def)
+            Command::Def(def,cmd.cause.clone())
         )),globally),
         BaseToken::Char(c,_) => state.set_ac_command(c,Some(Ptr::new(
-            Command::Def(def)
+            Command::Def(def,cmd.cause.clone())
         )),globally)
     }
     Ok(())
@@ -1811,6 +1844,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long(sto,s,gu,cmd,g,false,false,false));
     register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_(s,gu,cmd,global));
     register_int_assign!(mag,state,stomach,gullet);
+    register_assign!(mathchardef,state,stomach,gullet,(s,gu,_,cmd,global) =>mathchardef(s,gu,cmd,global));
     register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning(s,g,c));
     register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message(s,gu,cmd));
     register_int!(month,state,stomach,gullet,(s,g,c) => month(s,g,c));

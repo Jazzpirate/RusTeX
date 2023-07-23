@@ -6,6 +6,7 @@ use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
 use crate::tex::commands::{Assignable, methods, StomachCommand};
+use crate::tex::commands::Command::MathChar;
 use crate::tex::token::Token;
 use crate::utils::errors::{ImplementationError, ModeError, TeXError};
 
@@ -38,6 +39,7 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         AssignableValue {name,tp} => todo!("Assignable Value"),
         Relax => Ok(()),
         Char(x,_) => todo!("Character in digest"),
+        MathChar(_) => todo!("Mathchar in digest"),
         Superscript => todo!("Superscript in digest"),
         Subscript => todo!("Subscript in digest"),
         Space if state.mode().is_vertical() => Ok(()),
