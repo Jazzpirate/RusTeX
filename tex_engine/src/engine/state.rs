@@ -87,6 +87,12 @@ pub trait State<T:Token>:Sized+'static {
     /// set the current [`CategoryCode`] for a character
     fn set_catcode(&mut self, c: T::Char, cc:CategoryCode, globally:bool);
 
+
+    /// get the current space factor code for the character
+    fn get_sfcode(&self,c:&T::Char) -> <Self::NumSet as NumSet>::Int;
+    /// set the current space factor code for a character
+    fn set_sfcode(&mut self, c: T::Char, v:<Self::NumSet as NumSet>::Int, globally:bool);
+
     /// get the uppercase character for a character
     fn get_ucchar(&self, c: T::Char) -> T::Char;
     /// set the uppercase character for a character
@@ -164,6 +170,7 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
     ac_commands: CharField<T::Char,Option<Ptr<Command<T>>>>,
 
     catcodes: CharField<T::Char,CategoryCode>,
+    sfcodes: CharField<T::Char,NS::Int>,
     ucchar: CharField<T::Char, T::Char>,
     lcchar: CharField<T::Char, T::Char>,
 
@@ -199,6 +206,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> TeXState<T,FS,NS> {
             commands: HashMapField::new(),
             ac_commands: CharField::new(T::Char::rep_field(None)),
             catcodes: CharField::new(T::Char::starting_catcode_scheme()),
+            sfcodes: CharField::new(T::Char::rep_field(NS::Int::default())),
             ucchar: CharField::new(T::Char::ident()),
             lcchar: CharField::new(T::Char::ident()),
             intregisters: VecField::new(),
@@ -308,6 +316,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.ac_commands.push_stack();
 
         self.catcodes.push_stack();
+        self.sfcodes.push_stack();
         self.ucchar.push_stack();
         self.lcchar.push_stack();
 
@@ -337,6 +346,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.ac_commands.pop_stack();
 
         self.catcodes.pop_stack();
+        self.sfcodes.pop_stack();
         self.ucchar.pop_stack();
         self.lcchar.pop_stack();
 
@@ -393,6 +403,19 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
             self.newlinechar.set_globally(c)
         } else {
             self.newlinechar.set_locally(c)
+        }
+    }
+
+    fn get_sfcode(&self, c: &T::Char) -> <Self::NumSet as NumSet>::Int {
+        self.sfcodes.get(c)
+    }
+    fn set_sfcode(&mut self, c: T::Char, v: <Self::NumSet as NumSet>::Int, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.sfcodes.set_globally(c,v)
+        } else {
+            self.sfcodes.set_locally(c,v)
         }
     }
 

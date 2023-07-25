@@ -41,7 +41,6 @@ insertpenalties
 mathcode
 lccode
 uccode
-sfcode
 delcode
 textfont
 scriptfont
@@ -64,34 +63,9 @@ lastskip
 
 globaldefs
 
-baselineskip
-lineskip
-parskip
-abovedisplayskip
-abovedisplayshortskip
-belowdisplayskip
-belowdisplayshortskip
-leftskip
-rightskip
-topskip
-splittopskip
-tabskip
-spaceskip
-xspaceskip
-parfillskip
-
 thinmuskip
 medmuskip
 thickmuskip
-
-output
-everypar
-everymath
-everydisplay
-everyhbox
-everyvbox
-everyjob
-everycr
 
 setbox
 font
@@ -1818,6 +1792,32 @@ pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
 }
 
 
+pub fn sfcode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning space factor code");
+    let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
+    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"catcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("catcode",cmd));
+    let v = catch_prim!(gullet.get_int(state) => ("catcode",cmd));
+    debug_log!(debug=>"\\sfcode '{}' = {}",c.char_str(),v);
+    state.set_sfcode(c,v,global);
+    Ok(())
+}
+pub fn sfcode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting space factor code");
+    let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
+    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"sfcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = state.get_sfcode(&c);
+    debug_log!(debug=>"\\sfcode '{}' == {}",c.char_str(),v);
+    Ok(v)
+}
+
+
 pub fn skip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning \\skip");
     let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
@@ -2121,6 +2121,13 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_value_assign_int!(escapechar,state,stomach,gullet);
     register_int_assign!(exhyphenpenalty,state,stomach,gullet);
     register_gullet!(expandafter,state,stomach,gullet,(s,g,c) => expandafter(s,g,c));
+    register_tok_assign!(everypar,state,stomach,gullet);
+    register_tok_assign!(everymath,state,stomach,gullet);
+    register_tok_assign!(everydisplay,state,stomach,gullet);
+    register_tok_assign!(everyhbox,state,stomach,gullet);
+    register_tok_assign!(everyvbox,state,stomach,gullet);
+    register_tok_assign!(everyjob,state,stomach,gullet);
+    register_tok_assign!(everycr,state,stomach,gullet);
     register_int_assign!(fam,state,stomach,gullet);
     register_gullet!(fi,state,stomach,gullet,(s,gu,cmd) =>fi(s,gu,cmd));
     register_int_assign!(finalhyphendemerits,state,stomach,gullet);
@@ -2190,6 +2197,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin(s,gu,sto,cmd));
     register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout(s,gu,sto,cmd));
     register_assign!(outer,state,stomach,gullet,(s,gu,sto,cmd,g) =>outer(sto,s,gu,cmd,g,false,false,false));
+    register_tok_assign!(output,state,stomach,gullet);
     register_int_assign!(outputpenalty,state,stomach,gullet);
     register_dim_assign!(overfullrule,state,stomach,gullet);
 
@@ -2212,6 +2220,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(relpenalty,state,stomach,gullet);
     register_skip_assign!(rightskip,state,stomach,gullet);
     register_dim_assign!(scriptspace,state,stomach,gullet);
+    register_value_assign_int!(sfcode,state,stomach,gullet);
     register_int_assign!(showboxbreadth,state,stomach,gullet);
     register_int_assign!(showboxdepth,state,stomach,gullet);
     register_value_assign_skip!(skip,state,stomach,gullet);
