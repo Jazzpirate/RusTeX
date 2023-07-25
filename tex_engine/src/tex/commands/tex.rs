@@ -207,7 +207,6 @@ botmark
 box
 bye
 char
-csname
 cleaders
 copy
 cr
@@ -220,7 +219,6 @@ displaylimits
 displaystyle
 dp
 dump
-endcsname
 endinput
 eqno
 errorstopmode
@@ -576,6 +574,7 @@ pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
         }
     }
     let str : TeXStr<T::Char> = csname.into();
+    debug_log!(trace=>"csname {}",str.to_string());
     match state.get_command(&str) {
         None => state.set_command(str.clone(),Some(Ptr::new(Command::Relax)),false),
         _ => ()
@@ -1016,12 +1015,15 @@ pub fn expandafter<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gul
         None => file_end_prim!("expandafter",cmd),
         Some((t,b)) => (t,b)
     };
+    debug_log!(debug=>"expandafter: 1. {}",first);
     match catch_prim!(gullet.mouth().get_next(state) => ("expandafter",cmd)){
         None => file_end_prim!("expandafter",cmd),
         Some((t,false)) => {
+            debug_log!(debug=>"expandafter: 2. \\noexpand{}",t);
             gullet.mouth().push_noexpand(t);
         }
         Some((t,_)) => {
+            debug_log!(debug=>"expandafter: 2. {}",t);
             if let Some(ncmd) = match t.base() {
                 BaseToken::CS(n) => Some(catch_prim!(state.need_command(&n) => ("expandafter",cmd))),
                 BaseToken::Char(c, CategoryCode::Active) =>

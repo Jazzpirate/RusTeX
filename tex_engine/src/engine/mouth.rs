@@ -204,7 +204,7 @@ impl<T:Token> Mouth<T> for NoTracingMouth<T> {
     fn requeue(&mut self, tk: T) {
         match self.buffer.take() {
             Some(tk2) => {
-                self.push_tokens(vec!(tk2,tk))
+                self.push_tokens(vec!(tk,tk2))
             },
             None => self.buffer = Some(tk)
         }
@@ -265,7 +265,7 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
     fn requeue(&mut self, tk: TokenWithSourceref<Char>) {
         match self.buffer.take() {
             Some(tk2) => {
-                self.push_tokens(vec!(tk2,tk))
+                self.push_tokens(vec!(tk,tk2))
             },
             None => self.buffer = Some(tk)
         }
