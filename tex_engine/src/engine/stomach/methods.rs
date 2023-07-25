@@ -27,7 +27,10 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
             Err(ModeError{cmd:name.clone(),mode:state.mode(),cause:Some(cmd.cause),source:None}.into())
         }
         ValueRegister(u,Assignable::Int) => assign_int_register(state,gullet,u,cmd,false), // TODO global!
-        ValueRegister(u,_) => todo!("ValueRegister assignment"),
+        ValueRegister(u,Assignable::Dim) => assign_dim_register(state,gullet,u,cmd,false), // TODO global!
+        ValueRegister(u,Assignable::Skip) => assign_skip_register(state,gullet,u,cmd,false), // TODO global!
+        ValueRegister(u,Assignable::MuSkip) => assign_muskip_register(state,gullet,u,cmd,false), // TODO global!
+        ValueRegister(_,_) => todo!("Value Register"),
         Assignment {name,index} => match stomach.command(index) {
             Some(f) => Ok(f(state, gullet, stomach, cmd, false)?), // TODO global!
             None => Err(ImplementationError(format!("Missing implementation for primitive command {}", name), PhantomData).into())
@@ -38,7 +41,8 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         Whatsit {name,index} => todo!("Whatsits"),
         AssignableValue {name,tp} => todo!("Assignable Value"),
         Relax => Ok(()),
-        Char(x,_) => todo!("Character in digest"),
+        Char(x,_) =>
+            todo!("Character in digest"),
         MathChar(_) => todo!("Mathchar in digest"),
         Superscript => todo!("Superscript in digest"),
         Subscript => todo!("Subscript in digest"),
@@ -57,5 +61,32 @@ fn assign_int_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet
     let v = catch!(gullet.get_int(state) => cmd.cause);
     debug_log!(debug=>"\\count{} = {}",u,v);
     state.set_int_register(u,v,global);
+    Ok(())
+}
+fn assign_dim_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+                                                            -> Result<(),Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Assigning \\dimen{}",u);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
+    let v = catch!(gullet.get_dim(state) => cmd.cause);
+    debug_log!(debug=>"\\dimen{} = {}",u,v);
+    state.set_dim_register(u,v,global);
+    Ok(())
+}
+fn assign_skip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+                                                            -> Result<(),Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Assigning \\skip{}",u);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
+    let v = catch!(gullet.get_skip(state) => cmd.cause);
+    debug_log!(debug=>"\\skip{} = {}",u,v);
+    state.set_skip_register(u,v,global);
+    Ok(())
+}
+fn assign_muskip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+                                                             -> Result<(),Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Assigning \\muskip{}",u);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
+    let v = catch!(gullet.get_muskip(state) => cmd.cause);
+    debug_log!(debug=>"\\muskip{} = {}",u,v);
+    state.set_muskip_register(u,v,global);
     Ok(())
 }

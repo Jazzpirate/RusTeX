@@ -8,7 +8,7 @@ use crate::catch;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::tex::commands::{GulletCommand, StomachCommand, StomachCommandInner};
-use crate::tex::numbers::NumSet;
+use crate::tex::numbers::{NumSet, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ErrorInPrimitive, TeXError};
 use crate::utils::map::Map;
@@ -53,7 +53,7 @@ pub trait Gullet<T:Token>:Sized+'static {
     }
 
     /// Reads a skip from the input stream.
-    fn get_skip(&mut self, state:&mut Self::S) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,Box<dyn TeXError<T>>> {
+    fn get_skip(&mut self, state:&mut Self::S) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>,Box<dyn TeXError<T>>> {
         methods::get_skip(self, state)
     }
 
@@ -107,9 +107,9 @@ pub trait Gullet<T:Token>:Sized+'static {
     fn primitive_dim(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim,ErrorInPrimitive<T>>>;
     fn primitive_dim_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim,ErrorInPrimitive<T>>>;
 
-    fn register_primitive_skip(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>) -> usize;
-    fn primitive_skip(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>>;
-    fn primitive_skip_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>>;
+    fn register_primitive_skip(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>>) -> usize;
+    fn primitive_skip(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>>>;
+    fn primitive_skip_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>>>;
 
     fn register_primitive_muskip(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>) -> usize;
     fn primitive_muskip(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>>;
@@ -128,7 +128,7 @@ pub struct TeXGullet<T:Token,M:Mouth<T>,S:State<T>> {
     primitives:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>,
     ints:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Int,ErrorInPrimitive<T>>>,
     dims:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Dim,ErrorInPrimitive<T>>>,
-    skips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Skip,ErrorInPrimitive<T>>>,
+    skips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Skip<<<S as State<T>>::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>>>,
     muskips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>>>,
     toks:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>,
     phantom_char:std::marker::PhantomData<T>,
@@ -174,7 +174,7 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     fn register_primitive_dim(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim, ErrorInPrimitive<T>>) -> usize {
         self.dims.insert(name,cmd)
     }
-    fn register_primitive_skip(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip, ErrorInPrimitive<T>>) -> usize {
+    fn register_primitive_skip(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>, ErrorInPrimitive<T>>) -> usize {
         self.skips.insert(name,cmd)
     }
     fn register_primitive_muskip(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip, ErrorInPrimitive<T>>) -> usize {
@@ -207,10 +207,10 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     fn primitive_dim_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Dim, ErrorInPrimitive<T>>> {
         self.dims.get_from_name(name).copied()
     }
-    fn primitive_skip(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip, ErrorInPrimitive<T>>> {
+    fn primitive_skip(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>, ErrorInPrimitive<T>>> {
         self.skips.get(idx).copied()
     }
-    fn primitive_skip_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::Skip, ErrorInPrimitive<T>>> {
+    fn primitive_skip_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Skip<<<Self::S as State<T>>::NumSet as NumSet>::SkipDim>, ErrorInPrimitive<T>>> {
         self.skips.get_from_name(name).copied()
     }
     fn primitive_muskip(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<<<Self::S as State<T>>::NumSet as NumSet>::MuSkip, ErrorInPrimitive<T>>> {

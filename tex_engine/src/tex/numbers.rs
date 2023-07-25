@@ -8,7 +8,7 @@ use crate::utils::errors::NumericalError;
 pub trait NumSet:'static {
     type Int:Int;
     type Dim:Dim;
-    type Skip: Skip;
+    type SkipDim: SkipDim<Dim=Self::Dim>;
     type MuSkip: MuSkip;
 }
 
@@ -17,18 +17,24 @@ Neg<Output=Self>+Div<Self,Output=Self>+Mul<Self,Output=Self>+Add<Self,Output=Sel
     fn from_i64<T:Token>(i:i64) -> Result<Self,NumericalError<T>>;
     fn to_i64(&self) -> i64;
 }
-pub trait Dim:Default+Display+Clone+IsDefault+Neg<Output=Self> {
+pub trait Dim:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+
+Mul<i64,Output=Self>+Div<i64,Output=Self>{
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
 }
-pub trait Skip:Default+Display+Clone+IsDefault {}
+pub trait SkipDim:Display+Clone {
+    type Dim:Dim;
+    fn units() -> Vec<&'static str>;
+    fn from_dim(dim:Self::Dim) -> Self;
+    fn from_float(dim:&str,float:f64) -> Self;
+}
 pub trait MuSkip:Default+Display+Clone+IsDefault {}
 
 pub struct DefaultNumSet;
 impl NumSet for DefaultNumSet {
     type Int = i32;
     type Dim = Dimi32;
-    type Skip = Skipi32;
+    type SkipDim = Fill;
     type MuSkip = MuSkipi32;
 }
 
@@ -86,6 +92,30 @@ impl Display for Dimi32 {
     }
 }
 
+impl Add<Self> for Dimi32 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Dimi32(self.0 + rhs.0)
+    }
+}
+
+impl Mul<i64> for Dimi32 {
+    type Output = Self;
+
+    fn mul(self, rhs: i64) -> Self::Output {
+        Dimi32(self.0 * (rhs as i32))
+    }
+}
+impl Div<i64> for Dimi32 {
+    type Output = Self;
+
+    fn div(self, rhs: i64) -> Self::Output {
+        Dimi32(self.0 / (rhs as i32))
+    }
+}
+
+
 impl Dim for Dimi32 {
     fn units() -> Vec<&'static str> {vec!["pt","pc","in","bp","cm","mm","dd","cc","sp"]}
     fn from_float(dim: &str, float: f64) -> Self { match dim {
@@ -108,24 +138,76 @@ impl Neg for Dimi32 {
     }
 }
 
+#[derive(Clone)]
+pub struct Skip<SD:SkipDim>{
+    pub base:SD::Dim,
+    pub stretch:Option<SD>,
+    pub shrink:Option<SD>,
+}
+impl<SD:SkipDim> Default for Skip<SD> {
+    fn default() -> Self {
+        Self{base:SD::Dim::default(),stretch:None,shrink:None}
+    }
+}
+impl<SD:SkipDim> Display for Skip<SD> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.base,f)?;
+        if let Some(stretch) = &self.stretch {
+            write!(f," plus {}",stretch)?;
+        }
+        if let Some(shrink) = &self.shrink {
+            write!(f," minus {}",shrink)?;
+        }
+        Ok(())
+    }
+}
+impl<SD:SkipDim> Neg for Skip<SD> {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self{base:-self.base,stretch:self.stretch,shrink:self.shrink}
+    }
+}
+
+
 #[derive(Clone,Copy)]
-pub struct Skipi32{dim:Dimi32}
-impl Default for Skipi32 {
+pub enum Fill {
+    pt(i32),
+    fil(i32),
+    fill(i32),
+}
+
+impl Display for Fill {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Fill::pt(i) => Dimi32(*i).fmt(f),
+            Fill::fil(i) => write!(f,"{}fil",Dimi32(*i).to_string()),
+            Fill::fill(i) => write!(f,"{}fill",Dimi32(*i).to_string()),
+        }
+    }
+}
+impl Default for Fill {
     fn default() -> Self {
         todo!()
     }
 }
-impl IsDefault for Skipi32 {
-    fn is_default(&self) -> bool {
-        self.dim.is_default()
+impl SkipDim for Fill {
+    type Dim = Dimi32;
+    fn units() -> Vec<&'static str> {
+        vec!["pt","pc","in","bp","cm","mm","dd","cc","sp","fil","fill"]
+    }
+    fn from_dim(dim: Self::Dim) -> Self {
+        Self::pt(dim.0)
+    }
+    fn from_float(dim: &str, float: f64) -> Self {
+        if dim == "fil" {
+            Self::fil((float*65536.0).round() as i32)
+        } else if dim == "fill" {
+            Self::fill((float*65536.0).round() as i32)
+        } else {
+            Self::pt(Dimi32::from_float(dim,float).0)
+        }
     }
 }
-impl Display for Skipi32 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"skip {}",self.dim)
-    }
-}
-impl Skip for Skipi32 {}
 
 #[derive(Clone,Copy)]
 pub struct MuSkipi32{dim:Dimi32}

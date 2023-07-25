@@ -10,7 +10,7 @@ use crate::utils::errors::{OtherError, TeXError, UndefinedActiveCharacter, Undef
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::Outputs;
-use crate::tex::numbers::NumSet;
+use crate::tex::numbers::{NumSet, Skip};
 use crate::utils::Ptr;
 
 pub mod fields;
@@ -108,9 +108,9 @@ pub trait State<T:Token>:Sized+'static {
     fn set_dim_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Dim,globally:bool);
 
     /// get the value of a skip register
-    fn get_skip_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::Skip;
+    fn get_skip_register(&self,i:usize) -> Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>;
     /// set the value of a skip register
-    fn set_skip_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Skip,globally:bool);
+    fn set_skip_register(&mut self,i:usize,v:Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>,globally:bool);
 
     /// get the value of a skip register
     fn get_muskip_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::MuSkip;
@@ -164,7 +164,7 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
 
     intregisters: VecField<NS::Int>,
     dimregisters: VecField<NS::Dim>,
-    skipregisters: VecField<NS::Skip>,
+    skipregisters: VecField<Skip<NS::SkipDim>>,
     muskipregisters: VecField<NS::MuSkip>,
     toksregisters:VecField<Vec<T>>,
 
@@ -466,8 +466,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         }
     }
 
-    fn get_skip_register(&self, i: usize) -> NS::Skip { self.skipregisters.get(&i) }
-    fn set_skip_register(&mut self, i: usize, v: NS::Skip, globally: bool) {
+    fn get_skip_register(&self, i: usize) -> Skip<NS::SkipDim> { self.skipregisters.get(&i) }
+    fn set_skip_register(&mut self, i: usize, v: Skip<NS::SkipDim>, globally: bool) {
         if globally {
             self.skipregisters.set_globally(i,v)
         } else {

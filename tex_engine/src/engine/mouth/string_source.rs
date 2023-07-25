@@ -281,6 +281,10 @@ impl<C:CharType> StringSourceState<C> {
                                 debug_log!(trace=>"get_next_immediate: State:N; returning \\par");
                                 Some((BaseToken::CS(C::par_token()), line, col))
                             }
+                            MouthState::S => {
+                                self.state = MouthState::N;
+                                return self.get_next_immediate(cc,endline)
+                            }
                             _ => {
                                 self.state = MouthState::N;
                                 debug_log!(trace=>"get_next_immediate: State:{:?}; returning Space",self.state);
@@ -303,9 +307,9 @@ impl<C:CharType> StringSourceState<C> {
                     }
                     Escape => {
                         debug_log!(trace=>"get_next_immediate:   Escape");
+                        self.state = MouthState::S;
                         match self.next_char(cc,endline) {
                             Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
-                                self.state = MouthState::S;
                                 self.charbuffer.push((a,l,c));
                                 debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
                                 Some((BaseToken::CS(C::empty_str()),line, col))
@@ -322,7 +326,6 @@ impl<C:CharType> StringSourceState<C> {
                                         Some((b,_,_)) if *cc.get(b) == Letter => v.push(b),
                                         Some(o) => {
                                             self.charbuffer.push(o);
-                                            self.state = MouthState::S;
                                             break
                                         }
                                         None => break
@@ -333,7 +336,6 @@ impl<C:CharType> StringSourceState<C> {
                                 Some((ret,line, col))
                             }
                             Some((a,_,_)) => {
-                                self.state = MouthState::S;
                                 let ret = BaseToken::CS(vec!(a).into());
                                 debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
                                 Some((ret, line, col))

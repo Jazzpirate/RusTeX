@@ -12,7 +12,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::parse_signature;
-use crate::tex::numbers::{Int, NumSet};
+use crate::tex::numbers::{Int, NumSet, Skip};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
 use crate::utils::Ptr;
@@ -443,58 +443,6 @@ wd
 xleaders
  */
 
-
-// TODO check division by 0
-macro_rules! modify_in_place {
-    ($name:ident,$state:ident,$gullet:ident,$cmd:ident,$global:ident,$opstr:expr,$op:tt) => {
-        debug_log!(trace=>"\\{}",stringify!($name));
-        catch_prim!($gullet.mouth().skip_whitespace($state) => (stringify!($name),$cmd));
-        match catch_prim!($gullet.get_next_stomach_command($state) => (stringify!($name),$cmd)) {
-            None => file_end_prim!("advance",$cmd),
-            Some(ocmd) => match ocmd.cmd {
-                StomachCommandInner::ValueRegister(u,crate::tex::commands::Assignable::Int) => {
-                    catch_prim!($gullet.get_keyword($state,"by") => (stringify!($name),$cmd));
-                    debug_log!(debug => "  \\<register>{}",u);
-                    let i = catch_prim!(($gullet.get_int($state)) => (stringify!($name),$cmd));
-                    let ov = $state.get_int_register(u);
-                    debug_log!(debug => "  =={}{}{}",ov,$opstr,i);
-                    let nv : <S::NumSet as NumSet>::Int = ov $op i;
-                    debug_log!(debug => "  ={}",nv);
-                    $state.set_int_register(u,nv,$global);
-                    return Ok(())
-                }
-                StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Int} => {
-                    debug_log!(debug => "  \\{}",name);
-                    let ov = $state.get_primitive_int(name);
-                    let i = catch_prim!(($gullet.get_int($state)) => (stringify!($name),$cmd));
-                    debug_log!(debug => "  =={}{}{}",ov,$opstr,i);
-                    let nv : <S::NumSet as NumSet>::Int = ov $op i;
-                    debug_log!(debug => "  ={}",nv);
-                    $state.set_primitive_int(name,nv,$global);
-                    return Ok(())
-                }
-                StomachCommandInner::ValueAssignment {name:"count",..} => {
-                    catch_prim!($gullet.get_keyword($state,"by") => (stringify!($name),$cmd));
-                    let i = catch_prim!(($gullet.get_int($state)) => (stringify!($name),$cmd));
-                    let u = match i.try_into() {
-                        Ok(u) => u,
-                        _ => return Err(ErrorInPrimitive{name:"count",msg:Some(format!("Not a valid register")),cause:Some($cmd.cause),source:None})
-                    };
-                    debug_log!(debug => "  \\count{}",u);
-                    let i = catch_prim!(($gullet.get_int($state)) => (stringify!($name),$cmd));
-                    let ov = $state.get_int_register(u);
-                    debug_log!(debug => "  =={}{}{}",ov,$opstr,i);
-                    let nv : <S::NumSet as NumSet>::Int = ov $op i;
-                    debug_log!(debug => "  ={}",nv);
-                    $state.set_int_register(u,nv,$global);
-                    return Ok(())
-                }
-                _ => return Err(ErrorInPrimitive{name:stringify!($name),msg:Some(format!("expected register after \\{}",stringify!($name))),cause:Some($cmd.cause),source:None})
-            }
-        }
-    }
-}
-
 pub fn SPACE<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,_cmd:StomachCommand<T>)
                                      -> Result<(),ErrorInPrimitive<T>> {
     todo!("\\ ")
@@ -502,7 +450,63 @@ pub fn SPACE<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,_cmd:St
 
 pub fn advance<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
                                                      -> Result<(),ErrorInPrimitive<T>> {
-    modify_in_place!(advance,state,gullet,cmd,global,"+",+);
+    debug_log!(trace=>"\\advance");
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("advance",cmd));
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("advance",cmd)) {
+        None => file_end_prim!("advance",cmd),
+        Some(ocmd) => match ocmd.cmd {
+            StomachCommandInner::ValueRegister(u,Assignable::Int) => {
+                catch_prim!(gullet.get_keyword(state,"by") => ("advance",cmd));
+                debug_log!(debug => "  \\count{}",u);
+                let i = catch_prim!(gullet.get_int(state) => ("advance",cmd));
+                let ov = state.get_int_register(u);
+                debug_log!(debug => "  =={}+{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov + i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_int_register(u,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Int} => {
+                debug_log!(debug => "  \\{}",name);
+                catch_prim!(gullet.get_keyword(state,"by") => ("advance",cmd));
+                let ov = state.get_primitive_int(name);
+                let i = catch_prim!(gullet.get_int(state) => ("advance",cmd));
+                debug_log!(debug => "  =={}+{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov + i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_primitive_int(name,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Dim} => {
+                debug_log!(debug => "  \\{}",name);
+                catch_prim!(gullet.get_keyword(state,"by") => ("advance",cmd));
+                let ov = state.get_primitive_dim(name);
+                let i = catch_prim!(gullet.get_dim(state) => ("advance",cmd));
+                debug_log!(debug => "  =={}+{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Dim = ov + i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_primitive_dim(name,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::ValueAssignment {name:"count",..} => {
+                let i = catch_prim!(gullet.get_int(state) => ("advance",cmd));
+                let u = match i.try_into() {
+                    Ok(u) => u,
+                    _ => return Err(ErrorInPrimitive{name:"count",msg:Some(format!("Not a valid register")),cause:Some(cmd.cause),source:None})
+                };
+                catch_prim!(gullet.get_keyword(state,"by") => ("advance",cmd));
+                debug_log!(debug => "  \\count{}",u);
+                let i = catch_prim!(gullet.get_int(state) => (stringify!(name),cmd));
+                let ov = state.get_int_register(u);
+                debug_log!(debug => "  =={}+{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov + i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_int_register(u,nv,global);
+                return Ok(())
+            }
+            o => return Err(ErrorInPrimitive{name:"advance",msg:Some(format!("expected register after \\advance;got:{:?}",o)),cause:Some(cmd.cause),source:None})
+        }
+    }
 }
 
 pub fn begingroup<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,_cmd:StomachCommand<T>)
@@ -765,7 +769,72 @@ pub fn dimendef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
 
 pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
     -> Result<(),ErrorInPrimitive<T>> {
-    modify_in_place!(divide,state,gullet,cmd,global,"/",/);
+    debug_log!(trace=>"\\divide");
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("divide",cmd));
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("divide",cmd)) {
+        None => file_end_prim!("divide",cmd),
+        Some(ocmd) => match ocmd.cmd {
+            StomachCommandInner::ValueRegister(u,Assignable::Int) => {
+                catch_prim!(gullet.get_keyword(state,"by") => ("divide",cmd));
+                debug_log!(debug => "  \\count{}",u);
+                let i = catch_prim!(gullet.get_int(state) => ("divide",cmd));
+                let ov = state.get_int_register(u);
+                debug_log!(debug => "  =={}/{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov / i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_int_register(u,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Int} => {
+                debug_log!(debug => "  \\{}",name);
+                catch_prim!(gullet.get_keyword(state,"by") => ("divide",cmd));
+                let ov = state.get_primitive_int(name);
+                let i = catch_prim!(gullet.get_int(state) => ("divide",cmd));
+                debug_log!(debug => "  =={}/{}",ov,i);
+                if i.to_i64() == 0 {
+                    return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
+                }
+                let nv : <S::NumSet as NumSet>::Int = ov / i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_primitive_int(name,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Dim} => {
+                debug_log!(debug => "  \\{}",name);
+                catch_prim!(gullet.get_keyword(state,"by") => ("divide",cmd));
+                let ov = state.get_primitive_dim(name);
+                let i = catch_prim!(gullet.get_int(state) => ("divide",cmd));
+                debug_log!(debug => "  =={}/{}",ov,i);
+                if i.to_i64() == 0 {
+                    return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
+                }
+                let nv : <S::NumSet as NumSet>::Dim = ov / i.to_i64();
+                debug_log!(debug => "  ={}",nv);
+                state.set_primitive_dim(name,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::ValueAssignment {name:"count",..} => {
+                let i = catch_prim!(gullet.get_int(state) => ("divide",cmd));
+                let u = match i.try_into() {
+                    Ok(u) => u,
+                    _ => return Err(ErrorInPrimitive{name:"count",msg:Some(format!("Not a valid register")),cause:Some(cmd.cause),source:None})
+                };
+                catch_prim!(gullet.get_keyword(state,"by") => ("divide",cmd));
+                debug_log!(debug => "  \\count{}",u);
+                let i = catch_prim!(gullet.get_int(state) => (stringify!(name),cmd));
+                let ov = state.get_int_register(u);
+                if i.to_i64() == 0 {
+                    return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
+                }
+                debug_log!(debug => "  =={}/{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov / i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_int_register(u,nv,global);
+                return Ok(())
+            }
+            o => return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("expected register after \\divide;got:{:?}",o)),cause:Some(cmd.cause),source:None})
+        }
+    }
 }
 
 pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
@@ -1057,6 +1126,7 @@ pub fn gdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
 pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
                                                  -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace => "\\global");
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("global",cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => ("global",cmd)) {
         None => file_end_prim!("global",cmd),
         Some(c) => match c.cmd {
@@ -1074,7 +1144,7 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
                     Some(f) => f(state,gullet,stomach,c,true)
                 }
             }
-            _ => todo!("global: {:?}",c)
+            _ => todo!("global: {:?} at {}",c,gullet.mouth().preview(100))
         }
     }
 }
@@ -1529,7 +1599,63 @@ pub fn month<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,c
 
 pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
                                                    -> Result<(),ErrorInPrimitive<T>> {
-    modify_in_place!(multiply,state,gullet,cmd,global,"*",*);
+    debug_log!(trace=>"\\multiply");
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("multiply",cmd));
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("multiply",cmd)) {
+        None => file_end_prim!("multiply",cmd),
+        Some(ocmd) => match ocmd.cmd {
+            StomachCommandInner::ValueRegister(u,Assignable::Int) => {
+                catch_prim!(gullet.get_keyword(state,"by") => ("multiply",cmd));
+                debug_log!(debug => "  \\count{}",u);
+                let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
+                let ov = state.get_int_register(u);
+                debug_log!(debug => "  =={}*{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov * i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_int_register(u,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Int} => {
+                debug_log!(debug => "  \\{}",name);
+                catch_prim!(gullet.get_keyword(state,"by") => ("multiply",cmd));
+                let ov = state.get_primitive_int(name);
+                let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
+                debug_log!(debug => "  =={}*{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov * i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_primitive_int(name,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::AssignableValue {name,tp:crate::tex::commands::Assignable::Dim} => {
+                debug_log!(debug => "  \\{}",name);
+                catch_prim!(gullet.get_keyword(state,"by") => ("multiply",cmd));
+                let ov = state.get_primitive_dim(name);
+                let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
+                debug_log!(debug => "  =={}*{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Dim = ov * i.to_i64();
+                debug_log!(debug => "  ={}",nv);
+                state.set_primitive_dim(name,nv,global);
+                return Ok(())
+            }
+            StomachCommandInner::ValueAssignment {name:"count",..} => {
+                let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
+                let u = match i.try_into() {
+                    Ok(u) => u,
+                    _ => return Err(ErrorInPrimitive{name:"count",msg:Some(format!("Not a valid register")),cause:Some(cmd.cause),source:None})
+                };
+                catch_prim!(gullet.get_keyword(state,"by") => ("multiply",cmd));
+                debug_log!(debug => "  \\count{}",u);
+                let i = catch_prim!(gullet.get_int(state) => (stringify!(name),cmd));
+                let ov = state.get_int_register(u);
+                debug_log!(debug => "  =={}*{}",ov,i);
+                let nv : <S::NumSet as NumSet>::Int = ov * i;
+                debug_log!(debug => "  ={}",nv);
+                state.set_int_register(u,nv,global);
+                return Ok(())
+            }
+            o => return Err(ErrorInPrimitive{name:"multiply",msg:Some(format!("expected register after \\multiply;got:{:?}",o)),cause:Some(cmd.cause),source:None})
+        }
+    }
 }
 
 
@@ -1773,7 +1899,7 @@ pub fn skip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut
     state.set_skip_register(i,v,global);
     Ok(())
 }
-pub fn skip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Skip,ErrorInPrimitive<T>> {
+pub fn skip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Skip<<S::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"Getting \\skip");
     let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
     let i:usize = match i.clone().try_into() {
@@ -1814,6 +1940,31 @@ pub fn skipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
         }
     }
     Ok(())
+}
+
+pub fn string<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"string");
+    match catch_prim!(gullet.mouth().get_next(state) => ("string",cmd)) {
+        None => file_end_prim!("string",cmd),
+        Some((t,_)) => match t.base() {
+            BaseToken::Char(c,_) => {
+                let ret = gullet::methods::string_to_tokens::<T>(&c.char_str().as_bytes());
+                Ok(ret)
+            }
+            BaseToken::CS(name) => {
+                let mut ret = Vec::new();
+                match state.get_escapechar() {
+                    None => (),
+                    Some(c) => ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None))
+                }
+                for t in name.as_vec() {
+                    ret.push(T::new(BaseToken::Char(t.clone(),CategoryCode::Other),None));
+                }
+                Ok(ret)
+            }
+        }
+    }
+
 }
 
 pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
@@ -2073,6 +2224,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     state.set_command(T::Char::relax_token(),Some(Ptr::new(Command::Relax)),true);
     register_value_assign_skip!(skip,state,stomach,gullet);
     register_assign!(skipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>skipdef(s,gu,cmd,global));
+    register_gullet!(string,state,stomach,gullet,(s,g,c) => string(s,g,c));
     register_gullet!(the,state,stomach,gullet,(s,g,c) => the(s,g,c));
     register_int!(time,state,stomach,gullet,(s,g,c) => time(s,g,c));
     register_assign!(toks,state,stomach,gullet,(s,gu,_,cmd,global) =>toks(s,gu,cmd,global));

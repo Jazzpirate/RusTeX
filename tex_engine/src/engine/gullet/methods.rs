@@ -5,7 +5,7 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
-use crate::tex::numbers::{Dim, Int, NumSet};
+use crate::tex::numbers::{Dim, Int, NumSet, Skip, SkipDim};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ExpectedInteger, ExpectedToken, ExpectedUnit, ImplementationError, OtherError, TeXError, UnexpectedEndgroup};
 use crate::utils::Ptr;
@@ -594,38 +594,143 @@ pub fn get_dim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&
                     43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
                         => next.cause
                     ),
+                    _ => return get_dim_inner(gullet,state,isnegative,StomachCommandInner::Char(c,false),next.cause)
+                }
+            }
+            o => return get_dim_inner(gullet,state,isnegative,o,next.cause)
+        }
+    }
+    file_end!()
+}
+pub fn get_dim_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S,isnegative:bool,next:StomachCommandInner<T::Char>,cause:T) -> Result<NS::Dim,Box<dyn TeXError<T>>> {
+    match next {
+        StomachCommandInner::Char(c,false) => {
+            let us = c.to_usize();
+            match us {
+                46 | 44 => /* . / ,*/ {
+                    let f = catch!(read_float(gullet,state,us as u8,isnegative)
+                            => cause
+                        );
+                    return read_unit(gullet,state,f)
+                },
+                _ if is_ascii_digit(us) => {
+                    let f = catch!(read_float(gullet,state,us as u8,isnegative)
+                            => cause
+                        );
+                    return read_unit(gullet,state,f)
+                },
+                _ => todo!("Non-digit in read_dimension")
+            }
+        }
+        StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Dim,..} => {
+            match gullet.primitive_dim(value_index) {
+                None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
+                Some(f) => {
+                    let val = f(state,gullet,GulletCommand{cause})?;
+                    return Ok(if isnegative { -val } else { val })
+                }
+            }
+        }
+        _ => todo!("Non-char in read_dim")
+    }
+}
+
+pub fn get_skipdim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S) -> Result<NS::SkipDim,Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Reading dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    gullet.mouth().skip_whitespace(state)?;
+    let mut isnegative = false;
+    while let Some(next) = gullet.get_next_stomach_command(state)? {
+        match next.cmd {
+            StomachCommandInner::Char(c,false) => {
+                let us = c.to_usize();
+                match us {
+                    45 => { // -
+                        isnegative = !isnegative;
+                        catch!(gullet.mouth().skip_whitespace(state)
+                            => next.cause
+                        );
+                    }
+                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
+                        => next.cause
+                    ),
                     46 | 44 => /* . / ,*/ {
                         let f = catch!(read_float(gullet,state,us as u8,isnegative)
                             => next.cause
                         );
-                        return read_unit(gullet,state,f)
+                        return read_skip_unit(gullet,state,f)
                     },
                     _ if is_ascii_digit(us) => {
                         let f = catch!(read_float(gullet,state,us as u8,isnegative)
                             => next.cause
                         );
-                        return read_unit(gullet,state,f)
+                        return read_skip_unit(gullet,state,f)
                     },
-                    _ => todo!("Non-digit in read_dimension")
+                    _ => todo!("Non-digit in read_skipdim")
                 }
             }
             StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Dim,..} => {
                 match gullet.primitive_dim(value_index) {
-                    None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
+                    None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
+                    Some(f) => {
+                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
+                        let ret = if isnegative { -val } else { val };
+                        return Ok(NS::SkipDim::from_dim(ret))
+                    }
+                }
+            }
+            _ => todo!("Non-char in read_skipdim")
+        }
+    }
+    file_end!()
+}
+
+pub fn get_skip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S) -> Result<Skip<NS::SkipDim>,Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Reading skip {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    gullet.mouth().skip_whitespace(state)?;
+    let mut isnegative = false;
+    while let Some(next) = gullet.get_next_stomach_command(state)? {
+        match next.cmd {
+            StomachCommandInner::Char(c,false) => {
+                let us = c.to_usize();
+                match us {
+                    45 => { // -
+                        isnegative = !isnegative;
+                        catch!(gullet.mouth().skip_whitespace(state)
+                            => next.cause
+                        );
+                    }
+                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
+                        => next.cause
+                    ),
+                    _ => return get_skip_inner(gullet,state,isnegative,StomachCommandInner::Char(c,false),next.cause)
+                }
+            }
+            StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Skip,..} => {
+                match gullet.primitive_skip(value_index) {
+                    None => return Err(ImplementationError("Missing implementation for primitive skip".to_string(),PhantomData).into()),
                     Some(f) => {
                         let val = f(state,gullet,GulletCommand{cause:next.cause})?;
                         return Ok(if isnegative { -val } else { val })
                     }
                 }
             }
-            _ => todo!("Non-char in read_dim")
+            _ => return get_skip_inner(gullet,state,isnegative,next.cmd,next.cause)
         }
     }
     file_end!()
 }
 
-pub fn get_skip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S) -> Result<NS::Skip,Box<dyn TeXError<T>>> {
-    todo!("get_skip")
+fn get_skip_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S,isnegative:bool,next:StomachCommandInner<T::Char>,cause:T) -> Result<Skip<NS::SkipDim>,Box<dyn TeXError<T>>> {
+    let base = get_dim_inner(gullet,state,isnegative,next,cause)?;
+    gullet.mouth().skip_whitespace(state);
+    let stretch = if gullet.get_keyword(state,"plus")? {
+        Some(get_skipdim(gullet,state)?)
+    } else {None};
+    gullet.mouth().skip_whitespace(state);
+    let shrink = if gullet.get_keyword(state,"minus")? {
+        Some(get_skipdim(gullet,state)?)
+    } else {None};
+    Ok(Skip{base,stretch,shrink})
 }
 
 pub fn get_muskip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S) -> Result<NS::MuSkip,Box<dyn TeXError<T>>> {
@@ -677,6 +782,25 @@ pub fn read_unit<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet
         match get_keywords(gullet, state, NS::Dim::units())? {
             Some(dim) => Ok(NS::Dim::from_float(dim,float)),
             _ => todo!("Non-unit in read_unit")
+        }
+    }
+}
+
+
+pub fn read_skip_unit<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,float:f64) -> Result<NS::SkipDim,Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Reading skip unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    gullet.mouth().skip_whitespace(state)?;
+    if get_keyword(gullet, state, "true")? {
+        gullet.mouth().skip_whitespace(state)?;
+        let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
+        match get_keywords(gullet, state, NS::Dim::units())? {
+            Some(dim) => Ok(NS::SkipDim::from_float(dim,float * mag)),
+            _ => Err(ExpectedUnit(PhantomData).into())
+        }
+    } else {
+        match get_keywords(gullet, state, NS::SkipDim::units())? {
+            Some(dim) => Ok(NS::SkipDim::from_float(dim,float)),
+            _ => todo!("Non-unit in read_skip_unit")
         }
     }
 }
