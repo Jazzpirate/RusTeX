@@ -152,8 +152,8 @@ impl<T:Token,Sto:Stomach<T>> EngineStruct<T,Sto> {
 pub struct Outputs {
     pub error: fn(&str),
     pub message: fn(&str),
-    pub file_open:fn(&PathBuf),
-    pub file_close:fn(&PathBuf),
+    pub file_open:fn(&str),
+    pub file_close:fn(&str),
     pub write_18:fn(&str),
     pub write_17:fn(&str),
     pub write_16:fn(&str),

@@ -128,12 +128,12 @@ mod tests {
         let outputs = Outputs {
             error: |s|  { println!("{}",Red.paint(std::format!("{}",s))) },
             message: |s| { print!("{}",Yellow.paint(s)) },
-            file_open:|pb| { println!("{}",Green.paint(format!("Opening file {:?}",pb))) },
-            file_close:|pb| { println!("{}",Green.paint(format!("Closing file {:?}",pb))) },
+            file_open:|pb| { println!("{}",Green.paint(format!("({:?}",pb))) },
+            file_close:|pb| { print!("{}",Green.paint(format!(")"))) },
             write_18:|_| { },
             write_17:|s| { print!("{}",s) },
             write_16:|s| { print!("{}",White.bold().paint(s)) },
-            write_neg1:|s| { print!("{}",Black.on(Blue).paint(s)) },
+            write_neg1:|s| { println!("{}",Black.on(Blue).paint(s)) },
             write_other:|s| { print!("{}",Black.on(Green).paint(s)) },
         };
 

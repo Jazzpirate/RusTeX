@@ -359,7 +359,11 @@ impl<C:CharType> TracingMouth<C> {
                 Ok(Some((tk,true)))
             } else {
                 match source {
-                    TeXMouthSource::String(_) => {
+                    TeXMouthSource::String(s) => {
+                        match &s.source {
+                            Some(s) => (state.outputs().file_close)(&*s),
+                            None => ()
+                        }
                         self.sources.pop();
                         debug!("file end; inserting \\everyeof");
                         let mut v = state.get_primitive_toks("everyeof");

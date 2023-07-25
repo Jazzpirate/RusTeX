@@ -5,10 +5,10 @@ use crate::engine::state::modes::GroupType;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
-use crate::tex::commands::{Assignable, methods, StomachCommand};
+use crate::tex::commands::{Assignable, methods, StomachCommand, StomachCommandInner};
 use crate::tex::commands::Command::MathChar;
-use crate::tex::token::Token;
-use crate::utils::errors::{ImplementationError, ModeError, TeXError};
+use crate::tex::token::{Token, TokenList};
+use crate::utils::errors::{ErrorInPrimitive, ImplementationError, ModeError, OtherError, TeXError};
 
 pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gullet:&mut Sto::Gu, cmd:StomachCommand<T>)
     -> Result<(),Box<dyn TeXError<T>>> {
@@ -30,7 +30,8 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         ValueRegister(u,Assignable::Dim) => assign_dim_register(state,gullet,u,cmd,false), // TODO global!
         ValueRegister(u,Assignable::Skip) => assign_skip_register(state,gullet,u,cmd,false), // TODO global!
         ValueRegister(u,Assignable::MuSkip) => assign_muskip_register(state,gullet,u,cmd,false), // TODO global!
-        ValueRegister(_,_) => todo!("Value Register"),
+        ValueRegister(u,Assignable::Toks) => assign_toks_register(state,gullet,u,cmd,false), // TODO global!
+        ValueRegister(_,tp) => todo!("Value Register {:?}",tp),
         Assignment {name,index} => match stomach.command(index) {
             Some(f) => Ok(f(state, gullet, stomach, cmd, false)?), // TODO global!
             None => Err(ImplementationError(format!("Missing implementation for primitive command {}", name), PhantomData).into())
@@ -89,5 +90,19 @@ fn assign_muskip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gul
     let v = catch!(gullet.get_muskip(state) => cmd.cause);
     debug_log!(debug=>"\\muskip{} = {}",u,v);
     state.set_muskip_register(u,v,global);
+    Ok(())
+}
+pub fn assign_toks_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,u:usize,cmd:StomachCommand<T>,global:bool) -> Result<(),Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Setting \\toks{}",u);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
+    match catch!(gullet.get_next_stomach_command(state) => cmd.cause) {
+        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup,..}) => (),
+        _ => return Err(OtherError{
+            msg:"Begin group token expected".to_string(),cause:Some(cmd.cause),source:None
+        }.into())
+    }
+    let tks = catch!(gullet.mouth().read_until_endgroup(state) => cmd.cause);
+    debug_log!(debug=>"\\toks{} = {:?}",u,TokenList(tks.clone()));
+    state.set_toks_register(u,tks,global);
     Ok(())
 }

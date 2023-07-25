@@ -1,10 +1,12 @@
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
+use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{debug_log, register_assign, register_gullet, register_int, register_tok_assign};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int, register_tok_assign};
+use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::numbers::NumSet;
-use crate::tex::token::Token;
+use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
@@ -38,7 +40,6 @@ glueshrinkorder
 gluestretchorder
 gluestretch
 gluetomu
-ifdefined
 ifcsname
 iffontchar
 interactionmode
@@ -82,6 +83,20 @@ pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mu
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(2) => ("eTeXversion",cmd)))
 }
 
+pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifdefined");
+    match catch_prim!(gullet.mouth().get_next(state) => ("ifeof",cmd)) {
+        None => file_end_prim!("ifeof",cmd),
+        Some((t,_)) => match t.base() {
+            BaseToken::Char(c,CategoryCode::Active) =>
+                Ok(state.get_ac_command(*c).is_some()),
+            BaseToken::CS(name) =>
+                Ok(state.get_command(name).is_some()),
+            _ => Err(ErrorInPrimitive{name:"ifdefined",msg:Some(format!("Expected a control sequence, got: {:?}",t)),cause:Some(cmd.cause),source:None})
+        }
+    }
+}
+
 use super::tex::{global,long,outer,def,edef,gdef,xdef};
 
 pub fn protected<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
@@ -111,6 +126,7 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision(s,g,c));
     register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
     register_tok_assign!(everyeof,state,stomach,gullet);
+    register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
     register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected(sto,s,gu,cmd,g,false,false,false));
     register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded(s,g,c));
 }

@@ -1176,6 +1176,7 @@ pub fn input<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
     if !file.exists() {
         Err(ErrorInPrimitive{name:"input",msg:Some(format!("I can't find file `{}'",filename)),cause:Some(cmd.cause),source:None})
     } else {
+        (state.outputs().file_open)(file.path().to_str().unwrap());
         gullet.mouth().push_file(&file);
         Ok(vec!())
     }
@@ -1912,8 +1913,12 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                 let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
                 Ok(ret)
             }
-            StomachCommandInner::ValueRegister(_,_) => todo!(),
-            StomachCommandInner::AssignableValue {..} => todo!(),
+            StomachCommandInner::ValueRegister(i,Assignable::Toks) =>
+                Ok(state.get_toks_register(i)),
+            StomachCommandInner::ValueRegister(_,tp) => todo!("\\the ValueRegister {:?}",tp),
+            StomachCommandInner::AssignableValue {tp:Assignable::Toks,name} =>
+                Ok(state.get_primitive_toks(name)),
+            StomachCommandInner::AssignableValue {tp,..} => todo!("\\the AssignableValue {:?}",tp),
             StomachCommandInner::Value {name,index,tp:Assignable::Int} => {
                 match gullet.primitive_int(index) {
                     None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(

@@ -8,6 +8,7 @@ use crate::catch;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::tex::commands::{GulletCommand, StomachCommand, StomachCommandInner};
+use crate::tex::ConditionalBranch;
 use crate::tex::numbers::{NumSet, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ErrorInPrimitive, TeXError};
@@ -86,7 +87,7 @@ pub trait Gullet<T:Token>:Sized+'static {
     }
 
     fn new_conditional(&mut self) -> usize;
-    fn close_conditional(&mut self);
+    fn set_conditional(&mut self,branch:ConditionalBranch);
     fn pop_conditional(&mut self);
 
 
@@ -123,7 +124,7 @@ pub trait Gullet<T:Token>:Sized+'static {
 
 pub struct TeXGullet<T:Token,M:Mouth<T>,S:State<T>> {
     pub mouth:M,
-    in_conditionals:Vec<bool>,
+    in_conditionals:Vec<ConditionalBranch>,
     conditionals:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>>>,
     primitives:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>,
     ints:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<<<S as State<T>>::NumSet as NumSet>::Int,ErrorInPrimitive<T>>>,
@@ -226,15 +227,14 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
         self.toks.get_from_name(name).copied()
     }
 
-
     fn new_conditional(&mut self) -> usize {
         let ret = self.in_conditionals.len();
-        self.in_conditionals.push(false);
+        self.in_conditionals.push(ConditionalBranch::None);
         ret
     }
-    fn close_conditional(&mut self) {
+    fn set_conditional(&mut self,branch:ConditionalBranch) {
         // TODO throw error
-        *self.in_conditionals.last_mut().unwrap() = true;
+        *self.in_conditionals.last_mut().unwrap() = branch;
     }
     fn pop_conditional(&mut self) {
         // TODO throw error

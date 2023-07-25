@@ -10,6 +10,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ExpectedInteger, ExpectedToken, ExpectedUnit, ImplementationError, OtherError, TeXError, UnexpectedEndgroup};
 use crate::utils::Ptr;
 use crate::engine::mouth::Mouth;
+use crate::tex::ConditionalBranch;
 use crate::utils::strings::{CharType, TeXStr};
 
 pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> StomachCommand<T> {
@@ -337,8 +338,8 @@ pub fn do_conditional<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:
         Some(c) => {
             let idx = gullet.new_conditional();
             let b = c(state,gullet,GulletCommand{cause})?;
-            gullet.close_conditional();
             if b {
+                gullet.set_conditional(ConditionalBranch::True);
                 debug_log!(trace=>"True conditional");
                 Ok(())
             } else { false_loop(gullet,state) }
@@ -356,6 +357,7 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
                     Some(Command::Conditional {..}) => incond += 1,
                     Some(Command::Gullet {name:"else",..}) if incond == 0 => {
                         debug_log!(trace=>"...else branch.");
+                        gullet.set_conditional(ConditionalBranch::Else);
                         return Ok(())
                     }
                     Some(Command::Gullet {name:"fi",..}) if incond > 0 => incond -= 1,
@@ -370,6 +372,7 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
                 match state.get_command(name).as_deref() {
                     Some(Command::Conditional {..}) => incond += 1,
                     Some(Command::Gullet {name:"else",..}) if incond == 0 => {
+                        gullet.set_conditional(ConditionalBranch::Else);
                         debug_log!(trace=>"...else branch.");
                         return Ok(())
                     }
@@ -390,6 +393,7 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
 
 pub fn else_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S) -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"\\else. Skipping...");
+    gullet.set_conditional(ConditionalBranch::Else);
     let mut incond:u8 = 0;
     while let Some((next,exp)) = gullet.mouth().get_next(state)? {
         match next.base() {
@@ -411,7 +415,7 @@ pub fn else_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut 
                 match state.get_command(name).as_deref() {
                     Some(Command::Conditional {..}) => incond += 1,
                     Some(Command::Gullet {name:"else",..}) if incond == 0 => {
-                        todo!("Unexpected \\else in conditional")
+                        return Err(OtherError{msg:"Unexpected \\else".into(),source:None,cause:None}.into())
                     }
                     Some(Command::Gullet {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(Command::Gullet {name:"fi",..}) => {
