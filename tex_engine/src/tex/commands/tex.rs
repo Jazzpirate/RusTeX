@@ -1,7 +1,7 @@
 //! TeX primitive [`Command`]s
 
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
@@ -62,75 +62,7 @@ wd
 dp
 lastskip
 
-pretolerance
-tolerance
-hbadness
-vbadness
-linepenalty
-hyphenpenalty
-exhyphenpenalty
-binoppenalty
-relpenalty
-clubpenalty
-widowpenalty
-displaywidowpenalty
-brokenpenalty
-predisplaypenalty
-postdisplaypenalty
-interlinepenalty
-floatingpenalty
-outputpenalty
-doublehyphendemerits
-finalhyphendemerits
-adjdemerits
-looseness
-pausing
-holdinginserts
-tracingonline
-tracingmacros
-tracingstats
-tracingparagraphs
-tracingpages
-tracingoutput
-tracinglostchars
-tracingcommands
-tracingrestores
-language
-uchyph
-lefthyphenmin
-righthyphenmin
 globaldefs
-defaulthyphenchar
-defaultskewchar
-maxdeadcycles
-hangafter
-fam
-delimiterfactor
-showboxbreadth
-showboxdepth
-errorcontextlines
-
-hfuzz
-vfuzz
-overfullrule
-emergencystretch
-hsize
-vsize
-maxdepth
-splitmaxdepth
-boxmaxdepth
-lineskiplimit
-delimitershortfall
-nulldelimiterspace
-scriptspace
-mathsurround
-predisplaysize
-displaywidth
-displayindent
-parindent
-hangindent
-hoffset
-voffset
 
 baselineskip
 lineskip
@@ -2135,21 +2067,40 @@ pub fn year<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cm
 
 pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stomach:&mut Sto,gullet:&mut Sto::Gu) {
 
+    register_skip_assign!(abovedisplayshortskip,state,stomach,gullet);
+    register_skip_assign!(abovedisplayskip,state,stomach,gullet);
+    register_int_assign!(adjdemerits,state,stomach,gullet);
     register_assign!(advance,state,stomach,gullet,(s,gu,_,cmd,global) =>advance(s,gu,cmd,global));
+    register_skip_assign!(baselineskip,state,stomach,gullet);
     register_stomach!(begingroup,state,stomach,gullet,(s,_,sto,cmd,_) =>begingroup(sto,s,cmd));
+    register_skip_assign!(belowdisplayskip,state,stomach,gullet);
+    register_skip_assign!(belowdisplayshortskip,state,stomach,gullet);
+    register_int_assign!(binoppenalty,state,stomach,gullet);
+    register_dim_assign!(boxmaxdepth,state,stomach,gullet);
+    register_int_assign!(brokenpenalty,state,stomach,gullet);
     register_value_assign_int!(catcode,state,stomach,gullet);
     register_assign!(chardef,state,stomach,gullet,(s,gu,_,cmd,global) =>chardef(s,gu,cmd,global));
     register_stomach!(closein,state,stomach,gullet,(s,gu,sto,cmd,_) =>closein(s,gu,sto,cmd));
     register_whatsit!(closeout,state,stomach,gullet,(s,gu,sto,cmd) =>closeout(s,gu,sto,cmd));
+    register_int_assign!(clubpenalty,state,stomach,gullet);
     register_value_assign_int!(count,state,stomach,gullet);
     register_assign!(countdef,state,stomach,gullet,(s,gu,_,cmd,global) =>countdef(s,gu,cmd,global));
     register_int!(day,state,stomach,gullet,(s,g,c) => day(s,g,c));
     register_assign!(def,state,stomach,gullet,(s,gu,_,cmd,global) =>def(s,gu,cmd,global,false,false,false));
+    register_int_assign!(defaulthyphenchar,state,stomach,gullet);
+    register_int_assign!(defaultskewchar,state,stomach,gullet);
+    register_int_assign!(delimiterfactor,state,stomach,gullet);
+    register_dim_assign!(delimitershortfall,state,stomach,gullet);
     register_value_assign_dim!(dimen,state,stomach,gullet);
     register_assign!(dimendef,state,stomach,gullet,(s,gu,_,cmd,global) =>dimendef(s,gu,cmd,global));
+    register_dim_assign!(displayindent,state,stomach,gullet);
+    register_int_assign!(displaywidowpenalty,state,stomach,gullet);
+    register_dim_assign!(displaywidth,state,stomach,gullet);
     register_assign!(divide,state,stomach,gullet,(s,gu,_,cmd,global) =>divide(s,gu,cmd,global));
+    register_int_assign!(doublehyphendemerits,state,stomach,gullet);
     register_assign!(edef,state,stomach,gullet,(s,gu,_,cmd,global) =>edef(s,gu,cmd,global,false,false,false));
     register_gullet!(else,state,stomach,gullet,(s,gu,cmd) =>else_(s,gu,cmd));
+    register_dim_assign!(emergencystretch,state,stomach,gullet);
     register_stomach!(end,state,stomach,gullet,(s,_,sto,cmd,_) =>end(sto,s,cmd));
     register_stomach!(endgroup,state,stomach,gullet,(s,_,sto,cmd,_) =>endgroup(sto,s,cmd));
     register_value_assign_int!(endlinechar,state,stomach,gullet);
@@ -2166,12 +2117,25 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
         index:em
     })),true);
 
+    register_int_assign!(errorcontextlines,state,stomach,gullet);
     register_value_assign_int!(escapechar,state,stomach,gullet);
+    register_int_assign!(exhyphenpenalty,state,stomach,gullet);
     register_gullet!(expandafter,state,stomach,gullet,(s,g,c) => expandafter(s,g,c));
+    register_int_assign!(fam,state,stomach,gullet);
     register_gullet!(fi,state,stomach,gullet,(s,gu,cmd) =>fi(s,gu,cmd));
+    register_int_assign!(finalhyphendemerits,state,stomach,gullet);
+    register_int_assign!(floatingpenalty,state,stomach,gullet);
     register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef(s,gu,cmd,global,false,false,false));
     register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global(sto,s,gu,cmd,g,false,false,false));
-
+    register_int_assign!(globaldefs,state,stomach,gullet);
+    register_int_assign!(hangafter,state,stomach,gullet);
+    register_dim_assign!(hangindent,state,stomach,gullet);
+    register_int_assign!(hbadness,state,stomach,gullet);
+    register_dim_assign!(hfuzz,state,stomach,gullet);
+    register_dim_assign!(hoffset,state,stomach,gullet);
+    register_int_assign!(holdinginserts,state,stomach,gullet);
+    register_dim_assign!(hsize,state,stomach,gullet);
+    register_int_assign!(hyphenpenalty,state,stomach,gullet);
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>todo!("if"));
     register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcase"));
     register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcat"));
@@ -2198,10 +2162,21 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx(s,gu,cmd));
     register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate(s,gu,sto,cmd));
     register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input(s,gu,cmd));
-    register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long(sto,s,gu,cmd,g,false,false,false));
+    register_int_assign!(interlinepenalty,state,stomach,gullet);
+    register_int_assign!(language,state,stomach,gullet);
+    register_int_assign!(lefthyphenmin,state,stomach,gullet);
+    register_skip_assign!(leftskip,state,stomach,gullet);
     register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_(s,gu,cmd,global));
+    register_int_assign!(linepenalty,state,stomach,gullet);
+    register_skip_assign!(lineskip,state,stomach,gullet);
+    register_dim_assign!(lineskiplimit,state,stomach,gullet);
+    register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long(sto,s,gu,cmd,g,false,false,false));
+    register_int_assign!(looseness,state,stomach,gullet);
     register_int_assign!(mag,state,stomach,gullet);
+    register_int_assign!(maxdeadcycles,state,stomach,gullet);
+    register_dim_assign!(maxdepth,state,stomach,gullet);
     register_assign!(mathchardef,state,stomach,gullet,(s,gu,_,cmd,global) =>mathchardef(s,gu,cmd,global));
+    register_dim_assign!(mathsurround,state,stomach,gullet);
     register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning(s,g,c));
     register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message(s,gu,cmd));
     register_int!(month,state,stomach,gullet,(s,g,c) => month(s,g,c));
@@ -2210,26 +2185,65 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_assign!(muskipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>muskipdef(s,gu,cmd,global));
     register_value_assign_int!(newlinechar,state,stomach,gullet);
     register_gullet!(noexpand,state,stomach,gullet,(s,g,c) => noexpand(s,g,c));
+    register_dim_assign!(nulldelimiterspace,state,stomach,gullet);
     register_gullet!(number,state,stomach,gullet,(s,g,c) => number(s,g,c));
     register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin(s,gu,sto,cmd));
     register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout(s,gu,sto,cmd));
     register_assign!(outer,state,stomach,gullet,(s,gu,sto,cmd,g) =>outer(sto,s,gu,cmd,g,false,false,false));
+    register_int_assign!(outputpenalty,state,stomach,gullet);
+    register_dim_assign!(overfullrule,state,stomach,gullet);
 
     state.set_command(T::Char::par_token(),Some(Ptr::new(Command::Stomach {
         name:"par",
         index:stomach.register_primitive("par",|s,_gu,sto,cmd,_global| par(sto,s,cmd))
     })),true);
-
+    register_skip_assign!(parfillskip,state,stomach,gullet);
+    register_dim_assign!(parindent,state,stomach,gullet);
+    register_skip_assign!(parskip,state,stomach,gullet);
+    register_int_assign!(pausing,state,stomach,gullet);
+    register_int_assign!(postdisplaypenalty,state,stomach,gullet);
+    register_int_assign!(predisplaypenalty,state,stomach,gullet);
+    register_dim_assign!(predisplaysize,state,stomach,gullet);
+    register_int_assign!(relpenalty,state,stomach,gullet);
+    register_int_assign!(righthyphenmin,state,stomach,gullet);
+    register_int_assign!(pretolerance,state,stomach,gullet);
     register_assign!(read,state,stomach,gullet,(s,gu,_,cmd,global) =>read(s,gu,cmd,global));
     state.set_command(T::Char::relax_token(),Some(Ptr::new(Command::Relax)),true);
+    register_int_assign!(relpenalty,state,stomach,gullet);
+    register_skip_assign!(rightskip,state,stomach,gullet);
+    register_dim_assign!(scriptspace,state,stomach,gullet);
+    register_int_assign!(showboxbreadth,state,stomach,gullet);
+    register_int_assign!(showboxdepth,state,stomach,gullet);
     register_value_assign_skip!(skip,state,stomach,gullet);
     register_assign!(skipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>skipdef(s,gu,cmd,global));
+    register_skip_assign!(spaceskip,state,stomach,gullet);
+    register_dim_assign!(splitmaxdepth,state,stomach,gullet);
+    register_skip_assign!(splittopskip,state,stomach,gullet);
     register_gullet!(string,state,stomach,gullet,(s,g,c) => string(s,g,c));
+    register_skip_assign!(tabskip,state,stomach,gullet);
     register_gullet!(the,state,stomach,gullet,(s,g,c) => the(s,g,c));
     register_int!(time,state,stomach,gullet,(s,g,c) => time(s,g,c));
     register_assign!(toks,state,stomach,gullet,(s,gu,_,cmd,global) =>toks(s,gu,cmd,global));
     register_assign!(toksdef,state,stomach,gullet,(s,gu,_,cmd,global) =>toksdef(s,gu,cmd,global));
+    register_int_assign!(tolerance,state,stomach,gullet);
+    register_skip_assign!(topskip,state,stomach,gullet);
+    register_int_assign!(tracingcommands,state,stomach,gullet);
+    register_int_assign!(tracinglostchars,state,stomach,gullet);
+    register_int_assign!(tracingmacros,state,stomach,gullet);
+    register_int_assign!(tracingonline,state,stomach,gullet);
+    register_int_assign!(tracingoutput,state,stomach,gullet);
+    register_int_assign!(tracingpages,state,stomach,gullet);
+    register_int_assign!(tracingparagraphs,state,stomach,gullet);
+    register_int_assign!(tracingrestores,state,stomach,gullet);
+    register_int_assign!(tracingstats,state,stomach,gullet);
+    register_int_assign!(uchyph,state,stomach,gullet);
+    register_int_assign!(vbadness,state,stomach,gullet);
+    register_dim_assign!(vfuzz,state,stomach,gullet);
+    register_dim_assign!(voffset,state,stomach,gullet);
+    register_dim_assign!(vsize,state,stomach,gullet);
+    register_int_assign!(widowpenalty,state,stomach,gullet);
     register_whatsit!(write,state,stomach,gullet,(s,gu,sto,cmd) =>write(s,gu,sto,cmd));
     register_assign!(xdef,state,stomach,gullet,(s,gu,_,cmd,global) =>xdef(s,gu,cmd,global,false,false,false));
+    register_skip_assign!(xspaceskip,state,stomach,gullet);
     register_int!(year,state,stomach,gullet,(s,g,c) => year(s,g,c));
 }

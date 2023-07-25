@@ -10,7 +10,7 @@ use crate::utils::errors::{OtherError, TeXError, UndefinedActiveCharacter, Undef
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::Outputs;
-use crate::tex::numbers::{NumSet, Skip};
+use crate::tex::numbers::{Int, NumSet, Skip};
 use crate::utils::Ptr;
 
 pub mod fields;
@@ -131,6 +131,11 @@ pub trait State<T:Token>:Sized+'static {
     /// set a primitive dimension register
     fn set_primitive_dim(&mut self, name:&'static str, v:<<Self as State<T>>::NumSet as NumSet>::Dim, globally:bool);
 
+    /// get a primitive dimension register
+    fn get_primitive_skip(&self, name:&'static str) -> Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>;
+    /// set a primitive dimension register
+    fn set_primitive_skip(&mut self, name:&'static str, v:Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>, globally:bool);
+
     /// get a primitive token register
     fn get_primitive_toks(&self, name:&'static str) -> Vec<T>;
     /// set a primitive token register
@@ -170,6 +175,7 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
 
     primitive_intregisters: HashMapField<&'static str,NS::Int>,
     primitive_dimregisters: HashMapField<&'static str,NS::Dim>,
+    primitive_skipregisters: HashMapField<&'static str,Skip<NS::SkipDim>>,
     primitive_tokregisters: HashMapField<&'static str,Vec<T>>,
 }
 use crate::utils::strings::CharType;
@@ -203,6 +209,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> TeXState<T,FS,NS> {
 
             primitive_intregisters: HashMapField::new(),
             primitive_dimregisters: HashMapField::new(),
+            primitive_skipregisters: HashMapField::new(),
             primitive_tokregisters: HashMapField::new(),
         };
         for i in 97..123 {
@@ -312,6 +319,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
 
         self.primitive_intregisters.push_stack();
         self.primitive_dimregisters.push_stack();
+        self.primitive_skipregisters.push_stack();
         self.primitive_tokregisters.push_stack();
         unsafe{self.aftergroups.push(self.aftergroups.last().unwrap_unchecked().clone())};
     }
@@ -340,6 +348,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
 
         self.primitive_intregisters.pop_stack();
         self.primitive_dimregisters.pop_stack();
+        self.primitive_skipregisters.pop_stack();
         self.primitive_tokregisters.pop_stack();
 
         Ok(self.aftergroups.pop())
@@ -352,6 +361,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     fn get_escapechar(&self) -> Option<T::Char> { *self.escapechar.get() }
     // #[inline(always)]
     fn set_escapechar(&mut self, c: Option<T::Char>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.escapechar.set_globally(c)
         } else {
@@ -363,6 +374,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     fn get_endlinechar(&self) -> Option<T::Char> { *self.endlinechar.get() }
     // #[inline(always)]
     fn set_endlinechar(&mut self, c: Option<T::Char>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.endlinechar.set_globally(c)
         } else {
@@ -374,6 +387,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     fn get_newlinechar(&self) -> Option<T::Char> { *self.newlinechar.get() }
     // #[inline(always)]
     fn set_newlinechar(&mut self, c: Option<T::Char>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.newlinechar.set_globally(c)
         } else {
@@ -387,6 +402,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
     // #[inline(always)]
     fn set_command(&mut self, name: TeXStr<T::Char>, cmd: Option<Ptr<Command<T>>>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.commands.set_globally(name,cmd)
         } else {
@@ -397,6 +414,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.ac_commands.get(&c)
     }
     fn set_ac_command(&mut self, c: T::Char, cmd: Option<Ptr<Command<T>>>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.ac_commands.set_globally(c,cmd)
         } else {
@@ -411,6 +430,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
     // #[inline(always)]
     fn set_catcode(&mut self, c: T::Char, cc: CategoryCode, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.catcodes.set_globally(c,cc)
         } else {
@@ -424,6 +445,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
     // #[inline(always)]
     fn set_ucchar(&mut self, c: T::Char, uc: T::Char, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.ucchar.set_globally(c,uc)
         } else {
@@ -437,6 +460,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
     // #[inline(always)]
     fn set_lcchar(&mut self, c: T::Char, lc: T::Char, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.lcchar.set_globally(c,lc)
         } else {
@@ -450,6 +475,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
     // #[inline(always)]
     fn set_int_register(&mut self, i: usize, v: NS::Int, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.intregisters.set_globally(i,v)
         } else {
@@ -459,6 +486,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
 
     fn get_dim_register(&self, i: usize) -> NS::Dim { self.dimregisters.get(&i) }
     fn set_dim_register(&mut self, i: usize, v: NS::Dim, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.dimregisters.set_globally(i,v)
         } else {
@@ -468,6 +497,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
 
     fn get_skip_register(&self, i: usize) -> Skip<NS::SkipDim> { self.skipregisters.get(&i) }
     fn set_skip_register(&mut self, i: usize, v: Skip<NS::SkipDim>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.skipregisters.set_globally(i,v)
         } else {
@@ -477,6 +508,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
 
     fn get_muskip_register(&self, i: usize) -> NS::MuSkip { self.muskipregisters.get(&i) }
     fn set_muskip_register(&mut self, i: usize, v: NS::MuSkip, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.muskipregisters.set_globally(i,v)
         } else {
@@ -486,6 +519,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
 
     fn get_toks_register(&self, i: usize) -> Vec<T> { self.toksregisters.get(&i) }
     fn set_toks_register(&mut self, i: usize, v: Vec<T>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.toksregisters.set_globally(i,v)
         } else {
@@ -497,6 +532,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.primitive_intregisters.get(&name)
     }
     fn set_primitive_int(&mut self, name: &'static str, v: <<Self as State<T>>::NumSet as NumSet>::Int, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.primitive_intregisters.set_globally(name,v)
         } else {
@@ -508,6 +545,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         self.primitive_dimregisters.get(&name)
     }
     fn set_primitive_dim(&mut self, name: &'static str, v: <<Self as State<T>>::NumSet as NumSet>::Dim, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.primitive_dimregisters.set_globally(name,v)
         } else {
@@ -515,10 +554,25 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         }
     }
 
+    fn get_primitive_skip(&self, name: &'static str) -> Skip<NS::SkipDim> {
+        self.primitive_skipregisters.get(&name)
+    }
+    fn set_primitive_skip(&mut self, name: &'static str, v: Skip<NS::SkipDim>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.primitive_skipregisters.set_globally(name,v)
+        } else {
+            self.primitive_skipregisters.set_locally(name,v)
+        }
+    }
+
     fn get_primitive_toks(&self, name: &'static str) -> Vec<T> {
         self.primitive_tokregisters.get(&name)
     }
     fn set_primitive_toks(&mut self, name: &'static str, v: Vec<T>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
             self.primitive_tokregisters.set_globally(name,v)
         } else {

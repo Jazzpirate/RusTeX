@@ -291,7 +291,6 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
             Some(t) => ret.push_str(format!("{}",t).as_str()),
             None => ()
         }
-        if ret.len() > len { return ret.chars().take(len).collect() }
         for s in self.sources.iter().rev() {
             ret.push_str(&match s {
                 TeXMouthSource::NoExpand(t) => todo!("preview `\noexpand`ed token"),

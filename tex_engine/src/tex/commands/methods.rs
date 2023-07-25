@@ -121,6 +121,15 @@ macro_rules! register_dim_assign {
         })),true);
     };
 }
+#[macro_export]
+macro_rules! register_skip_assign {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
+            name:stringify!($name),
+            tp:crate::tex::commands::Assignable::Skip
+        })),true);
+    };
+}
 
 #[macro_export]
 macro_rules! register_tok_assign {
@@ -244,6 +253,14 @@ pub fn assign_primitive_dim<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gu
     let d = catch_prim!(gullet.get_dim(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_dim(name,d,global);
+    Ok(())
+}
+pub fn assign_primitive_skip<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning {}",name);
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
+    let d = catch_prim!(gullet.get_skip(state) => (name,cmd));
+    debug_log!(debug=>"\\{} = {}",name,d);
+    state.set_primitive_skip(name,d,global);
     Ok(())
 }
 pub fn assign_primitive_toks<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<T>> {

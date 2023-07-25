@@ -149,6 +149,11 @@ impl<SD:SkipDim> Default for Skip<SD> {
         Self{base:SD::Dim::default(),stretch:None,shrink:None}
     }
 }
+impl<SD:SkipDim> IsDefault for Skip<SD> {
+    fn is_default(&self) -> bool {
+        self.base.is_default() && self.stretch.is_none() && self.shrink.is_none()
+    }
+}
 impl<SD:SkipDim> Display for Skip<SD> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.base,f)?;

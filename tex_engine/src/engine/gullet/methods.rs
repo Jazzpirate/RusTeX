@@ -631,7 +631,11 @@ pub fn get_dim_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gu
                 }
             }
         }
-        _ => todo!("Non-char in read_dim")
+        StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
+            let val = state.get_dim_register(i);
+            return Ok(if isnegative { -val } else { val })
+        }
+        o => todo!("Non-char in read_dim: {:?}",o)
     }
 }
 
@@ -800,7 +804,7 @@ pub fn read_skip_unit<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(g
     } else {
         match get_keywords(gullet, state, NS::SkipDim::units())? {
             Some(dim) => Ok(NS::SkipDim::from_float(dim,float)),
-            _ => todo!("Non-unit in read_skip_unit")
+            _ => todo!("Non-unit in read_skip_unit: {}",gullet.mouth().preview(50).replace("\n","\\n"))
         }
     }
 }
@@ -852,10 +856,19 @@ pub fn get_keywords<'a,T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, stat
                         return Ok(None)
                     }
                     else if keywords.len() == 1 && keywords[0] == current { return Ok(Some(keywords[0])) }
+                } else if keywords.contains(&current.as_str()) {
+                    gullet.mouth().requeue(next.cause);
+                    keywords = keywords.into_iter().filter(|s| s == &current).collect();
+                    return Ok(Some(keywords[0]))
                 } else {
                     gullet.mouth().push_tokens(read_toks);
                     return Ok(None)
                 }
+            }
+            _ if keywords.contains(&current.as_str()) => {
+                gullet.mouth().requeue(next.cause);
+                keywords = keywords.into_iter().filter(|s| s == &current).collect();
+                return Ok(Some(keywords[0]))
             }
             _ => {
                 gullet.mouth().push_tokens(read_toks);
