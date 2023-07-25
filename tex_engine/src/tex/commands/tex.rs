@@ -16,7 +16,7 @@ use crate::tex::numbers::{Int, NumSet, Skip};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
 use crate::utils::Ptr;
-use crate::utils::strings::{AllCharsTrait, CharType};
+use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use crate::engine::gullet;
 use crate::tex::boxes::Whatsit;
@@ -555,6 +555,34 @@ pub fn countdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
     Ok(())
 }
 
+pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"csname");
+    let csidx = state.push_csname();
+    let mut csname = Vec::new();
+    while state.current_csname() == Some(csidx) {
+        match catch_prim!(gullet.get_next_stomach_command(state) => ("csname",cmd)) {
+            None => return file_end_prim!("csname",cmd),
+            Some(sc) => match sc.cmd {
+                StomachCommandInner::Command {name:"endcsname",..} => state.pop_csname(),
+                StomachCommandInner::Char(c,_) => csname.push(c),
+                StomachCommandInner::BeginGroup(c) => csname.push(c),
+                StomachCommandInner::EndGroup(c) => csname.push(c),
+                StomachCommandInner::Superscript(c) => csname.push(c),
+                StomachCommandInner::Subscript(c) => csname.push(c),
+                StomachCommandInner::MathShift(c) => csname.push(c),
+                StomachCommandInner::Space => csname.push(T::Char::from(b' ')),
+                o => return Err(ErrorInPrimitive{name:"csname",msg:Some(format!("Unexpected token in csname: {:?}",o)),cause:Some(cmd.cause),source:None})
+            }
+        }
+    }
+    let str : TeXStr<T::Char> = csname.into();
+    match state.get_command(&str) {
+        None => state.set_command(str.clone(),Some(Ptr::new(Command::Relax)),false),
+        _ => ()
+    }
+    Ok(vec!(T::new(BaseToken::CS(str),None)))
+}
+
 pub fn day<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(
         state.get_start_time().day() as i64
@@ -904,6 +932,10 @@ pub fn else_<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cm
 
 pub fn end<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,_state:&mut Sto::S,_cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
     todo!("end")
+}
+
+pub fn endcsname<T:Token>(cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+    Err(ErrorInPrimitive{name:"endcsname",msg:Some("Not in a \\csname".to_string()),cause:Some(cmd.cause),source:None})
 }
 
 pub fn endgroup<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
@@ -2090,6 +2122,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(clubpenalty,state,stomach,gullet);
     register_value_assign_int!(count,state,stomach,gullet);
     register_assign!(countdef,state,stomach,gullet,(s,gu,_,cmd,global) =>countdef(s,gu,cmd,global));
+    register_gullet!(csname,state,stomach,gullet,(s,gu,cmd) =>csname(s,gu,cmd));
     register_int!(day,state,stomach,gullet,(s,g,c) => day(s,g,c));
     register_assign!(def,state,stomach,gullet,(s,gu,_,cmd,global) =>def(s,gu,cmd,global,false,false,false));
     register_int_assign!(defaulthyphenchar,state,stomach,gullet);
@@ -2107,6 +2140,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_gullet!(else,state,stomach,gullet,(s,gu,cmd) =>else_(s,gu,cmd));
     register_dim_assign!(emergencystretch,state,stomach,gullet);
     register_stomach!(end,state,stomach,gullet,(s,_,sto,cmd,_) =>end(sto,s,cmd));
+    register_stomach!(endcsname,state,stomach,gullet,(_,_,_,cmd,_) =>endcsname(cmd));
     register_stomach!(endgroup,state,stomach,gullet,(s,_,sto,cmd,_) =>endgroup(sto,s,cmd));
     register_value_assign_int!(endlinechar,state,stomach,gullet);
     register_tok_assign!(errhelp,state,stomach,gullet);

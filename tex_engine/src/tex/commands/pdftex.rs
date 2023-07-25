@@ -158,6 +158,8 @@ pdfximage
 quitvmode
  */
 
+//TODO: pdffilesize
+
 pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
     register_int_assign!(pdfdecimaldigits,state,stomach,gullet);

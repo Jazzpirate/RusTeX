@@ -16,12 +16,12 @@ use crate::utils::strings::{CharType, TeXStr};
 pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> StomachCommand<T> {
     use CategoryCode::*;
     StomachCommand{cause,cmd:match catcode {
-        Superscript => StomachCommandInner::Superscript,
-        Subscript => StomachCommandInner::Subscript,
+        Superscript => StomachCommandInner::Superscript(char),
+        Subscript => StomachCommandInner::Subscript(char),
         Space => StomachCommandInner::Space,
-        MathShift => StomachCommandInner::MathShift,
-        BeginGroup => StomachCommandInner::BeginGroup,
-        EndGroup => StomachCommandInner::EndGroup,
+        MathShift => StomachCommandInner::MathShift(char),
+        BeginGroup => StomachCommandInner::BeginGroup(char),
+        EndGroup => StomachCommandInner::EndGroup(char),
         Letter|Other => StomachCommandInner::Char(char,false),
         EOF => StomachCommandInner::Relax,
         _ => unreachable!() // Already excluded: Active, Ignored, EndLine

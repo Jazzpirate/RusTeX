@@ -267,7 +267,7 @@ pub fn assign_primitive_toks<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,g
     debug_log!(trace=>"Setting {}",name);
     catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => (name,cmd)) {
-        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup,..}) => (),
+        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup(_),..}) => (),
         _ => return Err(ErrorInPrimitive{
             name,msg:Some("Begin group token expected".to_string()),cause:Some(cmd.cause),source:None
         })

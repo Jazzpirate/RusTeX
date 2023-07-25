@@ -29,6 +29,10 @@ pub trait State<T:Token>:Sized+'static {
 
     fn outputs(&self) -> &Outputs;
 
+    fn push_csname(&mut self) -> usize;
+    fn current_csname(&self) -> Option<usize>;
+    fn pop_csname(&mut self);
+
     /// The current [`TeXMode`]
     fn mode(&self) -> TeXMode;
 
@@ -152,6 +156,7 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
     filesystem:FS,
     out_files:Vec<Option<FS::F>>,
     in_files:Vec<Option<FS::F>>,
+    csnames:usize,
 
     outputs:Outputs,
 
@@ -192,6 +197,7 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> TeXState<T,FS,NS> {
             filesystem:fs,
             out_files:vec!(),
             in_files:vec!(),
+            csnames:0,
             outputs,
             aftergroups:vec!(vec!()),
 
@@ -252,6 +258,19 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     fn set_job(&mut self, jobname: String) {
         self.jobname = Some(jobname);
         self.start_time = Some(Local::now());
+    }
+    fn push_csname(&mut self) -> usize {
+        self.csnames += 1;
+        self.csnames
+    }
+    fn current_csname(&self) -> Option<usize> {
+        match self.csnames {
+            0 => None,
+            _ => Some(self.csnames)
+        }
+    }
+    fn pop_csname(&mut self) {
+        self.csnames -= 1;
     }
     fn outputs(&self) -> &Outputs { &self.outputs }
     fn get_jobname(&self) -> String {

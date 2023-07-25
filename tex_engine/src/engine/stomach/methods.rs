@@ -46,13 +46,13 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         Char(x,_) =>
             todo!("Character in digest"),
         MathChar(_) => todo!("Mathchar in digest"),
-        Superscript => todo!("Superscript in digest"),
-        Subscript => todo!("Subscript in digest"),
+        Superscript(_) => todo!("Superscript in digest"),
+        Subscript(_) => todo!("Subscript in digest"),
         Space if state.mode().is_vertical() => Ok(()),
         Space => todo!("Space in H mode"),
-        MathShift => todo!("MathShift in digest"),
-        BeginGroup => Ok(state.stack_push(<<Sto::S as State<T>>::Gr as GroupType>::from_catcode_token())),
-        EndGroup => todo!("EndGroup in digest")
+        MathShift(_) => todo!("MathShift in digest"),
+        BeginGroup(_) => Ok(state.stack_push(<<Sto::S as State<T>>::Gr as GroupType>::from_catcode_token())),
+        EndGroup(_) => todo!("EndGroup in digest")
     }
 }
 
@@ -96,7 +96,7 @@ pub fn assign_toks_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gu
     debug_log!(trace=>"Setting \\toks{}",u);
     catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
     match catch!(gullet.get_next_stomach_command(state) => cmd.cause) {
-        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup,..}) => (),
+        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup(_),..}) => (),
         _ => return Err(OtherError{
             msg:"Begin group token expected".to_string(),cause:Some(cmd.cause),source:None
         }.into())

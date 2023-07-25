@@ -90,8 +90,10 @@ pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gulle
         Some((t,_)) => match t.base() {
             BaseToken::Char(c,CategoryCode::Active) =>
                 Ok(state.get_ac_command(*c).is_some()),
-            BaseToken::CS(name) =>
-                Ok(state.get_command(name).is_some()),
+            BaseToken::CS(name) => {
+                debug_log!(trace => "ifdefined: {}",name.to_string());
+                Ok(state.get_command(name).is_some())
+            }
             _ => Err(ErrorInPrimitive{name:"ifdefined",msg:Some(format!("Expected a control sequence, got: {:?}",t)),cause:Some(cmd.cause),source:None})
         }
     }

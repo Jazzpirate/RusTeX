@@ -112,12 +112,12 @@ pub enum StomachCommandInner<C:CharType> {
     Relax,
     Char(C,bool),
     MathChar(u32),
-    Superscript,
-    Subscript,
+    Superscript(C),
+    Subscript(C),
     Space,
-    MathShift,
-    BeginGroup,
-    EndGroup
+    MathShift(C),
+    BeginGroup(C),
+    EndGroup(C)
 }
 
 #[derive(Debug,Clone)]
@@ -136,12 +136,12 @@ impl<C:CharType> Debug for StomachCommandInner<C> {
             StomachCommandInner::Whatsit {name,index} => write!(f,"Whatsit {}",name),
             StomachCommandInner::Char(c,_) => write!(f,"Character '{}'",c),
             StomachCommandInner::MathChar(n) => write!(f,"Math Character {:X}",n),
-            StomachCommandInner::Superscript => write!(f,"Superscript Token"),
-            StomachCommandInner::Subscript => write!(f,"Subscript Token"),
+            StomachCommandInner::Superscript(_) => write!(f,"Superscript Token"),
+            StomachCommandInner::Subscript(_) => write!(f,"Subscript Token"),
             StomachCommandInner::Space => write!(f,"Space Token"),
-            StomachCommandInner::MathShift => write!(f,"MathShift Token"),
-            StomachCommandInner::BeginGroup => write!(f,"BeginGroup Token"),
-            StomachCommandInner::EndGroup => write!(f,"EndGroup Token")
+            StomachCommandInner::MathShift(_) => write!(f,"MathShift Token"),
+            StomachCommandInner::BeginGroup(_) => write!(f,"BeginGroup Token"),
+            StomachCommandInner::EndGroup(_) => write!(f,"EndGroup Token")
         }
     }
 }
