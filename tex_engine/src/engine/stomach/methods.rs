@@ -43,7 +43,7 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         AssignableValue {name,tp} => todo!("Assignable Value: {:?}",tp),
         Whatsit {name,index} => todo!("Whatsits"),
         Relax => Ok(()),
-        Char(x,_) =>
+        Char{..} =>
             todo!("Character in digest"),
         MathChar(_) => todo!("Mathchar in digest"),
         Superscript(_) => todo!("Superscript in digest"),
@@ -52,7 +52,13 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         Space => todo!("Space in H mode"),
         MathShift(_) => todo!("MathShift in digest"),
         BeginGroup(_) => Ok(state.stack_push(<<Sto::S as State<T>>::Gr as GroupType>::from_catcode_token())),
-        EndGroup(_) => todo!("EndGroup in digest")
+        EndGroup(_) => match state.stack_pop(<<Sto::S as State<T>>::Gr as GroupType>::from_catcode_token())? {
+            None => Ok(()),
+            Some(v) => {
+                gullet.mouth().push_tokens(v);
+                Ok(())
+            }
+        }
     }
 }
 

@@ -306,10 +306,8 @@ macro_rules! expected_def {
     }
 }
 
-// TODO: maybe make references Ptr instead?
-// TODO: maybe make replacement a Vec<Token|Parameter(i)>?
 pub fn exand_def<T:Token,M:Mouth<T>,S:State<T>>(d: &Def<T>, state:&S, mouth:&mut M, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-    debug_log!(debug=>"Expanding {:?}",d);
+    debug_log!(debug=>"Expanding {}:{:?}\n - {}",cause,d,mouth.preview(150).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
@@ -345,17 +343,11 @@ pub fn exand_def<T:Token,M:Mouth<T>,S:State<T>>(d: &Def<T>, state:&S, mouth:&mut
 
 fn expand_simple<T:Token>(d:&Def<T>, token:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T> {
     let mut result = Vec::with_capacity(d.replacement.len());
-    let mut iter = d.replacement.iter();
-    while let Some(ExpToken::Token(t)) = iter.next() {
-        match t.catcode() {
-            CategoryCode::Parameter =>
-            // safe, because arity=0 and `\def` would have failed otherwise
-                result.push(match unsafe{iter.next().unwrap_unchecked()} {
-                    ExpToken::Token(t) => t,
-                    _ => unreachable!() // dito
-                }
-                    .with_ref(&token,&cmd)),
-            _ => result.push(t.with_ref(&token,&cmd))
+    for r in &d.replacement {
+        match r {
+            ExpToken::Token(t) => result.push(t.with_ref(&token,&cmd)),
+            ExpToken::ParamToken(t) => result.push(t.with_ref(&token,&cmd)),
+            _ => unreachable!()
         }
     }
     result

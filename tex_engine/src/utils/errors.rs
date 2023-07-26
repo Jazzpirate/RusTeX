@@ -105,7 +105,7 @@ pub struct ErrorInDef<T:Token>{
     pub def:Def<T>, pub cause:T, pub source:Box<dyn TeXError<T>>}
 impl<T:Token> TeXError<T> for ErrorInDef<T> {
     fn display(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"Error in definition of {}",todo!("meaning of Def macro"))
+        write!(f,"Error in definition of {:?}",self.def)
     }
     fn token(&self) -> Option<&T> {Some(&self.cause)}
     fn error_source(&self) -> Option<&(dyn TeXError<T>+'static)> {

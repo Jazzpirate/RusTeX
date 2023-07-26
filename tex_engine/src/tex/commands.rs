@@ -110,7 +110,7 @@ pub enum StomachCommandInner<C:CharType> {
     Assignment {name:&'static str,index:usize},
     Whatsit {name:&'static str,index:usize},
     Relax,
-    Char(C,bool),
+    Char{char:C,from_chardef:bool},
     MathChar(u32),
     Superscript(C),
     Subscript(C),
@@ -134,7 +134,7 @@ impl<C:CharType> Debug for StomachCommandInner<C> {
             StomachCommandInner::AssignableValue {name,tp,..} => write!(f, "{:?} Assignment {}",tp,name),
             StomachCommandInner::ValueRegister(u,tp) => write!(f, "{:?} register {}",tp, u),
             StomachCommandInner::Whatsit {name,index} => write!(f,"Whatsit {}",name),
-            StomachCommandInner::Char(c,_) => write!(f,"Character '{}'",c),
+            StomachCommandInner::Char{char,..} => write!(f,"Character '{}'",char),
             StomachCommandInner::MathChar(n) => write!(f,"Math Character {:X}",n),
             StomachCommandInner::Superscript(_) => write!(f,"Superscript Token"),
             StomachCommandInner::Subscript(_) => write!(f,"Subscript Token"),
@@ -168,7 +168,14 @@ impl<T:Token> Def<T>{
 }
 impl<T:Token> Debug for Def<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{:?}{{{:?}}}",self.signature,self.replacement)
+        for x in &self.signature {
+            write!(f,"{:?}",x)?;
+        }
+        write!(f,"->")?;
+        for x in &self.replacement {
+            write!(f,"{:?}",x)?;
+        }
+        Ok(())
     }
 }
 
@@ -195,7 +202,7 @@ pub enum ExpToken<T:Token> {
 impl<T:Token> Debug for ExpToken<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Param(t,u8) => write!(f,"{}{}",t,u8),
+            Self::Param(t,u8) => write!(f,"{}{}",t,u8+1),
             Self::Token(t) => write!(f,"{}",t),
             Self::ParamToken(t) => write!(f,"{}{}",t,t)
         }

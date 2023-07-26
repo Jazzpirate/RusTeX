@@ -9,7 +9,7 @@ use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::GroupType;
 use crate::engine::stomach::Stomach;
-use crate::tex::catcodes::CategoryCode;
+use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, NumSet, Skip};
@@ -245,7 +245,7 @@ pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
             None => return file_end_prim!("csname",cmd),
             Some(sc) => match sc.cmd {
                 StomachCommandInner::Command {name:"endcsname",..} => state.pop_csname(),
-                StomachCommandInner::Char(c,_) => csname.push(c),
+                StomachCommandInner::Char{char,..} => csname.push(char),
                 StomachCommandInner::BeginGroup(c) => csname.push(c),
                 StomachCommandInner::EndGroup(c) => csname.push(c),
                 StomachCommandInner::Superscript(c) => csname.push(c),
@@ -338,8 +338,9 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
     let mut ingroups = 1;
     let mut ret = vec!();
     let escape = state.get_escapechar();
+    let cc = state.get_catcode_scheme();
     let mut succeeded = false;
-    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("lowercase",cmd)) {
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("detokenize",cmd)) {
         match next.base() {
             BaseToken::Char(c,CategoryCode::BeginGroup) => {
                 ingroups += 1;
@@ -356,6 +357,10 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
             BaseToken::Char(c,CategoryCode::Space) => {
                 ret.push(next)
             }
+            BaseToken::Char(c,CategoryCode::Parameter) => {
+                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None));
+                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+            }
             BaseToken::Char(c,_) => {
                 ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
             }
@@ -365,7 +370,14 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
                     Some(c) => ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None))
                 }
                 for c in name.as_vec() {
-                    ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+                    if *cc.get(*c) == CategoryCode::Space {
+                        ret.push(T::new(BaseToken::Char(*c,CategoryCode::Space),None));
+                    } else {
+                        ret.push(T::new(BaseToken::Char(c.clone(), CategoryCode::Other), None));
+                    }
+                }
+                if name.as_vec().len() != 1 || *state.get_catcode_scheme().get(name.as_vec()[0]) != CategoryCode::Letter {
+                    ret.push(T::new(BaseToken::Char(T::Char::from(b' '),CategoryCode::Space),None))
                 }
             }
         }
@@ -555,7 +567,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                                         Command::Gullet {name,index} => {
                                             catch_prim!(do_expandable($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
-                                        Command::Def(def,_) => {
+                                        Command::Def(def,_) if $expand => {
                                             let v = catch_prim!(def.expand($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
                                             if !v.is_empty() {
                                                 $gullet.mouth().push_tokens(v);
@@ -577,7 +589,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                                         Command::Gullet {name,index} => {
                                             catch_prim!(do_expandable($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
-                                        Command::Def(def,_) => {
+                                        Command::Def(def,_) if $expand => {
                                             let v = catch_prim!(def.expand($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
                                             if !v.is_empty() {
                                                 $gullet.mouth().push_tokens(v);
@@ -637,16 +649,25 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
     };
             Command::Gullet {name:"the",..} => {
                 for t in catch_prim!(the(state,gullet,GulletCommand{cause:cmd.cause.clone()}) => ("edef",cmd)) {
-                    replacement.push(ExpToken::Token(t));
+                    if t.catcode() == CategoryCode::Parameter {
+                        replacement.push(ExpToken::ParamToken(t));
+                    } else {
+                        replacement.push(ExpToken::Token(t));
+                    }
                 }
             }
-            Command::Gullet {name:"unexpanded",..} => todo!("'unexpanded' in expansion"),
-            Command::Gullet {name:"noexpand",..} => {
-                match catch_prim!(gullet.mouth().get_next(state) => ("edef",cmd)) {
-                    Some((tk,_)) => replacement.push(ExpToken::Token(tk)),
-                    None => return Err(ErrorInPrimitive{name:"edef",msg:None,cause:Some(cmd.cause),source:Some(
-                        UnexpectedEndgroup(tk).into()
-                    )})
+            Command::Gullet {name:"unexpanded",index} => {
+                match gullet.primitive(*index) {
+                    Some(f) => {
+                        for t in catch_prim!(f(state,gullet,GulletCommand{cause:cmd.cause.clone()}) => ("edef",cmd)) {
+                            if t.catcode() == CategoryCode::Parameter {
+                                replacement.push(ExpToken::ParamToken(t));
+                            } else {
+                                replacement.push(ExpToken::Token(t));
+                            }
+                        }
+                    }
+                    None => return Err(ErrorInPrimitive{name:"edef",msg:Some("\\unexpanded not implemented".to_string()),cause:Some(cmd.cause),source:None})
                 }
             }
             Command::Def(def,_) if def.protected => replacement.push(ExpToken::Token(tk))
@@ -767,6 +788,12 @@ pub fn expandafter<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gul
                         catch_prim!(crate::engine::gullet::methods::do_conditional(gullet,state,t,name,*index) => ("expandafter",cmd)),
                     Command::Gullet {name,index} =>
                         catch_prim!(crate::engine::gullet::methods::do_expandable(gullet,state,t,name,*index) => ("expandafter",cmd)),
+                    Command::Def(d,_) => {
+                        let v = catch_prim!(d.expand(state,gullet.mouth(),ncmd.clone(),Ptr::new(t.clone())) => ("expandafter",cmd));
+                        if !v.is_empty() {
+                            gullet.mouth().push_tokens(v);
+                        }
+                    }
                     _ => gullet.mouth().requeue(t)
                 }
             }
@@ -813,7 +840,13 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
                     Some(f) => f(state,gullet,stomach,c,true)
                 }
             }
-            _ => todo!("global: {:?} at {}",c,gullet.mouth().preview(100))
+            StomachCommandInner::ValueAssignment {assignment_index,..} => {
+                match stomach.command(assignment_index) {
+                    None => Err(ErrorInPrimitive{name:"global",msg:Some(format!("Invalid assignment: {}",assignment_index)),cause:Some(cmd.cause),source:None}),
+                    Some(f) => f(state,gullet,stomach,c,true)
+                 }
+            }
+            o => todo!("global: {:?} at {}",o,gullet.mouth().preview(100))
         }
     }
 }
@@ -1164,8 +1197,8 @@ pub fn meaning<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletC
             }
         }
         Some((t,_)) => match t.base() {
-            BaseToken::CS(name) => Ok(meaning_cmd(state.get_command(name),state.get_escapechar())),
-            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd(state.get_ac_command(*c),state.get_escapechar())),
+            BaseToken::CS(name) => Ok(meaning_cmd(state.get_command(name),state.get_escapechar(),state.get_catcode_scheme())),
+            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd(state.get_ac_command(*c),state.get_escapechar(),state.get_catcode_scheme())),
             BaseToken::Char(c,cc) => Ok(meaning_char(*c,*cc)),
         }
     }
@@ -1186,7 +1219,7 @@ pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
     }
 }
 
-pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Char>) -> Vec<T> {
+pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>) -> Vec<T> {
     match cmd {
         None => string_to_tokens("undefined".as_bytes()),
         Some(cmd) => {
@@ -1213,7 +1246,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     let mut i = 0;
                     for s in &d.signature {
                         match s {
-                            ParamToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar).as_bytes()),
+                            ParamToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar,cc).as_bytes()),
                             ParamToken::Param => {
                                 i += 1;
                                 ret.extend(format!("#{}",i).as_bytes());
@@ -1224,10 +1257,10 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     ret.push(b'-'); ret.push(b'>');
                     for t in &d.replacement {
                         match t {
-                            ExpToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar).as_bytes()),
-                            ExpToken::ParamToken(t) => ret.extend(tokens_to_string(vec!(t.clone(),t.clone()),escapechar).as_bytes()),
+                            ExpToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar,cc).as_bytes()),
+                            ExpToken::ParamToken(t) => ret.extend(tokens_to_string(vec!(t.clone(),t.clone()),escapechar,cc).as_bytes()),
                             ExpToken::Param(t,i) => {
-                                ret.extend(tokens_to_string(vec!(t.clone()),escapechar).as_bytes());
+                                ret.extend(tokens_to_string(vec!(t.clone()),escapechar,cc).as_bytes());
                                 ret.extend(i.to_string().as_bytes());
                             }
                         }
@@ -1630,7 +1663,6 @@ pub fn par<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,_cmd:Stom
     }
 }
 
-
 pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"read");
     let i = catch_prim!(gullet.get_int(state) => ("read",cmd));
@@ -1667,6 +1699,73 @@ pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
     Ok(())
 }
 
+pub fn romannumeral<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"romannumeral");
+    let mut num = catch_prim!(gullet.get_int(state) => ("romannumeral",cmd)).to_i64();
+    if num <= 0 {
+        return Ok(vec!())
+    }
+    let mut ret : Vec<u8> = vec!();
+    while num >= 1000 {
+        num -= 1000;
+        ret.push(b'm');
+    }
+    if num >= 900 {
+        num -= 900;
+        ret.push(b'c');
+        ret.push(b'm');
+    }
+    if num >= 500 {
+        num -= 500;
+        ret.push(b'd');
+    }
+    if num >= 400 {
+        num -= 400;
+        ret.push(b'c');
+        ret.push(b'd');
+    }
+    while num >= 100 {
+        num -= 100;
+        ret.push(b'c');
+    }
+    if num >= 90 {
+        num -= 90;
+        ret.push(b'x');
+        ret.push(b'c');
+    }
+    if num >= 50 {
+        num -= 50;
+        ret.push(b'l');
+    }
+    if num >= 40 {
+        num -= 40;
+        ret.push(b'x');
+        ret.push(b'l');
+    }
+    while num >= 10 {
+        num -= 10;
+        ret.push(b'x');
+    }
+    if num >= 9 {
+        num -= 9;
+        ret.push(b'i');
+        ret.push(b'x');
+    }
+    if num >= 5 {
+        num -= 5;
+        ret.push(b'v');
+    }
+    if num >= 4 {
+        num -= 4;
+        ret.push(b'i');
+        ret.push(b'v');
+    }
+    while num >= 1 {
+        num -= 1;
+        ret.push(b'i');
+    }
+    Ok(string_to_tokens(&ret))
+}
 
 pub fn sfcode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning space factor code");
@@ -1752,6 +1851,7 @@ pub fn skipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
 
 pub fn string<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"string");
+    let cc = state.get_catcode_scheme();
     match catch_prim!(gullet.mouth().get_next(state) => ("string",cmd)) {
         None => file_end_prim!("string",cmd),
         Some((t,_)) => match t.base() {
@@ -1766,7 +1866,11 @@ pub fn string<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCo
                     Some(c) => ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None))
                 }
                 for t in name.as_vec() {
-                    ret.push(T::new(BaseToken::Char(t.clone(),CategoryCode::Other),None));
+                    if *cc.get(*t) == CategoryCode::Space {
+                        ret.push(T::new(BaseToken::Char(*t,CategoryCode::Space),None));
+                    } else {
+                        ret.push(T::new(BaseToken::Char(t.clone(), CategoryCode::Other), None));
+                    }
                 }
                 Ok(ret)
             }
@@ -2163,6 +2267,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     state.set_command(T::Char::relax_token(),Some(Ptr::new(Command::Relax)),true);
     register_int_assign!(relpenalty,state,stomach,gullet);
     register_skip_assign!(rightskip,state,stomach,gullet);
+    register_gullet!(romannumeral,state,stomach,gullet,(s,g,c) => romannumeral(s,g,c));
     register_dim_assign!(scriptspace,state,stomach,gullet);
     register_value_assign_int!(sfcode,state,stomach,gullet);
     register_int_assign!(showboxbreadth,state,stomach,gullet);
@@ -2358,7 +2463,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,noalign);
     cmtodo!(state,stomach,gullet,nullfont);
     cmtodo!(state,stomach,gullet,omit);
-    cmtodo!(state,stomach,gullet,romannumeral);
     cmtodo!(state,stomach,gullet,smallskip);
     cmtodo!(state,stomach,gullet,span);
     cmtodo!(state,stomach,gullet,unhbox);

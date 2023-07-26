@@ -56,8 +56,8 @@ mod tests {
     use crate::engine::gullet::TeXGullet;
     use crate::engine::mouth::TracingMouth;
     use crate::engine::{Engine, new_tex_with_source_references, Outputs};
-    use crate::engine::state::TeXState;
-    use crate::engine::stomach::NoShipoutDefaultStomach;
+    use crate::engine::state::{State, TeXState};
+    use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
     use crate::tex::boxes::StandardTeXBox;
     use crate::tex::token::TokenWithSourceref;
     use crate::engine::mouth::Mouth;
@@ -66,6 +66,9 @@ mod tests {
     use crate::engine::filesystem::kpathsea::Kpathsea;
     use crate::utils::errors::TeXError;
     use ansi_term::Colour::*;
+    use crate::tex::commands::Command;
+    use crate::utils::Ptr;
+    use crate::utils::strings::CharType;
 
     macro_rules! measure {
         ($key:ident:$x:expr) => {{
@@ -138,6 +141,16 @@ mod tests {
         };
 
         let mut engine = new_tex_with_source_references(KpseVirtualFileSystem::<u8>::new(std::env::current_dir().unwrap()),outputs.clone());
+        engine.state.set_command(<u8 as CharType>::from_str("rustexBREAK"),Some(Ptr::new(
+            Command::Stomach {
+                name: "rustexBREAK",
+                index: engine.stomach.register_primitive("rustexBREAK",|_,_,_,_,_| {
+                    println!("HERE!");
+                    Ok(())
+                })
+            }
+        )),true);
+
         match engine.initialize_pdflatex() {
             Ok(_) => {},
             Err(e) => {

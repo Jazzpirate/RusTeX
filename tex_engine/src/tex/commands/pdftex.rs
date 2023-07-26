@@ -13,7 +13,7 @@ use crate::utils::Ptr;
 fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"pdffilesize");
     let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("pdffilesize",cmd));
-    let filename = tokens_to_string(ret,state.get_escapechar());
+    let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = state.filesystem().get(&filename);
     let ret = f.content_string().len().to_string();
     Ok(string_to_tokens(ret.as_bytes()))
@@ -43,6 +43,7 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     register_int_assign!(pdfpkresolution,state,stomach,gullet);
     register_gullet!(pdfstrcomp,state,stomach,gullet,(s,gu,cmd) =>pdfstrcomp(s,gu,cmd));
     register_dim_assign!(pdfvorigin,state,stomach,gullet);
+    register_int_assign!(tracingstacklevels,state,stomach,gullet);
 
     cmtodo!(state,stomach,gullet,efcode);
     cmtodo!(state,stomach,gullet,knaccode);
@@ -81,8 +82,6 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     cmtodo!(state,stomach,gullet,showstream);
     cmtodo!(state,stomach,gullet,stbscode);
     cmtodo!(state,stomach,gullet,tagcode);
-    cmtodo!(state,stomach,gullet,tracinglostchars);
-    cmtodo!(state,stomach,gullet,tracingstacklevels);
     cmtodo!(state,stomach,gullet,pdelapsedtime);
     cmtodo!(state,stomach,gullet,pdflastannot);
     cmtodo!(state,stomach,gullet,pdflastlink);

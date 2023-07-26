@@ -30,7 +30,13 @@ pub fn skip_eq_char<T:Token,S:State<T>,M:Mouth<T>>(mouth:&mut M,state:&S) -> Res
     debug_log!(trace=>"skipping '='");
     if let Some((tk,_)) = mouth.get_next(state)? {
         match tk.base() {
-            BaseToken::Char(c,_) if c.to_usize() == 61 => (),
+            BaseToken::Char(c,_) if c.to_usize() == 61 => {
+                match mouth.get_next(state)? {
+                    Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
+                    Some((tk,_)) => mouth.requeue(tk),
+                    _ => ()
+                }
+            },
             _ => mouth.requeue(tk)
         }
     }

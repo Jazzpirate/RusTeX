@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::{catch, debug_log, file_end};
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
-use crate::tex::catcodes::CategoryCode;
+use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::numbers::{Dim, Int, NumSet, Skip, SkipDim};
 use crate::tex::token::{BaseToken, Token};
@@ -12,6 +12,7 @@ use crate::utils::Ptr;
 use crate::engine::mouth::Mouth;
 use crate::tex::ConditionalBranch;
 use crate::utils::strings::{CharType, TeXStr};
+use crate::utils::strings::AllCharsTrait;
 
 pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> StomachCommand<T> {
     use CategoryCode::*;
@@ -22,7 +23,7 @@ pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> 
         MathShift => StomachCommandInner::MathShift(char),
         BeginGroup => StomachCommandInner::BeginGroup(char),
         EndGroup => StomachCommandInner::EndGroup(char),
-        Letter|Other => StomachCommandInner::Char(char,false),
+        Letter|Other => StomachCommandInner::Char{char,from_chardef:false},
         EOF => StomachCommandInner::Relax,
         _ => unreachable!() // Already excluded: Active, Ignored, EndLine
         // TODO: exclude: AlignmentTab, Parameter, Invalid
@@ -243,22 +244,22 @@ pub fn get_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &m
 
 pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &mut S) -> Result<Vec<u8>,Box<dyn TeXError<T>>> {
     let mut ret = Vec::with_capacity(50); // seems to speed things up
-    let esc = state.get_escapechar();
+    let esc = state.get_escapechar();;
     expand_group_without_unknowns!(state,gullet,return Ok(ret),(tk,expand) =>
-        for u in token_to_string(tk,esc) {
+        for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
             ret.push(u)
         };
         Command::Gullet {name:"unexpanded",..} => todo!("'unexpanded' in expansion"),
         Command::Gullet {name:"noexpand",..} => {
             match gullet.mouth().get_next(state)? {
-                Some((tk,_)) => for u in token_to_string(tk,esc) {
+                Some((tk,_)) => for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
                         ret.push(u)
                     },
                 None => return Err(UnexpectedEndgroup(tk).into())
             }
         }
         Command::Def(def,_) if def.protected => {
-            for u in token_to_string(tk,esc) {
+            for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
                 ret.push(u)
             }
         }
@@ -340,7 +341,7 @@ pub fn process_cmd_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut 
         Command::Assignment{name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Assignment{name,index:*index}})),
         Command::Stomach {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Command{name,index:*index}})),
         Command::Char {char,catcode} =>
-            Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Char(*char,true)}))
+            Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Char{char:*char,from_chardef:true}}))
     }
 }
 
@@ -477,8 +478,8 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
 
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
@@ -550,8 +551,8 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                     }
                 }
             }
-            StomachCommandInner::Char(c,_) => {
-                let c = <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(c.to_usize() as i64)?;
+            StomachCommandInner::Char{char,..} => {
+                let c = <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(char.to_usize() as i64)?;
                 debug_log!(trace=>"Returning {}",c);
                 return Ok(c)
             }
@@ -583,8 +584,8 @@ pub fn read_decimal_number<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=
 
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
                 } else {
@@ -611,8 +612,8 @@ pub fn get_dim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
@@ -623,7 +624,7 @@ pub fn get_dim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&
                     43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
                         => next.cause
                     ),
-                    _ => return get_dim_inner(gullet,state,isnegative,StomachCommandInner::Char(c,false),next.cause)
+                    _ => return get_dim_inner(gullet,state,isnegative,StomachCommandInner::Char{char,from_chardef:false},next.cause)
                 }
             }
             o => return get_dim_inner(gullet,state,isnegative,o,next.cause)
@@ -633,8 +634,8 @@ pub fn get_dim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&
 }
 pub fn get_dim_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state:&mut S,isnegative:bool,next:StomachCommandInner<T::Char>,cause:T) -> Result<NS::Dim,Box<dyn TeXError<T>>> {
     match next {
-        StomachCommandInner::Char(c,false) => {
-            let us = c.to_usize();
+        StomachCommandInner::Char{char,from_chardef:false} => {
+            let us = char.to_usize();
             match us {
                 46 | 44 => /* . / ,*/ {
                     let f = catch!(read_float(gullet,state,us as u8,isnegative)
@@ -674,8 +675,8 @@ pub fn get_skipdim<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gull
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
@@ -723,8 +724,8 @@ pub fn get_skip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
@@ -735,7 +736,7 @@ pub fn get_skip<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:
                     43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
                         => next.cause
                     ),
-                    _ => return get_skip_inner(gullet,state,isnegative,StomachCommandInner::Char(c,false),next.cause)
+                    _ => return get_skip_inner(gullet,state,isnegative,StomachCommandInner::Char{char,from_chardef:false},next.cause)
                 }
             }
             StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Skip,..} => {
@@ -777,8 +778,8 @@ pub fn read_float<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gulle
     let mut rets = if in_float {vec!(b'0',b'.')} else {vec!(firstchar)};
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
                 }
@@ -845,8 +846,8 @@ pub fn get_keyword<'a,T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         read_toks.push(next.cause.clone());
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 if us < 256 {
                     current.push(us as u8 as char);
                     if current == kw { return Ok(true) }
@@ -875,8 +876,8 @@ pub fn get_keywords<'a,T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, stat
     while let Some(next) = gullet.get_next_stomach_command(state)? {
         read_toks.push(next.cause.clone());
         match next.cmd {
-            StomachCommandInner::Char(c,false) => {
-                let us = c.to_usize();
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
                 if us < 256 {
                     current.push(us as u8 as char);
                     keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
@@ -908,7 +909,7 @@ pub fn get_keywords<'a,T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, stat
     file_end!()
 }
 
-pub fn token_to_string<T:Token>(tk:T,escapechar:Option<T::Char>) -> Vec<u8> {
+pub fn token_to_string<T:Token>(tk:T,escapechar:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>) -> Vec<u8> {
     match escapechar {
         None => match tk.base() {
                 BaseToken::Char(c,CategoryCode::Space) => vec!(b' '),
@@ -931,14 +932,16 @@ pub fn token_to_string<T:Token>(tk:T,escapechar:Option<T::Char>) -> Vec<u8> {
                     for c in str.as_vec() {for u in c.as_bytes() {
                         s.push(u);
                     }}
-                    s.push(b' ');
+                    if str.as_vec().len() != 1 || *cc.get(str.as_vec()[0]) != CategoryCode::Letter {
+                        s.push(b' ');
+                    }
                     s
                 }
             }
     }
 }
 
-pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>) -> String {
+pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>) -> String {
     let mut s = vec!();
     match escapechar {
         None => for t in v {
@@ -949,7 +952,9 @@ pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>) -> String 
                         for c in str.as_vec() {for u in c.as_bytes() {
                             s.push(u);
                         }}
-                        s.push(b' ');
+                        if str.as_vec().len() != 1 || *cc.get(str.as_vec()[0]) != CategoryCode::Letter {
+                            s.push(b' ');
+                        }
                     }
                 }
             }
@@ -962,7 +967,9 @@ pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>) -> String 
                         for c in str.as_vec() {for u in c.as_bytes() {
                             s.push(u);
                         }}
-                        s.push(b' ');
+                        if str.as_vec().len() != 1 || *cc.get(str.as_vec()[0]) != CategoryCode::Letter {
+                            s.push(b' ');
+                        }
                     }
                 }
             }

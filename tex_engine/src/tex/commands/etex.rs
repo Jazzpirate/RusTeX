@@ -2,7 +2,7 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_gullet, register_int, register_tok_assign};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_gullet, register_int, register_int_assign, register_tok_assign};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::numbers::NumSet;
@@ -61,8 +61,16 @@ pub fn protected<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gull
     }
 }
 
-pub fn unexpanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    todo!("unexpanded")
+pub fn unexpanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"unexpanded");
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("unexpanded",cmd)) {
+        None => file_end_prim!("unexpanded",cmd),
+        Some(sc) => match sc.cmd {
+            StomachCommandInner::BeginGroup(_) => (),
+            _ => return Err(ErrorInPrimitive{name:"unexpanded",msg:Some("Expected a begin group after \\unexpanded".to_string()),cause:Some(cmd.cause),source:None})
+        }
+    }
+    Ok(catch_prim!(gullet.mouth().read_until_endgroup(state) => ("unexpanded",cmd)))
 }
 
 pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
@@ -71,6 +79,11 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_tok_assign!(everyeof,state,stomach,gullet);
     register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded(s,g,c));
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
+    register_int_assign!(tracingassigns,state,stomach,gullet);
+    register_int_assign!(tracinggroups,state,stomach,gullet);
+    register_int_assign!(tracingifs,state,stomach,gullet);
+    register_int_assign!(tracingnesting,state,stomach,gullet);
+    register_int_assign!(tracingscantokens,state,stomach,gullet);
     register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected(sto,s,gu,cmd,g,false,false,false));
     register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded(s,g,c));
 
@@ -126,11 +139,6 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     cmtodo!(state,stomach,gullet,splitfirstmarks);
     cmtodo!(state,stomach,gullet,TeXXeTstate);
     cmtodo!(state,stomach,gullet,topmarks);
-    cmtodo!(state,stomach,gullet,tracingassigns);
-    cmtodo!(state,stomach,gullet,tracinggroups);
-    cmtodo!(state,stomach,gullet,tracingifs);
-    cmtodo!(state,stomach,gullet,tracingnesting);
-    cmtodo!(state,stomach,gullet,tracingscantokens);
     cmtodo!(state,stomach,gullet,unless);
     cmtodo!(state,stomach,gullet,widowpenalties);
 }
