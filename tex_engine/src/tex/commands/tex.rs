@@ -39,8 +39,6 @@ prevgraf
 deadcycles
 insertpenalties
 mathcode
-lccode
-uccode
 delcode
 textfont
 scriptfont
@@ -252,7 +250,6 @@ lastbox
 lastkern
 lastpenalty
 lastskip
-lccode
 leaders
 left
 leqno
@@ -321,7 +318,6 @@ string
 textfont
 textstyle
 topmark
-uccode
 underline
 unhbox
 unhcopy
@@ -1216,6 +1212,35 @@ pub fn input<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
     }
 }
 
+pub fn lccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning lower case character");
+    let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
+    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"lccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("lccode",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
+    let lc: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"lccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    debug_log!(debug=>"\\lccode '{}' = {}",c.char_str(),lc.char_str());
+    state.set_lccode(c,lc,global);
+    Ok(())
+}
+pub fn lccode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting lower case character");
+    let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
+    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"lccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = catch_prim!(<S::NumSet as NumSet>::Int::from_i64(state.get_lccode(c).to_usize() as i64) => ("lccode",cmd));
+    debug_log!(debug=>"\\lccode '{}' == {}",c.char_str(),v);
+    Ok(v)
+}
+
 pub fn let_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"let");
     let csO = catch_prim!(gullet.mouth().get_next(state) => ("let",cmd));
@@ -1279,8 +1304,6 @@ pub fn long<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&
         }
     }
 }
-
-// \mag           : Int
 
 pub fn mathchardef<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"mathchardef");
@@ -2048,6 +2071,35 @@ pub fn toksdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
 }
 
 
+pub fn uccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning upper case character");
+    let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
+    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"uccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("uccode",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
+    let lc: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"uccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    debug_log!(debug=>"\\uccode '{}' = {}",c.char_str(),lc.char_str());
+    state.set_uccode(c,lc,global);
+    Ok(())
+}
+pub fn uccode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting upper case character");
+    let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
+    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"uccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = catch_prim!(<S::NumSet as NumSet>::Int::from_i64(state.get_uccode(c).to_usize() as i64) => ("uccode",cmd));
+    debug_log!(debug=>"\\uccode '{}' == {}",c.char_str(),v);
+    Ok(v)
+}
+
 pub fn write<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>) -> Result<Whatsit<T, Sto>, ErrorInPrimitive<T>> {
     debug_log!(trace=>"\\write");
     let i = catch_prim!(gullet.get_int(state) => ("write",cmd));
@@ -2212,6 +2264,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input(s,gu,cmd));
     register_int_assign!(interlinepenalty,state,stomach,gullet);
     register_int_assign!(language,state,stomach,gullet);
+    register_value_assign_int!(lccode,state,stomach,gullet);
     register_int_assign!(lefthyphenmin,state,stomach,gullet);
     register_skip_assign!(leftskip,state,stomach,gullet);
     register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_(s,gu,cmd,global));
@@ -2286,6 +2339,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(tracingparagraphs,state,stomach,gullet);
     register_int_assign!(tracingrestores,state,stomach,gullet);
     register_int_assign!(tracingstats,state,stomach,gullet);
+    register_value_assign_int!(uccode,state,stomach,gullet);
     register_int_assign!(uchyph,state,stomach,gullet);
     register_int_assign!(vbadness,state,stomach,gullet);
     register_dim_assign!(vfuzz,state,stomach,gullet);

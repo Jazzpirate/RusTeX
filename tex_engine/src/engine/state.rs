@@ -98,14 +98,14 @@ pub trait State<T:Token>:Sized+'static {
     fn set_sfcode(&mut self, c: T::Char, v:<Self::NumSet as NumSet>::Int, globally:bool);
 
     /// get the uppercase character for a character
-    fn get_ucchar(&self, c: T::Char) -> T::Char;
+    fn get_uccode(&self, c: T::Char) -> T::Char;
     /// set the uppercase character for a character
-    fn set_ucchar(&mut self, c: T::Char, uc: T::Char, globally:bool);
+    fn set_uccode(&mut self, c: T::Char, uc: T::Char, globally:bool);
 
     /// get the lowercase character for a character
-    fn get_lcchar(&self, c: T::Char) -> T::Char;
+    fn get_lccode(&self, c: T::Char) -> T::Char;
     /// set the lowercase character for a character
-    fn set_lcchar(&mut self, c: T::Char, lc: T::Char, globally:bool);
+    fn set_lccode(&mut self, c: T::Char, lc: T::Char, globally:bool);
 
     /// get the value of an integer register
     fn get_int_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::Int;
@@ -482,11 +482,11 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
 
     // #[inline(always)]
-    fn get_ucchar(&self, c: T::Char) -> T::Char {
+    fn get_uccode(&self, c: T::Char) -> T::Char {
         self.ucchar.get(&c)
     }
     // #[inline(always)]
-    fn set_ucchar(&mut self, c: T::Char, uc: T::Char, globally: bool) {
+    fn set_uccode(&mut self, c: T::Char, uc: T::Char, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -497,11 +497,11 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
     }
 
     // #[inline(always)]
-    fn get_lcchar(&self, c: T::Char) -> T::Char {
+    fn get_lccode(&self, c: T::Char) -> T::Char {
         self.lcchar.get(&c)
     }
     // #[inline(always)]
-    fn set_lcchar(&mut self, c: T::Char, lc: T::Char, globally: bool) {
+    fn set_lccode(&mut self, c: T::Char, lc: T::Char, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {

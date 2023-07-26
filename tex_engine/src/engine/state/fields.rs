@@ -69,7 +69,7 @@ pub trait KeyValueField<K,V>: StateField {
 }
 
 /// An Array/Vec of Characters with associated values of type A; e.g.
-/// [`ucchar`](crate::engine::state::State::get_ucchar), [`catcode`](crate::engine::state::State::get_catcode_scheme) etc.
+/// [`ucchar`](crate::engine::state::State::get_uccode), [`catcode`](crate::engine::state::State::get_catcode_scheme) etc.
 pub struct CharField<C:CharType,A:Clone+Default>{pub charfield: C::Allchars<A>, changes: Vec<HashMap<C,A>>}
 impl<C:CharType,A:Clone+Default> StateField for CharField<C,A> {
     fn push_stack(&mut self) { self.changes.push(HashMap::default()) }
