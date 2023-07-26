@@ -209,7 +209,6 @@ cr
 crcr
 delcode
 delimiter
-detokenize
 discretionary
 displaylimits
 displaystyle
@@ -636,6 +635,53 @@ pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
     file_end_prim!("def",cmd)
 }
 
+pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"detokenize");
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("detokenize",cmd)) {
+        None => file_end_prim!("detokenize",cmd),
+        Some(sc) => match sc.cmd {
+            StomachCommandInner::BeginGroup(_) => (),
+            _ => return Err(ErrorInPrimitive{name:"detokenize",msg:Some("Expected a begin group after \\detokenize".to_string()),cause:Some(cmd.cause),source:None})
+        }
+    }
+    let mut ingroups = 1;
+    let mut ret = vec!();
+    let escape = state.get_escapechar();
+    let mut succeeded = false;
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("lowercase",cmd)) {
+        match next.base() {
+            BaseToken::Char(c,CategoryCode::BeginGroup) => {
+                ingroups += 1;
+                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+            }
+            BaseToken::Char(c,CategoryCode::EndGroup) => {
+                ingroups -= 1;
+                if ingroups == 0 {
+                    succeeded = true;
+                    break
+                }
+                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+            }
+            BaseToken::Char(c,CategoryCode::Space) => {
+                ret.push(next)
+            }
+            BaseToken::Char(c,_) => {
+                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+            }
+            BaseToken::CS(name) => {
+                match escape {
+                    None => (),
+                    Some(c) => ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None))
+                }
+                for c in name.as_vec() {
+                    ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+                }
+            }
+        }
+    }
+    if !succeeded { file_end_prim!("detokenize",cmd) }
+    Ok(ret)
+}
 
 pub fn dimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning \\dimen");
@@ -2254,6 +2300,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(defaultskewchar,state,stomach,gullet);
     register_int_assign!(delimiterfactor,state,stomach,gullet);
     register_dim_assign!(delimitershortfall,state,stomach,gullet);
+    register_gullet!(detokenize,state,stomach,gullet,(s,gu,cmd) =>detokenize(s,gu,cmd));
     register_value_assign_dim!(dimen,state,stomach,gullet);
     register_assign!(dimendef,state,stomach,gullet,(s,gu,_,cmd,global) =>dimendef(s,gu,cmd,global));
     register_dim_assign!(displayindent,state,stomach,gullet);
