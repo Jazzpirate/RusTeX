@@ -965,8 +965,7 @@ pub fn endlinechar_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:
 pub fn errmessage<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(debug=>"errmessage");
     catch_prim!(gullet.mouth().skip_whitespace(state) => ("errmessage",cmd));
-    let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("errmessage",cmd));
-    let errmsg = tokens_to_string(ret,state.get_escapechar());
+    let errmsg = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("errmessage",cmd))).unwrap();
     let eh = state.get_primitive_toks("errhelp");
     // TODO errhelp
     Err(ErrorInPrimitive{
@@ -1585,8 +1584,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
 pub fn message<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(debug=>"message");
     catch_prim!(gullet.mouth().skip_whitespace(state) => ("message",cmd));
-    let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("message",cmd));
-    let msg = tokens_to_string(ret,state.get_escapechar());
+    let msg = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("message",cmd))).unwrap();
     (state.outputs().message)(&msg);
     Ok(())
 }
@@ -2190,8 +2188,7 @@ pub fn write<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, st
         tks.push(T::new(BaseToken::Char(T::Char::from(b'}'),CategoryCode::EndGroup),None));
         tks.insert(0,T::new(BaseToken::Char(T::Char::from(b'{'),CategoryCode::BeginGroup),None));
         let old = gullet.switch_mouth(tks);
-        let new = gullet.get_expanded_group(state,false,false,true)?;
-        let string = tokens_to_string(new,state.get_escapechar());
+        let string = String::from_utf8(gullet.get_braced_string(state)?).unwrap();
         if i == 18 {
             (state.outputs().write_18)(&string)
         }

@@ -57,7 +57,7 @@ macro_rules! expand_group_without_unknowns {
                         BaseToken::CS(n) => {
                             let cmd = $state.need_command(n)?;
                             match &*cmd {
-                                $($branch)*,
+                                $($branch)*
                                 Command::Gullet {name,index} => {
                                     do_expandable($gullet,$state,$tk,name,*index)?;
                                 }
@@ -76,7 +76,7 @@ macro_rules! expand_group_without_unknowns {
                         BaseToken::Char(c, CategoryCode::Active) => {
                             let cmd = $state.need_ac_command(*c)?;
                             match &*cmd {
-                                $($branch)*,
+                                $($branch)*
                                 Command::Gullet {name,index} => {
                                     do_expandable($gullet,$state,$tk,name,*index)?;
                                 }
@@ -240,6 +240,31 @@ pub fn get_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &m
     Ok(ret.into())
 }
 
+
+pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &mut S) -> Result<Vec<u8>,Box<dyn TeXError<T>>> {
+    let mut ret = Vec::with_capacity(50); // seems to speed things up
+    let esc = state.get_escapechar();
+    expand_group_without_unknowns!(state,gullet,return Ok(ret),(tk,expand) =>
+        for u in token_to_string(tk,esc) {
+            ret.push(u)
+        };
+        Command::Gullet {name:"unexpanded",..} => todo!("'unexpanded' in expansion"),
+        Command::Gullet {name:"noexpand",..} => {
+            match gullet.mouth().get_next(state)? {
+                Some((tk,_)) => for u in token_to_string(tk,esc) {
+                        ret.push(u)
+                    },
+                None => return Err(UnexpectedEndgroup(tk).into())
+            }
+        }
+        Command::Def(def,_) if def.protected => {
+            for u in token_to_string(tk,esc) {
+                ret.push(u)
+            }
+        }
+    );
+}
+
 pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &mut S, expand_protected:bool, keep_the:bool, err_on_unknowns:bool) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
     let mut tks = Vec::with_capacity(50); // seems to speed things up
     if err_on_unknowns {
@@ -252,7 +277,7 @@ pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, s
                     None => return Err(UnexpectedEndgroup(tk).into())
                 }
             }
-            Command::Def(def,_) if def.protected && !expand_protected => tks.push(tk)
+            Command::Def(def,_) if def.protected && !expand_protected => {tks.push(tk)}
         );
     } else {
         expand_group_with_unknowns!(state,gullet,return Ok(tks),(tk,expand) => tks.push(tk);
@@ -264,7 +289,7 @@ pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, s
                     None => return Err(UnexpectedEndgroup(tk).into())
                 }
             }
-            Command::Def(def,_) if def.protected && !expand_protected => tks.push(tk)
+            Command::Def(def,_) if def.protected && !expand_protected => {tks.push(tk)}
         );
     }
 }
@@ -881,6 +906,36 @@ pub fn get_keywords<'a,T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, stat
         }
     }
     file_end!()
+}
+
+pub fn token_to_string<T:Token>(tk:T,escapechar:Option<T::Char>) -> Vec<u8> {
+    match escapechar {
+        None => match tk.base() {
+                BaseToken::Char(c,CategoryCode::Space) => vec!(b' '),
+                BaseToken::Char(c,_) => c.as_bytes(),
+                BaseToken::CS(str) => {
+                    let mut s = vec!();
+                    for c in str.as_vec() {for u in c.as_bytes() {
+                        s.push(u);
+                    }}
+                    s.push(b' ');
+                    s
+                }
+            }
+        Some(escapechar) => match tk.base() {
+                BaseToken::Char(c,CategoryCode::Space) => vec!(b' '),
+                BaseToken::Char(c,_) => c.as_bytes(),
+                BaseToken::CS(str) => {
+                    let mut s = vec!();
+                    for u in escapechar.as_bytes() {s.push(u)};
+                    for c in str.as_vec() {for u in c.as_bytes() {
+                        s.push(u);
+                    }}
+                    s.push(b' ');
+                    s
+                }
+            }
+    }
 }
 
 pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>) -> String {

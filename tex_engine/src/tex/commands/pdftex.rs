@@ -5,7 +5,7 @@ use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::tex::commands::GulletCommand;
-use crate::tex::token::Token;
+use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive};
 use crate::utils::strings::CharType;
 use crate::utils::Ptr;
@@ -172,7 +172,16 @@ fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletC
     Ok(string_to_tokens(ret.as_bytes()))
 }
 
-//TODO: pdffilesize
+fn pdfstrcomp<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"pdfstrcomp");
+    let str1 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("pdfstrcomp",cmd))).unwrap();
+    let str2 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("pdfstrcomp",cmd))).unwrap();
+    debug_log!(trace=>"pdfstrcomp: {}=={}?",str1,str2);
+    let ret = if str1==str2 {vec!(Token::new(BaseToken::CS(T::Char::from_str("0")),None))}
+        else if str1 < str2 { string_to_tokens("-1".as_bytes())}
+        else {string_to_tokens("1".as_bytes())};
+    Ok(ret)
+}
 
 pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
@@ -185,5 +194,6 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     register_dim_assign!(pdfpageheight,state,stomach,gullet);
     register_dim_assign!(pdfpagewidth,state,stomach,gullet);
     register_int_assign!(pdfpkresolution,state,stomach,gullet);
+    register_gullet!(pdfstrcomp,state,stomach,gullet,(s,gu,cmd) =>pdfstrcomp(s,gu,cmd));
     register_dim_assign!(pdfvorigin,state,stomach,gullet);
 }

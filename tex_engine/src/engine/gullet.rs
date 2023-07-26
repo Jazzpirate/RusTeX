@@ -67,6 +67,10 @@ pub trait Gullet<T:Token>:Sized+'static {
         methods::get_expanded_group(self, state, expand_protected, keep_the, err_on_unknowns)
     }
 
+    fn get_braced_string(&mut self, state:&mut Self::S) -> Result<Vec<u8>,Box<dyn TeXError<T>>> {
+        methods::get_braced_string(self, state)
+    }
+
     /// read a single keyword from the input stream; returns `true` if the keyword is found.
     fn get_keyword<'a>(&mut self, state:&mut Self::S, keyword:&'a str) -> Result<bool,Box<dyn TeXError<T>>> {
         methods::get_keyword(self, state, keyword)

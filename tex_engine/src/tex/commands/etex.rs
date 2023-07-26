@@ -83,6 +83,11 @@ pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mu
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(2) => ("eTeXversion",cmd)))
 }
 
+pub fn expanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"expanded");
+    Ok(catch_prim!(gullet.get_expanded_group(state,false,false,false) => ("expanded",cmd)))
+}
+
 pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
     debug_log!(trace=>"ifdefined");
     match catch_prim!(gullet.mouth().get_next(state) => ("ifeof",cmd)) {
@@ -128,6 +133,7 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision(s,g,c));
     register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
     register_tok_assign!(everyeof,state,stomach,gullet);
+    register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded(s,g,c));
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
     register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected(sto,s,gu,cmd,g,false,false,false));
     register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded(s,g,c));
