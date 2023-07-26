@@ -2,7 +2,7 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int, register_tok_assign};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_gullet, register_int, register_tok_assign};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::numbers::NumSet;
@@ -12,70 +12,6 @@ use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
 
-
-/* TODO
-
-beginL
-beginR
-botmarks
-clubpenalties
-currentgrouplevel
-currentgrouptype
-currentifbranch
-currentiflevel
-currentiftype
-dimexpr
-displaywidowpenalties
-endL
-endR
-expanded
-firstmarks
-fontchardp
-fontcharht
-fontcharic
-fontcharwd
-glueexpr
-glueshrink
-glueshrinkorder
-gluestretchorder
-gluestretch
-gluetomu
-ifcsname
-iffontchar
-interactionmode
-interlinepenalties
-lastlinefit
-lastnodetype
-marks
-middle
-muexpr
-mutoglue
-numexpr
-pagediscards
-parshapedimen
-parshapeindent
-parshapelength
-predisplaydirection
-readline
-savinghyphcodes
-savingvdiscards
-showgroups
-showifs
-showtokens
-splitdiscards
-scantokens
-splitbotmarks
-splitfirstmarks
-TeXXeTstate
-topmarks
-tracingassigns
-tracinggroups
-tracingifs
-tracingnesting
-tracingscantokens
-unless
-widowpenalties
- */
 pub fn etexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     Ok(T::from_str(".6".to_string()))
 }
@@ -137,4 +73,64 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
     register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected(sto,s,gu,cmd,g,false,false,false));
     register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded(s,g,c));
+
+    cmtodo!(state,stomach,gullet,beginL);
+    cmtodo!(state,stomach,gullet,beginR);
+    cmtodo!(state,stomach,gullet,botmarks);
+    cmtodo!(state,stomach,gullet,clubpenalties);
+    cmtodo!(state,stomach,gullet,currentgrouplevel);
+    cmtodo!(state,stomach,gullet,currentgrouptype);
+    cmtodo!(state,stomach,gullet,currentifbranch);
+    cmtodo!(state,stomach,gullet,currentiflevel);
+    cmtodo!(state,stomach,gullet,currentiftype);
+    cmtodo!(state,stomach,gullet,dimexpr);
+    cmtodo!(state,stomach,gullet,displaywidowpenalties);
+    cmtodo!(state,stomach,gullet,endL);
+    cmtodo!(state,stomach,gullet,endR);
+    cmtodo!(state,stomach,gullet,firstmarks);
+    cmtodo!(state,stomach,gullet,fontchardp);
+    cmtodo!(state,stomach,gullet,fontcharht);
+    cmtodo!(state,stomach,gullet,fontcharic);
+    cmtodo!(state,stomach,gullet,fontcharwd);
+    cmtodo!(state,stomach,gullet,glueexpr);
+    cmtodo!(state,stomach,gullet,glueshrink);
+    cmtodo!(state,stomach,gullet,glueshrinkorder);
+    cmtodo!(state,stomach,gullet,gluestretch);
+    cmtodo!(state,stomach,gullet,gluestretchorder);
+    cmtodo!(state,stomach,gullet,gluetomu);
+    cmtodo!(state,stomach,gullet,ifcsname);
+    cmtodo!(state,stomach,gullet,iffontchar);
+    cmtodo!(state,stomach,gullet,interactionmode);
+    cmtodo!(state,stomach,gullet,interlinepenalties);
+    cmtodo!(state,stomach,gullet,lastlinefit);
+    cmtodo!(state,stomach,gullet,lastnodetype);
+    cmtodo!(state,stomach,gullet,marks);
+    cmtodo!(state,stomach,gullet,middle);
+    cmtodo!(state,stomach,gullet,muexpr);
+    cmtodo!(state,stomach,gullet,mutoglue);
+    cmtodo!(state,stomach,gullet,numexpr);
+    cmtodo!(state,stomach,gullet,pagediscards);
+    cmtodo!(state,stomach,gullet,parshapedimen);
+    cmtodo!(state,stomach,gullet,parshapeindent);
+    cmtodo!(state,stomach,gullet,parshapelength);
+    cmtodo!(state,stomach,gullet,predisplaydirection);
+    cmtodo!(state,stomach,gullet,readline);
+    cmtodo!(state,stomach,gullet,savinghyphcodes);
+    cmtodo!(state,stomach,gullet,savingvdiscards);
+    cmtodo!(state,stomach,gullet,scantokens);
+    cmtodo!(state,stomach,gullet,showgroups);
+    cmtodo!(state,stomach,gullet,showifs);
+    cmtodo!(state,stomach,gullet,showtokens);
+    cmtodo!(state,stomach,gullet,splitbotmarks);
+    cmtodo!(state,stomach,gullet,splitdiscards);
+    cmtodo!(state,stomach,gullet,splitfirstmarks);
+    cmtodo!(state,stomach,gullet,TeXXeTstate);
+    cmtodo!(state,stomach,gullet,topmarks);
+    cmtodo!(state,stomach,gullet,tracingassigns);
+    cmtodo!(state,stomach,gullet,tracinggroups);
+    cmtodo!(state,stomach,gullet,tracingifs);
+    cmtodo!(state,stomach,gullet,tracingnesting);
+    cmtodo!(state,stomach,gullet,tracingscantokens);
+    cmtodo!(state,stomach,gullet,unless);
+    cmtodo!(state,stomach,gullet,widowpenalties);
 }

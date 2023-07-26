@@ -1,4 +1,4 @@
-use crate::{debug_log, register_dim_assign, register_gullet, register_int_assign};
+use crate::{cmtodo, debug_log, register_dim_assign, register_gullet, register_int_assign};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
@@ -9,159 +9,6 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive};
 use crate::utils::strings::CharType;
 use crate::utils::Ptr;
-
-/* TODO
-
-efcode
-knaccode
-knbccode
-knbscode
-lpcode
-pdfadjustinterwordglue
-pdfadjustspacing
-pdfappendkern
-pdfdraftmode
-pdfforcepagebox
-pdfgamma
-pdfgentounicode
-pdfimageapplygamma
-pdfimagegamma
-pdfimagehicolor
-pdfimageresolution
-pdfinclusioncopyfonts
-pdfinclusionerrorlevel
-pdfinfoomitdate
-pdfmajorversion
-pdfomitcharset
-pdfomitinfodict
-pdfomitprocset
-pdfpagebox
-pdfprependkern
-pdfprotrudechars
-pdfsuppressptexinfo
-pdfsuppresswarningdupdest
-pdfsuppresswarningdupmap
-pdfsuppresswarningpagegroup
-pdftracingfonts
-pdfuniqueresname
-rpcode
-shbscode
-showstream
-stbscode
-tagcode
-tracinglostchars
-tracingstacklevels
-
-pdfelapsedtime
-pdflastannot
-pdflastlink
-pdflastobj
-pdflastxform
-pdflastximage
-pdflastximagecolordepth
-pdflastximagepages
-pdflastxpos
-pdflastypos
-pdfrandomseed
-pdfretval
-pdfshellescape
-pdftexversion
-
-pdfdestmargin
-pdfeachlinedepth
-pdfeachlineheight
-pdffirstlineheight
-pdfignoreddimen
-pdflastlinedepth
-pdflinkmargin
-pdfpxdimen
-pdfthreadmargin
-
-pdfpageattr
-pdfpageresources
-pdfpagesattr
-pdfpkmode
-
-expanded
-ifincsname
-ifpdfabsdim
-ifpdfabsnum
-ifpdfprimitive
-leftmarginkern
-pdfcolorstackinit
-pdfcreationdate
-pdfescapehex
-pdfescapename
-pdfescapestring
-pdffiledump
-pdffilemoddate
-pdffilesize
-pdffontname
-pdffontobjnum
-pdffontsize
-pdfincludechars
-pdfinsertht
-pdflastmatch
-pdfmatch
-pdfmdfivesum
-pdfnormaldeviate
-pdfpageref
-pdftexbanner
-pdftexrevision
-pdfunescapehex
-pdfuniformdeviate
-pdfxformname
-pdfximagebbox
-rightmarginkern
-
-letterspacefont
-partokenname
-pdfannot
-pdfcatalog
-pdfcolorstack
-pdfcopyfont
-pdfdest
-pdfendlink
-pdfendthread
-pdffakespace
-pdffontattr
-pdffontexpand
-pdfglyphtounicode
-pdfinfo
-pdfinterwordspaceoff
-pdfinterwordspaceon
-pdfliteral
-pdfmapfile
-pdfmapline
-pdfnames
-pdfnobuiltintounicode
-pdfnoligatures
-pdfobj
-pdfoutline
-pdfprimitive
-pdfrefobj
-pdfrefxform
-pdfrefximage
-pdfresettimer
-pdfrestore
-pdfrunninglinkoff
-pdfrunninglinkon
-pdfsave
-pdfsavepos
-pdfsetmatrix
-pdfsetrandomseed
-pdfspacefont
-pdfstartlink
-pdfthread
-pdftrailer
-pdftrailerid
-pdfstartthread
-pdfxform
-pdfximage
-quitvmode
- */
-
-// TODO pdffstrcmp
 
 fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"pdffilesize");
@@ -196,4 +43,148 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     register_int_assign!(pdfpkresolution,state,stomach,gullet);
     register_gullet!(pdfstrcomp,state,stomach,gullet,(s,gu,cmd) =>pdfstrcomp(s,gu,cmd));
     register_dim_assign!(pdfvorigin,state,stomach,gullet);
+
+    cmtodo!(state,stomach,gullet,efcode);
+    cmtodo!(state,stomach,gullet,knaccode);
+    cmtodo!(state,stomach,gullet,knbccode);
+    cmtodo!(state,stomach,gullet,knbscode);
+    cmtodo!(state,stomach,gullet,lpcode);
+    cmtodo!(state,stomach,gullet,pdfadjustinterwordglue);
+    cmtodo!(state,stomach,gullet,pdfadjustspacing);
+    cmtodo!(state,stomach,gullet,pdfappendkern);
+    cmtodo!(state,stomach,gullet,pdfdraftmode);
+    cmtodo!(state,stomach,gullet,pdfforcepagebox);
+    cmtodo!(state,stomach,gullet,pdfgamma);
+    cmtodo!(state,stomach,gullet,pdfgentounicode);
+    cmtodo!(state,stomach,gullet,pdfimageapplygamma);
+    cmtodo!(state,stomach,gullet,pdfimagegamma);
+    cmtodo!(state,stomach,gullet,pdfimagehicolor);
+    cmtodo!(state,stomach,gullet,pdfimageresolution);
+    cmtodo!(state,stomach,gullet,pdfinclusioncopyfonts);
+    cmtodo!(state,stomach,gullet,pdfinclusionerrorlevel);
+    cmtodo!(state,stomach,gullet,pdfinfoomitdate);
+    cmtodo!(state,stomach,gullet,pdfmajorversion);
+    cmtodo!(state,stomach,gullet,pdfomitcharset);
+    cmtodo!(state,stomach,gullet,pdfomitinfodict);
+    cmtodo!(state,stomach,gullet,pdfomitprocset);
+    cmtodo!(state,stomach,gullet,pdfpagebox);
+    cmtodo!(state,stomach,gullet,pdfprependkern);
+    cmtodo!(state,stomach,gullet,pdfprotrudechars);
+    cmtodo!(state,stomach,gullet,pdfsuppressptexinfo);
+    cmtodo!(state,stomach,gullet,pdfsuppresswarningdupdest);
+    cmtodo!(state,stomach,gullet,pdfsuppresswarningdupmap);
+    cmtodo!(state,stomach,gullet,pdfsuppresswarningpagegroup);
+    cmtodo!(state,stomach,gullet,pdftracingfonts);
+    cmtodo!(state,stomach,gullet,pdfuniqueresname);
+    cmtodo!(state,stomach,gullet,rpcode);
+    cmtodo!(state,stomach,gullet,shbscode);
+    cmtodo!(state,stomach,gullet,showstream);
+    cmtodo!(state,stomach,gullet,stbscode);
+    cmtodo!(state,stomach,gullet,tagcode);
+    cmtodo!(state,stomach,gullet,tracinglostchars);
+    cmtodo!(state,stomach,gullet,tracingstacklevels);
+    cmtodo!(state,stomach,gullet,pdelapsedtime);
+    cmtodo!(state,stomach,gullet,pdflastannot);
+    cmtodo!(state,stomach,gullet,pdflastlink);
+    cmtodo!(state,stomach,gullet,pdflastobj);
+    cmtodo!(state,stomach,gullet,pdflastxform);
+    cmtodo!(state,stomach,gullet,pdflastximage);
+    cmtodo!(state,stomach,gullet,pdflastximagecolordepth);
+    cmtodo!(state,stomach,gullet,pdflastximagepages);
+    cmtodo!(state,stomach,gullet,pdflastxpos);
+    cmtodo!(state,stomach,gullet,pdflastypos);
+    cmtodo!(state,stomach,gullet,pdfrandomseed);
+    cmtodo!(state,stomach,gullet,pdfretval);
+    cmtodo!(state,stomach,gullet,pdfshellescape);
+    cmtodo!(state,stomach,gullet,pdftexversion);
+    cmtodo!(state,stomach,gullet,pdfdestmargin);
+    cmtodo!(state,stomach,gullet,pdfeachlinedepth);
+    cmtodo!(state,stomach,gullet,pdfeachlineheight);
+    cmtodo!(state,stomach,gullet,pdffirstlineheight);
+    cmtodo!(state,stomach,gullet,pdfignoreddimen);
+    cmtodo!(state,stomach,gullet,pdflastlinedepth);
+    cmtodo!(state,stomach,gullet,pdflinkmargin);
+    cmtodo!(state,stomach,gullet,pdfpxdimen);
+    cmtodo!(state,stomach,gullet,pdfthreadmargin);
+    cmtodo!(state,stomach,gullet,pdfpageattr);
+    cmtodo!(state,stomach,gullet,pdfpageresources);
+    cmtodo!(state,stomach,gullet,pdfpagesattr);
+    cmtodo!(state,stomach,gullet,pdfpkmode);
+    cmtodo!(state,stomach,gullet,ifincsname);
+    cmtodo!(state,stomach,gullet,ifpdfabsdim);
+    cmtodo!(state,stomach,gullet,ifpdfabsnum);
+    cmtodo!(state,stomach,gullet,ifpdfprimitive);
+    cmtodo!(state,stomach,gullet,leftmarginkern);
+    cmtodo!(state,stomach,gullet,pdfcolorstackinit);
+    cmtodo!(state,stomach,gullet,pdfcreationdate);
+    cmtodo!(state,stomach,gullet,pdfescapehex);
+    cmtodo!(state,stomach,gullet,pdfescapename);
+    cmtodo!(state,stomach,gullet,pdfescapestring);
+    cmtodo!(state,stomach,gullet,pdffiledump);
+    cmtodo!(state,stomach,gullet,pdffilemoddate);
+    cmtodo!(state,stomach,gullet,pdffilesize);
+    cmtodo!(state,stomach,gullet,pdffontname);
+    cmtodo!(state,stomach,gullet,pdffontobjnum);
+    cmtodo!(state,stomach,gullet,pdffontsize);
+    cmtodo!(state,stomach,gullet,pdfincludechars);
+    cmtodo!(state,stomach,gullet,pdfinsertht);
+    cmtodo!(state,stomach,gullet,pdflastmatch);
+    cmtodo!(state,stomach,gullet,pdfmatch);
+    cmtodo!(state,stomach,gullet,pdfmdfivesum);
+    cmtodo!(state,stomach,gullet,pdfnormaldeviate);
+    cmtodo!(state,stomach,gullet,pdfpageref);
+    cmtodo!(state,stomach,gullet,pdftexbanner);
+    cmtodo!(state,stomach,gullet,pdftexrevision);
+    cmtodo!(state,stomach,gullet,pdfunescapehex);
+    cmtodo!(state,stomach,gullet,pdfuniformdeviate);
+    cmtodo!(state,stomach,gullet,pdfxformname);
+    cmtodo!(state,stomach,gullet,pdfximagebbox);
+    cmtodo!(state,stomach,gullet,rightmarginkern);
+
+    cmtodo!(state,stomach,gullet,letterspacefont);
+    cmtodo!(state,stomach,gullet,partokenname);
+    cmtodo!(state,stomach,gullet,pdfannot);
+    cmtodo!(state,stomach,gullet,pdfcatalog);
+    cmtodo!(state,stomach,gullet,pdfcolorstack);
+    cmtodo!(state,stomach,gullet,pdfcopyfont);
+    cmtodo!(state,stomach,gullet,pdfdest);
+    cmtodo!(state,stomach,gullet,pdfendlink);
+    cmtodo!(state,stomach,gullet,pdfendthread);
+    cmtodo!(state,stomach,gullet,pdffakespace);
+    cmtodo!(state,stomach,gullet,pdffontattr);
+    cmtodo!(state,stomach,gullet,pdffontexpand);
+    cmtodo!(state,stomach,gullet,pdfglyphtounicode);
+    cmtodo!(state,stomach,gullet,pdfinfo);
+    cmtodo!(state,stomach,gullet,pdfinterwordspaceoff);
+    cmtodo!(state,stomach,gullet,pdfinterwordspaceon);
+    cmtodo!(state,stomach,gullet,pdfliteral);
+    cmtodo!(state,stomach,gullet,pdfmapfile);
+    cmtodo!(state,stomach,gullet,pdfmapline);
+    cmtodo!(state,stomach,gullet,pdfnames);
+    cmtodo!(state,stomach,gullet,pdfnobuiltintounicode);
+    cmtodo!(state,stomach,gullet,pdfnoligatures);
+    cmtodo!(state,stomach,gullet,pdfobj);
+    cmtodo!(state,stomach,gullet,pdfoutline);
+    cmtodo!(state,stomach,gullet,pdfprimitive);
+    cmtodo!(state,stomach,gullet,pdfrefobj);
+    cmtodo!(state,stomach,gullet,pdfrefxform);
+    cmtodo!(state,stomach,gullet,pdfrefximage);
+    cmtodo!(state,stomach,gullet,pdfresettimer);
+    cmtodo!(state,stomach,gullet,pdfrestore);
+    cmtodo!(state,stomach,gullet,pdfrunninglinkoff);
+    cmtodo!(state,stomach,gullet,pdfrunninglinkon);
+    cmtodo!(state,stomach,gullet,pdfsave);
+    cmtodo!(state,stomach,gullet,pdfsavepos);
+    cmtodo!(state,stomach,gullet,pdfsetmatrix);
+    cmtodo!(state,stomach,gullet,pdfsetrandomseed);
+    cmtodo!(state,stomach,gullet,pdfspacefont);
+    cmtodo!(state,stomach,gullet,pdfstartlink);
+    cmtodo!(state,stomach,gullet,pdfthread);
+    cmtodo!(state,stomach,gullet,pdftrailer);
+    cmtodo!(state,stomach,gullet,pdftrailerid);
+    cmtodo!(state,stomach,gullet,pdfstartthread);
+    cmtodo!(state,stomach,gullet,pdfxform);
+    cmtodo!(state,stomach,gullet,pdfximage);
+    cmtodo!(state,stomach,gullet,quitvmode);
+
 }

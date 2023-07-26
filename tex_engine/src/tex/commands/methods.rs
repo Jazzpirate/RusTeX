@@ -8,6 +8,12 @@ use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::Ptr;
 
+#[macro_export]
+macro_rules! cmtodo {
+    ($state:ident,$stomach:ident,$gullet:ident,$name:ident) => {
+        register_gullet!($name,$state,$stomach,$gullet,(_,_,_) => todo!(stringify!($name)));
+    };
+}
 
 #[macro_export]
 macro_rules! map_group {

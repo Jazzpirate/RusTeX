@@ -1,7 +1,7 @@
 //! TeX primitive [`Command`]s
 
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
@@ -28,316 +28,6 @@ use super::etex::protected;
 SPACE
 \/
 \-
-
-lastpenalty
-parshape
-inputlineno
-hyphenchar
-skewchar
-badness
-spacefactor
-prevgraf
-deadcycles
-insertpenalties
-mathcode
-delcode
-textfont
-scriptfont
-scriptscriptfont
-lastkern
-fontdimen
-prevdepth
-pagegoal
-pagetotal
-pagestretch
-pagefilstretch
-pagefillstretch
-pagefilllstretch
-pageshrink
-pagedepth
-ht
-wd
-dp
-lastskip
-
-globaldefs
-
-thinmuskip
-medmuskip
-thickmuskip
-
-setbox
-font
-futurelet
-
-fontdimen
-hyphenchar
-skewchar
-hyphenation
-patterns
-errorstopmode
-scrollmode
-nonstopmode
-batchmode
-
-box
-copy
-lastbox
-vsplit
-hbox
-vbox
-vtop
-
-show
-showbox
-showlists
-showthe
-
-shipout
-ignorespaces
-afterassignment
-aftergroup
-special
-penalty
-kern
-mkern
-unpenalty
-unkern
-unskip
-mark
-topmark
-firstmark
-botmark
-splitfirstmark
-splitbotmark
-insert
-vadjust
-
-vskip
-vfil
-vfill
-vss
-vfilneg
-
-leaders
-cleaders
-xleaders
-vrule
-hrule
-
-moveleft
-moveright
-unvbox
-unvcopy
-unhbox
-unhcopy
-halign
-valign
-indent
-noindent
-
-noboundary
-hfil
-hfill
-hfilneg
-hss
-accent
-discretionary
-dump
-raise
-lower
-setlanguage
-
-mathchar
-delimiter
-mathcode
-fam
-nonscript
-vcenter
-mathord
-mathop
-mathbin
-mathrel
-mathopen
-mathclose
-mathpunct
-mathinner
-underline
-overline
-mathaccent
-radical
-displaylimits
-limits
-nolimits
-mathchoice
-displaystyle
-textstyle
-scriptstyle
-scriptscriptstyle
-left
-right
-over
-atop
-above
-overwithdelims
-atopwithdelims
-abovewithdelims
-eqno
-leqno
-
-
-or
-
-
-----------------------------------------------------------------------------------------------------
-
-above
-abovewithdelims
-accent
-afterassignment
-aftergroup
-atop
-atopwithdelims
-batchmode
-bigskip
-botmark
-box
-bye
-char
-cleaders
-copy
-cr
-crcr
-delcode
-delimiter
-discretionary
-displaylimits
-displaystyle
-dp
-dump
-endinput
-eqno
-errorstopmode
-firstmark
-font
-fontdimen
-fontname
-futurelet
-halign
-hangafter
-hangindent
-hbox
-hfil
-hfill
-hfilneg
-holdinginserts
-hrule
-hskip
-hss
-ht
-hyphenation
-hyphenchar
-ignorespaces
-indent
-inputlineno
-insert
-italiccorr
-jobname
-kern
-lastbox
-lastkern
-lastpenalty
-lastskip
-leaders
-left
-leqno
-limits
-looseness
-lower
-mark
-mathaccent
-mathbin
-mathchar
-mathchoice
-mathclose
-mathcode
-mathinner
-mathop
-mathopen
-mathord
-mathpunct
-mathrel
-medskip
-mkern
-moveleft
-moveright
-mskip
-noboundary
-noalign
-noindent
-nolimits
-nonscript
-nonstopmode
-nullfont
-number
-omit
-over
-overline
-overwithdelims
-pagegoal
-parshape
-pausing
-penalty
-radical
-raise
-right
-romannumeral
-scriptfont
-scriptscriptfont
-scriptstyle
-scriptscriptstyle
-scrollmode
-setbox
-setlanguage
-sfcode
-shipout
-show
-showbox
-showlists
-showthe
-skewchar
-smallskip
-span
-special
-splitbotmark
-splitfirstmark
-string
-textfont
-textstyle
-topmark
-underline
-unhbox
-unhcopy
-unkern
-unpenalty
-unskip
-unvbox
-unvcopy
-uppercase
-vadjust
-valign
-vbox
-vcenter
-vfil
-vfill
-vfilneg
-vrule
-vskip
-vsplit
-vss
-vtop
-wd
-xleaders
  */
 
 pub fn SPACE<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,_cmd:StomachCommand<T>)
@@ -2511,4 +2201,167 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_assign!(xdef,state,stomach,gullet,(s,gu,_,cmd,global) =>xdef(s,gu,cmd,global,false,false,false));
     register_skip_assign!(xspaceskip,state,stomach,gullet);
     register_int!(year,state,stomach,gullet,(s,g,c) => year(s,g,c));
+
+    // TODOS ---------------------------------------------------------------------
+
+    cmtodo!(state,stomach,gullet,thinmuskip);
+    cmtodo!(state,stomach,gullet,medmuskip);
+    cmtodo!(state,stomach,gullet,thickmuskip);
+
+    cmtodo!(state,stomach,gullet,lastpenalty);
+    cmtodo!(state,stomach,gullet,parshape);
+    cmtodo!(state,stomach,gullet,inputlineno);
+    cmtodo!(state,stomach,gullet,hyphenchar);
+    cmtodo!(state,stomach,gullet,skewchar);
+    cmtodo!(state,stomach,gullet,badness);
+    cmtodo!(state,stomach,gullet,spacefactor);
+    cmtodo!(state,stomach,gullet,prevgraf);
+    cmtodo!(state,stomach,gullet,deadcycles);
+    cmtodo!(state,stomach,gullet,insertpenalties);
+    cmtodo!(state,stomach,gullet,mathcode);
+    cmtodo!(state,stomach,gullet,delcode);
+    cmtodo!(state,stomach,gullet,textfont);
+    cmtodo!(state,stomach,gullet,scriptfont);
+    cmtodo!(state,stomach,gullet,scriptscriptfont);
+    cmtodo!(state,stomach,gullet,lastkern);
+    cmtodo!(state,stomach,gullet,fontdimen);
+    cmtodo!(state,stomach,gullet,prevdepth);
+    cmtodo!(state,stomach,gullet,pagegoal);
+    cmtodo!(state,stomach,gullet,pagetotal);
+    cmtodo!(state,stomach,gullet,pagestretch);
+    cmtodo!(state,stomach,gullet,pagefilstretch);
+    cmtodo!(state,stomach,gullet,pagefillstretch);
+    cmtodo!(state,stomach,gullet,pagefilllstretch);
+    cmtodo!(state,stomach,gullet,pageshrink);
+    cmtodo!(state,stomach,gullet,pagedepth);
+    cmtodo!(state,stomach,gullet,ht);
+    cmtodo!(state,stomach,gullet,wd);
+    cmtodo!(state,stomach,gullet,dp);
+    cmtodo!(state,stomach,gullet,lastskip);
+    cmtodo!(state,stomach,gullet,setbox);
+    cmtodo!(state,stomach,gullet,font);
+    cmtodo!(state,stomach,gullet,futurelet);
+    cmtodo!(state,stomach,gullet,fontdimen);
+    cmtodo!(state,stomach,gullet,hyphenation);
+    cmtodo!(state,stomach,gullet,patterns);
+    cmtodo!(state,stomach,gullet,errorstopmode);
+    cmtodo!(state,stomach,gullet,scrollmode);
+    cmtodo!(state,stomach,gullet,nonstopmode);
+    cmtodo!(state,stomach,gullet,batchmode);
+    cmtodo!(state,stomach,gullet,box);
+    cmtodo!(state,stomach,gullet,copy);
+    cmtodo!(state,stomach,gullet,lastbox);
+    cmtodo!(state,stomach,gullet,vsplit);
+    cmtodo!(state,stomach,gullet,hbox);
+    cmtodo!(state,stomach,gullet,vbox);
+    cmtodo!(state,stomach,gullet,vtop);
+    cmtodo!(state,stomach,gullet,show);
+    cmtodo!(state,stomach,gullet,showbox);
+    cmtodo!(state,stomach,gullet,showlists);
+    cmtodo!(state,stomach,gullet,showthe);
+    cmtodo!(state,stomach,gullet,shipout);
+    cmtodo!(state,stomach,gullet,ignorespaces);
+    cmtodo!(state,stomach,gullet,afterassignment);
+    cmtodo!(state,stomach,gullet,aftergroup);
+    cmtodo!(state,stomach,gullet,special);
+    cmtodo!(state,stomach,gullet,penalty);
+    cmtodo!(state,stomach,gullet,kern);
+    cmtodo!(state,stomach,gullet,mkern);
+    cmtodo!(state,stomach,gullet,unpenalty);
+    cmtodo!(state,stomach,gullet,unkern);
+    cmtodo!(state,stomach,gullet,unskip);
+    cmtodo!(state,stomach,gullet,mark);
+    cmtodo!(state,stomach,gullet,topmark);
+    cmtodo!(state,stomach,gullet,firstmark);
+    cmtodo!(state,stomach,gullet,botmark);
+    cmtodo!(state,stomach,gullet,splitfirstmark);
+    cmtodo!(state,stomach,gullet,splitbotmark);
+    cmtodo!(state,stomach,gullet,insert);
+    cmtodo!(state,stomach,gullet,vadjust);
+    cmtodo!(state,stomach,gullet,vskip);
+    cmtodo!(state,stomach,gullet,vfil);
+    cmtodo!(state,stomach,gullet,vfill);
+    cmtodo!(state,stomach,gullet,vss);
+    cmtodo!(state,stomach,gullet,vfilneg);
+    cmtodo!(state,stomach,gullet,leaders);
+    cmtodo!(state,stomach,gullet,cleaders);
+    cmtodo!(state,stomach,gullet,xleaders);
+    cmtodo!(state,stomach,gullet,vrule);
+    cmtodo!(state,stomach,gullet,hrule);
+    cmtodo!(state,stomach,gullet,moveleft);
+    cmtodo!(state,stomach,gullet,moveright);
+    cmtodo!(state,stomach,gullet,unvbox);
+    cmtodo!(state,stomach,gullet,unvcopy);
+    cmtodo!(state,stomach,gullet,halign);
+    cmtodo!(state,stomach,gullet,valign);
+    cmtodo!(state,stomach,gullet,indent);
+    cmtodo!(state,stomach,gullet,noindent);
+    cmtodo!(state,stomach,gullet,noboundary);
+    cmtodo!(state,stomach,gullet,hfil);
+    cmtodo!(state,stomach,gullet,hfill);
+    cmtodo!(state,stomach,gullet,hfilneg);
+    cmtodo!(state,stomach,gullet,hss);
+    cmtodo!(state,stomach,gullet,accent);
+    cmtodo!(state,stomach,gullet,discretionary);
+    cmtodo!(state,stomach,gullet,dump);
+    cmtodo!(state,stomach,gullet,raise);
+    cmtodo!(state,stomach,gullet,lower);
+    cmtodo!(state,stomach,gullet,setlanguage);
+    cmtodo!(state,stomach,gullet,delimiter);
+    cmtodo!(state,stomach,gullet,mathcode);
+    cmtodo!(state,stomach,gullet,nonscript);
+    cmtodo!(state,stomach,gullet,vcenter);
+    cmtodo!(state,stomach,gullet,mathord);
+    cmtodo!(state,stomach,gullet,mathop);
+    cmtodo!(state,stomach,gullet,mathbin);
+    cmtodo!(state,stomach,gullet,mathrel);
+    cmtodo!(state,stomach,gullet,mathopen);
+    cmtodo!(state,stomach,gullet,mathclose);
+    cmtodo!(state,stomach,gullet,mathpunct);
+    cmtodo!(state,stomach,gullet,mathinner);
+    cmtodo!(state,stomach,gullet,underline);
+    cmtodo!(state,stomach,gullet,overline);
+    cmtodo!(state,stomach,gullet,mathaccent);
+    cmtodo!(state,stomach,gullet,radical);
+    cmtodo!(state,stomach,gullet,displaylimits);
+    cmtodo!(state,stomach,gullet,limits);
+    cmtodo!(state,stomach,gullet,nolimits);
+    cmtodo!(state,stomach,gullet,mathchoice);
+    cmtodo!(state,stomach,gullet,displaystyle);
+    cmtodo!(state,stomach,gullet,textstyle);
+    cmtodo!(state,stomach,gullet,scriptstyle);
+    cmtodo!(state,stomach,gullet,scriptscriptstyle);
+    cmtodo!(state,stomach,gullet,left);
+    cmtodo!(state,stomach,gullet,right);
+    cmtodo!(state,stomach,gullet,over);
+    cmtodo!(state,stomach,gullet,atop);
+    cmtodo!(state,stomach,gullet,above);
+    cmtodo!(state,stomach,gullet,overwithdelims);
+    cmtodo!(state,stomach,gullet,atopwithdelims);
+    cmtodo!(state,stomach,gullet,abovewithdelims);
+    cmtodo!(state,stomach,gullet,eqno);
+    cmtodo!(state,stomach,gullet,leqno);
+    cmtodo!(state,stomach,gullet,or);
+    cmtodo!(state,stomach,gullet,bigskip);
+    cmtodo!(state,stomach,gullet,bye);
+    cmtodo!(state,stomach,gullet,char);
+    cmtodo!(state,stomach,gullet,cr);
+    cmtodo!(state,stomach,gullet,crcr);
+    cmtodo!(state,stomach,gullet,endinput);
+    cmtodo!(state,stomach,gullet,fontname);
+    cmtodo!(state,stomach,gullet,hskip);
+    cmtodo!(state,stomach,gullet,italiccorr);
+    cmtodo!(state,stomach,gullet,jobname);
+    cmtodo!(state,stomach,gullet,mathchar);
+    cmtodo!(state,stomach,gullet,medskip);
+    cmtodo!(state,stomach,gullet,mskip);
+    cmtodo!(state,stomach,gullet,noalign);
+    cmtodo!(state,stomach,gullet,nullfont);
+    cmtodo!(state,stomach,gullet,omit);
+    cmtodo!(state,stomach,gullet,romannumeral);
+    cmtodo!(state,stomach,gullet,smallskip);
+    cmtodo!(state,stomach,gullet,span);
+    cmtodo!(state,stomach,gullet,unhbox);
+    cmtodo!(state,stomach,gullet,unhcopy);
 }
+
