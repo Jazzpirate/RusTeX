@@ -106,7 +106,6 @@ pdfmatch
 pdfmdfivesum
 pdfnormaldeviate
 pdfpageref
-pdfstrcmp
 pdftexbanner
 pdftexrevision
 pdfunescapehex
@@ -161,6 +160,8 @@ pdfxform
 pdfximage
 quitvmode
  */
+
+// TODO pdffstrcmp
 
 fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"pdffilesize");

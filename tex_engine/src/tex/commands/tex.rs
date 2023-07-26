@@ -96,8 +96,6 @@ shipout
 ignorespaces
 afterassignment
 aftergroup
-uppercase
-lowercase
 special
 penalty
 kern
@@ -256,7 +254,6 @@ leqno
 limits
 looseness
 lower
-lowercase
 mark
 mathaccent
 mathbin
@@ -1305,6 +1302,45 @@ pub fn long<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&
     }
 }
 
+pub fn lowercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>)
+                                         -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace => "\\lowercase");
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("lowercase",cmd)) {
+        None => file_end_prim!("lowercase",cmd),
+        Some(sc) => match sc.cmd {
+            StomachCommandInner::BeginGroup(_) => (),
+            _ => return Err(ErrorInPrimitive{name:"lowercase",msg:Some("Expected a begin group after \\lowercase".to_string()),cause:Some(cmd.cause),source:None})
+        }
+    }
+    let mut ingroups = 1;
+    let mut ret = vec!();
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("lowercase",cmd)) {
+        match next.base() {
+            BaseToken::Char(c,CategoryCode::BeginGroup) => {
+                ingroups += 1;
+                let nc = state.get_lccode(*c);
+                ret.push(T::new(BaseToken::Char(nc,CategoryCode::BeginGroup),None));
+            },
+            BaseToken::Char(c,CategoryCode::EndGroup) => {
+                ingroups -= 1;
+                if ingroups == 0 {
+                    break;
+                } else {
+                    let nc = state.get_lccode(*c);
+                    ret.push(T::new(BaseToken::Char(nc,CategoryCode::EndGroup),None));
+                }
+            },
+            BaseToken::Char(c,cc) => {
+                let nc = state.get_lccode(*c);
+                ret.push(T::new(BaseToken::Char(nc,*cc),None));
+            },
+            _ => ret.push(next)
+        }
+    }
+    gullet.mouth().push_tokens(ret);
+    Ok(())
+}
+
 pub fn mathchardef<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"mathchardef");
     let csO = catch_prim!(gullet.mouth().get_next(state) => ("mathchardef",cmd));
@@ -2070,7 +2106,6 @@ pub fn toksdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
     Ok(())
 }
 
-
 pub fn uccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning upper case character");
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
@@ -2098,6 +2133,45 @@ pub fn uccode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     let v = catch_prim!(<S::NumSet as NumSet>::Int::from_i64(state.get_uccode(c).to_usize() as i64) => ("uccode",cmd));
     debug_log!(debug=>"\\uccode '{}' == {}",c.char_str(),v);
     Ok(v)
+}
+
+pub fn uppercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>)
+                                         -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace => "\\uppercase");
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("uppercase",cmd)) {
+        None => file_end_prim!("uppercase",cmd),
+        Some(sc) => match sc.cmd {
+            StomachCommandInner::BeginGroup(_) => (),
+            _ => return Err(ErrorInPrimitive{name:"uppercase",msg:Some("Expected a begin group after \\uppercase".to_string()),cause:Some(cmd.cause),source:None})
+        }
+    }
+    let mut ingroups = 1;
+    let mut ret = vec!();
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("uppercase",cmd)) {
+        match next.base() {
+            BaseToken::Char(c,CategoryCode::BeginGroup) => {
+                ingroups += 1;
+                let nc = state.get_uccode(*c);
+                ret.push(T::new(BaseToken::Char(nc,CategoryCode::BeginGroup),None));
+            },
+            BaseToken::Char(c,CategoryCode::EndGroup) => {
+                ingroups -= 1;
+                if ingroups == 0 {
+                    break;
+                } else {
+                    let nc = state.get_uccode(*c);
+                    ret.push(T::new(BaseToken::Char(nc,CategoryCode::EndGroup),None));
+                }
+            },
+            BaseToken::Char(c,cc) => {
+                let nc = state.get_uccode(*c);
+                ret.push(T::new(BaseToken::Char(nc,*cc),None));
+            },
+            _ => ret.push(next)
+        }
+    }
+    gullet.mouth().push_tokens(ret);
+    Ok(())
 }
 
 pub fn write<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>) -> Result<Whatsit<T, Sto>, ErrorInPrimitive<T>> {
@@ -2272,6 +2346,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_skip_assign!(lineskip,state,stomach,gullet);
     register_dim_assign!(lineskiplimit,state,stomach,gullet);
     register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long(sto,s,gu,cmd,g,false,false,false));
+    register_stomach!(lowercase,state,stomach,gullet,(s,gu,sto,cmd,_) =>lowercase(sto,s,gu,cmd));
     register_int_assign!(looseness,state,stomach,gullet);
     register_int_assign!(mag,state,stomach,gullet);
     register_int_assign!(maxdeadcycles,state,stomach,gullet);
@@ -2341,6 +2416,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(tracingstats,state,stomach,gullet);
     register_value_assign_int!(uccode,state,stomach,gullet);
     register_int_assign!(uchyph,state,stomach,gullet);
+    register_stomach!(uppercase,state,stomach,gullet,(s,gu,sto,cmd,_) =>uppercase(sto,s,gu,cmd));
     register_int_assign!(vbadness,state,stomach,gullet);
     register_dim_assign!(vfuzz,state,stomach,gullet);
     register_dim_assign!(voffset,state,stomach,gullet);
