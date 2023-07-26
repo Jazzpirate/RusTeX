@@ -5,6 +5,7 @@ use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_gullet, register_int, register_int_assign, register_tok_assign};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
+use crate::tex::commands::tex::get_csname;
 use crate::tex::numbers::NumSet;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim};
@@ -22,6 +23,12 @@ pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mu
 pub fn expanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"expanded");
     Ok(catch_prim!(gullet.get_expanded_group(state,false,false,false) => ("expanded",cmd)))
+}
+
+pub fn ifcsname<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifcsname");
+    let name = get_csname(state,gullet,cmd,"ifcsname")?;
+    Ok(state.get_command(&name).is_some())
 }
 
 pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
@@ -78,6 +85,7 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
     register_tok_assign!(everyeof,state,stomach,gullet);
     register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded(s,g,c));
+    register_conditional!(ifcsname,state,stomach,gullet,(s,gu,cmd) =>ifcsname(s,gu,cmd));
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
     register_int_assign!(tracingassigns,state,stomach,gullet);
     register_int_assign!(tracinggroups,state,stomach,gullet);
@@ -111,7 +119,6 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     cmtodo!(state,stomach,gullet,gluestretch);
     cmtodo!(state,stomach,gullet,gluestretchorder);
     cmtodo!(state,stomach,gullet,gluetomu);
-    cmtodo!(state,stomach,gullet,ifcsname);
     cmtodo!(state,stomach,gullet,iffontchar);
     cmtodo!(state,stomach,gullet,interactionmode);
     cmtodo!(state,stomach,gullet,interlinepenalties);

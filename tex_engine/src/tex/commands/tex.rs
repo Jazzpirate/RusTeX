@@ -236,13 +236,12 @@ pub fn countdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
     Ok(())
 }
 
-pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"csname");
+pub fn get_csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>,name:&'static str) -> Result<TeXStr<T::Char>,ErrorInPrimitive<T>>{
     let csidx = state.push_csname();
     let mut csname = Vec::new();
     while state.current_csname() == Some(csidx) {
-        match catch_prim!(gullet.get_next_stomach_command(state) => ("csname",cmd)) {
-            None => return file_end_prim!("csname",cmd),
+        match catch_prim!(gullet.get_next_stomach_command(state) => (name,cmd)) {
+            None => return file_end_prim!(name,cmd),
             Some(sc) => match sc.cmd {
                 StomachCommandInner::Command {name:"endcsname",..} => state.pop_csname(),
                 StomachCommandInner::Char{char,..} => csname.push(char),
@@ -252,11 +251,16 @@ pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 StomachCommandInner::Subscript(c) => csname.push(c),
                 StomachCommandInner::MathShift(c) => csname.push(c),
                 StomachCommandInner::Space => csname.push(T::Char::from(b' ')),
-                o => return Err(ErrorInPrimitive{name:"csname",msg:Some(format!("Unexpected token in csname: {:?}",o)),cause:Some(cmd.cause),source:None})
+                o => return Err(ErrorInPrimitive{name:"csname",msg:Some(format!("Unexpected token in {}: {:?}",name,o)),cause:Some(cmd.cause),source:None})
             }
         }
     }
-    let str : TeXStr<T::Char> = csname.into();
+    Ok(csname.into())
+}
+
+pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"csname");
+    let str = get_csname(state,gullet,cmd,"csname")?;
     debug_log!(trace=>"csname {}",str.to_string());
     match state.get_command(&str) {
         None => state.set_command(str.clone(),Some(Ptr::new(Command::Relax)),false),
@@ -864,6 +868,38 @@ pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletComma
     })
 }
 
+pub fn ifcat<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    let first = get_if_token(state,gullet,cmd.clone(),"ifcat")?;
+    let second = get_if_token(state,gullet,cmd,"ifcat")?;
+    let first = match first {
+        None => return Ok(false),
+        Some(first) => match first.base() {
+            BaseToken::Char(_,cc) => *cc,
+            BaseToken::CS(name) => match state.get_command(name) {
+                None => CategoryCode::Escape,
+                Some(cmd) => match &*cmd {
+                    Command::Char {catcode,..} => *catcode,
+                    _ => CategoryCode::Escape
+                }
+            }
+        }
+    };
+    let second = match second {
+        None => return Ok(false),
+        Some(first) => match first.base() {
+            BaseToken::Char(_,cc) => *cc,
+            BaseToken::CS(name) => match state.get_command(name) {
+                None => CategoryCode::Escape,
+                Some(cmd) => match &*cmd {
+                    Command::Char {catcode,..} => *catcode,
+                    _ => CategoryCode::Escape
+                }
+            }
+        }
+    };
+    Ok(first == second)
+}
+
 pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>,name:&'static str) -> Result<Option<T>,ErrorInPrimitive<T>> {
     // need to be careful not to expand \else and \fi before conditional is done.
     while let Some((t,e)) = catch_prim!(gullet.mouth().get_next(state) => (name,cmd)) {
@@ -944,22 +980,22 @@ pub fn ifx<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletComma
         (BaseToken::Char(c1,CategoryCode::Active),BaseToken::Char(c2,CategoryCode::Active)) => {
             let cmd1 = state.get_ac_command(*c1);
             let cmd2 = state.get_ac_command(*c2);
-            Ok(ifx_eq_cmd(cmd1,exp1,cmd2,exp2))
+            Ok(ifx_eq_cmd(cmd1,t1,exp1,cmd2,t2,exp2))
         }
         (BaseToken::CS(name),BaseToken::Char(c2,CategoryCode::Active)) =>{
             let cmd1 = state.get_command(name);
             let cmd2 = state.get_ac_command(*c2);
-            Ok(ifx_eq_cmd(cmd1,exp1,cmd2,exp2))
+            Ok(ifx_eq_cmd(cmd1,t1,exp1,cmd2,t2,exp2))
         }
         (BaseToken::Char(c1,CategoryCode::Active),BaseToken::CS(name)) =>{
             let cmd1 = state.get_ac_command(*c1);
             let cmd2 = state.get_command(name);
-            Ok(ifx_eq_cmd(cmd1,exp1,cmd2,exp2))
+            Ok(ifx_eq_cmd(cmd1,t1,exp1,cmd2,t2,exp2))
         }
         (BaseToken::CS(name1),BaseToken::CS(name2)) =>{
             let cmd1 = state.get_command(name1);
             let cmd2 = state.get_command(name2);
-            Ok(ifx_eq_cmd(cmd1,exp1,cmd2,exp2))
+            Ok(ifx_eq_cmd(cmd1,t1,exp1,cmd2,t2,exp2))
         }
         (BaseToken::Char(c1,cc1),BaseToken::Char(c2,cc2)) =>
             Ok(c1==c2 && cc1 == cc2),
@@ -976,12 +1012,13 @@ pub fn ifx<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletComma
     }
 }
 
-fn ifx_eq_cmd<T:Token>(cmd1:Option<Ptr<Command<T>>>,expand1:bool,cmd2:Option<Ptr<Command<T>>>,expand2:bool) -> bool {
-    if !expand1 || !expand2 {
-        todo!("\\noexpand commands in ifx")
-    }
+fn ifx_eq_cmd<T:Token>(cmd1:Option<Ptr<Command<T>>>,t1:T,expand1:bool,cmd2:Option<Ptr<Command<T>>>,t2:T,expand2:bool) -> bool {
     debug_log!(debug=>"ifx_eq_cmd: {:?} == {:?}?",cmd1,cmd2);
-    cmd1 == cmd2
+    if expand1 && expand2 {cmd1 == cmd2}
+    else if !expand1 && !expand2 {
+        t1 == t2
+    }
+    else { false }
 }
 
 
@@ -2198,7 +2235,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_(s,gu,cmd));
     register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcase"));
-    register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcat"));
+    register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>ifcat(s,gu,cmd));
     register_conditional!(ifdim,state,stomach,gullet,(s,gu,cmd) =>todo!("ifdim"));
     register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof(s,gu,cmd));
     register_conditional!(iffalse,state,stomach,gullet,(s,gu,cmd) => Ok(false));

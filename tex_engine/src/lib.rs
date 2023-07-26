@@ -123,10 +123,10 @@ mod tests {
 
     #[test]
     fn engine() { measure!(engine: {
-        //debug();
+        debug();
         //trace();
-        std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
-        env_logger::init();
+        //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
+        //env_logger::init();
 
         let outputs = Outputs {
             error: |s|  { print!("\n{}",Red.paint(std::format!("{}",s))) },

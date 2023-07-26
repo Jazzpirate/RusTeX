@@ -31,7 +31,7 @@ pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> 
 }
 
 macro_rules! expand_group_without_unknowns {
-    ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident) => $f:expr;$($branch:tt)*) => {
+    ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident,$cmd:ident) => $f:expr;$($branch:tt)*) => {
         if let Some((tk,b)) = $gullet.mouth().get_next($state)? {
             match tk.catcode() {
                 CategoryCode::BeginGroup => (),
@@ -56,14 +56,14 @@ macro_rules! expand_group_without_unknowns {
                 _ => {
                     match $tk.base() {
                         BaseToken::CS(n) => {
-                            let cmd = $state.need_command(n)?;
-                            match &*cmd {
+                            let $cmd = $state.need_command(n)?;
+                            match &*$cmd {
                                 $($branch)*
                                 Command::Gullet {name,index} => {
                                     do_expandable($gullet,$state,$tk,name,*index)?;
                                 }
                                 Command::Def(def,_) => {
-                                    let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
+                                    let v = def.expand($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
                                     if !v.is_empty() {
                                         $gullet.mouth().push_tokens(v);
                                     }
@@ -75,14 +75,14 @@ macro_rules! expand_group_without_unknowns {
                             }
                         }
                         BaseToken::Char(c, CategoryCode::Active) => {
-                            let cmd = $state.need_ac_command(*c)?;
-                            match &*cmd {
+                            let $cmd = $state.need_ac_command(*c)?;
+                            match &*$cmd {
                                 $($branch)*
                                 Command::Gullet {name,index} => {
                                     do_expandable($gullet,$state,$tk,name,*index)?;
                                 }
                                 Command::Def(def,_) => {
-                                    let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
+                                    let v = def.expand($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
                                     if !v.is_empty() {
                                         $gullet.mouth().push_tokens(v);
                                     }
@@ -103,7 +103,7 @@ macro_rules! expand_group_without_unknowns {
 }
 
 macro_rules! expand_group_with_unknowns {
-    ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident) => $f:expr;$($branch:tt)*) => {
+    ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident,$cmd:ident) => $f:expr;$($branch:tt)*) => {
         if let Some((tk,b)) = $gullet.mouth().get_next($state)? {
             match tk.catcode() {
                 CategoryCode::BeginGroup => (),
@@ -131,13 +131,13 @@ macro_rules! expand_group_with_unknowns {
                             match $state.get_command(n) {
                                 None => $f,
                                 Some(_) if !$expand => $f,
-                                Some(cmd) => match &*cmd {
+                                Some($cmd) => match &*$cmd {
                                     $($branch)*,
                                     Command::Gullet {name,index} => {
                                         do_expandable($gullet,$state,$tk,name,*index)?;
                                     }
                                     Command::Def(def,_) => {
-                                        let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
+                                        let v = def.expand($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
                                         if !v.is_empty() {
                                             $gullet.mouth().push_tokens(v);
                                         }
@@ -153,13 +153,13 @@ macro_rules! expand_group_with_unknowns {
                             match $state.get_ac_command(*c) {
                                 None => $f,
                                 Some(_) if !$expand => $f,
-                                Some(cmd) => match &*cmd {
+                                Some($cmd) => match &*$cmd {
                                     $($branch)*,
                                     Command::Gullet {name,index} => {
                                         do_expandable($gullet,$state,$tk,name,*index)?;
                                     }
                                     Command::Def(def,_) => {
-                                        let v = def.expand($state,$gullet.mouth(),cmd.clone(),Ptr::new($tk))?;
+                                        let v = def.expand($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
                                         if !v.is_empty() {
                                             $gullet.mouth().push_tokens(v);
                                         }
@@ -245,7 +245,7 @@ pub fn get_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &m
 pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &mut S) -> Result<Vec<u8>,Box<dyn TeXError<T>>> {
     let mut ret = Vec::with_capacity(50); // seems to speed things up
     let esc = state.get_escapechar();;
-    expand_group_without_unknowns!(state,gullet,return Ok(ret),(tk,expand) =>
+    expand_group_without_unknowns!(state,gullet,return Ok(ret),(tk,expand,cmd) =>
         for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
             ret.push(u)
         };
@@ -269,10 +269,24 @@ pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, st
 pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, state: &mut S, expand_protected:bool, keep_the:bool, err_on_unknowns:bool) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
     let mut tks = Vec::with_capacity(50); // seems to speed things up
     if err_on_unknowns {
-        expand_group_without_unknowns!(state,gullet,return Ok(tks),(tk,expand) => tks.push(tk);
+        expand_group_without_unknowns!(state,gullet,return Ok(tks),(tk,expand,cmd) => tks.push(tk);
             Command::Gullet {name:"the",..} if keep_the => todo!("'the' in expansion"),
-            Command::Gullet {name:"unexpanded",..} => todo!("'unexpanded' in expansion"),
-            Command::Gullet {name:"noexpand",..} => {
+            Command::Gullet {name:"unexpanded",index} if expand => {
+                match gullet.primitive(*index) {
+                    Some(f) => {
+                        for t in f(state,gullet,GulletCommand{cause:tk.clone()})? {
+                            /*if t.catcode() == CategoryCode::Parameter {
+                                tks.push(t.clone());
+                                tks.push(t);
+                            } else {*/
+                                tks.push(t);
+                            //}
+                        }
+                    }
+                    None => return Err(OtherError{msg:"\\unexpanded not implemented".to_string(),cause:Some(tk),source:None}.into())
+                }
+            }
+            Command::Gullet {name:"noexpand",..} if expand => {
                 match gullet.mouth().get_next(state)? {
                     Some((tk,_)) => tks.push(tk),
                     None => return Err(UnexpectedEndgroup(tk).into())
@@ -281,10 +295,24 @@ pub fn get_expanded_group<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, s
             Command::Def(def,_) if def.protected && !expand_protected => {tks.push(tk)}
         );
     } else {
-        expand_group_with_unknowns!(state,gullet,return Ok(tks),(tk,expand) => tks.push(tk);
+        expand_group_with_unknowns!(state,gullet,return Ok(tks),(tk,expand,cmd) => tks.push(tk);
             Command::Gullet {name:"the",..} if keep_the => todo!("'the' in expansion"),
-            Command::Gullet {name:"unexpanded",..} => todo!("'unexpanded' in expansion"),
-            Command::Gullet {name:"noexpand",..} => {
+            Command::Gullet {name:"unexpanded",index} if expand => {
+                match gullet.primitive(*index) {
+                    Some(f) => {
+                        for t in f(state,gullet,GulletCommand{cause:tk.clone()})? {
+                            /*if t.catcode() == CategoryCode::Parameter {
+                                tks.push(t.clone());
+                                tks.push(t);
+                            } else {*/
+                                tks.push(t);
+                            //}
+                        }
+                    }
+                    None => return Err(OtherError{msg:"\\unexpanded not implemented".to_string(),cause:Some(tk),source:None}.into())
+                }
+            }
+            Command::Gullet {name:"noexpand",..} if expand => {
                 match gullet.mouth().get_next(state)? {
                     Some((tk,_)) => tks.push(tk),
                     None => return Err(UnexpectedEndgroup(tk).into())
