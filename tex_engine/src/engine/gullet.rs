@@ -93,7 +93,7 @@ pub trait Gullet<T:Token>:Sized+'static {
     fn new_conditional(&mut self) -> usize;
     fn set_conditional(&mut self,branch:ConditionalBranch);
     fn pop_conditional(&mut self);
-
+    fn current_conditional(&self) -> Option<ConditionalBranch>;
 
     fn register_primitive(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>) -> usize;
     fn register_conditional(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>>) -> usize;
@@ -243,5 +243,8 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     fn pop_conditional(&mut self) {
         // TODO throw error
         self.in_conditionals.pop();
+    }
+    fn current_conditional(&self) -> Option<ConditionalBranch> {
+        self.in_conditionals.last().copied()
     }
 }

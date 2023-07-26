@@ -20,6 +20,7 @@ use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use crate::engine::gullet;
 use crate::tex::boxes::Whatsit;
+use crate::tex::ConditionalBranch;
 use super::etex::protected;
 
 /* TODO
@@ -1125,6 +1126,53 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
             _ => todo!("global: {:?} at {}",c,gullet.mouth().preview(100))
         }
     }
+}
+
+pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    let first = get_if_token(state,gullet,cmd.clone(),"if")?;
+    let second = get_if_token(state,gullet,cmd,"if")?;
+    Ok(match (first,second) {
+        (None,_) | (_,None) => false,
+        (Some(f),Some(s)) => match (f.base(),s.base()) {
+            (BaseToken::Char(f,CategoryCode::Active),BaseToken::Char(s,CategoryCode::Active)) => f == s,
+            (BaseToken::CS(f),BaseToken::CS(s)) => true,
+            _ => false
+        }
+    })
+}
+
+pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>,name:&'static str) -> Result<Option<T>,ErrorInPrimitive<T>> {
+    // need to be careful not to expand \else and \fi before conditional is done.
+    while let Some((t,e)) = catch_prim!(gullet.mouth().get_next(state) => (name,cmd)) {
+        let cmdo = match t.base() {
+            BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(*c),
+            BaseToken::CS(n) => state.get_command(n),
+            _ => return Ok(Some(t))
+        };
+        match cmdo {
+            None => return Ok(Some(t)),
+            Some(c) => match &*c {
+                Command::Conditional{name,index} if e => {
+                    catch_prim!(crate::engine::gullet::methods::do_conditional(gullet,state,t,name,*index) => (name,cmd));
+                },
+                Command::Def(d,_) if e => {
+                    let v = catch_prim!(d.expand(state,gullet.mouth(),c.clone(),Ptr::new(t.clone())) => (name,cmd));
+                    if !v.is_empty() {
+                        gullet.mouth().push_tokens(v);
+                    }
+                },
+                Command::Gullet {name,..} if e && gullet.current_conditional() == Some(ConditionalBranch::None) && (*name == "else" || *name == "fi") => {
+                    gullet.mouth().requeue(t);
+                    return Ok(None)
+                }
+                Command::Gullet {name,index} if e => {
+                    catch_prim!(crate::engine::gullet::methods::do_expandable(gullet,state,t,name,*index) => (name,cmd));
+                },
+                _ => return Ok(Some(t))
+            }
+        }
+    }
+    file_end_prim!(name,cmd)
 }
 
 pub fn ifeof<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
@@ -2354,29 +2402,22 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(holdinginserts,state,stomach,gullet);
     register_dim_assign!(hsize,state,stomach,gullet);
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
-    register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>todo!("if"));
+    register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_(s,gu,cmd));
     register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcase"));
     register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcat"));
     register_conditional!(ifdim,state,stomach,gullet,(s,gu,cmd) =>todo!("ifdim"));
     register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof(s,gu,cmd));
-
     register_conditional!(iffalse,state,stomach,gullet,(s,gu,cmd) => Ok(false));
-
     register_conditional!(ifhbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhbox"));
     register_conditional!(ifhmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhmode"));
     register_conditional!(ifinner,state,stomach,gullet,(s,gu,cmd) =>todo!("ifinner"));
     register_conditional!(ifmmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifmmode"));
-
     register_conditional!(ifnum,state,stomach,gullet,(s,gu,cmd) =>ifnum(s,gu,cmd));
-
     register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>todo!("ifodd"));
-
     register_conditional!(iftrue,state,stomach,gullet,(s,gu,cmd) => Ok(true));
-
     register_conditional!(ifvbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvbox"));
     register_conditional!(ifvmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvmode"));
     register_conditional!(ifvoid,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvoid"));
-
     register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx(s,gu,cmd));
     register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate(s,gu,sto,cmd));
     register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input(s,gu,cmd));

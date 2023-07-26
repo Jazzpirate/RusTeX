@@ -7,7 +7,7 @@ pub mod boxes;
 pub mod numbers;
 pub mod fonts;
 
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy,Clone,Debug,PartialEq)]
 pub enum ConditionalBranch { None,True,Else }
 impl Default for ConditionalBranch {
     fn default() -> Self { ConditionalBranch::None }

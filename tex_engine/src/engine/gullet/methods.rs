@@ -361,7 +361,7 @@ pub fn do_conditional<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:
     match gullet.conditional(index) {
         None => Err(ImplementationError(format!("Missing implementation for primitive command {}",name),PhantomData).into()),
         Some(c) => {
-            let idx = gullet.new_conditional();
+            gullet.new_conditional();
             let b = c(state,gullet,GulletCommand{cause})?;
             if b {
                 gullet.set_conditional(ConditionalBranch::True);
