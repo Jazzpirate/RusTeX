@@ -10,7 +10,7 @@ use crate::utils::errors::{OtherError, TeXError, UndefinedActiveCharacter, Undef
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::Outputs;
-use crate::tex::numbers::{Int, NumSet, Skip};
+use crate::tex::numbers::{Int, MuSkip, NumSet, Skip};
 use crate::utils::Ptr;
 
 pub mod fields;
@@ -123,9 +123,9 @@ pub trait State<T:Token>:Sized+'static {
     fn set_skip_register(&mut self,i:usize,v:Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>,globally:bool);
 
     /// get the value of a skip register
-    fn get_muskip_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::MuSkip;
+    fn get_muskip_register(&self,i:usize) -> MuSkip<<<Self as State<T>>::NumSet as NumSet>::MuDim,<<Self as State<T>>::NumSet as NumSet>::MuStretchShrinkDim>;
     /// set the value of a skip register
-    fn set_muskip_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::MuSkip,globally:bool);
+    fn set_muskip_register(&mut self,i:usize,v:MuSkip<<<Self as State<T>>::NumSet as NumSet>::MuDim,<<Self as State<T>>::NumSet as NumSet>::MuStretchShrinkDim>,globally:bool);
 
     /// get the value of a skip register
     fn get_toks_register(&self,i:usize) -> Vec<T>;
@@ -182,7 +182,7 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
     intregisters: VecField<NS::Int>,
     dimregisters: VecField<NS::Dim>,
     skipregisters: VecField<Skip<NS::SkipDim>>,
-    muskipregisters: VecField<NS::MuSkip>,
+    muskipregisters: VecField<MuSkip<NS::MuDim,NS::MuStretchShrinkDim>>,
     toksregisters:VecField<Vec<T>>,
 
     primitive_intregisters: HashMapField<&'static str,NS::Int>,
@@ -548,8 +548,8 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
         }
     }
 
-    fn get_muskip_register(&self, i: usize) -> NS::MuSkip { self.muskipregisters.get(&i) }
-    fn set_muskip_register(&mut self, i: usize, v: NS::MuSkip, globally: bool) {
+    fn get_muskip_register(&self, i: usize) -> MuSkip<NS::MuDim,NS::MuStretchShrinkDim> { self.muskipregisters.get(&i) }
+    fn set_muskip_register(&mut self, i: usize, v: MuSkip<NS::MuDim,NS::MuStretchShrinkDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {

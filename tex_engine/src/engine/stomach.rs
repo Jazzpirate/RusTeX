@@ -1,14 +1,12 @@
 pub mod methods;
 
-use std::marker::PhantomData;
 use crate::debug_log;
 use crate::engine::gullet::Gullet;
-use crate::engine::state::modes::TeXGroupType;
 use crate::engine::state::State;
 use crate::tex::boxes::{BoxOrWhatsit, OpenBox, TeXBox, Whatsit};
 use crate::tex::commands::{StomachCommand,StomachCommandInner};
 use crate::tex::token::Token;
-use crate::utils::errors::{ErrorInPrimitive, ImplementationError, ModeError, TeXError};
+use crate::utils::errors::{ErrorInPrimitive, TeXError};
 use crate::utils::map::Map;
 
 pub trait Stomach<T:Token>:Sized+'static {

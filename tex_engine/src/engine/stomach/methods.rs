@@ -6,9 +6,8 @@ use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
 use crate::tex::commands::{Assignable, methods, StomachCommand, StomachCommandInner};
-use crate::tex::commands::Command::MathChar;
 use crate::tex::token::{Token, TokenList};
-use crate::utils::errors::{ErrorInPrimitive, ImplementationError, ModeError, OtherError, TeXError};
+use crate::utils::errors::{ImplementationError, ModeError, OtherError, TeXError};
 
 pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gullet:&mut Sto::Gu, cmd:StomachCommand<T>)
     -> Result<(),Box<dyn TeXError<T>>> {

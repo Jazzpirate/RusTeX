@@ -1,7 +1,7 @@
 use crate::debug_log;
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
-use crate::tex::commands::{Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
+use crate::tex::commands::{Command, Def, ExpToken, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError, UnexpectedEndgroup};
 use crate::engine::mouth::Mouth;
@@ -130,7 +130,16 @@ macro_rules! register_skip {
     };
 }
 
-
+#[macro_export]
+macro_rules! register_muskip {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+            name:stringify!($name),
+            tp:crate::tex::commands::Assignable::MuSkip,
+            index:$gullet.register_primitive_muskip(stringify!($name),|$s,$gu,$c| $f)
+        })),true);
+    };
+}
 
 #[macro_export]
 macro_rules! register_int_assign {

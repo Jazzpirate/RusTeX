@@ -12,7 +12,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::{assign_primitive_dim, assign_primitive_int, assign_primitive_skip, assign_primitive_toks, parse_signature};
-use crate::tex::numbers::{Int, NumSet, Skip,Numeric};
+use crate::tex::numbers::{Int, NumSet, Skip,Numeric,MuSkip};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
 use crate::utils::Ptr;
@@ -682,12 +682,12 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
 
 pub fn else_<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     match gullet.current_conditional() {
-        None => return Err(ErrorInPrimitive{name:"else",msg:Some("Not in a conditional".to_string()),cause:Some(cmd.cause),source:None}),
-        Some(ConditionalBranch::True(name)) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,name) => ("else",cmd)),
-        Some(ConditionalBranch::Case(_,_)) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase") => ("else",cmd)),
-        o => unreachable!("{:?}",o)
+        (None,_) => return Err(ErrorInPrimitive{name:"else",msg:Some("Not in a conditional".to_string()),cause:Some(cmd.cause),source:None}),
+        (Some(ConditionalBranch::True(name)),i) =>
+            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,name,i) => ("else",cmd)),
+        (Some(ConditionalBranch::Case(_,_)),i) =>
+            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase",i) => ("else",cmd)),
+        o => unreachable!("{:?}\nat:{}\n{}\n",o,gullet.mouth().file_line(),gullet.mouth().preview(200))
     }
     Ok(vec![])
 }
@@ -950,7 +950,7 @@ pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gu
                     }
                 },
                 Command::Gullet {name,..} if e && (*name == "else" || *name == "fi") && (match gullet.current_conditional() {
-                    Some(ConditionalBranch::None(_)) => true,
+                    (Some(ConditionalBranch::None(_)),_) => true,
                     _ => false
                 }) => {
                     gullet.mouth().requeue(t);
@@ -1562,7 +1562,7 @@ pub fn muskip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&m
     state.set_muskip_register(i,v,global);
     Ok(())
 }
-pub fn muskip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::MuSkip,ErrorInPrimitive<T>> {
+pub fn muskip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<MuSkip<<S::NumSet as NumSet>::MuDim,<S::NumSet as NumSet>::MuStretchShrinkDim>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"Getting \\muskip");
     let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
     let i:usize = match i.clone().try_into() {
@@ -1688,7 +1688,7 @@ pub fn openin<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, s
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"openin",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    gullet.mouth().skip_eq_char(state);
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("openin",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openin",cmd)).to_string();
     let f = state.filesystem().get(&filename);
     state.file_openin(i,f); // TODO error?
@@ -1702,7 +1702,7 @@ pub fn openout<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, 
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"openout",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    gullet.mouth().skip_eq_char(state);
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("openout",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openout",cmd)).to_string();
     let apply = Box::new(move |_stomach:&mut Sto,state:&mut Sto::S,_gullet:&mut Sto::Gu| {
         let f = state.filesystem().get(&filename);
@@ -1714,8 +1714,8 @@ pub fn openout<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, 
 
 pub fn or<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     match gullet.current_conditional() {
-        Some(ConditionalBranch::Case(_,_)) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase") => ("or",cmd)),
+        (Some(ConditionalBranch::Case(_,_)),i) =>
+            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase",i) => ("or",cmd)),
         _ => return Err(ErrorInPrimitive{name:"or",msg:Some("Not in an \\ifcase".to_string()),cause:Some(cmd.cause),source:None}),
     }
     Ok(vec![])
@@ -2012,6 +2012,20 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
             }
             StomachCommandInner::Value {name,index,tp:Assignable::Skip} => {
                 match gullet.primitive_skip(index) {
+                    None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(
+                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
+                    )}),
+                    Some(fun) => {
+                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
+                        let str = format!("{}",val);
+                        debug_log!(debug => "the: {}",str);
+                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        Ok(ret)
+                    }
+                }
+            }
+            StomachCommandInner::Value {name,index,tp:Assignable::MuSkip} => {
+                match gullet.primitive_muskip(index) {
                     None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(
                         ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
                     )}),

@@ -3,7 +3,7 @@
 use crate::engine::mouth::Mouth;
 use crate::{debug_log, file_end};
 use crate::engine::state::State;
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
+use crate::tex::catcodes::CategoryCode;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{InvalidCharacter, OtherError, TeXError};
 use crate::utils::strings::CharType;

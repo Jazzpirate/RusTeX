@@ -9,7 +9,8 @@ pub trait NumSet:'static {
     type Int:Int;
     type Dim:Dim;
     type SkipDim: SkipDim<Dim=Self::Dim>;
-    type MuSkip: MuSkip;
+    type MuDim: MuDim;
+    type MuStretchShrinkDim:MuStretchShrinkDim;
 }
 
 pub trait Numeric:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+Sub<Self,Output=Self>{
@@ -17,18 +18,18 @@ pub trait Numeric:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Outp
     fn tex_div(&self,other:i64) -> Self;
 }
 
-impl IsDefault for i64 {
+impl IsDefault for f64 {
     fn is_default(&self) -> bool {
-        *self == 0
+        *self == 0.0
     }
 }
-impl Numeric for i64 {
+impl Numeric for f64 {
     fn tex_mult(&self, other: i64) -> Self {
-        self * other
+        self * (other as f64)
     }
 
     fn tex_div(&self, other: i64) -> Self {
-        self / other
+        self / (other as f64)
     }
 }
 
@@ -47,14 +48,22 @@ pub trait SkipDim:Display+Clone {
     fn from_dim(dim:Self::Dim) -> Self;
     fn from_float(dim:&str,float:f64) -> Self;
 }
-pub trait MuSkip:Default+Display+Clone+IsDefault {}
+pub trait MuDim:Numeric {
+    fn units() -> Vec<&'static str>;
+    fn from_float(dim:&str,float:f64) -> Self;
+}
+pub trait MuStretchShrinkDim:Display+Clone {
+    fn units() -> Vec<&'static str>;
+    fn from_float(dim:&str,float:f64) -> Self;
+}
 
 pub struct DefaultNumSet;
 impl NumSet for DefaultNumSet {
     type Int = i32;
     type Dim = Dimi32;
     type SkipDim = Fill;
-    type MuSkip = MuSkipi32;
+    type MuDim = Mui32;
+    type MuStretchShrinkDim = MuFill;
 }
 impl Numeric for i32 {
     fn tex_mult(&self, other: i64) -> Self {
@@ -238,6 +247,7 @@ impl<SD:SkipDim> Numeric for Skip<SD> {
 
 
 #[derive(Clone,Copy)]
+#[allow(non_camel_case_types)]
 pub enum Fill {
     pt(i32),
     fil(i32),
@@ -277,21 +287,142 @@ impl SkipDim for Fill {
     }
 }
 
-#[derive(Clone,Copy)]
-pub struct MuSkipi32{dim:Dimi32}
-impl Default for MuSkipi32 {
+
+#[derive(Clone)]
+pub struct MuSkip<MD:MuDim,SD:MuStretchShrinkDim>{
+    pub base: MD,
+    pub stretch:Option<SD>,
+    pub shrink:Option<SD>,
+}
+impl<MD:MuDim,SD:MuStretchShrinkDim> Default for MuSkip<MD,SD> {
     fn default() -> Self {
-        todo!()
+        Self{base:MD::default(),stretch:None,shrink:None}
     }
 }
-impl IsDefault for MuSkipi32 {
-    fn is_default(&self) -> bool {
-        self.dim.is_default()
-    }
-}
-impl Display for MuSkipi32 {
+impl<MD:MuDim,SD:MuStretchShrinkDim> Display for MuSkip<MD,SD> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"skip {}",self.dim)
+        Display::fmt(&self.base,f)?;
+        if let Some(stretch) = &self.stretch {
+            write!(f," plus {}",stretch)?;
+        }
+        if let Some(shrink) = &self.shrink {
+            write!(f," minus {}",shrink)?;
+        }
+        Ok(())
     }
 }
-impl MuSkip for MuSkipi32 {}
+impl<MD:MuDim,SD:MuStretchShrinkDim> Add<Self> for MuSkip<MD,SD> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self{base:self.base+rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+    }
+}
+impl<MD:MuDim,SD:MuStretchShrinkDim> IsDefault for MuSkip<MD,SD> {
+    fn is_default(&self) -> bool {
+        self.base.is_default() && self.stretch.is_none() && self.shrink.is_none()
+    }
+}
+impl<MD:MuDim,SD:MuStretchShrinkDim> Neg for MuSkip<MD,SD> {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self{base:-self.base,stretch:self.stretch,shrink:self.shrink}
+    }
+}
+impl<MD:MuDim,SD:MuStretchShrinkDim> Sub<Self> for MuSkip<MD,SD> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self{base:self.base-rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+    }
+}
+impl<MD:MuDim,SD:MuStretchShrinkDim> Numeric for MuSkip<MD,SD> {
+    fn tex_div(&self, other: i64) -> Self {
+        Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+    fn tex_mult(&self, other: i64) -> Self {
+        Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+}
+
+#[derive(Clone,Copy,Debug)]
+pub struct Mui32(i32);
+impl Display for Mui32 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}mu",Dimi32(self.0).to_string())
+    }
+}
+impl Default for Mui32 {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+impl IsDefault for Mui32 {
+    fn is_default(&self) -> bool {
+        self.0 == 0
+    }
+}
+impl Neg for Mui32 {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
+    }
+}
+impl Add for Mui32 {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+impl Sub for Mui32 {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
+    }
+}
+impl Numeric for Mui32 {
+    fn tex_mult(&self, other: i64) -> Self {
+        Self((self.0 as i64 * other) as i32)
+    }
+
+    fn tex_div(&self, other: i64) -> Self {
+        Self((self.0 as i64 / other) as i32)
+    }
+}
+impl MuDim for Mui32 {
+    fn units() -> Vec<&'static str> {vec!["mu"]}
+    fn from_float(dim: &str, float: f64) -> Self { match dim {
+        "mu" => Self((float*65536.0).round() as i32),
+        _ => unreachable!("Invalid dimension unit")
+    } }
+}
+
+
+#[derive(Clone,Copy)]
+#[allow(non_camel_case_types)]
+pub enum MuFill {
+    mu(i32),
+    fil(i32),
+    fill(i32),
+}
+impl Display for MuFill {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MuFill::mu(i) => Mui32(*i).fmt(f),
+            MuFill::fil(i) => write!(f,"{}fil",Dimi32(*i).to_string()),
+            MuFill::fill(i) => write!(f,"{}fill",Dimi32(*i).to_string()),
+        }
+    }
+}
+impl MuStretchShrinkDim for MuFill {
+    fn units() -> Vec<&'static str> {
+        vec!["mu","fil","fill"]
+    }
+    fn from_float(dim: &str, float: f64) -> Self {
+        if dim == "fil" {
+            Self::fil((float*65536.0).round() as i32)
+        } else if dim == "fill" {
+            Self::fill((float*65536.0).round() as i32)
+        } else {
+            Self::mu((float*65536.0).round() as i32)
+        }
+    }
+}
