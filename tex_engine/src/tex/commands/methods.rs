@@ -109,6 +109,18 @@ macro_rules! register_int {
 }
 
 #[macro_export]
+macro_rules! register_dim {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+            name:stringify!($name),
+            tp:crate::tex::commands::Assignable::Dim,
+            index:$gullet.register_primitive_dim(stringify!($name),|$s,$gu,$c| $f)
+        })),true);
+    };
+}
+
+
+#[macro_export]
 macro_rules! register_int_assign {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
         $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{

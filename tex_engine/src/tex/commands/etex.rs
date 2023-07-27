@@ -2,16 +2,62 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_gullet, register_int, register_int_assign, register_tok_assign};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_gullet, register_int, register_int_assign, register_tok_assign};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::commands::tex::get_csname;
-use crate::tex::numbers::NumSet;
+use crate::tex::numbers::{Numeric, NumSet};
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim};
+use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
+
+
+fn dimexpr_inner<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:&GulletCommand<T>) -> Result<i64,ErrorInPrimitive<T>> {
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("dimexpr",cmd.clone()));
+    let first = if catch_prim!(gullet.get_keyword(state,"(") => ("dimexpr",cmd.clone())) {
+        let r = catch_prim!(dimexpr_inner(state,gullet,cmd) => ("dimexpr",cmd.clone()));
+        if !catch_prim!(gullet.get_keyword(state,")") => ("dimexpr",cmd.clone())) {
+            return Err(ErrorInPrimitive{name:"dimexpr",msg:Some("Expected ')'".to_string()),cause:Some(cmd.cause.clone()),source:None})
+        }
+        r
+    } else { catch_prim!(gullet.get_int(state) => ("dimexpr",cmd.clone())).to_i64() };
+    dimexpr_inner_ii(state,gullet,cmd,first)
+}
+
+fn dimexpr_inner_ii<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:&GulletCommand<T>,first:i64) -> Result<i64,ErrorInPrimitive<T>> {
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("dimexpr",cmd.clone()));
+    match catch_prim!(gullet.get_keywords(state,vec!("+","-","*","/")) => ("dimexpr",cmd.clone())) {
+        None => Ok(first),
+        Some(op) => {
+            let second = catch_prim!(dimexpr_inner(state,gullet,cmd) => ("dimexpr",cmd.clone()));
+            match op {
+                "+" => dimexpr_inner_ii(state,gullet,cmd,first + second),
+                "-" => dimexpr_inner_ii(state,gullet,cmd,first - second),
+                "*" => dimexpr_inner_ii(state,gullet,cmd,first * second),
+                "/" => dimexpr_inner_ii(state,gullet,cmd,first / second),
+                _ => unreachable!()
+            }
+        }
+    }
+}
+
+
+pub fn dimexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"dimexpr: {}",gullet.mouth().preview(100));
+    let ret = expr(state, gullet, &cmd,"numexpr",|s,g| g.get_dim(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("dimexpr",cmd)) {
+        match next.base() {
+            BaseToken::CS(name) => match state.get_command(name).as_deref() {
+                Some(Command::Relax) => (),
+                _ => gullet.mouth().requeue(next)
+            }
+            _ => gullet.mouth().requeue(next)
+        }
+    }
+    Ok(ret)
+}
 
 pub fn etexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     Ok(T::from_str(".6".to_string()))
@@ -47,38 +93,106 @@ pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gulle
     }
 }
 
-fn numexpr_inner<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:&GulletCommand<T>) -> Result<i64,ErrorInPrimitive<T>> {
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
-    let first = if catch_prim!(gullet.get_keyword(state,"(") => ("numexpr",cmd.clone())) {
-        let r = catch_prim!(numexpr_inner(state,gullet,cmd) => ("numexpr",cmd.clone()));
-        if !catch_prim!(gullet.get_keyword(state,")") => ("numexpr",cmd.clone())) {
-            return Err(ErrorInPrimitive{name:"numexpr",msg:Some("Expected ')'".to_string()),cause:Some(cmd.cause.clone()),source:None})
-        }
-        r
-    } else { catch_prim!(gullet.get_int(state) => ("numexpr",cmd.clone())).to_i64() };
-    numexpr_inner_ii(state,gullet,cmd,first)
-}
 
-fn numexpr_inner_ii<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:&GulletCommand<T>,first:i64) -> Result<i64,ErrorInPrimitive<T>> {
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
-    match catch_prim!(gullet.get_keywords(state,vec!("+","-","*","/")) => ("numexpr",cmd.clone())) {
-        None => Ok(first),
-        Some(op) => {
-            let second = catch_prim!(numexpr_inner(state,gullet,cmd) => ("numexpr",cmd.clone()));
-            match op {
-                "+" => numexpr_inner_ii(state,gullet,cmd,first + second),
-                "-" => numexpr_inner_ii(state,gullet,cmd,first - second),
-                "*" => numexpr_inner_ii(state,gullet,cmd,first * second),
-                "/" => numexpr_inner_ii(state,gullet,cmd,first / second),
+pub fn expr<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>,name:&'static str,get:fn(&mut S,&mut Gu) -> Result<Num,Box<dyn TeXError<T>>>)
+    -> Result<Num,ErrorInPrimitive<T>> {
+    let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
+    'a: loop {
+        catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
+        if catch_prim!(gullet.get_keyword(state,"(") => (name,cmd.clone())) {
+            stack.push((None, None));
+            continue 'a;
+        }
+        let mut first = catch_prim!(get(state,gullet) => (name,cmd.clone()));
+        match stack.last_mut() {
+            Some((Some(second), Some(op))) => {
+                first = op(first, second.clone());
+                *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+            }
+            _ => ()
+        }
+        'b: loop {
+            catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
+            match catch_prim!(
+                if stack.len()>1 {gullet.get_keywords(state,vec!("+","-","*","/",")"))}
+                else {gullet.get_keywords(state,vec!("+","-","*","/"))}
+                => ("numexpr",cmd.clone())) {
+                None => {
+                    match stack.pop() {
+                        Some((None, None)) if stack.is_empty() => return Ok(first),
+                        _ => return Err(ErrorInPrimitive { name, msg: Some("Expected ')'".to_string()), cause: Some(cmd.cause.clone()), source: None })
+                    }
+                }
+                Some(r) if r == ")" => {
+                    stack.pop();
+                    match stack.last_mut() {
+                        Some((Some(second), Some(op))) => {
+                            first = op(first, second.clone());
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                }
+                Some(r) if r == "+" => {
+                    *stack.last_mut().unwrap() = (Some(first), Some(|a, b| a + b));
+                    continue 'a;
+                }
+                Some(r) if r == "-" => {
+                    *stack.last_mut().unwrap() = (Some(first), Some(|a, b| a - b));
+                    continue 'a;
+                }
+                Some(r) if r == "*" => {
+                    let ret = catch_prim!(expr(state,gullet,cmd,&name,|s,g| {
+                        Ok(g.get_int(s)?.to_i64())
+                    }) => (name,cmd.clone()));
+                    first = first.tex_mult(ret);
+                }
+                Some(r) if r == "/" => {
+                    let ret = catch_prim!(expr(state,gullet,cmd,&name,|s,g| {
+                        Ok(g.get_int(s)?.to_i64())
+                    }) => (name,cmd.clone()));
+                    first = first.tex_div(ret);
+                }
                 _ => unreachable!()
             }
         }
     }
 }
+/*
+fn expr_i<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>) -> Result<i64,ErrorInPrimitive<T>> {
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
+    let first = if catch_prim!(gullet.get_keyword(state,"(") => ("numexpr",cmd.clone())) {
+        let r = catch_prim!(expr_i(state,gullet,cmd) => ("numexpr",cmd.clone()));
+        if !catch_prim!(gullet.get_keyword(state,")") => ("numexpr",cmd.clone())) {
+            return Err(ErrorInPrimitive{name:"numexpr",msg:Some("Expected ')'".to_string()),cause:Some(cmd.cause.clone()),source:None})
+        }
+        r
+    } else { catch_prim!(gullet.get_int(state) => ("numexpr",cmd.clone())).to_i64() };
+    expr_ii(state, gullet, cmd, first)
+}
 
+fn expr_ii<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>, first:i64) -> Result<i64,ErrorInPrimitive<T>> {
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
+    match catch_prim!(gullet.get_keywords(state,vec!("+","-","*","/")) => ("numexpr",cmd.clone())) {
+        None => Ok(first),
+        Some(op) => {
+            let second = catch_prim!(expr_i(state,gullet,cmd) => ("numexpr",cmd.clone()));
+            match op {
+                "+" => expr_ii(state, gullet, cmd, first + second),
+                "-" => expr_ii(state, gullet, cmd, first - second),
+                "*" => expr_ii(state, gullet, cmd, first * second),
+                "/" => expr_ii(state, gullet, cmd, first / second),
+                _ => unreachable!()
+            }
+        }
+    }
+}
+*/
 pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     debug_log!(trace=>"numexpr: {}",gullet.mouth().preview(100));
-    let ret = numexpr_inner(state,gullet,&cmd)?;
+    let ret = expr(state, gullet, &cmd,"numexpr",|s,g| g.get_int(s))?;
+    /*
+    let ret = expr_i(state, gullet, &cmd)?;
     if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {
@@ -89,6 +203,17 @@ pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
         }
     }
     Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(ret) => ("numexpr",cmd)))
+     */
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
+        match next.base() {
+            BaseToken::CS(name) => match state.get_command(name).as_deref() {
+                Some(Command::Relax) => (),
+                _ => gullet.mouth().requeue(next)
+            }
+            _ => gullet.mouth().requeue(next)
+        }
+    }
+    Ok(ret)
 }
 
 use super::tex::{global,long,outer,def,edef,gdef,xdef};
@@ -125,6 +250,7 @@ pub fn unexpanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
 }
 
 pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
+    register_dim!(dimexpr,state,stomach,gullet,(s,g,c) => dimexpr(s,g,c));
     register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision(s,g,c));
     register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
     register_tok_assign!(everyeof,state,stomach,gullet);
@@ -149,7 +275,6 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     cmtodo!(state,stomach,gullet,currentifbranch);
     cmtodo!(state,stomach,gullet,currentiflevel);
     cmtodo!(state,stomach,gullet,currentiftype);
-    cmtodo!(state,stomach,gullet,dimexpr);
     cmtodo!(state,stomach,gullet,displaywidowpenalties);
     cmtodo!(state,stomach,gullet,endL);
     cmtodo!(state,stomach,gullet,endR);

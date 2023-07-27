@@ -136,7 +136,6 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     cmtodo!(state,stomach,gullet,pdfescapestring);
     cmtodo!(state,stomach,gullet,pdffiledump);
     cmtodo!(state,stomach,gullet,pdffilemoddate);
-    cmtodo!(state,stomach,gullet,pdffilesize);
     cmtodo!(state,stomach,gullet,pdffontname);
     cmtodo!(state,stomach,gullet,pdffontobjnum);
     cmtodo!(state,stomach,gullet,pdffontsize);

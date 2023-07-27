@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::marker::PhantomData;
-use std::ops::{Add, Div, Mul, Neg};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 use crate::engine::state::fields::IsDefault;
 use crate::tex::token::Token;
 use crate::utils::errors::NumericalError;
@@ -12,13 +12,32 @@ pub trait NumSet:'static {
     type MuSkip: MuSkip;
 }
 
-pub trait Int:Default+Display+Clone+IsDefault+PartialOrd+TryInto<usize>+From<u8>+
-Neg<Output=Self>+Div<Self,Output=Self>+Mul<Self,Output=Self>+Add<Self,Output=Self> {
+pub trait Numeric:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+Sub<Self,Output=Self>{
+    fn tex_mult(&self,other:i64) -> Self;
+    fn tex_div(&self,other:i64) -> Self;
+}
+
+impl IsDefault for i64 {
+    fn is_default(&self) -> bool {
+        *self == 0
+    }
+}
+impl Numeric for i64 {
+    fn tex_mult(&self, other: i64) -> Self {
+        self * other
+    }
+
+    fn tex_div(&self, other: i64) -> Self {
+        self / other
+    }
+}
+
+pub trait Int:Numeric+PartialOrd+TryInto<usize>+From<u8>+
+Div<Self,Output=Self>+Mul<Self,Output=Self> {
     fn from_i64<T:Token>(i:i64) -> Result<Self,NumericalError<T>>;
     fn to_i64(&self) -> i64;
 }
-pub trait Dim:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+
-Mul<i64,Output=Self>+Div<i64,Output=Self>{
+pub trait Dim:Numeric+Add<Self,Output=Self>{
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
 }
@@ -37,7 +56,15 @@ impl NumSet for DefaultNumSet {
     type SkipDim = Fill;
     type MuSkip = MuSkipi32;
 }
+impl Numeric for i32 {
+    fn tex_mult(&self, other: i64) -> Self {
+        (self.to_i64() * other) as i32
+    }
 
+    fn tex_div(&self, other: i64) -> Self {
+        (self.to_i64() / other) as i32
+    }
+}
 impl Int for i32 {
     fn from_i64<T:Token>(i:i64) -> Result<Self,NumericalError<T>> {
         if i < i32::MIN as i64 || i > (i32::MAX as i64) {
@@ -114,8 +141,23 @@ impl Div<i64> for Dimi32 {
         Dimi32(self.0 / (rhs as i32))
     }
 }
+impl Sub<Dimi32> for Dimi32 {
+    type Output = Self;
 
+    fn sub(self, rhs: Dimi32) -> Self::Output {
+        Dimi32(self.0 - rhs.0)
+    }
+}
 
+impl Numeric for Dimi32 {
+    fn tex_mult(&self, other: i64) -> Self {
+        Dimi32((self.0 as i64 * other) as i32)
+    }
+
+    fn tex_div(&self, other: i64) -> Self {
+        Dimi32((self.0 as i64 / other) as i32)
+    }
+}
 impl Dim for Dimi32 {
     fn units() -> Vec<&'static str> {vec!["pt","pc","in","bp","cm","mm","dd","cc","sp"]}
     fn from_float(dim: &str, float: f64) -> Self { match dim {

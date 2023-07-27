@@ -11,8 +11,8 @@ use crate::engine::state::modes::GroupType;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
-use crate::tex::commands::methods::parse_signature;
-use crate::tex::numbers::{Int, NumSet, Skip};
+use crate::tex::commands::methods::{assign_primitive_dim, assign_primitive_int, assign_primitive_skip, assign_primitive_toks, parse_signature};
+use crate::tex::numbers::{Int, NumSet, Skip,Numeric};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
 use crate::utils::Ptr;
@@ -488,7 +488,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 if i.to_i64() == 0 {
                     return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
                 }
-                let nv : <S::NumSet as NumSet>::Dim = ov / i.to_i64();
+                let nv : <S::NumSet as NumSet>::Dim = ov.tex_div(i.to_i64());
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -858,6 +858,14 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
                     Some(f) => f(state,gullet,stomach,c,true)
                  }
             }
+            StomachCommandInner::AssignableValue {name,tp:Assignable::Int} =>
+                Ok(catch_prim!(assign_primitive_int(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+            StomachCommandInner::AssignableValue {name,tp:Assignable::Dim} =>
+                Ok(catch_prim!(assign_primitive_dim(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+            StomachCommandInner::AssignableValue {name,tp:Assignable::Skip} =>
+                Ok(catch_prim!(assign_primitive_skip(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+            StomachCommandInner::AssignableValue {name,tp:Assignable::Toks} =>
+                Ok(catch_prim!(assign_primitive_toks(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
             StomachCommandInner::ValueRegister(u,Assignable::Int) => Ok(catch_prim!(assign_int_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
             StomachCommandInner::ValueRegister(u,Assignable::Dim) => Ok(catch_prim!(assign_dim_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
             StomachCommandInner::ValueRegister(u,Assignable::Skip) => Ok(catch_prim!(assign_skip_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
@@ -1514,7 +1522,7 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
                 let ov = state.get_primitive_dim(name);
                 let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
                 debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Dim = ov * i.to_i64();
+                let nv : <S::NumSet as NumSet>::Dim = ov.tex_mult(i.to_i64());
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -1976,6 +1984,20 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
             StomachCommandInner::AssignableValue {tp,..} => todo!("\\the AssignableValue {:?}",tp),
             StomachCommandInner::Value {name,index,tp:Assignable::Int} => {
                 match gullet.primitive_int(index) {
+                    None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(
+                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
+                    )}),
+                    Some(fun) => {
+                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
+                        let str = format!("{}",val);
+                        debug_log!(debug => "the: {}",str);
+                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        Ok(ret)
+                    }
+                }
+            }
+            StomachCommandInner::Value {name,index,tp:Assignable::Dim} => {
+                match gullet.primitive_dim(index) {
                     None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(
                         ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
                     )}),

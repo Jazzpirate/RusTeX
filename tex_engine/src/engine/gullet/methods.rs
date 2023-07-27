@@ -269,7 +269,7 @@ pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, st
                 None => return Err(UnexpectedEndgroup(tk).into())
             }
         }
-        Command::Def(def,_) if expand => {
+        Command::Def(def,_) if def.protected || !expand => {
             for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
                 ret.push(u)
             }
