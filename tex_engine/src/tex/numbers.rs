@@ -214,6 +214,27 @@ impl<SD:SkipDim> Neg for Skip<SD> {
         Self{base:-self.base,stretch:self.stretch,shrink:self.shrink}
     }
 }
+impl<SD:SkipDim> Add for Skip<SD> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self{base:self.base+rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+    }
+}
+impl<SD:SkipDim> Sub for Skip<SD> {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self{base:self.base-rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+    }
+}
+impl<SD:SkipDim> Numeric for Skip<SD> {
+    fn tex_mult(&self, other: i64) -> Self {
+        Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+
+    fn tex_div(&self, other: i64) -> Self {
+        Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+}
 
 
 #[derive(Clone,Copy)]

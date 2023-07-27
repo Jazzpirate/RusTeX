@@ -2010,6 +2010,20 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                     }
                 }
             }
+            StomachCommandInner::Value {name,index,tp:Assignable::Skip} => {
+                match gullet.primitive_skip(index) {
+                    None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(
+                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
+                    )}),
+                    Some(fun) => {
+                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
+                        let str = format!("{}",val);
+                        debug_log!(debug => "the: {}",str);
+                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        Ok(ret)
+                    }
+                }
+            }
             StomachCommandInner::ValueAssignment {name,value_index,tp:Assignable::Int,..} => {
                 match gullet.primitive_int(value_index) {
                     None =>return Err(ErrorInPrimitive{name:"the",msg:None,cause:Some(cmd.cause),source:Some(

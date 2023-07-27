@@ -2,11 +2,11 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_gullet, register_int, register_int_assign, register_tok_assign};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_gullet, register_int, register_int_assign, register_skip, register_tok_assign};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::commands::tex::get_csname;
-use crate::tex::numbers::{Numeric, NumSet};
+use crate::tex::numbers::{Numeric, NumSet, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError};
 use crate::utils::strings::CharType;
@@ -69,6 +69,22 @@ pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mu
 pub fn expanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"expanded");
     Ok(catch_prim!(gullet.get_expanded_group(state,false,false,false) => ("expanded",cmd)))
+}
+
+
+pub fn glueexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Skip<<S::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"dimexpr: {}",gullet.mouth().preview(100));
+    let ret = expr(state, gullet, &cmd,"numexpr",|s,g| g.get_skip(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("dimexpr",cmd)) {
+        match next.base() {
+            BaseToken::CS(name) => match state.get_command(name).as_deref() {
+                Some(Command::Relax) => (),
+                _ => gullet.mouth().requeue(next)
+            }
+            _ => gullet.mouth().requeue(next)
+        }
+    }
+    Ok(ret)
 }
 
 pub fn ifcsname<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
@@ -255,6 +271,7 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
     register_tok_assign!(everyeof,state,stomach,gullet);
     register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded(s,g,c));
+    register_skip!(glueexpr,state,stomach,gullet,(s,g,c) => glueexpr(s,g,c));
     register_conditional!(ifcsname,state,stomach,gullet,(s,gu,cmd) =>ifcsname(s,gu,cmd));
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
     register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr(s,g,c));
@@ -283,7 +300,6 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     cmtodo!(state,stomach,gullet,fontcharht);
     cmtodo!(state,stomach,gullet,fontcharic);
     cmtodo!(state,stomach,gullet,fontcharwd);
-    cmtodo!(state,stomach,gullet,glueexpr);
     cmtodo!(state,stomach,gullet,glueshrink);
     cmtodo!(state,stomach,gullet,glueshrinkorder);
     cmtodo!(state,stomach,gullet,gluestretch);

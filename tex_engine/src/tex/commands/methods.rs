@@ -119,6 +119,18 @@ macro_rules! register_dim {
     };
 }
 
+#[macro_export]
+macro_rules! register_skip {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+            name:stringify!($name),
+            tp:crate::tex::commands::Assignable::Skip,
+            index:$gullet.register_primitive_skip(stringify!($name),|$s,$gu,$c| $f)
+        })),true);
+    };
+}
+
+
 
 #[macro_export]
 macro_rules! register_int_assign {
