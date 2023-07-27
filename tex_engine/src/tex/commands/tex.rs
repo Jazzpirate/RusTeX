@@ -681,7 +681,14 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
 }
 
 pub fn else_<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state) => ("else",cmd));
+    match gullet.current_conditional() {
+        None => return Err(ErrorInPrimitive{name:"else",msg:Some("Not in a conditional".to_string()),cause:Some(cmd.cause),source:None}),
+        Some(ConditionalBranch::True(name)) =>
+            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,name) => ("else",cmd)),
+        Some(ConditionalBranch::Case(_,_)) =>
+            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase") => ("else",cmd)),
+        o => unreachable!("{:?}",o)
+    }
     Ok(vec![])
 }
 
@@ -876,6 +883,10 @@ pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletComma
     })
 }
 
+pub fn ifcase<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    unreachable!("executed in Gullet")
+}
+
 pub fn ifcat<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
     debug_log!(trace=>"ifcat");
     let first = get_if_token(state,gullet,cmd.clone(),"ifcat")?;
@@ -930,7 +941,10 @@ pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gu
                         gullet.mouth().push_tokens(v);
                     }
                 },
-                Command::Gullet {name,..} if e && gullet.current_conditional() == Some(ConditionalBranch::None) && (*name == "else" || *name == "fi") => {
+                Command::Gullet {name,..} if e && (*name == "else" || *name == "fi") && (match gullet.current_conditional() {
+                    Some(ConditionalBranch::None(_)) => true,
+                    _ => false
+                }) => {
                     gullet.mouth().requeue(t);
                     return Ok(None)
                 }
@@ -1690,6 +1704,15 @@ pub fn openout<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, 
     Ok(Whatsit { apply })
 }
 
+pub fn or<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    match gullet.current_conditional() {
+        Some(ConditionalBranch::Case(_,_)) =>
+            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase") => ("or",cmd)),
+        _ => return Err(ErrorInPrimitive{name:"or",msg:Some("Not in an \\ifcase".to_string()),cause:Some(cmd.cause),source:None}),
+    }
+    Ok(vec![])
+}
+
 pub fn outer<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
                                                       -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace => "\\outer");
@@ -2250,7 +2273,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_dim_assign!(hsize,state,stomach,gullet);
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_(s,gu,cmd));
-    register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>todo!("ifcase"));
+    register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>ifcase(s,gu,cmd));
     register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>ifcat(s,gu,cmd));
     register_conditional!(ifdim,state,stomach,gullet,(s,gu,cmd) =>todo!("ifdim"));
     register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof(s,gu,cmd));
@@ -2297,6 +2320,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_gullet!(number,state,stomach,gullet,(s,g,c) => number(s,g,c));
     register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin(s,gu,sto,cmd));
     register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout(s,gu,sto,cmd));
+    register_gullet!(or,state,stomach,gullet,(s,g,c) => or(s,g,c));
     register_assign!(outer,state,stomach,gullet,(s,gu,sto,cmd,g) =>outer(sto,s,gu,cmd,g,false,false,false));
     register_tok_assign!(output,state,stomach,gullet);
     register_int_assign!(outputpenalty,state,stomach,gullet);
@@ -2499,7 +2523,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,abovewithdelims);
     cmtodo!(state,stomach,gullet,eqno);
     cmtodo!(state,stomach,gullet,leqno);
-    cmtodo!(state,stomach,gullet,or);
     cmtodo!(state,stomach,gullet,bigskip);
     cmtodo!(state,stomach,gullet,bye);
     cmtodo!(state,stomach,gullet,char);

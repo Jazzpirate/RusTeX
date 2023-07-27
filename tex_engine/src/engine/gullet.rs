@@ -90,8 +90,9 @@ pub trait Gullet<T:Token>:Sized+'static {
         methods::get_string(self, state)
     }
 
-    fn new_conditional(&mut self) -> usize;
-    fn set_conditional(&mut self,branch:ConditionalBranch);
+    fn new_conditional(&mut self,name:&'static str) -> usize;
+    fn set_conditional(&mut self,idx:usize,branch:ConditionalBranch);
+    fn set_top_conditional(&mut self,branch:ConditionalBranch);
     fn pop_conditional(&mut self);
     fn current_conditional(&self) -> Option<ConditionalBranch>;
 
@@ -231,12 +232,16 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
         self.toks.get_from_name(name).copied()
     }
 
-    fn new_conditional(&mut self) -> usize {
+    fn new_conditional(&mut self,name:&'static str) -> usize {
         let ret = self.in_conditionals.len();
-        self.in_conditionals.push(ConditionalBranch::None);
+        self.in_conditionals.push(ConditionalBranch::None(name));
         ret
     }
-    fn set_conditional(&mut self,branch:ConditionalBranch) {
+    fn set_conditional(&mut self,idx:usize,branch:ConditionalBranch) {
+        // TODO throw error
+        *self.in_conditionals.get_mut(idx).unwrap() = branch;
+    }
+    fn set_top_conditional(&mut self,branch:ConditionalBranch) {
         // TODO throw error
         *self.in_conditionals.last_mut().unwrap() = branch;
     }

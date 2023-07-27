@@ -8,7 +8,4 @@ pub mod numbers;
 pub mod fonts;
 
 #[derive(Copy,Clone,Debug,PartialEq)]
-pub enum ConditionalBranch { None,True,Else }
-impl Default for ConditionalBranch {
-    fn default() -> Self { ConditionalBranch::None }
-}
+pub enum ConditionalBranch { None(&'static str),True(&'static str),Else(&'static str),Case(i64,usize) }

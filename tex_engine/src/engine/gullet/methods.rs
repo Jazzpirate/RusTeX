@@ -397,22 +397,33 @@ pub fn do_expandable<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&
     }
 }
 
-pub fn do_conditional<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,cause:T,name:&str,index:usize) -> Result<(),Box<dyn TeXError<T>>> {
-    match gullet.conditional(index) {
-        None => Err(ImplementationError(format!("Missing implementation for primitive command {}",name),PhantomData).into()),
-        Some(c) => {
-            gullet.new_conditional();
-            let b = c(state,gullet,GulletCommand{cause})?;
-            if b {
-                gullet.set_conditional(ConditionalBranch::True);
-                debug_log!(trace=>"True conditional");
-                Ok(())
-            } else { false_loop(gullet,state) }
+pub fn do_conditional<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,cause:T,name:&'static str,index:usize) -> Result<(),Box<dyn TeXError<T>>> {
+    if name == "ifcase" {
+        let i = gullet.new_conditional("ifcase");
+        let ret = gullet.get_int(state)?.to_i64();
+        gullet.set_conditional(i, ConditionalBranch::Case(ret, 0));
+        if ret == 0 {
+            Ok(())
+        } else {
+            false_loop(gullet,state,"ifcase")
+        }
+    } else {
+        match gullet.conditional(index) {
+            None => Err(ImplementationError(format!("Missing implementation for primitive command {}", name), PhantomData).into()),
+            Some(c) => {
+                let i = gullet.new_conditional(name);
+                let b = c(state, gullet, GulletCommand { cause })?;
+                if b {
+                    gullet.set_conditional(i,ConditionalBranch::True(name));
+                    debug_log!(trace=>"True conditional");
+                    Ok(())
+                } else { false_loop(gullet, state,name) }
+            }
         }
     }
 }
 
-pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S) -> Result<(),Box<dyn TeXError<T>>> {
+pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,condname:&'static str) -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"False conditional. Skipping...");
     let mut incond:u8 = 0;
     while let Some((next,exp)) = gullet.mouth().get_next(state)? {
@@ -422,8 +433,20 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
                     Some(Command::Conditional {..}) => incond += 1,
                     Some(Command::Gullet {name:"else",..}) if incond == 0 => {
                         debug_log!(trace=>"...else branch.");
-                        gullet.set_conditional(ConditionalBranch::Else);
+                        gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         return Ok(())
+                    }
+                    Some(Command::Gullet {name:"or",..}) if incond == 0 && condname == "ifcase" => {
+                        match gullet.current_conditional() {
+                            Some(ConditionalBranch::Case(i, j)) => {
+                                gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
+                                if i == ((j+1) as i64) {
+                                    debug_log!(trace=>"...or branch.");
+                                    return Ok(())
+                                }
+                            }
+                            _ => unreachable!()
+                        }
                     }
                     Some(Command::Gullet {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(Command::Gullet {name:"fi",..}) => {
@@ -437,7 +460,7 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
                 match state.get_command(name).as_deref() {
                     Some(Command::Conditional {..}) => incond += 1,
                     Some(Command::Gullet {name:"else",..}) if incond == 0 => {
-                        gullet.set_conditional(ConditionalBranch::Else);
+                        gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         debug_log!(trace=>"...else branch.");
                         return Ok(())
                     }
@@ -456,9 +479,9 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
     Ok(())
 }
 
-pub fn else_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S) -> Result<(),Box<dyn TeXError<T>>> {
+pub fn else_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,condname:&'static str) -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"\\else. Skipping...");
-    gullet.set_conditional(ConditionalBranch::Else);
+    gullet.set_top_conditional(ConditionalBranch::Else(condname));
     let mut incond:u8 = 0;
     while let Some((next,exp)) = gullet.mouth().get_next(state)? {
         match next.base() {
