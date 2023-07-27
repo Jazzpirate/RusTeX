@@ -62,7 +62,7 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
     }
 }
 
-fn assign_int_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+pub fn assign_int_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
     -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"Assigning \\count{}",u);
     catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
@@ -71,7 +71,7 @@ fn assign_int_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet
     state.set_int_register(u,v,global);
     Ok(())
 }
-fn assign_dim_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+pub fn assign_dim_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
                                                             -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"Assigning \\dimen{}",u);
     catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
@@ -80,7 +80,7 @@ fn assign_dim_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet
     state.set_dim_register(u,v,global);
     Ok(())
 }
-fn assign_skip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+pub fn assign_skip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
                                                             -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"Assigning \\skip{}",u);
     catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
@@ -89,7 +89,7 @@ fn assign_skip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gulle
     state.set_skip_register(u,v,global);
     Ok(())
 }
-fn assign_muskip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
+pub fn assign_muskip_register<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, u:usize,cmd:StomachCommand<T>,global:bool)
                                                              -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"Assigning \\muskip{}",u);
     catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);

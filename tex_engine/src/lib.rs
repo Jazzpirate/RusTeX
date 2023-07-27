@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn engine() { measure!(engine: {
-        debug();
+        //debug();
         //trace();
         //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
         //env_logger::init();

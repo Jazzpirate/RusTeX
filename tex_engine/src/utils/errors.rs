@@ -166,7 +166,7 @@ impl<T:Token> TeXError<T> for ErrorInPrimitive<T> {
 error_impl!(ErrorInPrimitive);
 
 macro_rules! catch_prim {
-    ($f:expr => ($name:expr,$cause:ident)) => {
+    ($f:expr => ($name:expr,$cause:expr)) => {
         match $f {
             Ok(x) => x,
             Err(e) => return Err(ErrorInPrimitive{name:$name,msg:None,cause:Some($cause.cause),source:Some(e.into())})

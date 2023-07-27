@@ -19,6 +19,7 @@ use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use crate::engine::gullet;
+use crate::engine::stomach::methods::{assign_dim_register, assign_int_register, assign_muskip_register, assign_skip_register, assign_toks_register};
 use crate::tex::boxes::Whatsit;
 use crate::tex::ConditionalBranch;
 use super::etex::protected;
@@ -850,27 +851,36 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
                     Some(f) => f(state,gullet,stomach,c,true)
                  }
             }
+            StomachCommandInner::ValueRegister(u,Assignable::Int) => Ok(catch_prim!(assign_int_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Dim) => Ok(catch_prim!(assign_dim_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Skip) => Ok(catch_prim!(assign_skip_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::MuSkip) => Ok(catch_prim!(assign_muskip_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Toks) => Ok(catch_prim!(assign_toks_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
             o => todo!("global: {:?} at {}",o,gullet.mouth().preview(100))
         }
     }
 }
 
 pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"if");
     let first = get_if_token(state,gullet,cmd.clone(),"if")?;
     let second = get_if_token(state,gullet,cmd,"if")?;
+    debug_log!(trace=>"if: {:?} == {:?}",first,second);
     Ok(match (first,second) {
         (None,_) | (_,None) => false,
         (Some(f),Some(s)) => match (f.base(),s.base()) {
-            (BaseToken::Char(f,CategoryCode::Active),BaseToken::Char(s,CategoryCode::Active)) => f == s,
-            (BaseToken::CS(f),BaseToken::CS(s)) => true,
+            (BaseToken::Char(f,_),BaseToken::Char(s,_)) => f == s,
+            (BaseToken::CS(_),BaseToken::CS(_)) => true,
             _ => false
         }
     })
 }
 
 pub fn ifcat<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifcat");
     let first = get_if_token(state,gullet,cmd.clone(),"ifcat")?;
     let second = get_if_token(state,gullet,cmd,"ifcat")?;
+    debug_log!(trace=>"ifcat: {:?} == {:?}",first,second);
     let first = match first {
         None => return Ok(false),
         Some(first) => match first.base() {
@@ -963,6 +973,12 @@ pub fn ifnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
         "=" => Ok(i1==i2),
         _ => unreachable!()
     }
+}
+
+pub fn ifodd<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifodd");
+    let num = catch_prim!(gullet.get_int(state) => ("ifodd",cmd));
+    Ok(num.to_i64() % 2 != 0)
 }
 
 pub fn ifx<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
@@ -2244,7 +2260,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_conditional!(ifinner,state,stomach,gullet,(s,gu,cmd) =>todo!("ifinner"));
     register_conditional!(ifmmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifmmode"));
     register_conditional!(ifnum,state,stomach,gullet,(s,gu,cmd) =>ifnum(s,gu,cmd));
-    register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>todo!("ifodd"));
+    register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>ifodd(s,gu,cmd));
     register_conditional!(iftrue,state,stomach,gullet,(s,gu,cmd) => Ok(true));
     register_conditional!(ifvbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvbox"));
     register_conditional!(ifvmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvmode"));

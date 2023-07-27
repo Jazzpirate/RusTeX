@@ -47,6 +47,50 @@ pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gulle
     }
 }
 
+fn numexpr_inner<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:&GulletCommand<T>) -> Result<i64,ErrorInPrimitive<T>> {
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
+    let first = if catch_prim!(gullet.get_keyword(state,"(") => ("numexpr",cmd.clone())) {
+        let r = catch_prim!(numexpr_inner(state,gullet,cmd) => ("numexpr",cmd.clone()));
+        if !catch_prim!(gullet.get_keyword(state,")") => ("numexpr",cmd.clone())) {
+            return Err(ErrorInPrimitive{name:"numexpr",msg:Some("Expected ')'".to_string()),cause:Some(cmd.cause.clone()),source:None})
+        }
+        r
+    } else { catch_prim!(gullet.get_int(state) => ("numexpr",cmd.clone())).to_i64() };
+    numexpr_inner_ii(state,gullet,cmd,first)
+}
+
+fn numexpr_inner_ii<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:&GulletCommand<T>,first:i64) -> Result<i64,ErrorInPrimitive<T>> {
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
+    match catch_prim!(gullet.get_keywords(state,vec!("+","-","*","/")) => ("numexpr",cmd.clone())) {
+        None => Ok(first),
+        Some(op) => {
+            let second = catch_prim!(numexpr_inner(state,gullet,cmd) => ("numexpr",cmd.clone()));
+            match op {
+                "+" => numexpr_inner_ii(state,gullet,cmd,first + second),
+                "-" => numexpr_inner_ii(state,gullet,cmd,first - second),
+                "*" => numexpr_inner_ii(state,gullet,cmd,first * second),
+                "/" => numexpr_inner_ii(state,gullet,cmd,first / second),
+                _ => unreachable!()
+            }
+        }
+    }
+}
+
+pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"numexpr: {}",gullet.mouth().preview(100));
+    let ret = numexpr_inner(state,gullet,&cmd)?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
+        match next.base() {
+            BaseToken::CS(name) => match state.get_command(name).as_deref() {
+                Some(Command::Relax) => (),
+                _ => gullet.mouth().requeue(next)
+            }
+            _ => gullet.mouth().requeue(next)
+        }
+    }
+    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(ret) => ("numexpr",cmd)))
+}
+
 use super::tex::{global,long,outer,def,edef,gdef,xdef};
 
 pub fn protected<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
@@ -87,6 +131,7 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded(s,g,c));
     register_conditional!(ifcsname,state,stomach,gullet,(s,gu,cmd) =>ifcsname(s,gu,cmd));
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
+    register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr(s,g,c));
     register_int_assign!(tracingassigns,state,stomach,gullet);
     register_int_assign!(tracinggroups,state,stomach,gullet);
     register_int_assign!(tracingifs,state,stomach,gullet);
@@ -128,7 +173,6 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     cmtodo!(state,stomach,gullet,middle);
     cmtodo!(state,stomach,gullet,muexpr);
     cmtodo!(state,stomach,gullet,mutoglue);
-    cmtodo!(state,stomach,gullet,numexpr);
     cmtodo!(state,stomach,gullet,pagediscards);
     cmtodo!(state,stomach,gullet,parshapedimen);
     cmtodo!(state,stomach,gullet,parshapeindent);

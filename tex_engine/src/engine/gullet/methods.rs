@@ -23,10 +23,10 @@ pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> 
         MathShift => StomachCommandInner::MathShift(char),
         BeginGroup => StomachCommandInner::BeginGroup(char),
         EndGroup => StomachCommandInner::EndGroup(char),
-        Letter|Other => StomachCommandInner::Char{char,from_chardef:false},
+        Letter|Other|AlignmentTab => StomachCommandInner::Char{char,from_chardef:false},
         EOF => StomachCommandInner::Relax,
         _ => unreachable!() // Already excluded: Active, Ignored, EndLine
-        // TODO: exclude: AlignmentTab, Parameter, Invalid
+        // TODO: exclude: AlignmentTab proper, Parameter
     }}
 }
 
@@ -249,8 +249,19 @@ pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, st
         for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
             ret.push(u)
         };
-        Command::Gullet {name:"unexpanded",..} => todo!("'unexpanded' in expansion"),
-        Command::Gullet {name:"noexpand",..} => {
+        Command::Gullet {name:"unexpanded",index} if expand => {
+                match gullet.primitive(*index) {
+                    Some(f) => {
+                        for t in f(state,gullet,GulletCommand{cause:tk.clone()})? {
+                            for u in token_to_string(t,esc,state.get_catcode_scheme()) {
+                                ret.push(u);
+                            }
+                        }
+                    }
+                    None => return Err(OtherError{msg:"\\unexpanded not implemented".to_string(),cause:Some(tk),source:None}.into())
+                }
+            }
+        Command::Gullet {name:"noexpand",..} if expand => {
             match gullet.mouth().get_next(state)? {
                 Some((tk,_)) => for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
                         ret.push(u)
@@ -258,7 +269,7 @@ pub fn get_braced_string<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, st
                 None => return Err(UnexpectedEndgroup(tk).into())
             }
         }
-        Command::Def(def,_) if def.protected => {
+        Command::Def(def,_) if expand => {
             for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
                 ret.push(u)
             }
@@ -369,7 +380,7 @@ pub fn process_cmd_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut 
         Command::Assignment{name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Assignment{name,index:*index}})),
         Command::Stomach {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Command{name,index:*index}})),
         Command::Char {char,catcode} =>
-            Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Char{char:*char,from_chardef:true}}))
+            Ok(Some(char_to_command(cause, *char, *catcode)))
     }
 }
 
@@ -540,15 +551,18 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                     },
                     _ if is_ascii_hex_digit(us) && ishex =>
                         // TODO: texnically, this requires catcode 12 for 0-9 and catcode 11 or 12 for A-F
-                        todo!("Hex digit in read_number"),
+                        return read_hex_number(gullet,state,us as u8,isnegative),
                     _ if is_ascii_digit(us) && !isoct =>
                         // TODO: texnically, this requires catcode 12
                         return read_decimal_number(gullet,state,us as u8,isnegative),
                     _ if is_ascii_oct_digit(us) => // isoct == true
                         // TODO: texnically, this requires catcode 12
                         todo!("Octal digit in read_number"),
-                    _ =>
-                        todo!("Non-digit in read_number")
+                    _ => {
+                        let c = <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(char.to_usize() as i64)?;
+                        debug_log!(trace=>"Returning {}",c);
+                        return Ok(c)
+                    }
                 }
             }
             StomachCommandInner::ValueRegister(index,Assignable::Int) => {
@@ -579,6 +593,12 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                     }
                 }
             }
+            StomachCommandInner::AssignableValue {name,tp:Assignable::Int} => {
+                let val = state.get_primitive_int(name);
+                let val = if isnegative { -val } else { val };
+                debug_log!(trace=>"Returning {}",val);
+                return Ok(val)
+            }
             StomachCommandInner::Char{char,..} => {
                 let c = <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(char.to_usize() as i64)?;
                 debug_log!(trace=>"Returning {}",c);
@@ -589,7 +609,7 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                 debug_log!(trace=>"Returning {}",c);
                 return Ok(c)
             }
-            o => todo!("Non-char in read_number: {:?}",o)
+            o => todo!("Non-char in read_number: {:?} at {}",o,gullet.mouth().file_line())
         }
     }
     file_end!()
@@ -630,6 +650,34 @@ pub fn read_decimal_number<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=
     }
     use std::str::FromStr;
     let i = i64::from_str(std::str::from_utf8(&rets).unwrap()).unwrap();
+    debug_log!(trace=>"Returning {}",i);
+    Ok(NS::Int::from_i64(if isnegative { -i } else { i })?)
+}
+
+pub fn read_hex_number<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,firstchar:u8,isnegative:bool) -> Result<NS::Int,Box<dyn TeXError<T>>> {
+    debug_log!(trace=>"Reading decimal number {}...",(firstchar as char));
+    let mut rets = vec!(firstchar);
+
+    while let Some(next) = gullet.get_next_stomach_command(state)? {
+        match next.cmd {
+            StomachCommandInner::Char{char,from_chardef:false} => {
+                let us = char.to_usize();
+                if is_ascii_hex_digit(us) {
+                    rets.push(us as u8);
+                } else {
+                    gullet.mouth().requeue(next.cause);
+                    break
+                }
+            }
+            StomachCommandInner::Space => break, // eat one space
+            _ => {
+                gullet.mouth().requeue(next.cause);
+                break
+            }
+        }
+    }
+    use std::str::FromStr;
+    let i = i64::from_str_radix(std::str::from_utf8(&rets).unwrap(),16).unwrap();
     debug_log!(trace=>"Returning {}",i);
     Ok(NS::Int::from_i64(if isnegative { -i } else { i })?)
 }
