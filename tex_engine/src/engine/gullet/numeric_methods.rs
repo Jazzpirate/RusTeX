@@ -85,6 +85,12 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
+            StomachCommandInner::ValueRegister(index,Assignable::Dim) => {
+                let val = state.get_dim_register(index);
+                let val = if isnegative { -val } else { val };
+                debug_log!(trace=>"Returning {}",val);
+                return Ok(<<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(val.to_sp())?)
+            }
             StomachCommandInner::Value {index,tp:Assignable::Int,..} => {
                 match gullet.primitive_int(index) {
                     None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
@@ -93,6 +99,17 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                         let val = if isnegative { -val } else { val };
                         debug_log!(trace=>"Returning {}",val);
                         return Ok(val)
+                    }
+                }
+            }
+            StomachCommandInner::Value {index,tp:Assignable::Dim,..} => {
+                match gullet.primitive_dim(index) {
+                    None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
+                    Some(f) => {
+                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
+                        let val = if isnegative { -val } else { val };
+                        debug_log!(trace=>"Returning {}",val);
+                        return Ok(<<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(val.to_sp())?)
                     }
                 }
             }
@@ -569,7 +586,10 @@ pub fn read_float<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gulle
                 }
             }
             StomachCommandInner::Space => break, // eat one space
-            _ => todo!("Non-char in read_decimal_number")
+            _ => {
+                gullet.mouth().requeue(next.cause.clone());
+                break
+            }
         }
     }
     use std::str::FromStr;

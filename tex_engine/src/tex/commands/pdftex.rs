@@ -1,4 +1,4 @@
-use crate::{cmtodo, debug_log, register_dim_assign, register_gullet, register_int, register_int_assign};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_gullet, register_int, register_int_assign};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
@@ -7,11 +7,44 @@ use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::GulletCommand;
-use crate::tex::numbers::{Int,NumSet};
+use crate::tex::numbers::{Int,NumSet, Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive};
 use crate::utils::strings::CharType;
 use crate::utils::Ptr;
+
+
+pub fn ifpdfabsnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifpdfabsnum");
+    let i1 = catch_prim!(gullet.get_int(state) => ("ifpdfabsnum",cmd));
+    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifpdfabsnum",cmd)) {
+        None => return Err(ErrorInPrimitive{name:"ifpdfabsnum",msg:Some("Expected one of '<','>','='".to_string()),cause:Some(cmd.cause),source:None}),
+        Some(r) => r
+    };
+    let i2 = catch_prim!(gullet.get_int(state) => ("ifpdfabsnum",cmd));
+    match rel {
+        "<" => Ok(i1.to_i64().abs() < i2.to_i64().abs()),
+        ">" => Ok(i1.to_i64().abs()>i2.to_i64().abs()),
+        "=" => Ok(i1.to_i64().abs()==i2.to_i64().abs()),
+        _ => unreachable!()
+    }
+}
+
+pub fn ifpdfabsdim<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifpdfabsdim");
+    let i1 = catch_prim!(gullet.get_dim(state) => ("ifpdfabsdim",cmd));
+    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifpdfabsdim",cmd)) {
+        None => return Err(ErrorInPrimitive{name:"ifpdfabsdim",msg:Some("Expected one of '<','>','='".to_string()),cause:Some(cmd.cause),source:None}),
+        Some(r) => r
+    };
+    let i2 = catch_prim!(gullet.get_dim(state) => ("ifpdfabsdim",cmd));
+    match rel {
+        "<" => Ok(i1.to_sp() < i2.to_sp().abs()),
+        ">" => Ok(i1.to_sp().abs()>i2.to_sp().abs()),
+        "=" => Ok(i1.to_sp().abs()==i2.to_sp().abs()),
+        _ => unreachable!()
+    }
+}
 
 fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
     debug_log!(trace=>"pdffilesize");
@@ -46,6 +79,8 @@ pub fn pdftexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:
 }
 
 pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
+    register_conditional!(ifpdfabsdim,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsdim(s,gu,cmd));
+    register_conditional!(ifpdfabsnum,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsnum(s,gu,cmd));
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
     register_int_assign!(pdfdecimaldigits,state,stomach,gullet);
     register_gullet!(pdffilesize,state,stomach,gullet,(s,gu,cmd) =>pdffilesize(s,gu,cmd));
@@ -126,8 +161,6 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     cmtodo!(state,stomach,gullet,pdfpagesattr);
     cmtodo!(state,stomach,gullet,pdfpkmode);
     cmtodo!(state,stomach,gullet,ifincsname);
-    cmtodo!(state,stomach,gullet,ifpdfabsdim);
-    cmtodo!(state,stomach,gullet,ifpdfabsnum);
     cmtodo!(state,stomach,gullet,ifpdfprimitive);
     cmtodo!(state,stomach,gullet,leftmarginkern);
     cmtodo!(state,stomach,gullet,pdfcolorstackinit);
