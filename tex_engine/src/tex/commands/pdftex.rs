@@ -3,6 +3,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
 use crate::engine::state::State;
+use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::GulletCommand;

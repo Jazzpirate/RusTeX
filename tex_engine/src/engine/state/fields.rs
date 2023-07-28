@@ -7,10 +7,10 @@
 use crate::utils::strings::{AllCharsTrait, CharType};
 use std::collections::hash_map::Entry;
 use std::hash::Hash;
-use ahash::HashMap;
+use crate::utils::map::HMap;
 
 /** A field of the [`State`](crate::engine::state::State) needs to be able to push and pop a new stack frame.
-  This is largely implemented as a [`Vec`] of [`HashMap`]s tracking changes and reverting the local ones
+  This is largely implemented as a [`Vec`] of [`HMap`]s tracking changes and reverting the local ones
   on pop.
 */
 pub trait StateField {
@@ -70,9 +70,9 @@ pub trait KeyValueField<K,V>: StateField {
 
 /// An Array/Vec of Characters with associated values of type A; e.g.
 /// [`ucchar`](crate::engine::state::State::get_uccode), [`catcode`](crate::engine::state::State::get_catcode_scheme) etc.
-pub struct CharField<C:CharType,A:Clone+Default>{pub charfield: C::Allchars<A>, changes: Vec<HashMap<C,A>>}
+pub struct CharField<C:CharType,A:Clone+Default>{pub charfield: C::Allchars<A>, changes: Vec<HMap<C,A>>}
 impl<C:CharType,A:Clone+Default> StateField for CharField<C,A> {
-    fn push_stack(&mut self) { self.changes.push(HashMap::default()) }
+    fn push_stack(&mut self) { self.changes.push(HMap::default()) }
     fn pop_stack(&mut self) {
         if let Some(m) = self.changes.pop() {
             for (k,v) in m {
@@ -113,7 +113,7 @@ impl<C:CharType,A:Clone+Default> CharField<C,A> {
 }
 
 /// A Vec of values of type A; e.g. [`intregisters`](crate::engine::state::State::get_int_register),
-pub struct VecField<V:Default>(Vec<V>, Vec<HashMap<usize,V>>);
+pub struct VecField<V:Default>(Vec<V>, Vec<HMap<usize,V>>);
 impl<V:Default+Clone> VecField<V> {
     /// initializes a new [`VecField`].
     //#[inline(always)]
@@ -130,7 +130,7 @@ impl<V:Default+Clone> VecField<V> {
     }
 }
 impl<V:Default+Clone> StateField for VecField<V> {
-    fn push_stack(&mut self) { self.1.push(HashMap::default()) }
+    fn push_stack(&mut self) { self.1.push(HMap::default()) }
     fn pop_stack(&mut self) {
         if let Some(m) = self.1.pop() {
             for (k,v) in m {
@@ -203,13 +203,13 @@ impl<A> IsDefault for Vec<A> {
 }
 
 /// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::Command)s,
-pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HashMap<K,V>, Vec<HashMap<K,V>>);
+pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HMap<K,V>, Vec<HMap<K,V>>);
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
     /// initializes a new [`HashMapField`].
     //#[inline(always)]
-    pub fn new() -> Self { HashMapField(HashMap::default(), Vec::new()) }
+    pub fn new() -> Self { HashMapField(HMap::default(), Vec::new()) }
     //#[inline(always)]
-    pub fn set_i(map:&mut HashMap<K,V>, k: K, v: V) -> Option<V> {
+    pub fn set_i(map:&mut HMap<K,V>, k: K, v: V) -> Option<V> {
         if v.is_default() {
             map.remove(&k)
         } else {
@@ -219,7 +219,7 @@ impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
 }
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> StateField for HashMapField<K,V> {
     // #[inline(always)]
-    fn push_stack(&mut self) { self.1.push(HashMap::default()) }
+    fn push_stack(&mut self) { self.1.push(HMap::default()) }
     // #[inline(always)]
     fn pop_stack(&mut self) {
         if let Some(m) = self.1.pop() {

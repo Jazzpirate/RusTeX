@@ -15,13 +15,13 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use kpathsea::Kpathsea;
-use ahash::HashMap;
 use crate::engine::filesystem::kpathsea::KpseResult;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{OtherError, TeXError};
+use crate::utils::map::HMap;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
@@ -166,7 +166,7 @@ impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
     }
 }
 
-pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HashMap<PathBuf,Ptr<VirtualFile<Char>>>}
+pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,Ptr<VirtualFile<Char>>>}
 impl<Char:CharType> KpsePhysicalFileSystem<Char> {
     pub fn kpsewhich(&self, path: &str) -> KpseResult {
         self.kpathsea.kpsewhich(path)
@@ -182,7 +182,7 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
     fn new(pwd:PathBuf) -> Self { KpseVirtualFileSystem {
         pwd:pwd.clone(),
         kpathsea:Kpathsea::new(pwd),
-        files:HashMap::default()
+        files:HMap::default()
     } }
     fn set_pwd(&mut self, pwd: PathBuf) -> PathBuf {
         let old = std::mem::replace(&mut self.kpathsea, Kpathsea::new(pwd));

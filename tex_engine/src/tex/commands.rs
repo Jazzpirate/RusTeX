@@ -25,9 +25,9 @@ pub enum Command<T:Token>{
     /// A primitive assignable value, e.g. `\tolerance` ([`Int`](Assignable::Int)),
     /// `\hsize` ([`Dim`](Assignable::Dim))
     AssignableValue{name:&'static str,tp:Assignable},
-    /// A primitive non-assignable [`crate::tex::numbers::Int`] value, e.g. `\eTeXversion`
+    /// A primitive non-assignable value, e.g. `\eTeXversion`
     Value{name:&'static str,index:usize,tp:Assignable},
-    /// An value register, e.g. resulting from `\countdef`, `\dimdef` etc.
+    /// An (assignable) value register, e.g. resulting from `\countdef`, `\dimdef` etc.
     ValueRegister{index:usize,tp:Assignable},
     /// Assignable, potentially parametric value requiring parsing; e.g. `\catcode`,
     /// `\count`, etc.

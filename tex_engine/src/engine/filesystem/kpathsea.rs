@@ -3,19 +3,19 @@
 use std::collections::hash_map::Entry;
 use std::path::PathBuf;
 use std::sync::Arc;
-use ahash::{HashSet,HashMap};
 use lazy_static::lazy_static;
 use crate::debug_log;
+use crate::utils::map::{HMap, HSet};
 
 /// A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
 /// `TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].
 /// and lazily computed on first use.
-pub struct Kpathsea {pub pwd:PathBuf,local:HashSet<PathBuf>,global:Arc<KpathseaBase>}
+pub struct Kpathsea {pub pwd:PathBuf,local:HSet<PathBuf>,global:Arc<KpathseaBase>}
 impl Kpathsea {
     /// Create a new [`Kpathsea`] instance with the given working directory.
     pub fn new(pwd:PathBuf) -> Kpathsea {
         let global = KPATHSEA.clone();
-        let mut local:HashSet<PathBuf> = HashSet::default();
+        let mut local:HSet<PathBuf> = HSet::default();
         KpathseaBase::fill_set(&mut local,pwd.clone(),global.recdot);
         Kpathsea { pwd, local, global }
     }
@@ -44,7 +44,7 @@ impl Kpathsea {
             let mut p = l.join(filestr);
             if p.exists() { return KpseResult{path:p,local:false} }
             p = l.join(format!("{}.tex",filestr));
-            if p.exists() { return KpseResult{path:p,local:true} }
+            if p.exists() { return KpseResult{path:p,local:false} }
         }
         KpseResult{path:self.pwd.join(filestr),local:true}
     }
@@ -77,14 +77,23 @@ pub struct KpseResult {
 
 
 
-struct KpathseaBase {
-    set: HashSet<PathBuf>,
+pub struct KpathseaBase {
+    set: HSet<PathBuf>,
     recdot:bool
 }
 impl KpathseaBase {
+    pub fn get(&self,filestr:&str) -> Option<KpseResult> {
+        for l in &self.set {
+            let mut p = l.join(filestr);
+            if p.exists() { return Some(KpseResult{path:p,local:false}) }
+            p = l.join(format!("{}.tex",filestr));
+            if p.exists() { return Some(KpseResult{path:p,local:true}) }
+        }
+        None
+    }
     pub fn new() -> KpathseaBase {
         debug_log!(debug=>"Initializing kpathsea database");
-        let mut vars = HashMap::<String,String>::default();
+        let mut vars = HMap::<String,String>::default();
         let loc = std::str::from_utf8(std::process::Command::new("kpsewhich")
             .args(vec!("-var-value","SELFAUTOLOC")).output().expect("kpsewhich not found!")
             .stdout.as_slice()).unwrap().trim().to_string();
@@ -175,12 +184,12 @@ impl KpathseaBase {
                 }
             }
         }
-        let mut set: HashSet<PathBuf> = HashSet::default();
+        let mut set: HSet<PathBuf> = HSet::default();
         for (path,recurse) in paths.into_iter() { KpathseaBase::fill_set(&mut set, path, recurse) }
         KpathseaBase { set,recdot }
     }
 
-    fn fill_set(set: &mut HashSet<PathBuf>, path : PathBuf, recurse: bool) {
+    fn fill_set(set: &mut HSet<PathBuf>, path : PathBuf, recurse: bool) {
         if path.is_dir() {
             set.insert(path.clone());
             if recurse {
@@ -192,7 +201,7 @@ impl KpathseaBase {
         }
     }
 
-    fn parse_string(s : String,vars:&HashMap<String,String>) -> Vec<String> {
+    fn parse_string(s : String,vars:&HMap<String,String>) -> Vec<String> {
         let mut fin : Vec<String> = vec!();
         let mut ret : Vec<String> = vec!("".to_string());
         let mut i : usize = 0;
@@ -274,5 +283,5 @@ impl KpathseaBase {
 }
 
 lazy_static! {
-    static ref KPATHSEA : Arc<KpathseaBase> = Arc::new(KpathseaBase::new());
+    pub static ref KPATHSEA : Arc<KpathseaBase> = Arc::new(KpathseaBase::new());
 }

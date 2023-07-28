@@ -11,7 +11,7 @@ use crate::utils::Ptr;
 #[macro_export]
 macro_rules! cmtodo {
     ($state:ident,$stomach:ident,$gullet:ident,$name:ident) => {
-        register_gullet!($name,$state,$stomach,$gullet,(_,_,_) => todo!(stringify!($name)));
+        register_gullet!($name,$state,$stomach,$gullet,(_,g,_) => todo!("{}: {}",stringify!($name),g.mouth().file_line()));
     };
 }
 
@@ -238,6 +238,18 @@ macro_rules! register_value_assign_int {
             assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
             value_index:$gullet.register_primitive_int(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
             tp:Assignable::Int
+        })),true);
+    }};
+}
+
+#[macro_export]
+macro_rules! register_value_assign_font {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+            name:stringify!($name),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_font(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            tp:Assignable::Font
         })),true);
     }};
 }

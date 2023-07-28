@@ -41,6 +41,8 @@ Div<Self,Output=Self>+Mul<Self,Output=Self> {
 pub trait Dim:Numeric+Add<Self,Output=Self>{
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
+    fn from_sp(sp:i64) -> Self;
+    fn to_sp(&self) -> i64;
 }
 pub trait SkipDim:Display+Clone {
     type Dim:Dim;
@@ -181,6 +183,8 @@ impl Dim for Dimi32 {
         "cc" => Self((float*65536.0*14856.0/1157.0).round() as i32),
         _ => unreachable!("Invalid dimension unit")
     } }
+    fn from_sp(s: i64) -> Self { Self(s as i32) }
+    fn to_sp(&self) -> i64 { self.0 as i64 }
 }
 impl Neg for Dimi32 {
     type Output = Self;

@@ -13,87 +13,9 @@ use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
 
-pub fn dimexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"dimexpr: {}",gullet.mouth().preview(100));
-    let ret = expr(state, gullet, &cmd,"dimexpr",|s,g| g.get_dim(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("dimexpr",cmd)) {
-        match next.base() {
-            BaseToken::CS(name) => match state.get_command(name).as_deref() {
-                Some(Command::Relax) => (),
-                _ => gullet.mouth().requeue(next)
-            }
-            _ => gullet.mouth().requeue(next)
-        }
-    }
-    Ok(ret)
-}
 
-pub fn etexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    Ok(T::from_str(".6".to_string()))
-}
-pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(2) => ("eTeXversion",cmd)))
-}
-
-pub fn expanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"expanded");
-    Ok(catch_prim!(gullet.get_expanded_group(state,false,false,false) => ("expanded",cmd)))
-}
-
-pub fn glueexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Skip<<S::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"glueexpr: {}",gullet.mouth().preview(100));
-    let ret = expr(state, gullet, &cmd,"glueexpr",|s,g| g.get_skip(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("glueexpr",cmd)) {
-        match next.base() {
-            BaseToken::CS(name) => match state.get_command(name).as_deref() {
-                Some(Command::Relax) => (),
-                _ => gullet.mouth().requeue(next)
-            }
-            _ => gullet.mouth().requeue(next)
-        }
-    }
-    Ok(ret)
-}
-
-pub fn ifcsname<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"ifcsname");
-    let name = get_csname(state,gullet,cmd,"ifcsname")?;
-    Ok(state.get_command(&name).is_some())
-}
-
-pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"ifdefined");
-    match catch_prim!(gullet.mouth().get_next(state) => ("ifeof",cmd)) {
-        None => file_end_prim!("ifeof",cmd),
-        Some((t,_)) => match t.base() {
-            BaseToken::Char(c,CategoryCode::Active) =>
-                Ok(state.get_ac_command(*c).is_some()),
-            BaseToken::CS(name) => {
-                debug_log!(trace => "ifdefined: {}",name.to_string());
-                Ok(state.get_command(name).is_some())
-            }
-            _ => Err(ErrorInPrimitive{name:"ifdefined",msg:Some(format!("Expected a control sequence, got: {:?}",t)),cause:Some(cmd.cause),source:None})
-        }
-    }
-}
-
-pub fn muexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<MuSkip<<S::NumSet as NumSet>::MuDim,<S::NumSet as NumSet>::MuStretchShrinkDim>,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"muexpr: {}",gullet.mouth().preview(100));
-    let ret = expr(state, gullet, &cmd,"muexpr",|s,g| g.get_muskip(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("muexpr",cmd)) {
-        match next.base() {
-            BaseToken::CS(name) => match state.get_command(name).as_deref() {
-                Some(Command::Relax) => (),
-                _ => gullet.mouth().requeue(next)
-            }
-            _ => gullet.mouth().requeue(next)
-        }
-    }
-    Ok(ret)
-}
-
-pub fn expr<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>,name:&'static str,get:fn(&mut S,&mut Gu) -> Result<Num,Box<dyn TeXError<T>>>)
-    -> Result<Num,ErrorInPrimitive<T>> {
+pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>, name:&'static str, get:fn(&mut S, &mut Gu) -> Result<Num,Box<dyn TeXError<T>>>)
+                                                                  -> Result<Num,ErrorInPrimitive<T>> {
     let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
     'a: loop {
         catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
@@ -140,13 +62,13 @@ pub fn expr<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gulle
                     continue 'a;
                 }
                 Some(r) if r == "*" => {
-                    let ret = catch_prim!(expr(state,gullet,cmd,&name,|s,g| {
+                    let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
                         Ok(g.get_int(s)?.to_i64() as f64)
                     }) => (name,cmd.clone()));
                     first = first.tex_mult(ret.round() as i64);
                 }
                 Some(r) if r == "/" => {
-                    let ret = catch_prim!(expr(state,gullet,cmd,&name,|s,g| {
+                    let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
                         Ok(g.get_int(s)?.to_i64() as f64)
                     }) => (name,cmd.clone()));
                     first = first.tex_div(ret.round() as i64);
@@ -156,42 +78,12 @@ pub fn expr<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gulle
         }
     }
 }
-/*
-fn expr_i<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>) -> Result<i64,ErrorInPrimitive<T>> {
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
-    let first = if catch_prim!(gullet.get_keyword(state,"(") => ("numexpr",cmd.clone())) {
-        let r = catch_prim!(expr_i(state,gullet,cmd) => ("numexpr",cmd.clone()));
-        if !catch_prim!(gullet.get_keyword(state,")") => ("numexpr",cmd.clone())) {
-            return Err(ErrorInPrimitive{name:"numexpr",msg:Some("Expected ')'".to_string()),cause:Some(cmd.cause.clone()),source:None})
-        }
-        r
-    } else { catch_prim!(gullet.get_int(state) => ("numexpr",cmd.clone())).to_i64() };
-    expr_ii(state, gullet, cmd, first)
-}
 
-fn expr_ii<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>, first:i64) -> Result<i64,ErrorInPrimitive<T>> {
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("numexpr",cmd.clone()));
-    match catch_prim!(gullet.get_keywords(state,vec!("+","-","*","/")) => ("numexpr",cmd.clone())) {
-        None => Ok(first),
-        Some(op) => {
-            let second = catch_prim!(expr_i(state,gullet,cmd) => ("numexpr",cmd.clone()));
-            match op {
-                "+" => expr_ii(state, gullet, cmd, first + second),
-                "-" => expr_ii(state, gullet, cmd, first - second),
-                "*" => expr_ii(state, gullet, cmd, first * second),
-                "/" => expr_ii(state, gullet, cmd, first / second),
-                _ => unreachable!()
-            }
-        }
-    }
-}
-*/
-pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    debug_log!(trace=>"numexpr: {}",gullet.mouth().preview(100));
-    let ret = expr(state, gullet, &cmd,"numexpr",|s,g| g.get_int(s))?;
-    /*
-    let ret = expr_i(state, gullet, &cmd)?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
+
+pub fn dimexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"dimexpr: {}",gullet.mouth().preview(100));
+    let ret = expr_loop(state, gullet, &cmd, "dimexpr", |s, g| g.get_dim(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("dimexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {
                 Some(Command::Relax) => (),
@@ -200,8 +92,76 @@ pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
             _ => gullet.mouth().requeue(next)
         }
     }
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(ret) => ("numexpr",cmd)))
-     */
+    Ok(ret)
+}
+
+pub fn etexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    Ok(T::from_str(".6".to_string()))
+}
+pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(2) => ("eTeXversion",cmd)))
+}
+
+pub fn expanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"expanded");
+    Ok(catch_prim!(gullet.get_expanded_group(state,false,false,false) => ("expanded",cmd)))
+}
+
+pub fn glueexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Skip<<S::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"glueexpr: {}",gullet.mouth().preview(100));
+    let ret = expr_loop(state, gullet, &cmd, "glueexpr", |s, g| g.get_skip(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("glueexpr",cmd)) {
+        match next.base() {
+            BaseToken::CS(name) => match state.get_command(name).as_deref() {
+                Some(Command::Relax) => (),
+                _ => gullet.mouth().requeue(next)
+            }
+            _ => gullet.mouth().requeue(next)
+        }
+    }
+    Ok(ret)
+}
+
+pub fn ifcsname<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifcsname");
+    let name = get_csname(state,gullet,cmd,"ifcsname")?;
+    Ok(state.get_command(&name).is_some())
+}
+
+pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"ifdefined");
+    match catch_prim!(gullet.mouth().get_next(state) => ("ifeof",cmd)) {
+        None => file_end_prim!("ifeof",cmd),
+        Some((t,_)) => match t.base() {
+            BaseToken::Char(c,CategoryCode::Active) =>
+                Ok(state.get_ac_command(*c).is_some()),
+            BaseToken::CS(name) => {
+                debug_log!(trace => "ifdefined: {}",name.to_string());
+                Ok(state.get_command(name).is_some())
+            }
+            _ => Err(ErrorInPrimitive{name:"ifdefined",msg:Some(format!("Expected a control sequence, got: {:?}",t)),cause:Some(cmd.cause),source:None})
+        }
+    }
+}
+
+pub fn muexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<MuSkip<<S::NumSet as NumSet>::MuDim,<S::NumSet as NumSet>::MuStretchShrinkDim>,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"muexpr: {}",gullet.mouth().preview(100));
+    let ret = expr_loop(state, gullet, &cmd, "muexpr", |s, g| g.get_muskip(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("muexpr",cmd)) {
+        match next.base() {
+            BaseToken::CS(name) => match state.get_command(name).as_deref() {
+                Some(Command::Relax) => (),
+                _ => gullet.mouth().requeue(next)
+            }
+            _ => gullet.mouth().requeue(next)
+        }
+    }
+    Ok(ret)
+}
+
+pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"numexpr: {}",gullet.mouth().preview(100));
+    let ret = expr_loop(state, gullet, &cmd, "numexpr", |s, g| g.get_int(s))?;
     if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {

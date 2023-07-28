@@ -10,6 +10,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::tex::commands::{GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::ConditionalBranch;
+use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{NumSet, Skip, MuSkip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ErrorInPrimitive, TeXError};
@@ -126,6 +127,10 @@ pub trait Gullet<T:Token>:Sized+'static {
     fn primitive_toks(&self,idx:usize) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>;
     fn primitive_toks_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>;
 
+    fn register_primitive_font(&mut self,name:&'static str,cmd:fn(& mut Self::S,&mut Self,GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>>) -> usize;
+    fn primitive_font(&self,idx:usize) -> Option<fn(& mut Self::S,&mut Self,GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>>>;
+    fn primitive_font_from_name(&self,name:&'static str) -> Option<fn(& mut Self::S,&mut Self,GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>>>;
+
 }
 
 pub struct TeXGullet<T:Token,M:Mouth<T>,S:State<T>> {
@@ -138,6 +143,7 @@ pub struct TeXGullet<T:Token,M:Mouth<T>,S:State<T>> {
     skips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Skip<<<S as State<T>>::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>>>,
     muskips:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<MuSkip<<<S as State<T>>::NumSet as NumSet>::MuDim,<<S as State<T>>::NumSet as NumSet>::MuStretchShrinkDim>,ErrorInPrimitive<T>>>,
     toks:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>>>,
+        fonts:Map<fn(&mut S,&mut Self,GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>>>,
     phantom_char:std::marker::PhantomData<T>,
     phantom_state:std::marker::PhantomData<S>
 }
@@ -152,6 +158,8 @@ impl<T:Token,M:Mouth<T>,S:State<T>> TeXGullet<T,M,S> {
             skips:Map::default(),
             muskips:Map::default(),
             toks:Map::default(),
+            fonts:Map::default(),
+
             phantom_char:std::marker::PhantomData,
             phantom_state:std::marker::PhantomData
         }
@@ -189,6 +197,9 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     }
     fn register_primitive_toks(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Vec<T>, ErrorInPrimitive<T>>) -> usize {
         self.toks.insert(name,cmd)
+    }
+    fn register_primitive_font(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<usize, ErrorInPrimitive<T>>) -> usize {
+        self.fonts.insert(name,cmd)
     }
     fn primitive(&self, idx: usize) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Vec<T>, ErrorInPrimitive<T>>> {
         self.primitives.get(idx).copied()
@@ -231,6 +242,12 @@ impl<T:Token,M:Mouth<T>,S:State<T>> Gullet<T> for TeXGullet<T,M,S> {
     }
     fn primitive_toks_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<Vec<T>, ErrorInPrimitive<T>>> {
         self.toks.get_from_name(name).copied()
+    }
+    fn primitive_font(&self, idx: usize) -> Option<fn(& mut Self::S, &mut Self, GulletCommand<T>) -> Result<usize, ErrorInPrimitive<T>>> {
+        self.fonts.get(idx).copied()
+    }
+    fn primitive_font_from_name(&self, name: &'static str) -> Option<fn(&mut Self::S, &mut Self, GulletCommand<T>) -> Result<usize, ErrorInPrimitive<T>>> {
+        self.fonts.get_from_name(name).copied()
     }
 
     fn new_conditional(&mut self,name:&'static str) -> usize {

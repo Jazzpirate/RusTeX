@@ -1,7 +1,7 @@
 //! TeX primitive [`Command`]s
 
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
@@ -12,7 +12,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::{assign_primitive_dim, assign_primitive_int, assign_primitive_skip, assign_primitive_toks, parse_signature};
-use crate::tex::numbers::{Int, NumSet, Skip,Numeric,MuSkip};
+use crate::tex::numbers::{Int, NumSet, Skip, Numeric, MuSkip, Dim};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
 use crate::utils::Ptr;
@@ -22,6 +22,7 @@ use crate::engine::gullet;
 use crate::engine::stomach::methods::{assign_dim_register, assign_int_register, assign_muskip_register, assign_skip_register, assign_toks_register};
 use crate::tex::boxes::Whatsit;
 use crate::tex::ConditionalBranch;
+use crate::tex::fonts::{FontStore,Font};
 use super::etex::protected;
 
 /* TODO
@@ -825,6 +826,42 @@ pub fn fi<T:Token,Gu:Gullet<T>>(_state:&mut Gu::S,gullet:&mut Gu,_cmd:GulletComm
     Ok(vec![])
 }
 
+pub fn font_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\font");
+    let cs = catch_prim!(gullet.get_control_sequence(state) => ("font",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("font",cmd));
+    let mut fontname = catch_prim!(gullet.get_string(state) => ("font",cmd)).to_string();
+    if !fontname.ends_with(".tfm") {
+        fontname = fontname + ".tfm"
+    }
+    let index = catch_prim!(state.fontstore().get_new(&fontname) => ("font",cmd));
+    match catch_prim!(gullet.get_keywords(state,vec!("at","scaled")) => ("font",cmd)) {
+        Some(s) if s == "at" => {
+            let dim = catch_prim!(gullet.get_dim(state) => ("font",cmd));
+            state.fontstore().get(index).set_at(dim.to_sp());
+        }
+        Some(s) if s == "scaled" => {
+            let r = catch_prim!(crate::engine::gullet::numeric_methods::read_float(gullet,state,b'0',false) => ("font",cmd));
+            let font = state.fontstore().get(index);
+            let new_at = ((font.get_at() as f64) * r).round() as i64;
+            font.set_at(new_at);
+        }
+        _ => ()
+    }
+    let fontcmd = Command::ValueRegister{index,tp:Assignable::Font};
+    match cs.base() {
+        BaseToken::Char(c,CategoryCode::Active) =>
+            state.set_ac_command(*c,Some(Ptr::new(fontcmd)),global),
+        BaseToken::CS(name) =>
+            state.set_command(name.clone(),Some(Ptr::new(fontcmd)),global),
+        _ => unreachable!()
+    }
+    Ok(())
+}
+pub fn font_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting \\font");
+    todo!("\\font_get")
+}
 
 pub fn gdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
                                                  -> Result<(),ErrorInPrimitive<T>> {
@@ -2311,6 +2348,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_gullet!(fi,state,stomach,gullet,(s,gu,cmd) =>fi(s,gu,cmd));
     register_int_assign!(finalhyphendemerits,state,stomach,gullet);
     register_int_assign!(floatingpenalty,state,stomach,gullet);
+    register_value_assign_font!(font,state,stomach,gullet);
     register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef(s,gu,cmd,global,false,false,false));
     register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global(sto,s,gu,cmd,g,false,false,false));
     register_int_assign!(globaldefs,state,stomach,gullet);
@@ -2471,7 +2509,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,dp);
     cmtodo!(state,stomach,gullet,lastskip);
     cmtodo!(state,stomach,gullet,setbox);
-    cmtodo!(state,stomach,gullet,font);
     cmtodo!(state,stomach,gullet,futurelet);
     cmtodo!(state,stomach,gullet,fontdimen);
     cmtodo!(state,stomach,gullet,hyphenation);

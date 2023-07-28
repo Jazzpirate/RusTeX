@@ -10,6 +10,7 @@ use crate::utils::errors::{OtherError, TeXError, UndefinedActiveCharacter, Undef
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::Outputs;
+use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, NumSet, Skip};
 use crate::utils::Ptr;
 
@@ -21,6 +22,7 @@ pub trait State<T:Token>:Sized+'static {
     type FS:FileSystem<T::Char>;
     type Gr:GroupType;
     type NumSet:NumSet;
+    type FontStore:FontStore<Char=T::Char>;
     /// Should be called at the start of a new job with the jobname (name of the main file)
     fn set_job(&mut self, jobname:String);
 
@@ -44,6 +46,8 @@ pub trait State<T:Token>:Sized+'static {
     fn file_closein(&mut self, i: usize);
     fn get_open_out_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F>;
     fn get_open_in_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F>;
+
+    fn fontstore(&mut self) -> &mut Self::FontStore;
 
     /// push a new group onto the stack
     fn stack_push(&mut self, g: Self::Gr);
@@ -152,11 +156,12 @@ pub trait State<T:Token>:Sized+'static {
     fn set_primitive_toks(&mut self, name:&'static str, v:Vec<T>, globally:bool);
 }
 
-pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
+pub struct TeXState<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> {
     filesystem:FS,
     out_files:Vec<Option<FS::F>>,
     in_files:Vec<Option<FS::F>>,
     csnames:usize,
+    fontstore:FontS,
 
     outputs:Outputs,
 
@@ -191,13 +196,14 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,NS:NumSet> {
     primitive_tokregisters: HashMapField<&'static str,Vec<T>>,
 }
 use crate::utils::strings::CharType;
-impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> TeXState<T,FS,NS> {
-    pub fn new(fs:FS,outputs:Outputs) -> Self {
+impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> TeXState<T,FS,FontS,NS> {
+    pub fn new(fs:FS,fontstore:FontS,outputs:Outputs) -> Self {
         let mut state = Self {
             filesystem:fs,
             out_files:vec!(),
             in_files:vec!(),
             csnames:0,
+            fontstore,
             outputs,
             aftergroups:vec!(vec!()),
 
@@ -250,10 +256,16 @@ impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> TeXState<T,FS,NS> {
         state
     }
 }
-impl<T:Token,FS:FileSystem<T::Char>,NS:NumSet> State<T> for TeXState<T,FS,NS> {
+impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> State<T> for TeXState<T,FS,FontS,NS> {
     type FS = FS;
     type Gr = TeXGroupType;
     type NumSet=NS;
+    type FontStore = FontS;
+
+    fn fontstore(&mut self) -> &mut Self::FontStore {
+        &mut self.fontstore
+    }
+
     fn mode(&self) -> TeXMode { self.mode }
     fn set_job(&mut self, jobname: String) {
         self.jobname = Some(jobname);
