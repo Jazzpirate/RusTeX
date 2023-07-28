@@ -65,13 +65,13 @@ pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, 
                     let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
                         Ok(g.get_int(s)?.to_i64() as f64)
                     }) => (name,cmd.clone()));
-                    first = first.tex_mult(ret.round() as i64);
+                    first = first.tex_mult(ret);
                 }
                 Some(r) if r == "/" => {
                     let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
                         Ok(g.get_int(s)?.to_i64() as f64)
                     }) => (name,cmd.clone()));
-                    first = first.tex_div(ret.round() as i64);
+                    first = first.tex_div(ret);
                 }
                 _ => unreachable!()
             }

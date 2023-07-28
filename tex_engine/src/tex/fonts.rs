@@ -7,6 +7,7 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::state::State;
 use crate::tex::fonts::tfm_files::TfmFile;
+use crate::tex::numbers::{NumSet,Dim};
 use crate::tex::token::Token;
 use crate::utils::errors::{OtherError, TeXError};
 use crate::utils::map::HMap;
@@ -23,6 +24,8 @@ pub trait Font{
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
+    fn set_dim<NS:NumSet>(&mut self,i:usize,d:NS::Dim);
+    fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim;
 }
 
 pub struct TfmFontStore {
@@ -49,7 +52,7 @@ impl FontStore for TfmFontStore {
             file,
             at:None,
             name:s.to_string(),
-            dimen:HMap::default(),
+            dimens:HMap::default(),
             hyphenchar:0,
             skewchar:0,
             lps:HMap::default(),
@@ -57,7 +60,9 @@ impl FontStore for TfmFontStore {
         });
         Ok(self.fonts.len() - 1)
     }
-    fn get(&mut self,i:usize) -> &mut Self::F { todo!() }
+    fn get(&mut self,i:usize) -> &mut Self::F {
+        self.fonts.get_mut(i).unwrap()
+    }
 }
 impl TfmFontStore {
     pub(crate) fn new() -> Self { Self{fonts:vec!(), font_files:HMap::default()} }
@@ -67,7 +72,7 @@ pub struct TfmFont {
     file:Ptr<TfmFile>,
     at:Option<i64>,
     name:String,
-    dimen:HMap<u8,i32>,
+    dimens:HMap<usize,i64>,
     hyphenchar:u8,
     skewchar:u8,
     lps:HMap<u8,u8>,
@@ -83,5 +88,17 @@ impl Font for TfmFont {
             Some(at) => at,
             None => self.file.size
         }
+    }
+    fn set_dim<NS: NumSet>(&mut self, i: usize, d: NS::Dim) {
+        self.dimens.insert(i,d.to_sp());
+    }
+    fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim {
+        NS::Dim::from_sp(self.dimens.get(&i).map(|c| *c).unwrap_or(
+            if i > 0 && i < 256 {
+                ((self.file.dimen[i] * (self.get_at() as f64)).round() as i64)
+            } else {
+                0
+            }
+        ))
     }
 }

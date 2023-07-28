@@ -489,7 +489,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 if i.to_i64() == 0 {
                     return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
                 }
-                let nv : <S::NumSet as NumSet>::Dim = ov.tex_div(i.to_i64());
+                let nv : <S::NumSet as NumSet>::Dim = ov.tex_div(i.to_i64() as f64);
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -861,6 +861,38 @@ pub fn font_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut
 pub fn font_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>> {
     debug_log!(trace=>"Getting \\font");
     todo!("\\font_get")
+}
+
+pub fn fontdimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\fontdimen");
+    let o = catch_prim!(gullet.get_int(state) => ("fontdimen",cmd));
+    let i = match o.try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"fontdimen",
+            msg: Some(format!("Invalid font dimension index")),
+            cause:Some(cmd.cause),source:None
+        })
+    };
+    let fontidx = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("fontdimen",cmd));
+    let dim = catch_prim!(gullet.get_dim(state) => ("fontdimen",cmd));
+    let font = state.fontstore().get(fontidx);
+    font.set_dim::<S::NumSet>(i,dim);
+    Ok(())
+}
+pub fn fontdimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting \\fontdimen");
+    let o = catch_prim!(gullet.get_int(state) => ("fontdimen",cmd));
+    let i = match o.try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"fontdimen",
+            msg: Some(format!("Invalid font dimension index")),
+            cause:Some(cmd.cause),source:None
+        })
+    };
+    let idx = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
+    let font = state.fontstore().get(idx);
+    Ok(font.get_dim::<S::NumSet>(i))
 }
 
 pub fn gdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
@@ -1559,7 +1591,7 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
                 let ov = state.get_primitive_dim(name);
                 let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
                 debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Dim = ov.tex_mult(i.to_i64());
+                let nv : <S::NumSet as NumSet>::Dim = ov.tex_mult(i.to_i64() as f64);
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -2349,6 +2381,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(finalhyphendemerits,state,stomach,gullet);
     register_int_assign!(floatingpenalty,state,stomach,gullet);
     register_value_assign_font!(font,state,stomach,gullet);
+    register_value_assign_dim!(fontdimen,state,stomach,gullet);
     register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef(s,gu,cmd,global,false,false,false));
     register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global(sto,s,gu,cmd,g,false,false,false));
     register_int_assign!(globaldefs,state,stomach,gullet);
@@ -2494,7 +2527,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,scriptfont);
     cmtodo!(state,stomach,gullet,scriptscriptfont);
     cmtodo!(state,stomach,gullet,lastkern);
-    cmtodo!(state,stomach,gullet,fontdimen);
     cmtodo!(state,stomach,gullet,prevdepth);
     cmtodo!(state,stomach,gullet,pagegoal);
     cmtodo!(state,stomach,gullet,pagetotal);
@@ -2510,7 +2542,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,lastskip);
     cmtodo!(state,stomach,gullet,setbox);
     cmtodo!(state,stomach,gullet,futurelet);
-    cmtodo!(state,stomach,gullet,fontdimen);
     cmtodo!(state,stomach,gullet,hyphenation);
     cmtodo!(state,stomach,gullet,patterns);
     cmtodo!(state,stomach,gullet,errorstopmode);

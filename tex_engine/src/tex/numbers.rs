@@ -14,8 +14,8 @@ pub trait NumSet:'static {
 }
 
 pub trait Numeric:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+Sub<Self,Output=Self>{
-    fn tex_mult(&self,other:i64) -> Self;
-    fn tex_div(&self,other:i64) -> Self;
+    fn tex_mult(&self,other:f64) -> Self;
+    fn tex_div(&self,other:f64) -> Self;
 }
 
 impl IsDefault for f64 {
@@ -24,13 +24,8 @@ impl IsDefault for f64 {
     }
 }
 impl Numeric for f64 {
-    fn tex_mult(&self, other: i64) -> Self {
-        self * (other as f64)
-    }
-
-    fn tex_div(&self, other: i64) -> Self {
-        self / (other as f64)
-    }
+    fn tex_mult(&self, other: f64) -> Self { self * other }
+    fn tex_div(&self, other: f64) -> Self { self / other }
 }
 
 pub trait Int:Numeric+PartialOrd+TryInto<usize>+From<u8>+
@@ -68,12 +63,12 @@ impl NumSet for DefaultNumSet {
     type MuStretchShrinkDim = MuFill;
 }
 impl Numeric for i32 {
-    fn tex_mult(&self, other: i64) -> Self {
-        (self.to_i64() * other) as i32
+    fn tex_mult(&self, other: f64) -> Self {
+        ((self.to_i64() as f64) * other).round() as i32
     }
 
-    fn tex_div(&self, other: i64) -> Self {
-        (self.to_i64() / other) as i32
+    fn tex_div(&self, other: f64) -> Self {
+        ((self.to_i64() as f64) / other).round() as i32
     }
 }
 impl Int for i32 {
@@ -161,12 +156,12 @@ impl Sub<Dimi32> for Dimi32 {
 }
 
 impl Numeric for Dimi32 {
-    fn tex_mult(&self, other: i64) -> Self {
-        Dimi32((self.0 as i64 * other) as i32)
+    fn tex_mult(&self, other: f64) -> Self {
+        Dimi32((self.0 as f64 * other).round() as i32)
     }
 
-    fn tex_div(&self, other: i64) -> Self {
-        Dimi32((self.0 as i64 / other) as i32)
+    fn tex_div(&self, other: f64) -> Self {
+        Dimi32((self.0 as f64 / other).round() as i32)
     }
 }
 impl Dim for Dimi32 {
@@ -240,11 +235,11 @@ impl<SD:SkipDim> Sub for Skip<SD> {
     }
 }
 impl<SD:SkipDim> Numeric for Skip<SD> {
-    fn tex_mult(&self, other: i64) -> Self {
+    fn tex_mult(&self, other: f64) -> Self {
         Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 
-    fn tex_div(&self, other: i64) -> Self {
+    fn tex_div(&self, other: f64) -> Self {
         Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }
@@ -339,10 +334,10 @@ impl<MD:MuDim,SD:MuStretchShrinkDim> Sub<Self> for MuSkip<MD,SD> {
     }
 }
 impl<MD:MuDim,SD:MuStretchShrinkDim> Numeric for MuSkip<MD,SD> {
-    fn tex_div(&self, other: i64) -> Self {
+    fn tex_div(&self, other: f64) -> Self {
         Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
-    fn tex_mult(&self, other: i64) -> Self {
+    fn tex_mult(&self, other: f64) -> Self {
         Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }
@@ -383,12 +378,12 @@ impl Sub for Mui32 {
     }
 }
 impl Numeric for Mui32 {
-    fn tex_mult(&self, other: i64) -> Self {
-        Self((self.0 as i64 * other) as i32)
+    fn tex_mult(&self, other: f64) -> Self {
+        Self((self.0 as f64 * other).round() as i32)
     }
 
-    fn tex_div(&self, other: i64) -> Self {
-        Self((self.0 as i64 / other) as i32)
+    fn tex_div(&self, other: f64) -> Self {
+        Self((self.0 as f64 / other).round() as i32)
     }
 }
 impl MuDim for Mui32 {

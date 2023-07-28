@@ -4,9 +4,10 @@ use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
 use crate::engine::gullet::methods::{get_keyword, get_keywords};
 use crate::engine::state::State;
+use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;
 use crate::tex::commands::{Assignable, GulletCommand, StomachCommand, StomachCommandInner};
-use crate::tex::numbers::{MuSkip, NumSet, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim};
+use crate::tex::numbers::{MuSkip, NumSet, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim, Numeric};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ExpectedInteger, ExpectedUnit, ImplementationError, TeXError};
 
@@ -238,7 +239,7 @@ pub fn get_dim_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gu
                         );
                     return read_unit(gullet,state,f)
                 },
-                _ => todo!("Non-digit in read_dimension")
+                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}",char,us,gullet.mouth().file_line())
             }
         }
         StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Dim,..} => {
@@ -254,25 +255,50 @@ pub fn get_dim_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gu
             let val = state.get_dim_register(i);
             return Ok(if isnegative { -val } else { val })
         }
-        o => todo!("Non-char in read_dim: {:?}",o)
+        StomachCommandInner::ValueRegister(i,Assignable::Int) => {
+            let val = state.get_int_register(i).to_i64() as f64;
+            let val = if isnegative { -val } else { val };
+            return read_unit(gullet,state,val)
+        }
+        StomachCommandInner::Char{char,..} => {
+            let val = char.to_usize() as f64;
+            let val = if isnegative { -val } else { val };
+            return read_unit(gullet,state,val)
+        }
+        o => todo!("Non-char in read_dim: {:?}\n{}\n at {}",o,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line())
     }
 }
 
 pub fn read_unit<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,float:f64) -> Result<NS::Dim,Box<dyn TeXError<T>>> {
     debug_log!(trace=>"Reading unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
-    if get_keyword(gullet, state, "true")? {
-        gullet.mouth().skip_whitespace(state)?;
-        let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
-        match get_keywords(gullet, state, NS::Dim::units())? {
-            Some(dim) => Ok(NS::Dim::from_float(dim,float * mag)),
-            _ => Err(ExpectedUnit(PhantomData).into())
+    match gullet.get_next_stomach_command(state)? {
+        Some(cmd) => {
+            match cmd.cmd {
+                StomachCommandInner::Char { .. } => {
+                    gullet.mouth().requeue(cmd.cause);
+                    gullet.mouth().skip_whitespace(state)?;
+                    if get_keyword(gullet, state, "true")? {
+                        gullet.mouth().skip_whitespace(state)?;
+                        let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
+                        match get_keywords(gullet, state, NS::Dim::units())? {
+                            Some(dim) => Ok(NS::Dim::from_float(dim, float * mag)),
+                            _ => Err(ExpectedUnit(PhantomData).into())
+                        }
+                    } else {
+                        match get_keywords(gullet, state, NS::Dim::units())? {
+                            Some(dim) => Ok(NS::Dim::from_float(dim, float)),
+                            _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
+                        }
+                    }
+                }
+                StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
+                    let val = state.get_dim_register(i);
+                    Ok(val.tex_mult(float))
+                }
+                _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
+            }
         }
-    } else {
-        match get_keywords(gullet, state, NS::Dim::units())? {
-            Some(dim) => Ok(NS::Dim::from_float(dim,float)),
-            _ => todo!("Non-unit in read_unit")
-        }
+        None => file_end!(),
     }
 }
 

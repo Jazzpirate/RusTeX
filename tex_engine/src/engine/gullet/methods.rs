@@ -4,17 +4,18 @@ use crate::{debug_log, file_end};
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::{Command, GulletCommand, StomachCommand, StomachCommandInner};
+use crate::tex::commands::{Assignable, Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::numbers::Int;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{ExpectedToken, ImplementationError, OtherError, TeXError, UnexpectedEndgroup};
 use crate::utils::Ptr;
 use crate::engine::mouth::Mouth;
 use crate::tex::ConditionalBranch;
+use crate::tex::fonts::FontStore;
 use crate::utils::strings::{CharType, TeXStr};
 use crate::utils::strings::AllCharsTrait;
 
-pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> StomachCommand<T> {
+pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode,from_chardef:bool) -> StomachCommand<T> {
     use CategoryCode::*;
     StomachCommand{cause,cmd:match catcode {
         Superscript => StomachCommandInner::Superscript(char),
@@ -23,7 +24,7 @@ pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode) -> 
         MathShift => StomachCommandInner::MathShift(char),
         BeginGroup => StomachCommandInner::BeginGroup(char),
         EndGroup => StomachCommandInner::EndGroup(char),
-        Letter|Other|AlignmentTab => StomachCommandInner::Char{char,from_chardef:false},
+        Letter|Other|AlignmentTab => StomachCommandInner::Char{char,from_chardef},
         EOF => StomachCommandInner::Relax,
         _ => unreachable!() // Already excluded: Active, Ignored, EndLine
         // TODO: exclude: AlignmentTab proper, Parameter
@@ -347,7 +348,7 @@ pub fn process_token_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mu
         BaseToken::Char(c, cat) => {
             let c = *c;
             let cat = *cat;
-            Ok(Some(char_to_command(token, c, cat)))
+            Ok(Some(char_to_command(token, c, cat,false)))
         }
     }
 }
@@ -380,7 +381,7 @@ pub fn process_cmd_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut 
         Command::Assignment{name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Assignment{name,index:*index}})),
         Command::Stomach {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Command{name,index:*index}})),
         Command::Char {char,catcode} =>
-            Ok(Some(char_to_command(cause, *char, *catcode)))
+            Ok(Some(char_to_command(cause, *char, *catcode,true)))
     }
 }
 
@@ -702,5 +703,16 @@ fn get_cs_check_command<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu, sta
             Ok(None)
         }
         _ => Ok(Some(tk.base().clone()))
+    }
+}
+
+pub fn get_font<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet: &mut Gu,state:&mut S) -> Result<usize,Box<dyn TeXError<T>>> {
+    match gullet.get_next_stomach_command(state)? {
+        Some(cmd) => match cmd.cmd {
+            StomachCommandInner::ValueRegister(i,Assignable::Font) =>
+                Ok(i),
+            o => todo!("get_font: {:?}",o),
+        }
+        None => file_end!(),
     }
 }

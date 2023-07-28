@@ -1,19 +1,19 @@
 use std::fs;
 use std::path::PathBuf;
 use crate::utils::map::HMap;
-// TODO: replace HMap<u8,X> by [X;256]
+
 pub struct TfmFile {
     pub hyphenchar:u8,
     pub skewchar:u8,
-    pub dimen:HMap<u8,f64>,
+    pub dimen:[f64;256],
     pub size : i64,
     pub typestr : String,
-    pub widths:HMap<u8,f64>,
-    pub heights: HMap<u8,f64>,
-    pub depths: HMap<u8,f64>,
-    pub ics:HMap<u8,f64>,
-    pub lps:HMap<u8,u8>,
-    pub rps: HMap<u8,u8>,
+    pub widths:[f64;256],
+    pub heights: [f64;256],
+    pub depths: [f64;256],
+    pub ics:[f64;256],
+    pub lps:[u8;256],
+    pub rps:[u8;256],
     pub ligs:HMap<(u8,u8),u8>,
     pub name:String,
     pub filepath:String,
@@ -38,15 +38,15 @@ impl TfmFile {
 
         let hyphenchar : u8 = 45;
         let skewchar : u8 = 255;
-        let mut dimen: HMap<u8,f64> = HMap::default();
+        let mut dimen: [f64;256] = [0.0;256];
         let mut size: i64 = 65536;
         let mut typestr = "".to_string();
-        let mut widths:HMap<u8,f64> = HMap::default();
-        let mut heights: HMap<u8,f64> = HMap::default();
-        let mut depths: HMap<u8,f64> = HMap::default();
-        let mut ics:HMap<u8,f64> = HMap::default();
-        let lps:HMap<u8,u8> = HMap::default();
-        let rps: HMap<u8,u8> = HMap::default();
+        let mut widths: [f64;256] = [0.0;256];
+        let mut heights: [f64;256] = [0.0;256];
+        let mut depths: [f64;256] = [0.0;256];
+        let mut ics: [f64;256] = [0.0;256];
+        let lps: [u8;256] = [0;256];
+        let rps: [u8;256] = [0;256];
         let mut ligs:HMap<(u8,u8),u8> = HMap::default();
 
         let (lf,lh) = state.read_int();
@@ -107,39 +107,37 @@ impl TfmFile {
         state.skip(nk + ne);
         assert_eq!(state.i,lh + 6 + (ec-bc+1) + nw + nh + nd + ni + nl + nk + ne);
         if np > 0 {
-            dimen.insert(1,state.read_float());
-        } else {
-            dimen.insert(1,0.0);
+            dimen[0] = state.read_float();
         }
         for i in 2..(np+1) {
-            dimen.insert(i as u8,state.read_float());
+            dimen[i-1] = state.read_float();
         }
 
-        let factor = match dimen.get(&6) {
-            Some(f) => *f as f64,
-            None => 1.0
+        let factor = match dimen[6 - 1] {
+            0.0 => 1.0,
+            f => f
         };
 
         for t in finfo_table {
             match widthls.get(t.width_index as usize) {
                 Some(i) if *i == 0.0 => (),
                 None => (),
-                Some(f) => {widths.insert(t.char,factor * f);}
+                Some(f) => {widths[t.char as usize] = factor * f;}
             }
             match heightls.get(t.height_index as usize) {
                 Some(i) if *i == 0.0 => (),
                 None => (),
-                Some(f) => {heights.insert(t.char,factor * f);}
+                Some(f) => {heights[t.char as usize] = factor * f;}
             }
             match depthls.get(t.depth_index as usize) {
                 Some(i) if *i == 0.0 => (),
                 None => (),
-                Some(f) => {depths.insert(t.char,factor * f);}
+                Some(f) => {depths[t.char as usize] = factor * f;}
             }
             match italicls.get(t.char_ic_index as usize) {
                 Some(i) if *i == 0.0 => (),
                 None => (),
-                Some(f) => {ics.insert(t.char,factor * f);}
+                Some(f) => {ics[t.char as usize] = factor * f;}
             }
             for (nc,rep) in t.ligature(&ligatures) {
                 ligs.insert((t.char,nc),rep);

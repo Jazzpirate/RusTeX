@@ -92,6 +92,10 @@ pub trait Gullet<T:Token>:Sized+'static {
         methods::get_string(self, state)
     }
 
+    fn get_font(&mut self,state:&mut Self::S) -> Result<usize,Box<dyn TeXError<T>>> {
+        methods::get_font(self, state)
+    }
+
     fn new_conditional(&mut self,name:&'static str) -> usize;
     fn set_conditional(&mut self,idx:usize,branch:ConditionalBranch);
     fn set_top_conditional(&mut self,branch:ConditionalBranch);
