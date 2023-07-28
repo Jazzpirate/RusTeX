@@ -389,6 +389,7 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
         }
     }
     if !succeeded { file_end_prim!("detokenize",cmd) }
+    debug_log!(debug=>"detokenize: {:?}",ret);
     Ok(ret)
 }
 
@@ -489,7 +490,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 if i.to_i64() == 0 {
                     return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
                 }
-                let nv : <S::NumSet as NumSet>::Dim = ov.tex_div(i.to_i64() as f64);
+                let nv : <S::NumSet as NumSet>::Dim = ov.tex_div(i.to_i64());
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -741,7 +742,7 @@ pub fn errmessage<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     // TODO errhelp
     Err(ErrorInPrimitive{
         name:"errmessage",
-        msg:Some(errmsg),
+        msg:Some(errmsg + "\n\n" + &gullet.mouth().file_line()),
         cause:Some(cmd.cause),
         source:None
     }.into())
@@ -834,15 +835,15 @@ pub fn font_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
     }
-    let index = catch_prim!(state.fontstore().get_new(&fontname) => ("font",cmd));
+    let index = catch_prim!(state.fontstore_mut().get_new(&fontname) => ("font",cmd));
     match catch_prim!(gullet.get_keywords(state,vec!("at","scaled")) => ("font",cmd)) {
         Some(s) if s == "at" => {
             let dim = catch_prim!(gullet.get_dim(state) => ("font",cmd));
-            state.fontstore().get(index).set_at(dim.to_sp());
+            state.fontstore_mut().get_mut(index).set_at(dim.to_sp());
         }
         Some(s) if s == "scaled" => {
             let r = catch_prim!(crate::engine::gullet::numeric_methods::read_float(gullet,state,b'0',false) => ("font",cmd));
-            let font = state.fontstore().get(index);
+            let font = state.fontstore_mut().get_mut(index);
             let new_at = ((font.get_at() as f64) * r).round() as i64;
             font.set_at(new_at);
         }
@@ -876,7 +877,7 @@ pub fn fontdimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet
     let fontidx = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
     catch_prim!(gullet.mouth().skip_eq_char(state) => ("fontdimen",cmd));
     let dim = catch_prim!(gullet.get_dim(state) => ("fontdimen",cmd));
-    let font = state.fontstore().get(fontidx);
+    let font = state.fontstore_mut().get_mut(fontidx);
     font.set_dim::<S::NumSet>(i,dim);
     Ok(())
 }
@@ -891,7 +892,7 @@ pub fn fontdimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&m
         })
     };
     let idx = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
-    let font = state.fontstore().get(idx);
+    let font = state.fontstore_mut().get_mut(idx);
     Ok(font.get_dim::<S::NumSet>(i))
 }
 
@@ -950,7 +951,7 @@ pub fn hyphenchar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gulle
     let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
     catch_prim!(gullet.mouth().skip_eq_char(state) => ("hyphenchar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("hyphenchar",cmd)).to_i64();
-    let font = state.fontstore().get(fontidx);
+    let font = state.fontstore_mut().get_mut(fontidx);
     debug_log!(debug=>"\\hyphenchar\\{:?} = {:?}",font,i);
     font.set_hyphenchar(i);
     Ok(())
@@ -958,7 +959,7 @@ pub fn hyphenchar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gulle
 pub fn hyphenchar_get<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<<Gu::S as State<T>>::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
     debug_log!(trace=>"Getting \\hyphenchar");
     let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
-    let font = state.fontstore().get(fontidx);
+    let font = state.fontstore_mut().get_mut(fontidx);
     debug_log!(debug=>"\\hyphenchar == {:?}",font.get_hyphenchar());
     Ok(catch_prim!(<<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64::<T>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
 }
@@ -1359,8 +1360,8 @@ pub fn meaning<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletC
             }
         }
         Some((t,_)) => match t.base() {
-            BaseToken::CS(name) => Ok(meaning_cmd(state.get_command(name),state.get_escapechar(),state.get_catcode_scheme())),
-            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd(state.get_ac_command(*c),state.get_escapechar(),state.get_catcode_scheme())),
+            BaseToken::CS(name) => Ok(meaning_cmd(state.get_command(name),state)),
+            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd(state.get_ac_command(*c),state)),
             BaseToken::Char(c,cc) => Ok(meaning_char(*c,*cc)),
         }
     }
@@ -1381,13 +1382,13 @@ pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
     }
 }
 
-pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>) -> Vec<T> {
+pub fn meaning_cmd<T:Token,S:State<T>>(cmd:Option<Ptr<Command<T>>>,state:&S) -> Vec<T> {
     match cmd {
         None => string_to_tokens("undefined".as_bytes()),
         Some(cmd) => {
             match &*cmd {
                 Command::Def(d,_) => {
-                    let esc = match escapechar {
+                    let esc = match state.get_escapechar() {
                         None => vec!(),
                         Some(c) => c.as_bytes()
                     };
@@ -1408,7 +1409,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     let mut i = 0;
                     for s in &d.signature {
                         match s {
-                            ParamToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar,cc).as_bytes()),
+                            ParamToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes()),
                             ParamToken::Param => {
                                 i += 1;
                                 ret.extend(format!("#{}",i).as_bytes());
@@ -1419,10 +1420,10 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     ret.push(b'-'); ret.push(b'>');
                     for t in &d.replacement {
                         match t {
-                            ExpToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),escapechar,cc).as_bytes()),
-                            ExpToken::ParamToken(t) => ret.extend(tokens_to_string(vec!(t.clone(),t.clone()),escapechar,cc).as_bytes()),
+                            ExpToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes()),
+                            ExpToken::ParamToken(t) => ret.extend(tokens_to_string(vec!(t.clone(),t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes()),
                             ExpToken::Param(t,i) => {
-                                ret.extend(tokens_to_string(vec!(t.clone()),escapechar,cc).as_bytes());
+                                ret.extend(tokens_to_string(vec!(t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes());
                                 ret.extend(i.to_string().as_bytes());
                             }
                         }
@@ -1431,7 +1432,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     string_to_tokens(&ret)
                 }
                 Command::Stomach {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1442,7 +1443,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::AssignableValue {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1453,7 +1454,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::Value {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1465,7 +1466,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                 }
                 Command::ValueRegister {tp:Assignable::Int,index} => {
                     let mut string = vec!();
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => (),
                         Some(c) => {
                             for u in c.as_bytes() {string.push(u)}
@@ -1475,9 +1476,51 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     for u in index.to_string().as_bytes() {string.push(*u)}
                     string_to_tokens(&string)
                 }
+                Command::ValueRegister {tp:Assignable::Dim,index} => {
+                    let mut string = vec!();
+                    match state.get_escapechar() {
+                        None => (),
+                        Some(c) => {
+                            for u in c.as_bytes() {string.push(u)}
+                        }
+                    }
+                    for u in "dimen".as_bytes() {string.push(*u)}
+                    for u in index.to_string().as_bytes() {string.push(*u)}
+                    string_to_tokens(&string)
+                }
+                Command::ValueRegister {tp:Assignable::Skip,index} => {
+                    let mut string = vec!();
+                    match state.get_escapechar() {
+                        None => (),
+                        Some(c) => {
+                            for u in c.as_bytes() {string.push(u)}
+                        }
+                    }
+                    for u in "skip".as_bytes() {string.push(*u)}
+                    for u in index.to_string().as_bytes() {string.push(*u)}
+                    string_to_tokens(&string)
+                }
+                Command::ValueRegister {tp:Assignable::MuSkip,index} => {
+                    let mut string = vec!();
+                    match state.get_escapechar() {
+                        None => (),
+                        Some(c) => {
+                            for u in c.as_bytes() {string.push(u)}
+                        }
+                    }
+                    for u in "muskip".as_bytes() {string.push(*u)}
+                    for u in index.to_string().as_bytes() {string.push(*u)}
+                    string_to_tokens(&string)
+                }
+                Command::ValueRegister {tp:Assignable::Font,index} => {
+                    let mut string = vec!();
+                    for u in "select font ".as_bytes() {string.push(*u)}
+                    for u in state.fontstore().get(*index).to_string().as_bytes() {string.push(*u)}
+                    string_to_tokens(&string)
+                }
                 Command::ValueRegister {..} => todo!("meaning_cmd: ValueRegister"),
                 Command::ValueAssignment {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1488,7 +1531,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::Assignment {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1499,7 +1542,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::Relax => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens("relax".as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1510,7 +1553,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::Conditional {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1521,7 +1564,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     }
                 }
                 Command::Gullet {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();
@@ -1534,7 +1577,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                 Command::Char {char,catcode} => meaning_char(*char,*catcode),
                 Command::MathChar(index) => {
                     let mut string = vec!();
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => (),
                         Some(c) => {
                             for u in c.as_bytes() {string.push(u)}
@@ -1545,7 +1588,7 @@ pub fn meaning_cmd<T:Token>(cmd:Option<Ptr<Command<T>>>,escapechar:Option<T::Cha
                     string_to_tokens(&string)
                 }
                 Command::Whatsit {name,..} => {
-                    match escapechar {
+                    match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
                             let mut string = vec!();

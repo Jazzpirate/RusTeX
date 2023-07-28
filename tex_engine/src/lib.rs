@@ -146,8 +146,9 @@ mod tests {
                 name: "rustexBREAK",
                 index: engine.stomach.register_primitive("rustexBREAK",|_,_,_,_,_| {
                     println!("HERE!");
-                    std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
-                    env_logger::init();
+                    //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
+                    //env_logger::init();
+                    trace();
                     Ok(())
                 })
             }

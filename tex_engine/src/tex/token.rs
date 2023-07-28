@@ -16,12 +16,22 @@ use crate::utils::strings::{CharType, TeXStr};
 
 /// A [`BaseToken`] bundles the actually TeX-relevant data of a [`Token`], which is cloned often
 /// and required by all [`Token`] implementations
-#[derive(Clone,PartialEq)]
+#[derive(Clone)]
 pub enum BaseToken<C:CharType> {
     /// A control sequence token with the provided name
     CS(TeXStr<C>),
     /// An active character token with the provided character
     Char(C, CategoryCode)
+}
+impl<C:CharType> PartialEq for BaseToken<C> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (BaseToken::Char(_, CategoryCode::Space), BaseToken::Char(_,CategoryCode::Space)) => true,
+            (BaseToken::Char(c1, cc1), BaseToken::Char(c2, cc2)) => c1 == c2 && cc1 == cc2,
+            (BaseToken::CS(n1), BaseToken::CS(n2)) => n1 == n2,
+            _ => false
+        }
+    }
 }
 impl<C:CharType> Display for BaseToken<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

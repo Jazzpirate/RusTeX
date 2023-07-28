@@ -2,13 +2,13 @@ pub mod tfm_files;
 //use include_dir::{Dir, include_dir};
 //static TFM_FILES : Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/resources/fontmaps");
 
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::state::State;
 use crate::tex::fonts::tfm_files::TfmFile;
-use crate::tex::numbers::{NumSet,Dim};
+use crate::tex::numbers::{NumSet, Dim, Dimi32};
 use crate::tex::token::Token;
 use crate::utils::errors::{OtherError, TeXError};
 use crate::utils::map::HMap;
@@ -19,9 +19,10 @@ pub trait FontStore:'static {
     type Char:CharType;
     type F:Font<Char=Self::Char>;
     fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<usize,Box<dyn TeXError<T>>>;
-    fn get(&mut self,i:usize) -> &mut Self::F;
+    fn get(&self,i:usize) -> &Self::F;
+    fn get_mut(&mut self, i:usize) -> &mut Self::F;
 }
-pub trait Font:Debug {
+pub trait Font:Debug+Display {
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
@@ -58,14 +59,16 @@ impl FontStore for TfmFontStore {
             skewchar:file.skewchar as i64,
             file,
             at:None,
-            name:s.to_string(),
             dimens:HMap::default(),
             lps:HMap::default(),
             rps:HMap::default(),
         });
         Ok(self.fonts.len() - 1)
     }
-    fn get(&mut self,i:usize) -> &mut Self::F {
+    fn get(&self, i: usize) -> &Self::F {
+        self.fonts.get(i).unwrap()
+    }
+    fn get_mut(&mut self, i:usize) -> &mut Self::F {
         self.fonts.get_mut(i).unwrap()
     }
 }
@@ -76,7 +79,6 @@ impl TfmFontStore {
 pub struct TfmFont {
     file:Ptr<TfmFile>,
     at:Option<i64>,
-    name:String,
     dimens:HMap<usize,i64>,
     hyphenchar:i64,
     skewchar:i64,
@@ -85,7 +87,16 @@ pub struct TfmFont {
 }
 impl Debug for TfmFont {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"Font({})",self.name)
+        write!(f,"Font({})",self.file.name)
+    }
+}
+impl Display for TfmFont {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.file.name)?;
+        match self.at {
+            None => Ok(()),
+            Some(at) => write!(f," at {}",Dimi32(at as i32))
+        }
     }
 }
 impl Font for TfmFont {

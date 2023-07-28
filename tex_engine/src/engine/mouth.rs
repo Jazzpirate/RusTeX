@@ -293,7 +293,7 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
         }
         for s in self.sources.iter().rev() {
             ret.push_str(&match s {
-                TeXMouthSource::NoExpand(t) => todo!("preview `\noexpand`ed token"),
+                TeXMouthSource::NoExpand(t) => TokenList(vec!(t.clone())).to_string(),
                 TeXMouthSource::Token(ts) => ts.preview(),
                 TeXMouthSource::String(ss) => ss.preview()
             });

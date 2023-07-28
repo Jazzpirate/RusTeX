@@ -47,7 +47,8 @@ pub trait State<T:Token>:Sized+'static {
     fn get_open_out_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F>;
     fn get_open_in_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F>;
 
-    fn fontstore(&mut self) -> &mut Self::FontStore;
+    fn fontstore(&self) -> &Self::FontStore;
+    fn fontstore_mut(&mut self) -> &mut Self::FontStore;
 
     /// push a new group onto the stack
     fn stack_push(&mut self, g: Self::Gr);
@@ -262,7 +263,8 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     type NumSet=NS;
     type FontStore = FontS;
 
-    fn fontstore(&mut self) -> &mut Self::FontStore {
+    fn fontstore(&self) -> &Self::FontStore { &self.fontstore }
+    fn fontstore_mut(&mut self) -> &mut Self::FontStore {
         &mut self.fontstore
     }
 

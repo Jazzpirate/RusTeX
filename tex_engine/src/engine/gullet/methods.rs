@@ -400,10 +400,13 @@ pub fn do_expandable<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&
 
 pub fn do_conditional<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,cause:T,name:&'static str,index:usize) -> Result<(),Box<dyn TeXError<T>>> {
     if name == "ifcase" {
+        debug_log!(trace=>"ifcase");
         let i = gullet.new_conditional("ifcase");
         let ret = gullet.get_int(state)?.to_i64();
+        debug_log!(trace=>"ifcase: {}",ret);
         gullet.set_conditional(i, ConditionalBranch::Case(ret, 0));
         if ret == 0 {
+            debug_log!(trace=>"True conditional");
             Ok(())
         } else {
             false_loop(gullet,state,"ifcase",i)
@@ -427,6 +430,9 @@ pub fn do_conditional<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:
 pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut S,condname:&'static str,condidx:usize) -> Result<(),Box<dyn TeXError<T>>> {
     debug_log!(trace=>"False conditional. Skipping...");
     let mut incond:usize = gullet.current_conditional().1 - condidx;
+    for i in 0..incond {
+        gullet.pop_conditional();
+    }
     while let Some((next,exp)) = gullet.mouth().get_next(state)? {
         match next.base() {
             BaseToken::Char(c,CategoryCode::Active) =>
@@ -464,6 +470,18 @@ pub fn false_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut Gu,state:&mut
                         gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         debug_log!(trace=>"...else branch.");
                         return Ok(())
+                    }
+                    Some(Command::Gullet {name:"or",..}) if incond == 0 && condname == "ifcase" => {
+                        match gullet.current_conditional() {
+                            (Some(ConditionalBranch::Case(i, j)),_) => {
+                                gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
+                                if i == ((j+1) as i64) {
+                                    debug_log!(trace=>"...or branch.");
+                                    return Ok(())
+                                }
+                            }
+                            _ => unreachable!()
+                        }
                     }
                     Some(Command::Gullet {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(Command::Gullet {name:"fi",..}) => {
@@ -663,7 +681,7 @@ pub fn string_to_tokens<T:Token>(str:&[u8]) -> Vec<T> {
     let mut ret = vec!();
     for u in str {
         let c = T::Char::from(*u);
-        ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None));
+        ret.push(T::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None));
     }
     ret
 }

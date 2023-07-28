@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use crate::engine::state::fields::IsDefault;
@@ -14,18 +14,64 @@ pub trait NumSet:'static {
 }
 
 pub trait Numeric:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+Sub<Self,Output=Self>{
-    fn tex_mult(&self,other:f64) -> Self;
-    fn tex_div(&self,other:f64) -> Self;
+    fn scale(&self,times:i64,div:i64) -> Self;
 }
 
-impl IsDefault for f64 {
-    fn is_default(&self) -> bool {
-        *self == 0.0
+
+#[derive(Clone,Copy,Debug)]
+pub struct Frac(pub(crate) i64, pub(crate) i64);
+impl Frac {
+    pub fn new(n:i64,d:i64) -> Self {
+        if d < 0 {return Frac::new(-n,-d)}
+        if n % d == 0 {return Frac(n/d,1)}
+        Frac(n,d)
+    }
+    pub fn inv(self) -> Self {
+        Frac::new(self.1,self.0)
     }
 }
-impl Numeric for f64 {
-    fn tex_mult(&self, other: f64) -> Self { self * other }
-    fn tex_div(&self, other: f64) -> Self { self / other }
+impl Default for Frac {
+    fn default() -> Self {
+        Frac(0,1)
+    }
+}
+impl IsDefault for Frac {
+    fn is_default(&self) -> bool {
+        self.0 == 0 && self.1 == 1
+    }
+}
+impl Neg for Frac {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        Frac(-self.0,self.1)
+    }
+}
+impl Display for Frac {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.1 == 1 {
+            write!(f, "{}", self.0)
+        } else {
+            write!(f, "{}/{}", self.0, self.1)
+        }
+    }
+}
+impl Add for Frac {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Frac::new(self.0 * rhs.1 + rhs.0 * self.1, self.1 * rhs.1)
+    }
+}
+impl Sub for Frac {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        Frac::new(self.0 * rhs.1 - rhs.0 * self.1, self.1 * rhs.1)
+    }
+}
+
+impl Numeric for Frac {
+    fn scale(&self, times: i64, div: i64) -> Self {
+        Frac::new(self.0 * times,self.1 * div)
+    }
 }
 
 pub trait Int:Numeric+PartialOrd+TryInto<usize>+From<u8>+
@@ -38,6 +84,8 @@ pub trait Dim:Numeric+Add<Self,Output=Self>{
     fn from_float(dim:&str,float:f64) -> Self;
     fn from_sp(sp:i64) -> Self;
     fn to_sp(&self) -> i64;
+    fn tex_mult(&self,other:f64) -> Self;
+    fn tex_div(&self,other:i64) -> Self;
 }
 pub trait SkipDim:Display+Clone {
     type Dim:Dim;
@@ -48,6 +96,8 @@ pub trait SkipDim:Display+Clone {
 pub trait MuDim:Numeric {
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
+    fn tex_mult(&self,other:f64) -> Self;
+    fn tex_div(&self,other:i64) -> Self;
 }
 pub trait MuStretchShrinkDim:Display+Clone {
     fn units() -> Vec<&'static str>;
@@ -63,12 +113,8 @@ impl NumSet for DefaultNumSet {
     type MuStretchShrinkDim = MuFill;
 }
 impl Numeric for i32 {
-    fn tex_mult(&self, other: f64) -> Self {
-        ((self.to_i64() as f64) * other).round() as i32
-    }
-
-    fn tex_div(&self, other: f64) -> Self {
-        ((self.to_i64() as f64) / other).round() as i32
+    fn scale(&self, times: i64, div: i64) -> Self {
+        ((*self as f64) * (times as f64) / (div as f64)).round() as i32
     }
 }
 impl Int for i32 {
@@ -82,7 +128,7 @@ impl Int for i32 {
     fn to_i64(&self) -> i64 { *self as i64 }
 }
 #[derive(Clone,Copy)]
-pub struct Dimi32(i32);
+pub struct Dimi32(pub i32);
 impl Dimi32 {
     fn round(&self) -> f64 {
         let mut i = 1.0 as f64;
@@ -156,12 +202,8 @@ impl Sub<Dimi32> for Dimi32 {
 }
 
 impl Numeric for Dimi32 {
-    fn tex_mult(&self, other: f64) -> Self {
-        Dimi32((self.0 as f64 * other).round() as i32)
-    }
-
-    fn tex_div(&self, other: f64) -> Self {
-        Dimi32((self.0 as f64 / other).round() as i32)
+    fn scale(&self, times: i64, div: i64) -> Self {
+        Dimi32(((self.0 as f64 * (times as f64)) / (div as f64)).round() as i32)
     }
 }
 impl Dim for Dimi32 {
@@ -180,6 +222,8 @@ impl Dim for Dimi32 {
     } }
     fn from_sp(s: i64) -> Self { Self(s as i32) }
     fn to_sp(&self) -> i64 { self.0 as i64 }
+    fn tex_mult(&self, other: f64) -> Self { Dimi32(((self.0 as f64 * other * 65536.0).floor() / 65536.0).floor() as i32) }
+    fn tex_div(&self, other: i64) -> Self { Dimi32(self.0 / other as i32) }
 }
 impl Neg for Dimi32 {
     type Output = Self;
@@ -193,6 +237,14 @@ pub struct Skip<SD:SkipDim>{
     pub base:SD::Dim,
     pub stretch:Option<SD>,
     pub shrink:Option<SD>,
+}
+impl<SD:SkipDim> Skip<SD> {
+    fn tex_mult(&self, other: f64) -> Self {
+        Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+    fn tex_div(&self, other: i64) -> Self {
+        Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
 }
 impl<SD:SkipDim> Default for Skip<SD> {
     fn default() -> Self {
@@ -235,12 +287,8 @@ impl<SD:SkipDim> Sub for Skip<SD> {
     }
 }
 impl<SD:SkipDim> Numeric for Skip<SD> {
-    fn tex_mult(&self, other: f64) -> Self {
-        Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
-    }
-
-    fn tex_div(&self, other: f64) -> Self {
-        Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    fn scale(&self, times: i64, div: i64) -> Self {
+        Self{base:self.base.scale(times,div),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }
 
@@ -293,6 +341,14 @@ pub struct MuSkip<MD:MuDim,SD:MuStretchShrinkDim>{
     pub stretch:Option<SD>,
     pub shrink:Option<SD>,
 }
+impl<MD:MuDim,SD:MuStretchShrinkDim> MuSkip<MD,SD> {
+    fn tex_div(&self, other: i64) -> Self {
+        Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+    fn tex_mult(&self, other: f64) -> Self {
+        Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    }
+}
 impl<MD:MuDim,SD:MuStretchShrinkDim> Default for MuSkip<MD,SD> {
     fn default() -> Self {
         Self{base:MD::default(),stretch:None,shrink:None}
@@ -334,11 +390,8 @@ impl<MD:MuDim,SD:MuStretchShrinkDim> Sub<Self> for MuSkip<MD,SD> {
     }
 }
 impl<MD:MuDim,SD:MuStretchShrinkDim> Numeric for MuSkip<MD,SD> {
-    fn tex_div(&self, other: f64) -> Self {
-        Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
-    }
-    fn tex_mult(&self, other: f64) -> Self {
-        Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+    fn scale(&self, times: i64, div: i64) -> Self {
+        Self{base:self.base.scale(times,div),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }
 
@@ -378,12 +431,8 @@ impl Sub for Mui32 {
     }
 }
 impl Numeric for Mui32 {
-    fn tex_mult(&self, other: f64) -> Self {
-        Self((self.0 as f64 * other).round() as i32)
-    }
-
-    fn tex_div(&self, other: f64) -> Self {
-        Self((self.0 as f64 / other).round() as i32)
+    fn scale(&self, times: i64, div: i64) -> Self {
+        Self((self.0 as f64 * (times as f64) / (div as f64)).round() as i32)
     }
 }
 impl MuDim for Mui32 {
@@ -392,6 +441,8 @@ impl MuDim for Mui32 {
         "mu" => Self((float*65536.0).round() as i32),
         _ => unreachable!("Invalid dimension unit")
     } }
+    fn tex_mult(&self, other: f64) -> Self { Mui32(Dimi32(self.0).tex_mult(other).0) }
+    fn tex_div(&self, other: i64) -> Self { Self((self.0 as i64 / other) as i32) }
 }
 
 

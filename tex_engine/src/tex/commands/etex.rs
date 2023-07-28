@@ -6,7 +6,7 @@ use crate::{cmtodo, debug_log, register_assign, register_conditional, register_d
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Command, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::commands::tex::get_csname;
-use crate::tex::numbers::{MuSkip, Numeric, NumSet, Skip};
+use crate::tex::numbers::{Frac, MuSkip, Numeric, NumSet, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError};
 use crate::utils::strings::CharType;
@@ -26,17 +26,18 @@ pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, 
         let mut first = catch_prim!(get(state,gullet) => (name,cmd.clone()));
         match stack.last_mut() {
             Some((Some(second), Some(op))) => {
-                first = op(first, second.clone());
+                first = op(second.clone(),first);
                 *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
             }
             _ => ()
         }
         loop {
             catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
-            match catch_prim!(
+            let kw = catch_prim!(
                 if stack.len()>1 {gullet.get_keywords(state,vec!("+","-","*","/",")"))}
                 else {gullet.get_keywords(state,vec!("+","-","*","/"))}
-                => ("numexpr",cmd.clone())) {
+                => ("numexpr",cmd.clone()));
+            match kw {
                 None => {
                     match stack.pop() {
                         Some((None, None)) if stack.is_empty() => return Ok(first),
@@ -63,15 +64,15 @@ pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, 
                 }
                 Some(r) if r == "*" => {
                     let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
-                        Ok(g.get_int(s)?.to_i64() as f64)
+                        Ok(Frac::new(g.get_int(s)?.to_i64(),1))
                     }) => (name,cmd.clone()));
-                    first = first.tex_mult(ret);
+                    first = first.scale(ret.0,ret.1);
                 }
                 Some(r) if r == "/" => {
                     let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
-                        Ok(g.get_int(s)?.to_i64() as f64)
+                        Ok(Frac::new(g.get_int(s)?.to_i64(),1))
                     }) => (name,cmd.clone()));
-                    first = first.tex_div(ret);
+                    first = first.scale(ret.1,ret.0);
                 }
                 _ => unreachable!()
             }

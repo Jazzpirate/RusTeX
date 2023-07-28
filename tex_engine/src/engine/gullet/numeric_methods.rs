@@ -181,7 +181,7 @@ pub fn read_decimal_number<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=
     }
     use std::str::FromStr;
     let i = i64::from_str(std::str::from_utf8(&rets).unwrap()).unwrap();
-    debug_log!(trace=>"Returning {}",i);
+    debug_log!(trace=>"Returning {}",if isnegative { -i } else { i });
     Ok(NS::Int::from_i64(if isnegative { -i } else { i })?)
 }
 
