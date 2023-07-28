@@ -945,6 +945,24 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
     }
 }
 
+pub fn hyphenchar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Assigning \\hyphenchar");
+    let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("hyphenchar",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("hyphenchar",cmd)).to_i64();
+    let font = state.fontstore().get(fontidx);
+    debug_log!(debug=>"\\hyphenchar\\{:?} = {:?}",font,i);
+    font.set_hyphenchar(i);
+    Ok(())
+}
+pub fn hyphenchar_get<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<<Gu::S as State<T>>::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+    debug_log!(trace=>"Getting \\hyphenchar");
+    let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
+    let font = state.fontstore().get(fontidx);
+    debug_log!(debug=>"\\hyphenchar == {:?}",font.get_hyphenchar());
+    Ok(catch_prim!(<<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64::<T>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
+}
+
 pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
     debug_log!(trace=>"if");
     let first = get_if_token(state,gullet,cmd.clone(),"if")?;
@@ -2392,6 +2410,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_dim_assign!(hoffset,state,stomach,gullet);
     register_int_assign!(holdinginserts,state,stomach,gullet);
     register_dim_assign!(hsize,state,stomach,gullet);
+    register_value_assign_int!(hyphenchar,state,stomach,gullet);
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_(s,gu,cmd));
     register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>ifcase(s,gu,cmd));
@@ -2514,7 +2533,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,lastpenalty);
     cmtodo!(state,stomach,gullet,parshape);
     cmtodo!(state,stomach,gullet,inputlineno);
-    cmtodo!(state,stomach,gullet,hyphenchar);
     cmtodo!(state,stomach,gullet,skewchar);
     cmtodo!(state,stomach,gullet,badness);
     cmtodo!(state,stomach,gullet,spacefactor);

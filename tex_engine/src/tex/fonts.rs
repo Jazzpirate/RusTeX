@@ -2,6 +2,7 @@ pub mod tfm_files;
 //use include_dir::{Dir, include_dir};
 //static TFM_FILES : Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/resources/fontmaps");
 
+use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
@@ -20,10 +21,14 @@ pub trait FontStore:'static {
     fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<usize,Box<dyn TeXError<T>>>;
     fn get(&mut self,i:usize) -> &mut Self::F;
 }
-pub trait Font{
+pub trait Font:Debug {
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
+
+    fn set_hyphenchar(&mut self,hyphenchar:i64);
+    fn get_hyphenchar(&self) -> i64;
+
     fn set_dim<NS:NumSet>(&mut self,i:usize,d:NS::Dim);
     fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim;
 }
@@ -49,12 +54,12 @@ impl FontStore for TfmFontStore {
             Some(file) => file.clone()
         };
         self.fonts.push(TfmFont{
+            hyphenchar:file.hyphenchar as i64,
+            skewchar:file.skewchar as i64,
             file,
             at:None,
             name:s.to_string(),
             dimens:HMap::default(),
-            hyphenchar:0,
-            skewchar:0,
             lps:HMap::default(),
             rps:HMap::default(),
         });
@@ -73,10 +78,15 @@ pub struct TfmFont {
     at:Option<i64>,
     name:String,
     dimens:HMap<usize,i64>,
-    hyphenchar:u8,
-    skewchar:u8,
+    hyphenchar:i64,
+    skewchar:i64,
     lps:HMap<u8,u8>,
     rps:HMap<u8,u8>,
+}
+impl Debug for TfmFont {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"Font({})",self.name)
+    }
 }
 impl Font for TfmFont {
     type Char = u8;
@@ -89,6 +99,14 @@ impl Font for TfmFont {
             None => self.file.size
         }
     }
+
+    fn get_hyphenchar(&self) -> i64 {
+        self.hyphenchar
+    }
+    fn set_hyphenchar(&mut self, hyphenchar: i64) {
+        self.hyphenchar = hyphenchar;
+    }
+
     fn set_dim<NS: NumSet>(&mut self, i: usize, d: NS::Dim) {
         self.dimens.insert(i,d.to_sp());
     }
