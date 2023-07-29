@@ -380,6 +380,7 @@ pub fn process_cmd_for_stomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(gullet:&mut 
         Command::AssignableValue {name,tp} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::AssignableValue {name,tp:*tp}})),
         Command::Assignment{name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Assignment{name,index:*index}})),
         Command::Stomach {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Command{name,index:*index}})),
+        Command::OpenBox {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::OpenBox{name,index:*index}})),
         Command::Char {char,catcode} =>
             Ok(Some(char_to_command(cause, *char, *catcode,true)))
     }

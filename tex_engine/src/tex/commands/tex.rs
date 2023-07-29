@@ -1,7 +1,7 @@
 //! TeX primitive [`Command`]s
 
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
@@ -14,13 +14,13 @@ use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, Pa
 use crate::tex::commands::methods::{assign_primitive_dim, assign_primitive_int, assign_primitive_skip, assign_primitive_toks, parse_signature};
 use crate::tex::numbers::{Int, NumSet, Skip, Numeric, MuSkip, Dim};
 use crate::tex::token::{BaseToken, Token, TokenList};
-use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError};
+use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, ExpectedToken, UnexpectedEndgroup, ImplementationError, TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use crate::engine::gullet;
 use crate::engine::stomach::methods::{assign_dim_register, assign_int_register, assign_muskip_register, assign_skip_register, assign_toks_register};
-use crate::tex::boxes::Whatsit;
+use crate::tex::boxes::{OpenBox, TeXNode, Whatsit};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
 use super::etex::protected;
@@ -946,6 +946,12 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
     }
 }
 
+
+pub fn hbox<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>)
+                                         -> Result<Box<dyn FnOnce(&mut Sto, &mut Sto::S, &mut Sto::Gu) -> Option<<Sto::B as TeXNode>::Bx>>,ErrorInPrimitive<T>> {
+    todo!("hbox")
+}
+
 pub fn hyphenchar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning \\hyphenchar");
     let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
@@ -1432,6 +1438,17 @@ pub fn meaning_cmd<T:Token,S:State<T>>(cmd:Option<Ptr<Command<T>>>,state:&S) -> 
                     string_to_tokens(&ret)
                 }
                 Command::Stomach {name,..} => {
+                    match state.get_escapechar() {
+                        None => string_to_tokens(name.as_bytes()),
+                        Some(c) => {
+                            let mut string = vec!();
+                            for u in c.as_bytes() {string.push(u)}
+                            for u in name.as_bytes() {string.push(*u)}
+                            string_to_tokens(&string)
+                        }
+                    }
+                }
+                Command::OpenBox {name,..} => {
                     match state.get_escapechar() {
                         None => string_to_tokens(name.as_bytes()),
                         Some(c) => {
@@ -1981,6 +1998,38 @@ pub fn romannumeral<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mu
     Ok(string_to_tokens(&ret))
 }
 
+pub fn setbox<T:Token,Sto:Stomach<T>>(state:&mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>, global:bool) -> Result<(),ErrorInPrimitive<T>> {
+    debug_log!(trace=>"\\setbox");
+    let i = catch_prim!(gullet.get_int(state) => ("setbox",cmd)).to_i64();
+    if i < 0  {
+        return Err(ErrorInPrimitive{name:"setbox",msg:Some(format!("Invalid box number: {}",i)),cause:Some(cmd.cause),source:None})
+    }
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("setbox",cmd));
+    match catch_prim!(gullet.get_next_stomach_command(state) => ("setbox",cmd)) {
+        None => file_end_prim!("setbox",cmd),
+        Some(c) => match c.cmd {
+            StomachCommandInner::OpenBox {index,name} => {
+                let f = match stomach.get_box_cmd(index) {
+                    None => return Err(ErrorInPrimitive{name:"setbox",msg:None,cause:Some(cmd.cause),source:Some(
+                        ImplementationError(format!("Command not implemented: {}",name),PhantomData).into()
+                    )}),
+                    Some(f) => catch_prim!(f(state,gullet,stomach,c) => ("setbox",cmd))
+                };
+                stomach.stack_mut().push(OpenBox::Box {list:vec!(),on_close:Box::new(move |sto,s,gu| {
+                    let bx = match f(sto,s,gu) {
+                        Some(r) => {r}
+                        None => {todo!("make void box")}
+                    };
+                    s.set_box_register(i as usize,Some(bx));
+                    None
+                })});
+            }
+            _ => Err(ErrorInPrimitive{name:"setbox",msg:Some(format!("Box expected: {}",c.cause)),cause:Some(cmd.cause),source:None})
+        }
+    }
+
+}
+
 pub fn sfcode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
     debug_log!(trace=>"Assigning space factor code");
     let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
@@ -2449,6 +2498,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_int_assign!(hangafter,state,stomach,gullet);
     register_dim_assign!(hangindent,state,stomach,gullet);
     register_int_assign!(hbadness,state,stomach,gullet);
+    register_open_box!(hbox,state,stomach,gullet,(s,gu,sto,cmd) =>hbox(sto,s,gu,cmd));
     register_dim_assign!(hfuzz,state,stomach,gullet);
     register_dim_assign!(hoffset,state,stomach,gullet);
     register_int_assign!(holdinginserts,state,stomach,gullet);
@@ -2529,6 +2579,7 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     register_skip_assign!(rightskip,state,stomach,gullet);
     register_gullet!(romannumeral,state,stomach,gullet,(s,g,c) => romannumeral(s,g,c));
     register_dim_assign!(scriptspace,state,stomach,gullet);
+    register_assign!(setbox,state,stomach,gullet,(s,gu,sto,cmd,global) =>setbox(s,gu,sto,cmd,global));
     register_value_assign_int!(sfcode,state,stomach,gullet);
     register_int_assign!(showboxbreadth,state,stomach,gullet);
     register_int_assign!(showboxdepth,state,stomach,gullet);
@@ -2601,7 +2652,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,wd);
     cmtodo!(state,stomach,gullet,dp);
     cmtodo!(state,stomach,gullet,lastskip);
-    cmtodo!(state,stomach,gullet,setbox);
     cmtodo!(state,stomach,gullet,futurelet);
     cmtodo!(state,stomach,gullet,hyphenation);
     cmtodo!(state,stomach,gullet,patterns);
@@ -2613,7 +2663,6 @@ pub fn initialize_tex_primitives<T:Token,Sto:Stomach<T>>(state:&mut Sto::S,stoma
     cmtodo!(state,stomach,gullet,copy);
     cmtodo!(state,stomach,gullet,lastbox);
     cmtodo!(state,stomach,gullet,vsplit);
-    cmtodo!(state,stomach,gullet,hbox);
     cmtodo!(state,stomach,gullet,vbox);
     cmtodo!(state,stomach,gullet,vtop);
     cmtodo!(state,stomach,gullet,show);

@@ -14,7 +14,7 @@
    e.g. the current [`CategoryCodeScheme`](tex::catcodes::CategoryCodeScheme), and allows for
    pushing/popping the stack,
  - a [`Stomach`](engine::stomach::Stomach) that processes the [`StomachCommand`](tex::commands::StomachCommand)s
-   and returns [`TeXBox`](tex::boxes::TeXBox)es.
+   and returns [`TeXBox`](tex::boxes::TeXNode)es.
 
    Almost all algorithms, too, are generic over implementations of these traits.
    The default [`Engine`](engine::Engine) for plain TeX/LaTeX can be found
@@ -58,7 +58,7 @@ mod tests {
     use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
-    use crate::tex::boxes::StandardTeXBox;
+    use crate::tex::boxes::StandardTeXNode;
     use crate::tex::token::TokenWithSourceref;
     use crate::engine::mouth::Mouth;
 
@@ -146,9 +146,9 @@ mod tests {
                 name: "rustexBREAK",
                 index: engine.stomach.register_primitive("rustexBREAK",|_,_,_,_,_| {
                     println!("HERE!");
-                    //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
-                    //env_logger::init();
-                    trace();
+                    std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace");
+                    env_logger::init();
+                    //trace();
                     Ok(())
                 })
             }

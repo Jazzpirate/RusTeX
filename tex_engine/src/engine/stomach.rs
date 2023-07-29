@@ -3,7 +3,7 @@ pub mod methods;
 use crate::debug_log;
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
-use crate::tex::boxes::{BoxOrWhatsit, OpenBox, TeXBox, Whatsit};
+use crate::tex::boxes::{NodeOrWhatsit, OpenBox, TeXNode, Whatsit};
 use crate::tex::commands::{StomachCommand,StomachCommandInner};
 use crate::tex::token::Token;
 use crate::utils::errors::{ErrorInPrimitive, TeXError};
@@ -12,15 +12,20 @@ use crate::utils::map::Map;
 pub trait Stomach<T:Token>:Sized+'static {
     type S:State<T>;
     type Gu:Gullet<T,S=Self::S>;
-    type B:TeXBox;
+    type B: TeXNode;
     fn register_primitive(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>,bool) -> Result<(),ErrorInPrimitive<T>>) -> usize;
     fn register_whatsit(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>) -> Result<Whatsit<T,Self>,ErrorInPrimitive<T>>) -> usize;
+    fn register_open_box(&mut self,name:&'static str,cmd:fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>) -> Result<
+        Box<dyn FnOnce(&mut Self, &mut Self::S, &mut Self::Gu) -> Option<<Self::B as TeXNode>::Bx>>
+    ,ErrorInPrimitive<T>>) -> usize;
     fn stack(&self) -> &Vec<OpenBox<T,Self,Self::B>>;
     fn stack_mut(&mut self) -> &mut Vec<OpenBox<T,Self,Self::B>>;
     fn command(&self,index:usize) -> Option<fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>,bool) -> Result<(),ErrorInPrimitive<T>>>;
     fn command_from_name(&self,name:&'static str) -> Option<fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>,bool) -> Result<(),ErrorInPrimitive<T>>>;
 
     fn get_whatsit_cmd(&self,index:usize) -> Option<fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>) -> Result<Whatsit<T,Self>,ErrorInPrimitive<T>>>;
+    fn get_box_cmd(&self,index:usize) -> Option<fn(&mut Self::S,&mut Self::Gu,&mut Self,StomachCommand<T>) -> Result<
+        Box<dyn FnOnce(&mut Self, &mut Self::S, &mut Self::Gu) -> Option<<Self::B as TeXNode>::Bx>> ,ErrorInPrimitive<T>>>;
 
     fn digest(&mut self,state:&mut Self::S, gullet:&mut Self::Gu, cmd:StomachCommand<T>) -> Result<(),Box<dyn TeXError<T>>>;
 
@@ -29,8 +34,8 @@ pub trait Stomach<T:Token>:Sized+'static {
         match self.stack_mut().first_mut() {
             None => None,
             Some(OpenBox::Top { list }) if !list.is_empty() => match list.remove(0) {
-                BoxOrWhatsit::Box(b) => Some(b),
-                BoxOrWhatsit::Whatsit(_) => {
+                NodeOrWhatsit::Node(b) => Some(b),
+                NodeOrWhatsit::Whatsit(_) => {
                     todo!("Handle whatsit");
                     self.maybe_shipout(force)
                 }
@@ -63,25 +68,28 @@ pub trait Stomach<T:Token>:Sized+'static {
 }
 
 // TODO
-pub struct ShipoutDefaultStomach<T:Token,S:State<T>,Gu:Gullet<T>,B:TeXBox>{
+pub struct ShipoutDefaultStomach<T:Token,S:State<T>,Gu:Gullet<T>,B: TeXNode>{
     commands:Map<fn(&mut S,&mut S::FS,&mut Gu,&mut Self,StomachCommand<T>,bool) -> Result<(),ErrorInPrimitive<T>>>,
+    //whatsit_cmds:Map<fn(&mut S,&mut Gu,&mut Self,StomachCommand<T>) -> Result<Whatsit<T,Self>,ErrorInPrimitive<T>>>,
     phantom_box:std::marker::PhantomData<B>
 }
 
-pub struct NoShipoutDefaultStomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B:TeXBox>{
+pub struct NoShipoutDefaultStomach<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B: TeXNode>{
     commands:Map<fn(&mut S,&mut Gu,&mut Self,StomachCommand<T>,bool) -> Result<(),ErrorInPrimitive<T>>>,
     whatsit_cmds:Map<fn(&mut S,&mut Gu,&mut Self,StomachCommand<T>) -> Result<Whatsit<T,Self>,ErrorInPrimitive<T>>>,
+    box_cmds:Map<fn(&mut S,&mut Gu,&mut Self,StomachCommand<T>) -> Result<Box<dyn FnOnce(&mut Self, &mut S, &mut Gu) -> Option<<B as TeXNode>::Bx>>,ErrorInPrimitive<T>>>,
     stack:Vec<OpenBox<T,Self,B>>,
 }
 
-impl<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B:TeXBox> NoShipoutDefaultStomach<T,S,Gu,B> {
+impl<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B: TeXNode> NoShipoutDefaultStomach<T,S,Gu,B> {
     pub fn new() -> Self { Self {
         commands:Map::default(),
         whatsit_cmds:Map::default(),
+        box_cmds:Map::default(),
         stack:Vec::new(),
     } }
 }
-impl<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B:TeXBox> Stomach<T> for NoShipoutDefaultStomach<T,S,Gu,B> {
+impl<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B: TeXNode> Stomach<T> for NoShipoutDefaultStomach<T,S,Gu,B> {
     type S=S;
     type Gu=Gu;
     type B = B;
@@ -90,6 +98,12 @@ impl<T:Token,S:State<T>,Gu:Gullet<T,S=S>,B:TeXBox> Stomach<T> for NoShipoutDefau
     }
     fn register_whatsit(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self::Gu, &mut Self, StomachCommand<T>) -> Result<Whatsit<T, Self>, ErrorInPrimitive<T>>) -> usize {
         self.whatsit_cmds.insert(name,cmd)
+    }
+    fn register_open_box(&mut self, name: &'static str, cmd: fn(&mut Self::S, &mut Self::Gu, &mut Self, StomachCommand<T>) -> Result<Box<dyn FnOnce(&mut Self, &mut Self::S, &mut Self::Gu) -> Option<<Self::B as TeXNode>::Bx>>, ErrorInPrimitive<T>>) -> usize {
+        self.box_cmds.insert(name,cmd)
+    }
+    fn get_box_cmd(&self, index: usize) -> Option<fn(&mut Self::S, &mut Self::Gu, &mut Self, StomachCommand<T>) -> Result<Box<dyn FnOnce(&mut Self, &mut Self::S, &mut Self::Gu) -> Option<<Self::B as TeXNode>::Bx>>, ErrorInPrimitive<T>>> {
+        self.box_cmds.get(index).copied()
     }
     fn get_whatsit_cmd(&self, index: usize) -> Option<fn(&mut Self::S, &mut Self::Gu, &mut Self, StomachCommand<T>) -> Result<Whatsit<T, Self>, ErrorInPrimitive<T>>> {
         self.whatsit_cmds.get(index).copied()

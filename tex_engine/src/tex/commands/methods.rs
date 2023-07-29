@@ -190,6 +190,17 @@ macro_rules! register_whatsit {
     };
 }
 
+
+#[macro_export]
+macro_rules! register_open_box {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$sto:tt,$cmd:tt) => $f:expr) => {
+        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::OpenBox{
+            name:stringify!($name),
+            index:$stomach.register_open_box(stringify!($name),|$s,$gu,$sto,$cmd| $f)
+        })),true);
+    };
+}
+
 #[macro_export]
 macro_rules! register_stomach {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$sto:tt,$cmd:tt,$b:tt) => $f:expr) => {
@@ -444,12 +455,16 @@ fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:
                         iter.next();
                     }
                     let mut arg = Vec::with_capacity(50);
+                    let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
                         match if d.long {catch_def!({mouth.get_next(state)} => (d,cause))}
                         else {catch_def!({mouth.get_next_nopar(state)} => (d,cause))} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
+                                if arg.len() == 0 {
+                                    removebraces = Some(-1);
+                                }
                                 arg.push(t);
                             }
                             Some((t,_)) if t.catcode() == CategoryCode::EndGroup => {
@@ -458,6 +473,12 @@ fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:
                                 } else {
                                     depth -= 1;
                                     arg.push(t);
+                                    if depth == 0 {
+                                        match removebraces {
+                                            Some(-1) => removebraces = Some(arg.len() as i32),
+                                            _ => ()
+                                        }
+                                    }
                                 }
                             }
                             Some((t,_)) => {
@@ -472,9 +493,8 @@ fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:
                             None => file_end_def!(d,cause)
                         }
                     }
-                    match (arg.first(),arg.last()) {
-                        (Some(bg),Some(eg)) if
-                        bg.catcode() == CategoryCode::BeginGroup && eg.catcode() == CategoryCode::EndGroup => {
+                    match removebraces {
+                        Some(i) if i != -1 && arg.len()  == (i as usize) => {
                             arg.remove(0);
                             arg.pop();
                         }

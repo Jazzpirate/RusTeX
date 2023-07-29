@@ -40,6 +40,7 @@ pub fn digest<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S, gulle
         AssignableValue {name,tp:Assignable::Skip} => Ok(methods::assign_primitive_skip(state,gullet,cmd,name,false)?), // TODO global!
         AssignableValue {name,tp:Assignable::Toks} => Ok(methods::assign_primitive_toks(state,gullet,cmd,name,false)?), // TODO global!
         AssignableValue {name,tp} => todo!("Assignable Value: {:?}",tp),
+                OpenBox {..} => todo!("OpenBox"),
         Whatsit {name,index} => todo!("Whatsits"),
         Relax => Ok(()),
         Char{..} =>

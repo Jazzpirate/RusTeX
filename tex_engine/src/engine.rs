@@ -7,7 +7,7 @@ use crate::engine::mouth::{Mouth, NoTracingMouth, TracingMouth};
 use crate::engine::state::{State, TeXState};
 use crate::engine::stomach::{Stomach, NoShipoutDefaultStomach};
 use crate::tex;
-use crate::tex::boxes::StandardTeXBox;
+use crate::tex::boxes::StandardTeXNode;
 use crate::tex::fonts::TfmFontStore;
 use crate::tex::numbers::{DefaultNumSet, NumSet};
 use crate::tex::token::{BaseToken, Token, TokenWithSourceref};
@@ -75,7 +75,7 @@ pub fn new<T:Token,Sto:Stomach<T>
     }
 }
 
-pub type TeXEngine<T,M,FS> = EngineStruct<T,NoShipoutDefaultStomach<T,TeXState<T,FS,TfmFontStore,DefaultNumSet>,TeXGullet<T, M,TeXState<T,FS,TfmFontStore,DefaultNumSet>>,StandardTeXBox>>;
+pub type TeXEngine<T,M,FS> = EngineStruct<T,NoShipoutDefaultStomach<T,TeXState<T,FS,TfmFontStore,DefaultNumSet>,TeXGullet<T, M,TeXState<T,FS,TfmFontStore,DefaultNumSet>>, StandardTeXNode>>;
 
 pub fn new_tex<FS:FileSystem<u8>>(fs:FS,outputs:Outputs) -> TeXEngine<BaseToken<u8>,NoTracingMouth<BaseToken<u8>>,FS> {
     new(TeXState::new(fs,TfmFontStore::new(),outputs), TeXGullet::new(NoTracingMouth::new()), NoShipoutDefaultStomach::new())

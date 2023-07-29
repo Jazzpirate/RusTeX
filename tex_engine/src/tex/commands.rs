@@ -45,6 +45,8 @@ pub enum Command<T:Token>{
     MathChar(u32),
     /// A command producing a [`crate::tex::boxes::Whatsit`], executed during shipout or `\immediate`ly
     Whatsit {name:&'static str,index:usize},
+    /// A command opening a new  [`crate::tex::boxes::TeXNode`], e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
+    OpenBox{name:&'static str,index:usize},
     /// `\relax`
     Relax
     // ...
@@ -55,16 +57,17 @@ impl<T:Token> PartialEq for Command<T> {
             (Command::Def(a,_),Command::Def(b,_)) => a == b,
             (Command::Stomach{index:a,..},Command::Stomach{index:b,..}) => a == b,
             (Command::AssignableValue{tp:a,name:b},Command::AssignableValue{tp:c,name:d}) => a == c && b == d,
-            (Command::Value{tp:a,name:b,index:c},Command::Value{tp:d,name:e,index:f}) => a == d && b == e && c == f,
+            (Command::Value{tp:a,name:b,..},Command::Value{tp:d,name:e,..}) => a == d && b == e,
             (Command::ValueRegister{tp:a,index:b},Command::ValueRegister{tp:c,index:d}) => a == c && b == d,
-            (Command::ValueAssignment{tp:a,name:b,assignment_index:c,value_index:d},Command::ValueAssignment{tp:e,name:f,assignment_index:g,value_index:h}) => a == e && b == f && c == g && d == h,
-            (Command::Assignment{name:a,index:b},Command::Assignment{name:c,index:d}) => a == c && b == d,
-            (Command::Conditional{name:a,index:b},Command::Conditional{name:c,index:d}) => a == c && b == d,
-            (Command::Gullet{name:a,index:b},Command::Gullet{name:c,index:d}) => a == c && b == d,
+            (Command::ValueAssignment{tp:a,name:b,..},Command::ValueAssignment{tp:e,name:f,..}) => a == e && b == f,
+            (Command::Assignment{name:a,..},Command::Assignment{name:c,..}) => a == c,
+            (Command::Conditional{name:a,..},Command::Conditional{name:c,..}) => a == c,
+            (Command::Gullet{name:a,..},Command::Gullet{name:c,..}) => a == c,
             (Command::Char{char:a,catcode:b},Command::Char{char:c,catcode:d}) => a == c && b == d,
             (Command::MathChar(a),Command::MathChar(b)) => a == b,
-            (Command::Whatsit{name:a,index:b},Command::Whatsit{name:c,index:d}) => a == c && b == d,
+            (Command::Whatsit{name:a,..},Command::Whatsit{name:c,..}) => a == c,
             (Command::Relax,Command::Relax) => true,
+            (Command::OpenBox {name:a,..},Command::OpenBox {name:c,..}) => a == c,
             _ => false
         }
     }
@@ -74,7 +77,7 @@ impl<T:Token> PartialEq for Command<T> {
 pub enum Assignable {
     Int,Dim,
     Skip,
-    MuSkip,Font,Toks
+    MuSkip,Font,Toks,Box
 }
 
 impl<T:Token> Debug for Command<T> {
@@ -93,6 +96,7 @@ impl<T:Token> Debug for Command<T> {
             Command::MathChar(n) => write!(f, "Math Character {:X}", n),
             Command::Value {name,tp,..} => write!(f, "{:?} Command {}",tp, name),
             Command::Whatsit {name,index} => write!(f,"Whatsit {}",name),
+            Command::OpenBox {name,index} => write!(f,"Open Box {}",name),
         }
     }
 }
@@ -109,6 +113,7 @@ pub enum StomachCommandInner<C:CharType> {
     ValueAssignment{name:&'static str,assignment_index:usize,value_index:usize,tp:Assignable},
     Assignment {name:&'static str,index:usize},
     Whatsit {name:&'static str,index:usize},
+    OpenBox{name:&'static str,index:usize},
     Relax,
     Char{char:C,from_chardef:bool},
     MathChar(u32),
@@ -141,7 +146,8 @@ impl<C:CharType> Debug for StomachCommandInner<C> {
             StomachCommandInner::Space => write!(f,"Space Token"),
             StomachCommandInner::MathShift(_) => write!(f,"MathShift Token"),
             StomachCommandInner::BeginGroup(_) => write!(f,"BeginGroup Token"),
-            StomachCommandInner::EndGroup(_) => write!(f,"EndGroup Token")
+            StomachCommandInner::EndGroup(_) => write!(f,"EndGroup Token"),
+            StomachCommandInner::OpenBox{name,..} => write!(f,"Open Box {}",name)
         }
     }
 }

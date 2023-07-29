@@ -124,6 +124,17 @@ pub fn get_int<T:Token,Gu:Gullet<T>>(gullet:&mut Gu, state:&mut Gu::S) -> Result
                     }
                 }
             }
+            StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Dim,..} => {
+                match gullet.primitive_dim(value_index) {
+                    None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
+                    Some(f) => {
+                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
+                        let val = if isnegative { -val } else { val };
+                        debug_log!(trace=>"Returning {}",val.to_sp());
+                        return Ok( <<Gu::S as State<T>>::NumSet as NumSet>::Int::from_i64(val.to_sp())?)
+                    }
+                }
+            }
             StomachCommandInner::AssignableValue {name,tp:Assignable::Int} => {
                 let val = state.get_primitive_int(name);
                 let val = if isnegative { -val } else { val };
@@ -265,6 +276,16 @@ pub fn get_dim_inner<NS:NumSet,T:Token,S:State<T,NumSet=NS>,Gu:Gullet<T,S=S>>(gu
                 Some(f) => {
                     let val = f(state,gullet,GulletCommand{cause})?;
                     return Ok(if isnegative { -val } else { val })
+                }
+            }
+        }
+        StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Int,..} => {
+            match gullet.primitive_int(value_index) {
+                None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
+                Some(f) => {
+                    let val = f(state,gullet,GulletCommand{cause})?.to_i64() as f64;
+                    let val = if isnegative { -val } else { val };
+                    return read_unit(gullet,state,val)
                 }
             }
         }
