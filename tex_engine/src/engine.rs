@@ -27,7 +27,7 @@ pub trait EngineType:Sized+'static {
     type File:File<Self::Char>;
     type FileSystem:FileSystem<Self::Char,F=Self::File>;
     type Font:Font;
-    type FontStore:FontStore<Font=Self::Font>;
+    type FontStore:FontStore<Char=Self::Char,Font=Self::Font>;
     type Node:TeXNode<Bx=Self::Box>;
     type Box:TeXBox;
     type Int:Int;

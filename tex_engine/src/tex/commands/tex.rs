@@ -23,7 +23,7 @@ use crate::engine::stomach::methods::{assign_dim_register, assign_int_register, 
 use crate::tex::boxes::{HBox, OpenBox, StomachNode, TeXNode, Whatsit};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
-//use super::etex::protected;
+use super::etex::protected;
 
 /* TODO
 
@@ -181,22 +181,21 @@ pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, st
     });
     Ok(Whatsit { apply })
 }
-/*
 
-pub fn count_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn count_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\count");
     let i = catch_prim!(gullet.get_int(state) => ("count",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"count",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("count",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("count",cmd));
     let v = catch_prim!(gullet.get_int(state) => ("count",cmd));
     debug_log!(debug=>"\\count{} = {}",i,v);
     state.set_int_register(i,v,global);
     Ok(())
 }
-pub fn count_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn count_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\count");
     let i = catch_prim!(gullet.get_int(state) => ("count",cmd));
     let i:usize = match i.clone().try_into() {
@@ -208,8 +207,8 @@ pub fn count_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut G
     Ok(v)
 }
 
-pub fn countdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-    -> Result<(),ErrorInPrimitive<T>> {
+pub fn countdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"countdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => ("countdef",cmd));
     match &name {
@@ -220,7 +219,7 @@ pub fn countdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
             state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
         }
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("countdef",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("countdef",cmd));
     let num = catch_prim!(gullet.get_int(state) => ("countdef",cmd));
     if num.to_i64() < 0 {
         return Err(ErrorInPrimitive{name:"countdef",msg:Some(format!("Invalid count register index: {}",num)),cause:Some(cmd.cause),source:None})
@@ -239,7 +238,8 @@ pub fn countdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
     Ok(())
 }
 
-pub fn get_csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>,name:&'static str) -> Result<TeXStr<T::Char>,ErrorInPrimitive<T>>{
+pub fn get_csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>,name:&'static str)
+    -> Result<TeXStr<ET::Char>,ErrorInPrimitive<ET::Token>>{
     let csidx = state.push_csname();
     let mut csname = Vec::new();
     while state.current_csname() == Some(csidx) {
@@ -253,7 +253,7 @@ pub fn get_csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
                 StomachCommandInner::Superscript(c) => csname.push(c),
                 StomachCommandInner::Subscript(c) => csname.push(c),
                 StomachCommandInner::MathShift(c) => csname.push(c),
-                StomachCommandInner::Space => csname.push(T::Char::from(b' ')),
+                StomachCommandInner::Space => csname.push(ET::Char::from(b' ')),
                 o => return Err(ErrorInPrimitive{name:"csname",msg:Some(format!("Unexpected token in {}: {:?}",name,o)),cause:Some(cmd.cause),source:None})
             }
         }
@@ -261,28 +261,28 @@ pub fn get_csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     Ok(csname.into())
 }
 
-pub fn csname<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"csname");
-    let str = get_csname(state,gullet,cmd,"csname")?;
+    let str = get_csname::<ET>(state,gullet,cmd,"csname")?;
     debug_log!(trace=>"csname {}",str.to_string());
     match state.get_command(&str) {
         None => state.set_command(str.clone(),Some(Ptr::new(Command::Relax)),false),
         _ => ()
     }
-    Ok(vec!(T::new(BaseToken::CS(str),None)))
+    Ok(vec!(ET::Token::new(BaseToken::CS(str),None)))
 }
 
-pub fn day<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(
+pub fn day<ET:EngineType>(state:&mut ET::State,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(
         state.get_start_time().day() as i64
     ) => ("day",cmd)))
 }
 
 
-pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
-    -> Result<(),ErrorInPrimitive<T>> {
+pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool,protected:bool,long:bool,outer:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"def");
-    let csO = catch_prim!(gullet.mouth().get_next(state) => ("def",cmd));
+    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("def",cmd));
     let cs = match &csO {
         None => file_end_prim!("def",cmd),
         Some((t,_)) => t.base()
@@ -292,8 +292,8 @@ pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
         BaseToken::CS(_) => (),
         _ => return Err(ErrorInPrimitive{name:"def",msg:Some(format!("Command expected after \\def")),cause:Some(csO.unwrap().0),source:None})
     }
-    let (endswithbrace,arity,signature) = parse_signature(state,gullet,cmd.clone(),"def")?;
-    let mut replacement: Vec<ExpToken<T>> = Vec::with_capacity(50);
+    let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,cmd.clone(),"def")?;
+    let mut replacement: Vec<ExpToken<ET::Token>> = Vec::with_capacity(50);
     map_group!("def",cmd,state,gullet.mouth(),{
         let def = Command::Def(Def{protected,long,outer,endswithbrace,arity,signature,replacement},cmd.cause.clone());
         match cs {
@@ -310,7 +310,7 @@ pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
     },tk => {
         match tk.base() {
             BaseToken::Char(c,CategoryCode::Parameter) => {
-                match catch_prim!(gullet.mouth().get_next(state) => ("def",cmd)) {
+                match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("def",cmd)) {
                     None => file_end_prim!("def",cmd),
                     Some((stk,_)) => match stk.base() {
                         BaseToken::Char(_,CategoryCode::Parameter) =>
@@ -333,7 +333,7 @@ pub fn def<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
     file_end_prim!("def",cmd)
 }
 
-pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn detokenize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"detokenize");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("detokenize",cmd)) {
         None => file_end_prim!("detokenize",cmd),
@@ -347,11 +347,11 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
     let escape = state.get_escapechar();
     let cc = state.get_catcode_scheme();
     let mut succeeded = false;
-    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("detokenize",cmd)) {
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("detokenize",cmd)) {
         match next.base() {
             BaseToken::Char(c,CategoryCode::BeginGroup) => {
                 ingroups += 1;
-                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+                ret.push(ET::Token::new(BaseToken::Char(*c,CategoryCode::Other),None))
             }
             BaseToken::Char(c,CategoryCode::EndGroup) => {
                 ingroups -= 1;
@@ -359,32 +359,32 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
                     succeeded = true;
                     break
                 }
-                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+                ret.push(ET::Token::new(BaseToken::Char(*c,CategoryCode::Other),None))
             }
             BaseToken::Char(c,CategoryCode::Space) => {
                 ret.push(next)
             }
             BaseToken::Char(c,CategoryCode::Parameter) => {
-                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None));
-                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+                ret.push(ET::Token::new(BaseToken::Char(*c,CategoryCode::Other),None));
+                ret.push(ET::Token::new(BaseToken::Char(*c,CategoryCode::Other),None))
             }
             BaseToken::Char(c,_) => {
-                ret.push(T::new(BaseToken::Char(*c,CategoryCode::Other),None))
+                ret.push(ET::Token::new(BaseToken::Char(*c,CategoryCode::Other),None))
             }
             BaseToken::CS(name) => {
                 match escape {
                     None => (),
-                    Some(c) => ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None))
+                    Some(c) => ret.push(ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))
                 }
                 for c in name.as_vec() {
                     if *cc.get(*c) == CategoryCode::Space {
-                        ret.push(T::new(BaseToken::Char(*c,CategoryCode::Space),None));
+                        ret.push(ET::Token::new(BaseToken::Char(*c,CategoryCode::Space),None));
                     } else {
-                        ret.push(T::new(BaseToken::Char(c.clone(), CategoryCode::Other), None));
+                        ret.push(ET::Token::new(BaseToken::Char(c.clone(), CategoryCode::Other), None));
                     }
                 }
                 if name.as_vec().len() != 1 || *state.get_catcode_scheme().get(name.as_vec()[0]) != CategoryCode::Letter {
-                    ret.push(T::new(BaseToken::Char(T::Char::from(b' '),CategoryCode::Space),None))
+                    ret.push(ET::Token::new(BaseToken::Char(ET::Char::from(b' '),CategoryCode::Space),None))
                 }
             }
         }
@@ -394,20 +394,22 @@ pub fn detokenize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gull
     Ok(ret)
 }
 
-pub fn dimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn dimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\dimen");
     let i = catch_prim!(gullet.get_int(state) => ("dimen",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"dimen",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("dimen",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("dimen",cmd));
     let v = catch_prim!(gullet.get_dim(state) => ("dimen",cmd));
     debug_log!(debug=>"\\dimen{} = {}",i,v);
     state.set_dim_register(i,v,global);
     Ok(())
 }
-pub fn dimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+pub fn dimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Dim,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\dimen");
     let i = catch_prim!(gullet.get_int(state) => ("dimen",cmd));
     let i:usize = match i.clone().try_into() {
@@ -419,8 +421,8 @@ pub fn dimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut G
     Ok(v)
 }
 
-pub fn dimendef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-                                                     -> Result<(),ErrorInPrimitive<T>> {
+pub fn dimendef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                                     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"dimendef");
     let name = catch_prim!(gullet.get_control_sequence(state) => ("dimendef",cmd));
     match &name {
@@ -431,7 +433,7 @@ pub fn dimendef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
             state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
         }
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("dimendef",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("dimendef",cmd));
     let num = catch_prim!(gullet.get_int(state) => ("dimendef",cmd));
     if num.to_i64() < 0 {
         return Err(ErrorInPrimitive{name:"dimendef",msg:Some(format!("Invalid dimen register index: {}",num)),cause:Some(cmd.cause),source:None})
@@ -450,10 +452,10 @@ pub fn dimendef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
     Ok(())
 }
 
-pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-    -> Result<(),ErrorInPrimitive<T>> {
+pub fn divide<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\divide");
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("divide",cmd));
+    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("divide",cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => ("divide",cmd)) {
         None => file_end_prim!("divide",cmd),
         Some(ocmd) => match ocmd.cmd {
@@ -463,7 +465,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 let i = catch_prim!(gullet.get_int(state) => ("divide",cmd));
                 let ov = state.get_int_register(u);
                 debug_log!(debug => "  =={}/{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Int = ov / i;
+                let nv : ET::Int = ov / i;
                 debug_log!(debug => "  ={}",nv);
                 state.set_int_register(u,nv,global);
                 return Ok(())
@@ -477,7 +479,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 if i.to_i64() == 0 {
                     return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
                 }
-                let nv : <S::NumSet as NumSet>::Int = ov / i;
+                let nv : ET::Int = ov / i;
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_int(name,nv,global);
                 return Ok(())
@@ -491,7 +493,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                 if i.to_i64() == 0 {
                     return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
                 }
-                let nv : <S::NumSet as NumSet>::Dim = ov.tex_div(i.to_i64());
+                let nv : ET::Dim = ov.tex_div(i.to_i64());
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -510,7 +512,7 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
                     return Err(ErrorInPrimitive{name:"divide",msg:Some(format!("Division by zero: {} / {}",ov,i)),cause:Some(cmd.cause),source:None})
                 }
                 debug_log!(debug => "  =={}/{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Int = ov / i;
+                let nv : ET::Int = ov / i;
                 debug_log!(debug => "  ={}",nv);
                 state.set_int_register(u,nv,global);
                 return Ok(())
@@ -520,10 +522,10 @@ pub fn divide<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
     }
 }
 
-pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
-                                                -> Result<(),ErrorInPrimitive<T>> {
+pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool,protected:bool,long:bool,outer:bool)
+                                                -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"edef");
-    let csO = catch_prim!(gullet.mouth().get_next(state) => ("edef",cmd));
+    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("edef",cmd));
     let cs = match &csO {
         None => file_end_prim!("edef",cmd),
         Some((t,_)) => t.base()
@@ -533,22 +535,22 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
         BaseToken::CS(_) => (),
         _ => return Err(ErrorInPrimitive{name:"edef",msg:Some(format!("Command expected after \\edef")),cause:Some(csO.unwrap().0),source:None})
     }
-    let (endswithbrace,arity,signature) = parse_signature(state,gullet,cmd.clone(),"edef")?;
-    let mut replacement: Vec<ExpToken<T>> = Vec::with_capacity(50);
+    let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,cmd.clone(),"edef")?;
+    let mut replacement: Vec<ExpToken<ET::Token>> = Vec::with_capacity(50);
 
     macro_rules! expand_group_with_unknowns {
         ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident) => $f:expr;$($branch:tt)*) => {
-            if let Some((tk,b)) = catch_prim!($gullet.mouth().get_next($state) => ("edef",cmd)) {
+            if let Some((tk,b)) = catch_prim!($gullet.mouth().get_next::<ET>($state) => ("edef",cmd)) {
                 match tk.catcode() {
                     CategoryCode::BeginGroup => (),
                     _ =>
                     return Err(ErrorInPrimitive{name:"edef",msg:None,cause:Some(cmd.cause),source:Some(
-                        ExpectedToken{expected:T::new(BaseToken::Char(T::Char::from(b'{'),CategoryCode::BeginGroup),None),found:tk}.into()
+                        ExpectedToken{expected:ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None),found:tk}.into()
                     )})
                 }
             }
             let mut depth = 1;
-            while let Some(($tk,$expand)) = catch_prim!($gullet.mouth().get_next($state) => ("edef",cmd)) {
+            while let Some(($tk,$expand)) = catch_prim!($gullet.mouth().get_next::<ET>($state) => ("edef",cmd)) {
                 match $tk.catcode() {
                     CategoryCode::BeginGroup => {
                         depth += 1;
@@ -573,16 +575,16 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                                     Some(ncmd) => match &*ncmd {
                                         $($branch)*,
                                         Command::Gullet {name,index} => {
-                                            catch_prim!(do_expandable($gullet,$state,$tk,name,*index) => ("edef",cmd));
+                                            catch_prim!(do_expandable::<ET>($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
                                         Command::Def(def,_) if $expand => {
-                                            let v = catch_prim!(def.expand($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
+                                            let v = catch_prim!(def.expand::<ET>($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
                                             if !v.is_empty() {
                                                 $gullet.mouth().push_tokens(v);
                                             }
                                         }
                                         Command::Conditional {name,index} => {
-                                            catch_prim!(do_conditional($gullet,$state,$tk,name,*index) => ("edef",cmd));
+                                            catch_prim!(do_conditional::<ET>($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
                                         _ => $f
                                     }
@@ -595,16 +597,16 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
                                     Some(ncmd) => match &*ncmd {
                                         $($branch)*,
                                         Command::Gullet {name,index} => {
-                                            catch_prim!(do_expandable($gullet,$state,$tk,name,*index) => ("edef",cmd));
+                                            catch_prim!(do_expandable::<ET>($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
                                         Command::Def(def,_) if $expand => {
-                                            let v = catch_prim!(def.expand($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
+                                            let v = catch_prim!(def.expand::<ET>($state,$gullet.mouth(),ncmd.clone(),Ptr::new($tk)) => ("edef",cmd));
                                             if !v.is_empty() {
                                                 $gullet.mouth().push_tokens(v);
                                             }
                                         }
                                         Command::Conditional {name,index} => {
-                                            catch_prim!(do_conditional($gullet,$state,$tk,name,*index) => ("edef",cmd));
+                                            catch_prim!(do_conditional::<ET>($gullet,$state,$tk,name,*index) => ("edef",cmd));
                                         }
                                         _ => $f
                                     }
@@ -635,7 +637,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
     },(tk,expand) => {
         match tk.base() {
             BaseToken::Char(c,CategoryCode::Parameter) => {
-                match catch_prim!(gullet.mouth().get_next(state) => ("edef",cmd)) {
+                match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("edef",cmd)) {
                     None => file_end_prim!("edef",cmd),
                     Some((stk,_)) => match stk.base() {
                         BaseToken::Char(_,CategoryCode::Parameter) =>
@@ -656,7 +658,7 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
         }
     };
             Command::Gullet {name:"the",..} => {
-                for t in catch_prim!(the(state,gullet,GulletCommand{cause:cmd.cause.clone()}) => ("edef",cmd)) {
+                for t in catch_prim!(the::<ET>(state,gullet,GulletCommand{cause:cmd.cause.clone()}) => ("edef",cmd)) {
                     if t.catcode() == CategoryCode::Parameter {
                         replacement.push(ExpToken::ParamToken(t));
                     } else {
@@ -683,19 +685,21 @@ pub fn edef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd
     file_end_prim!("edef",cmd)
 }
 
-pub fn else_<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn else_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     match gullet.current_conditional() {
         (None,_) => return Err(ErrorInPrimitive{name:"else",msg:Some("Not in a conditional".to_string()),cause:Some(cmd.cause),source:None}),
         (Some(ConditionalBranch::True(name)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,name,i) => ("else",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,name,i) => ("else",cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase",i) => ("else",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i) => ("else",cmd)),
         o => unreachable!("{:?}\nat:{}\n{}\n",o,gullet.mouth().file_line(),gullet.mouth().preview(200))
     }
     Ok(vec![])
 }
 
-pub fn end<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,_state:&mut Sto::S,_cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+pub fn end<ET:EngineType>(_stomach:&mut ET::Stomach,_state:&mut ET::State,_cmd:StomachCommand<ET::Token>)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     todo!("end")
 }
 
@@ -703,7 +707,8 @@ pub fn endcsname<T:Token>(cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T
     Err(ErrorInPrimitive{name:"endcsname",msg:Some("Not in a \\csname".to_string()),cause:Some(cmd.cause),source:None})
 }
 
-pub fn endgroup<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+pub fn endgroup<ET:EngineType>(_stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     match state.stack_pop() {
         Some((v,GroupType::CS)) => {
             if !v.is_empty() {gullet.mouth().push_tokens(v);}
@@ -713,13 +718,14 @@ pub fn endgroup<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,gull
     }
 }
 
-pub fn endlinechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn endlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\endlinechar");
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("endlinechar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("endlinechar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("endlinechar",cmd));
     let c = match i.to_i64() {
         -1|255 => None,
-        j => match T::Char::from_i64(j) {
+        j => match ET::Char::from_i64(j) {
             Some(c) => Some(c),
             None => return Err(ErrorInPrimitive{name:"endlinechar",msg:Some(format!("Not a valid character: {}",j)),cause:Some(cmd.cause),source:None})
         }
@@ -728,21 +734,23 @@ pub fn endlinechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gull
     state.set_endlinechar(c,global);
     Ok(())
 }
-pub fn endlinechar_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn endlinechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\endlinechar");
     let c = match state.get_endlinechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\endlinechar == {:?}",c);
-    Ok(<S::NumSet as NumSet>::Int::from_i64::<T>(c).unwrap())
+    Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
 }
 
 // \errhelp
 
-pub fn errmessage<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+pub fn errmessage<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(debug=>"errmessage");
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("errmessage",cmd));
+    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("errmessage",cmd));
     let errmsg = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("errmessage",cmd))).unwrap();
     let eh = state.get_primitive_toks("errhelp");
     // TODO errhelp
@@ -754,13 +762,14 @@ pub fn errmessage<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     }.into())
 }
 
-pub fn escapechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn escapechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\escapechar");
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("escapechar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("escapechar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("escapechar",cmd));
     let c = match i.to_i64() {
         -1|255 => None,
-        j => match T::Char::from_i64(j) {
+        j => match ET::Char::from_i64(j) {
             Some(c) => Some(c),
             None => return Err(ErrorInPrimitive{name:"escapechar",msg:Some(format!("Not a valid character: {}",j)),cause:Some(cmd.cause),source:None})
         }
@@ -769,24 +778,25 @@ pub fn escapechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gulle
     state.set_escapechar(c,global);
     Ok(())
 }
-pub fn escapechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Numbers::Int,ErrorInPrimitive<ET::Token>> {
+pub fn escapechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\escapechar");
     let c = match state.get_escapechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\escapechar == {}",c);
-    Ok(ET::Numbers::Int::from_i64::<ET::Token>(c).unwrap())
+    Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
 }
 
-pub fn expandafter<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn expandafter<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"expandafter");
-    let (first,exp) = match catch_prim!(gullet.mouth().get_next(state) => ("expandafter",cmd)){
+    let (first,exp) = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("expandafter",cmd)){
         None => file_end_prim!("expandafter",cmd),
         Some((t,b)) => (t,b)
     };
     debug_log!(debug=>"expandafter: 1. {}",first);
-    match catch_prim!(gullet.mouth().get_next(state) => ("expandafter",cmd)){
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("expandafter",cmd)){
         None => file_end_prim!("expandafter",cmd),
         Some((t,false)) => {
             debug_log!(debug=>"expandafter: 2. \\noexpand{}",t);
@@ -805,11 +815,11 @@ pub fn expandafter<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gul
             } {
                 match &*ncmd {
                     Command::Conditional{name,index} =>
-                        catch_prim!(crate::engine::gullet::methods::do_conditional(gullet,state,t,name,*index) => ("expandafter",cmd)),
+                        catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index) => ("expandafter",cmd)),
                     Command::Gullet {name,index} =>
-                        catch_prim!(crate::engine::gullet::methods::do_expandable(gullet,state,t,name,*index) => ("expandafter",cmd)),
+                        catch_prim!(crate::engine::gullet::methods::do_expandable::<ET>(gullet,state,t,name,*index) => ("expandafter",cmd)),
                     Command::Def(d,_) => {
-                        let v = catch_prim!(d.expand(state,gullet.mouth(),ncmd.clone(),Ptr::new(t.clone())) => ("expandafter",cmd));
+                        let v = catch_prim!(d.expand::<ET>(state,gullet.mouth(),ncmd.clone(),Ptr::new(t.clone())) => ("expandafter",cmd));
                         if !v.is_empty() {
                             gullet.mouth().push_tokens(v);
                         }
@@ -827,16 +837,18 @@ pub fn expandafter<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gul
     Ok(vec!())
 }
 
-pub fn fi<T:Token,Gu:Gullet<T>>(_state:&mut Gu::S,gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn fi<ET:EngineType>(_state:&mut ET::State,gullet:&mut ET::Gullet,_cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"...end of conditional.");
     gullet.pop_conditional();
     Ok(vec![])
 }
 
-pub fn font_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn font_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\font");
     let cs = catch_prim!(gullet.get_control_sequence(state) => ("font",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("font",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("font",cmd));
     let mut fontname = catch_prim!(gullet.get_string(state) => ("font",cmd)).to_string();
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
@@ -848,7 +860,7 @@ pub fn font_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut
             state.fontstore_mut().get_mut(index).set_at(dim.to_sp());
         }
         Some(s) if s == "scaled" => {
-            let r = catch_prim!(crate::engine::gullet::numeric_methods::read_float(gullet,state,b'0',false) => ("font",cmd));
+            let r = catch_prim!(crate::engine::gullet::numeric_methods::read_float::<ET>(gullet,state,b'0',false) => ("font",cmd));
             let font = state.fontstore_mut().get_mut(index);
             let new_at = ((font.get_at() as f64) * r).round() as i64;
             font.set_at(new_at);
@@ -865,12 +877,14 @@ pub fn font_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut
     }
     Ok(())
 }
-pub fn font_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<usize,ErrorInPrimitive<T>> {
+pub fn font_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<usize,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\font");
     todo!("\\font_get")
 }
 
-pub fn fontdimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn fontdimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\fontdimen");
     let o = catch_prim!(gullet.get_int(state) => ("fontdimen",cmd));
     let i = match o.try_into() {
@@ -881,13 +895,15 @@ pub fn fontdimen_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet
         })
     };
     let fontidx = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("fontdimen",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("fontdimen",cmd));
     let dim = catch_prim!(gullet.get_dim(state) => ("fontdimen",cmd));
     let font = state.fontstore_mut().get_mut(fontidx);
-    font.set_dim::<S::NumSet>(i,dim);
+    font.set_dim::<ET::Numbers>(i,dim);
     Ok(())
 }
-pub fn fontdimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+
+pub fn fontdimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Dim,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\fontdimen");
     let o = catch_prim!(gullet.get_int(state) => ("fontdimen",cmd));
     let i = match o.try_into() {
@@ -899,29 +915,29 @@ pub fn fontdimen_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&m
     };
     let idx = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
     let font = state.fontstore_mut().get_mut(idx);
-    Ok(font.get_dim::<S::NumSet>(i))
+    Ok(font.get_dim::<ET::Numbers>(i))
 }
 
-pub fn gdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
-                                                 -> Result<(),ErrorInPrimitive<T>> {
-    def(state,gullet,cmd,true,protected,long,outer)
+pub fn gdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool,protected:bool,long:bool,outer:bool)
+                                                 -> Result<(),ErrorInPrimitive<ET::Token>> {
+    def::<ET>(state,gullet,cmd,true,protected,long,outer)
 }
 
-pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
-                                                 -> Result<(),ErrorInPrimitive<T>> {
+pub fn global<ET:EngineType>(stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global_:bool,protected_:bool,long_:bool,outer_:bool)
+                                                 -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\global");
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("global",cmd));
+    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("global",cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => ("global",cmd)) {
         None => file_end_prim!("global",cmd),
         Some(c) => match c.cmd {
-            StomachCommandInner::Assignment {name:"global",..} => global(stomach,state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"protected",..} => protected(stomach,state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"long",..} => long(stomach,state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"outer",..} => outer(stomach,state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"def",..} => def(state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"edef",..} => edef(state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"gdef",..} => gdef(state,gullet,cmd,true,protected_,long_,outer_),
-            StomachCommandInner::Assignment {name:"xdef",..} => xdef(state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"global",..} => global::<ET>(stomach,state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"protected",..} => protected::<ET>(stomach,state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"long",..} => long::<ET>(stomach,state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"outer",..} => outer::<ET>(stomach,state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"def",..} => def::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"edef",..} => edef::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"gdef",..} => gdef::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
+            StomachCommandInner::Assignment {name:"xdef",..} => xdef::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
             StomachCommandInner::Assignment {index,..} => {
                 match stomach.command(index) {
                     None => Err(ErrorInPrimitive{name:"global",msg:Some(format!("Invalid assignment: {}",index)),cause:Some(cmd.cause),source:None}),
@@ -935,18 +951,18 @@ pub fn global<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:
                  }
             }
             StomachCommandInner::AssignableValue {name,tp:Assignable::Int} =>
-                Ok(catch_prim!(assign_primitive_int(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+                Ok(catch_prim!(assign_primitive_int::<ET>(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
             StomachCommandInner::AssignableValue {name,tp:Assignable::Dim} =>
-                Ok(catch_prim!(assign_primitive_dim(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+                Ok(catch_prim!(assign_primitive_dim::<ET>(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
             StomachCommandInner::AssignableValue {name,tp:Assignable::Skip} =>
-                Ok(catch_prim!(assign_primitive_skip(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+                Ok(catch_prim!(assign_primitive_skip::<ET>(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
             StomachCommandInner::AssignableValue {name,tp:Assignable::Toks} =>
-                Ok(catch_prim!(assign_primitive_toks(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
-            StomachCommandInner::ValueRegister(u,Assignable::Int) => Ok(catch_prim!(assign_int_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
-            StomachCommandInner::ValueRegister(u,Assignable::Dim) => Ok(catch_prim!(assign_dim_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
-            StomachCommandInner::ValueRegister(u,Assignable::Skip) => Ok(catch_prim!(assign_skip_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
-            StomachCommandInner::ValueRegister(u,Assignable::MuSkip) => Ok(catch_prim!(assign_muskip_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
-            StomachCommandInner::ValueRegister(u,Assignable::Toks) => Ok(catch_prim!(assign_toks_register(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+                Ok(catch_prim!(assign_primitive_toks::<ET>(state,gullet,cmd.clone(),name,true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Int) => Ok(catch_prim!(assign_int_register::<ET>(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Dim) => Ok(catch_prim!(assign_dim_register::<ET>(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Skip) => Ok(catch_prim!(assign_skip_register::<ET>(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::MuSkip) => Ok(catch_prim!(assign_muskip_register::<ET>(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
+            StomachCommandInner::ValueRegister(u,Assignable::Toks) => Ok(catch_prim!(assign_toks_register::<ET>(state,gullet,u,cmd.clone(),true) => ("global",cmd))),
             o => todo!("global: {:?} at {}",o,gullet.mouth().preview(100))
         }
     }
@@ -988,28 +1004,30 @@ pub fn hbox<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet
     file_end_prim!("hbox",cmd);
 }
 
-pub fn hyphenchar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn hyphenchar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\hyphenchar");
     let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("hyphenchar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("hyphenchar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("hyphenchar",cmd)).to_i64();
     let font = state.fontstore_mut().get_mut(fontidx);
     debug_log!(debug=>"\\hyphenchar\\{:?} = {:?}",font,i);
     font.set_hyphenchar(i);
     Ok(())
 }
-pub fn hyphenchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Numbers::Int,ErrorInPrimitive<ET::Token>> {
+pub fn hyphenchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\hyphenchar");
     let fontidx = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
     let font = state.fontstore_mut().get_mut(fontidx);
     debug_log!(debug=>"\\hyphenchar == {:?}",font.get_hyphenchar());
-    Ok(catch_prim!(ET::Numbers::Int::from_i64::<ET::Token>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
+    Ok(catch_prim!(ET::Int::from_i64::<ET::Token>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
 }
 
-pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn if_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"if");
-    let first = get_if_token(state,gullet,cmd.clone(),"if")?;
-    let second = get_if_token(state,gullet,cmd,"if")?;
+    let first = get_if_token::<ET>(state,gullet,cmd.clone(),"if")?;
+    let second = get_if_token::<ET>(state,gullet,cmd,"if")?;
     debug_log!(trace=>"if: {:?} == {:?}",first,second);
     Ok(match (first,second) {
         (None,_) | (_,None) => false,
@@ -1021,14 +1039,15 @@ pub fn if_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletComma
     })
 }
 
-pub fn ifcase<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifcase<ET:EngineType>() -> Result<bool,ErrorInPrimitive<ET::Token>> {
     unreachable!("executed in Gullet")
 }
 
-pub fn ifcat<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifcat<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifcat");
-    let first = get_if_token(state,gullet,cmd.clone(),"ifcat")?;
-    let second = get_if_token(state,gullet,cmd,"ifcat")?;
+    let first = get_if_token::<ET>(state,gullet,cmd.clone(),"ifcat")?;
+    let second = get_if_token::<ET>(state,gullet,cmd,"ifcat")?;
     debug_log!(trace=>"ifcat: {:?} == {:?}",first,second);
     let first = match first {
         None => return Ok(false),
@@ -1059,9 +1078,10 @@ pub fn ifcat<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
     Ok(first == second)
 }
 
-pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>,name:&'static str) -> Result<Option<T>,ErrorInPrimitive<T>> {
+pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>,name:&'static str)
+    -> Result<Option<ET::Token>,ErrorInPrimitive<ET::Token>> {
     // need to be careful not to expand \else and \fi before conditional is done.
-    while let Some((t,e)) = catch_prim!(gullet.mouth().get_next(state) => (name,cmd)) {
+    while let Some((t,e)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => (name,cmd)) {
         let cmdo = match t.base() {
             BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(*c),
             BaseToken::CS(n) => state.get_command(n),
@@ -1071,10 +1091,10 @@ pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gu
             None => return Ok(Some(t)),
             Some(c) => match &*c {
                 Command::Conditional{name,index} if e => {
-                    catch_prim!(crate::engine::gullet::methods::do_conditional(gullet,state,t,name,*index) => (name,cmd));
+                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index) => (name,cmd));
                 },
                 Command::Def(d,_) if e => {
-                    let v = catch_prim!(d.expand(state,gullet.mouth(),c.clone(),Ptr::new(t.clone())) => (name,cmd));
+                    let v = catch_prim!(d.expand::<ET>(state,gullet.mouth(),c.clone(),Ptr::new(t.clone())) => (name,cmd));
                     if !v.is_empty() {
                         gullet.mouth().push_tokens(v);
                     }
@@ -1087,7 +1107,7 @@ pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gu
                     return Ok(None)
                 }
                 Command::Gullet {name,index} if e => {
-                    catch_prim!(crate::engine::gullet::methods::do_expandable(gullet,state,t,name,*index) => (name,cmd));
+                    catch_prim!(crate::engine::gullet::methods::do_expandable::<ET>(gullet,state,t,name,*index) => (name,cmd));
                 },
                 _ => return Ok(Some(t))
             }
@@ -1096,7 +1116,8 @@ pub fn get_if_token<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gu
     file_end_prim!(name,cmd)
 }
 
-pub fn ifeof<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifeof");
     let i = catch_prim!(gullet.get_int(state) => ("ifeof",cmd));
     let i : usize = match i.clone().try_into() {
@@ -1111,7 +1132,8 @@ pub fn ifeof<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
     Ok(f.eof())
 }
 
-pub fn ifnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifnum");
     let i1 = catch_prim!(gullet.get_int(state) => ("ifnum",cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifnum",cmd)) {
@@ -1127,19 +1149,21 @@ pub fn ifnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
     }
 }
 
-pub fn ifodd<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifodd<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifodd");
     let num = catch_prim!(gullet.get_int(state) => ("ifodd",cmd));
     Ok(num.to_i64() % 2 != 0)
 }
 
-pub fn ifx<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifx<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifx");
-    let (t1,exp1) = match catch_prim!(gullet.mouth().get_next(state) => ("ifx",cmd)) {
+    let (t1,exp1) = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
         None => file_end_prim!("ifx",cmd),
         Some(t) => t
     };
-    let (t2,exp2) = match catch_prim!(gullet.mouth().get_next(state) => ("ifx",cmd)) {
+    let (t2,exp2) = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
         None => file_end_prim!("ifx",cmd),
         Some(t) => t
     };
@@ -1190,8 +1214,8 @@ fn ifx_eq_cmd<T:Token>(cmd1:Option<Ptr<Command<T>>>,t1:T,expand1:bool,cmd2:Optio
 }
 
 
-pub fn immediate<T:Token,Sto:Stomach<T>+'static>(state:&mut Sto::S,gullet:&mut Sto::Gu,stomach:&mut Sto,cmd:StomachCommand<T>)
-                                                 -> Result<(),ErrorInPrimitive<T>> {
+pub fn immediate<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,stomach:&mut ET::Stomach,cmd:StomachCommand<ET::Token>)
+                                                 -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"immediate");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("immediate",cmd)) {
         None => file_end_prim!("immediate",cmd),
@@ -1215,7 +1239,8 @@ pub fn immediate<T:Token,Sto:Stomach<T>+'static>(state:&mut Sto::S,gullet:&mut S
     }
 }
 
-pub fn input<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn input<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"input");
     let filename = catch_prim!(gullet.get_string(state) => ("input",cmd)).to_string();
     debug_log!(trace=>"input: {}",filename);
@@ -1230,16 +1255,17 @@ pub fn input<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCom
     }
 }
 
-pub fn lccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn lccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning lower case character");
     let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
-    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"lccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("lccode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("lccode",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
-    let lc: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let lc: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"lccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
@@ -1247,29 +1273,32 @@ pub fn lccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&m
     state.set_lccode(c,lc,global);
     Ok(())
 }
-pub fn lccode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+
+pub fn lccode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting lower case character");
     let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
-    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"lccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    let v = catch_prim!(<S::NumSet as NumSet>::Int::from_i64(state.get_lccode(c).to_usize() as i64) => ("lccode",cmd));
+    let v = catch_prim!(ET::Int::from_i64(state.get_lccode(c).to_usize() as i64) => ("lccode",cmd));
     debug_log!(debug=>"\\lccode '{}' == {}",c.char_str(),v);
     Ok(v)
 }
 
-pub fn let_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn let_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,globally:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"let");
-    let csO = catch_prim!(gullet.mouth().get_next(state) => ("let",cmd));
+    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("let",cmd));
     let cs = match &csO {
         None => file_end_prim!("let",cmd),
         Some((t,_)) => t.base()
     };
     match cs {
         BaseToken::Char(c,CategoryCode::Active) => {
-            catch_prim!(gullet.mouth().skip_eq_char(state) => ("let",cmd));
-            let csO = catch_prim!(gullet.mouth().get_next(state) => ("let",cmd));
+            catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("let",cmd));
+            let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("let",cmd));
             let cs = match &csO {
                 None => file_end_prim!("let",cmd),
                 Some((t,_)) => t.base()
@@ -1284,8 +1313,8 @@ pub fn let_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
             state.set_ac_command(*c,cmd,globally);
         }
         BaseToken::CS(name) => {
-            catch_prim!(gullet.mouth().skip_eq_char(state) => ("let",cmd));
-            let csO = catch_prim!(gullet.mouth().get_next(state) => ("let",cmd));
+            catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("let",cmd));
+            let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("let",cmd));
             let cs = match &csO {
                 None => file_end_prim!("let",cmd),
                 Some((t,_)) => t.base()
@@ -1304,27 +1333,27 @@ pub fn let_<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
     Ok(())
 }
 
-pub fn long<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
-                                                -> Result<(),ErrorInPrimitive<T>> {
+pub fn long<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global_:bool,protected_:bool,long_:bool,outer_:bool)
+                                                -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\long");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("long",cmd)) {
         None => file_end_prim!("long",cmd),
         Some(c) => match c.cmd {
-            StomachCommandInner::Assignment {name:"global",..} => global(stomach,state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"protected",..} => protected(stomach,state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"long",..} => long(stomach,state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"outer",..} => outer(stomach,state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"def",..} => def(state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"edef",..} => edef(state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"gdef",..} => gdef(state,gullet,cmd,global_,protected_,true,outer_),
-            StomachCommandInner::Assignment {name:"xdef",..} => xdef(state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"global",..} => global::<ET>(stomach,state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"protected",..} => protected::<ET>(stomach,state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"long",..} => long::<ET>(stomach,state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"outer",..} => outer::<ET>(stomach,state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"def",..} => def::<ET>(state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"edef",..} => edef::<ET>(state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"gdef",..} => gdef::<ET>(state,gullet,cmd,global_,protected_,true,outer_),
+            StomachCommandInner::Assignment {name:"xdef",..} => xdef::<ET>(state,gullet,cmd,global_,protected_,true,outer_),
             _ => return Err(ErrorInPrimitive{name:"long",msg:Some("Expected a macro definition after \\long".to_string()),cause:Some(cmd.cause),source:None})
         }
     }
 }
 
-pub fn lowercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>)
-                                         -> Result<(),ErrorInPrimitive<T>> {
+pub fn lowercase<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>)
+                                         -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\lowercase");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("lowercase",cmd)) {
         None => file_end_prim!("lowercase",cmd),
@@ -1335,12 +1364,12 @@ pub fn lowercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gul
     }
     let mut ingroups = 1;
     let mut ret = vec!();
-    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("lowercase",cmd)) {
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("lowercase",cmd)) {
         match next.base() {
             BaseToken::Char(c,CategoryCode::BeginGroup) => {
                 ingroups += 1;
                 let nc = state.get_lccode(*c);
-                ret.push(T::new(BaseToken::Char(nc,CategoryCode::BeginGroup),None));
+                ret.push(ET::Token::new(BaseToken::Char(nc,CategoryCode::BeginGroup),None));
             },
             BaseToken::Char(c,CategoryCode::EndGroup) => {
                 ingroups -= 1;
@@ -1348,12 +1377,12 @@ pub fn lowercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gul
                     break;
                 } else {
                     let nc = state.get_lccode(*c);
-                    ret.push(T::new(BaseToken::Char(nc,CategoryCode::EndGroup),None));
+                    ret.push(ET::Token::new(BaseToken::Char(nc,CategoryCode::EndGroup),None));
                 }
             },
             BaseToken::Char(c,cc) => {
                 let nc = state.get_lccode(*c);
-                ret.push(T::new(BaseToken::Char(nc,*cc),None));
+                ret.push(ET::Token::new(BaseToken::Char(nc,*cc),None));
             },
             _ => ret.push(next)
         }
@@ -1362,9 +1391,10 @@ pub fn lowercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gul
     Ok(())
 }
 
-pub fn mathchardef<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn mathchardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,globally:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"mathchardef");
-    let csO = catch_prim!(gullet.mouth().get_next(state) => ("mathchardef",cmd));
+    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("mathchardef",cmd));
     let cs = match &csO {
         None => file_end_prim!("mathchardef",cmd),
         Some((t,_)) => t.base()
@@ -1374,7 +1404,7 @@ pub fn mathchardef<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Sto
         BaseToken::CS(_) => (),
         _ => return Err(ErrorInPrimitive{name:"mathchardef",msg:Some(format!("Command expected after \\mathchardef")),cause:Some(csO.unwrap().0),source:None})
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("mathchardef",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("mathchardef",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("mathchardef",cmd)).to_i64();
     if i < 0 {
         return Err(ErrorInPrimitive{name:"mathchardef",msg:Some(format!("Invalid math char: {}",i)),cause:Some(csO.unwrap().0),source:None})
@@ -1386,9 +1416,10 @@ pub fn mathchardef<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Sto
     Ok(())
 }
 
-pub fn meaning<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"meaning");
-    match catch_prim!(gullet.mouth().get_next(state) => ("meaning",cmd)) {
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("meaning",cmd)) {
         None => file_end_prim!("meaning",cmd),
         Some((_,false)) => {
             match state.get_escapechar() {
@@ -1402,8 +1433,8 @@ pub fn meaning<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletC
             }
         }
         Some((t,_)) => match t.base() {
-            BaseToken::CS(name) => Ok(meaning_cmd(state.get_command(name),state)),
-            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd(state.get_ac_command(*c),state)),
+            BaseToken::CS(name) => Ok(meaning_cmd::<ET>(state.get_command(name),state)),
+            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd::<ET>(state.get_ac_command(*c),state)),
             BaseToken::Char(c,cc) => Ok(meaning_char(*c,*cc)),
         }
     }
@@ -1424,7 +1455,7 @@ pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
     }
 }
 
-pub fn meaning_cmd<T:Token,S:State<T>>(cmd:Option<Ptr<Command<T>>>,state:&S) -> Vec<T> {
+pub fn meaning_cmd<ET:EngineType>(cmd:Option<Ptr<Command<ET::Token>>>,state:&ET::State) -> Vec<ET::Token> {
     match cmd {
         None => string_to_tokens("undefined".as_bytes()),
         Some(cmd) => {
@@ -1656,24 +1687,25 @@ pub fn meaning_cmd<T:Token,S:State<T>>(cmd:Option<Ptr<Command<T>>>,state:&S) -> 
     }
 }
 
-pub fn message<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+pub fn message<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(debug=>"message");
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("message",cmd));
+    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("message",cmd));
     let msg = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("message",cmd))).unwrap();
     (state.outputs().message)(&msg);
     Ok(())
 }
 
-pub fn month<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(
+pub fn month<ET:EngineType>(state:&mut ET::State,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(
         state.get_start_time().month() as i64
     ) => ("month",cmd)))
 }
 
-pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-                                                   -> Result<(),ErrorInPrimitive<T>> {
+pub fn multiply<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                                   -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\multiply");
-    catch_prim!(gullet.mouth().skip_whitespace(state) => ("multiply",cmd));
+    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("multiply",cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => ("multiply",cmd)) {
         None => file_end_prim!("multiply",cmd),
         Some(ocmd) => match ocmd.cmd {
@@ -1683,7 +1715,7 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
                 let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
                 let ov = state.get_int_register(u);
                 debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Int = ov * i;
+                let nv : ET::Int = ov * i;
                 debug_log!(debug => "  ={}",nv);
                 state.set_int_register(u,nv,global);
                 return Ok(())
@@ -1694,7 +1726,7 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
                 let ov = state.get_primitive_int(name);
                 let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
                 debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Int = ov * i;
+                let nv : ET::Int = ov * i;
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_int(name,nv,global);
                 return Ok(())
@@ -1705,7 +1737,7 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
                 let ov = state.get_primitive_dim(name);
                 let i = catch_prim!(gullet.get_int(state) => ("multiply",cmd));
                 debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Dim = ov.tex_mult(i.to_i64() as f64);
+                let nv : ET::Dim = ov.tex_mult(i.to_i64() as f64);
                 debug_log!(debug => "  ={}",nv);
                 state.set_primitive_dim(name,nv,global);
                 return Ok(())
@@ -1721,7 +1753,7 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
                 let i = catch_prim!(gullet.get_int(state) => (stringify!(name),cmd));
                 let ov = state.get_int_register(u);
                 debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : <S::NumSet as NumSet>::Int = ov * i;
+                let nv : ET::Int = ov * i;
                 debug_log!(debug => "  ={}",nv);
                 state.set_int_register(u,nv,global);
                 return Ok(())
@@ -1732,20 +1764,23 @@ pub fn multiply<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
 }
 
 
-pub fn muskip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn muskip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\muskip");
     let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"muskip",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("muskip",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("muskip",cmd));
     let v = catch_prim!(gullet.get_muskip(state) => ("muskip",cmd));
     debug_log!(debug=>"\\muskip{} = {}",i,v);
     state.set_muskip_register(i,v,global);
     Ok(())
 }
-pub fn muskip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<MuSkip<<S::NumSet as NumSet>::MuDim,<S::NumSet as NumSet>::MuStretchShrinkDim>,ErrorInPrimitive<T>> {
+
+pub fn muskip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) ->
+                                                                                                           Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\muskip");
     let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
     let i:usize = match i.clone().try_into() {
@@ -1757,8 +1792,8 @@ pub fn muskip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     Ok(v)
 }
 
-pub fn muskipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-                                                     -> Result<(),ErrorInPrimitive<T>> {
+pub fn muskipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                                     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"muskipdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => ("muskipdef",cmd));
     match &name {
@@ -1769,7 +1804,7 @@ pub fn muskipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut G
             state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
         }
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("muskipdef",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("muskipdef",cmd));
     let num = catch_prim!(gullet.get_int(state) => ("muskipdef",cmd));
     if num.to_i64() < 0 {
         return Err(ErrorInPrimitive{name:"muskipdef",msg:Some(format!("Invalid muskip register index: {}",num)),cause:Some(cmd.cause),source:None})
@@ -1789,13 +1824,14 @@ pub fn muskipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut G
 }
 
 
-pub fn newlinechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn newlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\newlinechar");
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("newlinechar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("newlinechar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("newlinechar",cmd));
     let c = match i.to_i64() {
         -1|255 => None,
-        j => match T::Char::from_i64(j) {
+        j => match ET::Char::from_i64(j) {
             Some(c) => Some(c),
             None => return Err(ErrorInPrimitive{name:"newlinechar",msg:Some(format!("Not a valid character: {}",j)),cause:Some(cmd.cause),source:None})
         }
@@ -1804,21 +1840,23 @@ pub fn newlinechar_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gull
     state.set_newlinechar(c,global);
     Ok(())
 }
-pub fn newlinechar_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn newlinechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\newlinechar");
     let c = match state.get_newlinechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\newlinechar == {}",c);
-    Ok(<S::NumSet as NumSet>::Int::from_i64::<T>(c).unwrap())
+    Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
 }
 
-// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
-// in the first place
-pub fn noexpand<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+/// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
+/// in the first place
+pub fn noexpand<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\noexpand");
-    match catch_prim!(gullet.mouth().get_next(state) => ("noexpand",cmd)) {
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("noexpand",cmd)) {
         None => file_end_prim!("noexpand",cmd),
         Some((t,_)) => match t.base() {
             BaseToken::Char(c,CategoryCode::Active) => {
@@ -1853,41 +1891,44 @@ pub fn noexpand<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gullet
     Ok(vec!())
 }
 
-pub fn number<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn number<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\number");
     let num = catch_prim!(gullet.get_int(state) => ("number",cmd));
     let ret =
-        num.to_i64().to_string().as_bytes().into_iter().map(|c| T::new(BaseToken::Char(T::Char::from(*c),
+        num.to_i64().to_string().as_bytes().into_iter().map(|c| ET::Token::new(BaseToken::Char(ET::Char::from(*c),
             if *c == 32 {CategoryCode::Space} else {CategoryCode::Other}
         ),None)).collect();
     Ok(ret)
 }
 
 
-pub fn openin<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>) -> Result<(), ErrorInPrimitive<T>> {
+pub fn openin<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+    -> Result<(), ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\openin");
     let i = catch_prim!(gullet.get_int(state) => ("openin",cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"openin",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("openin",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("openin",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openin",cmd)).to_string();
     let f = state.filesystem().get(&filename);
     state.file_openin(i,f); // TODO error?
     Ok(())
 }
 
-pub fn openout<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>) -> Result<Whatsit<T, Sto>, ErrorInPrimitive<T>> {
+pub fn openout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+    -> Result<Whatsit<ET>, ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\openout");
     let i = catch_prim!(gullet.get_int(state) => ("openout",cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"openout",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("openout",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("openout",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openout",cmd)).to_string();
-    let apply = Box::new(move |_stomach:&mut Sto,state:&mut Sto::S,_gullet:&mut Sto::Gu| {
+    let apply = Box::new(move |_stomach:&mut ET::Stomach,state:&mut ET::State,_gullet:&mut ET::Gullet| {
         let f = state.filesystem().get(&filename);
         state.file_openout(i,f); // TODO error?
         Ok(())
@@ -1895,42 +1936,44 @@ pub fn openout<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, 
     Ok(Whatsit { apply })
 }
 
-pub fn or<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn or<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     match gullet.current_conditional() {
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop(gullet,state,"ifcase",i) => ("or",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i) => ("or",cmd)),
         _ => return Err(ErrorInPrimitive{name:"or",msg:Some("Not in an \\ifcase".to_string()),cause:Some(cmd.cause),source:None}),
     }
     Ok(vec![])
 }
 
-pub fn outer<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,protected_:bool,long_:bool,outer_:bool)
-                                                      -> Result<(),ErrorInPrimitive<T>> {
+pub fn outer<ET:EngineType>(stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global_:bool,protected_:bool,long_:bool,outer_:bool)
+                                                      -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\outer");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("outer",cmd)) {
         None => file_end_prim!("outer",cmd),
         Some(c) => match c.cmd {
-            StomachCommandInner::Assignment {name:"global",..} => global(stomach,state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"protected",..} => protected(stomach,state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"long",..} => long(stomach,state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"outer",..} => outer(stomach,state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"def",..} => def(state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"edef",..} => edef(state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"gdef",..} => gdef(state,gullet,cmd,global_,protected_,long_,true),
-            StomachCommandInner::Assignment {name:"xdef",..} => xdef(state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"global",..} => global::<ET>(stomach,state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"protected",..} => protected::<ET>(stomach,state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"long",..} => long::<ET>(stomach,state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"outer",..} => outer::<ET>(stomach,state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"def",..} => def::<ET>(state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"edef",..} => edef::<ET>(state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"gdef",..} => gdef::<ET>(state,gullet,cmd,global_,protected_,long_,true),
+            StomachCommandInner::Assignment {name:"xdef",..} => xdef::<ET>(state,gullet,cmd,global_,protected_,long_,true),
             _ => return Err(ErrorInPrimitive{name:"outer",msg:Some("Expected a macro definition after \\outer".to_string()),cause:Some(cmd.cause),source:None})
         }
     }
 }
 
-pub fn par<T:Token,Sto:Stomach<T>>(_stomach:&mut Sto,state:&mut Sto::S,_cmd:StomachCommand<T>) -> Result<(),ErrorInPrimitive<T>> {
+pub fn par<ET:EngineType>(_stomach:&mut ET::Stomach,state:&mut ET::State,_cmd:StomachCommand<ET::Token>) -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"par");
     if state.mode().is_vertical() {Ok(())} else {
         todo!("par in horizontal mode")
     }
 }
 
-pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCommand<T>,globally:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,globally:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"read");
     let i = catch_prim!(gullet.get_int(state) => ("read",cmd));
     let i : usize = match i.clone().try_into() {
@@ -1945,7 +1988,7 @@ pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
         return Err(ErrorInPrimitive{name:"read",msg:Some("Expected 'to' after \\read".to_string()),cause:Some(cmd.cause),source:None})
     }
     let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("read",cmd));
-    let ret = catch_prim!(file.read(state) => ("read",cmd)).into_iter().map(|tk| ExpToken::Token(tk)).collect();
+    let ret = catch_prim!(file.read::<ET>(state) => ("read",cmd)).into_iter().map(|tk| ExpToken::Token(tk)).collect();
     let def = Def {
         protected: false,
         long: false,
@@ -1966,7 +2009,8 @@ pub fn read<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:StomachCom
     Ok(())
 }
 
-pub fn romannumeral<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn romannumeral<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"romannumeral");
     let mut num = catch_prim!(gullet.get_int(state) => ("romannumeral",cmd)).to_i64();
     if num <= 0 {
@@ -2034,13 +2078,14 @@ pub fn romannumeral<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mu
     Ok(string_to_tokens(&ret))
 }
 
-pub fn setbox<T:Token,Sto:Stomach<T>>(state:&mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>, global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>, global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\setbox");
     let i = catch_prim!(gullet.get_int(state) => ("setbox",cmd)).to_i64();
     if i < 0  {
         return Err(ErrorInPrimitive{name:"setbox",msg:Some(format!("Invalid box number: {}",i)),cause:Some(cmd.cause),source:None})
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("setbox",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("setbox",cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => ("setbox",cmd)) {
         None => file_end_prim!("setbox",cmd),
         Some(c) => match c.cmd {
@@ -2051,7 +2096,7 @@ pub fn setbox<T:Token,Sto:Stomach<T>>(state:&mut Sto::S, gullet:&mut Sto::Gu, st
                     )}),
                     Some(f) => catch_prim!(f(state,gullet,stomach,c) => ("setbox",cmd))
                 };
-                stomach.stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Box::new(move |sto,s,gu,v| {
+                state.box_stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Box::new(move |sto,s,gu,v| {
                     let bx = match f(sto,s,gu,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
@@ -2068,23 +2113,25 @@ pub fn setbox<T:Token,Sto:Stomach<T>>(state:&mut Sto::S, gullet:&mut Sto::Gu, st
 
 }
 
-pub fn sfcode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn sfcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning space factor code");
     let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
-    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"catcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("catcode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("catcode",cmd));
     let v = catch_prim!(gullet.get_int(state) => ("catcode",cmd));
     debug_log!(debug=>"\\sfcode '{}' = {}",c.char_str(),v);
     state.set_sfcode(c,v,global);
     Ok(())
 }
-pub fn sfcode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn sfcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting space factor code");
     let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
-    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"sfcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
@@ -2093,21 +2140,23 @@ pub fn sfcode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     Ok(v)
 }
 
-
-pub fn skip_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn skip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\skip");
     let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"skip",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("skip",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("skip",cmd));
     let v = catch_prim!(gullet.get_skip(state) => ("skip",cmd));
     debug_log!(debug=>"\\skip{} = {}",i,v);
     state.set_skip_register(i,v,global);
     Ok(())
 }
-pub fn skip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Skip<<S::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>> {
+
+pub fn skip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Skip<ET::SkipDim>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting \\skip");
     let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
     let i:usize = match i.clone().try_into() {
@@ -2119,8 +2168,8 @@ pub fn skip_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
     Ok(v)
 }
 
-pub fn skipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-                                                     -> Result<(),ErrorInPrimitive<T>> {
+pub fn skipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                                     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"skipdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => ("skipdef",cmd));
     match &name {
@@ -2131,7 +2180,7 @@ pub fn skipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
             state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
         }
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("skipdef",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("skipdef",cmd));
     let num = catch_prim!(gullet.get_int(state) => ("skipdef",cmd));
     if num.to_i64() < 0 {
         return Err(ErrorInPrimitive{name:"skipdef",msg:Some(format!("Invalid skip register index: {}",num)),cause:Some(cmd.cause),source:None})
@@ -2150,27 +2199,28 @@ pub fn skipdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
     Ok(())
 }
 
-pub fn string<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn string<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"string");
     let cc = state.get_catcode_scheme();
-    match catch_prim!(gullet.mouth().get_next(state) => ("string",cmd)) {
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("string",cmd)) {
         None => file_end_prim!("string",cmd),
         Some((t,_)) => match t.base() {
             BaseToken::Char(c,_) => {
-                let ret = gullet::methods::string_to_tokens::<T>(&c.char_str().as_bytes());
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&c.char_str().as_bytes());
                 Ok(ret)
             }
             BaseToken::CS(name) => {
                 let mut ret = Vec::new();
                 match state.get_escapechar() {
                     None => (),
-                    Some(c) => ret.push(T::new(BaseToken::Char(c,CategoryCode::Other),None))
+                    Some(c) => ret.push(ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))
                 }
                 for t in name.as_vec() {
                     if *cc.get(*t) == CategoryCode::Space {
-                        ret.push(T::new(BaseToken::Char(*t,CategoryCode::Space),None));
+                        ret.push(ET::Token::new(BaseToken::Char(*t,CategoryCode::Space),None));
                     } else {
-                        ret.push(T::new(BaseToken::Char(t.clone(), CategoryCode::Other), None));
+                        ret.push(ET::Token::new(BaseToken::Char(t.clone(), CategoryCode::Other), None));
                     }
                 }
                 Ok(ret)
@@ -2180,7 +2230,8 @@ pub fn string<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCo
 
 }
 
-pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\the");
     let next = catch_prim!(gullet.get_next_stomach_command(state) => ("the",cmd));
     match next {
@@ -2190,7 +2241,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                 let val = state.get_int_register(i);
                 let str = format!("{}",val);
                 debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
                 Ok(ret)
             }
             StomachCommandInner::ValueRegister(i,Assignable::Toks) =>
@@ -2208,7 +2259,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -2222,7 +2273,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -2236,7 +2287,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -2250,7 +2301,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -2264,7 +2315,7 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
                         let val = catch_prim!(fun(state,gullet,cmd.clone()) => ("the",cmd));
                         let str = format!("{}",val);
                         debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<T>(&str.as_bytes());
+                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
                         Ok(ret)
                     }
                 }
@@ -2279,33 +2330,34 @@ pub fn the<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:
     }
 }
 
-pub fn time<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn time<ET:EngineType>(state:&mut ET::State,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     let t = state.get_start_time();
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
+    Ok(catch_prim!(ET::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
 }
 
 
-pub fn toks<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\toks");
     let i = catch_prim!(gullet.get_int(state) => ("toks",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("toks",cmd));
-    match catch_prim!(gullet.mouth().get_next(state) => ("toks",cmd)) {
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("toks",cmd));
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("toks",cmd)) {
         None => file_end_prim!("toks",cmd),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Expected begin group token after \\toks, got: {}",o)),cause:Some(cmd.cause),source:None})
     }
-    let v = catch_prim!(gullet.mouth().read_until_endgroup(state) => ("toks",cmd));
+    let v = catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("toks",cmd));
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(v.clone()));
     state.set_toks_register(i,v,global);
     Ok(())
 }
 
-pub fn toksdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool)
-                                                      -> Result<(),ErrorInPrimitive<T>> {
+pub fn toksdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                                      -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"toksdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => ("toksdef",cmd));
     match &name {
@@ -2316,7 +2368,7 @@ pub fn toksdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
             state.set_command(name.clone(),Some(Ptr::new(Command::Relax)),false)
         }
     }
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("toksdef",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("toksdef",cmd));
     let num = catch_prim!(gullet.get_int(state) => ("toksdef",cmd));
     if num.to_i64() < 0 {
         return Err(ErrorInPrimitive{name:"toksdef",msg:Some(format!("Invalid toks register index: {}",num)),cause:Some(cmd.cause),source:None})
@@ -2335,16 +2387,17 @@ pub fn toksdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
     Ok(())
 }
 
-pub fn uccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn uccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+    -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning upper case character");
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
-    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"uccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    catch_prim!(gullet.mouth().skip_eq_char(state) => ("uccode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("uccode",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
-    let lc: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let lc: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"uccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
@@ -2352,20 +2405,22 @@ pub fn uccode_assign<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&m
     state.set_uccode(c,lc,global);
     Ok(())
 }
-pub fn uccode_get<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+
+pub fn uccode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Getting upper case character");
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
-    let c: T::Char = match T::Char::from_i64(i.to_i64()) {
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => return Err(ErrorInPrimitive{name:"uccode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
     };
-    let v = catch_prim!(<S::NumSet as NumSet>::Int::from_i64(state.get_uccode(c).to_usize() as i64) => ("uccode",cmd));
+    let v = catch_prim!(ET::Int::from_i64(state.get_uccode(c).to_usize() as i64) => ("uccode",cmd));
     debug_log!(debug=>"\\uccode '{}' == {}",c.char_str(),v);
     Ok(v)
 }
 
-pub fn uppercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>)
-                                         -> Result<(),ErrorInPrimitive<T>> {
+pub fn uppercase<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>)
+                                         -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\uppercase");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("uppercase",cmd)) {
         None => file_end_prim!("uppercase",cmd),
@@ -2376,12 +2431,12 @@ pub fn uppercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gul
     }
     let mut ingroups = 1;
     let mut ret = vec!();
-    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("uppercase",cmd)) {
+    while let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("uppercase",cmd)) {
         match next.base() {
             BaseToken::Char(c,CategoryCode::BeginGroup) => {
                 ingroups += 1;
                 let nc = state.get_uccode(*c);
-                ret.push(T::new(BaseToken::Char(nc,CategoryCode::BeginGroup),None));
+                ret.push(ET::Token::new(BaseToken::Char(nc,CategoryCode::BeginGroup),None));
             },
             BaseToken::Char(c,CategoryCode::EndGroup) => {
                 ingroups -= 1;
@@ -2389,12 +2444,12 @@ pub fn uppercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gul
                     break;
                 } else {
                     let nc = state.get_uccode(*c);
-                    ret.push(T::new(BaseToken::Char(nc,CategoryCode::EndGroup),None));
+                    ret.push(ET::Token::new(BaseToken::Char(nc,CategoryCode::EndGroup),None));
                 }
             },
             BaseToken::Char(c,cc) => {
                 let nc = state.get_uccode(*c);
-                ret.push(T::new(BaseToken::Char(nc,*cc),None));
+                ret.push(ET::Token::new(BaseToken::Char(nc,*cc),None));
             },
             _ => ret.push(next)
         }
@@ -2403,21 +2458,22 @@ pub fn uppercase<T:Token,Sto:Stomach<T>>(stomach:&mut Sto, state:&mut Sto::S,gul
     Ok(())
 }
 
-pub fn write<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, stomach:&mut Sto, cmd:StomachCommand<T>) -> Result<Whatsit<T, Sto>, ErrorInPrimitive<T>> {
+pub fn write<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+    -> Result<Whatsit<ET>, ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\write");
     let i = catch_prim!(gullet.get_int(state) => ("write",cmd));
     let i = i.to_i64();
 
-    match catch_prim!(gullet.mouth().get_next(state) => ("write",cmd)) {
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("write",cmd)) {
         None => file_end_prim!("write",cmd),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => return Err(ErrorInPrimitive{name:"write",msg:Some(format!("Expected begin group token after \\write, got: {}",o)),cause:Some(cmd.cause),source:None})
     }
-    let mut tks = catch_prim!(gullet.mouth().read_until_endgroup(state) => ("write",cmd));
+    let mut tks = catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("write",cmd));
 
-    let apply = Box::new(move |_stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu| {
-        tks.push(T::new(BaseToken::Char(T::Char::from(b'}'),CategoryCode::EndGroup),None));
-        tks.insert(0,T::new(BaseToken::Char(T::Char::from(b'{'),CategoryCode::BeginGroup),None));
+    let apply = Box::new(move |_stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet| {
+        tks.push(ET::Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
+        tks.insert(0,ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
         let old = gullet.switch_mouth(tks);
         let string = String::from_utf8(gullet.get_braced_string(state)?).unwrap();
         if i == 18 {
@@ -2443,17 +2499,16 @@ pub fn write<T:Token,Sto:Stomach<T>>(state: &mut Sto::S, gullet:&mut Sto::Gu, st
 }
 
 
-pub fn xdef<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,global:bool,protected:bool,long:bool,outer:bool)
-                                                 -> Result<(),ErrorInPrimitive<T>> {
-    edef(state,gullet,cmd,true,protected,long,outer)
+pub fn xdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool,protected:bool,long:bool,outer:bool)
+                                                 -> Result<(),ErrorInPrimitive<ET::Token>> {
+    edef::<ET>(state,gullet,cmd,true,protected,long,outer)
 }
 
-pub fn year<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(
+pub fn year<ET:EngineType>(state:&mut ET::State,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(
         state.get_start_time().year() as i64
     ) => ("year",cmd)))
 }
-*/
 
 // --------------------------------------------------------------------------------------------------
 
@@ -2476,40 +2531,39 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_stomach!(closein,state,stomach,gullet,(s,gu,sto,cmd,_) =>closein::<ET>(s,gu,sto,cmd));
     register_whatsit!(closeout,state,stomach,gullet,(s,gu,sto,cmd) =>closeout::<ET>(s,gu,sto,cmd));
     register_int_assign!(clubpenalty,state,stomach,gullet);
-    /*
     register_value_assign_int!(count,state,stomach,gullet);
-    register_assign!(countdef,state,stomach,gullet,(s,gu,_,cmd,global) =>countdef(s,gu,cmd,global));
-    register_gullet!(csname,state,stomach,gullet,(s,gu,cmd) =>csname(s,gu,cmd));
-    register_int!(day,state,stomach,gullet,(s,g,c) => day(s,g,c));
-    register_assign!(def,state,stomach,gullet,(s,gu,_,cmd,global) =>def(s,gu,cmd,global,false,false,false));
+    register_assign!(countdef,state,stomach,gullet,(s,gu,_,cmd,global) =>countdef::<ET>(s,gu,cmd,global));
+    register_gullet!(csname,state,stomach,gullet,(s,gu,cmd) =>csname::<ET>(s,gu,cmd));
+    register_int!(day,state,stomach,gullet,(s,g,c) => day::<ET>(s,c));
+    register_assign!(def,state,stomach,gullet,(s,gu,_,cmd,global) =>def::<ET>(s,gu,cmd,global,false,false,false));
     register_int_assign!(defaulthyphenchar,state,stomach,gullet);
     register_int_assign!(defaultskewchar,state,stomach,gullet);
     register_int_assign!(delimiterfactor,state,stomach,gullet);
     register_dim_assign!(delimitershortfall,state,stomach,gullet);
-    register_gullet!(detokenize,state,stomach,gullet,(s,gu,cmd) =>detokenize(s,gu,cmd));
+    register_gullet!(detokenize,state,stomach,gullet,(s,gu,cmd) =>detokenize::<ET>(s,gu,cmd));
     register_value_assign_dim!(dimen,state,stomach,gullet);
-    register_assign!(dimendef,state,stomach,gullet,(s,gu,_,cmd,global) =>dimendef(s,gu,cmd,global));
+    register_assign!(dimendef,state,stomach,gullet,(s,gu,_,cmd,global) =>dimendef::<ET>(s,gu,cmd,global));
     register_dim_assign!(displayindent,state,stomach,gullet);
     register_int_assign!(displaywidowpenalty,state,stomach,gullet);
     register_dim_assign!(displaywidth,state,stomach,gullet);
-    register_assign!(divide,state,stomach,gullet,(s,gu,_,cmd,global) =>divide(s,gu,cmd,global));
+    register_assign!(divide,state,stomach,gullet,(s,gu,_,cmd,global) =>divide::<ET>(s,gu,cmd,global));
     register_int_assign!(doublehyphendemerits,state,stomach,gullet);
-    register_assign!(edef,state,stomach,gullet,(s,gu,_,cmd,global) =>edef(s,gu,cmd,global,false,false,false));
-    register_gullet!(else,state,stomach,gullet,(s,gu,cmd) =>else_(s,gu,cmd));
+    register_assign!(edef,state,stomach,gullet,(s,gu,_,cmd,global) =>edef::<ET>(s,gu,cmd,global,false,false,false));
+    register_gullet!(else,state,stomach,gullet,(s,gu,cmd) =>else_::<ET>(s,gu,cmd));
     register_dim_assign!(emergencystretch,state,stomach,gullet);
-    register_stomach!(end,state,stomach,gullet,(s,_,sto,cmd,_) =>end(sto,s,cmd));
-    register_stomach!(endcsname,state,stomach,gullet,(_,_,_,cmd,_) =>endcsname(cmd));
-    register_stomach!(endgroup,state,stomach,gullet,(s,gu,sto,cmd,_) =>endgroup(sto,s,gu,cmd));
+    register_stomach!(end,state,stomach,gullet,(s,_,sto,cmd,_) =>end::<ET>(sto,s,cmd));
+    register_stomach!(endcsname,state,stomach,gullet,(_,_,_,cmd,_) =>endcsname::<ET::Token>(cmd));
+    register_stomach!(endgroup,state,stomach,gullet,(s,gu,sto,cmd,_) =>endgroup::<ET>(sto,s,gu,cmd));
     register_value_assign_int!(endlinechar,state,stomach,gullet);
     register_tok_assign!(errhelp,state,stomach,gullet);
 
     let em = stomach.register_primitive("errmessage",|s,gu,_sto,cmd,_global|
-        errmessage(s,gu,cmd));
-    state.set_command(T::Char::from_str("errmessage"),Some(Ptr::new(Command::Stomach {
+        errmessage::<ET>(s,gu,cmd));
+    state.set_command(ET::Char::from_str("errmessage"),Some(Ptr::new(Command::Stomach {
         name:"errmessage",
         index:em
     })),true);
-    state.set_command(T::Char::from_str("LaTeX3 error:"),Some(Ptr::new(Command::Stomach {
+    state.set_command(ET::Char::from_str("LaTeX3 error:"),Some(Ptr::new(Command::Stomach {
         name:"LaTeX3 error:",
         index:em
     })),true);
@@ -2517,7 +2571,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(errorcontextlines,state,stomach,gullet);
     register_value_assign_int!(escapechar,state,stomach,gullet);
     register_int_assign!(exhyphenpenalty,state,stomach,gullet);
-    register_gullet!(expandafter,state,stomach,gullet,(s,g,c) => expandafter(s,g,c));
+    register_gullet!(expandafter,state,stomach,gullet,(s,g,c) => expandafter::<ET>(s,g,c));
     register_tok_assign!(everypar,state,stomach,gullet);
     register_tok_assign!(everymath,state,stomach,gullet);
     register_tok_assign!(everydisplay,state,stomach,gullet);
@@ -2526,81 +2580,81 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_tok_assign!(everyjob,state,stomach,gullet);
     register_tok_assign!(everycr,state,stomach,gullet);
     register_int_assign!(fam,state,stomach,gullet);
-    register_gullet!(fi,state,stomach,gullet,(s,gu,cmd) =>fi(s,gu,cmd));
+    register_gullet!(fi,state,stomach,gullet,(s,gu,cmd) =>fi::<ET>(s,gu,cmd));
     register_int_assign!(finalhyphendemerits,state,stomach,gullet);
     register_int_assign!(floatingpenalty,state,stomach,gullet);
     register_value_assign_font!(font,state,stomach,gullet);
     register_value_assign_dim!(fontdimen,state,stomach,gullet);
-    register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef(s,gu,cmd,global,false,false,false));
-    register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global(sto,s,gu,cmd,g,false,false,false));
+    register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef::<ET>(s,gu,cmd,global,false,false,false));
+    register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global::<ET>(sto,s,gu,cmd,g,false,false,false));
     register_int_assign!(globaldefs,state,stomach,gullet);
     register_int_assign!(hangafter,state,stomach,gullet);
     register_dim_assign!(hangindent,state,stomach,gullet);
     register_int_assign!(hbadness,state,stomach,gullet);
-    register_open_box!(hbox,state,stomach,gullet,BoxMode::H,(s,gu,sto,cmd) =>hbox(sto,s,gu,cmd));
+    register_open_box!(hbox,state,stomach,gullet,BoxMode::H,(s,gu,sto,cmd) =>hbox::<ET>(sto,s,gu,cmd));
     register_dim_assign!(hfuzz,state,stomach,gullet);
     register_dim_assign!(hoffset,state,stomach,gullet);
     register_int_assign!(holdinginserts,state,stomach,gullet);
     register_dim_assign!(hsize,state,stomach,gullet);
     register_value_assign_int!(hyphenchar,state,stomach,gullet);
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
-    register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_(s,gu,cmd));
-    register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>ifcase(s,gu,cmd));
-    register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>ifcat(s,gu,cmd));
+    register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_::<ET>(s,gu,cmd));
+    register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>ifcase::<ET>());
+    register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>ifcat::<ET>(s,gu,cmd));
     register_conditional!(ifdim,state,stomach,gullet,(s,gu,cmd) =>todo!("ifdim"));
-    register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof(s,gu,cmd));
+    register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof::<ET>(s,gu,cmd));
     register_conditional!(iffalse,state,stomach,gullet,(s,gu,cmd) => Ok(false));
     register_conditional!(ifhbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhbox"));
     register_conditional!(ifhmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhmode"));
     register_conditional!(ifinner,state,stomach,gullet,(s,gu,cmd) =>todo!("ifinner"));
     register_conditional!(ifmmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifmmode"));
-    register_conditional!(ifnum,state,stomach,gullet,(s,gu,cmd) =>ifnum(s,gu,cmd));
-    register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>ifodd(s,gu,cmd));
+    register_conditional!(ifnum,state,stomach,gullet,(s,gu,cmd) =>ifnum::<ET>(s,gu,cmd));
+    register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>ifodd::<ET>(s,gu,cmd));
     register_conditional!(iftrue,state,stomach,gullet,(s,gu,cmd) => Ok(true));
     register_conditional!(ifvbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvbox"));
     register_conditional!(ifvmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvmode"));
     register_conditional!(ifvoid,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvoid"));
-    register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx(s,gu,cmd));
-    register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate(s,gu,sto,cmd));
-    register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input(s,gu,cmd));
+    register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx::<ET>(s,gu,cmd));
+    register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate::<ET>(s,gu,sto,cmd));
+    register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input::<ET>(s,gu,cmd));
     register_int_assign!(interlinepenalty,state,stomach,gullet);
     register_int_assign!(language,state,stomach,gullet);
     register_value_assign_int!(lccode,state,stomach,gullet);
     register_int_assign!(lefthyphenmin,state,stomach,gullet);
     register_skip_assign!(leftskip,state,stomach,gullet);
-    register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_(s,gu,cmd,global));
+    register_assign!(let,state,stomach,gullet,(s,gu,_,cmd,global) =>let_::<ET>(s,gu,cmd,global));
     register_int_assign!(linepenalty,state,stomach,gullet);
     register_skip_assign!(lineskip,state,stomach,gullet);
     register_dim_assign!(lineskiplimit,state,stomach,gullet);
-    register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long(sto,s,gu,cmd,g,false,false,false));
-    register_stomach!(lowercase,state,stomach,gullet,(s,gu,sto,cmd,_) =>lowercase(sto,s,gu,cmd));
+    register_assign!(long,state,stomach,gullet,(s,gu,sto,cmd,g) =>long::<ET>(sto,s,gu,cmd,g,false,false,false));
+    register_stomach!(lowercase,state,stomach,gullet,(s,gu,sto,cmd,_) =>lowercase::<ET>(sto,s,gu,cmd));
     register_int_assign!(looseness,state,stomach,gullet);
     register_int_assign!(mag,state,stomach,gullet);
     register_int_assign!(maxdeadcycles,state,stomach,gullet);
     register_dim_assign!(maxdepth,state,stomach,gullet);
-    register_assign!(mathchardef,state,stomach,gullet,(s,gu,_,cmd,global) =>mathchardef(s,gu,cmd,global));
+    register_assign!(mathchardef,state,stomach,gullet,(s,gu,_,cmd,global) =>mathchardef::<ET>(s,gu,cmd,global));
     register_dim_assign!(mathsurround,state,stomach,gullet);
-    register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning(s,g,c));
-    register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message(s,gu,cmd));
-    register_int!(month,state,stomach,gullet,(s,g,c) => month(s,g,c));
-    register_assign!(multiply,state,stomach,gullet,(s,gu,_,cmd,global) =>multiply(s,gu,cmd,global));
+    register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning::<ET>(s,g,c));
+    register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message::<ET>(s,gu,cmd));
+    register_int!(month,state,stomach,gullet,(s,g,c) => month::<ET>(s,c));
+    register_assign!(multiply,state,stomach,gullet,(s,gu,_,cmd,global) =>multiply::<ET>(s,gu,cmd,global));
     register_value_assign_muskip!(muskip,state,stomach,gullet);
-    register_assign!(muskipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>muskipdef(s,gu,cmd,global));
+    register_assign!(muskipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>muskipdef::<ET>(s,gu,cmd,global));
     register_value_assign_int!(newlinechar,state,stomach,gullet);
-    register_gullet!(noexpand,state,stomach,gullet,(s,g,c) => noexpand(s,g,c));
+    register_gullet!(noexpand,state,stomach,gullet,(s,g,c) => noexpand::<ET>(s,g,c));
     register_dim_assign!(nulldelimiterspace,state,stomach,gullet);
-    register_gullet!(number,state,stomach,gullet,(s,g,c) => number(s,g,c));
-    register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin(s,gu,sto,cmd));
-    register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout(s,gu,sto,cmd));
-    register_gullet!(or,state,stomach,gullet,(s,g,c) => or(s,g,c));
-    register_assign!(outer,state,stomach,gullet,(s,gu,sto,cmd,g) =>outer(sto,s,gu,cmd,g,false,false,false));
+    register_gullet!(number,state,stomach,gullet,(s,g,c) => number::<ET>(s,g,c));
+    register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin::<ET>(s,gu,sto,cmd));
+    register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout::<ET>(s,gu,sto,cmd));
+    register_gullet!(or,state,stomach,gullet,(s,g,c) => or::<ET>(s,g,c));
+    register_assign!(outer,state,stomach,gullet,(s,gu,sto,cmd,g) =>outer::<ET>(sto,s,gu,cmd,g,false,false,false));
     register_tok_assign!(output,state,stomach,gullet);
     register_int_assign!(outputpenalty,state,stomach,gullet);
     register_dim_assign!(overfullrule,state,stomach,gullet);
 
-    state.set_command(T::Char::par_token(),Some(Ptr::new(Command::Stomach {
+    state.set_command(ET::Char::par_token(),Some(Ptr::new(Command::Stomach {
         name:"par",
-        index:stomach.register_primitive("par",|s,_gu,sto,cmd,_global| par(sto,s,cmd))
+        index:stomach.register_primitive("par",|s,_gu,sto,cmd,_global| par::<ET>(sto,s,cmd))
     })),true);
     register_skip_assign!(parfillskip,state,stomach,gullet);
     register_dim_assign!(parindent,state,stomach,gullet);
@@ -2612,27 +2666,27 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(relpenalty,state,stomach,gullet);
     register_int_assign!(righthyphenmin,state,stomach,gullet);
     register_int_assign!(pretolerance,state,stomach,gullet);
-    register_assign!(read,state,stomach,gullet,(s,gu,_,cmd,global) =>read(s,gu,cmd,global));
-    state.set_command(T::Char::relax_token(),Some(Ptr::new(Command::Relax)),true);
+    register_assign!(read,state,stomach,gullet,(s,gu,_,cmd,global) =>read::<ET>(s,gu,cmd,global));
+    state.set_command(ET::Char::relax_token(),Some(Ptr::new(Command::Relax)),true);
     register_int_assign!(relpenalty,state,stomach,gullet);
     register_skip_assign!(rightskip,state,stomach,gullet);
-    register_gullet!(romannumeral,state,stomach,gullet,(s,g,c) => romannumeral(s,g,c));
+    register_gullet!(romannumeral,state,stomach,gullet,(s,g,c) => romannumeral::<ET>(s,g,c));
     register_dim_assign!(scriptspace,state,stomach,gullet);
-    register_assign!(setbox,state,stomach,gullet,(s,gu,sto,cmd,global) =>setbox(s,gu,sto,cmd,global));
+    register_assign!(setbox,state,stomach,gullet,(s,gu,sto,cmd,global) =>setbox::<ET>(s,gu,sto,cmd,global));
     register_value_assign_int!(sfcode,state,stomach,gullet);
     register_int_assign!(showboxbreadth,state,stomach,gullet);
     register_int_assign!(showboxdepth,state,stomach,gullet);
     register_value_assign_skip!(skip,state,stomach,gullet);
-    register_assign!(skipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>skipdef(s,gu,cmd,global));
+    register_assign!(skipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>skipdef::<ET>(s,gu,cmd,global));
     register_skip_assign!(spaceskip,state,stomach,gullet);
     register_dim_assign!(splitmaxdepth,state,stomach,gullet);
     register_skip_assign!(splittopskip,state,stomach,gullet);
-    register_gullet!(string,state,stomach,gullet,(s,g,c) => string(s,g,c));
+    register_gullet!(string,state,stomach,gullet,(s,g,c) => string::<ET>(s,g,c));
     register_skip_assign!(tabskip,state,stomach,gullet);
-    register_gullet!(the,state,stomach,gullet,(s,g,c) => the(s,g,c));
-    register_int!(time,state,stomach,gullet,(s,g,c) => time(s,g,c));
-    register_assign!(toks,state,stomach,gullet,(s,gu,_,cmd,global) =>toks(s,gu,cmd,global));
-    register_assign!(toksdef,state,stomach,gullet,(s,gu,_,cmd,global) =>toksdef(s,gu,cmd,global));
+    register_gullet!(the,state,stomach,gullet,(s,g,c) => the::<ET>(s,g,c));
+    register_int!(time,state,stomach,gullet,(s,g,c) => time::<ET>(s,c));
+    register_assign!(toks,state,stomach,gullet,(s,gu,_,cmd,global) =>toks::<ET>(s,gu,cmd,global));
+    register_assign!(toksdef,state,stomach,gullet,(s,gu,_,cmd,global) =>toksdef::<ET>(s,gu,cmd,global));
     register_int_assign!(tolerance,state,stomach,gullet);
     register_skip_assign!(topskip,state,stomach,gullet);
     register_int_assign!(tracingcommands,state,stomach,gullet);
@@ -2646,17 +2700,16 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(tracingstats,state,stomach,gullet);
     register_value_assign_int!(uccode,state,stomach,gullet);
     register_int_assign!(uchyph,state,stomach,gullet);
-    register_stomach!(uppercase,state,stomach,gullet,(s,gu,sto,cmd,_) =>uppercase(sto,s,gu,cmd));
+    register_stomach!(uppercase,state,stomach,gullet,(s,gu,sto,cmd,_) =>uppercase::<ET>(sto,s,gu,cmd));
     register_int_assign!(vbadness,state,stomach,gullet);
     register_dim_assign!(vfuzz,state,stomach,gullet);
     register_dim_assign!(voffset,state,stomach,gullet);
     register_dim_assign!(vsize,state,stomach,gullet);
     register_int_assign!(widowpenalty,state,stomach,gullet);
-    register_whatsit!(write,state,stomach,gullet,(s,gu,sto,cmd) =>write(s,gu,sto,cmd));
-    register_assign!(xdef,state,stomach,gullet,(s,gu,_,cmd,global) =>xdef(s,gu,cmd,global,false,false,false));
+    register_whatsit!(write,state,stomach,gullet,(s,gu,sto,cmd) =>write::<ET>(s,gu,sto,cmd));
+    register_assign!(xdef,state,stomach,gullet,(s,gu,_,cmd,global) =>xdef::<ET>(s,gu,cmd,global,false,false,false));
     register_skip_assign!(xspaceskip,state,stomach,gullet);
-    register_int!(year,state,stomach,gullet,(s,g,c) => year(s,g,c));
-     */
+    register_int!(year,state,stomach,gullet,(s,g,c) => year::<ET>(s,c));
 
     // TODOS ---------------------------------------------------------------------
 

@@ -82,9 +82,6 @@ pub trait Token:PartialEq+Clone+Display+Debug+'static{
     /// (if the [`Token`] is a [`TokenWithSourceref`]).
     fn with_ref(&self, token:&Ptr<Self>, cmd:&Ptr<Command<Self>>) -> Self;
     fn sourceref_trace(&self) -> Option<String>;
-
-    /// Parse a string into a list of [`Token`]s of [`CategoryCode::Other`]
-    fn from_str(s:String) -> Vec<Self>;
 }
 
 impl<C:CharType> Token for BaseToken<C> {
@@ -95,14 +92,6 @@ impl<C:CharType> Token for BaseToken<C> {
         self.clone()
     }
     fn sourceref_trace(&self) -> Option<String> { None }
-    fn from_str(s:String) -> Vec<Self> {
-        let mut ret = Vec::with_capacity(s.len());
-        let mut iter = s.as_bytes().to_vec().into_iter();
-        while let Some(c) = C::from_u8_iter(&mut iter) {
-            ret.push(BaseToken::Char(c, CategoryCode::Other))
-        }
-        ret
-    }
 }
 
 /// A list of [`Token`]s
@@ -170,9 +159,6 @@ impl<C:CharType> Token for TokenWithSourceref<C> {
             },
             None => None
         }
-    }
-    fn from_str(s: String) -> Vec<Self> {
-        BaseToken::from_str(s).into_iter().map(|b| Self { base: b, sourceref: None }).collect()
     }
 }
 impl<C:CharType> PartialEq for TokenWithSourceref<C> {

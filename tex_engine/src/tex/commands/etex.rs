@@ -4,9 +4,10 @@ use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_gullet, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign};
 use crate::engine::EngineType;
+use crate::engine::gullet::methods::string_to_tokens;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Command, GulletCommand, StomachCommand, StomachCommandInner};
-//use crate::tex::commands::tex::get_csname;
+use crate::tex::commands::tex::get_csname;
 use crate::tex::numbers::{Frac, MuSkip, Numeric, NumSet, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError};
@@ -14,12 +15,13 @@ use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
 
-/*
-pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>, name:&'static str, get:fn(&mut S, &mut Gu) -> Result<Num,Box<dyn TeXError<T>>>)
-                                                                  -> Result<Num,ErrorInPrimitive<T>> {
+
+pub fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&GulletCommand<ET::Token>, name:&'static str,
+                                get:fn(&mut ET::State, &mut ET::Gullet) -> Result<Num,Box<dyn TeXError<ET::Token>>>)
+                                                                  -> Result<Num,ErrorInPrimitive<ET::Token>> {
     let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
     'a: loop {
-        catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
+        catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
         if catch_prim!(gullet.get_keyword(state,"(") => (name,cmd.clone())) {
             stack.push((None, None));
             continue 'a;
@@ -33,7 +35,7 @@ pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, 
             _ => ()
         }
         loop {
-            catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
+            catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
             let kw = catch_prim!(
                 if stack.len()>1 {gullet.get_keywords(state,vec!("+","-","*","/",")"))}
                 else {gullet.get_keywords(state,vec!("+","-","*","/"))}
@@ -64,13 +66,13 @@ pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, 
                     continue 'a;
                 }
                 Some(r) if r == "*" => {
-                    let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
+                    let ret = catch_prim!(expr_loop::<ET,Frac>(state,gullet,cmd,&name,|s,g:&mut ET::Gullet| {
                         Ok(Frac::new(g.get_int(s)?.to_i64(),1))
                     }) => (name,cmd.clone()));
                     first = first.scale(ret.0,ret.1);
                 }
                 Some(r) if r == "/" => {
-                    let ret = catch_prim!(expr_loop(state,gullet,cmd,&name,|s,g| {
+                    let ret = catch_prim!(expr_loop::<ET,Frac>(state,gullet,cmd,&name,|s,g:&mut ET::Gullet| {
                         Ok(Frac::new(g.get_int(s)?.to_i64(),1))
                     }) => (name,cmd.clone()));
                     first = first.scale(ret.1,ret.0);
@@ -82,10 +84,10 @@ pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, 
 }
 
 
-pub fn dimexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Dim,ErrorInPrimitive<T>> {
+pub fn dimexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Dim,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"dimexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop(state, gullet, &cmd, "dimexpr", |s, g| g.get_dim(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("dimexpr",cmd)) {
+    let ret = expr_loop::<ET,ET::Dim>(state, gullet, &cmd, "dimexpr", |s, g:&mut ET::Gullet| g.get_dim(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("dimexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {
                 Some(Command::Relax) => (),
@@ -97,22 +99,23 @@ pub fn dimexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
     Ok(ret)
 }
 
-pub fn etexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    Ok(T::from_str(".6".to_string()))
-}
-pub fn etexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(_:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(2) => ("eTeXversion",cmd)))
+pub fn etexrevision<ET:EngineType>() -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+    Ok(string_to_tokens(".6".as_bytes()))
 }
 
-pub fn expanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn etexversion<ET:EngineType>(cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(2) => ("eTeXversion",cmd)))
+}
+
+pub fn expanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"expanded");
     Ok(catch_prim!(gullet.get_expanded_group(state,false,false,false) => ("expanded",cmd)))
 }
 
-pub fn glueexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Skip<<S::NumSet as NumSet>::SkipDim>,ErrorInPrimitive<T>> {
+pub fn glueexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Skip<ET::SkipDim>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"glueexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop(state, gullet, &cmd, "glueexpr", |s, g| g.get_skip(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("glueexpr",cmd)) {
+    let ret = expr_loop::<ET,Skip<ET::SkipDim>>(state, gullet, &cmd, "glueexpr", |s, g:&mut ET::Gullet| g.get_skip(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("glueexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {
                 Some(Command::Relax) => (),
@@ -124,15 +127,15 @@ pub fn glueexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu
     Ok(ret)
 }
 
-pub fn ifcsname<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifcsname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifcsname");
-    let name = get_csname(state,gullet,cmd,"ifcsname")?;
+    let name = get_csname::<ET>(state,gullet,cmd,"ifcsname")?;
     Ok(state.get_command(&name).is_some())
 }
 
-pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifdefined<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifdefined");
-    match catch_prim!(gullet.mouth().get_next(state) => ("ifeof",cmd)) {
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifeof",cmd)) {
         None => file_end_prim!("ifeof",cmd),
         Some((t,_)) => match t.base() {
             BaseToken::Char(c,CategoryCode::Active) =>
@@ -146,10 +149,11 @@ pub fn ifdefined<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gulle
     }
 }
 
-pub fn muexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<MuSkip<<S::NumSet as NumSet>::MuDim,<S::NumSet as NumSet>::MuStretchShrinkDim>,ErrorInPrimitive<T>> {
+pub fn muexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"muexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop(state, gullet, &cmd, "muexpr", |s, g| g.get_muskip(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("muexpr",cmd)) {
+    let ret = expr_loop::<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>(state, gullet, &cmd, "muexpr", |s, g:&mut ET::Gullet| g.get_muskip(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("muexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {
                 Some(Command::Relax) => (),
@@ -161,10 +165,10 @@ pub fn muexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,c
     Ok(ret)
 }
 
-pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
+pub fn numexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"numexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop(state, gullet, &cmd, "numexpr", |s, g| g.get_int(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
+    let ret = expr_loop::<ET,ET::Int>(state, gullet, &cmd, "numexpr", |s, g:&mut ET::Gullet| g.get_int(s))?;
+    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("numexpr",cmd)) {
         match next.base() {
             BaseToken::CS(name) => match state.get_command(name).as_deref() {
                 Some(Command::Relax) => (),
@@ -178,26 +182,26 @@ pub fn numexpr<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,
 
 use super::tex::{global,long,outer,def,edef,gdef,xdef};
 
-pub fn protected<T:Token,Sto:Stomach<T>>(stomach:&mut Sto,state:&mut Sto::S,gullet:&mut Sto::Gu,cmd:StomachCommand<T>,global_:bool,_:bool,long_:bool,outer_:bool)
-                                                      -> Result<(),ErrorInPrimitive<T>> {
+pub fn protected<ET:EngineType>(stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global_:bool,_:bool,long_:bool,outer_:bool)
+                                                      -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace => "\\protected");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("protected",cmd)) {
         None => file_end_prim!("protected",cmd),
         Some(c) => match c.cmd {
-            StomachCommandInner::Assignment {name:"global",..} => global(stomach,state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"protected",..} => protected(stomach,state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"long",..} => long(stomach,state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"outer",..} => outer(stomach,state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"def",..} => def(state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"edef",..} => edef(state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"gdef",..} => gdef(state,gullet,cmd,global_,true,long_,outer_),
-            StomachCommandInner::Assignment {name:"xdef",..} => xdef(state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"global",..} => global::<ET>(stomach,state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"protected",..} => protected::<ET>(stomach,state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"long",..} => long::<ET>(stomach,state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"outer",..} => outer::<ET>(stomach,state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"def",..} => def::<ET>(state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"edef",..} => edef::<ET>(state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"gdef",..} => gdef::<ET>(state,gullet,cmd,global_,true,long_,outer_),
+            StomachCommandInner::Assignment {name:"xdef",..} => xdef::<ET>(state,gullet,cmd,global_,true,long_,outer_),
             _ => return Err(ErrorInPrimitive{name:"protected",msg:Some("Expected a macro definition after \\protected".to_string()),cause:Some(cmd.cause),source:None})
         }
     }
 }
 
-pub fn unexpanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"unexpanded");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("unexpanded",cmd)) {
         None => file_end_prim!("unexpanded",cmd),
@@ -206,32 +210,27 @@ pub fn unexpanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
             _ => return Err(ErrorInPrimitive{name:"unexpanded",msg:Some("Expected a begin group after \\unexpanded".to_string()),cause:Some(cmd.cause),source:None})
         }
     }
-    Ok(catch_prim!(gullet.mouth().read_until_endgroup(state) => ("unexpanded",cmd)))
+    Ok(catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("unexpanded",cmd)))
 }
 
- */
-
 pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
-    /*
-    register_dim!(dimexpr,state,stomach,gullet,(s,g,c) => dimexpr(s,g,c));
-    register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision(s,g,c));
-    register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
+    register_dim!(dimexpr,state,stomach,gullet,(s,g,c) => dimexpr::<ET>(s,g,c));
+    register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision::<ET>());
+    register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion::<ET>(c));
     register_tok_assign!(everyeof,state,stomach,gullet);
-    register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded(s,g,c));
-    register_skip!(glueexpr,state,stomach,gullet,(s,g,c) => glueexpr(s,g,c));
-    register_conditional!(ifcsname,state,stomach,gullet,(s,gu,cmd) =>ifcsname(s,gu,cmd));
-    register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined(s,gu,cmd));
-    register_muskip!(muexpr,state,stomach,gullet,(s,g,c) => muexpr(s,g,c));
-    register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr(s,g,c));
+    register_gullet!(expanded,state,stomach,gullet,(s,g,c) => expanded::<ET>(s,g,c));
+    register_skip!(glueexpr,state,stomach,gullet,(s,g,c) => glueexpr::<ET>(s,g,c));
+    register_conditional!(ifcsname,state,stomach,gullet,(s,gu,cmd) =>ifcsname::<ET>(s,gu,cmd));
+    register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined::<ET>(s,gu,cmd));
+    register_muskip!(muexpr,state,stomach,gullet,(s,g,c) => muexpr::<ET>(s,g,c));
+    register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr::<ET>(s,g,c));
     register_int_assign!(tracingassigns,state,stomach,gullet);
     register_int_assign!(tracinggroups,state,stomach,gullet);
     register_int_assign!(tracingifs,state,stomach,gullet);
     register_int_assign!(tracingnesting,state,stomach,gullet);
     register_int_assign!(tracingscantokens,state,stomach,gullet);
-    register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected(sto,s,gu,cmd,g,false,false,false));
-    register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded(s,g,c));
-
-     */
+    register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected::<ET>(sto,s,gu,cmd,g,false,false,false));
+    register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded::<ET>(s,g,c));
 
     cmtodo!(state,stomach,gullet,beginL);
     cmtodo!(state,stomach,gullet,beginR);

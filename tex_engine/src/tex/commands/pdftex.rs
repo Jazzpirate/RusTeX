@@ -14,8 +14,8 @@ use crate::utils::errors::{catch_prim, ErrorInPrimitive};
 use crate::utils::strings::CharType;
 use crate::utils::Ptr;
 
-/*
-pub fn ifpdfabsnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+
+pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifpdfabsnum");
     let i1 = catch_prim!(gullet.get_int(state) => ("ifpdfabsnum",cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifpdfabsnum",cmd)) {
@@ -31,7 +31,7 @@ pub fn ifpdfabsnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gul
     }
 }
 
-pub fn ifpdfabsdim<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
+pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifpdfabsdim");
     let i1 = catch_prim!(gullet.get_dim(state) => ("ifpdfabsdim",cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifpdfabsdim",cmd)) {
@@ -47,7 +47,7 @@ pub fn ifpdfabsdim<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:Gul
     }
 }
 
-fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"pdffilesize");
     let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("pdffilesize",cmd));
     let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
@@ -56,53 +56,52 @@ fn pdffilesize<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletC
     Ok(string_to_tokens(ret.as_bytes()))
 }
 
-fn pdfstrcmp<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
+fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"pdfstrcmp");
     let str1 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("pdfstrcmp",cmd))).unwrap();
     let str2 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("pdfstrcmp",cmd))).unwrap();
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    let ret = if str1==str2 {vec!(Token::new(BaseToken::Char(T::Char::from(b'0'),CategoryCode::Other),None))}
+    let ret = if str1==str2 {vec!(Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
         else if str1 < str2 { string_to_tokens("-1".as_bytes())}
-        else {vec!(Token::new(BaseToken::Char(T::Char::from(b'1'),CategoryCode::Other),None))};
+        else {vec!(Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))};
     Ok(ret)
 }
 
-fn pdftexversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(140) => ("pdftexversion",cmd)))
+fn pdftexversion<ET:EngineType>(state:&mut ET::State,_gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(140) => ("pdftexversion",cmd)))
 }
 
-fn pdfmajorversion<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<<S::NumSet as NumSet>::Int,ErrorInPrimitive<T>> {
-    Ok(catch_prim!(<S::NumSet as NumSet>::Int::from_i64(1) => ("pdfmajorversion",cmd)))
+fn pdfmajorversion<ET:EngineType>(state:&mut ET::State,_gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(1) => ("pdfmajorversion",cmd)))
 }
 
-pub fn pdftexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:&mut Gu,_cmd:GulletCommand<T>) -> Result<Vec<T>,ErrorInPrimitive<T>> {
-    Ok(T::from_str("25".to_string()))
+pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,_gullet:&mut ET::Gullet,_cmd:GulletCommand<ET::Token>)
+    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+    Ok(string_to_tokens("25".as_bytes()))
 }
-
- */
 
 pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
-    /*
-    register_conditional!(ifpdfabsdim,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsdim(s,gu,cmd));
-    register_conditional!(ifpdfabsnum,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsnum(s,gu,cmd));
+    register_conditional!(ifpdfabsdim,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsdim::<ET>(s,gu,cmd));
+    register_conditional!(ifpdfabsnum,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsnum::<ET>(s,gu,cmd));
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
     register_int_assign!(pdfdecimaldigits,state,stomach,gullet);
-    register_gullet!(pdffilesize,state,stomach,gullet,(s,gu,cmd) =>pdffilesize(s,gu,cmd));
+    register_gullet!(pdffilesize,state,stomach,gullet,(s,gu,cmd) =>pdffilesize::<ET>(s,gu,cmd));
     register_dim_assign!(pdfhorigin,state,stomach,gullet);
     register_int_assign!(pdfoutput,state,stomach,gullet);
-    register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion(s,g,c));
+    register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion::<ET>(s,g,c));
     register_int_assign!(pdfminorversion,state,stomach,gullet);
     register_int_assign!(pdfobjcompresslevel,state,stomach,gullet);
     register_dim_assign!(pdfpageheight,state,stomach,gullet);
     register_dim_assign!(pdfpagewidth,state,stomach,gullet);
     register_int_assign!(pdfpkresolution,state,stomach,gullet);
-    register_gullet!(pdfstrcmp,state,stomach,gullet,(s,gu,cmd) =>pdfstrcmp(s,gu,cmd));
-    register_gullet!(pdftexrevision,state,stomach,gullet,(s,gu,cmd) =>pdftexrevision(s,gu,cmd));
-    register_int!(pdftexversion,state,stomach,gullet,(s,g,c) => pdftexversion(s,g,c));
+    register_gullet!(pdfstrcmp,state,stomach,gullet,(s,gu,cmd) =>pdfstrcmp::<ET>(s,gu,cmd));
+    register_gullet!(pdftexrevision,state,stomach,gullet,(s,gu,cmd) =>pdftexrevision::<ET>(s,gu,cmd));
+    register_int!(pdftexversion,state,stomach,gullet,(s,g,c) => pdftexversion::<ET>(s,g,c));
     register_dim_assign!(pdfvorigin,state,stomach,gullet);
     register_int_assign!(tracingstacklevels,state,stomach,gullet);
 
-     */
 
     cmtodo!(state,stomach,gullet,efcode);
     cmtodo!(state,stomach,gullet,knaccode);

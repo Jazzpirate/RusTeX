@@ -19,18 +19,18 @@ macro_rules! cmtodo {
 #[macro_export]
 macro_rules! map_group {
     ($name:expr,$cmd:ident,$state:ident,$mouth:expr,$finish:expr,$tk:ident => $f:expr) => {
-        if let Some((tk,b)) = catch_prim!($mouth.get_next($state) => ($name,$cmd)) {
+        if let Some((tk,b)) = catch_prim!($mouth.get_next::<ET>($state) => ($name,$cmd)) {
             match tk.catcode() {
                 CategoryCode::BeginGroup => (),
                 _ => return Err(
                     ErrorInPrimitive{name:$name,msg:None,cause:Some($cmd.cause),source:Some(
-                        crate::utils::errors::ExpectedToken{expected:T::new(BaseToken::Char(T::Char::from(b'{'),CategoryCode::BeginGroup),None),found:tk}.into()
+                        crate::utils::errors::ExpectedToken{expected:ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None),found:tk}.into()
                     )}
                 )
             }
         }
         let mut depth = 1;
-        while let Some(($tk,_)) = catch_prim!($mouth.get_next($state) => ($name,$cmd)) {
+        while let Some(($tk,_)) = catch_prim!($mouth.get_next::<ET>($state) => ($name,$cmd)) {
             match $tk.catcode() {
                 CategoryCode::BeginGroup => {
                     depth += 1;
@@ -284,8 +284,8 @@ macro_rules! register_value_assign_skip {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
         $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
-            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
-            value_index:$gullet.register_primitive_skip(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>]::<ET>(s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_skip(stringify!($name),|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd)),
             tp:Assignable::Skip
         })),true);
     }};
@@ -296,8 +296,8 @@ macro_rules! register_value_assign_muskip {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
         $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
-            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
-            value_index:$gullet.register_primitive_muskip(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>]::<ET>(s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_muskip(stringify!($name),|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd)),
             tp:Assignable::MuSkip
         })),true);
     }};
