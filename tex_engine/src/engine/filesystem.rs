@@ -15,6 +15,7 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use kpathsea::Kpathsea;
+use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KpseResult;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
@@ -35,7 +36,7 @@ pub trait File<Char:CharType>:Clone {
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof(&self) -> bool;
-    fn read<T:Token<Char=Char>,S:State<T>>(&self,state:&S) -> Result<Vec<T>,Box<dyn TeXError<T>>>;
+    fn read<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>>;
 }
 
 pub trait FileSystem<Char:CharType>:'static {
@@ -81,7 +82,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<T:Token,S:State<T>>(&self,_:&S) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+    fn read<ET: EngineType>(&self, state: &ET::State) -> Result<Vec<ET::Token>, Box<dyn TeXError<ET::Token>>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -119,17 +120,17 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let mut open = self.open.write().unwrap();
         open.as_mut().unwrap().preview().is_empty()//.peek().is_none()
     }
-    fn read<T: Token<Char=Char>, S: State<T>>(&self, state: &S) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+    fn read<ET: EngineType<Char=Char>>(&self, state: &ET::State) -> Result<Vec<ET::Token>, Box<dyn TeXError<ET::Token>>> {
         let mut open = self.open.write().unwrap();
         match &mut *open {
             None => Err(OtherError{msg:"File not open".to_string(),source:None,cause:None}.into()),
             Some(m) => {
                 let line = m.line();
-                let mut ret: Vec<T> = vec!();
+                let mut ret: Vec<ET::Token> = vec!();
                 let mut ingroups = 0;
                 loop {
                     if ingroups != 0 || m.line() == line {
-                        match m.get_next::<T>(state.get_catcode_scheme(),state.get_endlinechar())? {
+                        match m.get_next::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar())? {
                             None =>
                                 return Ok(ret),
                             Some(tk) => {

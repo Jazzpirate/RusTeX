@@ -12,6 +12,7 @@ pub mod methods;
 
 use std::vec::IntoIter;
 use log::debug;
+use crate::engine::EngineType;
 use crate::engine::filesystem::File;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
@@ -60,15 +61,15 @@ pub trait Mouth<T:Token>:Sized+'static {
     /// (for implementations with a peek buffer)
     fn requeue(&mut self,tk:T);
 
-    fn has_next<S:State<T>>(&mut self, state:&S) -> Result<bool,InvalidCharacter<T>>;
+    fn has_next<ET:EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<bool,InvalidCharacter<T>>;
 
     /// Return the next [`Token`] from the [`Mouth`], and whether to expand it (due to `\noexpand`)
     //#[inline(always)]
-    fn get_next<S:State<T>>(&mut self,state:&S) -> Result<Option<(T,bool)>,InvalidCharacter<T>>;
+    fn get_next<ET:EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self,state:&ET::State) -> Result<Option<(T,bool)>,InvalidCharacter<T>>;
 
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn get_next_nopar<S:State<T>>(&mut self,state:&S) -> Result<Option<(T,bool)>,Box<dyn TeXError<T>>> {
-        match self.get_next(state)? {
+    fn get_next_nopar<ET:EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self,state:&ET::State) -> Result<Option<(T,bool)>,Box<dyn TeXError<T>>> {
+        match self.get_next::<ET>(state)? {
             Some((t,b)) => {
                 match t.base() {
                     BaseToken::CS(name) if *name == T::Char::par_token() =>
@@ -90,33 +91,33 @@ pub trait Mouth<T:Token>:Sized+'static {
     fn file_line(&self) -> String;
 
     /// Skip whitespace characters from the [`Mouth`]
-    fn skip_whitespace<S:State<T>>(&mut self, state:&S) -> Result<(),InvalidCharacter<T>> {
-        methods::skip_whitespace(self,state)
+    fn skip_whitespace<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<(),InvalidCharacter<T>> {
+        methods::skip_whitespace::<ET>(self,state)
     }
 
     /// read optional `=` characters from the [`Mouth`]
-    fn skip_eq_char<S:State<T>>(&mut self,state:&S) -> Result<(),InvalidCharacter<T>> {
-        methods::skip_eq_char(self,state)
+    fn skip_eq_char<ET:EngineType<Token=T,Mouth=Self>>(&mut self,state:&ET::State) -> Result<(),InvalidCharacter<T>> {
+        methods::skip_eq_char::<ET>(self,state)
     }
 
     /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    fn read_argument<S:State<T>>(&mut self, state:&S) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-        methods::read_argument(self,state)
+    fn read_argument<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+        methods::read_argument::<ET>(self,state)
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn read_argument_nopar<S:State<T>>(&mut self, state:&S) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-        methods::read_argument_nopar(self,state)
+    fn read_argument_nopar<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+        methods::read_argument_nopar::<ET>(self,state)
     }
 
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
-    fn read_until_endgroup<S:State<T>>(&mut self, state:&S) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-        methods::read_until_endgroup(self,state)
+    fn read_until_endgroup<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+        methods::read_until_endgroup::<ET>(self,state)
     }
 }
 
@@ -166,7 +167,7 @@ impl<T:Token> NoTracingMouth<T> {
 
  */
 }
-
+/*
 impl<T:Token> Mouth<T> for NoTracingMouth<T> {
 
     fn new() -> Self {
@@ -223,6 +224,8 @@ impl<T:Token> Mouth<T> for NoTracingMouth<T> {
     fn file_line(&self) -> String { "unknown source".to_string() }
 }
 
+ */
+
 /// Like [`NoTracingMouth`], but keeping track of [`SourceReference`](crate::tex::token::SourceReference)s
 // I wish there was a smarter way to implement this than literally copy-pasting the whole thing
 // just for adapting one method -.-
@@ -271,17 +274,16 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
         }
     }
 
-    fn has_next<S:State<TokenWithSourceref<Char>>>(&mut self, state:&S) -> Result<bool,InvalidCharacter<TokenWithSourceref<Char>>> {
+    fn has_next<ET: EngineType<Char=Char,Token=TokenWithSourceref<Char>,Mouth=Self>>(&mut self, state: &ET::State) -> Result<bool, InvalidCharacter<TokenWithSourceref<Char>>> {
         match self.buffer {
             Some(_) => Ok(true),
             _ => self.has_next_i(state.get_catcode_scheme(),state.get_endlinechar())
         }
     }
 
-    //#[inline(always)]
-    fn get_next<S:State<TokenWithSourceref<Char>>>(&mut self, s:&S) -> Result<Option<(TokenWithSourceref<Char>, bool)>,InvalidCharacter<TokenWithSourceref<Char>>> {
+    fn get_next<ET: EngineType<Char=Char,Token=TokenWithSourceref<Char>,Mouth=Self>>(&mut self, state: &ET::State) -> Result<Option<(TokenWithSourceref<Char>, bool)>, InvalidCharacter<TokenWithSourceref<Char>>> {
         if let Some(tk) = std::mem::take(&mut self.buffer) { return Ok(Some((tk,true))) } else {
-            self.get_next_i(s)
+            self.get_next_i::<ET>(state)
         }
     }
 
@@ -344,7 +346,7 @@ impl<C:CharType> TracingMouth<C> {
             }
         } else { Ok(false) }
     }
-    fn get_next_i<S:State<TokenWithSourceref<C>>>(&mut self, state:&S) -> Result<Option<(TokenWithSourceref<C>, bool)>,InvalidCharacter<TokenWithSourceref<C>>> {
+    fn get_next_i<ET:EngineType<Char=C,Token=TokenWithSourceref<C>>>(&mut self, state:&ET::State) -> Result<Option<(TokenWithSourceref<C>, bool)>,InvalidCharacter<TokenWithSourceref<C>>> {
         if let Some(source) = self.sources.last_mut() {
             return if let Some(tk) = match source {
                 TeXMouthSource::Token(ts) => ts.get_next(),
@@ -372,12 +374,12 @@ impl<C:CharType> TracingMouth<C> {
                         } else {
                             v.push(TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'), CategoryCode::EOF),None));
                             self.push_tokens(v);
-                            self.get_next_i(state)
+                            self.get_next_i::<ET>(state)
                         }
                     }
                     _ => {
                         self.sources.pop();
-                        self.get_next_i(state)
+                        self.get_next_i::<ET>(state)
                     }
                 }
             }

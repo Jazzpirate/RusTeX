@@ -1,4 +1,5 @@
 use crate::debug_log;
+use crate::engine::EngineType;
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::tex::commands::{Command, Def, ExpToken, ParamToken, StomachCommand, StomachCommandInner};
@@ -54,15 +55,15 @@ macro_rules! map_group {
     }
 }
 
-pub fn parse_signature<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str)
-    -> Result<(bool,u8,Vec<ParamToken<T>>),ErrorInPrimitive<T>> {
+pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str)
+    -> Result<(bool,u8,Vec<ParamToken<ET::Token>>),ErrorInPrimitive<ET::Token>> {
     let mouth = gullet.mouth();
     let mut arity : u8 = 0;
-    let mut params : Vec<ParamToken<T>> = Vec::with_capacity(10);
-    while let Some((next,_)) = catch_prim!(mouth.get_next(state) => (name,cmd)) {
+    let mut params : Vec<ParamToken<ET::Token>> = Vec::with_capacity(10);
+    while let Some((next,_)) = catch_prim!(mouth.get_next::<ET>(state) => (name,cmd)) {
         match next.base() {
             BaseToken::Char(_,CategoryCode::Parameter) => {
-                match catch_prim!(mouth.get_next(state) => (name,cmd)) {
+                match catch_prim!(mouth.get_next::<ET>(state) => (name,cmd)) {
                     None => file_end_prim!(name,cmd),
                     Some((next,_)) => {
                         match next.base() {
@@ -100,7 +101,7 @@ pub fn parse_signature<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:
 #[macro_export]
 macro_rules! register_int {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Int,
             index:$gullet.register_primitive_int(stringify!($name),|$s,$gu,$c| $f)
@@ -111,7 +112,7 @@ macro_rules! register_int {
 #[macro_export]
 macro_rules! register_dim {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Dim,
             index:$gullet.register_primitive_dim(stringify!($name),|$s,$gu,$c| $f)
@@ -122,7 +123,7 @@ macro_rules! register_dim {
 #[macro_export]
 macro_rules! register_skip {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Skip,
             index:$gullet.register_primitive_skip(stringify!($name),|$s,$gu,$c| $f)
@@ -133,7 +134,7 @@ macro_rules! register_skip {
 #[macro_export]
 macro_rules! register_muskip {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Value{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::MuSkip,
             index:$gullet.register_primitive_muskip(stringify!($name),|$s,$gu,$c| $f)
@@ -144,7 +145,7 @@ macro_rules! register_muskip {
 #[macro_export]
 macro_rules! register_int_assign {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Int
         })),true);
@@ -154,7 +155,7 @@ macro_rules! register_int_assign {
 #[macro_export]
 macro_rules! register_dim_assign {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Dim
         })),true);
@@ -163,7 +164,7 @@ macro_rules! register_dim_assign {
 #[macro_export]
 macro_rules! register_skip_assign {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Skip
         })),true);
@@ -173,7 +174,7 @@ macro_rules! register_skip_assign {
 #[macro_export]
 macro_rules! register_tok_assign {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Toks
         })),true);
@@ -183,7 +184,7 @@ macro_rules! register_tok_assign {
 #[macro_export]
 macro_rules! register_whatsit {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$sto:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Whatsit{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Whatsit{
             name:stringify!($name),
             index:$stomach.register_whatsit(stringify!($name),|$s,$gu,$sto,$cmd| $f)
         })),true);
@@ -193,9 +194,10 @@ macro_rules! register_whatsit {
 
 #[macro_export]
 macro_rules! register_open_box {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$sto:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::OpenBox{
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,$tp:expr,($s:tt,$gu:tt,$sto:tt,$cmd:tt) => $f:expr) => {
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::OpenBox{
             name:stringify!($name),
+            mode:$tp,
             index:$stomach.register_open_box(stringify!($name),|$s,$gu,$sto,$cmd| $f)
         })),true);
     };
@@ -204,7 +206,7 @@ macro_rules! register_open_box {
 #[macro_export]
 macro_rules! register_stomach {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$sto:tt,$cmd:tt,$b:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Stomach{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Stomach{
             name:stringify!($name),
             index:$stomach.register_primitive(stringify!($name),|$s,$gu,$sto,$cmd,$b| $f)
         })),true);
@@ -214,7 +216,7 @@ macro_rules! register_stomach {
 #[macro_export]
 macro_rules! register_gullet {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Gullet{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Gullet{
             name:stringify!($name),
             index:$gullet.register_primitive(stringify!($name),|$s,$gu,$cmd| $f)
         })),true);
@@ -224,7 +226,7 @@ macro_rules! register_gullet {
 #[macro_export]
 macro_rules! register_conditional {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Conditional{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Conditional{
             name:stringify!($name),
             index:$gullet.register_conditional(stringify!($name),|$s,$gu,$cmd| $f)
         })),true);
@@ -234,7 +236,7 @@ macro_rules! register_conditional {
 #[macro_export]
 macro_rules! register_assign {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$sto:tt,$cmd:tt,$b:tt) => $f:expr) => {
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Assignment{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::Assignment{
             name:stringify!($name),
             index:$stomach.register_primitive(stringify!($name),|$s,$gu,$sto,$cmd,$b| $f)
         })),true);
@@ -244,10 +246,10 @@ macro_rules! register_assign {
 #[macro_export]
 macro_rules! register_value_assign_int {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
-            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
-            value_index:$gullet.register_primitive_int(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>]::<ET>(s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_int(stringify!($name),|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd)),
             tp:Assignable::Int
         })),true);
     }};
@@ -256,10 +258,10 @@ macro_rules! register_value_assign_int {
 #[macro_export]
 macro_rules! register_value_assign_font {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
-            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
-            value_index:$gullet.register_primitive_font(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>]::<ET>(s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_font(stringify!($name),|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd)),
             tp:Assignable::Font
         })),true);
     }};
@@ -268,10 +270,10 @@ macro_rules! register_value_assign_font {
 #[macro_export]
 macro_rules! register_value_assign_dim {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
-            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
-            value_index:$gullet.register_primitive_dim(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
+            assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>]::<ET>(s,gu,cmd,b) ),
+            value_index:$gullet.register_primitive_dim(stringify!($name),|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd)),
             tp:Assignable::Dim
         })),true);
     }};
@@ -280,7 +282,7 @@ macro_rules! register_value_assign_dim {
 #[macro_export]
 macro_rules! register_value_assign_skip {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
             assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
             value_index:$gullet.register_primitive_skip(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
@@ -292,7 +294,7 @@ macro_rules! register_value_assign_skip {
 #[macro_export]
 macro_rules! register_value_assign_muskip {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(T::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::ValueAssignment{
             name:stringify!($name),
             assignment_index:$stomach.register_primitive(stringify!($name),|s,gu,_,cmd,b| [<$name _assign>](s,gu,cmd,b) ),
             value_index:$gullet.register_primitive_muskip(stringify!($name),|s,gu,cmd| [<$name _get>](s,gu,cmd)),
@@ -301,40 +303,40 @@ macro_rules! register_value_assign_muskip {
     }};
 }
 
-pub fn assign_primitive_int<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str, global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn assign_primitive_int<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str, global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
     let i = catch_prim!(gullet.get_int(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,i);
     state.set_primitive_int(name,i,global);
     Ok(())
 }
-pub fn assign_primitive_dim<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn assign_primitive_dim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
     let d = catch_prim!(gullet.get_dim(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_dim(name,d,global);
     Ok(())
 }
-pub fn assign_primitive_skip<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn assign_primitive_skip<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
     let d = catch_prim!(gullet.get_skip(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_skip(name,d,global);
     Ok(())
 }
-pub fn assign_primitive_toks<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut Gu,cmd:StomachCommand<T>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<T>> {
+pub fn assign_primitive_toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Setting {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => (name,cmd)) {
         Some(StomachCommand{cmd:StomachCommandInner::BeginGroup(_),..}) => (),
         _ => return Err(ErrorInPrimitive{
             name,msg:Some("Begin group token expected".to_string()),cause:Some(cmd.cause),source:None
         })
     }
-    let tks = catch_prim!(gullet.mouth().read_until_endgroup(state) => (name,cmd));
+    let tks = catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(tks.clone()));
     state.set_primitive_toks(name,tks,global);
     Ok(())
@@ -362,7 +364,8 @@ macro_rules! expected_def {
     }
 }
 
-pub fn exand_def<T:Token,M:Mouth<T>,S:State<T>>(d: &Def<T>, state:&S, mouth:&mut M, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+pub fn exand_def<ET:EngineType>(d: &Def<ET::Token>, state:&ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<ET::Token>>, cause:Ptr<ET::Token>)
+    -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cause,d,mouth.preview(150).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
@@ -375,7 +378,7 @@ pub fn exand_def<T:Token,M:Mouth<T>,S:State<T>>(d: &Def<T>, state:&S, mouth:&mut
         for elem in &d.signature {
             match elem {
                 ParamToken::Token(delim) => {
-                    if let Some((n,_)) = catch_def!(mouth.get_next(state) => (d,cause)) {
+                    if let Some((n,_)) = catch_def!(mouth.get_next::<ET>(state) => (d,cause)) {
                         if n != *delim {
                             expected_def!(d,cause,delim,n)
                         }
@@ -391,7 +394,7 @@ pub fn exand_def<T:Token,M:Mouth<T>,S:State<T>>(d: &Def<T>, state:&S, mouth:&mut
 
     // The general case:
     // We parse the arguments according to the signature
-    let args = catch_def!(read_arguments(d,mouth,state,&cause) => (d,cause));
+    let args = catch_def!(read_arguments::<ET>(d,mouth,state,&cause) => (d,cause));
 
     // Now we have all the arguments, so we can expand the replacement
     Ok(replace(d,args,cause,cmd))
@@ -409,13 +412,14 @@ fn expand_simple<T:Token>(d:&Def<T>, token:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T
     result
 }
 
-fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:&S, cause:&T) -> Result<Vec<Vec<T>>,Box<dyn TeXError<T>>> {
-    let mut args : Vec<Vec<T>> = Vec::with_capacity(d.arity as usize);
+fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&ET::State, cause:&ET::Token)
+    -> Result<Vec<Vec<ET::Token>>,Box<dyn TeXError<ET::Token>>> {
+    let mut args : Vec<Vec<ET::Token>> = Vec::with_capacity(d.arity as usize);
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
             ParamToken::Token(delim) => { // eat the delimiter
-                if let Some((n,_)) = catch_def!(mouth.get_next(state) => (d,cause)) {
+                if let Some((n,_)) = catch_def!(mouth.get_next::<ET>(state) => (d,cause)) {
                     if n != *delim {
                         expected_def!(d,cause,delim,n)
                     }
@@ -427,8 +431,8 @@ fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:
                 None if d.endswithbrace => {// read until `{`
                     let mut arg = Vec::with_capacity(50); // seems to speed things up
                     'L: loop {
-                        match if d.long {catch_def!({mouth.get_next(state)} => (d,cause))}
-                        else {catch_def!({mouth.get_next_nopar(state)} => (d,cause))} {
+                        match if d.long {catch_def!({mouth.get_next::<ET>(state)} => (d,cause))}
+                        else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
                             Some((t,_)) => {
                                 if t.catcode() == CategoryCode::BeginGroup {
                                     mouth.requeue(t);
@@ -443,9 +447,9 @@ fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:
                     args.push(arg)
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
-                    catch_def!(mouth.skip_whitespace(state) => (d,cause));
-                    let arg = if d.long {catch_def!(mouth.read_argument(state) => (d,cause))}
-                        else {catch_def!(mouth.read_argument_nopar(state) => (d,cause))};
+                    catch_def!(mouth.skip_whitespace::<ET>(state) => (d,cause));
+                    let arg = if d.long {catch_def!(mouth.read_argument::<ET>(state) => (d,cause))}
+                        else {catch_def!(mouth.read_argument_nopar::<ET>(state) => (d,cause))};
                     args.push(arg);
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
@@ -458,8 +462,8 @@ fn read_arguments<T:Token,S:State<T>,M:Mouth<T>>(d:&Def<T>, mouth:&mut M, state:
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
-                        match if d.long {catch_def!({mouth.get_next(state)} => (d,cause))}
-                        else {catch_def!({mouth.get_next_nopar(state)} => (d,cause))} {
+                        match if d.long {catch_def!({mouth.get_next::<ET>(state)} => (d,cause))}
+                        else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
                                 if arg.len() == 0 {

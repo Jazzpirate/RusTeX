@@ -17,10 +17,10 @@ use crate::utils::strings::CharType;
 
 pub trait FontStore:'static {
     type Char:CharType;
-    type F:Font<Char=Self::Char>;
+    type Font:Font<Char=Self::Char>;
     fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<usize,Box<dyn TeXError<T>>>;
-    fn get(&self,i:usize) -> &Self::F;
-    fn get_mut(&mut self, i:usize) -> &mut Self::F;
+    fn get(&self,i:usize) -> &Self::Font;
+    fn get_mut(&mut self, i:usize) -> &mut Self::Font;
 }
 pub trait Font:Debug+Display {
     type Char:CharType;
@@ -40,7 +40,7 @@ pub struct TfmFontStore {
 }
 impl FontStore for TfmFontStore {
     type Char = u8;
-    type F = TfmFont;
+    type Font = TfmFont;
     fn get_new<T:Token<Char=Self::Char>>(&mut self, s: &str) -> Result<usize,Box<dyn TeXError<T>>> {
         let path = match KPATHSEA.get(s) {
             None => return Err(OtherError{msg:format!("Font not found: {}",s),cause:None,source:None}.into()),
@@ -65,10 +65,10 @@ impl FontStore for TfmFontStore {
         });
         Ok(self.fonts.len() - 1)
     }
-    fn get(&self, i: usize) -> &Self::F {
+    fn get(&self, i: usize) -> &Self::Font {
         self.fonts.get(i).unwrap()
     }
-    fn get_mut(&mut self, i:usize) -> &mut Self::F {
+    fn get_mut(&mut self, i:usize) -> &mut Self::Font {
         self.fonts.get_mut(i).unwrap()
     }
 }

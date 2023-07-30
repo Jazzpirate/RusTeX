@@ -18,6 +18,11 @@ pub enum TeXMode {
     /// mode inside of display math
     Displaymath
 }
+
+impl Default for TeXMode {
+    fn default() -> Self { TeXMode::Vertical }
+}
+
 impl TeXMode {
     pub fn is_vertical(&self) -> bool {
         use TeXMode::*;
@@ -42,15 +47,8 @@ impl Display for TeXMode {
 }
 
 /// The types of TeX groups that exist
-pub trait GroupType:Clone+PartialEq+Default {
-    fn from_catcode_token() -> Self;
-    fn from_begingroup_cs() -> Self;
-}
-
-
-/// An default implementation of [`GroupType`] for the different types of TeX groups.
 #[derive(Copy,Clone,PartialEq)]
-pub enum TeXGroupType {
+pub enum GroupType {
     /// The initial "group" containing the entire document.
     Top,
     /// A group delimited by `{` and `}`.
@@ -60,12 +58,8 @@ pub enum TeXGroupType {
     /// A box of some [`BoxMode`].
     Box(BoxMode),
 }
-impl Default for TeXGroupType {
-    fn default() -> Self { TeXGroupType::Top }
-}
-impl GroupType for TeXGroupType {
-    fn from_begingroup_cs() -> Self { TeXGroupType::CS }
-    fn from_catcode_token() -> Self { TeXGroupType::Token }
+impl Default for GroupType {
+    fn default() -> Self { GroupType::Top }
 }
 
 /// An enum for the different types of boxes in TeX.

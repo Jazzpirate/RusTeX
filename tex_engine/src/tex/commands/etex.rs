@@ -3,9 +3,10 @@ use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_gullet, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign};
+use crate::engine::EngineType;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{Command, GulletCommand, StomachCommand, StomachCommandInner};
-use crate::tex::commands::tex::get_csname;
+//use crate::tex::commands::tex::get_csname;
 use crate::tex::numbers::{Frac, MuSkip, Numeric, NumSet, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError};
@@ -13,7 +14,7 @@ use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
 
-
+/*
 pub fn expr_loop<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Num:Numeric>(state:&mut S, gullet:&mut Gu, cmd:&GulletCommand<T>, name:&'static str, get:fn(&mut S, &mut Gu) -> Result<Num,Box<dyn TeXError<T>>>)
                                                                   -> Result<Num,ErrorInPrimitive<T>> {
     let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
@@ -208,7 +209,10 @@ pub fn unexpanded<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,gullet:&mut 
     Ok(catch_prim!(gullet.mouth().read_until_endgroup(state) => ("unexpanded",cmd)))
 }
 
-pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
+ */
+
+pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
+    /*
     register_dim!(dimexpr,state,stomach,gullet,(s,g,c) => dimexpr(s,g,c));
     register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision(s,g,c));
     register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => etexversion(s,g,c));
@@ -226,6 +230,8 @@ pub fn initialize_etex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomac
     register_int_assign!(tracingscantokens,state,stomach,gullet);
     register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected(sto,s,gu,cmd,g,false,false,false));
     register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded(s,g,c));
+
+     */
 
     cmtodo!(state,stomach,gullet,beginL);
     cmtodo!(state,stomach,gullet,beginR);

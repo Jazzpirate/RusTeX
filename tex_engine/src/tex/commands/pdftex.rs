@@ -1,4 +1,5 @@
 use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_gullet, register_int, register_int_assign};
+use crate::engine::EngineType;
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
@@ -13,7 +14,7 @@ use crate::utils::errors::{catch_prim, ErrorInPrimitive};
 use crate::utils::strings::CharType;
 use crate::utils::Ptr;
 
-
+/*
 pub fn ifpdfabsnum<T:Token,Gu:Gullet<T>>(state:&mut Gu::S,gullet:&mut Gu,cmd:GulletCommand<T>) -> Result<bool,ErrorInPrimitive<T>> {
     debug_log!(trace=>"ifpdfabsnum");
     let i1 = catch_prim!(gullet.get_int(state) => ("ifpdfabsnum",cmd));
@@ -78,7 +79,10 @@ pub fn pdftexrevision<T:Token,S:State<T>,Gu:Gullet<T,S=S>>(state:&mut S,_gullet:
     Ok(T::from_str("25".to_string()))
 }
 
-pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stomach<T,S=S,Gu=Gu>>(state:&mut S,stomach:&mut Sto,gullet:&mut Gu) {
+ */
+
+pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
+    /*
     register_conditional!(ifpdfabsdim,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsdim(s,gu,cmd));
     register_conditional!(ifpdfabsnum,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsnum(s,gu,cmd));
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
@@ -97,6 +101,8 @@ pub fn initialize_pdftex_primitives<T:Token,S:State<T>,Gu:Gullet<T,S=S>,Sto:Stom
     register_int!(pdftexversion,state,stomach,gullet,(s,g,c) => pdftexversion(s,g,c));
     register_dim_assign!(pdfvorigin,state,stomach,gullet);
     register_int_assign!(tracingstacklevels,state,stomach,gullet);
+
+     */
 
     cmtodo!(state,stomach,gullet,efcode);
     cmtodo!(state,stomach,gullet,knaccode);

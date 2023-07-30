@@ -3,13 +3,15 @@
 use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField};
-use crate::engine::state::modes::{GroupType, TeXGroupType, TeXMode};
+use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::tex::commands::Command;
 use crate::tex::token::Token;
 use crate::utils::errors::{OtherError, TeXError, UndefinedActiveCharacter, UndefinedControlSequence};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
-use crate::engine::Outputs;
+use crate::engine::{EngineType, Outputs};
+use crate::engine::stomach::Stomach;
+use crate::tex::boxes::{OpenBox, TeXNode};
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, NumSet, Skip};
 use crate::utils::Ptr;
@@ -18,11 +20,7 @@ pub mod fields;
 pub mod modes;
 
 /// A TeX state
-pub trait State<T:Token>:Sized+'static {
-    type FS:FileSystem<T::Char>;
-    type Gr:GroupType;
-    type NumSet:NumSet;
-    type FontStore:FontStore<Char=T::Char>;
+pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     /// Should be called at the start of a new job with the jobname (name of the main file)
     fn set_job(&mut self, jobname:String);
 
@@ -35,134 +33,139 @@ pub trait State<T:Token>:Sized+'static {
     fn current_csname(&self) -> Option<usize>;
     fn pop_csname(&mut self);
 
+
+    fn box_stack(&self) -> &Vec<OpenBox<ET>>;
+    fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>>;
+
     /// The current [`TeXMode`]
     fn mode(&self) -> TeXMode;
 
     /// get the [`FileSystem`] used by this state
-    fn filesystem(&mut self) -> &mut Self::FS;
-    fn file_openout(&mut self,i:usize,f:<Self::FS as FileSystem<T::Char>>::F);
+    fn filesystem(&mut self) -> &mut ET::FileSystem;
+    fn file_openout(&mut self,i:usize,f:ET::File);
     fn file_closeout(&mut self, i: usize);
-    fn file_openin(&mut self,i:usize,f:<Self::FS as FileSystem<T::Char>>::F);
+    fn file_openin(&mut self,i:usize,f:ET::File);
     fn file_closein(&mut self, i: usize);
-    fn get_open_out_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F>;
-    fn get_open_in_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F>;
+    fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
+    fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
 
-    fn fontstore(&self) -> &Self::FontStore;
-    fn fontstore_mut(&mut self) -> &mut Self::FontStore;
+    fn fontstore(&self) -> &ET::FontStore;
+    fn fontstore_mut(&mut self) -> &mut ET::FontStore;
 
     /// push a new group onto the stack
-    fn stack_push(&mut self, g: Self::Gr);
+    fn stack_push(&mut self, g: GroupType);
 
-    fn stack_pop(&mut self, g:Self::Gr) -> Result<Option<Vec<T>>,Box<dyn TeXError<T>>>;
+    fn stack_pop(&mut self) -> Option<(Vec<ET::Token>,GroupType)>;
 
     /// get the current group type
-    fn get_grouptype(&self) -> Self::Gr;
+    fn get_grouptype(&self) -> GroupType;
 
 
     /// get the current escape character (`\escapechar`)
-    fn get_escapechar(&self) -> Option<T::Char>;
+    fn get_escapechar(&self) -> Option<ET::Char>;
     /// set the current escape character (`\escapechar`)
-    fn set_escapechar(&mut self, c: Option<T::Char>, globally:bool);
+    fn set_escapechar(&mut self, c: Option<ET::Char>, globally:bool);
 
     /// get the current endline character (`\endlinechar`)
-    fn get_endlinechar(&self) -> Option<T::Char>;
+    fn get_endlinechar(&self) -> Option<ET::Char>;
     /// set the current endline character (`\endlinechar`)
-    fn set_endlinechar(&mut self, c: Option<T::Char>, globally:bool);
+    fn set_endlinechar(&mut self, c: Option<ET::Char>, globally:bool);
 
     /// get the current newline character (`\newlinechar`)
-    fn get_newlinechar(&self) -> Option<T::Char>;
+    fn get_newlinechar(&self) -> Option<ET::Char>;
     /// set the current newline character (`\newlinechar`)
-    fn set_newlinechar(&mut self, c: Option<T::Char>, globally:bool);
+    fn set_newlinechar(&mut self, c: Option<ET::Char>, globally:bool);
 
     /// get the current [`Command`] with name `name:`[`TeXStr`]
-    fn get_command(&self, name:&TeXStr<T::Char>) -> Option<Ptr<Command<T>>>;
+    fn get_command(&self, name:&TeXStr<ET::Char>) -> Option<Ptr<Command<ET::Token>>>;
     /// get the current [`Command`] for the active character `c`
-    fn get_ac_command(&self, c: T::Char) -> Option<Ptr<Command<T>>>;
+    fn get_ac_command(&self, c: ET::Char) -> Option<Ptr<Command<ET::Token>>>;
     /// set the current [`Command`] with name `name:`[`TeXStr`]
-    fn set_command(&mut self, name:TeXStr<T::Char>, cmd:Option<Ptr<Command<T>>>, globally:bool);
+    fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Ptr<Command<ET::Token>>>, globally:bool);
     /// set the current [`Command`] for the active character `c`
-    fn set_ac_command(&mut self, c: T::Char, cmd:Option<Ptr<Command<T>>>, globally:bool);
+    fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Ptr<Command<ET::Token>>>, globally:bool);
     /// get the current [`Command`] with name `name:`[`TeXStr`], or return an error if it is not defined
-    fn need_command(&self, name:&TeXStr<T::Char>) -> Result<Ptr<Command<T>>,UndefinedControlSequence<T>> {
+    fn need_command(&self, name:&TeXStr<ET::Char>) -> Result<Ptr<Command<ET::Token>>,UndefinedControlSequence<ET::Token>> {
         self.get_command(name).ok_or(UndefinedControlSequence(name.clone()))
     }
     /// get the current [`Command`] for the active character `c`, or return an error if it is not defined
-    fn need_ac_command(&self, c: T::Char) -> Result<Ptr<Command<T>>,UndefinedActiveCharacter<T>> {
+    fn need_ac_command(&self, c: ET::Char) -> Result<Ptr<Command<ET::Token>>,UndefinedActiveCharacter<ET::Token>> {
         self.get_ac_command(c).ok_or(UndefinedActiveCharacter(c))
     }
 
     /// get the current [`CategoryCodeScheme`]
-    fn get_catcode_scheme(&self) -> &CategoryCodeScheme<T::Char>;
+    fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char>;
     /// set the current [`CategoryCode`] for a character
-    fn set_catcode(&mut self, c: T::Char, cc:CategoryCode, globally:bool);
+    fn set_catcode(&mut self, c: ET::Char, cc:CategoryCode, globally:bool);
 
 
     /// get the current space factor code for the character
-    fn get_sfcode(&self,c:&T::Char) -> <Self::NumSet as NumSet>::Int;
+    fn get_sfcode(&self,c:&ET::Char) -> ET::Int;
     /// set the current space factor code for a character
-    fn set_sfcode(&mut self, c: T::Char, v:<Self::NumSet as NumSet>::Int, globally:bool);
+    fn set_sfcode(&mut self, c: ET::Char, v:ET::Int, globally:bool);
 
     /// get the uppercase character for a character
-    fn get_uccode(&self, c: T::Char) -> T::Char;
+    fn get_uccode(&self, c: ET::Char) -> ET::Char;
     /// set the uppercase character for a character
-    fn set_uccode(&mut self, c: T::Char, uc: T::Char, globally:bool);
+    fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally:bool);
 
     /// get the lowercase character for a character
-    fn get_lccode(&self, c: T::Char) -> T::Char;
+    fn get_lccode(&self, c: ET::Char) -> ET::Char;
     /// set the lowercase character for a character
-    fn set_lccode(&mut self, c: T::Char, lc: T::Char, globally:bool);
+    fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally:bool);
 
     /// get the value of an integer register
-    fn get_int_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::Int;
+    fn get_int_register(&self,i:usize) -> ET::Int;
     /// set the value of an integer register
-    fn set_int_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Int,globally:bool);
+    fn set_int_register(&mut self,i:usize,v:ET::Int,globally:bool);
 
     /// get the value of a dimension register
-    fn get_dim_register(&self,i:usize) -> <<Self as State<T>>::NumSet as NumSet>::Dim;
+    fn get_dim_register(&self,i:usize) -> ET::Dim;
     /// set the value of a dimension register
-    fn set_dim_register(&mut self,i:usize,v:<<Self as State<T>>::NumSet as NumSet>::Dim,globally:bool);
+    fn set_dim_register(&mut self,i:usize,v:ET::Dim,globally:bool);
 
     /// get the value of a skip register
-    fn get_skip_register(&self,i:usize) -> Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>;
+    fn get_skip_register(&self,i:usize) -> Skip<ET::SkipDim>;
     /// set the value of a skip register
-    fn set_skip_register(&mut self,i:usize,v:Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>,globally:bool);
+    fn set_skip_register(&mut self,i:usize,v:Skip<ET::SkipDim>,globally:bool);
 
     /// get the value of a skip register
-    fn get_muskip_register(&self,i:usize) -> MuSkip<<<Self as State<T>>::NumSet as NumSet>::MuDim,<<Self as State<T>>::NumSet as NumSet>::MuStretchShrinkDim>;
+    fn get_muskip_register(&self,i:usize) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim>;
     /// set the value of a skip register
-    fn set_muskip_register(&mut self,i:usize,v:MuSkip<<<Self as State<T>>::NumSet as NumSet>::MuDim,<<Self as State<T>>::NumSet as NumSet>::MuStretchShrinkDim>,globally:bool);
+    fn set_muskip_register(&mut self,i:usize,v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,globally:bool);
 
     /// get the value of a skip register
-    fn get_toks_register(&self,i:usize) -> Vec<T>;
+    fn get_toks_register(&self,i:usize) -> Vec<ET::Token>;
     /// set the value of a skip register
-    fn set_toks_register(&mut self,i:usize,v:Vec<T>,globally:bool);
+    fn set_toks_register(&mut self,i:usize,v:Vec<ET::Token>,globally:bool);
     /// get a primitive integer value
-    fn get_primitive_int(&self,name:&'static str) -> <<Self as State<T>>::NumSet as NumSet>::Int;
+    fn get_primitive_int(&self,name:&'static str) -> ET::Int;
     /// set a primitive integer value
-    fn set_primitive_int(&mut self,name:&'static str,v:<<Self as State<T>>::NumSet as NumSet>::Int,globally:bool);
+    fn set_primitive_int(&mut self,name:&'static str,v:ET::Int,globally:bool);
 
     /// get a primitive dimension register
-    fn get_primitive_dim(&self, name:&'static str) -> <<Self as State<T>>::NumSet as NumSet>::Dim;
+    fn get_primitive_dim(&self, name:&'static str) -> ET::Dim;
     /// set a primitive dimension register
-    fn set_primitive_dim(&mut self, name:&'static str, v:<<Self as State<T>>::NumSet as NumSet>::Dim, globally:bool);
+    fn set_primitive_dim(&mut self, name:&'static str, v:ET::Dim, globally:bool);
 
     /// get a primitive dimension register
-    fn get_primitive_skip(&self, name:&'static str) -> Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>;
+    fn get_primitive_skip(&self, name:&'static str) -> Skip<ET::SkipDim>;
     /// set a primitive dimension register
-    fn set_primitive_skip(&mut self, name:&'static str, v:Skip<<<Self as State<T>>::NumSet as NumSet>::SkipDim>, globally:bool);
+    fn set_primitive_skip(&mut self, name:&'static str, v:Skip<ET::SkipDim>, globally:bool);
 
     /// get a primitive token register
-    fn get_primitive_toks(&self, name:&'static str) -> Vec<T>;
+    fn get_primitive_toks(&self, name:&'static str) -> Vec<ET::Token>;
     /// set a primitive token register
-    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<T>, globally:bool);
+    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<ET::Token>, globally:bool);
 }
 
-pub struct TeXState<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> {
-    filesystem:FS,
-    out_files:Vec<Option<FS::F>>,
-    in_files:Vec<Option<FS::F>>,
+pub struct TeXState<ET:EngineType<State=Self>> {
+    filesystem:ET::FileSystem,
+    out_files:Vec<Option<ET::File>>,
+    in_files:Vec<Option<ET::File>>,
     csnames:usize,
-    fontstore:FontS,
+    fontstore:ET::FontStore,
+    box_stack:Vec<OpenBox<ET>>,
 
     outputs:Outputs,
 
@@ -171,34 +174,34 @@ pub struct TeXState<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>
 
     mode: TeXMode,
     /* filesystem: FS,*/
-    grouptype: Vec<TeXGroupType>,
-    aftergroups:Vec<Vec<T>>,
-    endlinechar: SingleValueField<Option<T::Char>>,
-    escapechar: SingleValueField<Option<T::Char>>,
-    newlinechar: SingleValueField<Option<T::Char>>,
+    grouptype: Vec<(GroupType,Option<TeXMode>)>,
+    aftergroups:Vec<Vec<ET::Token>>,
+    endlinechar: SingleValueField<Option<ET::Char>>,
+    escapechar: SingleValueField<Option<ET::Char>>,
+    newlinechar: SingleValueField<Option<ET::Char>>,
 
-    commands: HashMapField<TeXStr<T::Char>,Option<Ptr<Command<T>>>>,
-    ac_commands: CharField<T::Char,Option<Ptr<Command<T>>>>,
+    commands: HashMapField<TeXStr<ET::Char>,Option<Ptr<Command<ET::Token>>>>,
+    ac_commands: CharField<ET::Char,Option<Ptr<Command<ET::Token>>>>,
 
-    catcodes: CharField<T::Char,CategoryCode>,
-    sfcodes: CharField<T::Char,NS::Int>,
-    ucchar: CharField<T::Char, T::Char>,
-    lcchar: CharField<T::Char, T::Char>,
+    catcodes: CharField<ET::Char,CategoryCode>,
+    sfcodes: CharField<ET::Char,ET::Int>,
+    ucchar: CharField<ET::Char, ET::Char>,
+    lcchar: CharField<ET::Char, ET::Char>,
 
-    intregisters: VecField<NS::Int>,
-    dimregisters: VecField<NS::Dim>,
-    skipregisters: VecField<Skip<NS::SkipDim>>,
-    muskipregisters: VecField<MuSkip<NS::MuDim,NS::MuStretchShrinkDim>>,
-    toksregisters:VecField<Vec<T>>,
+    intregisters: VecField<ET::Int>,
+    dimregisters: VecField<ET::Dim>,
+    skipregisters: VecField<Skip<ET::SkipDim>>,
+    muskipregisters: VecField<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
+    toksregisters:VecField<Vec<ET::Token>>,
 
-    primitive_intregisters: HashMapField<&'static str,NS::Int>,
-    primitive_dimregisters: HashMapField<&'static str,NS::Dim>,
-    primitive_skipregisters: HashMapField<&'static str,Skip<NS::SkipDim>>,
-    primitive_tokregisters: HashMapField<&'static str,Vec<T>>,
+    primitive_intregisters: HashMapField<&'static str,ET::Int>,
+    primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
+    primitive_skipregisters: HashMapField<&'static str,Skip<ET::SkipDim>>,
+    primitive_tokregisters: HashMapField<&'static str,Vec<ET::Token>>,
 }
 use crate::utils::strings::CharType;
-impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> TeXState<T,FS,FontS,NS> {
-    pub fn new(fs:FS,fontstore:FontS,outputs:Outputs) -> Self {
+impl<ET:EngineType<State=Self>> TeXState<ET> {
+    pub fn new(fs:ET::FileSystem,fontstore:ET::FontStore,outputs:Outputs) -> Self {
         let mut state = Self {
             filesystem:fs,
             out_files:vec!(),
@@ -207,21 +210,22 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> TeX
             fontstore,
             outputs,
             aftergroups:vec!(vec!()),
+            box_stack:vec!(),
 
             jobname: None,
             start_time: None,
             mode: TeXMode::Vertical,
             /* filesystem: fs,*/
-            grouptype: vec![TeXGroupType::Top],
-            endlinechar: SingleValueField::new(Some(T::Char::carriage_return())),
-            escapechar: SingleValueField::new(Some(T::Char::backslash())),
-            newlinechar: SingleValueField::new(Some(T::Char::newline())),
+            grouptype: vec![(GroupType::Top,None)],
+            endlinechar: SingleValueField::new(Some(ET::Char::carriage_return())),
+            escapechar: SingleValueField::new(Some(ET::Char::backslash())),
+            newlinechar: SingleValueField::new(Some(ET::Char::newline())),
             commands: HashMapField::new(),
-            ac_commands: CharField::new(T::Char::rep_field(None)),
-            catcodes: CharField::new(T::Char::starting_catcode_scheme()),
-            sfcodes: CharField::new(T::Char::rep_field(NS::Int::default())),
-            ucchar: CharField::new(T::Char::ident()),
-            lcchar: CharField::new(T::Char::ident()),
+            ac_commands: CharField::new(ET::Char::rep_field(None)),
+            catcodes: CharField::new(ET::Char::starting_catcode_scheme()),
+            sfcodes: CharField::new(ET::Char::rep_field(ET::Int::default())),
+            ucchar: CharField::new(ET::Char::ident()),
+            lcchar: CharField::new(ET::Char::ident()),
             intregisters: VecField::new(),
             dimregisters: VecField::new(),
             skipregisters: VecField::new(),
@@ -257,14 +261,13 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> TeX
         state
     }
 }
-impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> State<T> for TeXState<T,FS,FontS,NS> {
-    type FS = FS;
-    type Gr = TeXGroupType;
-    type NumSet=NS;
-    type FontStore = FontS;
+impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
 
-    fn fontstore(&self) -> &Self::FontStore { &self.fontstore }
-    fn fontstore_mut(&mut self) -> &mut Self::FontStore {
+    fn box_stack(&self) -> &Vec<OpenBox<ET>> { &self.box_stack }
+    fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>> { &mut self.box_stack }
+
+    fn fontstore(&self) -> &ET::FontStore { &self.fontstore }
+    fn fontstore_mut(&mut self) -> &mut ET::FontStore {
         &mut self.fontstore
     }
 
@@ -293,10 +296,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     fn get_start_time(&self) -> DateTime<Local> {
         self.start_time.as_ref().unwrap().clone()
     }
-    fn filesystem(&mut self) -> &mut FS {
+    fn filesystem(&mut self) -> &mut ET::FileSystem {
         &mut self.filesystem
     }
-    fn file_openin(&mut self, i: usize, f: <Self::FS as FileSystem<T::Char>>::F) {
+    fn file_openin(&mut self, i: usize, f: ET::File) {
         if i >= self.in_files.len() {
             self.in_files.resize(i+1,None);
         }
@@ -310,7 +313,7 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
         self.in_files[i] = None
     }
-    fn file_openout(&mut self, i: usize, f: <Self::FS as FileSystem<T::Char>>::F) {
+    fn file_openout(&mut self, i: usize, f: ET::File) {
         f.open_out();
         if i >= self.out_files.len() {
             self.out_files.resize(i+1,None);
@@ -324,14 +327,14 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
         self.out_files[i] = None
     }
-    fn get_open_out_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F> {
+    fn get_open_out_file(&self,i:usize) -> Option<ET::File> {
         if i >= self.out_files.len() {
             None
         } else {
             self.out_files[i].clone()
         }
     }
-    fn get_open_in_file(&self,i:usize) -> Option<<Self::FS as FileSystem<T::Char>>::F> {
+    fn get_open_in_file(&self,i:usize) -> Option<ET::File> {
         if i >= self.in_files.len() {
             None
         } else {
@@ -339,8 +342,11 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
     // #[inline(always)]
-    fn stack_push(&mut self, g: TeXGroupType) {
-        self.grouptype.push(g);
+    fn stack_push(&mut self, g: GroupType) {
+        match g {
+            GroupType::Box(_) => self.grouptype.push((g,Some(self.mode))),
+            _ => self.grouptype.push((g,None))
+        }
         self.endlinechar.push_stack();
         self.escapechar.push_stack();
         self.newlinechar.push_stack();
@@ -365,12 +371,15 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         self.primitive_tokregisters.push_stack();
         unsafe{self.aftergroups.push(self.aftergroups.last().unwrap_unchecked().clone())};
     }
-    fn stack_pop(&mut self, g: Self::Gr) -> Result<Option<Vec<T>>, Box<dyn TeXError<T>>> {
-        match self.grouptype.pop() {
-            None => return Err(OtherError{msg:"There's no group here to end".to_string(),cause:None,source:None}.into()),
-            Some(gt) if gt != g => return Err(OtherError{msg:"There's no group here to end".to_string(),cause:None,source:None}.into()),
-            _ => ()
-        }
+    fn stack_pop(&mut self) -> Option<(Vec<ET::Token>,GroupType)> {
+        let gt = match self.grouptype.pop() {
+            None => return None,
+            Some((gt,Some(m))) => {
+                self.mode = m;
+                gt
+            }
+            Some((gt,_)) => gt
+        };
         self.endlinechar.pop_stack();
         self.escapechar.pop_stack();
         self.newlinechar.pop_stack();
@@ -394,16 +403,16 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         self.primitive_skipregisters.pop_stack();
         self.primitive_tokregisters.pop_stack();
 
-        Ok(self.aftergroups.pop())
+        Some((self.aftergroups.pop().unwrap_or(vec!()),gt))
     }
 
     // #[inline(always)]
-    fn get_grouptype(&self) -> TeXGroupType { *self.grouptype.last().unwrap_or(&TeXGroupType::Top) }
+    fn get_grouptype(&self) -> GroupType { *self.grouptype.last().map(|(t,_)| t).unwrap_or(&GroupType::Top) }
 
     // #[inline(always)]
-    fn get_escapechar(&self) -> Option<T::Char> { *self.escapechar.get() }
+    fn get_escapechar(&self) -> Option<ET::Char> { *self.escapechar.get() }
     // #[inline(always)]
-    fn set_escapechar(&mut self, c: Option<T::Char>, globally: bool) {
+    fn set_escapechar(&mut self, c: Option<ET::Char>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -414,9 +423,9 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     }
 
     // #[inline(always)]
-    fn get_endlinechar(&self) -> Option<T::Char> { *self.endlinechar.get() }
+    fn get_endlinechar(&self) -> Option<ET::Char> { *self.endlinechar.get() }
     // #[inline(always)]
-    fn set_endlinechar(&mut self, c: Option<T::Char>, globally: bool) {
+    fn set_endlinechar(&mut self, c: Option<ET::Char>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -427,9 +436,9 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     }
 
     // #[inline(always)]
-    fn get_newlinechar(&self) -> Option<T::Char> { *self.newlinechar.get() }
+    fn get_newlinechar(&self) -> Option<ET::Char> { *self.newlinechar.get() }
     // #[inline(always)]
-    fn set_newlinechar(&mut self, c: Option<T::Char>, globally: bool) {
+    fn set_newlinechar(&mut self, c: Option<ET::Char>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -439,10 +448,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_sfcode(&self, c: &T::Char) -> <Self::NumSet as NumSet>::Int {
+    fn get_sfcode(&self, c: &ET::Char) -> ET::Int {
         self.sfcodes.get(c)
     }
-    fn set_sfcode(&mut self, c: T::Char, v: <Self::NumSet as NumSet>::Int, globally: bool) {
+    fn set_sfcode(&mut self, c: ET::Char, v: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -453,11 +462,11 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     }
 
     // #[inline(always)]
-    fn get_command(&self, name: &TeXStr<T::Char>) -> Option<Ptr<Command<T>>> {
+    fn get_command(&self, name: &TeXStr<ET::Char>) -> Option<Ptr<Command<ET::Token>>> {
         self.commands.get(name)
     }
     // #[inline(always)]
-    fn set_command(&mut self, name: TeXStr<T::Char>, cmd: Option<Ptr<Command<T>>>, globally: bool) {
+    fn set_command(&mut self, name: TeXStr<ET::Char>, cmd: Option<Ptr<Command<ET::Token>>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -466,10 +475,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
             self.commands.set_locally(name,cmd)
         }
     }
-    fn get_ac_command(&self, c: T::Char) -> Option<Ptr<Command<T>>> {
+    fn get_ac_command(&self, c: ET::Char) -> Option<Ptr<Command<ET::Token>>> {
         self.ac_commands.get(&c)
     }
-    fn set_ac_command(&mut self, c: T::Char, cmd: Option<Ptr<Command<T>>>, globally: bool) {
+    fn set_ac_command(&mut self, c: ET::Char, cmd: Option<Ptr<Command<ET::Token>>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -481,11 +490,11 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
 
 
     // #[inline(always)]
-    fn get_catcode_scheme(&self) -> &CategoryCodeScheme<T::Char> {
+    fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char> {
         &self.catcodes.charfield
     }
     // #[inline(always)]
-    fn set_catcode(&mut self, c: T::Char, cc: CategoryCode, globally: bool) {
+    fn set_catcode(&mut self, c: ET::Char, cc: CategoryCode, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -496,11 +505,11 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     }
 
     // #[inline(always)]
-    fn get_uccode(&self, c: T::Char) -> T::Char {
+    fn get_uccode(&self, c: ET::Char) -> ET::Char {
         self.ucchar.get(&c)
     }
     // #[inline(always)]
-    fn set_uccode(&mut self, c: T::Char, uc: T::Char, globally: bool) {
+    fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -511,11 +520,11 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     }
 
     // #[inline(always)]
-    fn get_lccode(&self, c: T::Char) -> T::Char {
+    fn get_lccode(&self, c: ET::Char) -> ET::Char {
         self.lcchar.get(&c)
     }
     // #[inline(always)]
-    fn set_lccode(&mut self, c: T::Char, lc: T::Char, globally: bool) {
+    fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -526,11 +535,11 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
     }
 
     // #[inline(always)]
-    fn get_int_register(&self, i: usize) -> NS::Int {
+    fn get_int_register(&self, i: usize) -> ET::Int {
         self.intregisters.get(&i)
     }
     // #[inline(always)]
-    fn set_int_register(&mut self, i: usize, v: NS::Int, globally: bool) {
+    fn set_int_register(&mut self, i: usize, v: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -540,8 +549,8 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_dim_register(&self, i: usize) -> NS::Dim { self.dimregisters.get(&i) }
-    fn set_dim_register(&mut self, i: usize, v: NS::Dim, globally: bool) {
+    fn get_dim_register(&self, i: usize) -> ET::Dim { self.dimregisters.get(&i) }
+    fn set_dim_register(&mut self, i: usize, v: ET::Dim, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -551,8 +560,8 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_skip_register(&self, i: usize) -> Skip<NS::SkipDim> { self.skipregisters.get(&i) }
-    fn set_skip_register(&mut self, i: usize, v: Skip<NS::SkipDim>, globally: bool) {
+    fn get_skip_register(&self, i: usize) -> Skip<ET::SkipDim> { self.skipregisters.get(&i) }
+    fn set_skip_register(&mut self, i: usize, v: Skip<ET::SkipDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -562,8 +571,8 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_muskip_register(&self, i: usize) -> MuSkip<NS::MuDim,NS::MuStretchShrinkDim> { self.muskipregisters.get(&i) }
-    fn set_muskip_register(&mut self, i: usize, v: MuSkip<NS::MuDim,NS::MuStretchShrinkDim>, globally: bool) {
+    fn get_muskip_register(&self, i: usize) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> { self.muskipregisters.get(&i) }
+    fn set_muskip_register(&mut self, i: usize, v: MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -573,8 +582,8 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_toks_register(&self, i: usize) -> Vec<T> { self.toksregisters.get(&i) }
-    fn set_toks_register(&mut self, i: usize, v: Vec<T>, globally: bool) {
+    fn get_toks_register(&self, i: usize) -> Vec<ET::Token> { self.toksregisters.get(&i) }
+    fn set_toks_register(&mut self, i: usize, v: Vec<ET::Token>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -584,10 +593,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_primitive_int(&self, name: &'static str) -> <<Self as State<T>>::NumSet as NumSet>::Int {
+    fn get_primitive_int(&self, name: &'static str) -> ET::Int {
         self.primitive_intregisters.get(&name)
     }
-    fn set_primitive_int(&mut self, name: &'static str, v: <<Self as State<T>>::NumSet as NumSet>::Int, globally: bool) {
+    fn set_primitive_int(&mut self, name: &'static str, v: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -597,10 +606,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_primitive_dim(&self, name: &'static str) -> <<Self as State<T>>::NumSet as NumSet>::Dim {
+    fn get_primitive_dim(&self, name: &'static str) -> ET::Dim {
         self.primitive_dimregisters.get(&name)
     }
-    fn set_primitive_dim(&mut self, name: &'static str, v: <<Self as State<T>>::NumSet as NumSet>::Dim, globally: bool) {
+    fn set_primitive_dim(&mut self, name: &'static str, v: ET::Dim, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -610,10 +619,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_primitive_skip(&self, name: &'static str) -> Skip<NS::SkipDim> {
+    fn get_primitive_skip(&self, name: &'static str) -> Skip<ET::SkipDim> {
         self.primitive_skipregisters.get(&name)
     }
-    fn set_primitive_skip(&mut self, name: &'static str, v: Skip<NS::SkipDim>, globally: bool) {
+    fn set_primitive_skip(&mut self, name: &'static str, v: Skip<ET::SkipDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -623,10 +632,10 @@ impl<T:Token,FS:FileSystem<T::Char>,FontS:FontStore<Char=T::Char>,NS:NumSet> Sta
         }
     }
 
-    fn get_primitive_toks(&self, name: &'static str) -> Vec<T> {
+    fn get_primitive_toks(&self, name: &'static str) -> Vec<ET::Token> {
         self.primitive_tokregisters.get(&name)
     }
-    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<T>, globally: bool) {
+    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<ET::Token>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {

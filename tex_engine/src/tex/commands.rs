@@ -5,8 +5,10 @@ pub mod pdftex;
 pub mod methods;
 
 use std::fmt::{Debug, Formatter};
+use crate::engine::EngineType;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
+use crate::engine::state::modes::BoxMode;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
@@ -46,7 +48,7 @@ pub enum Command<T:Token>{
     /// A command producing a [`crate::tex::boxes::Whatsit`], executed during shipout or `\immediate`ly
     Whatsit {name:&'static str,index:usize},
     /// A command opening a new  [`crate::tex::boxes::TeXNode`], e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
-    OpenBox{name:&'static str,index:usize},
+    OpenBox{name:&'static str,index:usize,mode:BoxMode},
     /// `\relax`
     Relax
     // ...
@@ -96,7 +98,7 @@ impl<T:Token> Debug for Command<T> {
             Command::MathChar(n) => write!(f, "Math Character {:X}", n),
             Command::Value {name,tp,..} => write!(f, "{:?} Command {}",tp, name),
             Command::Whatsit {name,index} => write!(f,"Whatsit {}",name),
-            Command::OpenBox {name,index} => write!(f,"Open Box {}",name),
+            Command::OpenBox {name,index,..} => write!(f,"Open Box {}",name),
         }
     }
 }
@@ -113,7 +115,7 @@ pub enum StomachCommandInner<C:CharType> {
     ValueAssignment{name:&'static str,assignment_index:usize,value_index:usize,tp:Assignable},
     Assignment {name:&'static str,index:usize},
     Whatsit {name:&'static str,index:usize},
-    OpenBox{name:&'static str,index:usize},
+    OpenBox{name:&'static str,index:usize,mode:BoxMode},
     Relax,
     Char{char:C,from_chardef:bool},
     MathChar(u32),
@@ -168,8 +170,8 @@ impl<T:Token> Def<T>{
     /// token that triggered the expansion, used for constructing the
     /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
     /// error messages.
-    pub fn expand<M:Mouth<T>,S:State<T>>(&self, state:&S, mouth:&mut M, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-        methods::exand_def(self,state,mouth,cmd,cause)
+    pub fn expand<ET:EngineType<Token=T>>(&self, state:&ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+        methods::exand_def::<ET>(self,state,mouth,cmd,cause)
     }
 }
 impl<T:Token> Debug for Def<T> {

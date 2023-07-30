@@ -51,14 +51,14 @@ macro_rules! debug_log {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem};
+    use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
     use log::{error, warn, info, debug, trace};
     use crate::engine::gullet::TeXGullet;
     use crate::engine::mouth::TracingMouth;
-    use crate::engine::{Engine, new_tex_with_source_references, Outputs};
+    //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
-    use crate::tex::boxes::StandardTeXNode;
+    use crate::tex::boxes::{StandardTeXBox, StandardTeXNode};
     use crate::tex::token::TokenWithSourceref;
     use crate::engine::mouth::Mouth;
 
@@ -66,7 +66,10 @@ mod tests {
     use crate::engine::filesystem::kpathsea::Kpathsea;
     use crate::utils::errors::TeXError;
     use ansi_term::Colour::*;
+    use crate::engine::{EngineType, Outputs};
     use crate::tex::commands::Command;
+    use crate::tex::fonts::{TfmFont, TfmFontStore};
+    use crate::tex::numbers::{DefaultNumSet, Dimi32, Fill, MuFill, Mui32};
     use crate::utils::Ptr;
     use crate::utils::strings::CharType;
 
@@ -140,7 +143,35 @@ mod tests {
             write_other:|s| { print!("\n{}",Black.on(Green).paint(s)) },
         };
 
-        let mut engine = new_tex_with_source_references(KpseVirtualFileSystem::<u8>::new(std::env::current_dir().unwrap()),outputs.clone());
+        struct Default();
+        impl EngineType for Default {
+            type Char = u8;
+            type Token = TokenWithSourceref<u8>;
+            type File = Ptr<VirtualFile<u8>>;
+            type FileSystem = KpseVirtualFileSystem<u8>;
+            type Font = TfmFont;
+            type FontStore = TfmFontStore;
+            type Node = StandardTeXNode;
+            type Box = StandardTeXBox;
+            type Int = i32;
+            type Dim = Dimi32;
+            type SkipDim = Fill;
+            type MuDim = Mui32;
+            type MuStretchShrinkDim = MuFill;
+            type Numbers = DefaultNumSet;
+            type State = TeXState<Self>;
+            type Mouth = TracingMouth<u8>;
+            type Gullet = TeXGullet<Self>;
+            type Stomach = NoShipoutDefaultStomach<Self>;
+        }
+        let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
+        let fonts = TfmFontStore::new();
+        let state = TeXState::new(fs,fonts,outputs.clone());
+        let mouth = TracingMouth::new();
+        let gullet = TeXGullet::new(mouth);
+        let stomach = NoShipoutDefaultStomach::new();
+        let mut engine = crate::engine::new::<Default>(state,gullet,stomach);
+
         engine.state.set_command(<u8 as CharType>::from_str("rustexBREAK"),Some(Ptr::new(
             Command::Stomach {
                 name: "rustexBREAK",
