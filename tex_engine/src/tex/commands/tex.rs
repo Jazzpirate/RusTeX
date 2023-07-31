@@ -8,7 +8,7 @@ use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditi
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
-use crate::engine::stomach::Stomach;
+use crate::engine::stomach::{BoxReturn, Stomach};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{Assignable, Command, Def, ExpToken, GulletCommand, ParamToken, StomachCommand, StomachCommandInner};
 use crate::tex::commands::methods::{assign_primitive_dim, assign_primitive_int, assign_primitive_skip, assign_primitive_toks, parse_signature};
@@ -20,7 +20,7 @@ use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use crate::engine::{EngineType, gullet};
 use crate::engine::stomach::methods::{assign_dim_register, assign_int_register, assign_muskip_register, assign_skip_register, assign_toks_register};
-use crate::tex::boxes::{HBox, OpenBox, StomachNode, TeXNode, Whatsit};
+use crate::tex::boxes::{HBox, HVBox, OpenBox, StomachNode, TeXNode, Whatsit};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
 use super::etex::protected;
@@ -179,7 +179,7 @@ pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, st
         s.file_closeout(i); // TODO error?
         Ok(())
     });
-    Ok(Whatsit { apply })
+    Ok(Whatsit::new(apply))
 }
 
 pub fn count_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
@@ -584,7 +584,7 @@ pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
                                             }
                                         }
                                         Command::Conditional {name,index} => {
-                                            catch_prim!(do_conditional::<ET>($gullet,$state,$tk,name,*index) => ("edef",cmd));
+                                            catch_prim!(do_conditional::<ET>($gullet,$state,$tk,name,*index,false) => ("edef",cmd));
                                         }
                                         _ => $f
                                     }
@@ -606,7 +606,7 @@ pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
                                             }
                                         }
                                         Command::Conditional {name,index} => {
-                                            catch_prim!(do_conditional::<ET>($gullet,$state,$tk,name,*index) => ("edef",cmd));
+                                            catch_prim!(do_conditional::<ET>($gullet,$state,$tk,name,*index,false) => ("edef",cmd));
                                         }
                                         _ => $f
                                     }
@@ -815,7 +815,7 @@ pub fn expandafter<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
             } {
                 match &*ncmd {
                     Command::Conditional{name,index} =>
-                        catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index) => ("expandafter",cmd)),
+                        catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index,false) => ("expandafter",cmd)),
                     Command::Gullet {name,index} =>
                         catch_prim!(crate::engine::gullet::methods::do_expandable::<ET>(gullet,state,t,name,*index) => ("expandafter",cmd)),
                     Command::Def(d,_) => {
@@ -970,7 +970,7 @@ pub fn global<ET:EngineType>(stomach:&mut ET::Stomach,state:&mut ET::State,gulle
 
 
 pub fn hbox<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>)
-                                         -> Result<Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<StomachNode<ET>>>,ErrorInPrimitive<ET::Token>> {
+                                         -> Result<BoxReturn<ET>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\hbox");
     let (to,spread) = match catch_prim!(gullet.get_keywords(state,vec!("spread","to")) => ("hbox",cmd)) {
         None => (None,None),
@@ -992,7 +992,7 @@ pub fn hbox<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet
                 state.stack_push(GroupType::Box(BoxMode::H));
                 gullet.mouth().push_tokens(state.get_primitive_toks("everyhbox"));
                 return Ok(Box::new(move |sto,s,gu,children| {
-                    Some(StomachNode::HBox(HBox {
+                    Some(HVBox::H(HBox {
                         children, to, spread,
                         ..Default::default()
                     }))
@@ -1091,7 +1091,7 @@ pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
             None => return Ok(Some(t)),
             Some(c) => match &*c {
                 Command::Conditional{name,index} if e => {
-                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index) => (name,cmd));
+                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index,false) => (name,cmd));
                 },
                 Command::Def(d,_) if e => {
                     let v = catch_prim!(d.expand::<ET>(state,gullet.mouth(),c.clone(),Ptr::new(t.clone())) => (name,cmd));
@@ -1122,11 +1122,11 @@ pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gull
     let i = catch_prim!(gullet.get_int(state) => ("ifeof",cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
-        Err(_) => return Err(ErrorInPrimitive{name:"openin",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
+        Err(_) => return Err(ErrorInPrimitive{name:"ifeof",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
     };
     if i == 18 { return Ok(false) }
     let f = match state.get_open_in_file(i) {
-        None => return Err(ErrorInPrimitive{name:"openin",msg:Some(format!("No in file open at index: {}",i)),cause:Some(cmd.cause),source:None}.into()),
+        None => return Err(ErrorInPrimitive{name:"ifeof",msg:Some(format!("No in file open at index: {}",i)),cause:Some(cmd.cause),source:None}.into()),
         Some(f) => f
     };
     Ok(f.eof())
@@ -1228,7 +1228,7 @@ pub fn immediate<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,stom
                     )})
                 };
                 let wi = catch_prim!(fun(state,gullet,stomach,sc) => ("immediate",cmd));
-                catch_prim!((wi.apply)(stomach,state,gullet) => ("immediate",cmd));
+                catch_prim!(wi.apply(stomach,state,gullet) => ("immediate",cmd));
                 Ok(())
             }
             _ => {
@@ -1933,7 +1933,7 @@ pub fn openout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, sto
         state.file_openout(i,f); // TODO error?
         Ok(())
     });
-    Ok(Whatsit { apply })
+    Ok(Whatsit::new(apply))
 }
 
 pub fn or<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
@@ -1988,7 +1988,19 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
         return Err(ErrorInPrimitive{name:"read",msg:Some("Expected 'to' after \\read".to_string()),cause:Some(cmd.cause),source:None})
     }
     let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("read",cmd));
-    let ret = catch_prim!(file.read::<ET>(state) => ("read",cmd)).into_iter().map(|tk| ExpToken::Token(tk)).collect();
+    let ret = catch_prim!(file.read::<ET>(state) => ("read",cmd));
+    debug_log!(trace=>"read: {} = {}",newcmd,TokenList(ret.clone()));
+
+/*
+    if TokenList(ret.clone()).to_string().starts_with("102A0;CARIAN LETTER A") {
+        println!("Here!");
+        std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
+        env_logger::init();
+    }
+*/
+
+
+    let ret = ret.into_iter().map(|tk| ExpToken::Token(tk)).collect();
     let def = Def {
         protected: false,
         long: false,
@@ -2101,8 +2113,7 @@ pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, stoma
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    todo!("set box register");
-                    //s.set_box_register(i as usize,Some(bx));
+                    s.set_box_register(i as usize,bx,global);
                     None
                 })});
                 Ok(())
@@ -2325,6 +2336,10 @@ pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gullet
                 todo!()
             }
             StomachCommandInner::ValueAssignment {..} => todo!(),
+            StomachCommandInner::Char {char,from_chardef:true} => {
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(char.to_usize().to_string().as_bytes());
+                Ok(ret)
+            }
             _ => return Err(ErrorInPrimitive{name:"the",msg:Some("Expected a value after \\the".to_string()),cause:Some(cmd.cause),source:None})
         }
     }
@@ -2495,7 +2510,7 @@ pub fn write<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stoma
         gullet.restore_mouth(old);
         Ok(())
     });
-    Ok(Whatsit { apply })
+    Ok(Whatsit::new(apply))
 }
 
 

@@ -2,7 +2,7 @@
 
 use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField};
+use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField};
 use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::tex::commands::Command;
 use crate::tex::token::Token;
@@ -11,7 +11,7 @@ use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::{EngineType, Outputs};
 use crate::engine::stomach::Stomach;
-use crate::tex::boxes::{OpenBox, TeXNode};
+use crate::tex::boxes::{HVBox, OpenBox, TeXNode};
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, NumSet, Skip};
 use crate::utils::Ptr;
@@ -138,6 +138,11 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     fn get_toks_register(&self,i:usize) -> Vec<ET::Token>;
     /// set the value of a skip register
     fn set_toks_register(&mut self,i:usize,v:Vec<ET::Token>,globally:bool);
+
+    fn get_box_register(&self,i:usize) -> &HVBox<ET>;
+    fn set_box_register(&mut self,i:usize,v:HVBox<ET>,globally:bool);
+    fn take_box_register(&mut self,i:usize) -> HVBox<ET>;
+
     /// get a primitive integer value
     fn get_primitive_int(&self,name:&'static str) -> ET::Int;
     /// set a primitive integer value
@@ -193,6 +198,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     skipregisters: VecField<Skip<ET::SkipDim>>,
     muskipregisters: VecField<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
     toksregisters:VecField<Vec<ET::Token>>,
+    boxregisters:BoxField<ET>,
 
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
@@ -231,6 +237,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             skipregisters: VecField::new(),
             muskipregisters: VecField::new(),
             toksregisters: VecField::new(),
+            boxregisters: BoxField::new(),
 
             primitive_intregisters: HashMapField::new(),
             primitive_dimregisters: HashMapField::new(),
@@ -364,6 +371,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.skipregisters.push_stack();
         self.muskipregisters.push_stack();
         self.toksregisters.push_stack();
+        self.boxregisters.push_stack();
 
         self.primitive_intregisters.push_stack();
         self.primitive_dimregisters.push_stack();
@@ -397,6 +405,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.skipregisters.pop_stack();
         self.muskipregisters.pop_stack();
         self.toksregisters.pop_stack();
+        self.boxregisters.pop_stack();
 
         self.primitive_intregisters.pop_stack();
         self.primitive_dimregisters.pop_stack();
@@ -590,6 +599,22 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.toksregisters.set_globally(i,v)
         } else {
             self.toksregisters.set_locally(i,v)
+        }
+    }
+
+    fn get_box_register(&self, i: usize) -> &HVBox<ET> {
+        self.boxregisters.get(i)
+    }
+    fn take_box_register(&mut self, i: usize) -> HVBox<ET> {
+        self.boxregisters.take(i)
+    }
+    fn set_box_register(&mut self, i: usize, v: HVBox<ET>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.boxregisters.set_globally(i,v)
+        } else {
+            self.boxregisters.set_locally(i,v)
         }
     }
 

@@ -7,6 +7,8 @@
 use crate::utils::strings::{AllCharsTrait, CharType};
 use std::collections::hash_map::Entry;
 use std::hash::Hash;
+use crate::engine::EngineType;
+use crate::tex::boxes::HVBox;
 use crate::utils::map::HMap;
 
 /** A field of the [`State`](crate::engine::state::State) needs to be able to push and pop a new stack frame.
@@ -110,6 +112,67 @@ impl<C:CharType,A:Clone+Default> CharField<C,A> {
     /// initializes a new [`CharField`] with the given initial sequence of type [`CharType::Allchars`]
     //#[inline(always)]
     pub fn new(initial: C::Allchars<A>) -> Self { CharField{charfield:initial, changes:Vec::new()} }
+}
+
+pub struct BoxField<ET:EngineType>(Vec<HVBox<ET>>,Vec<HMap<usize,HVBox<ET>>>);
+impl <ET:EngineType> BoxField<ET> {
+    pub fn push_stack(&mut self) { self.1.push(HMap::default()) }
+    pub fn pop_stack(&mut self) {
+        if let Some(m) = self.1.pop() {
+            for (k,v) in m {
+                self.0[k] = v
+            }
+        }
+    }
+    pub fn new() -> Self { BoxField(Vec::new(),Vec::new()) }
+    pub fn get(&self, k: usize) -> &HVBox<ET> {
+        if k < self.0.len() {
+            &self.0[k]
+        } else {
+            &HVBox::Void
+        }
+    }
+    pub fn take(&mut self, k: usize) -> HVBox<ET> {
+        if k < self.0.len() {
+            std::mem::replace(&mut self.0[k],HVBox::Void)
+        } else {
+            HVBox::Void
+        }
+    }
+    fn set_inner(vec:&mut Vec<HVBox<ET>>,k:usize,v:HVBox<ET>) -> Option<HVBox<ET>> {
+        if k < vec.len() {
+            Some(std::mem::replace(&mut vec[k],v))
+        } else {
+            vec.resize(k+1,HVBox::Void);
+            vec[k] = v;
+            None
+        }
+    }
+    pub fn set_locally(&mut self, k: usize, v: HVBox<ET>) {
+        if let Some(m) = self.1.last_mut() {
+            match m.entry(k) {
+                Entry::Vacant(e) => {
+                    e.insert(match Self::set_inner(&mut self.0,k,v) {
+                        Some(old) => old,
+                        None => HVBox::Void
+                    });
+                }
+                Entry::Occupied(_) => {
+                    Self::set_inner(&mut self.0,k,v);
+                }
+            }
+        } else {
+            Self::set_inner(&mut self.0,k,v);
+        }
+    }
+
+    // #[inline(always)]
+    pub fn set_globally(&mut self, k: usize, v: HVBox<ET>) {
+        Self::set_inner(&mut self.0,k,v);
+        for ov in self.1.iter_mut() {
+            ov.remove(&k);
+        }
+    }
 }
 
 /// A Vec of values of type A; e.g. [`intregisters`](crate::engine::state::State::get_int_register),

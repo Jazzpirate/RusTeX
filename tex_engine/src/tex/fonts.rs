@@ -73,7 +73,7 @@ impl FontStore for TfmFontStore {
     }
 }
 impl TfmFontStore {
-    pub(crate) fn new() -> Self { Self{fonts:vec!(), font_files:HMap::default()} }
+    pub fn new() -> Self { Self{fonts:vec!(), font_files:HMap::default()} }
 }
 // todo: replace by Arrays, maybe
 pub struct TfmFont {

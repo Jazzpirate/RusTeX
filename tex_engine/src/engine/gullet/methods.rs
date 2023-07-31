@@ -71,7 +71,7 @@ macro_rules! expand_group_without_unknowns {
                                     }
                                 }
                                 Command::Conditional {name,index} => {
-                                    do_conditional::<ET>($gullet,$state,$tk,name,*index)?;
+                                    do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
                                 }
                                 _ => $f
                             }
@@ -90,7 +90,7 @@ macro_rules! expand_group_without_unknowns {
                                     }
                                 }
                                 Command::Conditional {name,index} => {
-                                    do_conditional::<ET>($gullet,$state,$tk,name,*index)?;
+                                    do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
                                 }
                                 _ => $f
                             }
@@ -145,7 +145,7 @@ macro_rules! expand_group_with_unknowns {
                                         }
                                     }
                                     Command::Conditional {name,index} => {
-                                        do_conditional::<ET>($gullet,$state,$tk,name,*index)?;
+                                        do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
                                     }
                                     _ => $f
                                 }
@@ -167,7 +167,7 @@ macro_rules! expand_group_with_unknowns {
                                         }
                                     }
                                     Command::Conditional {name,index} => {
-                                        do_conditional::<ET>($gullet,$state,$tk,name,*index)?;
+                                        do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
                                     }
                                     _ => $f
                                 }
@@ -201,7 +201,7 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
                         }
                     }
                     Some(Command::Conditional {name,index}) => {
-                        do_conditional::<ET>(gullet,state,tk,name,*index)?;
+                        do_conditional::<ET>(gullet,state,tk,name,*index,false)?;
                     }
                     _ => //if state.get_escapechar() == T::Char::MAX =>
                         ret.push(*c),
@@ -219,8 +219,9 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
                         }
                     }
                     Some(Command::Conditional {name,index}) => {
-                        do_conditional::<ET>(gullet,state,tk,name,*index)?;
+                        do_conditional::<ET>(gullet,state,tk,name,*index,false)?;
                     }
+                    Some(Command::Relax) if !quoted => return Ok(ret.into()),
                     _ => match state.get_escapechar() {
                         None => ret.extend(name.as_vec()),
                         Some(esc) => {
@@ -365,7 +366,7 @@ pub fn process_cmd_for_stomach<ET:EngineType>(gullet:&mut ET::Gullet, state: &mu
             Ok(None)
         }
         Command::Conditional{name,index} => {
-            do_conditional::<ET>(gullet,state,cause,name,*index)?;
+            do_conditional::<ET>(gullet,state,cause,name,*index,false)?;
             Ok(None)
         },
         Command::Gullet {name,index} => {
@@ -400,7 +401,7 @@ pub fn do_expandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,
     }
 }
 
-pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cause:ET::Token,name:&'static str,index:usize) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cause:ET::Token,name:&'static str,index:usize,unless:bool) -> Result<(),Box<dyn TeXError<ET::Token>>> {
     if name == "ifcase" {
         debug_log!(trace=>"ifcase");
         let i = gullet.new_conditional("ifcase");
@@ -419,7 +420,7 @@ pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State
             Some(c) => {
                 let i = gullet.new_conditional(name);
                 let b = c(state, gullet, GulletCommand { cause })?;
-                if b {
+                if (b && !unless) || (!b && unless) {
                     gullet.set_conditional(i,ConditionalBranch::True(name));
                     debug_log!(trace=>"True conditional");
                     Ok(())
@@ -715,7 +716,7 @@ fn get_cs_check_command<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::St
     -> Result<Option<BaseToken<ET::Char>>,Box<dyn TeXError<ET::Token>>> {
     match cmd.as_deref() {
         Some(Command::Conditional {name,index}) => {
-            do_conditional::<ET>(gullet,state,tk,name,*index)?;
+            do_conditional::<ET>(gullet,state,tk,name,*index,false)?;
             Ok(None)
         }
         Some(Command::Gullet {name,index}) => {

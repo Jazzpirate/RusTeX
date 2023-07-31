@@ -198,7 +198,7 @@ pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::
 }
 
 pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,Box<dyn TeXError<ET::Token>>> {
-    debug_log!(trace=>"Reading decimal number {}...",(firstchar as char));
+    debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
 
     while let Some(next) = gullet.get_next_stomach_command(state)? {
@@ -219,7 +219,8 @@ pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::Stat
             }
         }
     }
-    let i = i64::from_str_radix(std::str::from_utf8(&rets).unwrap(),16).unwrap();
+    let str = std::str::from_utf8(&rets).unwrap();
+    let i = i64::from_str_radix(str,16).unwrap();
     debug_log!(trace=>"Returning {}",i);
     Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
 }
@@ -299,6 +300,15 @@ pub fn get_dim_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State
             let val = state.get_int_register(i).to_i64() as f64;
             let val = if isnegative { -val } else { val };
             return read_unit::<ET>(gullet,state,val)
+        }
+        StomachCommandInner::Value {index,tp:Assignable::Dim,..} => {
+            match gullet.primitive_dim(index) {
+                None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
+                Some(f) => {
+                    let val = f(state,gullet,GulletCommand{cause})?;
+                    return Ok(if isnegative { -val } else { val })
+                }
+            }
         }
         StomachCommandInner::Char{char,..} => {
             let val = char.to_usize() as f64;

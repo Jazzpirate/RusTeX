@@ -15,6 +15,102 @@ use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
 
+pub fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&GulletCommand<ET::Token>, name:&'static str)
+                                                  -> Result<Frac,ErrorInPrimitive<ET::Token>> {
+    let mut stack: Vec<(Option<Frac>,Option<fn(Frac,Frac) -> Frac>)> = vec!((None,None));
+    'a: loop {
+        catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
+        if catch_prim!(gullet.get_keyword(state,"(") => (name,cmd.clone())) {
+            stack.push((None,None));
+            continue 'a;
+        }
+        let mut first = Frac::new(catch_prim!(gullet.get_int(state) => (name,cmd.clone())).to_i64(),1);
+        loop {
+            catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
+            let kw = catch_prim!(
+                if stack.len()>1 {gullet.get_keywords(state,vec!("+","-","*","/",")"))}
+                else {gullet.get_keywords(state,vec!("*","/"))}
+                => ("numexpr",cmd.clone()));
+            match kw {
+                None => {
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                    match stack.pop() {
+                        Some((None,None)) if stack.is_empty() => return Ok(first),
+                        _ => return Err(ErrorInPrimitive { name, msg: Some("Expected ')'".to_string()), cause: Some(cmd.cause.clone()), source: None })
+                    }
+                }
+                Some(r) if r == ")" => {
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                    stack.pop();
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                }
+                Some(r) if r == "+" => {
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                    *stack.last_mut().unwrap() = (Some(first),Some(|a,b| a + b));
+                    continue 'a;
+                }
+                Some(r) if r == "-" => {
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                    *stack.last_mut().unwrap() = (Some(first),Some(|a,b| a - b));
+                    continue 'a;
+                }
+                Some(r) if r == "*" => {
+                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
+                    first = first.scale(ret.0,ret.1);
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                }
+                Some(r) if r == "/" => {
+                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
+                    first = first.scale(ret.1,ret.0);
+                    match stack.last_mut() {
+                        Some((Some(f),Some(op))) => {
+                            first = op(*f,first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
+                }
+                _ => unreachable!()
+            }
+        }
+    }
+}
 
 pub fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&GulletCommand<ET::Token>, name:&'static str,
                                 get:fn(&mut ET::State, &mut ET::Gullet) -> Result<Num,Box<dyn TeXError<ET::Token>>>)
@@ -27,13 +123,6 @@ pub fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET
             continue 'a;
         }
         let mut first = catch_prim!(get(state,gullet) => (name,cmd.clone()));
-        match stack.last_mut() {
-            Some((Some(second), Some(op))) => {
-                first = op(second.clone(),first);
-                *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
-            }
-            _ => ()
-        }
         loop {
             catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
             let kw = catch_prim!(
@@ -42,40 +131,69 @@ pub fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET
                 => ("numexpr",cmd.clone()));
             match kw {
                 None => {
+                    match stack.last_mut() {
+                        Some((Some(second), Some(op))) => {
+                            first = op(second.clone(),first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
                     match stack.pop() {
                         Some((None, None)) if stack.is_empty() => return Ok(first),
                         _ => return Err(ErrorInPrimitive { name, msg: Some("Expected ')'".to_string()), cause: Some(cmd.cause.clone()), source: None })
                     }
                 }
                 Some(r) if r == ")" => {
-                    stack.pop();
-                    match stack.last_mut() {
+                    match stack.pop() {
                         Some((Some(second), Some(op))) => {
-                            first = op(first, second.clone());
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            first = op(second.clone(),first);
                         }
                         _ => ()
                     }
                 }
                 Some(r) if r == "+" => {
+                    match stack.last_mut() {
+                        Some((Some(second), Some(op))) => {
+                            first = op(second.clone(),first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
                     *stack.last_mut().unwrap() = (Some(first), Some(|a, b| a + b));
                     continue 'a;
                 }
                 Some(r) if r == "-" => {
+                    match stack.last_mut() {
+                        Some((Some(second), Some(op))) => {
+                            first = op(second.clone(),first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
                     *stack.last_mut().unwrap() = (Some(first), Some(|a, b| a - b));
                     continue 'a;
                 }
                 Some(r) if r == "*" => {
-                    let ret = catch_prim!(expr_loop::<ET,Frac>(state,gullet,cmd,&name,|s,g:&mut ET::Gullet| {
-                        Ok(Frac::new(g.get_int(s)?.to_i64(),1))
-                    }) => (name,cmd.clone()));
+                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.0,ret.1);
+                    match stack.last_mut() {
+                        Some((Some(second), Some(op))) => {
+                            first = op(second.clone(),first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
                 }
                 Some(r) if r == "/" => {
-                    let ret = catch_prim!(expr_loop::<ET,Frac>(state,gullet,cmd,&name,|s,g:&mut ET::Gullet| {
-                        Ok(Frac::new(g.get_int(s)?.to_i64(),1))
-                    }) => (name,cmd.clone()));
+                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.1,ret.0);
+                    match stack.last_mut() {
+                        Some((Some(second), Some(op))) => {
+                            first = op(second.clone(),first);
+                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                        }
+                        _ => ()
+                    }
                 }
                 _ => unreachable!()
             }
@@ -213,6 +331,28 @@ pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
     Ok(catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("unexpanded",cmd)))
 }
 
+pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"unless");
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("unless",cmd)) {
+        None => file_end_prim!("unless",cmd),
+        Some((next,true)) => {
+            let ncmd = match next.base() {
+                BaseToken::CS(name) => state.get_command(name),
+                BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(*c),
+                _ => return Err(ErrorInPrimitive{name:"unless",msg:Some("Expected a conditional after \\unless".to_string()),cause:Some(cmd.cause),source:None})
+            };
+            match ncmd.as_deref() {
+                Some(Command::Conditional {name,index}) => {
+                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,next,name,*index,true) => ("unless",cmd));
+                    Ok(vec!())
+                }
+                _ => Err(ErrorInPrimitive{name:"unless",msg:Some("Expected a conditional after \\unless".to_string()),cause:Some(cmd.cause),source:None}),
+            }
+        }
+        _ => Err(ErrorInPrimitive{name:"unless",msg:Some("Expected a conditional after \\unless".to_string()),cause:Some(cmd.cause),source:None})
+    }
+}
+
 pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
     register_dim!(dimexpr,state,stomach,gullet,(s,g,c) => dimexpr::<ET>(s,g,c));
     register_gullet!(eTeXrevision,state,stomach,gullet,(s,g,c) => etexrevision::<ET>());
@@ -231,6 +371,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&m
     register_int_assign!(tracingscantokens,state,stomach,gullet);
     register_assign!(protected,state,stomach,gullet,(s,gu,sto,cmd,g) =>protected::<ET>(sto,s,gu,cmd,g,false,false,false));
     register_gullet!(unexpanded,state,stomach,gullet,(s,g,c) => unexpanded::<ET>(s,g,c));
+    register_gullet!(unless,state,stomach,gullet,(s,gu,cmd) =>unless::<ET>(s,gu,cmd));
 
     cmtodo!(state,stomach,gullet,beginL);
     cmtodo!(state,stomach,gullet,beginR);
@@ -279,6 +420,5 @@ pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&m
     cmtodo!(state,stomach,gullet,splitfirstmarks);
     cmtodo!(state,stomach,gullet,TeXXeTstate);
     cmtodo!(state,stomach,gullet,topmarks);
-    cmtodo!(state,stomach,gullet,unless);
     cmtodo!(state,stomach,gullet,widowpenalties);
 }

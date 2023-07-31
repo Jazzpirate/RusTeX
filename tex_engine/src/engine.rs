@@ -21,7 +21,7 @@ pub mod filesystem;
 
 /// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`Mouth`]) and [`Stomach`] to
 /// form a complete TeX engine.
-pub trait EngineType:Sized+'static {
+pub trait EngineType:Sized+'static + Copy + Clone {
     type Char:CharType;
     type Token:Token<Char=Self::Char>;
     type File:File<Self::Char>;

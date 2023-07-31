@@ -167,6 +167,9 @@ impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
     }
 }
 
+// TODO get rid of:
+pub static UNICODEDATA_TXT : &str = include_str!("../resources/UnicodeData.txt");
+
 pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,Ptr<VirtualFile<Char>>>}
 impl<Char:CharType> KpsePhysicalFileSystem<Char> {
     pub fn kpsewhich(&self, path: &str) -> KpseResult {
@@ -193,6 +196,17 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
         let ret = self.kpathsea.kpsewhich(path);
         match self.files.entry(ret.path) {
             Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(e) if e.key().to_str().unwrap().ends_with("UnicodeData.txt") => {
+                // TODO remove
+                let s = UNICODEDATA_TXT.as_bytes().to_vec();
+                let ret = Ptr::new(VirtualFile{
+                    path:e.key().clone(),
+                    contents:RwLock::new(Some(s)),
+                    open:RwLock::new(None)
+                });
+                e.insert(ret.clone());
+                ret
+            }
             Entry::Vacant(e) => {
                 let s: Option<Vec<u8>> = self.kpathsea.get(&self.pwd,e.key());
                 let ret = Ptr::new(VirtualFile{

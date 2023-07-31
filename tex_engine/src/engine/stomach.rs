@@ -4,7 +4,7 @@ use crate::debug_log;
 use crate::engine::EngineType;
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
-use crate::tex::boxes::{StomachNode, OpenBox, TeXNode, Whatsit};
+use crate::tex::boxes::{StomachNode, OpenBox, TeXNode, Whatsit, HVBox};
 use crate::tex::commands::{StomachCommand,StomachCommandInner};
 use crate::tex::token::Token;
 use crate::utils::errors::{ErrorInPrimitive, TeXError};
@@ -12,7 +12,7 @@ use crate::utils::map::Map;
 
 type StomachFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, &mut ET::Stomach, StomachCommand<ET::Token>, bool) -> Result<(),ErrorInPrimitive<ET::Token>>;
 type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,&mut ET::Stomach,StomachCommand<ET::Token>) -> Result<Whatsit<ET>,ErrorInPrimitive<ET::Token>>;
-type BoxReturn<ET:EngineType> = Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<StomachNode<ET>>>;
+pub type BoxReturn<ET:EngineType> = Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<HVBox<ET>>>;
 type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,&mut ET::Stomach,StomachCommand<ET::Token>) -> Result<BoxReturn<ET> ,ErrorInPrimitive<ET::Token>>;
 
 pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized+'static {
