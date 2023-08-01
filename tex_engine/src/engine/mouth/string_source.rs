@@ -55,7 +55,7 @@ impl<C:CharType> StringSourceState<C> {
     }
 
     /// Process an [`end-of-line`](crate::tex::catcodes::CategoryCode::EOL) character:
-    /// If `\endline==255`, ignore it and obtain the next character. Otherwise, return the
+    /// If `\endline==None`, ignore it and obtain the next character. Otherwise, return the
     /// `\endlinechar` character.
     pub fn do_eol(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>) -> Option<(C,usize,usize)> {
         match endline {
@@ -241,19 +241,47 @@ impl<C:CharType> StringSourceState<C> {
                 }
             }
         }
-        /*
-        let mut next:Option<(C, usize, usize)> = None;
-        while self.get_next_lc().1 != 0 {
-            match self.next_char(endline) {
-                None => return (),
-                o => next = o
-            }
-        }
-        if let Some((b,line,col)) = next {
-            self.charbuffer.push((b,line,col));
-        }*/
     }
 
+    fn get_escape(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>,a:C,line:usize,col:usize) -> (BaseToken<C>,usize,usize) {
+        use crate::tex::catcodes::CategoryCode::*;
+        debug_log!(trace=>"get_next_immediate:   Escape");
+        match self.next_char(cc,endline) {
+            Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
+                self.charbuffer.push((a,l,c));
+                debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
+                (BaseToken::CS(C::empty_str()),line, col)
+            }
+            None => {
+                debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
+                (BaseToken::CS(C::empty_str()), line, col)
+            }
+            Some((a,_,_)) if *cc.get(a) == Letter => {
+                self.state = MouthState::S;
+                debug_log!(trace=>"get_next_immediate: Next character is Letter");
+                let mut v = vec!(a);
+                loop {
+                    match self.next_char(cc,endline) {
+                        Some((b,_,_)) if *cc.get(b) == Letter => v.push(b),
+                        Some(o) => {
+                            self.charbuffer.push(o);
+                            break
+                        }
+                        None => break
+                    }
+                }
+                let ret = BaseToken::CS(v.into());
+                debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
+                (ret,line, col)
+            }
+            Some((a,_,_)) => {
+                self.state = MouthState::M;
+                let ret = BaseToken::CS(vec!(a).into());
+                debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
+                (ret, line, col)
+            }
+        }
+    }
 
     /** Get the next [`BaseToken`] and its starting (line,column)-pair,
         using the given [`CategoryCodeScheme`] and `\endlinechar` value;
@@ -305,50 +333,7 @@ impl<C:CharType> StringSourceState<C> {
                             }
                         }
                     }
-                    Escape => {
-                        debug_log!(trace=>"get_next_immediate:   Escape");
-                        self.state = MouthState::S;
-                        match self.next_char(cc,endline) {
-                            Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
-                                self.charbuffer.push((a,l,c));
-                                debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
-                                Some((BaseToken::CS(C::empty_str()),line, col))
-                            }
-                            None => {
-                                debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
-                                Some((BaseToken::CS(C::empty_str()), line, col))
-                            }
-                            Some((a,_,_)) if *cc.get(a) == Letter => {
-                                debug_log!(trace=>"get_next_immediate: Next character is Letter");
-                                let mut v = vec!(a);
-                                loop {
-                                    match self.next_char(cc,endline) {
-                                        Some((b,_,_)) if *cc.get(b) == Letter => v.push(b),
-                                        Some(o) => {
-                                            self.charbuffer.push(o);
-                                            break
-                                        }
-                                        None => break
-                                    }
-                                }
-                                let ret = BaseToken::CS(v.into());
-                                debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
-                                Some((ret,line, col))
-                            }
-                            Some((a,_,_)) => {
-                                let ret = BaseToken::CS(vec!(a).into());
-                                debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
-                                Some((ret, line, col))
-                            }
-                        }
-                    }
-                    /*Comment => {
-                        self.skip_line(endline);
-                        self.get_next(cc, endline)
-                    }
-                    Ignored => self.get_next(cc, endline),
-                    Invalid => ???
-                    */
+                    Escape => Some(self.get_escape(cc,endline,a,line,col)),
                     o => {
                         self.state = MouthState::M;
                         let ret = BaseToken::Char(a, *o);
@@ -390,12 +375,62 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    /*pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<T>> {
-        match self.get_next_valid(cc, endline)? {
-            None => Ok(None),
-            Some((n,_,_)) => Ok(Some(T::new(n))),
+    pub fn read<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>,f:&mut dyn FnMut(T) -> ())
+        -> Result<(),InvalidCharacter<T>> {
+        let mut done = false;
+        use CategoryCode::*;
+        let currline = self.line;
+        while let Some((next,l,c)) = self.next_char(cc,endline) {
+            if l != currline {
+                self.charbuffer.push((next,l,c));
+                return Ok(())
+            }
+            match cc.get(next) {
+                Ignored => (),
+                Comment => {
+                    self.skip_line();
+                    if done {
+                        return Ok(())
+                    }
+                    return self.read(cc,endline,f)
+                }
+                Invalid => {
+                    debug_log!(trace=>"get_next_valid: Invalid. Error");
+                    return Err(InvalidCharacter(next))
+                }
+                EOL => {
+                    self.state = MouthState::N;
+                    if done {
+                        return Ok(())
+                    }
+                    return self.read(cc,endline,f)
+                }
+                Space => {
+                    match self.state {
+                        MouthState::S => (),
+                        MouthState::N => {
+                            self.state = MouthState::S;
+                        }
+                        _ => {
+                            self.state = MouthState::S;
+                            f(T::new(BaseToken::Char(next,Space),None));
+                            done = true;
+                        }
+                    }
+                }
+                Escape => {
+                    done = true;
+                    f(T::new(self.get_escape(cc,endline,next,l,c).0,None))
+                }
+                o => {
+                    self.state = MouthState::M;
+                    done = true;
+                    f(T::new(BaseToken::Char(next,*o),None))
+                }
+            }
         }
-    }*/
+        Ok(())
+    }
 }
 
 /// A [`StringSource`] is the primary [`TokenSource`](crate::engine::mouth::TeXMouthSource) for TeX, which reads from a [`String`]
@@ -414,17 +449,14 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
+    pub fn read<T:Token<Char=C>>(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:&mut dyn FnMut(T) -> ()) -> Result<(),InvalidCharacter<T>> {
+        self.state.read(cc,endline,f)
+    }
+
     pub fn line(&self) -> usize { self.state.line }
     pub fn column(&self) -> usize { self.state.col }
 
     pub fn preview(&self) -> String { self.state.preview() }
-
-    /*pub fn get_next_plain<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<T>> {
-        match self.state.get_next_valid(cc, endline)? {
-            None => Ok(None),
-            Some((n,_,_)) => Ok(Some(T::new(n))),
-        }
-    }*/
 
     pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<T>> {
         match self.state.get_next_valid(cc, endline)? {
@@ -433,135 +465,6 @@ impl<C:CharType> StringSource<C> {
                 Ok(Some(T::new(n,self.source.clone().map(|s|
                     (s,(l,c),self.state.get_next_lc())
                 ))))
-                /*Ok(Some(TokenWithSourceref{base:n,
-                sourceref:
-                self.source.clone().map(|s| SourceReference::File { file:s,start:(l,c),end:self.state.get_next_lc() })*/
         }
     }
-
-    /*
-    fn sourceref(&self,line:usize,col:usize) -> Option<SourceReference<C>> {
-        self.source.clone().map(|s| SourceReference::File { file:s,start:(line,col),end:self.state.get_next_lc() })
-    }
-    /** Get the next [`Token`] from the [`StringSource`], using the given [`CategoryCodeScheme`] and
-     `\endlinechar` value. [`Token`]s are returned immediately with no additional tracking.
-     Comments, characters with [`CategoryCode`](CategoryCode)
-     [`Ignored`](CategoryCode::Ignored),
-     superfluous spaces and end-of-line characters are skipped.
-    */
-    pub fn get_next(&mut self, cc: &CategoryCodeScheme<C>, endline: C) -> Option<Token<C>> {
-        use crate::tex::catcodes::CategoryCode::*;
-        match self.next_char(endline) {
-            None => None,
-            Some((a,line,col)) => {
-                match cc.get(a) {
-                    EOL => {
-                        self.skip_line(endline);
-                        match self.mstate {
-                            MouthState::N => {
-                                Some(Token{base: BaseToken::CS(C::par_token()), sourceref:self.sourceref(line, col)})
-                            }
-                            _ => {
-                                self.mstate = MouthState::N;
-                                Some(Token{base: BaseToken::Char(a, Space), sourceref:self.sourceref(line, col)})
-                            }
-                        }
-                    }
-                    Comment => {
-                        self.skip_line(endline);
-                        self.get_next(cc, endline)
-                    }
-                    Space => {
-                        match self.mstate {
-                            MouthState::S => self.get_next(cc, endline),
-                            MouthState::N => {
-                                self.get_next(cc, endline)
-                            }
-                            _ => {
-                                self.mstate = MouthState::S;
-                                Some(Token{base: BaseToken::Char(a, Space),sourceref:self.sourceref(line, col)})
-                            }
-                        }
-                    }
-                    Ignored => self.get_next(cc, endline),
-                    Escape => {
-                        match self.next_char(endline) {
-                            Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
-                                self.mstate = MouthState::S;
-                                self.charbuffer.push((a,l,c));
-                                Some(Token{base: BaseToken::CS(C::empty_str()), sourceref:self.sourceref(line, col)})
-                            }
-                            None => {
-                                Some(Token{base: BaseToken::CS(C::empty_str()), sourceref:self.sourceref(line, col)})
-                            }
-                            Some((a,_,_)) if *cc.get(a) == Letter => {
-                                let mut v = vec!(a);
-                                loop {
-                                    match self.next_char(endline) {
-                                        Some((b,_,_)) if *cc.get(b) == Letter => v.push(b),
-                                        Some(o) => {
-                                            self.charbuffer.push(o);
-                                            self.mstate = MouthState::S;
-                                            break
-                                        }
-                                        None => break
-                                    }
-                                }
-                                Some(Token{base: BaseToken::CS(v.into()), sourceref:self.sourceref(line, col)})
-                            }
-                            Some((a,_,_)) => {
-                                self.mstate = MouthState::S;
-                                Some(Token{base: BaseToken::CS(vec!(a).into()), sourceref:self.sourceref(line, col)})
-                            }
-                        }
-                    }
-                    Superscript => { // Check for ^^
-                        if let Some((b,bl,bc)) = self.next_char(endline) {
-                            if a == b && bl == line {
-                                fn cond(i: u8) -> bool { (48 <= i && i <= 57) || (97 <= i && i <= 102) }
-                                if let Some((first,_,_)) = self.next_char(endline) {
-                                    if let Some((second,sl,sc)) = self.next_char(endline) {
-                                        let u1 : u8 = first.into() as u8;
-                                        let u2 : u8 = second.into() as u8;
-                                        if cond(u1) && cond(u2) {
-                                            let char = u8::from_str_radix(std::str::from_utf8(&[u1, u2]).unwrap(), 16).unwrap();
-                                            self.charbuffer.push((char.into(),line,col));
-                                            self.get_next(cc, endline)
-                                        } else {
-                                            let u:usize = first.into();
-                                            let c : C = (((u as i16) - 64) as u8).into();
-                                            self.charbuffer.push((second,sl,sc));
-                                            self.charbuffer.push((c,line,col));
-                                            self.get_next(cc, endline)
-                                        }
-                                    } else {
-                                        let u:usize = first.into();
-                                        let c : C = (((u as i16) - 64) as u8).into();
-                                        self.charbuffer.push((c,line,col));
-                                        self.get_next(cc, endline)
-                                    }
-                                } else {
-                                    self.charbuffer.push((b,bl,bc));
-                                    self.mstate = MouthState::M;
-                                    Some(Token{base: BaseToken::Char(a, Superscript), sourceref:self.sourceref(line, col)})
-                                }
-                            } else {
-                                self.charbuffer.push((b,bl,bc));
-                                self.mstate = MouthState::M;
-                                Some(Token{base: BaseToken::Char(a, Superscript), sourceref:self.sourceref(line, col)})
-                            }
-                        } else {
-                            Some(Token{base: BaseToken::Char(a, Superscript), sourceref:self.sourceref(line, col)})
-                        }
-                    }
-                    o => {
-                        self.mstate = MouthState::M;
-                        Some(Token{base: BaseToken::Char(a, *o), sourceref:self.sourceref(line, col)})
-                    }
-                }
-            }
-        }
-    }
-
-     */
 }

@@ -17,9 +17,9 @@ use std::sync::RwLock;
 use kpathsea::Kpathsea;
 use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KpseResult;
-use crate::engine::mouth::string_source::StringSource;
+use crate::engine::mouth::string_source::{StringSource, StringSourceState};
 use crate::engine::state::State;
-use crate::tex::catcodes::CategoryCode;
+use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{OtherError, TeXError};
 use crate::utils::map::HMap;
@@ -36,7 +36,7 @@ pub trait File<Char:CharType>:Clone {
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof(&self) -> bool;
-    fn read<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>>;
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>>;
 }
 
 pub trait FileSystem<Char:CharType>:'static {
@@ -82,7 +82,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<ET: EngineType>(&self, state: &ET::State) -> Result<Vec<ET::Token>, Box<dyn TeXError<ET::Token>>> {
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -120,19 +120,38 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let mut open = self.open.write().unwrap();
         open.as_mut().unwrap().preview().is_empty()//.peek().is_none()
     }
-    fn read<ET: EngineType<Char=Char>>(&self, state: &ET::State) -> Result<Vec<ET::Token>, Box<dyn TeXError<ET::Token>>> {
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+        let mut open = self.open.write().unwrap();
+        match &mut *open {
+            None => Err(OtherError { msg: "File not open".to_string(), source: None, cause: None }.into()),
+            Some(m) => {
+                let mut ret: Vec<T> = vec!();
+                let mut ingroups = 0;
+                loop {
+                    m.read(cc,endlinechar,&mut |tk:T| match tk.base() {
+                        BaseToken::Char(c,CategoryCode::BeginGroup) => {ingroups += 1; ret.push(tk)},
+                        BaseToken::Char(c,CategoryCode::EndGroup) => {ingroups += 1; ret.push(tk)},
+                        _ => ret.push(tk)
+                    })?;
+                    if ingroups == 0 {return Ok(ret)}
+                }
+            }
+        }
+
+    }
+    /*
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
         let mut open = self.open.write().unwrap();
         match &mut *open {
             None => Err(OtherError{msg:"File not open".to_string(),source:None,cause:None}.into()),
             Some(m) => {
                 let line = m.line();
-                let mut ret: Vec<ET::Token> = vec!();
+                let mut ret: Vec<T> = vec!();
                 let mut ingroups = 0;
                 loop {
-                    if ingroups != 0 || m.line() == line {
-                        match m.get_next::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar())? {
-                            None =>
-                                return Ok(ret),
+                    if ingroups != 0 || m.line() == line || ret.is_empty() {
+                        match m.get_next::<T>(cc,endlinechar)? {
+                            None => return Ok(ret),
                             Some(tk) => {
                                 match tk.base() {
                                     BaseToken::Char(_,CategoryCode::BeginGroup) => ingroups += 1,
@@ -147,6 +166,8 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
             }
         }
     }
+
+     */
     fn write(&self, string: &str) {
         let mut write = self.contents.write().unwrap();
         let mut v = write.as_mut().unwrap();

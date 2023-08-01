@@ -114,7 +114,7 @@ impl NumSet for DefaultNumSet {
 }
 impl Numeric for i32 {
     fn scale(&self, times: i64, div: i64) -> Self {
-        ((*self as i64 * times) / div) as i32
+        ((*self as i64 * times) as f64 / (div as f64)).round() as i32
     }
 }
 impl Int for i32 {

@@ -6,14 +6,16 @@ use crate::{cmtodo, debug_log, register_assign, register_conditional, register_d
 use crate::engine::EngineType;
 use crate::engine::gullet::methods::string_to_tokens;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{Command, GulletCommand, StomachCommand, StomachCommandInner};
+use crate::tex::commands::{Command, ExpToken, GulletCommand, StomachCommand, StomachCommandInner};
 use crate::tex::commands::tex::get_csname;
 use crate::tex::numbers::{Frac, MuSkip, Numeric, NumSet, Skip};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::utils::Ptr;
+use crate::tex::commands::Def;
+use crate::engine::filesystem::File;
 
 pub fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&GulletCommand<ET::Token>, name:&'static str)
                                                   -> Result<Frac,ErrorInPrimitive<ET::Token>> {
@@ -319,6 +321,47 @@ pub fn protected<ET:EngineType>(stomach:&mut ET::Stomach,state:&mut ET::State,gu
     }
 }
 
+
+pub fn readline<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,globally:bool)
+                           -> Result<(),ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"readline");
+    let i = catch_prim!(gullet.get_int(state) => ("readline",cmd));
+    let i : usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => return Err(ErrorInPrimitive{name:"readline",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let file = match state.get_open_in_file(i) {
+        None => return Err(ErrorInPrimitive{name:"readline",msg:Some(format!("File {} not open for reading",i)),cause:Some(cmd.cause),source:None}),
+        Some(f) => f
+    };
+    if !catch_prim!(gullet.get_keyword(state,"to") => ("readline",cmd)) {
+        return Err(ErrorInPrimitive{name:"readline",msg:Some("Expected 'to' after \\read".to_string()),cause:Some(cmd.cause),source:None})
+    }
+    let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("readline",cmd));
+    let ret = catch_prim!(file.read::<ET::Token>(&ET::Char::other_catcode_scheme(),state.get_endlinechar()) => ("readline",cmd));
+    debug_log!(trace=>"readline: {} = {}",newcmd,TokenList(ret.clone()));
+
+    let ret = ret.into_iter().map(|tk| ExpToken::Token(tk)).collect();
+    let def = Def {
+        protected: false,
+        long: false,
+        outer: false,
+        endswithbrace:false,
+        replacement: ret,
+        arity:0,
+        signature:vec!()
+    };
+    match newcmd {
+        BaseToken::CS(name) => state.set_command(name,Some(Ptr::new(
+            Command::Def(def,cmd.cause.clone())
+        )),globally),
+        BaseToken::Char(c,_) => state.set_ac_command(c,Some(Ptr::new(
+            Command::Def(def,cmd.cause.clone())
+        )),globally)
+    }
+    Ok(())
+}
+
 pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"unexpanded");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("unexpanded",cmd)) {
@@ -364,6 +407,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&m
     register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined::<ET>(s,gu,cmd));
     register_muskip!(muexpr,state,stomach,gullet,(s,g,c) => muexpr::<ET>(s,g,c));
     register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr::<ET>(s,g,c));
+    register_assign!(readline,state,stomach,gullet,(s,gu,_,cmd,global) =>readline::<ET>(s,gu,cmd,global));
     register_int_assign!(tracingassigns,state,stomach,gullet);
     register_int_assign!(tracinggroups,state,stomach,gullet);
     register_int_assign!(tracingifs,state,stomach,gullet);
@@ -408,7 +452,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&m
     cmtodo!(state,stomach,gullet,parshapeindent);
     cmtodo!(state,stomach,gullet,parshapelength);
     cmtodo!(state,stomach,gullet,predisplaydirection);
-    cmtodo!(state,stomach,gullet,readline);
     cmtodo!(state,stomach,gullet,savinghyphcodes);
     cmtodo!(state,stomach,gullet,savingvdiscards);
     cmtodo!(state,stomach,gullet,scantokens);

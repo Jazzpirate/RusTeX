@@ -143,14 +143,16 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
                 return Ok(val)
             }
             StomachCommandInner::Char{char,..} => {
-                let c = ET::Int::from_i64(char.to_usize() as i64)?;
-                debug_log!(trace=>"Returning {}",c);
-                return Ok(c)
+                let val = ET::Int::from_i64(char.to_usize() as i64)?;
+                let val = if isnegative { -val } else { val };
+                debug_log!(trace=>"Returning {}",val);
+                return Ok(val)
             }
             StomachCommandInner::MathChar(u) => {
-                let c = ET::Int::from_i64(u as i64)?;
-                debug_log!(trace=>"Returning {}",c);
-                return Ok(c)
+                let val = ET::Int::from_i64(u as i64)?;
+                let val = if isnegative { -val } else { val };
+                debug_log!(trace=>"Returning {}",val);
+                return Ok(val)
             }
             o => todo!("Non-char in read_number: {:?} at {}",o,gullet.mouth().file_line())
         }

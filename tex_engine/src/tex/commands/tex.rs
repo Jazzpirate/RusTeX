@@ -690,9 +690,9 @@ pub fn else_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gull
     match gullet.current_conditional() {
         (None,_) => return Err(ErrorInPrimitive{name:"else",msg:Some("Not in a conditional".to_string()),cause:Some(cmd.cause),source:None}),
         (Some(ConditionalBranch::True(name)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,name,i) => ("else",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,name,i,false) => ("else",cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i) => ("else",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i,false) => ("else",cmd)),
         o => unreachable!("{:?}\nat:{}\n{}\n",o,gullet.mouth().file_line(),gullet.mouth().preview(200))
     }
     Ok(vec![])
@@ -1940,7 +1940,7 @@ pub fn or<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletC
     -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     match gullet.current_conditional() {
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i) => ("or",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i,true) => ("or",cmd)),
         _ => return Err(ErrorInPrimitive{name:"or",msg:Some("Not in an \\ifcase".to_string()),cause:Some(cmd.cause),source:None}),
     }
     Ok(vec![])
@@ -1988,7 +1988,7 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
         return Err(ErrorInPrimitive{name:"read",msg:Some("Expected 'to' after \\read".to_string()),cause:Some(cmd.cause),source:None})
     }
     let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("read",cmd));
-    let ret = catch_prim!(file.read::<ET>(state) => ("read",cmd));
+    let ret = catch_prim!(file.read::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar()) => ("read",cmd));
     debug_log!(trace=>"read: {} = {}",newcmd,TokenList(ret.clone()));
 
 /*

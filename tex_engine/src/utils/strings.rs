@@ -10,7 +10,7 @@ use std::fmt::{Display, Formatter, Debug};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::vec::IntoIter;
-use crate::tex::catcodes::{CategoryCodeScheme, STARTING_SCHEME_U8};
+use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
 use crate::utils::Ptr;
 
 
@@ -59,6 +59,10 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
 
     /// The starting category code scheme for this character type, see [`struct@STARTING_SCHEME_U8`].
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
+
+    /// The category code scheme for this character type with all characters having
+    /// code 12 (Other) except for ` `(32) having code 10 (Space), see [`struct@OTHER_SCHEME_U8`].
+    fn other_catcode_scheme() -> CategoryCodeScheme<Self>;
 
     fn newline() -> Self;
     fn carriage_return() -> Self;
@@ -117,6 +121,9 @@ impl CharType for u8 {
     // #[inline(always)]
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
         STARTING_SCHEME_U8.clone()
+    }
+    fn other_catcode_scheme() -> CategoryCodeScheme<Self> {
+        OTHER_SCHEME_U8.clone()
     }
     fn as_bytes(&self) -> Vec<u8> { vec![*self] }
 
@@ -284,6 +291,7 @@ impl CharType for char {
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
         todo!()
     }
+    fn other_catcode_scheme() -> CategoryCodeScheme<Self> { todo!() }
     fn from_u8_iter(iter: &mut IntoIter<u8>) -> Option<Self> {
         todo!()
     }

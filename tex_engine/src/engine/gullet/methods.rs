@@ -501,7 +501,7 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,con
     file_end!()
 }
 
-pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),Box<dyn TeXError<ET::Token>>> {
     debug_log!(trace=>"\\else. Skipping...");
     gullet.set_top_conditional(ConditionalBranch::Else(condname));
     let mut incond:usize = gullet.current_conditional().1 - condidx;
@@ -510,7 +510,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cond
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(*c).as_deref() {
                     Some(Command::Conditional {..}) => incond += 1,
-                    Some(Command::Gullet {name:"else",..}) if incond == 0 => {
+                    Some(Command::Gullet {name:"else",..}) if incond == 0 && !allowelse => {
                         return Err(OtherError{msg:"Unexpected \\else".into(),source:None,cause:None}.into())
                     }
                     Some(Command::Gullet {name:"fi",..}) if incond > 0 => incond -= 1,
@@ -524,7 +524,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cond
             BaseToken::CS(name) => {
                 match state.get_command(name).as_deref() {
                     Some(Command::Conditional {..}) => incond += 1,
-                    Some(Command::Gullet {name:"else",..}) if incond == 0 => {
+                    Some(Command::Gullet {name:"else",..}) if incond == 0 && !allowelse => {
                         return Err(OtherError{msg:"Unexpected \\else".into(),source:None,cause:None}.into())
                     }
                     Some(Command::Gullet {name:"fi",..}) if incond > 0 => incond -= 1,
