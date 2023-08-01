@@ -65,6 +65,7 @@ impl<T:Token> PartialEq for Command<T> {
             (Command::Assignment{name:a,..},Command::Assignment{name:c,..}) => a == c,
             (Command::Conditional{name:a,..},Command::Conditional{name:c,..}) => a == c,
             (Command::Gullet{name:a,..},Command::Gullet{name:c,..}) => a == c,
+            (Command::Char{char:a,catcode:CategoryCode::Space},Command::Char{char:c,catcode:CategoryCode::Space}) => true,
             (Command::Char{char:a,catcode:b},Command::Char{char:c,catcode:d}) => a == c && b == d,
             (Command::MathChar(a),Command::MathChar(b)) => a == b,
             (Command::Whatsit{name:a,..},Command::Whatsit{name:c,..}) => a == c,

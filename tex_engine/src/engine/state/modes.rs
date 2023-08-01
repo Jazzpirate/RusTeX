@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 /// A TeX engine is always in one of these modes
-#[derive(Copy,Clone,PartialEq)]
+#[derive(Copy,Clone,PartialEq,Debug)]
 pub enum TeXMode {
     /// initial mode outside of paragraphs and other boxes
     Vertical,

@@ -20,32 +20,111 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
             None => Err(ImplementationError(format!("Missing implementation for primitive command {}",name),PhantomData).into())
         }
         ValueAssignment {name,assignment_index,..} => match stomach.command(assignment_index) {
-            Some(f) => Ok(f(state,gullet,stomach,cmd,false)?), // TODO global!
+            Some(f) => {
+                f(state,gullet,stomach,cmd,false)?;
+                match state.take_afterassignment() {
+                    Some(t) => gullet.mouth().requeue(t),
+                    _ => ()
+                }
+                Ok(())
+            }
             None => Err(ImplementationError(format!("Missing implementation for primitive command {}",name),PhantomData).into())
         }
         Value{name,..} => {
             Err(ModeError{cmd:name.clone(),mode:state.mode(),cause:Some(cmd.cause),source:None}.into())
         }
-        ValueRegister(u,Assignable::Int) => assign_int_register::<ET>(state,gullet,u,cmd,false), // TODO global!
-        ValueRegister(u,Assignable::Dim) => assign_dim_register::<ET>(state,gullet,u,cmd,false), // TODO global!
-        ValueRegister(u,Assignable::Skip) => assign_skip_register::<ET>(state,gullet,u,cmd,false), // TODO global!
-        ValueRegister(u,Assignable::MuSkip) => assign_muskip_register::<ET>(state,gullet,u,cmd,false), // TODO global!
-        ValueRegister(u,Assignable::Toks) => assign_toks_register::<ET>(state,gullet,u,cmd,false), // TODO global!
+        ValueRegister(u,Assignable::Int) => {
+            assign_int_register::<ET>(state,gullet,u,cmd,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        ValueRegister(u,Assignable::Dim) => {
+            assign_dim_register::<ET>(state,gullet,u,cmd,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        ValueRegister(u,Assignable::Skip) => {
+            assign_skip_register::<ET>(state,gullet,u,cmd,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        ValueRegister(u,Assignable::MuSkip) => {
+            assign_muskip_register::<ET>(state,gullet,u,cmd,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        ValueRegister(u,Assignable::Toks) => {
+            assign_toks_register::<ET>(state,gullet,u,cmd,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
         ValueRegister(_,tp) => todo!("Value Register {:?}",tp),
         Assignment {name,index} => match stomach.command(index) {
-            Some(f) => Ok(f(state, gullet, stomach, cmd, false)?), // TODO global!
+            Some(f) => {
+                f(state, gullet, stomach, cmd, false)?;
+                match state.take_afterassignment() {
+                    Some(t) => gullet.mouth().requeue(t),
+                    _ => ()
+                }
+                Ok(())
+            }
             None => Err(ImplementationError(format!("Missing implementation for primitive command {}", name), PhantomData).into())
         }
-        AssignableValue {name,tp:Assignable::Int} => Ok(methods::assign_primitive_int::<ET>(state,gullet,cmd,name,false)?), // TODO global!
-        AssignableValue {name,tp:Assignable::Dim} => Ok(methods::assign_primitive_dim::<ET>(state,gullet,cmd,name,false)?), // TODO global!
-        AssignableValue {name,tp:Assignable::Skip} => Ok(methods::assign_primitive_skip::<ET>(state,gullet,cmd,name,false)?), // TODO global!
-        AssignableValue {name,tp:Assignable::Toks} => Ok(methods::assign_primitive_toks::<ET>(state,gullet,cmd,name,false)?), // TODO global!
+        AssignableValue {name,tp:Assignable::Int} => {
+            methods::assign_primitive_int::<ET>(state,gullet,cmd,name,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        AssignableValue {name,tp:Assignable::Dim} => {
+            methods::assign_primitive_dim::<ET>(state,gullet,cmd,name,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        AssignableValue {name,tp:Assignable::Skip} => {
+            methods::assign_primitive_skip::<ET>(state,gullet,cmd,name,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
+        AssignableValue {name,tp:Assignable::Toks} => {
+            methods::assign_primitive_toks::<ET>(state,gullet,cmd,name,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
         AssignableValue {name,tp} => todo!("Assignable Value: {:?}",tp),
         OpenBox {..} => todo!("OpenBox"),
         Whatsit {name,index} => todo!("Whatsits"),
         Relax => Ok(()),
-        Char{..} =>
-            todo!("Character in digest"),
+        Char{..} => {
+            let mode = state.mode();
+            todo!("Character in digest: {:?} at {}",mode,gullet.mouth().file_line())
+        }
         MathChar(_) => todo!("Mathchar in digest"),
         Superscript(_) => todo!("Superscript in digest"),
         Subscript(_) => todo!("Subscript in digest"),

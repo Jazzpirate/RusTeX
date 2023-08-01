@@ -98,6 +98,16 @@ pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:St
     }
 }
 
+pub fn afterassignment<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>) -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\afterassignment");
+    let next = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("afterassignment",cmd)) {
+        None => file_end_prim!("afterassignment",cmd),
+        Some((t,_)) => t
+    };
+    state.set_afterassignment(next);
+    Ok(())
+}
+
 pub fn begingroup<ET:EngineType>(state:&mut ET::State,_cmd:StomachCommand<ET::Token>)
      -> Result<(),ErrorInPrimitive<ET::Token>> {
     state.stack_push(GroupType::CS);
@@ -155,7 +165,6 @@ pub fn chardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:St
     }
     Ok(())
 }
-
 
 pub fn closein<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>) -> Result<(), ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\closein");
@@ -2352,6 +2361,20 @@ pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gullet
             }
             StomachCommandInner::ValueRegister(i,Assignable::Toks) =>
                 Ok(state.get_toks_register(i)),
+            StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
+                let val = state.get_dim_register(i);
+                let str = format!("{}",val);
+                debug_log!(debug => "the: {}",str);
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
+                Ok(ret)
+            }
+            StomachCommandInner::ValueRegister(i,Assignable::Skip) => {
+                let val = state.get_skip_register(i);
+                let str = format!("{}",val);
+                debug_log!(debug => "the: {}",str);
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
+                Ok(ret)
+            }
             StomachCommandInner::ValueRegister(_,tp) => todo!("\\the ValueRegister {:?}",tp),
             StomachCommandInner::AssignableValue {tp:Assignable::Toks,name} =>
                 Ok(state.get_primitive_toks(name)),
@@ -2629,6 +2652,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_skip_assign!(abovedisplayskip,state,stomach,gullet);
     register_int_assign!(adjdemerits,state,stomach,gullet);
     register_assign!(advance,state,stomach,gullet,(s,gu,_,cmd,global) =>advance::<ET>(s,gu,cmd,global));
+    register_stomach!(afterassignment,state,stomach,gullet,(s,gu,sto,cmd,_) =>afterassignment::<ET>(s,gu,sto,cmd));
     register_skip_assign!(baselineskip,state,stomach,gullet);
     register_stomach!(begingroup,state,stomach,gullet,(s,_,sto,cmd,_) =>begingroup::<ET>(s,cmd));
     register_skip_assign!(belowdisplayskip,state,stomach,gullet);
@@ -2874,7 +2898,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,showthe);
     cmtodo!(state,stomach,gullet,shipout);
     cmtodo!(state,stomach,gullet,ignorespaces);
-    cmtodo!(state,stomach,gullet,afterassignment);
     cmtodo!(state,stomach,gullet,aftergroup);
     cmtodo!(state,stomach,gullet,special);
     cmtodo!(state,stomach,gullet,penalty);

@@ -37,6 +37,9 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     fn box_stack(&self) -> &Vec<OpenBox<ET>>;
     fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>>;
 
+    fn set_afterassignment(&mut self,t:ET::Token);
+    fn take_afterassignment(&mut self) -> Option<ET::Token>;
+
     /// The current [`TeXMode`]
     fn mode(&self) -> TeXMode;
 
@@ -171,6 +174,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     csnames:usize,
     fontstore:ET::FontStore,
     box_stack:Vec<OpenBox<ET>>,
+    afterassignment:Option<ET::Token>,
 
     outputs:Outputs,
 
@@ -215,6 +219,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             csnames:0,
             fontstore,
             outputs,
+            afterassignment:None,
             aftergroups:vec!(vec!()),
             box_stack:vec!(),
 
@@ -272,6 +277,13 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
 
     fn box_stack(&self) -> &Vec<OpenBox<ET>> { &self.box_stack }
     fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>> { &mut self.box_stack }
+
+    fn set_afterassignment(&mut self, t: ET::Token) {
+        self.afterassignment = Some(t)
+    }
+    fn take_afterassignment(&mut self) -> Option<ET::Token> {
+        self.afterassignment.take()
+    }
 
     fn fontstore(&self) -> &ET::FontStore { &self.fontstore }
     fn fontstore_mut(&mut self) -> &mut ET::FontStore {
