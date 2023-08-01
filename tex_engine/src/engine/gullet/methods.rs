@@ -204,8 +204,12 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
                     Some(Command::Conditional {name,index}) => {
                         do_conditional::<ET>(gullet,state,tk,name,*index,false)?;
                     }
-                    _ => //if state.get_escapechar() == T::Char::MAX =>
-                        ret.push(*c),
+                    Some(Command::Relax) if !quoted => return Ok(ret.into()),
+                    _ => {
+                        gullet.mouth().requeue(tk);
+                        return Ok(ret.into())
+                    }
+                    //_ => ret.push(*c),
                 }
             }
             BaseToken::CS(name) => {
@@ -223,6 +227,11 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
                         do_conditional::<ET>(gullet,state,tk,name,*index,false)?;
                     }
                     Some(Command::Relax) if !quoted => return Ok(ret.into()),
+                    _ => {
+                        gullet.mouth().requeue(tk);
+                        return Ok(ret.into())
+                    }
+                    /*
                     _ => match state.get_escapechar() {
                         None => ret.extend(name.as_vec()),
                         Some(esc) => {
@@ -230,6 +239,7 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
                             ret.extend(name.as_vec());
                         }
                     }
+                     */
                 }
             }
             BaseToken::Char(_,CategoryCode::Space) if quoted =>

@@ -408,6 +408,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&m
     register_muskip!(muexpr,state,stomach,gullet,(s,g,c) => muexpr::<ET>(s,g,c));
     register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr::<ET>(s,g,c));
     register_assign!(readline,state,stomach,gullet,(s,gu,_,cmd,global) =>readline::<ET>(s,gu,cmd,global));
+    register_int_assign!(savinghyphcodes,state,stomach,gullet);
     register_int_assign!(tracingassigns,state,stomach,gullet);
     register_int_assign!(tracinggroups,state,stomach,gullet);
     register_int_assign!(tracingifs,state,stomach,gullet);
@@ -452,7 +453,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&m
     cmtodo!(state,stomach,gullet,parshapeindent);
     cmtodo!(state,stomach,gullet,parshapelength);
     cmtodo!(state,stomach,gullet,predisplaydirection);
-    cmtodo!(state,stomach,gullet,savinghyphcodes);
     cmtodo!(state,stomach,gullet,savingvdiscards);
     cmtodo!(state,stomach,gullet,scantokens);
     cmtodo!(state,stomach,gullet,showgroups);

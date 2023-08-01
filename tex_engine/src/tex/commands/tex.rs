@@ -1353,6 +1353,22 @@ fn ifx_eq_cmd<T:Token>(cmd1:Option<Ptr<Command<T>>>,t1:T,expand1:bool,cmd2:Optio
     else { false }
 }
 
+pub fn ignorespaces<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET::Token>)
+                                  -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\ignorespaces");
+    loop {
+        match catch_prim!(gullet.get_next_stomach_command(state) => ("ignorespaces",cmd)) {
+            None => return Ok(()),
+            Some(sc) => match sc.cmd {
+                StomachCommandInner::Space => (),
+                _ => {
+                    gullet.mouth().requeue(sc.cause);
+                    return Ok(())
+                }
+            }
+        }
+    }
+}
 
 pub fn immediate<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,stomach:&mut ET::Stomach,cmd:StomachCommand<ET::Token>)
                                                  -> Result<(),ErrorInPrimitive<ET::Token>> {
@@ -2480,6 +2496,27 @@ pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gullet
             StomachCommandInner::ValueRegister(_,tp) => todo!("\\the ValueRegister {:?}",tp),
             StomachCommandInner::AssignableValue {tp:Assignable::Toks,name} =>
                 Ok(state.get_primitive_toks(name)),
+            StomachCommandInner::AssignableValue {tp:Assignable::Int,name} => {
+                let val = state.get_primitive_int(name);
+                let str = format!("{}",val);
+                debug_log!(debug => "the: {}",str);
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
+                Ok(ret)
+            }
+            StomachCommandInner::AssignableValue {tp:Assignable::Dim,name} => {
+                let val = state.get_primitive_dim(name);
+                let str = format!("{}",val);
+                debug_log!(debug => "the: {}",str);
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
+                Ok(ret)
+            }
+            StomachCommandInner::AssignableValue {tp:Assignable::Skip,name} => {
+                let val = state.get_primitive_skip(name);
+                let str = format!("{}",val);
+                debug_log!(debug => "the: {}",str);
+                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
+                Ok(ret)
+            }
             StomachCommandInner::AssignableValue {tp,..} => todo!("\\the AssignableValue {:?}",tp),
             StomachCommandInner::Value {name,index,tp:Assignable::Int} => {
                 match gullet.primitive_int(index) {
@@ -2863,6 +2900,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_conditional!(ifvoid,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvoid"));
     register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx::<ET>(s,gu,cmd));
     register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate::<ET>(s,gu,sto,cmd));
+    register_stomach!(ignorespaces,state,stomach,gullet,(s,gu,sto,cmd,_) => ignorespaces::<ET>(s,gu,cmd));
     register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input::<ET>(s,gu,cmd));
     register_int!(inputlineno,state,stomach,gullet,(s,g,c) => inputlineno::<ET>(g,c));
     register_int_assign!(interlinepenalty,state,stomach,gullet);
@@ -3022,7 +3060,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,showlists);
     cmtodo!(state,stomach,gullet,showthe);
     cmtodo!(state,stomach,gullet,shipout);
-    cmtodo!(state,stomach,gullet,ignorespaces);
     cmtodo!(state,stomach,gullet,aftergroup);
     cmtodo!(state,stomach,gullet,special);
     cmtodo!(state,stomach,gullet,penalty);
