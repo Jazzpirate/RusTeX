@@ -162,7 +162,7 @@ impl<C:CharType> Token for TokenWithSourceref<C> {
     }
 }
 impl<C:CharType> PartialEq for TokenWithSourceref<C> {
-    fn eq(&self, other: &Self) -> bool { self.base == other.base }
+    fn eq(&self, other: &Self) -> bool { PartialEq::eq(&self.base,&other.base) }
 }
 impl<C:CharType> Display for TokenWithSourceref<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { Display::fmt(&self.base,f) }

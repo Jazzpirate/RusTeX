@@ -483,6 +483,12 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                                             _ => ()
                                         }
                                     }
+                                    if depth == 0 && arg.ends_with(delims.as_slice()) {
+                                        for _ in 0..delims.len() {
+                                            arg.pop();
+                                        }
+                                        break 'L;
+                                    }
                                 }
                             }
                             Some((t,_)) => {

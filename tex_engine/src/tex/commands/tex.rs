@@ -1193,6 +1193,24 @@ pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gull
     Ok(f.eof())
 }
 
+pub fn ifhmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                            -> Result<bool,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"ifhmode");
+    Ok(match state.mode() {
+        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => true,
+        _ => false
+    })
+}
+
+pub fn ifinner<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                              -> Result<bool,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"ifhmode");
+    Ok(match state.mode() {
+        TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::Math => true,
+        _ => false
+    })
+}
+
 pub fn ifnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
     -> Result<bool,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"ifnum");
@@ -1215,6 +1233,16 @@ pub fn ifodd<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gull
     debug_log!(trace=>"ifodd");
     let num = catch_prim!(gullet.get_int(state) => ("ifodd",cmd));
     Ok(num.to_i64() % 2 != 0)
+}
+
+
+pub fn ifvmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                              -> Result<bool,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"ifvmode");
+    Ok(match state.mode() {
+        TeXMode::Vertical | TeXMode::InternalVertical => true,
+        _ => false
+    })
 }
 
 pub fn ifx<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
@@ -2289,7 +2317,7 @@ pub fn string<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gul
                     Some(c) => ret.push(ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))
                 }
                 for t in name.as_vec() {
-                    if *cc.get(*t) == CategoryCode::Space {
+                    if t.to_usize() == 32 {
                         ret.push(ET::Token::new(BaseToken::Char(*t,CategoryCode::Space),None));
                     } else {
                         ret.push(ET::Token::new(BaseToken::Char(t.clone(), CategoryCode::Other), None));
@@ -2682,14 +2710,14 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof::<ET>(s,gu,cmd));
     register_conditional!(iffalse,state,stomach,gullet,(s,gu,cmd) => Ok(false));
     register_conditional!(ifhbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhbox"));
-    register_conditional!(ifhmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhmode"));
-    register_conditional!(ifinner,state,stomach,gullet,(s,gu,cmd) =>todo!("ifinner"));
+    register_conditional!(ifhmode,state,stomach,gullet,(s,gu,cmd) =>ifhmode::<ET>(s,gu,cmd));
+    register_conditional!(ifinner,state,stomach,gullet,(s,gu,cmd) =>ifinner::<ET>(s,gu,cmd));
     register_conditional!(ifmmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifmmode"));
     register_conditional!(ifnum,state,stomach,gullet,(s,gu,cmd) =>ifnum::<ET>(s,gu,cmd));
     register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>ifodd::<ET>(s,gu,cmd));
     register_conditional!(iftrue,state,stomach,gullet,(s,gu,cmd) => Ok(true));
     register_conditional!(ifvbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvbox"));
-    register_conditional!(ifvmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvmode"));
+    register_conditional!(ifvmode,state,stomach,gullet,(s,gu,cmd) =>ifvmode::<ET>(s,gu,cmd));
     register_conditional!(ifvoid,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvoid"));
     register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx::<ET>(s,gu,cmd));
     register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate::<ET>(s,gu,sto,cmd));
