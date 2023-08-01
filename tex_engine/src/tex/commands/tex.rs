@@ -918,6 +918,49 @@ pub fn fontdimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
     Ok(font.get_dim::<ET::Numbers>(i))
 }
 
+pub fn futurelet<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                -> Result<(),ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\futurelet");
+    let cs = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
+        None => file_end_prim!("futurelet",cmd),
+        Some((t,_)) => match t.base() {
+            BaseToken::Char(c,CategoryCode::Active) => {
+                BaseToken::Char(*c,CategoryCode::Active)
+            }
+            BaseToken::CS(name) => {
+                BaseToken::CS(name.clone())
+            }
+            _ => return Err(ErrorInPrimitive{name:"futurelet",msg:Some("Expected control sequence after \\futurelet".into()),cause:Some(cmd.cause),source:None})
+        }
+    };
+    let first = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
+        None => file_end_prim!("futurelet",cmd),
+        Some((t,_)) => t
+    };
+    let second = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
+        None => file_end_prim!("futurelet",cmd),
+        Some((t,_)) => t
+    };
+    let newcmd = match second.base() {
+        BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(*c),
+        BaseToken::CS(name) => state.get_command(name),
+        BaseToken::Char(c,cc) =>
+            Some(Ptr::new(Command::Char{char:*c,catcode:*cc}))
+    };
+    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
+    match cs {
+        BaseToken::Char(c,CategoryCode::Active) => {
+            state.set_ac_command(c,newcmd,global);
+        }
+        BaseToken::CS(name) => {
+            state.set_command(name,newcmd,global);
+        }
+        _ => unreachable!()
+    }
+    gullet.mouth().push_tokens(vec!(first,second));
+    Ok(())
+}
+
 pub fn gdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool,protected:bool,long:bool,outer:bool)
                                                  -> Result<(),ErrorInPrimitive<ET::Token>> {
     def::<ET>(state,gullet,cmd,true,protected,long,outer)
@@ -1114,6 +1157,24 @@ pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
         }
     }
     file_end_prim!(name,cmd)
+}
+
+
+pub fn ifdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                            -> Result<bool,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"ifdim");
+    let i1 = catch_prim!(gullet.get_dim(state) => ("ifdim",cmd));
+    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifdim",cmd)) {
+        None => return Err(ErrorInPrimitive{name:"ifdim",msg:Some("Expected one of '<','>','='".to_string()),cause:Some(cmd.cause),source:None}),
+        Some(r) => r
+    };
+    let i2 = catch_prim!(gullet.get_dim(state) => ("ifdim",cmd));
+    match rel {
+        "<" => Ok(i1.to_sp() < i2.to_sp()),
+        ">" => Ok(i1.to_sp() > i2.to_sp()),
+        "=" => Ok(i1.to_sp() == i2.to_sp()),
+        _ => unreachable!()
+    }
 }
 
 pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
@@ -2600,6 +2661,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(floatingpenalty,state,stomach,gullet);
     register_value_assign_font!(font,state,stomach,gullet);
     register_value_assign_dim!(fontdimen,state,stomach,gullet);
+    register_assign!(futurelet,state,stomach,gullet,(s,gu,_,cmd,global) =>futurelet::<ET>(s,gu,cmd,global));
     register_assign!(gdef,state,stomach,gullet,(s,gu,_,cmd,global) =>gdef::<ET>(s,gu,cmd,global,false,false,false));
     register_assign!(global,state,stomach,gullet,(s,gu,sto,cmd,g) =>global::<ET>(sto,s,gu,cmd,g,false,false,false));
     register_int_assign!(globaldefs,state,stomach,gullet);
@@ -2616,7 +2678,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_::<ET>(s,gu,cmd));
     register_conditional!(ifcase,state,stomach,gullet,(s,gu,cmd) =>ifcase::<ET>());
     register_conditional!(ifcat,state,stomach,gullet,(s,gu,cmd) =>ifcat::<ET>(s,gu,cmd));
-    register_conditional!(ifdim,state,stomach,gullet,(s,gu,cmd) =>todo!("ifdim"));
+    register_conditional!(ifdim,state,stomach,gullet,(s,gu,cmd) =>ifdim::<ET>(s,gu,cmd));
     register_conditional!(ifeof,state,stomach,gullet,(s,gu,cmd) =>ifeof::<ET>(s,gu,cmd));
     register_conditional!(iffalse,state,stomach,gullet,(s,gu,cmd) => Ok(false));
     register_conditional!(ifhbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhbox"));
@@ -2760,7 +2822,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,wd);
     cmtodo!(state,stomach,gullet,dp);
     cmtodo!(state,stomach,gullet,lastskip);
-    cmtodo!(state,stomach,gullet,futurelet);
     cmtodo!(state,stomach,gullet,hyphenation);
     cmtodo!(state,stomach,gullet,patterns);
     cmtodo!(state,stomach,gullet,errorstopmode);
