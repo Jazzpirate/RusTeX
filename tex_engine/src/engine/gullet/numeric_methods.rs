@@ -303,6 +303,10 @@ pub fn get_dim_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State
             let val = if isnegative { -val } else { val };
             return read_unit::<ET>(gullet,state,val)
         }
+        StomachCommandInner::ValueRegister(i,Assignable::Skip) => {
+            let val = state.get_skip_register(i).base;
+            return Ok(if isnegative { -val } else { val })
+        }
         StomachCommandInner::Value {index,tp:Assignable::Dim,..} => {
             match gullet.primitive_dim(index) {
                 None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
@@ -311,6 +315,10 @@ pub fn get_dim_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State
                     return Ok(if isnegative { -val } else { val })
                 }
             }
+        }
+        StomachCommandInner::AssignableValue {name,tp:Assignable::Dim} => {
+            let val = state.get_primitive_dim(name);
+            return Ok(if isnegative { -val } else { val })
         }
         StomachCommandInner::Char{char,..} => {
             let val = char.to_usize() as f64;
@@ -456,19 +464,32 @@ pub fn get_skipdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) 
 pub fn read_skip_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64)
     -> Result<ET::SkipDim,Box<dyn TeXError<ET::Token>>> {
     debug_log!(trace=>"Reading skip unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace::<ET>(state)?;
-    if get_keyword::<ET>(gullet, state, "true")? {
-        gullet.mouth().skip_whitespace::<ET>(state)?;
-        let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
-        match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
-            Some(dim) => Ok(ET::SkipDim::from_float(dim,float * mag)),
-            _ => Err(ExpectedUnit(PhantomData).into())
+    match gullet.get_next_stomach_command(state)? {
+        Some(cmd) => match cmd.cmd {
+            StomachCommandInner::Char { .. } => {
+                gullet.mouth().requeue(cmd.cause);
+                gullet.mouth().skip_whitespace::<ET>(state)?;
+                if get_keyword::<ET>(gullet, state, "true")? {
+                    gullet.mouth().skip_whitespace::<ET>(state)?;
+                    let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
+                    match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
+                        Some(dim) => Ok(ET::SkipDim::from_float(dim,float * mag)),
+                        _ => Err(ExpectedUnit(PhantomData).into())
+                    }
+                } else {
+                    match get_keywords::<ET>(gullet, state, ET::SkipDim::units())? {
+                        Some(dim) => Ok(ET::SkipDim::from_float(dim,float)),
+                        _ => todo!("Non-unit in read_skip_unit: {}",gullet.mouth().preview(50).replace("\n","\\n"))
+                    }
+                }
+            }
+            StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
+                let val = state.get_dim_register(i);
+                Ok(ET::SkipDim::from_dim(val.tex_mult(float)))
+            }
+            o => todo!("Non-unit in read_skip_unit: {:?}\n{}",o,gullet.mouth().preview(50).replace("\n","\\n"))
         }
-    } else {
-        match get_keywords::<ET>(gullet, state, ET::SkipDim::units())? {
-            Some(dim) => Ok(ET::SkipDim::from_float(dim,float)),
-            _ => todo!("Non-unit in read_skip_unit: {}",gullet.mouth().preview(50).replace("\n","\\n"))
-        }
+        None => file_end!()
     }
 }
 

@@ -360,7 +360,7 @@ impl<C:CharType> StringSourceState<C> {
                 }
                 Comment => {
                     debug_log!(trace=>"get_next_valid: Comment; skipping line");
-                    self.skip_line();
+                    if self.line == l {self.skip_line();}
                     self.get_next_valid(cc, endline)
                 }
                 Invalid => {

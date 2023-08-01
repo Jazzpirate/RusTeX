@@ -30,6 +30,9 @@ pub trait Font:Debug+Display {
     fn set_hyphenchar(&mut self,hyphenchar:i64);
     fn get_hyphenchar(&self) -> i64;
 
+    fn set_skewchar(&mut self,skewchar:i64);
+    fn get_skewchar(&self) -> i64;
+
     fn set_dim<NS:NumSet>(&mut self,i:usize,d:NS::Dim);
     fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim;
 }
@@ -73,7 +76,34 @@ impl FontStore for TfmFontStore {
     }
 }
 impl TfmFontStore {
-    pub fn new() -> Self { Self{fonts:vec!(), font_files:HMap::default()} }
+    pub fn new() -> Self {
+        let null = TfmFile {
+            hyphenchar:45,
+            skewchar:255,
+            dimen:[0.0;256],
+            size:0,
+            typestr:"nullfont".to_string(),
+            widths:[0.0;256],
+            heights:[0.0;256],
+            depths:[0.0;256],
+            ics:[0.0;256],
+            lps:[0;256],
+            rps:[0;256],
+            ligs:HMap::default(),
+            name:"nullfont".to_string(),
+            filepath:"nullfont".to_string()
+        };
+        let font = TfmFont{
+            hyphenchar:null.hyphenchar as i64,
+            skewchar:null.skewchar as i64,
+            file:Ptr::new(null),
+            at:None,
+            dimens:HMap::default(),
+            lps:HMap::default(),
+            rps:HMap::default(),
+        };
+        Self{fonts:vec!(font), font_files:HMap::default()}
+    }
 }
 // todo: replace by Arrays, maybe
 pub struct TfmFont {
@@ -116,6 +146,13 @@ impl Font for TfmFont {
     }
     fn set_hyphenchar(&mut self, hyphenchar: i64) {
         self.hyphenchar = hyphenchar;
+    }
+
+    fn get_skewchar(&self) -> i64 {
+        self.skewchar
+    }
+    fn set_skewchar(&mut self, skewchar: i64) {
+        self.skewchar = skewchar;
     }
 
     fn set_dim<NS: NumSet>(&mut self, i: usize, d: NS::Dim) {

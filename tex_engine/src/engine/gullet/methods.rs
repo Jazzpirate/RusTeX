@@ -27,6 +27,7 @@ pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode,from
         EndGroup => StomachCommandInner::EndGroup(char),
         Letter|Other|AlignmentTab => StomachCommandInner::Char{char,from_chardef},
         EOF => StomachCommandInner::Relax,
+        Parameter => StomachCommandInner::Parameter(char),
         _ => unreachable!() // Already excluded: Active, Ignored, EndLine
         // TODO: exclude: AlignmentTab proper, Parameter
     }}
@@ -732,6 +733,8 @@ pub fn get_font<ET:EngineType>(gullet: &mut ET::Gullet,state:&mut ET::State) -> 
         Some(cmd) => match cmd.cmd {
             StomachCommandInner::ValueRegister(i,Assignable::Font) =>
                 Ok(i),
+            StomachCommandInner::ValueAssignment {name:"font",..} =>
+                Ok(state.get_current_font()),
             o => todo!("get_font: {:?}",o),
         }
         None => file_end!(),

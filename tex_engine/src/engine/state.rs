@@ -180,6 +180,11 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     fn get_primitive_toks(&self, name:&'static str) -> Vec<ET::Token>;
     /// set a primitive token register
     fn set_primitive_toks(&mut self, name:&'static str, v:Vec<ET::Token>, globally:bool);
+
+    /// get the current font
+    fn get_current_font(&self) -> usize;
+    /// set the current font
+    fn set_current_font(&mut self, index:usize, globally:bool);
 }
 
 pub struct TeXState<ET:EngineType<State=Self>> {
@@ -190,6 +195,8 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     fontstore:ET::FontStore,
     box_stack:Vec<OpenBox<ET>>,
     afterassignment:Option<ET::Token>,
+
+    current_font:SingleValueField<usize>,
 
     outputs:Outputs,
 
@@ -240,6 +247,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             afterassignment:None,
             aftergroups:vec!(vec!()),
             box_stack:vec!(),
+            current_font:SingleValueField::new(0),
 
             jobname: None,
             start_time: None,
@@ -295,6 +303,18 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
     }
 }
 impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
+    fn get_current_font(&self) -> usize {
+        *self.current_font.get()
+    }
+    fn set_current_font(&mut self, index:usize, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.current_font.set_globally(index)
+        } else {
+            self.current_font.set_locally(index)
+        }
+    }
 
     fn box_stack(&self) -> &Vec<OpenBox<ET>> { &self.box_stack }
     fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>> { &mut self.box_stack }
@@ -387,6 +407,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             GroupType::Box(_) => self.grouptype.push((g,Some(self.mode))),
             _ => self.grouptype.push((g,None))
         }
+        self.current_font.push_stack();
         self.endlinechar.push_stack();
         self.escapechar.push_stack();
         self.newlinechar.push_stack();
@@ -424,6 +445,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             }
             Some((gt,_)) => gt
         };
+        self.current_font.pop_stack();
         self.endlinechar.pop_stack();
         self.escapechar.pop_stack();
         self.newlinechar.pop_stack();

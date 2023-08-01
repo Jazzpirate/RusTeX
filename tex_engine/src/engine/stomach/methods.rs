@@ -73,6 +73,14 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
             }
             Ok(())
         }
+        ValueRegister(u,Assignable::Font) => {
+            state.set_current_font(u,false);
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
         ValueRegister(_,tp) => todo!("Value Register {:?}",tp),
         Assignment {name,index} => match stomach.command(index) {
             Some(f) => {
@@ -132,6 +140,10 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
         Char{..} => {
             let mode = state.mode();
             todo!("Character in digest: {:?} at {}",mode,gullet.mouth().file_line())
+        }
+        Parameter(_) => {
+            let mode = state.mode();
+            Err(ModeError{cmd:"Parameter",mode,cause:Some(cmd.cause),source:None}.into())
         }
         MathChar(_) => todo!("Mathchar in digest"),
         Superscript(_) => todo!("Superscript in digest"),

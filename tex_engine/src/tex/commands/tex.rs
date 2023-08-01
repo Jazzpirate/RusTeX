@@ -2317,6 +2317,25 @@ pub fn sfcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
     Ok(v)
 }
 
+pub fn skewchar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                        -> Result<(),ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Assigning \\kewchar");
+    let fontidx = catch_prim!(gullet.get_font(state) => ("skewchar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("skewchar",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("skewchar",cmd)).to_i64();
+    let font = state.fontstore_mut().get_mut(fontidx);
+    debug_log!(debug=>"\\skewchar\\{:?} = {:?}",font,i);
+    font.set_skewchar(i);
+    Ok(())
+}
+pub fn skewchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Getting \\skewchar");
+    let fontidx = catch_prim!(gullet.get_font(state) => ("skewchar",cmd));
+    let font = state.fontstore_mut().get_mut(fontidx);
+    debug_log!(debug=>"\\skewchar == {:?}",font.get_skewchar());
+    Ok(catch_prim!(ET::Int::from_i64::<ET::Token>(font.get_skewchar()) => ("hyphenchar",cmd)))
+}
+
 pub fn skip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\skip");
@@ -2851,6 +2870,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_value_assign_int!(newlinechar,state,stomach,gullet);
     register_gullet!(noexpand,state,stomach,gullet,(s,g,c) => noexpand::<ET>(s,g,c));
     register_dim_assign!(nulldelimiterspace,state,stomach,gullet);
+    state.set_command(ET::Char::from_str("nullfont"),Some(Ptr::new(Command::ValueRegister{index:0,tp:Assignable::Font})),true);
     register_gullet!(number,state,stomach,gullet,(s,g,c) => number::<ET>(s,g,c));
     register_stomach!(openin,state,stomach,gullet,(s,gu,sto,cmd,_) =>openin::<ET>(s,gu,sto,cmd));
     register_whatsit!(openout,state,stomach,gullet,(s,gu,sto,cmd) =>openout::<ET>(s,gu,sto,cmd));
@@ -2884,6 +2904,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_value_assign_int!(sfcode,state,stomach,gullet);
     register_int_assign!(showboxbreadth,state,stomach,gullet);
     register_int_assign!(showboxdepth,state,stomach,gullet);
+    register_value_assign_int!(skewchar,state,stomach,gullet);
     register_value_assign_skip!(skip,state,stomach,gullet);
     register_assign!(skipdef,state,stomach,gullet,(s,gu,_,cmd,global) =>skipdef::<ET>(s,gu,cmd,global));
     register_skip_assign!(spaceskip,state,stomach,gullet);
@@ -2940,7 +2961,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
 
     cmtodo!(state,stomach,gullet,lastpenalty);
     cmtodo!(state,stomach,gullet,parshape);
-    cmtodo!(state,stomach,gullet,skewchar);
     cmtodo!(state,stomach,gullet,badness);
     cmtodo!(state,stomach,gullet,spacefactor);
     cmtodo!(state,stomach,gullet,prevgraf);
@@ -3061,7 +3081,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,medskip);
     cmtodo!(state,stomach,gullet,mskip);
     cmtodo!(state,stomach,gullet,noalign);
-    cmtodo!(state,stomach,gullet,nullfont);
     cmtodo!(state,stomach,gullet,omit);
     cmtodo!(state,stomach,gullet,smallskip);
     cmtodo!(state,stomach,gullet,span);
