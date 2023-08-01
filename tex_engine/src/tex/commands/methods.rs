@@ -17,6 +17,13 @@ macro_rules! cmtodo {
 }
 
 #[macro_export]
+macro_rules! cmstodo {
+    ($state:ident,$stomach:ident,$gullet:ident,$name:ident) => {
+        register_stomach!($name,$state,$stomach,$gullet,(_,g,_,_,_) => todo!("{}: {}",stringify!($name),g.mouth().file_line()));
+    };
+}
+
+#[macro_export]
 macro_rules! map_group {
     ($name:expr,$cmd:ident,$state:ident,$mouth:expr,$finish:expr,$tk:ident => $f:expr) => {
         if let Some((tk,b)) = catch_prim!($mouth.get_next::<ET>($state) => ($name,$cmd)) {
@@ -167,6 +174,15 @@ macro_rules! register_skip_assign {
         $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
             name:stringify!($name),
             tp:crate::tex::commands::Assignable::Skip
+        })),true);
+    };
+}
+#[macro_export]
+macro_rules! register_muskip_assign {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(Ptr::new(crate::tex::commands::Command::AssignableValue{
+            name:stringify!($name),
+            tp:crate::tex::commands::Assignable::MuSkip
         })),true);
     };
 }
@@ -325,6 +341,15 @@ pub fn assign_primitive_skip<ET:EngineType>(state:&mut ET::State,gullet:&mut ET:
     let d = catch_prim!(gullet.get_skip(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_skip(name,d,global);
+    Ok(())
+}
+
+pub fn assign_primitive_muskip<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Assigning {}",name);
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
+    let d = catch_prim!(gullet.get_muskip(state) => (name,cmd));
+    debug_log!(debug=>"\\{} = {}",name,d);
+    state.set_primitive_muskip(name,d,global);
     Ok(())
 }
 pub fn assign_primitive_toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,name:&'static str,global:bool) -> Result<(),ErrorInPrimitive<ET::Token>> {

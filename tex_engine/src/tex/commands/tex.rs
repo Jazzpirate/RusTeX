@@ -1,7 +1,7 @@
 //! TeX primitive [`Command`]s
 
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box};
+use crate::{debug_log, register_assign, register_conditional, register_gullet, register_int_assign, register_stomach, register_tok_assign, map_group, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, do_expandable, do_conditional, string_to_tokens};
@@ -340,6 +340,34 @@ pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stomac
         }
     });
     file_end_prim!("def",cmd)
+}
+
+pub fn delcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                      -> Result<(),ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Assigning delcode");
+    let i = catch_prim!(gullet.get_int(state) => ("delcode",cmd));
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"delcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("delcode",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("delcode",cmd));
+    debug_log!(debug=>"\\delcode '{}' = {}",c.char_str(),i);
+    state.set_delcode(c,i,global);
+    Ok(())
+}
+
+pub fn delcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                                   -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Getting delcode");
+    let i = catch_prim!(gullet.get_int(state) => ("delcode",cmd));
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"delcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = state.get_delcode(c);
+    debug_log!(debug=>"\\delcode '{}' == {}",c.char_str(),v);
+    Ok(v)
 }
 
 pub fn detokenize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
@@ -2716,6 +2744,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(delimiterfactor,state,stomach,gullet);
     register_dim_assign!(delimitershortfall,state,stomach,gullet);
     register_gullet!(detokenize,state,stomach,gullet,(s,gu,cmd) =>detokenize::<ET>(s,gu,cmd));
+    register_value_assign_int!(delcode,state,stomach,gullet);
     register_value_assign_dim!(dimen,state,stomach,gullet);
     register_assign!(dimendef,state,stomach,gullet,(s,gu,_,cmd,global) =>dimendef::<ET>(s,gu,cmd,global));
     register_dim_assign!(displayindent,state,stomach,gullet);
@@ -2890,11 +2919,24 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_skip_assign!(xspaceskip,state,stomach,gullet);
     register_int!(year,state,stomach,gullet,(s,g,c) => year::<ET>(s,c));
 
+    register_muskip_assign!(thinmuskip,state,stomach,gullet);
+    register_muskip_assign!(medmuskip,state,stomach,gullet);
+    register_muskip_assign!(thickmuskip,state,stomach,gullet);
+
     // TODOS ---------------------------------------------------------------------
 
-    cmtodo!(state,stomach,gullet,thinmuskip);
-    cmtodo!(state,stomach,gullet,medmuskip);
-    cmtodo!(state,stomach,gullet,thickmuskip);
+    cmstodo!(state,stomach,gullet,mathord);
+    cmstodo!(state,stomach,gullet,mathop);
+    cmstodo!(state,stomach,gullet,mathbin);
+    cmstodo!(state,stomach,gullet,mathrel);
+    cmstodo!(state,stomach,gullet,mathopen);
+    cmstodo!(state,stomach,gullet,mathclose);
+    cmstodo!(state,stomach,gullet,mathpunct);
+    cmstodo!(state,stomach,gullet,mathinner);
+    cmstodo!(state,stomach,gullet,mathaccent);
+    cmstodo!(state,stomach,gullet,radical);
+    cmstodo!(state,stomach,gullet,delimiter);
+
 
     cmtodo!(state,stomach,gullet,lastpenalty);
     cmtodo!(state,stomach,gullet,parshape);
@@ -2904,7 +2946,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,prevgraf);
     cmtodo!(state,stomach,gullet,deadcycles);
     cmtodo!(state,stomach,gullet,insertpenalties);
-    cmtodo!(state,stomach,gullet,delcode);
     cmtodo!(state,stomach,gullet,textfont);
     cmtodo!(state,stomach,gullet,scriptfont);
     cmtodo!(state,stomach,gullet,scriptscriptfont);
@@ -2985,21 +3026,10 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,raise);
     cmtodo!(state,stomach,gullet,lower);
     cmtodo!(state,stomach,gullet,setlanguage);
-    cmtodo!(state,stomach,gullet,delimiter);
     cmtodo!(state,stomach,gullet,nonscript);
     cmtodo!(state,stomach,gullet,vcenter);
-    cmtodo!(state,stomach,gullet,mathord);
-    cmtodo!(state,stomach,gullet,mathop);
-    cmtodo!(state,stomach,gullet,mathbin);
-    cmtodo!(state,stomach,gullet,mathrel);
-    cmtodo!(state,stomach,gullet,mathopen);
-    cmtodo!(state,stomach,gullet,mathclose);
-    cmtodo!(state,stomach,gullet,mathpunct);
-    cmtodo!(state,stomach,gullet,mathinner);
     cmtodo!(state,stomach,gullet,underline);
     cmtodo!(state,stomach,gullet,overline);
-    cmtodo!(state,stomach,gullet,mathaccent);
-    cmtodo!(state,stomach,gullet,radical);
     cmtodo!(state,stomach,gullet,displaylimits);
     cmtodo!(state,stomach,gullet,limits);
     cmtodo!(state,stomach,gullet,nolimits);

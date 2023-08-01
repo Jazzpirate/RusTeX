@@ -117,10 +117,15 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     /// set the lowercase character for a character
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally:bool);
 
-    /// get the lowercase character for a character
+    /// get the mathcode for a character
     fn get_mathcode(&self, c: ET::Char) -> ET::Int;
-    /// set the lowercase character for a character
+    /// set the mathcode for a character
     fn set_mathcode(&mut self, c: ET::Char, lc: ET::Int, globally:bool);
+
+    /// get the delimiter code for a character
+    fn get_delcode(&self, c: ET::Char) -> ET::Int;
+    /// set the delimiter code for a character
+    fn set_delcode(&mut self, c: ET::Char, lc: ET::Int, globally:bool);
 
     /// get the value of an integer register
     fn get_int_register(&self,i:usize) -> ET::Int;
@@ -166,6 +171,11 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     /// set a primitive dimension register
     fn set_primitive_skip(&mut self, name:&'static str, v:Skip<ET::SkipDim>, globally:bool);
 
+    /// get a primitive dimension register
+    fn get_primitive_muskip(&self, name:&'static str) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim>;
+    /// set a primitive dimension register
+    fn set_primitive_muskip(&mut self, name:&'static str, v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally:bool);
+
     /// get a primitive token register
     fn get_primitive_toks(&self, name:&'static str) -> Vec<ET::Token>;
     /// set a primitive token register
@@ -202,6 +212,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     ucchar: CharField<ET::Char, ET::Char>,
     lcchar: CharField<ET::Char, ET::Char>,
     mathcodes: CharField<ET::Char,ET::Int>,
+    delcodes: CharField<ET::Char,ET::Int>,
 
     intregisters: VecField<ET::Int>,
     dimregisters: VecField<ET::Dim>,
@@ -213,6 +224,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
     primitive_skipregisters: HashMapField<&'static str,Skip<ET::SkipDim>>,
+    primitive_muskipregisters: HashMapField<&'static str,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
     primitive_tokregisters: HashMapField<&'static str,Vec<ET::Token>>,
 }
 use crate::utils::strings::CharType;
@@ -244,6 +256,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             ucchar: CharField::new(ET::Char::ident()),
             lcchar: CharField::new(ET::Char::ident()),
             mathcodes: CharField::new(ET::Char::rep_field(ET::Int::default())),
+            delcodes: CharField::new(ET::Char::rep_field(ET::Int::default())),
             intregisters: VecField::new(),
             dimregisters: VecField::new(),
             skipregisters: VecField::new(),
@@ -254,6 +267,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             primitive_intregisters: HashMapField::new(),
             primitive_dimregisters: HashMapField::new(),
             primitive_skipregisters: HashMapField::new(),
+            primitive_muskipregisters: HashMapField::new(),
             primitive_tokregisters: HashMapField::new(),
         };
         for i in 97..123 {
@@ -385,6 +399,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.ucchar.push_stack();
         self.lcchar.push_stack();
         self.mathcodes.push_stack();
+        self.delcodes.push_stack();
 
         self.intregisters.push_stack();
         self.dimregisters.push_stack();
@@ -396,6 +411,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.primitive_intregisters.push_stack();
         self.primitive_dimregisters.push_stack();
         self.primitive_skipregisters.push_stack();
+        self.primitive_muskipregisters.push_stack();
         self.primitive_tokregisters.push_stack();
         unsafe{self.aftergroups.push(self.aftergroups.last().unwrap_unchecked().clone())};
     }
@@ -420,6 +436,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.ucchar.pop_stack();
         self.lcchar.pop_stack();
         self.mathcodes.pop_stack();
+        self.delcodes.pop_stack();
 
         self.intregisters.pop_stack();
         self.dimregisters.pop_stack();
@@ -431,6 +448,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.primitive_intregisters.pop_stack();
         self.primitive_dimregisters.pop_stack();
         self.primitive_skipregisters.pop_stack();
+        self.primitive_muskipregisters.pop_stack();
         self.primitive_tokregisters.pop_stack();
 
         Some((self.aftergroups.pop().unwrap_or(vec!()),gt))
@@ -501,6 +519,19 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.mathcodes.set_globally(c,lc)
         } else {
             self.mathcodes.set_locally(c,lc)
+        }
+    }
+
+    fn get_delcode(&self, c: ET::Char) -> ET::Int {
+        self.delcodes.get(&c)
+    }
+    fn set_delcode(&mut self, c: ET::Char, lc: ET::Int, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.delcodes.set_globally(c,lc)
+        } else {
+            self.delcodes.set_locally(c,lc)
         }
     }
 
@@ -688,6 +719,19 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.primitive_skipregisters.set_globally(name,v)
         } else {
             self.primitive_skipregisters.set_locally(name,v)
+        }
+    }
+
+    fn get_primitive_muskip(&self, name: &'static str) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
+        self.primitive_muskipregisters.get(&name)
+    }
+    fn set_primitive_muskip(&mut self, name: &'static str, v: MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.primitive_muskipregisters.set_globally(name,v)
+        } else {
+            self.primitive_muskipregisters.set_locally(name,v)
         }
     }
 

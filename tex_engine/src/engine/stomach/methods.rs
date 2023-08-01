@@ -109,6 +109,14 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
             }
             Ok(())
         }
+        AssignableValue {name,tp:Assignable::MuSkip} => {
+            methods::assign_primitive_muskip::<ET>(state,gullet,cmd,name,false)?;
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
         AssignableValue {name,tp:Assignable::Toks} => {
             methods::assign_primitive_toks::<ET>(state,gullet,cmd,name,false)?;
             match state.take_afterassignment() {
