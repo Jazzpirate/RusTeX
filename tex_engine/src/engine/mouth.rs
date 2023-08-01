@@ -264,7 +264,7 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
             None => ()
         }
         self.sources.push(TeXMouthSource::String(StringSource::new(
-            file.content_string(),
+            file.content_string().unwrap(),
             Some(Ptr::new(file.path().to_str().unwrap().to_string()))
         )))
     }
@@ -377,42 +377,42 @@ impl<C:CharType> TracingMouth<C> {
         } else { Ok(false) }
     }
     fn get_next_i<ET:EngineType<Char=C,Token=TokenWithSourceref<C>>>(&mut self, state:&ET::State) -> Result<Option<(TokenWithSourceref<C>, bool)>,InvalidCharacter<TokenWithSourceref<C>>> {
-        if let Some(source) = self.sources.last_mut() {
-            return if let Some(tk) = match source {
-                TeXMouthSource::Token(ts) => ts.get_next(),
-                TeXMouthSource::String(ss) => ss.get_next(state.get_catcode_scheme(), state.get_endlinechar())?,
-                TeXMouthSource::NoExpand(_) => {
-                    match self.sources.pop() {
-                        Some(TeXMouthSource::NoExpand(t)) => return Ok(Some((t,false))),
-                        _ => unreachable!()
-                    }
-                }
-            } {
-                Ok(Some((tk,true)))
-            } else {
-                match source {
-                    TeXMouthSource::String(s) => {
-                        match &s.source {
-                            Some(s) => (state.outputs().file_close)(&*s),
-                            None => ()
-                        }
-                        self.sources.pop();
-                        debug!("file end; inserting \\everyeof");
-                        let mut v = state.get_primitive_toks("everyeof");
-                        if v.is_empty() {
-                            Ok(Some((TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'),CategoryCode::EOF),None),true)))
-                        } else {
-                            v.push(TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'), CategoryCode::EOF),None));
-                            self.push_tokens(v);
-                            self.get_next_i::<ET>(state)
+        loop {
+            if let Some(source) = self.sources.last_mut() {
+                if let Some(tk) = match source {
+                    TeXMouthSource::Token(ts) => ts.get_next(),
+                    TeXMouthSource::String(ss) => ss.get_next(state.get_catcode_scheme(), state.get_endlinechar())?,
+                    TeXMouthSource::NoExpand(_) => {
+                        match self.sources.pop() {
+                            Some(TeXMouthSource::NoExpand(t)) => return Ok(Some((t, false))),
+                            _ => unreachable!()
                         }
                     }
-                    _ => {
-                        self.sources.pop();
-                        self.get_next_i::<ET>(state)
+                } {
+                    return Ok(Some((tk, true)))
+                } else {
+                    match source {
+                        TeXMouthSource::String(s) => {
+                            match &s.source {
+                                Some(s) => (state.outputs().file_close)(&*s),
+                                None => ()
+                            }
+                            self.sources.pop();
+                            debug!("file end; inserting \\everyeof");
+                            let mut v = state.get_primitive_toks("everyeof");
+                            if v.is_empty() {
+                                return Ok(Some((TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'), CategoryCode::EOF), None), true)))
+                            } else {
+                                v.push(TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'), CategoryCode::EOF), None));
+                                self.push_tokens(v);
+                            }
+                        }
+                        _ => {
+                            self.sources.pop();
+                        }
                     }
                 }
-            }
-        } else { Ok(None) }
+            } else { return Ok(None) }
+        }
     }
 }

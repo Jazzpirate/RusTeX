@@ -29,7 +29,7 @@ use crate::utils::strings::CharType;
 pub trait File<Char:CharType>:Clone {
     fn path(&self) -> &PathBuf;
     fn exists(&self) -> bool;
-    fn content_string(&self) -> Vec<u8>;
+    fn content_string(&self) -> Option<Vec<u8>>;
     fn open_out(&self);
     fn open_in(&self);
     fn close_out(&self);
@@ -46,12 +46,16 @@ pub trait FileSystem<Char:CharType>:'static {
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf;
 }
 
-pub struct PhysicalFile<Char:CharType> {path:PathBuf,contents:Vec<u8>,phantom:PhantomData<Char>}
+pub struct PhysicalFile<Char:CharType> {path:PathBuf,contents:Option<Vec<u8>>,phantom:PhantomData<Char>}
 impl<Char:CharType> PhysicalFile<Char> {
     pub fn new(path:PathBuf) -> Self {
         PhysicalFile {
             contents: {
-                std::fs::read(&path).ok().unwrap_or(vec!())
+                if path.exists() {
+                    Some(std::fs::read(&path).ok().unwrap_or(vec!()))
+                } else {
+                    None
+                }
             },
             phantom: PhantomData,
             path
@@ -61,7 +65,7 @@ impl<Char:CharType> PhysicalFile<Char> {
 impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn path(&self) -> &PathBuf { &self.path }
     fn exists(&self) -> bool { self.path.exists() }
-    fn content_string(&self) -> Vec<u8> {
+    fn content_string(&self) -> Option<Vec<u8>> {
         self.contents.clone()
     }
     fn open_out(&self) {
@@ -92,10 +96,10 @@ pub struct VirtualFile<Char:CharType> {path:PathBuf,contents:RwLock<Option<Vec<u
 impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
     fn path(&self) -> &PathBuf { &self.path }
     fn exists(&self) -> bool { self.contents.read().unwrap().is_some() }
-    fn content_string(&self) -> Vec<u8> {
+    fn content_string(&self) -> Option<Vec<u8>> {
         match &*self.contents.read().unwrap() {
-            Some(s) => s.clone(),
-            None => vec!()
+            Some(s) => Some(s.clone()),
+            None => None
         }
     }
     fn close_out(&self) {}
@@ -118,7 +122,7 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
     }
     fn eof(&self) -> bool {
         let mut open = self.open.write().unwrap();
-        open.as_mut().unwrap().preview().is_empty()//.peek().is_none()
+        open.as_mut().unwrap().eof()//.peek().is_none()
     }
     fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
         let mut open = self.open.write().unwrap();
@@ -189,7 +193,7 @@ impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
 }
 
 // TODO get rid of:
-pub static UNICODEDATA_TXT : &str = include_str!("../resources/UnicodeData.txt");
+//pub static UNICODEDATA_TXT : &str = include_str!("../resources/UnicodeData.txt");
 
 pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,Ptr<VirtualFile<Char>>>}
 impl<Char:CharType> KpsePhysicalFileSystem<Char> {
@@ -217,7 +221,7 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
         let ret = self.kpathsea.kpsewhich(path);
         match self.files.entry(ret.path) {
             Entry::Occupied(e) => e.get().clone(),
-            Entry::Vacant(e) if e.key().to_str().unwrap().ends_with("UnicodeData.txt") => {
+            /*Entry::Vacant(e) if e.key().to_str().unwrap().ends_with("UnicodeData.txt") => {
                 // TODO remove
                 let s = UNICODEDATA_TXT.as_bytes().to_vec();
                 let ret = Ptr::new(VirtualFile{
@@ -227,7 +231,7 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
                 });
                 e.insert(ret.clone());
                 ret
-            }
+            }*/
             Entry::Vacant(e) => {
                 let s: Option<Vec<u8>> = self.kpathsea.get(&self.pwd,e.key());
                 let ret = Ptr::new(VirtualFile{

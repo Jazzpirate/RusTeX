@@ -1,4 +1,4 @@
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_gullet, register_int, register_int_assign};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_gullet, register_int, register_int_assign, register_stomach};
 use crate::engine::EngineType;
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
@@ -7,7 +7,7 @@ use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::GulletCommand;
+use crate::tex::commands::{GulletCommand, StomachCommand};
 use crate::tex::numbers::{Int,NumSet, Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive};
@@ -52,8 +52,19 @@ fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gu
     let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("pdffilesize",cmd));
     let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = state.filesystem().get(&filename);
-    let ret = f.content_string().len().to_string();
-    Ok(string_to_tokens(ret.as_bytes()))
+    match f.content_string() {
+        None => Ok(vec!()),
+        Some(v) => Ok(string_to_tokens(v.len().to_string().as_bytes()))
+    }
+}
+
+pub fn pdfglyphtounicode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+                                  -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\pdfglyphtounicode");
+    // TODO
+    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("pdfglyphtounicode",cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("pdfglyphtounicode",cmd));
+    Ok(())
 }
 
 fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
@@ -88,6 +99,8 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
     register_int_assign!(pdfdecimaldigits,state,stomach,gullet);
     register_gullet!(pdffilesize,state,stomach,gullet,(s,gu,cmd) =>pdffilesize::<ET>(s,gu,cmd));
+    register_int_assign!(pdfgentounicode,state,stomach,gullet);
+    register_stomach!(pdfglyphtounicode,state,stomach,gullet,(s,gu,sto,cmd,_) =>pdfglyphtounicode::<ET>(s,gu,sto,cmd));
     register_dim_assign!(pdfhorigin,state,stomach,gullet);
     register_int_assign!(pdfoutput,state,stomach,gullet);
     register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion::<ET>(s,g,c));
@@ -114,7 +127,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:
     cmtodo!(state,stomach,gullet,pdfdraftmode);
     cmtodo!(state,stomach,gullet,pdfforcepagebox);
     cmtodo!(state,stomach,gullet,pdfgamma);
-    cmtodo!(state,stomach,gullet,pdfgentounicode);
     cmtodo!(state,stomach,gullet,pdfimageapplygamma);
     cmtodo!(state,stomach,gullet,pdfimagegamma);
     cmtodo!(state,stomach,gullet,pdfimagehicolor);
@@ -204,7 +216,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:
     cmtodo!(state,stomach,gullet,pdffakespace);
     cmtodo!(state,stomach,gullet,pdffontattr);
     cmtodo!(state,stomach,gullet,pdffontexpand);
-    cmtodo!(state,stomach,gullet,pdfglyphtounicode);
     cmtodo!(state,stomach,gullet,pdfinfo);
     cmtodo!(state,stomach,gullet,pdfinterwordspaceoff);
     cmtodo!(state,stomach,gullet,pdfinterwordspaceon);

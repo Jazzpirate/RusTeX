@@ -457,6 +457,7 @@ impl<C:CharType> StringSource<C> {
     pub fn column(&self) -> usize { self.state.col }
 
     pub fn preview(&self) -> String { self.state.preview() }
+    pub fn eof(&self) -> bool { self.state.string.clone().next().is_none() }
 
     pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<T>> {
         match self.state.get_next_valid(cc, endline)? {

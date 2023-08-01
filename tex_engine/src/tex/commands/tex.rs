@@ -559,6 +559,13 @@ pub fn divide<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Sto
     }
 }
 
+pub fn dump<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+                                    -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\dump");
+    // TODO
+    Ok(())
+}
+
 pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool,protected:bool,long:bool,outer:bool)
                                                 -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"edef");
@@ -803,6 +810,13 @@ pub fn errmessage<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
         cause:Some(cmd.cause),
         source:None
     }.into())
+}
+
+pub fn errorstopmode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+                                  -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\errorstopmode");
+    // TODO
+    Ok(())
 }
 
 pub fn escapechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
@@ -2829,6 +2843,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_dim_assign!(displaywidth,state,stomach,gullet);
     register_assign!(divide,state,stomach,gullet,(s,gu,_,cmd,global) =>divide::<ET>(s,gu,cmd,global));
     register_int_assign!(doublehyphendemerits,state,stomach,gullet);
+    register_stomach!(dump,state,stomach,gullet,(s,gu,sto,cmd,_) =>dump::<ET>(s,gu,sto,cmd));
     register_assign!(edef,state,stomach,gullet,(s,gu,_,cmd,global) =>edef::<ET>(s,gu,cmd,global,false,false,false));
     register_gullet!(else,state,stomach,gullet,(s,gu,cmd) =>else_::<ET>(s,gu,cmd));
     register_dim_assign!(emergencystretch,state,stomach,gullet);
@@ -2851,6 +2866,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     })),true);
 
     register_int_assign!(errorcontextlines,state,stomach,gullet);
+    register_stomach!(errorstopmode,state,stomach,gullet,(s,gu,sto,cmd,_) =>errorstopmode::<ET>(s,gu,sto,cmd));
     register_value_assign_int!(escapechar,state,stomach,gullet);
     register_int_assign!(exhyphenpenalty,state,stomach,gullet);
     register_gullet!(expandafter,state,stomach,gullet,(s,g,c) => expandafter::<ET>(s,g,c));
@@ -3045,7 +3061,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,wd);
     cmtodo!(state,stomach,gullet,dp);
     cmtodo!(state,stomach,gullet,lastskip);
-    cmtodo!(state,stomach,gullet,errorstopmode);
     cmtodo!(state,stomach,gullet,scrollmode);
     cmtodo!(state,stomach,gullet,nonstopmode);
     cmtodo!(state,stomach,gullet,batchmode);
@@ -3101,7 +3116,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,hss);
     cmtodo!(state,stomach,gullet,accent);
     cmtodo!(state,stomach,gullet,discretionary);
-    cmtodo!(state,stomach,gullet,dump);
     cmtodo!(state,stomach,gullet,raise);
     cmtodo!(state,stomach,gullet,lower);
     cmtodo!(state,stomach,gullet,setlanguage);
