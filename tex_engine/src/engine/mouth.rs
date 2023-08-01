@@ -90,6 +90,8 @@ pub trait Mouth<T:Token>:Sized+'static {
     /// Return the current file and line number as presentable string
     fn file_line(&self) -> String;
 
+    fn line_no(&self) -> usize;
+
     /// Skip whitespace characters from the [`Mouth`]
     fn skip_whitespace<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<(),InvalidCharacter<T>> {
         methods::skip_whitespace::<ET>(self,state)
@@ -302,6 +304,16 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
             if ret.len() > len { return ret.chars().take(len).collect() }
         }
         ret.chars().take(len).collect()
+    }
+
+    fn line_no(&self) -> usize {
+        for s in self.sources.iter().rev() {
+            match s {
+                TeXMouthSource::String(ss) => return ss.line(),
+                _ => ()
+            }
+        }
+        0
     }
 
     fn file_line(&self) -> String {

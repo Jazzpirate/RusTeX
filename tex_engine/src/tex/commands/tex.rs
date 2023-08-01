@@ -1344,6 +1344,12 @@ pub fn input<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gull
     }
 }
 
+pub fn inputlineno<ET:EngineType>(gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(
+        gullet.mouth().line_no() as i64
+    ) => ("month",cmd)))
+}
+
 pub fn lccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning lower case character");
@@ -2722,6 +2728,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx::<ET>(s,gu,cmd));
     register_stomach!(immediate,state,stomach,gullet,(s,gu,sto,cmd,_) =>immediate::<ET>(s,gu,sto,cmd));
     register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input::<ET>(s,gu,cmd));
+    register_int!(inputlineno,state,stomach,gullet,(s,g,c) => inputlineno::<ET>(g,c));
     register_int_assign!(interlinepenalty,state,stomach,gullet);
     register_int_assign!(language,state,stomach,gullet);
     register_value_assign_int!(lccode,state,stomach,gullet);
@@ -2824,7 +2831,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
 
     cmtodo!(state,stomach,gullet,lastpenalty);
     cmtodo!(state,stomach,gullet,parshape);
-    cmtodo!(state,stomach,gullet,inputlineno);
     cmtodo!(state,stomach,gullet,skewchar);
     cmtodo!(state,stomach,gullet,badness);
     cmtodo!(state,stomach,gullet,spacefactor);
