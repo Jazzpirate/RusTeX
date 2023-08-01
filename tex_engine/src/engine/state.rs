@@ -24,7 +24,7 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     /// Should be called at the start of a new job with the jobname (name of the main file)
     fn set_job(&mut self, jobname:String);
 
-    fn get_jobname(&self) -> String;
+    fn get_jobname(&self) -> &str;
     fn get_start_time(&self) -> DateTime<Local>;
 
     fn outputs(&self) -> &Outputs;
@@ -350,8 +350,8 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.csnames -= 1;
     }
     fn outputs(&self) -> &Outputs { &self.outputs }
-    fn get_jobname(&self) -> String {
-        self.jobname.as_ref().unwrap().clone()
+    fn get_jobname(&self) -> &str {
+        self.jobname.as_ref().unwrap().as_str()
     }
     fn get_start_time(&self) -> DateTime<Local> {
         self.start_time.as_ref().unwrap().clone()

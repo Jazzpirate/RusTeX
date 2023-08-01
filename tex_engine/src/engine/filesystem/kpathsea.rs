@@ -10,12 +10,12 @@ use crate::utils::map::{HMap, HSet};
 /// A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
 /// `TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].
 /// and lazily computed on first use.
-pub struct Kpathsea {pub pwd:PathBuf,local:HSet<PathBuf>,global:Arc<KpathseaBase>}
+pub struct Kpathsea {pub pwd:PathBuf,local:Vec<PathBuf>,global:Arc<KpathseaBase>}
 impl Kpathsea {
     /// Create a new [`Kpathsea`] instance with the given working directory.
     pub fn new(pwd:PathBuf) -> Kpathsea {
         let global = KPATHSEA.clone();
-        let mut local:HSet<PathBuf> = HSet::default();
+        let mut local:Vec<PathBuf> = vec!();
         KpathseaBase::fill_set(&mut local,pwd.clone(),global.recdot);
         Kpathsea { pwd, local, global }
     }
@@ -78,7 +78,7 @@ pub struct KpseResult {
 
 
 pub struct KpathseaBase {
-    set: HSet<PathBuf>,
+    set: Vec<PathBuf>,
     recdot:bool
 }
 impl KpathseaBase {
@@ -145,11 +145,11 @@ impl KpathseaBase {
             }
         }
         let filestrs : Vec<String> = vec!(
+            std::env::vars().find(|a| a.0 == "TEXINPUTS").map(|x| x.1.clone()),
+            vars.get("TEXINPUTS").map(|x| x.clone()),
             vars.get("VARTEXFONTS").map(|x| x.clone()),
             vars.get("VFFONTS").map(|x| x.clone()),
             vars.get("TFMFONTS").map(|x| x.clone()),
-            std::env::vars().find(|a| a.0 == "TEXINPUTS").map(|x| x.1.clone()),
-            vars.get("TEXINPUTS").map(|x| x.clone())
         ).into_iter().flatten().collect();
         vars.insert("progname".to_string(),"pdflatex".to_string());
         let home = if cfg!(target_os = "windows") {
@@ -184,14 +184,14 @@ impl KpathseaBase {
                 }
             }
         }
-        let mut set: HSet<PathBuf> = HSet::default();
+        let mut set: Vec<PathBuf> = vec!();
         for (path,recurse) in paths.into_iter() { KpathseaBase::fill_set(&mut set, path, recurse) }
         KpathseaBase { set,recdot }
     }
 
-    fn fill_set(set: &mut HSet<PathBuf>, path : PathBuf, recurse: bool) {
+    fn fill_set(set: &mut Vec<PathBuf>, path : PathBuf, recurse: bool) {
         if path.is_dir() {
-            set.insert(path.clone());
+            set.push(path.clone());
             if recurse {
                 for entry in std::fs::read_dir(path).unwrap() {
                     let p = entry.unwrap().path();

@@ -1090,6 +1090,14 @@ pub fn hbox<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet
     file_end_prim!("hbox",cmd);
 }
 
+pub fn hyphenation<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+                               -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\hyphenation");
+    // TODO
+    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("hyphenation",cmd));
+    Ok(())
+}
+
 pub fn hyphenchar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\hyphenchar");
@@ -1391,6 +1399,12 @@ pub fn inputlineno<ET:EngineType>(gullet:&mut ET::Gullet,cmd:GulletCommand<ET::T
     Ok(catch_prim!(ET::Int::from_i64(
         gullet.mouth().line_no() as i64
     ) => ("month",cmd)))
+}
+
+pub fn jobname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,_cmd:GulletCommand<ET::Token>)
+                         -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"jobname");
+    Ok(string_to_tokens(state.get_jobname().as_bytes()))
 }
 
 pub fn lccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
@@ -2068,7 +2082,6 @@ pub fn number<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gul
     Ok(ret)
 }
 
-
 pub fn openin<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
     -> Result<(), ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\openin");
@@ -2136,6 +2149,14 @@ pub fn par<ET:EngineType>(_stomach:&mut ET::Stomach,state:&mut ET::State,_cmd:St
     if state.mode().is_vertical() {Ok(())} else {
         todo!("par in horizontal mode")
     }
+}
+
+pub fn patterns<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
+                             -> Result<(), ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"\\patterns");
+    // TODO
+    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("patterns",cmd));
+    Ok(())
 }
 
 pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,globally:bool)
@@ -2821,6 +2842,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_dim_assign!(hoffset,state,stomach,gullet);
     register_int_assign!(holdinginserts,state,stomach,gullet);
     register_dim_assign!(hsize,state,stomach,gullet);
+    register_stomach!(hyphenation,state,stomach,gullet,(s,gu,sto,cmd,_) =>hyphenation::<ET>(s,gu,sto,cmd));
     register_value_assign_int!(hyphenchar,state,stomach,gullet);
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_::<ET>(s,gu,cmd));
@@ -2844,6 +2866,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_gullet!(input,state,stomach,gullet,(s,gu,cmd) =>input::<ET>(s,gu,cmd));
     register_int!(inputlineno,state,stomach,gullet,(s,g,c) => inputlineno::<ET>(g,c));
     register_int_assign!(interlinepenalty,state,stomach,gullet);
+    register_gullet!(jobname,state,stomach,gullet,(s,gu,cmd) =>jobname::<ET>(s,gu,cmd));
     register_int_assign!(language,state,stomach,gullet);
     register_value_assign_int!(lccode,state,stomach,gullet);
     register_int_assign!(lefthyphenmin,state,stomach,gullet);
@@ -2887,6 +2910,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_skip_assign!(parfillskip,state,stomach,gullet);
     register_dim_assign!(parindent,state,stomach,gullet);
     register_skip_assign!(parskip,state,stomach,gullet);
+    register_stomach!(patterns,state,stomach,gullet,(s,gu,sto,cmd,_) =>patterns::<ET>(s,gu,sto,cmd));
     register_int_assign!(pausing,state,stomach,gullet);
     register_int_assign!(postdisplaypenalty,state,stomach,gullet);
     register_int_assign!(predisplaypenalty,state,stomach,gullet);
@@ -2983,8 +3007,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,wd);
     cmtodo!(state,stomach,gullet,dp);
     cmtodo!(state,stomach,gullet,lastskip);
-    cmtodo!(state,stomach,gullet,hyphenation);
-    cmtodo!(state,stomach,gullet,patterns);
     cmtodo!(state,stomach,gullet,errorstopmode);
     cmtodo!(state,stomach,gullet,scrollmode);
     cmtodo!(state,stomach,gullet,nonstopmode);
@@ -3076,7 +3098,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,fontname);
     cmtodo!(state,stomach,gullet,hskip);
     cmtodo!(state,stomach,gullet,italiccorr);
-    cmtodo!(state,stomach,gullet,jobname);
     cmtodo!(state,stomach,gullet,mathchar);
     cmtodo!(state,stomach,gullet,medskip);
     cmtodo!(state,stomach,gullet,mskip);
