@@ -1526,6 +1526,34 @@ pub fn mathchardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
     Ok(())
 }
 
+pub fn mathcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
+                                    -> Result<(),ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Assigning math code");
+    let i = catch_prim!(gullet.get_int(state) => ("mathcode",cmd));
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"mathcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("lccode",cmd));
+    let i = catch_prim!(gullet.get_int(state) => ("mathcode",cmd));
+    debug_log!(debug=>"\\mathcode '{}' = {}",c.char_str(),i);
+    state.set_mathcode(c,i,global);
+    Ok(())
+}
+
+pub fn mathcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                                 -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
+    debug_log!(trace=>"Getting mathcode");
+    let i = catch_prim!(gullet.get_int(state) => ("mathcode",cmd));
+    let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
+        Some(i) => i,
+        None => return Err(ErrorInPrimitive{name:"mathcode",msg:Some(format!("Not a valid character: {}",i)),cause:Some(cmd.cause),source:None})
+    };
+    let v = state.get_mathcode(c);
+    debug_log!(debug=>"\\mathcode '{}' == {}",c.char_str(),v);
+    Ok(v)
+}
+
 pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
     -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"meaning");
@@ -2783,6 +2811,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(maxdeadcycles,state,stomach,gullet);
     register_dim_assign!(maxdepth,state,stomach,gullet);
     register_assign!(mathchardef,state,stomach,gullet,(s,gu,_,cmd,global) =>mathchardef::<ET>(s,gu,cmd,global));
+    register_value_assign_int!(mathcode,state,stomach,gullet);
     register_dim_assign!(mathsurround,state,stomach,gullet);
     register_gullet!(meaning,state,stomach,gullet,(s,g,c) => meaning::<ET>(s,g,c));
     register_stomach!(message,state,stomach,gullet,(s,gu,_,cmd,_) =>message::<ET>(s,gu,cmd));
@@ -2875,7 +2904,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,prevgraf);
     cmtodo!(state,stomach,gullet,deadcycles);
     cmtodo!(state,stomach,gullet,insertpenalties);
-    cmtodo!(state,stomach,gullet,mathcode);
     cmtodo!(state,stomach,gullet,delcode);
     cmtodo!(state,stomach,gullet,textfont);
     cmtodo!(state,stomach,gullet,scriptfont);
@@ -2958,7 +2986,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,lower);
     cmtodo!(state,stomach,gullet,setlanguage);
     cmtodo!(state,stomach,gullet,delimiter);
-    cmtodo!(state,stomach,gullet,mathcode);
     cmtodo!(state,stomach,gullet,nonscript);
     cmtodo!(state,stomach,gullet,vcenter);
     cmtodo!(state,stomach,gullet,mathord);

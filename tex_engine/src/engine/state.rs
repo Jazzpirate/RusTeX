@@ -117,6 +117,11 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     /// set the lowercase character for a character
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally:bool);
 
+    /// get the lowercase character for a character
+    fn get_mathcode(&self, c: ET::Char) -> ET::Int;
+    /// set the lowercase character for a character
+    fn set_mathcode(&mut self, c: ET::Char, lc: ET::Int, globally:bool);
+
     /// get the value of an integer register
     fn get_int_register(&self,i:usize) -> ET::Int;
     /// set the value of an integer register
@@ -196,6 +201,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     sfcodes: CharField<ET::Char,ET::Int>,
     ucchar: CharField<ET::Char, ET::Char>,
     lcchar: CharField<ET::Char, ET::Char>,
+    mathcodes: CharField<ET::Char,ET::Int>,
 
     intregisters: VecField<ET::Int>,
     dimregisters: VecField<ET::Dim>,
@@ -237,6 +243,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             sfcodes: CharField::new(ET::Char::rep_field(ET::Int::default())),
             ucchar: CharField::new(ET::Char::ident()),
             lcchar: CharField::new(ET::Char::ident()),
+            mathcodes: CharField::new(ET::Char::rep_field(ET::Int::default())),
             intregisters: VecField::new(),
             dimregisters: VecField::new(),
             skipregisters: VecField::new(),
@@ -252,24 +259,24 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
         for i in 97..123 {
             state.ucchar.set_locally((i as u8).into(),((i-32) as u8).into());
             state.lcchar.set_locally(((i-32) as u8).into(),(i as u8).into());
-            /*state.mathcodes.set_locally(i-32,
-                                        (i as i32-32) +
+            state.mathcodes.set_locally(ET::Char::from(i-32),
+                                        ET::Int::from_i64::<ET::Token>((i as i64-32) +
                                             (1 * 16 * 16) +
-                                            (7 * 16 * 16 * 16)
+                                            (7 * 16 * 16 * 16)).unwrap()
             );
-            state.mathcodes.set_locally(i,
-                                        (i as i32) +
+            state.mathcodes.set_locally(ET::Char::from(i),
+                                        ET::Int::from_i64::<ET::Token>((i as i64) +
                                             (1 * 16 * 16) +
-                                            (7 * 16 * 16 * 16)
-            );*/
+                                            (7 * 16 * 16 * 16)).unwrap()
+            );
         }
-        /*for i in 48..58 {
-            state.mathcodes.set_locally(i,
-                                        (i as i32) +
+        for i in 48..58 {
+            state.mathcodes.set_locally(ET::Char::from(i),
+                                        ET::Int::from_i64::<ET::Token>((i as i64) +
                                             (0 * 16 * 16) +
-                                            (7 * 16 * 16 * 16)
+                                            (7 * 16 * 16 * 16)).unwrap()
             );
-        }*/
+        }
         state
     }
 }
@@ -377,6 +384,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.sfcodes.push_stack();
         self.ucchar.push_stack();
         self.lcchar.push_stack();
+        self.mathcodes.push_stack();
 
         self.intregisters.push_stack();
         self.dimregisters.push_stack();
@@ -411,6 +419,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.sfcodes.pop_stack();
         self.ucchar.pop_stack();
         self.lcchar.pop_stack();
+        self.mathcodes.pop_stack();
 
         self.intregisters.pop_stack();
         self.dimregisters.pop_stack();
@@ -479,6 +488,19 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.sfcodes.set_globally(c,v)
         } else {
             self.sfcodes.set_locally(c,v)
+        }
+    }
+
+    fn get_mathcode(&self, c: ET::Char) -> ET::Int {
+        self.mathcodes.get(&c)
+    }
+    fn set_mathcode(&mut self, c: ET::Char, lc: ET::Int, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.mathcodes.set_globally(c,lc)
+        } else {
+            self.mathcodes.set_locally(c,lc)
         }
     }
 
