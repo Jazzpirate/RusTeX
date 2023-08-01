@@ -727,6 +727,12 @@ pub fn endgroup<ET:EngineType>(_stomach:&mut ET::Stomach,state:&mut ET::State,gu
     }
 }
 
+pub fn endinput<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
+                            -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+    gullet.mouth().endinput::<ET>(state);
+    Ok(vec![])
+}
+
 pub fn endlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:StomachCommand<ET::Token>,global:bool)
     -> Result<(),ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"Assigning \\endlinechar");
@@ -2449,7 +2455,14 @@ pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gullet
                     }
                 }
             }
-            StomachCommandInner::Assignment {name:"toks",..} => todo!("toks in \\the"),
+            StomachCommandInner::Assignment {name:"toks",index} => {
+                let i = catch_prim!(gullet.get_int(state) => ("toks",cmd));
+                let i:usize = match i.clone().try_into() {
+                    Ok(i) => i,
+                    Err(_) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
+                };
+                Ok(state.get_toks_register(i))
+            }
             StomachCommandInner::Value {name,index,tp:_} => {
                 todo!()
             }
@@ -2687,6 +2700,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_dim_assign!(emergencystretch,state,stomach,gullet);
     register_stomach!(end,state,stomach,gullet,(s,_,sto,cmd,_) =>end::<ET>(sto,s,cmd));
     register_stomach!(endcsname,state,stomach,gullet,(_,_,_,cmd,_) =>endcsname::<ET::Token>(cmd));
+    register_gullet!(endinput,state,stomach,gullet,(s,g,c) => endinput::<ET>(s,g,c));
     register_stomach!(endgroup,state,stomach,gullet,(s,gu,sto,cmd,_) =>endgroup::<ET>(sto,s,gu,cmd));
     register_value_assign_int!(endlinechar,state,stomach,gullet);
     register_tok_assign!(errhelp,state,stomach,gullet);
@@ -2982,7 +2996,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,char);
     cmtodo!(state,stomach,gullet,cr);
     cmtodo!(state,stomach,gullet,crcr);
-    cmtodo!(state,stomach,gullet,endinput);
     cmtodo!(state,stomach,gullet,fontname);
     cmtodo!(state,stomach,gullet,hskip);
     cmtodo!(state,stomach,gullet,italiccorr);
