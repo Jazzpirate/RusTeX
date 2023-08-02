@@ -30,7 +30,7 @@ type FontFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,GulletCommand<ET
 /// The [`Gullet`] trait defines the interface for the part of the TeX engine that reads tokens from the input stream,
 /// and expands macros. It has basically no components other than a [`Mouth`], so it is implemented as a trait
 /// to allow for overriding its methods.
-pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized+'static {
+pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// Returns a reference to the [`Mouth`].
     fn mouth(&mut self) -> &mut ET::Mouth;
 
@@ -145,6 +145,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized+'static {
 
 }
 
+#[derive(Clone)]
 pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
     pub mouth:ET::Mouth,
     in_conditionals:Vec<ConditionalBranch>,

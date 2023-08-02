@@ -1,6 +1,7 @@
 pub type HMap<A,B> = ahash::HashMap<A,B>;
 pub type HSet<A> = ahash::HashSet<A>;
 
+#[derive(Clone)]
 pub struct Map<V>(Vec<(&'static str,V)>);
 impl<V> Default for Map<V> {
     fn default() -> Self {

@@ -15,14 +15,14 @@ use crate::utils::map::HMap;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
-pub trait FontStore:'static {
+pub trait FontStore:Clone+'static {
     type Char:CharType;
     type Font:Font<Char=Self::Char>;
     fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<usize,Box<dyn TeXError<T>>>;
     fn get(&self,i:usize) -> &Self::Font;
     fn get_mut(&mut self, i:usize) -> &mut Self::Font;
 }
-pub trait Font:Debug+Display {
+pub trait Font:Debug+Display+Clone {
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
@@ -37,6 +37,7 @@ pub trait Font:Debug+Display {
     fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim;
 }
 
+#[derive(Clone)]
 pub struct TfmFontStore {
     font_files:HMap<PathBuf,Ptr<TfmFile>>,
     fonts:Vec<TfmFont>
@@ -106,6 +107,7 @@ impl TfmFontStore {
     }
 }
 // todo: replace by Arrays, maybe
+#[derive(Clone)]
 pub struct TfmFont {
     file:Ptr<TfmFile>,
     at:Option<i64>,

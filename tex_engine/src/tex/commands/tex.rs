@@ -1093,7 +1093,7 @@ pub fn hbox<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State,gullet
                 gullet.mouth().push_tokens(state.get_primitive_toks("everyhbox"));
                 return Ok(Box::new(move |sto,s,gu,children| {
                     Some(HVBox::H(HBox {
-                        children, to, spread,
+                        children, to:to.clone(), spread:spread.clone(),
                         ..Default::default()
                     }))
                 }))
@@ -2331,7 +2331,7 @@ pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, stoma
                     )}),
                     Some(f) => catch_prim!(f(state,gullet,stomach,c) => ("setbox",cmd))
                 };
-                state.box_stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Box::new(move |sto,s,gu,v| {
+                state.box_stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |sto,s,gu,v| {
                     let bx = match f(sto,s,gu,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}

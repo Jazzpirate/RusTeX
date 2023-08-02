@@ -22,7 +22,7 @@ This trait allows us to abstract over the character type, by providing the relev
  */
 pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default + Ord {
     /// The type of the array/vec/whatever of all possible characters. For [`u8`], this is `[A;256]`.
-    type Allchars<A:Default> : AllCharsTrait<Self,A>;
+    type Allchars<A:Default+Clone> : AllCharsTrait<Self,A>;
 
     /// The maximum value of the character type. For [`u8`], this is `255`.
     const MAX:Self;
@@ -93,7 +93,7 @@ thread_local! {
 }
 
 impl CharType for u8 {
-    type Allchars<A:Default> = [A;256];
+    type Allchars<A:Default+Clone> = [A;256];
     const MAX:Self=255;
     fn from_u8_iter(iter: &mut IntoIter<u8>) -> Option<Self> { iter.next() }
     fn newline() -> Self { b'\n' }
@@ -190,7 +190,7 @@ impl CharType for u8 {
 
 /** A trait for arrays of all possible characters. For [`u8`], this is `[A;256]`.
 */
-pub trait AllCharsTrait<C:CharType,A> {
+pub trait AllCharsTrait<C:CharType,A>:Clone {
     /// Returns the value for character `u`.
     fn get(&self, u: C) -> &A;
     /// Sets the value for character `u` to `v`.
@@ -198,7 +198,7 @@ pub trait AllCharsTrait<C:CharType,A> {
     /// Replaces the value for character `u` with `v`, returning the old value.
     fn replace(&mut self, u: C, v:A) -> A;
 }
-impl<A> AllCharsTrait<u8,A> for [A;256] {
+impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
     //#[inline(always)]
     fn get(&self, u:u8) -> &A { &self[u as usize] }
    // #[inline(always)]
@@ -248,7 +248,7 @@ impl<C:CharType> From<Vec<C>> for TeXStr<C> {
 
 impl CharType for char {
     const MAX: Self = 255 as char;
-    type Allchars<A: Default> = AllUnicodeChars<A>; // TODO
+    type Allchars<A: Default+Clone> = AllUnicodeChars<A>; // TODO
     fn from_i64(i: i64) -> Option<Self> { if i > 0 && i < 0x110000 { Some(char::from_u32(i as u32).unwrap()) } else { None } }
     fn to_usize(self) -> usize { self as usize }
     fn from_str(s: &str) -> TeXStr<Self> {
@@ -304,8 +304,9 @@ impl CharType for char {
     }
 }
 
+#[derive(Clone)]
 pub struct AllUnicodeChars<A:Default>(PhantomData<A>);
-impl<A:Default> AllCharsTrait<char,A> for AllUnicodeChars<A> {
+impl<A:Default+Clone> AllCharsTrait<char,A> for AllUnicodeChars<A> {
     fn get(&self, u: char) -> &A {
         todo!()
     }

@@ -97,13 +97,14 @@ impl TeXNode for StandardTeXNode {
     type Bx = StandardTeXBox;
 }
 
+#[derive(Clone)]
 pub enum OpenBox<ET:EngineType> {
     Top { list: Vec<StomachNode<ET>> },
     Paragraph { list: Vec<StomachNode<ET>> },
     Box {
         mode:BoxMode,
         list:Vec<StomachNode<ET>>,
-        on_close: Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) ->Option<StomachNode<ET>>>
+        on_close: Ptr<dyn Fn(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) ->Option<StomachNode<ET>>>
     },
 }
 impl<ET:EngineType> OpenBox<ET> {

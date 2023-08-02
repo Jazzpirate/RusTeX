@@ -24,6 +24,7 @@ use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 /// Either a [`TokenSource`] or a [`StringSource`]
+#[derive(Clone)]
 pub enum TeXMouthSource<T:Token> {
     Token(TokenSource<T>),
     /// Only because of `\noexpand`, which sets the [`Command`](crate::tex::commands::Command)
@@ -33,6 +34,7 @@ pub enum TeXMouthSource<T:Token> {
 }
 
 /// A [`TokenSource`] is essentially a pretokenized [`Token`] list
+#[derive(Clone)]
 pub struct TokenSource<T:Token>(IntoIter<T>);
 impl<T:Token> TokenSource<T> {
     pub(crate) fn new(ls:Vec<T>) -> Self { Self(ls.into_iter()) }
@@ -45,7 +47,7 @@ impl<T:Token> TokenSource<T> {
 }
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
-pub trait Mouth<T:Token>:Sized+'static {
+pub trait Mouth<T:Token>:Sized+ Clone +'static {
     fn new() -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
@@ -125,6 +127,7 @@ pub trait Mouth<T:Token>:Sized+'static {
     }
 }
 
+#[derive(Clone)]
 pub struct StandardMouth<T:Token>{ sources:Vec<TeXMouthSource<T>>,buffer:Option<T>}
 
 impl<T:Token> Mouth<T> for StandardMouth<T> {

@@ -20,7 +20,7 @@ pub mod fields;
 pub mod modes;
 
 /// A TeX state
-pub trait State<ET:EngineType<State=Self>>:Sized+'static {
+pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     /// Should be called at the start of a new job with the jobname (name of the main file)
     fn set_job(&mut self, jobname:String);
 
@@ -187,6 +187,7 @@ pub trait State<ET:EngineType<State=Self>>:Sized+'static {
     fn set_current_font(&mut self, index:usize, globally:bool);
 }
 
+#[derive(Clone)]
 pub struct TeXState<ET:EngineType<State=Self>> {
     filesystem:ET::FileSystem,
     out_files:Vec<Option<ET::File>>,

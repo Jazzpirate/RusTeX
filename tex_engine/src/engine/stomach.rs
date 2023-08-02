@@ -12,10 +12,10 @@ use crate::utils::map::Map;
 
 type StomachFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, &mut ET::Stomach, StomachCommand<ET::Token>, bool) -> Result<(),ErrorInPrimitive<ET::Token>>;
 type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,&mut ET::Stomach,StomachCommand<ET::Token>) -> Result<Whatsit<ET>,ErrorInPrimitive<ET::Token>>;
-pub type BoxReturn<ET:EngineType> = Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<HVBox<ET>>>;
+pub type BoxReturn<ET:EngineType> = Box<dyn Fn(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<HVBox<ET>>>;
 type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,&mut ET::Stomach,StomachCommand<ET::Token>) -> Result<BoxReturn<ET> ,ErrorInPrimitive<ET::Token>>;
 
-pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized+'static {
+pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn register_primitive(&mut self, name:&'static str, cmd: StomachFun<ET>) -> usize;
     fn register_whatsit(&mut self,name:&'static str,cmd:WhatsitFun<ET>) -> usize;
     fn register_open_box(&mut self,name:&'static str,cmd:BoxFun<ET>) -> usize;
@@ -75,6 +75,7 @@ pub struct ShipoutDefaultStomach<T:Token,S:State<T>,Gu:Gullet<T>,B: TeXNode>{
 
  */
 
+#[derive(Clone)]
 pub struct NoShipoutDefaultStomach<ET:EngineType>{
     commands:Map<StomachFun<ET>>,
     whatsit_cmds:Map<WhatsitFun<ET>>,

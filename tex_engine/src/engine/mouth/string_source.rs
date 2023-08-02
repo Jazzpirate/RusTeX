@@ -22,6 +22,7 @@ enum MouthState {
     /// In the middle of a line
     M
 }
+#[derive(Clone)]
 pub struct StringSourceState<C:CharType> {
     state : MouthState,
     line : usize,
@@ -455,6 +456,7 @@ impl<C:CharType> StringSourceState<C> {
 }
 
 /// A [`StringSource`] is the primary [`TokenSource`](crate::engine::mouth::TeXMouthSource) for TeX, which reads from a [`String`]
+#[derive(Clone)]
 pub struct StringSource<C:CharType> {
     pub(crate) state:StringSourceState<C>,
     pub source:Option<Ptr<String>>

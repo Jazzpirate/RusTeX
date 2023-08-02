@@ -39,7 +39,7 @@ pub trait File<Char:CharType>:Clone {
     fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>>;
 }
 
-pub trait FileSystem<Char:CharType>:'static {
+pub trait FileSystem<Char:CharType>:Clone + 'static {
     type F:File<Char>;
     fn new(pwd:PathBuf) -> Self;
     fn get(&mut self,path:&str) -> Self::F;
@@ -154,6 +154,7 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
     }
 }
 
+#[derive(Clone)]
 pub struct KpsePhysicalFileSystem<Char:CharType> {kpathsea:Kpathsea,phantom:PhantomData<Char>}
 impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
     type F = Ptr<PhysicalFile<Char>>;
@@ -166,6 +167,7 @@ impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
     }
 }
 
+#[derive(Clone)]
 pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,Ptr<VirtualFile<Char>>>}
 impl<Char:CharType> KpsePhysicalFileSystem<Char> {
     pub fn kpsewhich(&self, path: &str) -> KpseResult {

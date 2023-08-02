@@ -10,6 +10,8 @@ use crate::utils::map::{HMap, HSet};
 /// A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
 /// `TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].
 /// and lazily computed on first use.
+
+#[derive(Clone)]
 pub struct Kpathsea {pub pwd:PathBuf,local:Vec<PathBuf>,global:Arc<KpathseaBase>}
 impl Kpathsea {
     /// Create a new [`Kpathsea`] instance with the given working directory.
@@ -75,8 +77,7 @@ pub struct KpseResult {
     pub local : bool
 }
 
-
-
+#[derive(Clone)]
 pub struct KpathseaBase {
     set: Vec<PathBuf>,
     recdot:bool

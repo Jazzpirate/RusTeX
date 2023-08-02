@@ -26,7 +26,7 @@ pub trait StateField {
 /** A field consisting of a single value; e.g. [`endlinechar`](crate::engine::state::State::get_endlinechar),
   [`newlinechar`](crate::engine::state::State::get_newlinechar),...
 */
-#[derive(Default)]
+#[derive(Default,Clone)]
 pub struct SingleValueField<V>(V,Vec<Option<V>>);
 
 impl<V> SingleValueField<V> {
@@ -73,6 +73,7 @@ pub trait KeyValueField<K,V>: StateField {
 
 /// An Array/Vec of Characters with associated values of type A; e.g.
 /// [`ucchar`](crate::engine::state::State::get_uccode), [`catcode`](crate::engine::state::State::get_catcode_scheme) etc.
+#[derive(Clone)]
 pub struct CharField<C:CharType,A:Clone+Default>{pub charfield: C::Allchars<A>, changes: Vec<BTreeMap<C,A>>}
 impl<C:CharType,A:Clone+Default> StateField for CharField<C,A> {
     fn push_stack(&mut self) { self.changes.push(BTreeMap::default()) }
@@ -115,6 +116,7 @@ impl<C:CharType,A:Clone+Default> CharField<C,A> {
     pub fn new(initial: C::Allchars<A>) -> Self { CharField{charfield:initial, changes:Vec::new()} }
 }
 
+#[derive(Clone)]
 pub struct BoxField<ET:EngineType>(Vec<HVBox<ET>>,Vec<BTreeMap<usize,HVBox<ET>>>);
 impl <ET:EngineType> BoxField<ET> {
     pub fn push_stack(&mut self) { self.1.push(BTreeMap::default()) }
@@ -177,6 +179,8 @@ impl <ET:EngineType> BoxField<ET> {
 }
 
 /// A Vec of values of type A; e.g. [`intregisters`](crate::engine::state::State::get_int_register),
+
+#[derive(Clone)]
 pub struct VecField<V:Default>(Vec<V>, Vec<BTreeMap<usize,V>>);
 impl<V:Default+Clone> VecField<V> {
     /// initializes a new [`VecField`].
@@ -267,6 +271,7 @@ impl<A> IsDefault for Vec<A> {
 }
 
 /// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::Command)s,
+#[derive(Clone)]
 pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HMap<K,V>, Vec<BTreeMap<K,V>>);
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
     /// initializes a new [`HashMapField`].
