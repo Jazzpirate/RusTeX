@@ -14,7 +14,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::boxes::{HVBox, OpenBox, TeXNode};
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, NumSet, Skip};
-use crate::utils::Ptr;
+use crate::utils::{Pool, Ptr};
 
 pub mod fields;
 pub mod modes;
@@ -185,10 +185,14 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn get_current_font(&self) -> usize;
     /// set the current font
     fn set_current_font(&mut self, index:usize, globally:bool);
+
+    fn pool(&self) -> &Pool<ET::Token>;
+    fn pool_mut(&mut self) -> &mut Pool<ET::Token>;
 }
 
 #[derive(Clone)]
 pub struct TeXState<ET:EngineType<State=Self>> {
+    pool:Pool<ET::Token>,
     filesystem:ET::FileSystem,
     out_files:Vec<Option<ET::File>>,
     in_files:Vec<Option<ET::File>>,
@@ -239,6 +243,7 @@ use crate::utils::strings::CharType;
 impl<ET:EngineType<State=Self>> TeXState<ET> {
     pub fn new(fs:ET::FileSystem,fontstore:ET::FontStore,outputs:Outputs) -> Self {
         let mut state = Self {
+            pool:Pool::new(),
             filesystem:fs,
             out_files:vec!(),
             in_files:vec!(),
@@ -304,6 +309,12 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
     }
 }
 impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
+    fn pool(&self) -> &Pool<ET::Token> {
+        &self.pool
+    }
+    fn pool_mut(&mut self) -> &mut Pool<ET::Token> {
+        &mut self.pool
+    }
     fn get_current_font(&self) -> usize {
         *self.current_font.get()
     }

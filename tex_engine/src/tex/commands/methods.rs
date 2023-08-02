@@ -7,7 +7,7 @@ use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{catch_prim, ErrorInPrimitive, file_end_prim, TeXError, UnexpectedEndgroup};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
-use crate::utils::Ptr;
+use crate::utils::{Pool, Ptr};
 
 #[macro_export]
 macro_rules! cmtodo {
@@ -362,7 +362,7 @@ pub fn assign_primitive_toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET:
         })
     }
     let mut tks = vec!();
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| tks.push(t)) => (name,cmd));
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| tks.push(t)) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(tks.clone()));
     state.set_primitive_toks(name,tks,global);
     Ok(())
@@ -390,7 +390,7 @@ macro_rules! expected_def {
     }
 }
 
-pub fn exand_def<ET:EngineType>(d: &Def<ET::Token>, state:&ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<ET::Token>>, cause:Ptr<ET::Token>)
+pub fn exand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<ET::Token>>, cause:Ptr<ET::Token>)
     -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cause,d,mouth.preview(150).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -420,10 +420,10 @@ pub fn exand_def<ET:EngineType>(d: &Def<ET::Token>, state:&ET::State, mouth:&mut
 
     // The general case:
     // We parse the arguments according to the signature
-    let args = catch_def!(read_arguments::<ET>(d,mouth,state,&cause) => (d,cause));
+    catch_def!(read_arguments::<ET>(d,mouth,state,&cause) => (d,cause));
 
     // Now we have all the arguments, so we can expand the replacement
-    Ok(replace(d,args,cause,cmd))
+    Ok(replace(d,cause,cmd,state.pool_mut()))
 }
 
 fn expand_simple<T:Token>(d:&Def<T>, token:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T> {
@@ -440,9 +440,11 @@ fn expand_simple<T:Token>(d:&Def<T>, token:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T
 
 use arrayvec::ArrayVec;
 
-fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&ET::State, cause:&ET::Token)
-    -> Result<ArrayVec<Vec<ET::Token>,9>,Box<dyn TeXError<ET::Token>>> {
-    let mut args : ArrayVec<Vec<ET::Token>,9> = ArrayVec::new();  //Vec::with_capacity(d.arity as usize);
+fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&mut ET::State, cause:&ET::Token)
+    -> Result<(),Box<dyn TeXError<ET::Token>>> {
+    //let mut args : ArrayVec<Vec<ET::Token>,9> = ArrayVec::new();  //Vec::with_capacity(d.arity as usize);
+    state.pool_mut().clear_args();
+    let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
@@ -457,7 +459,7 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
             }
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
-                    let mut arg = vec!();
+                    argnum += 1;
                     'L: loop {
                         match if d.long {catch_def!({mouth.get_next::<ET>(state)} => (d,cause))}
                         else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
@@ -466,29 +468,27 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                                     mouth.requeue(t);
                                     break 'L;
                                 } else {
-                                    arg.push(t);
+                                    state.pool_mut().arg(argnum-1).push(t);
                                 }
                             }
                             None => file_end_def!(d,cause)
                         }
                     }
-                    args.push(arg)
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
+                    argnum += 1;
                     catch_def!(mouth.skip_whitespace::<ET>(state) => (d,cause));
-                    let mut arg = vec!();
-                    let mut f = |t| arg.push(t);
+                    let mut f = |s:&mut ET::State,t| s.pool_mut().arg(argnum-1).push(t);
                     if d.long {catch_def!(mouth.read_argument::<ET>(state,&mut f) => (d,cause))}
                         else {catch_def!(mouth.read_argument_nopar::<ET>(state,&mut f) => (d,cause))};
-                    args.push(arg);
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
+                    argnum += 1;
                     let mut delims = vec!();
                     while let Some(ParamToken::Token(t)) = iter.peek() {
                         delims.push(t.clone());
                         iter.next();
                     }
-                    let mut arg = vec!();
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
@@ -496,16 +496,17 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                         else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
-                                if arg.len() == 0 {
+                                if state.pool().iter_arg(argnum-1).len() == 0 {
                                     removebraces = Some(-1);
                                 }
-                                arg.push(t);
+                                state.pool_mut().arg(argnum-1).push(t);
                             }
                             Some((t,_)) if t.catcode() == CategoryCode::EndGroup => {
                                 if depth == 0 {
                                     return Err(ErrorInDef{def:d.clone(),cause:(*cause).clone(),source:crate::utils::errors::UnexpectedEndgroup(t).into()}.into())
                                 } else {
                                     depth -= 1;
+                                    let mut arg = state.pool_mut().arg(argnum-1);
                                     arg.push(t);
                                     if depth == 0 {
                                         match removebraces {
@@ -522,6 +523,7 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                                 }
                             }
                             Some((t,_)) => {
+                                let mut arg = state.pool_mut().arg(argnum-1);
                                 arg.push(t);
                                 if depth == 0 && arg.ends_with(delims.as_slice()) {
                                     for _ in 0..delims.len() {
@@ -533,6 +535,7 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                             None => file_end_def!(d,cause)
                         }
                     }
+                    let mut arg = state.pool_mut().arg(argnum-1);
                     match removebraces {
                         Some(i) if i != -1 && arg.len()  == (i as usize) => {
                             arg.remove(0);
@@ -540,29 +543,27 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                         }
                         _ => ()
                     }
-                    args.push(arg);
                 }
             }
         }
     }
-    Ok(args)
+    Ok(())
 }
 
-fn replace<T:Token>(d:&Def<T>, args:ArrayVec<Vec<T>,9>, cause:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T> {
+fn replace<T:Token>(d:&Def<T>, cause:Ptr<T>, cmd:Ptr<Command<T>>,args:&mut Pool<T>) -> Vec<T> {
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");
-        for i in &args {
-            debug_log!(debug=>"  - {}",TokenList(i.clone()));
+        for i in 0..d.arity {
+            debug_log!(debug=>"  - {}",TokenList(args.arg(i).clone()));
         }
     }
-    let mut result: Vec<T> = vec!();
+    let mut result: Vec<T> = Vec::with_capacity(32);
     let mut replacement = d.replacement.iter();
     while let Some(next) = replacement.next() {
         match next {
             ExpToken::Param(_,idx) => {
-                let argls:&Vec<T> = unsafe { args.get_unchecked(*idx as usize) }; // safe because otherwise `\def` would have failed
-                for t in argls {
+                for t in args.iter_arg(*idx as usize) {
                     result.push(t.with_ref(&cause, &cmd))
                 }
             }

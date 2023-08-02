@@ -110,19 +110,19 @@ pub trait Mouth<T:Token>:Sized+ Clone +'static {
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    fn read_argument<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State,f:&mut dyn FnMut(T)) -> Result<(),Box<dyn TeXError<T>>> {
+    fn read_argument<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,T)) -> Result<(),Box<dyn TeXError<T>>> {
         methods::read_argument::<ET>(self,state,f)
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn read_argument_nopar<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State,f:&mut dyn FnMut(T)) -> Result<(),Box<dyn TeXError<T>>> {
+    fn read_argument_nopar<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,T)) -> Result<(),Box<dyn TeXError<T>>> {
         methods::read_argument_nopar::<ET>(self,state,f)
     }
 
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
-    fn read_until_endgroup<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State,f:&mut dyn FnMut(T)) -> Result<(),Box<dyn TeXError<T>>> {
+    fn read_until_endgroup<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,T)) -> Result<(),Box<dyn TeXError<T>>> {
         methods::read_until_endgroup::<ET>(self,state,f)
     }
 }

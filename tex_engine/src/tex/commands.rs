@@ -173,7 +173,7 @@ impl<T:Token> Def<T>{
     /// token that triggered the expansion, used for constructing the
     /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
     /// error messages.
-    pub fn expand<ET:EngineType<Token=T>>(&self, state:&ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+    pub fn expand<ET:EngineType<Token=T>>(&self, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
         methods::exand_def::<ET>(self,state,mouth,cmd,cause)
     }
 }

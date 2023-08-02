@@ -223,7 +223,7 @@ pub fn assign_toks_register<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::
         }.into())
     }
     let mut tks = vec!();
-    catch!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| tks.push(t)) => cmd.cause);
+    catch!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| tks.push(t)) => cmd.cause);
     debug_log!(debug=>"\\toks{} = {:?}",u,TokenList(tks.clone()));
     state.set_toks_register(u,tks,global);
     Ok(())

@@ -45,18 +45,18 @@ pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Res
 }
 
 /// Default implementation for [`Mouth::read_argument`]
-pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State,f:&mut dyn FnMut(ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
     match mouth.get_next::<ET>(state)? {
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => read_until_endgroup::<ET>(mouth,state,f),
         Some((o,_)) => {
-            f(o);
+            f(state,o);
             Ok(())
         }
     }
 }
 
-pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State,f:&mut dyn FnMut(ET::Token))
+pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,ET::Token))
     -> Result<(),Box<dyn TeXError<ET::Token>>> {
     match mouth.get_next::<ET>(state)? {
         None => file_end!(),
@@ -73,20 +73,20 @@ pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State
                         return Err(OtherError{msg:format!("Paragraph ended while reading argument"),cause:Some(t),source:None}.into()),
                     _ => ()
                 }
-                f(tk);
+                f(state,tk);
             }
             file_end!()
         }
         Some((t,_)) if t.catcode() == CategoryCode::EOF => file_end!(),
         Some((o,_)) => {
-            f(o);
+            f(state,o);
             Ok(())
         }
     }
 }
 
 /// Default implementation for [`Mouth::read_until_endgroup`]
-pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&ET::State,f:&mut dyn FnMut(ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
     let mut depth = 1;
     while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
         match tk.catcode() {
@@ -98,7 +98,7 @@ pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&ET::Stat
             CategoryCode::EOF => file_end!(),
             _ => ()
         }
-        f(tk);
+        f(state,tk);
     }
     file_end!()
 }

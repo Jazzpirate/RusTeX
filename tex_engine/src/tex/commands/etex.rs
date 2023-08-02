@@ -372,7 +372,7 @@ pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
         }
     }
     let mut v = vec!();
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| v.push(t)) => ("unexpanded",cmd));
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| v.push(t)) => ("unexpanded",cmd));
     Ok(v)
 }
 
