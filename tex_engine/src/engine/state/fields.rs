@@ -4,8 +4,9 @@
   Most fields are [`KeyValueField`]s which map Keys of some type `K` to some value of type `V`.
  */
 
+use std::collections::BTreeMap;
 use crate::utils::strings::{AllCharsTrait, CharType};
-use std::collections::hash_map::Entry;
+use std::collections::btree_map::Entry;
 use std::hash::Hash;
 use crate::engine::EngineType;
 use crate::tex::boxes::HVBox;
@@ -72,9 +73,9 @@ pub trait KeyValueField<K,V>: StateField {
 
 /// An Array/Vec of Characters with associated values of type A; e.g.
 /// [`ucchar`](crate::engine::state::State::get_uccode), [`catcode`](crate::engine::state::State::get_catcode_scheme) etc.
-pub struct CharField<C:CharType,A:Clone+Default>{pub charfield: C::Allchars<A>, changes: Vec<HMap<C,A>>}
+pub struct CharField<C:CharType,A:Clone+Default>{pub charfield: C::Allchars<A>, changes: Vec<BTreeMap<C,A>>}
 impl<C:CharType,A:Clone+Default> StateField for CharField<C,A> {
-    fn push_stack(&mut self) { self.changes.push(HMap::default()) }
+    fn push_stack(&mut self) { self.changes.push(BTreeMap::default()) }
     fn pop_stack(&mut self) {
         if let Some(m) = self.changes.pop() {
             for (k,v) in m {
@@ -114,9 +115,9 @@ impl<C:CharType,A:Clone+Default> CharField<C,A> {
     pub fn new(initial: C::Allchars<A>) -> Self { CharField{charfield:initial, changes:Vec::new()} }
 }
 
-pub struct BoxField<ET:EngineType>(Vec<HVBox<ET>>,Vec<HMap<usize,HVBox<ET>>>);
+pub struct BoxField<ET:EngineType>(Vec<HVBox<ET>>,Vec<BTreeMap<usize,HVBox<ET>>>);
 impl <ET:EngineType> BoxField<ET> {
-    pub fn push_stack(&mut self) { self.1.push(HMap::default()) }
+    pub fn push_stack(&mut self) { self.1.push(BTreeMap::default()) }
     pub fn pop_stack(&mut self) {
         if let Some(m) = self.1.pop() {
             for (k,v) in m {
@@ -176,7 +177,7 @@ impl <ET:EngineType> BoxField<ET> {
 }
 
 /// A Vec of values of type A; e.g. [`intregisters`](crate::engine::state::State::get_int_register),
-pub struct VecField<V:Default>(Vec<V>, Vec<HMap<usize,V>>);
+pub struct VecField<V:Default>(Vec<V>, Vec<BTreeMap<usize,V>>);
 impl<V:Default+Clone> VecField<V> {
     /// initializes a new [`VecField`].
     //#[inline(always)]
@@ -193,7 +194,7 @@ impl<V:Default+Clone> VecField<V> {
     }
 }
 impl<V:Default+Clone> StateField for VecField<V> {
-    fn push_stack(&mut self) { self.1.push(HMap::default()) }
+    fn push_stack(&mut self) { self.1.push(BTreeMap::default()) }
     fn pop_stack(&mut self) {
         if let Some(m) = self.1.pop() {
             for (k,v) in m {
@@ -266,7 +267,7 @@ impl<A> IsDefault for Vec<A> {
 }
 
 /// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::Command)s,
-pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HMap<K,V>, Vec<HMap<K,V>>);
+pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HMap<K,V>, Vec<BTreeMap<K,V>>);
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
     /// initializes a new [`HashMapField`].
     //#[inline(always)]
@@ -282,7 +283,7 @@ impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
 }
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> StateField for HashMapField<K,V> {
     // #[inline(always)]
-    fn push_stack(&mut self) { self.1.push(HMap::default()) }
+    fn push_stack(&mut self) { self.1.push(BTreeMap::default()) }
     // #[inline(always)]
     fn pop_stack(&mut self) {
         if let Some(m) = self.1.pop() {
@@ -292,7 +293,7 @@ impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> StateField for HashMapField<K,V>
         }
     }
 }
-impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> KeyValueField<K,V> for HashMapField<K,V> {
+impl<K:Eq+Hash+Clone + Ord,V:Default+Clone+IsDefault> KeyValueField<K,V> for HashMapField<K,V> {
     // #[inline(always)]
     fn get(&self, k: &K) -> V {
         match self.0.get(k) {

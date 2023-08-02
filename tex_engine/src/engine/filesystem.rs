@@ -145,35 +145,7 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         }
 
     }
-    /*
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-        let mut open = self.open.write().unwrap();
-        match &mut *open {
-            None => Err(OtherError{msg:"File not open".to_string(),source:None,cause:None}.into()),
-            Some(m) => {
-                let line = m.line();
-                let mut ret: Vec<T> = vec!();
-                let mut ingroups = 0;
-                loop {
-                    if ingroups != 0 || m.line() == line || ret.is_empty() {
-                        match m.get_next::<T>(cc,endlinechar)? {
-                            None => return Ok(ret),
-                            Some(tk) => {
-                                match tk.base() {
-                                    BaseToken::Char(_,CategoryCode::BeginGroup) => ingroups += 1,
-                                    BaseToken::Char(_,CategoryCode::EndGroup) => ingroups -= 1,
-                                    _ => () // TODO negative ingroups values?
-                                }
-                                ret.push(tk)
-                            }
-                        }
-                    } else { return Ok(ret) }
-                }
-            }
-        }
-    }
 
-     */
     fn write(&self, string: &str) {
         let mut write = self.contents.write().unwrap();
         let mut v = write.as_mut().unwrap();
@@ -193,9 +165,6 @@ impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
         todo!("Physical file system not implemented yet")
     }
 }
-
-// TODO get rid of:
-//pub static UNICODEDATA_TXT : &str = include_str!("../resources/UnicodeData.txt");
 
 pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,Ptr<VirtualFile<Char>>>}
 impl<Char:CharType> KpsePhysicalFileSystem<Char> {
@@ -223,17 +192,6 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
         let ret = self.kpathsea.kpsewhich(path);
         match self.files.entry(ret.path) {
             Entry::Occupied(e) => e.get().clone(),
-            /*Entry::Vacant(e) if e.key().to_str().unwrap().ends_with("UnicodeData.txt") => {
-                // TODO remove
-                let s = UNICODEDATA_TXT.as_bytes().to_vec();
-                let ret = Ptr::new(VirtualFile{
-                    path:e.key().clone(),
-                    contents:RwLock::new(Some(s)),
-                    open:RwLock::new(None)
-                });
-                e.insert(ret.clone());
-                ret
-            }*/
             Entry::Vacant(e) => {
                 let s: Option<Vec<u8>> = self.kpathsea.get(&self.pwd,e.key());
                 let ret = Ptr::new(VirtualFile{

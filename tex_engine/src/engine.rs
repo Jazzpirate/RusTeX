@@ -127,16 +127,16 @@ impl<ET:EngineType> EngineStruct<ET> {
         self.etex();
         Ok(())
     }
-    fn etex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn etex(&mut self) -> Result<(),InitializationError<ET::Token>> {
         tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
         Ok(())
     }
-    fn pdftex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn pdftex(&mut self) -> Result<(),InitializationError<ET::Token>> {
         tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);
         self.init_file("pdftexconfig.tex")
     }
-    fn latex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn latex(&mut self) -> Result<(),InitializationError<ET::Token>> {
         self.init_file("latex.ltx")
     }
     pub fn initialize_pdftex(&mut self) -> Result<(),InitializationError<ET::Token>> {

@@ -20,7 +20,7 @@ Plain TeX parses source files as a sequence of [`u8`]s, but other engines might 
 This trait allows us to abstract over the character type, by providing the relevant data needed to treat them
 (essentially) like [`u8`]s.
  */
-pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default {
+pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default + Ord {
     /// The type of the array/vec/whatever of all possible characters. For [`u8`], this is `[A;256]`.
     type Allchars<A:Default> : AllCharsTrait<Self,A>;
 
@@ -108,7 +108,7 @@ impl CharType for u8 {
         }
     }
     fn from_str(s: &str) -> TeXStr<Self> {
-        TeXStr(Ptr::new(s.as_bytes().to_vec()))
+        TeXStr::new(s.as_bytes().to_vec())
     }
     // #[inline(always)]
     fn is_eol_pair(self, next: Self) -> bool {
@@ -212,9 +212,10 @@ impl<A> AllCharsTrait<u8,A> for [A;256] {
 /** A "string" in TeX is a sequence of characters of some [`CharType`]. [`TeXStr`]
 * abstracts away the character type, e.g. for control sequence names.
 */
-#[derive(Clone,PartialEq,Hash,Eq)]
+#[derive(Clone,PartialEq,Hash,Eq,PartialOrd,Ord)]
 pub struct TeXStr<C:CharType>(Ptr<Vec<C>>);
 impl<C:CharType> TeXStr<C> {
+    pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
     pub fn len(&self) -> usize { self.0.len() }
     pub fn as_vec(&self) -> &Vec<C> { &self.0 }
 }
@@ -229,17 +230,17 @@ impl<C:CharType> Display for TeXStr<C> {
 }
 impl From<&str> for TeXStr<u8> {
     fn from(s: &str) -> Self {
-        TeXStr(Ptr::new(s.as_bytes().to_vec()))
+        TeXStr::new(s.as_bytes().to_vec())
     }
 }
 impl From<String> for TeXStr<u8> {
     fn from(s: String) -> Self {
-        TeXStr(Ptr::new(s.into_bytes()))
+        TeXStr::new(s.into_bytes())
     }
 }
 impl<C:CharType> From<Vec<C>> for TeXStr<C> {
     fn from(v: Vec<C>) -> Self {
-        TeXStr(Ptr::new(v))
+        TeXStr::new(v)
     }
 }
 
@@ -251,7 +252,7 @@ impl CharType for char {
     fn from_i64(i: i64) -> Option<Self> { if i > 0 && i < 0x110000 { Some(char::from_u32(i as u32).unwrap()) } else { None } }
     fn to_usize(self) -> usize { self as usize }
     fn from_str(s: &str) -> TeXStr<Self> {
-        TeXStr(Ptr::new(s.chars().collect()))
+        TeXStr::new(s.chars().collect())
     }
     fn display_str(str: &TeXStr<Self>, f: &mut Formatter<'_>) -> std::fmt::Result {
         let str : String = str.0.iter().collect();
