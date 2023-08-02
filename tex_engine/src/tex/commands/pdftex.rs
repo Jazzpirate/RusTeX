@@ -62,8 +62,8 @@ pub fn pdfglyphtounicode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::G
                                   -> Result<(), ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("pdfglyphtounicode",cmd));
-    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("pdfglyphtounicode",cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state, &mut |_|{}) => ("pdfglyphtounicode",cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_|{}) => ("pdfglyphtounicode",cmd));
     Ok(())
 }
 

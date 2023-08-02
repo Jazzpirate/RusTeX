@@ -222,7 +222,8 @@ pub fn assign_toks_register<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::
             msg:"Begin group token expected".to_string(),cause:Some(cmd.cause),source:None
         }.into())
     }
-    let tks = catch!(gullet.mouth().read_until_endgroup::<ET>(state) => cmd.cause);
+    let mut tks = vec!();
+    catch!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| tks.push(t)) => cmd.cause);
     debug_log!(debug=>"\\toks{} = {:?}",u,TokenList(tks.clone()));
     state.set_toks_register(u,tks,global);
     Ok(())

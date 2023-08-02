@@ -371,7 +371,9 @@ pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
             _ => return Err(ErrorInPrimitive{name:"unexpanded",msg:Some("Expected a begin group after \\unexpanded".to_string()),cause:Some(cmd.cause),source:None})
         }
     }
-    Ok(catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("unexpanded",cmd)))
+    let mut v = vec!();
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| v.push(t)) => ("unexpanded",cmd));
+    Ok(v)
 }
 
 pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {

@@ -45,56 +45,60 @@ pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Res
 }
 
 /// Default implementation for [`Mouth::read_argument`]
-pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
+pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State,f:&mut dyn FnMut(ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
     match mouth.get_next::<ET>(state)? {
         None => file_end!(),
-        Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => read_until_endgroup::<ET>(mouth,state),
-        Some((o,_)) => Ok(vec!(o))
+        Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => read_until_endgroup::<ET>(mouth,state,f),
+        Some((o,_)) => {
+            f(o);
+            Ok(())
+        }
     }
 }
 
-pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State)
-    -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
+pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State,f:&mut dyn FnMut(ET::Token))
+    -> Result<(),Box<dyn TeXError<ET::Token>>> {
     match mouth.get_next::<ET>(state)? {
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
             let mut depth = 1;
-            let mut tks = vec!();
             while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
                 match tk.base() {
                     BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
                     BaseToken::Char(_,CategoryCode::EndGroup) => {
                         depth -= 1;
-                        if depth == 0 { return Ok(tks) }
+                        if depth == 0 { return Ok(()) }
                     },
                     BaseToken::CS(n) if *n == ET::Char::par_token() =>
                         return Err(OtherError{msg:format!("Paragraph ended while reading argument"),cause:Some(t),source:None}.into()),
                     _ => ()
                 }
-                tks.push(tk);
+                f(tk);
             }
             file_end!()
         }
         Some((t,_)) if t.catcode() == CategoryCode::EOF => file_end!(),
-        Some((o,_)) => Ok(vec!(o))
+        Some((o,_)) => {
+            f(o);
+            Ok(())
+        }
     }
 }
 
 /// Default implementation for [`Mouth::read_until_endgroup`]
-pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&ET::State) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
+pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&ET::State,f:&mut dyn FnMut(ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
     let mut depth = 1;
-    let mut tks = Vec::with_capacity(1024);
     while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
         match tk.catcode() {
             CategoryCode::BeginGroup => depth += 1,
             CategoryCode::EndGroup => {
                 depth -= 1;
-                if depth == 0 { return Ok(tks) }
+                if depth == 0 { return Ok(()) }
             },
             CategoryCode::EOF => file_end!(),
             _ => ()
         }
-        tks.push(tk);
+        f(tk);
     }
     file_end!()
 }

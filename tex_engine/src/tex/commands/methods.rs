@@ -361,7 +361,8 @@ pub fn assign_primitive_toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET:
             name,msg:Some("Begin group token expected".to_string()),cause:Some(cmd.cause),source:None
         })
     }
-    let tks = catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => (name,cmd));
+    let mut tks = vec!();
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| tks.push(t)) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(tks.clone()));
     state.set_primitive_toks(name,tks,global);
     Ok(())
@@ -475,8 +476,10 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
                     catch_def!(mouth.skip_whitespace::<ET>(state) => (d,cause));
-                    let arg = if d.long {catch_def!(mouth.read_argument::<ET>(state) => (d,cause))}
-                        else {catch_def!(mouth.read_argument_nopar::<ET>(state) => (d,cause))};
+                    let mut arg = vec!();
+                    let mut f = |t| arg.push(t);
+                    if d.long {catch_def!(mouth.read_argument::<ET>(state,&mut f) => (d,cause))}
+                        else {catch_def!(mouth.read_argument_nopar::<ET>(state,&mut f) => (d,cause))};
                     args.push(arg);
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument

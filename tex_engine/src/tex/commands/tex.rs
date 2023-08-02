@@ -1108,7 +1108,7 @@ pub fn hyphenation<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet,
                                -> Result<(), ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\hyphenation");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("hyphenation",cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_| {}) => ("hyphenation",cmd));
     Ok(())
 }
 
@@ -2185,7 +2185,7 @@ pub fn patterns<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, st
                              -> Result<(), ErrorInPrimitive<ET::Token>> {
     debug_log!(trace=>"\\patterns");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state) => ("patterns",cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_| {}) => ("patterns",cmd));
     Ok(())
 }
 
@@ -2649,7 +2649,8 @@ pub fn toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Expected begin group token after \\toks, got: {}",o)),cause:Some(cmd.cause),source:None})
     }
-    let v = catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("toks",cmd));
+    let mut v = vec!();
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| v.push(t)) => ("toks",cmd));
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(v.clone()));
     state.set_toks_register(i,v,global);
     Ok(())
@@ -2768,7 +2769,8 @@ pub fn write<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stoma
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => return Err(ErrorInPrimitive{name:"write",msg:Some(format!("Expected begin group token after \\write, got: {}",o)),cause:Some(cmd.cause),source:None})
     }
-    let mut tks = catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state) => ("write",cmd));
+    let mut tks = vec!();
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |t| tks.push(t)) => ("write",cmd));
 
     let apply = Box::new(move |_stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet| {
         tks.push(ET::Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
