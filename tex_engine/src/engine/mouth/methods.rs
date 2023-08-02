@@ -80,12 +80,10 @@ pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State
     }
 }
 
-
-
 /// Default implementation for [`Mouth::read_until_endgroup`]
 pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&ET::State) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
     let mut depth = 1;
-    let mut tks = Vec::with_capacity(500);
+    let mut tks = Vec::with_capacity(1024);
     while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
         match tk.catcode() {
             CategoryCode::BeginGroup => depth += 1,

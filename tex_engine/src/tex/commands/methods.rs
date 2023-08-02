@@ -437,9 +437,11 @@ fn expand_simple<T:Token>(d:&Def<T>, token:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T
     result
 }
 
+use arrayvec::ArrayVec;
+
 fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&ET::State, cause:&ET::Token)
-    -> Result<Vec<Vec<ET::Token>>,Box<dyn TeXError<ET::Token>>> {
-    let mut args : Vec<Vec<ET::Token>> = Vec::with_capacity(d.arity as usize);
+    -> Result<ArrayVec<Vec<ET::Token>,9>,Box<dyn TeXError<ET::Token>>> {
+    let mut args : ArrayVec<Vec<ET::Token>,9> = ArrayVec::new();  //Vec::with_capacity(d.arity as usize);
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
@@ -543,7 +545,7 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
     Ok(args)
 }
 
-fn replace<T:Token>(d:&Def<T>, args:Vec<Vec<T>>, cause:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T> {
+fn replace<T:Token>(d:&Def<T>, args:ArrayVec<Vec<T>,9>, cause:Ptr<T>, cmd:Ptr<Command<T>>) -> Vec<T> {
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");
