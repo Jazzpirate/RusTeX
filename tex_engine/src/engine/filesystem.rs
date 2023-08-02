@@ -35,7 +35,7 @@ pub trait File<Char:CharType>:Clone {
     fn close_out(&self);
     fn close_in(&self);
     fn write(&self,string:&str);
-    fn eof(&self) -> bool;
+    fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
     fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>>;
 }
 
@@ -77,7 +77,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn close_out(&self) {
         todo!("Physical file system not implemented yet")
     }
-    fn eof(&self) -> bool {
+    fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
         todo!("Physical file system not implemented yet")
     }
     fn open_in(&self) {
@@ -110,19 +110,21 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
     fn open_in(&self) {
         let w = self.contents.read().unwrap();
         let mut open = self.open.write().unwrap();
-        let v = match &*w {
-            None => vec!(),
-            Some(v) => v.clone()
+        let (v,eof) = match &*w {
+            None => (vec!(),true),
+            Some(v) => (v.clone(),false)
         };
-        *open = Some(StringSource::new(v,Some(Ptr::new(self.path.to_str().unwrap().to_string()))));
+        let mut ss = StringSource::new(v,Some(Ptr::new(self.path.to_str().unwrap().to_string())));
+        ss.state.eof = eof;
+        *open = Some(ss);
     }
     fn close_in(&self) {
         let mut open = self.open.write().unwrap();
         *open = None;
     }
-    fn eof(&self) -> bool {
+    fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
         let mut open = self.open.write().unwrap();
-        open.as_mut().unwrap().eof()//.peek().is_none()
+        open.as_mut().unwrap().eof::<ET>(state)//.peek().is_none()
     }
     fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
         let mut open = self.open.write().unwrap();

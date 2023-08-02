@@ -55,7 +55,7 @@ pub trait Engine<ET:EngineType> {
         let file = comps.state.filesystem().get(s);
         let old = comps.state.filesystem().set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.gullet.mouth().push_file(&file);
-        comps.state.set_job(s.to_string());
+        comps.state.set_job(file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         let state = &mut comps.state;
         let gullet = &mut comps.gullet;
         // should not produce any boxes, so loop until file end
@@ -67,7 +67,7 @@ pub trait Engine<ET:EngineType> {
         debug!("Running file {:?}",s);
         let mut ret = vec!();
         let comps = self.components_mut();
-        comps.state.set_job(s.file_name().unwrap().to_str().unwrap().to_string());
+        comps.state.set_job(s.with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         let file = comps.state.filesystem().get(s.to_str().unwrap());
         comps.gullet.mouth().push_file(&file);
         let state = &mut comps.state;

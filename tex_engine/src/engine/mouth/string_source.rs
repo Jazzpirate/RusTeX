@@ -4,6 +4,8 @@
 
 use std::vec::IntoIter;
 use crate::debug_log;
+use crate::engine::EngineType;
+use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::InvalidCharacter;
@@ -26,7 +28,7 @@ pub struct StringSourceState<C:CharType> {
     col : usize,
     string:IntoIter<u8>,
     charbuffer:Vec<(C, usize, usize)>,
-    eof:bool
+    pub(crate) eof:bool
 }
 impl<C:CharType> StringSourceState<C> {
     pub fn new(string: Vec<u8>) -> StringSourceState<C> {
@@ -249,10 +251,12 @@ impl<C:CharType> StringSourceState<C> {
         match self.next_char(cc,endline) {
             Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
                 self.charbuffer.push((a,l,c));
+                self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
                 (BaseToken::CS(C::empty_str()),line, col)
             }
             None => {
+                self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
                 (BaseToken::CS(C::empty_str()), line, col)
             }
@@ -262,6 +266,11 @@ impl<C:CharType> StringSourceState<C> {
                 let mut v = vec!(a);
                 loop {
                     match self.next_char(cc,endline) {
+                        Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
+                            self.charbuffer.push((a,l,c));
+                            self.state = MouthState::N;
+                            break
+                        }
                         Some((b,_,_)) if *cc.get(b) == Letter => v.push(b),
                         Some(o) => {
                             self.charbuffer.push(o);
@@ -382,6 +391,7 @@ impl<C:CharType> StringSourceState<C> {
         let currline = self.line;
         while let Some((next,l,c)) = self.next_char(cc,endline) {
             if l != currline {
+                self.state = MouthState::N;
                 self.charbuffer.push((next,l,c));
                 return Ok(())
             }
@@ -390,6 +400,7 @@ impl<C:CharType> StringSourceState<C> {
                 Comment => {
                     self.skip_line();
                     if done {
+                        self.state = MouthState::N;
                         return Ok(())
                     }
                     return self.read(cc,endline,f)
@@ -399,7 +410,6 @@ impl<C:CharType> StringSourceState<C> {
                     return Err(InvalidCharacter(next))
                 }
                 EOL => {
-                    self.state = MouthState::N;
                     if done {
                         return Ok(())
                     }
@@ -408,9 +418,7 @@ impl<C:CharType> StringSourceState<C> {
                 Space => {
                     match self.state {
                         MouthState::S => (),
-                        MouthState::N => {
-                            self.state = MouthState::S;
-                        }
+                        MouthState::N => (),
                         _ => {
                             self.state = MouthState::S;
                             f(T::new(BaseToken::Char(next,Space),None));
@@ -431,11 +439,24 @@ impl<C:CharType> StringSourceState<C> {
         }
         Ok(())
     }
+
+    pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool {
+        match self.charbuffer.last() {
+            Some(_) => false,
+            None => match self.next_char(state.get_catcode_scheme(), state.get_endlinechar()) {
+                None => true,
+                Some((c, l, co)) => {
+                    self.charbuffer.push((c, l, co));
+                    false
+                }
+            }
+        }
+    }
 }
 
 /// A [`StringSource`] is the primary [`TokenSource`](crate::engine::mouth::TeXMouthSource) for TeX, which reads from a [`String`]
 pub struct StringSource<C:CharType> {
-    state:StringSourceState<C>,
+    pub(crate) state:StringSourceState<C>,
     pub source:Option<Ptr<String>>
 }
 impl<C:CharType> StringSource<C> {
@@ -457,7 +478,7 @@ impl<C:CharType> StringSource<C> {
     pub fn column(&self) -> usize { self.state.col }
 
     pub fn preview(&self) -> String { self.state.preview() }
-    pub fn eof(&self) -> bool { self.state.string.clone().next().is_none() }
+    pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
     pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<T>> {
         match self.state.get_next_valid(cc, endline)? {

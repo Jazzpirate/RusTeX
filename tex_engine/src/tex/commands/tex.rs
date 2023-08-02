@@ -1255,7 +1255,7 @@ pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Gull
         None => return Err(ErrorInPrimitive{name:"ifeof",msg:Some(format!("No in file open at index: {}",i)),cause:Some(cmd.cause),source:None}.into()),
         Some(f) => f
     };
-    Ok(f.eof())
+    Ok(f.eof::<ET>(state))
 }
 
 pub fn ifhmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
@@ -2205,8 +2205,14 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
         return Err(ErrorInPrimitive{name:"read",msg:Some("Expected 'to' after \\read".to_string()),cause:Some(cmd.cause),source:None})
     }
     let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("read",cmd));
-    let ret = catch_prim!(file.read::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar()) => ("read",cmd));
+    let mut ret = catch_prim!(file.read::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar()) => ("read",cmd));
     debug_log!(trace=>"read: {} = {}",newcmd,TokenList(ret.clone()));
+    if ret.is_empty() {
+        match state.get_endlinechar() {
+            None => (),
+            Some(c) => ret.push(ET::Token::new(BaseToken::Char(c,*state.get_catcode_scheme().get(c)),None))
+        }
+    }
 
 /*
     if TokenList(ret.clone()).to_string().starts_with("102A0;CARIAN LETTER A") {
