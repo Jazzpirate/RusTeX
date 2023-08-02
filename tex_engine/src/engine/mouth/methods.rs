@@ -59,7 +59,7 @@ pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
             let mut depth = 1;
-            let mut tks = Vec::with_capacity(50); // seems to speed things up
+            let mut tks = vec!();
             while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
                 match tk.base() {
                     BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
@@ -83,7 +83,7 @@ pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State
 /// Default implementation for [`Mouth::read_until_endgroup`]
 pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&ET::State) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
     let mut depth = 1;
-    let mut tks = Vec::with_capacity(50); // seems to speed things up
+    let mut tks = vec!();
     while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
         match tk.catcode() {
             CategoryCode::BeginGroup => depth += 1,

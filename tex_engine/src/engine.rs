@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{Gullet, TeXGullet};
-use crate::engine::mouth::{Mouth, NoTracingMouth, TracingMouth};
+use crate::engine::mouth::{Mouth, StandardMouth};
 use crate::engine::state::{State, TeXState};
 use crate::engine::stomach::{Stomach, NoShipoutDefaultStomach};
 use crate::tex;

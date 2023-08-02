@@ -66,7 +66,7 @@ pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
     -> Result<(bool,u8,Vec<ParamToken<ET::Token>>),ErrorInPrimitive<ET::Token>> {
     let mouth = gullet.mouth();
     let mut arity : u8 = 0;
-    let mut params : Vec<ParamToken<ET::Token>> = Vec::with_capacity(10);
+    let mut params : Vec<ParamToken<ET::Token>> = vec!();
     while let Some((next,_)) = catch_prim!(mouth.get_next::<ET>(state) => (name,cmd)) {
         match next.base() {
             BaseToken::Char(_,CategoryCode::Parameter) => {
@@ -454,7 +454,7 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
             }
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
-                    let mut arg = Vec::with_capacity(50); // seems to speed things up
+                    let mut arg = vec!();
                     'L: loop {
                         match if d.long {catch_def!({mouth.get_next::<ET>(state)} => (d,cause))}
                         else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
@@ -478,12 +478,12 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                     args.push(arg);
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
-                    let mut delims = Vec::with_capacity(10);
+                    let mut delims = vec!();
                     while let Some(ParamToken::Token(t)) = iter.peek() {
                         delims.push(t.clone());
                         iter.next();
                     }
-                    let mut arg = Vec::with_capacity(50);
+                    let mut arg = vec!();
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
@@ -551,7 +551,7 @@ fn replace<T:Token>(d:&Def<T>, args:Vec<Vec<T>>, cause:Ptr<T>, cmd:Ptr<Command<T
             debug_log!(debug=>"  - {}",TokenList(i.clone()));
         }
     }
-    let mut result: Vec<T> = Vec::with_capacity(2*d.replacement.len()); // heuristic
+    let mut result: Vec<T> = vec!();
     let mut replacement = d.replacement.iter();
     while let Some(next) = replacement.next() {
         match next {

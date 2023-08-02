@@ -185,7 +185,7 @@ macro_rules! expand_group_with_unknowns {
 
 pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<TeXStr<ET::Char>,Box<dyn TeXError<ET::Token>>> {
     debug_log!(trace=>"Reading string {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    let mut ret: Vec<ET::Char> = Vec::with_capacity(50); // seems to speed things up
+    let mut ret: Vec<ET::Char> = vec!();
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let mut quoted = false;
     while let Some((tk,_)) = gullet.mouth().get_next::<ET>(state)? {
@@ -257,7 +257,7 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
 
 
 pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<Vec<u8>,Box<dyn TeXError<ET::Token>>> {
-    let mut ret = Vec::with_capacity(50); // seems to speed things up
+    let mut ret = vec!();
     let esc = state.get_escapechar();
     expand_group_without_unknowns!(state,gullet,return Ok(ret),(tk,expand,cmd) =>
         for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
@@ -292,7 +292,7 @@ pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::
 }
 
 pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, expand_protected:bool, keep_the:bool, err_on_unknowns:bool) -> Result<Vec<ET::Token>,Box<dyn TeXError<ET::Token>>> {
-    let mut tks = Vec::with_capacity(50); // seems to speed things up
+    let mut tks = vec!();
     if err_on_unknowns {
         expand_group_without_unknowns!(state,gullet,return Ok(tks),(tk,expand,cmd) => tks.push(tk);
             Command::Gullet {name:"the",..} if keep_the => todo!("'the' in expansion"),

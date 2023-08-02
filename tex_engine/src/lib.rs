@@ -54,7 +54,7 @@ mod tests {
     use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
     use log::{error, warn, info, debug, trace};
     use crate::engine::gullet::TeXGullet;
-    use crate::engine::mouth::TracingMouth;
+    use crate::engine::mouth::StandardMouth;
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
@@ -162,14 +162,14 @@ mod tests {
             type MuStretchShrinkDim = MuFill;
             type Numbers = DefaultNumSet;
             type State = TeXState<Self>;
-            type Mouth = TracingMouth<u8>;
+            type Mouth = StandardMouth<u8>;
             type Gullet = TeXGullet<Self>;
             type Stomach = NoShipoutDefaultStomach<Self>;
         }
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new();
         let state = TeXState::new(fs,fonts,outputs.clone());
-        let mouth = TracingMouth::new();
+        let mouth = StandardMouth::new();
         let gullet = TeXGullet::new(mouth);
         let stomach = NoShipoutDefaultStomach::new();
         let mut engine = crate::engine::new::<Default>(state,gullet,stomach);

@@ -1,6 +1,6 @@
 /*! A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
 
- The default implementations ([`NoTracingMouth`] and [`TracingMouth`]) are
+ The default implementations ([`NoTracingMouth`] and [`StandardMouth`]) are
  just wrappers around a [`Vec`]`<`[`TeXMouthSource`]`>`,
  which are either [`TokenSource`]s or [`StringSource`]s.
 
@@ -125,63 +125,18 @@ pub trait Mouth<T:Token>:Sized+'static {
     }
 }
 
-/// A [`NoTracingMouth`] is the standard implementation of a [`Mouth`] that does not keep track of
-/// source references
-pub struct NoTracingMouth<T:Token>{ sources:Vec<TeXMouthSource<T>>,buffer:Option<T>}
-impl<T:Token> NoTracingMouth<T> {
+pub struct StandardMouth<T:Token>{ sources:Vec<TeXMouthSource<T>>,buffer:Option<T>}
 
-/*
-    fn has_next_i(&mut self, cc:&CategoryCodeScheme<T::Char>, endline: T::Char) -> Result<bool,TeXError<T>> {
-        if let Some(source) = self.sources.last_mut() {
-            return if let Some(tk) = match source {
-                TeXMouthSource::Token(ts) => ts.get_next(),
-                TeXMouthSource::String(ss) => ss.get_next_plain(cc, endline)?,
-                TeXMouthSource::NoExpand(_) => return Ok(true)
-            } {
-                self.buffer = Some(tk);
-                Ok(true)
-            } else {
-                self.sources.pop();
-                self.has_next_i(cc, endline)
-            }
-        } else { Ok(false) }
-    }
-
-    fn get_next_i(&mut self, cc:&CategoryCodeScheme<T::Char>, endline: T::Char) -> Result<Option<T>,TeXError<T>> {
-        if let Some(source) = self.sources.last_mut() {
-            return if let Some(tk) = match source {
-                TeXMouthSource::Token(ts) => ts.get_next(),
-                TeXMouthSource::String(ss) => ss.get_next_plain(cc, endline)?,
-                TeXMouthSource::NoExpand(_) => {
-                    match self.sources.pop() {
-                        Some(TeXMouthSource::NoExpand(t)) => return Ok(Some(t)), // todo: Make `\relax`
-                        _ => unreachable!()
-                    }
-                }
-            } {
-                debug_log!(debug=>"Read token {:?}", tk);
-                Ok(Some(tk))
-            } else {
-                debug_log!(debug=>"Top Mouth empty");
-                self.sources.pop();
-                self.get_next_i(cc, endline)
-            }
-        } else { Ok(None) }
-    }
-
- */
-}
-/*
-impl<T:Token> Mouth<T> for NoTracingMouth<T> {
-
+impl<T:Token> Mouth<T> for StandardMouth<T> {
     fn new() -> Self {
-        NoTracingMouth { sources:Vec::new(),buffer:None}
+        StandardMouth { sources:Vec::new(),buffer:None}
     }
+
     //#[inline(always)]
     fn push_tokens(&mut self,mut tks:Vec<T>) {
-        match self.buffer.take() {
-            Some(tk2) => tks.push(tk2),
-            None => ()
+        match std::mem::take(&mut self.buffer) {
+            Some(t) => tks.push(t),
+            _ => ()
         }
         self.sources.push(TeXMouthSource::Token(TokenSource::new(tks)))
     }
@@ -201,7 +156,7 @@ impl<T:Token> Mouth<T> for NoTracingMouth<T> {
             None => ()
         }
         self.sources.push(TeXMouthSource::String(StringSource::new(
-            file.content_string().clone(),
+            file.content_string().unwrap(),
             Some(Ptr::new(file.path().to_str().unwrap().to_string()))
         )))
     }
@@ -215,77 +170,14 @@ impl<T:Token> Mouth<T> for NoTracingMouth<T> {
         }
     }
 
-    fn has_next<S:State<T>>(&mut self, state:&S) -> Result<bool,InvalidCharacter<T>> {
-        todo!("has_next for NoTracingMouth")
-    }
-
-    //#[inline(always)]
-    fn get_next<S:State<T>>(&mut self, state:&S) -> Result<Option<(T,bool)>,InvalidCharacter<T>> {
-        todo!("get_next for NoTracingMouth")
-    }
-
-    fn preview(&self,_len:usize) -> String { todo!("preview in NoTracingMouth") }
-    fn file_line(&self) -> String { "unknown source".to_string() }
-}
-
- */
-
-/// Like [`NoTracingMouth`], but keeping track of [`SourceReference`](crate::tex::token::SourceReference)s
-// I wish there was a smarter way to implement this than literally copy-pasting the whole thing
-// just for adapting one method -.-
-pub struct TracingMouth<Char:CharType>{ sources:Vec<TeXMouthSource<TokenWithSourceref<Char>>>,buffer:Option<TokenWithSourceref<Char>>}
-
-impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
-    fn new() -> Self {
-        TracingMouth { sources:Vec::new(),buffer:None}
-    }
-
-    //#[inline(always)]
-    fn push_tokens(&mut self,mut tks:Vec<TokenWithSourceref<Char>>) {
-        match std::mem::take(&mut self.buffer) {
-            Some(t) => tks.push(t),
-            _ => ()
-        }
-        self.sources.push(TeXMouthSource::Token(TokenSource::new(tks)))
-    }
-
-    fn push_noexpand(&mut self, tk: TokenWithSourceref<Char>) {
-        match self.buffer.take() {
-            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
-            None => ()
-        }
-        self.sources.push(TeXMouthSource::NoExpand(tk))
-    }
-
-    fn push_file<F: File<Char>>(&mut self, file: &F) {
-        debug!("Pushing file {:?}", file.path());
-        match self.buffer.take() {
-            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
-            None => ()
-        }
-        self.sources.push(TeXMouthSource::String(StringSource::new(
-            file.content_string().unwrap(),
-            Some(Ptr::new(file.path().to_str().unwrap().to_string()))
-        )))
-    }
-
-    fn requeue(&mut self, tk: TokenWithSourceref<Char>) {
-        match self.buffer.take() {
-            Some(tk2) => {
-                self.push_tokens(vec!(tk,tk2))
-            },
-            None => self.buffer = Some(tk)
-        }
-    }
-
-    fn has_next<ET: EngineType<Char=Char,Token=TokenWithSourceref<Char>,Mouth=Self>>(&mut self, state: &ET::State) -> Result<bool, InvalidCharacter<TokenWithSourceref<Char>>> {
+    fn has_next<ET: EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state: &ET::State) -> Result<bool, InvalidCharacter<T>> {
         match self.buffer {
             Some(_) => Ok(true),
             _ => self.has_next_i(state.get_catcode_scheme(),state.get_endlinechar())
         }
     }
 
-    fn get_next<ET: EngineType<Char=Char,Token=TokenWithSourceref<Char>,Mouth=Self>>(&mut self, state: &ET::State) -> Result<Option<(TokenWithSourceref<Char>, bool)>, InvalidCharacter<TokenWithSourceref<Char>>> {
+    fn get_next<ET: EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state: &ET::State) -> Result<Option<(T, bool)>, InvalidCharacter<T>> {
         if let Some(tk) = std::mem::take(&mut self.buffer) { return Ok(Some((tk,true))) } else {
             self.get_next_i::<ET>(state)
         }
@@ -318,7 +210,7 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
         0
     }
 
-    fn endinput<ET: EngineType<Token=TokenWithSourceref<Char>,Mouth=Self>>(&mut self, state: &mut ET::State) {
+    fn endinput<ET: EngineType<Token=T,Mouth=Self>>(&mut self, state: &mut ET::State) {
         for s in self.sources.iter().enumerate().rev() {
             match s.1 {
                 TeXMouthSource::String(ss) => {
@@ -350,9 +242,9 @@ impl<Char:CharType> Mouth<TokenWithSourceref<Char>> for TracingMouth<Char> {
     }
 }
 
-impl<C:CharType> TracingMouth<C> {
+impl<T:Token> StandardMouth<T> {
 
-    fn has_next_i(&mut self, cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Result<bool,InvalidCharacter<TokenWithSourceref<C>>> {
+    fn has_next_i(&mut self, cc:&CategoryCodeScheme<T::Char>, endline: Option<T::Char>) -> Result<bool,InvalidCharacter<T>> {
         if let Some(source) = self.sources.last_mut() {
             return if let Some(tk) = match source {
                 TeXMouthSource::Token(ts) => ts.get_next(),
@@ -364,7 +256,7 @@ impl<C:CharType> TracingMouth<C> {
             } else {
                 match source {
                     TeXMouthSource::String(_) => {
-                        self.buffer = Some(TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'),CategoryCode::EOF),None));
+                        self.buffer = Some(T::new(BaseToken::Char(T::Char::from(b'\n'),CategoryCode::EOF),None));
                         self.sources.pop();
                         Ok(true)
                     }
@@ -376,7 +268,7 @@ impl<C:CharType> TracingMouth<C> {
             }
         } else { Ok(false) }
     }
-    fn get_next_i<ET:EngineType<Char=C,Token=TokenWithSourceref<C>>>(&mut self, state:&ET::State) -> Result<Option<(TokenWithSourceref<C>, bool)>,InvalidCharacter<TokenWithSourceref<C>>> {
+    fn get_next_i<ET:EngineType<Char=T::Char,Token=T>>(&mut self, state:&ET::State) -> Result<Option<(T, bool)>,InvalidCharacter<T>> {
         loop {
             if let Some(source) = self.sources.last_mut() {
                 if let Some(tk) = match source {
@@ -401,9 +293,9 @@ impl<C:CharType> TracingMouth<C> {
                             debug!("file end; inserting \\everyeof");
                             let mut v = state.get_primitive_toks("everyeof");
                             if v.is_empty() {
-                                return Ok(Some((TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'), CategoryCode::EOF), None), true)))
+                                return Ok(Some((T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None), true)))
                             } else {
-                                v.push(TokenWithSourceref::<C>::new(BaseToken::Char(C::from(b'\n'), CategoryCode::EOF), None));
+                                v.push(T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None));
                                 self.push_tokens(v);
                             }
                         }

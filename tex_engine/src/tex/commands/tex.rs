@@ -302,7 +302,7 @@ pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stomac
         _ => return Err(ErrorInPrimitive{name:"def",msg:Some(format!("Command expected after \\def")),cause:Some(csO.unwrap().0),source:None})
     }
     let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,cmd.clone(),"def")?;
-    let mut replacement: Vec<ExpToken<ET::Token>> = Vec::with_capacity(50);
+    let mut replacement: Vec<ExpToken<ET::Token>> = vec!();
     map_group!("def",cmd,state,gullet.mouth(),{
         let def = Command::Def(Def{protected,long,outer,endswithbrace,arity,signature,replacement},cmd.cause.clone());
         match cs {
@@ -580,7 +580,7 @@ pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Stoma
         _ => return Err(ErrorInPrimitive{name:"edef",msg:Some(format!("Command expected after \\edef")),cause:Some(csO.unwrap().0),source:None})
     }
     let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,cmd.clone(),"edef")?;
-    let mut replacement: Vec<ExpToken<ET::Token>> = Vec::with_capacity(50);
+    let mut replacement: Vec<ExpToken<ET::Token>> = vec!();
 
     macro_rules! expand_group_with_unknowns {
         ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident) => $f:expr;$($branch:tt)*) => {
