@@ -264,7 +264,8 @@ impl<C:CharType> StringSourceState<C> {
             Some((a,_,_)) if *cc.get(a) == Letter => {
                 self.state = MouthState::S;
                 debug_log!(trace=>"get_next_immediate: Next character is Letter");
-                let mut v = vec!(a);
+                let mut v = Vec::with_capacity(64);
+                v.push(a);
                 loop {
                     match self.next_char(cc,endline) {
                         Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
