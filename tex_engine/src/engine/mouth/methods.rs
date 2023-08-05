@@ -1,17 +1,18 @@
 //! Default implementations for [`Mouth`] methods
 
 use crate::engine::mouth::Mouth;
-use crate::{debug_log, file_end};
+use crate::{debug_log, file_end, throw};
 use crate::engine::EngineType;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
+use crate::tex::commands::TokenCont;
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::errors::{InvalidCharacter, OtherError, TeXError};
+use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
 /// Default implementation for [`Mouth::skip_whitespace`]
 pub fn skip_whitespace<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State)
-                                -> Result<(),InvalidCharacter<ET::Token>> {
+                                -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"skipping whitespace");
     while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
         match tk.catcode() {
@@ -26,7 +27,7 @@ pub fn skip_whitespace<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State)
 }
 
 /// Default implementation for [`Mouth::skip_eq_char`]
-pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Result<(),InvalidCharacter<ET::Token>> {
+pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Result<(),TeXError<ET::Token>> {
     mouth.skip_whitespace::<ET>(state)?;
     debug_log!(trace=>"skipping '='");
     if let Some((tk,_)) = mouth.get_next::<ET>(state)? {
@@ -45,19 +46,19 @@ pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Res
 }
 
 /// Default implementation for [`Mouth::read_argument`]
-pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     match mouth.get_next::<ET>(state)? {
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => read_until_endgroup::<ET>(mouth,state,f),
         Some((o,_)) => {
-            f(state,o);
+            f(state,o)?;
             Ok(())
         }
     }
 }
 
-pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,ET::Token))
-    -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>)
+    -> Result<(),TeXError<ET::Token>> {
     match mouth.get_next::<ET>(state)? {
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
@@ -70,23 +71,23 @@ pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::S
                         if depth == 0 { return Ok(()) }
                     },
                     BaseToken::CS(n) if *n == ET::Char::par_token() =>
-                        return Err(OtherError{msg:format!("Paragraph ended while reading argument"),cause:Some(t),source:None}.into()),
+                        throw!("Paragraph ended while reading argument" => t),
                     _ => ()
                 }
-                f(state,tk);
+                f(state,tk)?;
             }
             file_end!()
         }
         Some((t,_)) if t.catcode() == CategoryCode::EOF => file_end!(),
         Some((o,_)) => {
-            f(state,o);
+            f(state,o)?;
             Ok(())
         }
     }
 }
 
 /// Default implementation for [`Mouth::read_until_endgroup`]
-pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&mut ET::State,f:&mut dyn FnMut(&mut ET::State,ET::Token)) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     let mut depth = 1;
     while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
         match tk.catcode() {
@@ -98,7 +99,7 @@ pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&mut ET::
             CategoryCode::EOF => file_end!(),
             _ => ()
         }
-        f(state,tk);
+        f(state,tk)?;
     }
     file_end!()
 }

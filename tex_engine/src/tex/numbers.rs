@@ -3,17 +3,10 @@ use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use crate::engine::state::fields::IsDefault;
 use crate::tex::token::Token;
-use crate::utils::errors::NumericalError;
+use crate::throw;
+use crate::utils::errors::TeXError;
 
-pub trait NumSet:'static {
-    type Int:Int;
-    type Dim:Dim;
-    type SkipDim: SkipDim<Dim=Self::Dim>;
-    type MuDim: MuDim;
-    type MuStretchShrinkDim:MuStretchShrinkDim;
-}
-
-pub trait Numeric:Default+Display+Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+Sub<Self,Output=Self>{
+pub trait Numeric:Default+Display+Copy + Clone+IsDefault+Neg<Output=Self>+Add<Self,Output=Self>+Sub<Self,Output=Self>{
     fn scale(&self,times:i64,div:i64) -> Self;
 }
 
@@ -74,9 +67,9 @@ impl Numeric for Frac {
     }
 }
 
-pub trait Int:Numeric+PartialOrd+TryInto<usize>+From<u8>+
+pub trait Int:Numeric +PartialOrd+TryInto<usize>+From<u8>+
 Div<Self,Output=Self>+Mul<Self,Output=Self> {
-    fn from_i64<T:Token>(i:i64) -> Result<Self,NumericalError<T>>;
+    fn from_i64<T:Token>(i:i64) -> Result<Self,TeXError<T>>;
     fn to_i64(&self) -> i64;
 }
 pub trait Dim:Numeric+Add<Self,Output=Self>{
@@ -87,7 +80,7 @@ pub trait Dim:Numeric+Add<Self,Output=Self>{
     fn tex_mult(&self,other:f64) -> Self;
     fn tex_div(&self,other:i64) -> Self;
 }
-pub trait SkipDim:Display+Clone {
+pub trait SkipDim:Display+Copy + Clone {
     type Dim:Dim;
     fn units() -> Vec<&'static str>;
     fn from_dim(dim:Self::Dim) -> Self;
@@ -99,18 +92,9 @@ pub trait MuDim:Numeric {
     fn tex_mult(&self,other:f64) -> Self;
     fn tex_div(&self,other:i64) -> Self;
 }
-pub trait MuStretchShrinkDim:Display+Clone {
+pub trait MuStretchShrinkDim:Display+Copy + Clone {
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
-}
-
-pub struct DefaultNumSet;
-impl NumSet for DefaultNumSet {
-    type Int = i32;
-    type Dim = Dimi32;
-    type SkipDim = Fill;
-    type MuDim = Mui32;
-    type MuStretchShrinkDim = MuFill;
 }
 impl Numeric for i32 {
     fn scale(&self, times: i64, div: i64) -> Self {
@@ -118,9 +102,9 @@ impl Numeric for i32 {
     }
 }
 impl Int for i32 {
-    fn from_i64<T:Token>(i:i64) -> Result<Self,NumericalError<T>> {
+    fn from_i64<T:Token>(i:i64) -> Result<Self,TeXError<T>> {
         if i < i32::MIN as i64 || i > (i32::MAX as i64) {
-            Err(NumericalError(format!("Integer overflow: {}",i),PhantomData))
+            throw!("Integer overflow: {}",i)
         } else {
             Ok(i as i32)
         }
@@ -232,7 +216,7 @@ impl Neg for Dimi32 {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Copy)]
 pub struct Skip<SD:SkipDim>{
     pub base:SD::Dim,
     pub stretch:Option<SD>,
@@ -335,7 +319,7 @@ impl SkipDim for Fill {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone,Copy)]
 pub struct MuSkip<MD:MuDim,SD:MuStretchShrinkDim>{
     pub base: MD,
     pub stretch:Option<SD>,

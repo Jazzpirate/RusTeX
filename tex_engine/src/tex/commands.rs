@@ -1,161 +1,417 @@
-//! A [`Command`] is a TeX primitive or macro that can be expanded or processed.
+//! A [`BaseCommand`] is a TeX primitive or macro that can be expanded or processed.
 pub mod tex;
 pub mod etex;
 pub mod pdftex;
 pub mod methods;
 
 use std::fmt::{Debug, Formatter};
+use std::hint::unreachable_unchecked;
 use crate::engine::EngineType;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
+use crate::tex::boxes::{HVBox, StomachNode, Whatsit};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::token::Token;
+use crate::tex::commands::methods::{set_primitive_int, set_dim_register, set_int_register, set_muskip_register, set_skip_register, set_toks_register, set_primitive_dim, set_primitive_skip, set_primitive_muskip, set_primitive_toks};
+use crate::tex::numbers::{Dimi32, MuSkip, Skip};
+use crate::tex::token::{BaseToken, Token};
+use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
+pub struct ResolvedToken<ET:EngineType> {
+    pub command:BaseCommand<ET>,
+    pub source: CommandSource<ET>,
+    pub expand:bool
+}
+
+pub struct StomachCommand<ET:EngineType> {
+    pub command:BaseStomachCommand<ET>,
+    pub source:CommandSource<ET>
+}
+
+impl <ET:EngineType> StomachCommand<ET> {
+    pub fn from_resolved(resolved:ResolvedToken<ET>) -> Result<Self,TeXError<ET::Token>> {
+        Ok(Self {
+            command:BaseStomachCommand::from_base(resolved.command,&resolved.source)?,
+            source:resolved.source
+        })
+    }
+}
+
+
+#[derive(Clone,Debug)]
+pub struct CommandSource<ET:EngineType> {
+    pub cause:ET::Token,
+    pub reference:Option<ET::CommandReference>
+}
+
+#[derive(Clone,Debug)]
+pub struct Command<ET:EngineType> {
+    pub base:BaseCommand<ET>,
+    pub reference:Option<ET::CommandReference>
+}
+impl<ET:EngineType> Command<ET> {
+    pub fn new(base:BaseCommand<ET>,source: Option<&CommandSource<ET>>) -> Command<ET> {
+        Command {
+            reference:match source {
+                Some(r) => Some(ET::CommandReference::new(&base,r)),
+                _ => None
+            },base
+        }
+    }
+    pub fn copy_with(self,source:&CommandSource<ET>) -> Command<ET> {
+        Command {
+            reference:Some(ET::CommandReference::new(&self.base,source)),base:self.base
+        }
+    }
+}
+
+pub trait CommandReference<ET:EngineType>:Clone+Debug {
+    fn new(base:&BaseCommand<ET>, source:&CommandSource<ET>) -> Self;
+}
+
+impl<ET:EngineType<CommandReference = Self>> CommandReference<ET> for () {
+    fn new(base: &BaseCommand<ET>, source: &CommandSource<ET>) -> Self { () }
+}
+
+pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&ET::State,ET::Token) -> Result<(),TeXError<ET::Token>>;
+pub type UnexpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<(),TeXError<ET::Token>>;
+pub type AssignmentFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET::Token>>;
+pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET::Token>>>;
+pub type ConditionalFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<bool,TeXError<ET::Token>>;
+pub type ExpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,TokenCont<ET>) -> Result<(),TeXError<ET::Token>>;
+pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<HVBox<ET>>>;
+pub type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET::Token>>;
+pub type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET::Token>>;
+
+pub type ValueFun<ET:EngineType,A> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<A,TeXError<ET::Token>>;
+pub type FontFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<ET::Font,TeXError<ET::Token>>;
+
+pub trait Assignable<ET:EngineType> {
+    fn get_register(state:&ET::State,index:usize) -> Self;
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>>;
+    fn get_primitive(state:&ET::State,name:&'static str) -> Self;
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>>;
+}
+
+impl<ET:EngineType> Assignable<ET> for Vec<ET::Token> {
+    fn get_register(state:&ET::State,index:usize) -> Self {
+        state.get_toks_register(index)
+    }
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_toks_register(state,gullet,index,cmd,global)
+    }
+    fn get_primitive(state:&ET::State,name:&'static str) -> Self {
+        state.get_primitive_toks(name)
+    }
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_primitive_toks(state,gullet,cmd,name,global)
+    }
+}
+impl<ET:EngineType<Int=i32>> Assignable<ET> for i32 {
+    fn get_register(state:&ET::State,index:usize) -> Self {
+        state.get_int_register(index)
+    }
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_int_register(state,gullet,index,cmd,global)
+    }
+    fn get_primitive(state:&ET::State,name:&'static str) -> Self {
+        state.get_primitive_int(name)
+    }
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_primitive_int(state,gullet,cmd,name,global)
+    }
+}
+impl<ET:EngineType<Dim=Dimi32>> Assignable<ET> for Dimi32 {
+    fn get_register(state:&ET::State,index:usize) -> Self {
+        state.get_dim_register(index)
+    }
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_dim_register(state,gullet,index,cmd,global)
+    }
+    fn get_primitive(state:&ET::State,name:&'static str) -> Self {
+        state.get_primitive_dim(name)
+    }
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_primitive_dim(state,gullet,cmd,name,global)
+    }
+}
+impl<ET:EngineType> Assignable<ET> for Skip<ET::SkipDim> {
+    fn get_register(state:&ET::State,index:usize) -> Self {
+        state.get_skip_register(index)
+    }
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_skip_register(state,gullet,index,cmd,global)
+    }
+    fn get_primitive(state:&ET::State,name:&'static str) -> Self {
+        state.get_primitive_skip(name)
+    }
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_primitive_skip(state,gullet,cmd,name,global)
+    }
+}
+impl<ET:EngineType> Assignable<ET> for MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
+    fn get_register(state:&ET::State,index:usize) -> Self {
+        state.get_muskip_register(index)
+    }
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_muskip_register(state,gullet,index,cmd,global)
+    }
+    fn get_primitive(state:&ET::State,name:&'static str) -> Self {
+        state.get_primitive_muskip(name)
+    }
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+        set_primitive_muskip(state,gullet,cmd,name,global)
+    }
+}
+
+#[derive(Clone)]
+pub enum ValueCommand<ET:EngineType,A:Assignable<ET>> {
+    Register(usize),
+    Primitive(&'static str),
+    Value{name:&'static str,get:ValueFun<ET,A>},
+    Complex{name:&'static str,get:ValueFun<ET,A>,set:AssignmentFun<ET>}
+}
+impl<ET:EngineType,A:Assignable<ET>> PartialEq for ValueCommand<ET,A> {
+    fn eq(&self, other: &Self) -> bool {
+        use ValueCommand::*;
+        match (self,other) {
+            (Register(a),Register(b)) => a == b,
+            (Primitive(a),Primitive(b)) => a == b,
+            (Value{name:a,..},Value{name:b,..}) => a == b,
+            (Complex{name:a,..},Complex{name:b,..}) => a == b,
+            _ => false
+        }
+    }
+}
+impl<ET:EngineType,A:Assignable<ET>> Debug for ValueCommand<ET,A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueCommand::Register(i) => write!(f, "Register {} ", i),
+            ValueCommand::Primitive(s) => write!(f, "\\{}", s),
+            ValueCommand::Value{name,..} => write!(f, "\\{}", name),
+            ValueCommand::Complex{name,..} => write!(f, "\\{}", name)
+        }
+    }
+}
+impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
+    pub fn get(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<A,TeXError<ET::Token>> {
+        match self {
+            ValueCommand::Value{get,..} => get(state, gullet, cmd.clone()),
+            ValueCommand::Complex{get,..} => get(state, gullet, cmd.clone()),
+            ValueCommand::Primitive(name) => Ok(A::get_primitive(state,name)),
+            ValueCommand::Register(index) => Ok(A::get_register(state,*index))
+        }
+    }
+    pub fn set(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
+        match self {
+            ValueCommand::Value{name,..} => throw!("Not allowed to assign to {}",name),
+            ValueCommand::Complex{set,..} => set(state, gullet, cmd,global),
+            ValueCommand::Primitive(name) => A::set_primitive(state,gullet,cmd,name,global),
+            ValueCommand::Register(index) => A::set_register(state,gullet,cmd,*index,global)
+        }
+    }
+}
+
 /// A command to be expanded in the [`crate::engine::gullet::Gullet`]
 /// or processed in the [`crate::engine::stomach::Stomach`].
 #[derive(Clone)]
-pub enum Command<T:Token>{
+pub enum BaseCommand<ET:EngineType>{
     /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
-    Def(Def<T>,T),
-    /// A primitive command to be processed in the [`crate::engine::stomach::Stomach`]
-    Stomach{name:&'static str,index:usize},
-
-    /// A primitive assignable value, e.g. `\tolerance` ([`Int`](Assignable::Int)),
-    /// `\hsize` ([`Dim`](Assignable::Dim))
-    AssignableValue{name:&'static str,tp:Assignable},
-    /// A primitive non-assignable value, e.g. `\eTeXversion`
-    Value{name:&'static str,index:usize,tp:Assignable},
-    /// An (assignable) value register, e.g. resulting from `\countdef`, `\dimdef` etc.
-    ValueRegister{index:usize,tp:Assignable},
-    /// Assignable, potentially parametric value requiring parsing; e.g. `\catcode`,
-    /// `\count`, etc.
-    ValueAssignment{name:&'static str,assignment_index:usize,value_index:usize,tp:Assignable},
-    /// A primitive assignment command, e.g. `\chardef`, `\let`, etc.
-    Assignment{name:&'static str,index:usize},
+    Def(Ptr<Def<ET::Token>>),
     /// A conditional, e.g. `\ifnum`, `\ifdim`, `\iftrue`, `\iffalse`, returning `true` or `false`
-    Conditional{name:&'static str,index:usize},
-    /// An expandable primitive to be processed in the [`crate::engine::gullet::Gullet`], e.g.
+    Conditional{name:&'static str,apply:ConditionalFun<ET>},
+    /// An expandable primitive to be processed in the [`Gullet`](crate::engine::gullet::Gullet), e.g.
     /// `\the`, `\number`, `\romannumeral`, `\string`, `\meaning`
-    Gullet{name:&'static str,index:usize},
-    /// A character; the result of e.g. `\let\foo=a`
-    Char{char:T::Char,catcode:CategoryCode},
+    Expandable {name:&'static str,apply:ExpandableFun<ET>},
+    /// A primitive command to be processed in the [`Stomach`](crate::engine::stomach::Stomach)
+    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>},
+    /// A primitive assignment command, e.g. `\chardef`, `\let`, etc. - importantly
+    /// unlike [`Unexpandable`](BaseCommand::Unexpandable), the `\afterassignment`-[`Token`]
+    /// (if existent) is inserted after one of these.
+    Assignment{name:&'static str,apply:AssignmentFun<ET>},
+    /// A command producing a [`Whatsit`](crate::tex::boxes::Whatsit), executed during shipout or `\immediate`ly
+    Whatsit {name:&'static str,apply:WhatsitFun<ET>},
+    /// A command opening a new  [`TeXBox`](crate::tex::boxes::TeXBox), e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
+    OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
+    /// A character; also e.g. the result of `\let\foo=a`
+    Char{char:ET::Char,catcode:CategoryCode},
+    /// The result of a `\chardef`, e.g. `\chardef\foo=97`
+    CharDef(ET::Char),
     /// A math character; the result of e.g. `\mathchardef\sum="1350`
     MathChar(u32),
-    /// A command producing a [`crate::tex::boxes::Whatsit`], executed during shipout or `\immediate`ly
-    Whatsit {name:&'static str,index:usize},
-    /// A command opening a new  [`crate::tex::boxes::TeXNode`], e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
-    OpenBox{name:&'static str,index:usize,mode:BoxMode},
+    /// An (optionally) assignable [`Int`](crate::tex::numbers::Int) value, e.g. `\eTeXversion`, `\catcode`,
+    /// or the result of a `\countdef`
+    Int(ValueCommand<ET,ET::Int>),
+    /// An (optionally) assignable [`Dim`](crate::tex::numbers::Dim) value, e.g. `\hsize` or the result of a `\dimendef`
+    Dim(ValueCommand<ET,ET::Dim>),
+    /// An (optionally) assignable [`Skip`](crate::tex::numbers::Skip) value, e.g. `\baselineskip` or the result of a `\skipdef`
+    Skip(ValueCommand<ET,Skip<ET::SkipDim>>),
+    /// An (optionally) assignable [`MuSkip`](crate::tex::numbers::MuSkip) value, e.g. `\thinmuskip` or the result of a `\muskipdef`
+    MuSkip(ValueCommand<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>),
+    /// An (optionally) assignable token value, e.g. `\everypar` or the result of a `\toksdef`
+    Toks(ValueCommand<ET,Vec<ET::Token>>),
+    /// A [`Font`](crate::tex::fonts::Font)
+    Font(ET::Font),
+    FontCommand { name:&'static str,get:FontFun<ET>,set:Option<AssignmentFun<ET>> },
     /// `\relax`
-    Relax
-    // ...
+    Relax,
+    /// None (throws an error in the [`Gullet`](crate::engine::gullet::Gullet))
+    None
 }
-impl<T:Token> PartialEq for Command<T> {
+
+impl<ET:EngineType> PartialEq for BaseCommand<ET> {
     fn eq(&self, other: &Self) -> bool {
         match (self,other) {
-            (Command::Def(a,_),Command::Def(b,_)) => a == b,
-            (Command::Stomach{index:a,..},Command::Stomach{index:b,..}) => a == b,
-            (Command::AssignableValue{tp:a,name:b},Command::AssignableValue{tp:c,name:d}) => a == c && b == d,
-            (Command::Value{tp:a,name:b,..},Command::Value{tp:d,name:e,..}) => a == d && b == e,
-            (Command::ValueRegister{tp:a,index:b},Command::ValueRegister{tp:c,index:d}) => a == c && b == d,
-            (Command::ValueAssignment{tp:a,name:b,..},Command::ValueAssignment{tp:e,name:f,..}) => a == e && b == f,
-            (Command::Assignment{name:a,..},Command::Assignment{name:c,..}) => a == c,
-            (Command::Conditional{name:a,..},Command::Conditional{name:c,..}) => a == c,
-            (Command::Gullet{name:a,..},Command::Gullet{name:c,..}) => a == c,
-            (Command::Char{char:a,catcode:CategoryCode::Space},Command::Char{char:c,catcode:CategoryCode::Space}) => true,
-            (Command::Char{char:a,catcode:b},Command::Char{char:c,catcode:d}) => a == c && b == d,
-            (Command::MathChar(a),Command::MathChar(b)) => a == b,
-            (Command::Whatsit{name:a,..},Command::Whatsit{name:c,..}) => a == c,
-            (Command::Relax,Command::Relax) => true,
-            (Command::OpenBox {name:a,..},Command::OpenBox {name:c,..}) => a == c,
+            (BaseCommand::Def(a), BaseCommand::Def(b)) => a == b,
+            (BaseCommand::Conditional{name:a,..}, BaseCommand::Conditional{name:b,..}) => a == b,
+            (BaseCommand::Expandable {name:a,..}, BaseCommand::Expandable {name:c,..}) => a == c,
+            (BaseCommand::Unexpandable {name:a,..}, BaseCommand::Unexpandable {name:b,..}) => a == b,
+            (BaseCommand::Assignment{name:a,..}, BaseCommand::Assignment{name:c,..}) => a == c,
+            (BaseCommand::Whatsit{name:a,..}, BaseCommand::Whatsit{name:c,..}) => a == c,
+            (BaseCommand::OpenBox {name:a,..}, BaseCommand::OpenBox {name:c,..}) => a == c,
+            (BaseCommand::Char{char:a,catcode:CategoryCode::Space}, BaseCommand::Char{char:c,catcode:CategoryCode::Space}) => true,
+            (BaseCommand::Char{char:a,catcode:b}, BaseCommand::Char{char:c,catcode:d}) => a == c && b == d,
+            (BaseCommand::MathChar(a), BaseCommand::MathChar(b)) => a == b,
+            (BaseCommand::Int(a), BaseCommand::Int(b)) => a == b,
+            (BaseCommand::Dim(a), BaseCommand::Dim(b)) =>  a == b,
+            (BaseCommand::Skip(a), BaseCommand::Skip(b)) =>  a == b,
+            (BaseCommand::MuSkip(a), BaseCommand::MuSkip(b)) =>  a == b,
+            (BaseCommand::Toks(a), BaseCommand::Toks(b)) =>  a == b,
+            (BaseCommand::Font(a), BaseCommand::Font(b)) => a == b,
+            (BaseCommand::FontCommand {name:a,..},BaseCommand::FontCommand {name:b,..}) => a == b,
+            (BaseCommand::Relax, BaseCommand::Relax) => true,
+            (BaseCommand::None, BaseCommand::None) => true,
             _ => false
         }
     }
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
-pub enum Assignable {
-    Int,Dim,
-    Skip,
-    MuSkip,Font,Toks,Box
-}
-
-impl<T:Token> Debug for Command<T> {
+impl<ET:EngineType> Debug for BaseCommand<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Command::Def(def,T) => <Def<T> as Debug>::fmt(def,f),
-            Command::ValueRegister{index,tp} => write!(f, "{:?} register {}",tp, index),
-            Command::Relax => write!(f, "Relax"),
-            Command::Stomach {name,..} => write!(f, "Stomach Command {}", name),
-            Command::ValueAssignment {name,tp,..} => write!(f, "{:?} Assignment {}", tp, name),
-            Command::Assignment {name,..} => write!(f, "Assignment {}", name),
-            Command::AssignableValue {name,tp,..} => write!(f, "{:?} Assignment {}",tp,name),
-            Command::Conditional{name,..} => write!(f, "Conditional {}", name),
-            Command::Gullet{name,..} => write!(f, "Gullet Command {}", name),
-            Command::Char{char,catcode} => write!(f, "Character '{}' (catcode {})", (char as &T::Char).char_str(), catcode),
-            Command::MathChar(n) => write!(f, "Math Character {:X}", n),
-            Command::Value {name,tp,..} => write!(f, "{:?} Command {}",tp, name),
-            Command::Whatsit {name,index} => write!(f,"Whatsit {}",name),
-            Command::OpenBox {name,index,..} => write!(f,"Open Box {}",name),
+            BaseCommand::Def(def) => <Def<ET::Token> as Debug>::fmt(def,f),
+            BaseCommand::Conditional{name,..} => write!(f, "Conditional {}", name),
+            BaseCommand::Expandable {name,..} => write!(f, "Gullet Command {}", name),
+            BaseCommand::Unexpandable {name,..} => write!(f, "Stomach Command {}", name),
+            BaseCommand::Assignment {name,..} => write!(f, "Assignment {}", name),
+            BaseCommand::Whatsit {name,..} => write!(f, "Whatsit {}", name),
+            BaseCommand::OpenBox {name,..} => write!(f, "Open Box {}", name),
+            BaseCommand::Char{char,catcode} => write!(f, "Character '{}' (catcode {})", (char as &ET::Char).char_str(), catcode),
+            BaseCommand::CharDef(char) => write!(f, "Character Definition '{}'", (char as &ET::Char).char_str()),
+            BaseCommand::MathChar(n) => write!(f, "Math Character {:X}", n),
+            BaseCommand::Int(a) => write!(f, "Int {:?}", a),
+            BaseCommand::Dim(a) => write!(f, "Dim {:?}", a),
+            BaseCommand::Skip(a) => write!(f, "Skip {:?}", a),
+            BaseCommand::MuSkip(a) => write!(f, "MuSkip {:?}", a),
+            BaseCommand::Toks(a) => write!(f, "Toks {:?}", a),
+            BaseCommand::Font(font) => write!(f, "Font {:?}", font),
+            BaseCommand::FontCommand {..} => write!(f, "\\font"),
+            BaseCommand::Relax => write!(f, "Relax"),
+            BaseCommand::None => write!(f, "None"),
         }
     }
 }
 
-
-#[derive(Debug,Clone)]
-pub struct StomachCommand<T:Token>{pub cause:T,pub cmd:StomachCommandInner<T::Char>}
-#[derive(Clone)]
-pub enum StomachCommandInner<C:CharType> {
-    Command{name:&'static str,index:usize},
-    AssignableValue{name:&'static str,tp:Assignable},
-    Value{name:&'static str,index:usize,tp:Assignable},
-    ValueRegister(usize,Assignable),
-    ValueAssignment{name:&'static str,assignment_index:usize,value_index:usize,tp:Assignable},
-    Assignment {name:&'static str,index:usize},
-    Whatsit {name:&'static str,index:usize},
-    OpenBox{name:&'static str,index:usize,mode:BoxMode},
-    Relax,
-    Parameter(C),
-    Char{char:C,from_chardef:bool},
+pub enum BaseStomachCommand<ET:EngineType> {
+    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>},
+    Assignment {name:Option<&'static str>, set:AssignmentFun<ET>},
+    Whatsit {name:&'static str,apply:WhatsitFun<ET>},
+    ValueAss(AssignmentFn<ET>),
+    OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
+    Char(ET::Char),
     MathChar(u32),
-    Superscript(C),
-    Subscript(C),
+    Relax,
     Space,
-    MathShift(C),
-    BeginGroup(C),
-    EndGroup(C)
+    BeginGroup,
+    EndGroup,
+    MathShift,
+    Superscript,
+    Subscript
 }
 
-#[derive(Debug,Clone)]
-pub struct GulletCommand<T:Token>{pub cause:T}
-
-impl<C:CharType> Debug for StomachCommandInner<C> {
+impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            StomachCommandInner::Relax => write!(f,"Relax"),
-            StomachCommandInner::Command{name,..} => write!(f,"\\{}",name),
-            StomachCommandInner::ValueAssignment {name,..} => write!(f, "\\{}", name),
-            StomachCommandInner::Assignment {name,..} => write!(f, "\\{}", name),
-            StomachCommandInner::Value{name,tp,..} => write!(f,"\\{}",name),
-            StomachCommandInner::AssignableValue {name,tp,..} => write!(f, "{:?} Assignment {}",tp,name),
-            StomachCommandInner::ValueRegister(u,tp) => write!(f, "{:?} register {}",tp, u),
-            StomachCommandInner::Whatsit {name,index} => write!(f,"Whatsit {}",name),
-            StomachCommandInner::Char{char,..} => write!(f,"Character '{}'",char),
-            StomachCommandInner::Parameter(c) => write!(f,"Parameter {}",c),
-            StomachCommandInner::MathChar(n) => write!(f,"Math Character {:X}",n),
-            StomachCommandInner::Superscript(_) => write!(f,"Superscript Token"),
-            StomachCommandInner::Subscript(_) => write!(f,"Subscript Token"),
-            StomachCommandInner::Space => write!(f,"Space Token"),
-            StomachCommandInner::MathShift(_) => write!(f,"MathShift Token"),
-            StomachCommandInner::BeginGroup(_) => write!(f,"BeginGroup Token"),
-            StomachCommandInner::EndGroup(_) => write!(f,"EndGroup Token"),
-            StomachCommandInner::OpenBox{name,..} => write!(f,"Open Box {}",name)
+            BaseStomachCommand::Unexpandable{name,..} => write!(f, "Stomach Command {}", name),
+            BaseStomachCommand::Assignment{name,..} => write!(f, "Assignment {}", name.unwrap_or("")),
+            BaseStomachCommand::Whatsit{name,..} => write!(f, "Whatsit {}", name),
+            BaseStomachCommand::OpenBox{name,..} => write!(f, "Open Box {}", name),
+            BaseStomachCommand::Char(ch) => write!(f, "Character {}", ch.char_str()),
+            BaseStomachCommand::MathChar(n) => write!(f, "Math Character {:X}", n),
+            BaseStomachCommand::ValueAss(_) => write!(f, "Value Assignment"),
+            BaseStomachCommand::Relax => write!(f, "Relax"),
+            BaseStomachCommand::Space => write!(f, "Space"),
+            BaseStomachCommand::BeginGroup => write!(f, "BeginGroup"),
+            BaseStomachCommand::EndGroup => write!(f, "EndGroup"),
+            BaseStomachCommand::MathShift => write!(f, "MathShift"),
+            BaseStomachCommand::Superscript => write!(f, "Superscript"),
+            BaseStomachCommand::Subscript => write!(f, "Subscript"),
         }
     }
 }
+
+impl<ET:EngineType> BaseStomachCommand<ET> {
+    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>) -> Result<Self,TeXError<ET::Token>> {
+        use BaseCommand::*;
+        use CategoryCode::*;
+        Ok(match value {
+            Def(_) | Conditional{..} | Expandable{..} | Int(ValueCommand::Value {..}) | Dim(ValueCommand::Value {..})
+            | Skip(ValueCommand::Value {..})| MuSkip(ValueCommand::Value {..}) | Toks(ValueCommand::Value {..})
+            | FontCommand{set:std::option::Option::None,..} =>
+                todo!(),
+            None => match source.cause.base() {
+                BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
+                BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
+            }
+            Unexpandable {name,apply} => BaseStomachCommand::Unexpandable {name,apply},
+            Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
+            Whatsit {name,apply} => BaseStomachCommand::Whatsit {name,apply:apply},
+            OpenBox {name,mode,apply} => BaseStomachCommand::OpenBox {name,mode,apply},
+            Int(ass) => {
+                BaseStomachCommand::ValueAss(Box::new(
+                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+            },
+            Dim(ass) => {
+                BaseStomachCommand::ValueAss(Box::new(
+                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+            },
+            Skip(ass) => {
+                BaseStomachCommand::ValueAss(Box::new(
+                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+            },
+            MuSkip(ass) => {
+                BaseStomachCommand::ValueAss(Box::new(
+                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+            },
+            Toks(ass) => {
+                BaseStomachCommand::ValueAss(Box::new(
+                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+            },
+            FontCommand {set:Some(set),..} => BaseStomachCommand::Assignment {name:std::option::Option::None,set},
+            Font(_) => todo!(),
+            Relax => BaseStomachCommand::Relax,
+            MathChar(u) => BaseStomachCommand::MathChar(u),
+            Char{char,catcode} => match catcode {
+                EOF => BaseStomachCommand::Relax,
+                BeginGroup => BaseStomachCommand::BeginGroup,
+                EndGroup => BaseStomachCommand::EndGroup,
+                MathShift => BaseStomachCommand::MathShift,
+                AlignmentTab => todo!(),
+                Superscript => BaseStomachCommand::Superscript,
+                Subscript => BaseStomachCommand::Subscript,
+                Space => BaseStomachCommand::Space,
+                Letter | Other => BaseStomachCommand::Char(char),
+                Parameter => todo!(),
+                Ignored | Invalid | Comment | EOL | Escape | Active => unreachable!()
+            }
+            CharDef(char) => BaseStomachCommand::Char(char)
+        })
+    }
+}
+
 
 /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
 #[derive(PartialEq,Clone)]
@@ -173,8 +429,19 @@ impl<T:Token> Def<T>{
     /// token that triggered the expansion, used for constructing the
     /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
     /// error messages.
-    pub fn expand<ET:EngineType<Token=T>>(&self, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:Ptr<Command<T>>, cause:Ptr<T>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
-        methods::exand_def::<ET>(self,state,mouth,cmd,cause)
+    pub fn expand<ET:EngineType<Token=T>>(&self, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
+        methods::exand_def::<ET>(self,state,mouth,cmd,f)
+    }
+    pub fn simple(replacement:Vec<T>) -> Ptr<Self> {
+        Ptr::new(Self {
+            protected:false,
+            long:false,
+            outer:false,
+            endswithbrace:false,
+            arity:0,
+            signature:Vec::new(),
+            replacement:replacement.into_iter().map(ExpToken::Token).collect()
+        })
     }
 }
 impl<T:Token> Debug for Def<T> {

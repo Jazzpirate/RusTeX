@@ -64,7 +64,7 @@ impl<V> StateField for SingleValueField<V> {
 /// A [`StateField`] storing Key-Value-Pairs.
 pub trait KeyValueField<K,V>: StateField {
     /// get the value associated with a key
-    fn get(&self,k:&K) -> V;
+    fn get(&self,k:&K) -> Option<&V>;
     /// set the value associated with a key locally to the current TeX Group
     fn set_locally(&mut self,k:K,v:V);
     /// set the value associated with a key globally
@@ -80,31 +80,31 @@ impl<C:CharType,A:Clone+Default> StateField for CharField<C,A> {
     fn pop_stack(&mut self) {
         if let Some(m) = self.changes.pop() {
             for (k,v) in m {
-                self.charfield.set(k,v)
+                self.charfield.set(&k,v)
             }
         }
     }
 }
 impl<C:CharType,A:Clone+Default> KeyValueField<C,A> for CharField<C,A> {
     //#[inline(always)]
-    fn get(&self, c:&C) -> A { self.charfield.get(*c).clone() }
+    fn get(&self, c:&C) -> Option<&A> { Some(self.charfield.get(c)) }
     //#[inline(always)]
     fn set_locally(&mut self, k: C, v:A) {
         if let Some(m) = self.changes.last_mut() {
             match m.entry(k) {
                 Entry::Vacant(e) => {
-                    e.insert(self.charfield.replace(k,v));
+                    e.insert(self.charfield.replace(&k,v));
                 }
                 Entry::Occupied(_) => {
-                    self.charfield.set(k,v);
+                    self.charfield.set(&k,v);
                 }
             }
         } else {
-            self.charfield.set(k,v);
+            self.charfield.set(&k,v);
         }
     }
     fn set_globally(&mut self, k: C, v:A) {
-        self.charfield.set(k,v);
+        self.charfield.set(&k,v);
         for ov in self.changes.iter_mut() {
             ov.remove(&k);
         }
@@ -209,11 +209,11 @@ impl<V:Default+Clone> StateField for VecField<V> {
 }
 impl<V:Default+Clone> KeyValueField<usize,V> for VecField<V> {
     // #[inline(always)]
-    fn get(&self, k: &usize) -> V {
+    fn get(&self, k: &usize) -> Option<&V> {
         if *k < self.0.len() {
-            self.0[*k].clone()
+            Some(&self.0[*k])
         } else {
-            V::default()
+            None
         }
     }
 
@@ -270,7 +270,7 @@ impl<A> IsDefault for Vec<A> {
     fn is_default(&self) -> bool { self.is_empty() }
 }
 
-/// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::Command)s,
+/// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::BaseCommand)s,
 #[derive(Clone)]
 pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HMap<K,V>, Vec<BTreeMap<K,V>>);
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
@@ -300,11 +300,8 @@ impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> StateField for HashMapField<K,V>
 }
 impl<K:Eq+Hash+Clone + Ord,V:Default+Clone+IsDefault> KeyValueField<K,V> for HashMapField<K,V> {
     // #[inline(always)]
-    fn get(&self, k: &K) -> V {
-        match self.0.get(k) {
-            Some(v) => v.clone(),
-            _ => V::default()
-        }
+    fn get(&self, k: &K) -> Option<&V> {
+        self.0.get(k)
     }
 
     // #[inline(always)]

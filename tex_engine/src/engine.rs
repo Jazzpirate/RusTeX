@@ -1,4 +1,5 @@
 //! Components of a TeX engine, such as [`Mouth`](mouth::NoTracingMouth) and [`State`](state::State)
+use std::fmt::Debug;
 use std::path::PathBuf;
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
@@ -8,10 +9,10 @@ use crate::engine::state::{State, TeXState};
 use crate::engine::stomach::{Stomach, NoShipoutDefaultStomach};
 use crate::tex;
 use crate::tex::boxes::{StandardTeXNode, TeXBox, TeXNode};
+use crate::tex::commands::{Assignable, Command, CommandReference};
 use crate::tex::fonts::{Font, FontStore, TfmFontStore};
-use crate::tex::numbers::{DefaultNumSet, Dim, MuDim, MuStretchShrinkDim, NumSet, SkipDim};
+use crate::tex::numbers::{Dim, MuDim, MuStretchShrinkDim, SkipDim};
 use crate::tex::token::{BaseToken, Token, TokenWithSourceref};
-use crate::utils::errors::{InitializationError, TeXError};
 
 pub mod state;
 pub mod mouth;
@@ -21,7 +22,7 @@ pub mod filesystem;
 
 /// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`Mouth`]) and [`Stomach`] to
 /// form a complete TeX engine.
-pub trait EngineType:Sized+'static + Copy + Clone {
+pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Char:CharType;
     type Token:Token<Char=Self::Char>;
     type File:File<Self::Char>;
@@ -30,12 +31,12 @@ pub trait EngineType:Sized+'static + Copy + Clone {
     type FontStore:FontStore<Char=Self::Char,Font=Self::Font>;
     type Node:TeXNode<Bx=Self::Box>;
     type Box:TeXBox;
-    type Int:Int;
-    type Dim:Dim;
+    type Int:Int+Assignable<Self>;
+    type Dim:Dim+Assignable<Self>;
     type SkipDim:SkipDim<Dim=Self::Dim>;
     type MuDim:MuDim;
     type MuStretchShrinkDim:MuStretchShrinkDim;
-    type Numbers:NumSet<Int=Self::Int,Dim=Self::Dim,SkipDim=Self::SkipDim,MuDim=Self::MuDim,MuStretchShrinkDim=Self::MuStretchShrinkDim>;
+    type CommandReference:CommandReference<Self>;
     type State:State<Self>;
     type Mouth:Mouth<Self::Token>;
     type Gullet:Gullet<Self>;
@@ -47,9 +48,9 @@ pub trait Engine<ET:EngineType> {
     /// checker to prove that the individual components are non-overlapping.
     fn components(&self) -> &EngineStruct<ET>;
     fn components_mut(&mut self) -> &mut EngineStruct<ET>;
-    fn initialize(&mut self) -> Result<(),InitializationError<ET::Token>>;
+    fn initialize(&mut self) -> Result<(),TeXError<ET::Token>>;
 
-    fn init_file(&mut self,s:&str) -> Result<(),InitializationError<ET::Token>> {
+    fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET::Token>> {
         debug!("Initializing with file {}",s);
         let comps = self.components_mut();
         let file = comps.state.filesystem().get(s);
@@ -63,7 +64,7 @@ pub trait Engine<ET:EngineType> {
         comps.state.filesystem().set_pwd(old);
         Ok(())
     }
-    fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,Box<dyn TeXError<ET::Token>>> {
+    fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET::Token>> {
         debug!("Running file {:?}",s);
         let mut ret = vec!();
         let comps = self.components_mut();
@@ -105,6 +106,7 @@ pub struct EngineStruct<ET:EngineType> {
 }
 
 use crate::tex::numbers::Int;
+use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
 impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
@@ -112,7 +114,7 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
     fn components_mut(&mut self) -> &mut EngineStruct<ET> {
         self
     }
-    fn initialize(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    fn initialize(&mut self) -> Result<(),TeXError<ET::Token>> {
         info!("Initializing TeX engine");
         tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
         self.state.set_primitive_int("mag",ET::Int::from_i64(1000)?,true);
@@ -122,32 +124,32 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
 
 }
 impl<ET:EngineType> EngineStruct<ET> {
-    pub fn initialize_etex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn initialize_etex(&mut self) -> Result<(),TeXError<ET::Token>> {
         self.initialize()?;
         self.etex();
         Ok(())
     }
-    pub fn etex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn etex(&mut self) -> Result<(),TeXError<ET::Token>> {
         tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
         Ok(())
     }
-    pub fn pdftex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn pdftex(&mut self) -> Result<(),TeXError<ET::Token>> {
         tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);
         self.init_file("pdftexconfig.tex")
     }
-    pub fn latex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn latex(&mut self) -> Result<(),TeXError<ET::Token>> {
         self.init_file("latex.ltx")
     }
-    pub fn initialize_pdftex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn initialize_pdftex(&mut self) -> Result<(),TeXError<ET::Token>> {
         self.initialize()?;
         self.pdftex()
     }
-    pub fn initialize_latex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn initialize_latex(&mut self) -> Result<(),TeXError<ET::Token>> {
         self.initialize_etex()?;
         self.init_file("latex.ltx")
     }
-    pub fn initialize_pdflatex(&mut self) -> Result<(),InitializationError<ET::Token>> {
+    pub fn initialize_pdflatex(&mut self) -> Result<(),TeXError<ET::Token>> {
         self.initialize_etex()?;
         self.pdftex()?;
         self.latex()

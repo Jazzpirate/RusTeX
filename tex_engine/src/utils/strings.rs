@@ -77,7 +77,7 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
         Ok(())
     }
     fn char_str(&self) -> String;
-    fn as_bytes(&self) -> Vec<u8>;
+    fn as_bytes(&self) -> &[u8];
 
     fn from_i64(i:i64) -> Option<Self>;
     fn to_usize(self) -> usize;
@@ -125,7 +125,7 @@ impl CharType for u8 {
     fn other_catcode_scheme() -> CategoryCodeScheme<Self> {
         OTHER_SCHEME_U8.clone()
     }
-    fn as_bytes(&self) -> Vec<u8> { vec![*self] }
+    fn as_bytes(&self) -> &[u8] { std::slice::from_ref(self) }
 
     // #[inline(always)]
     fn char_str(&self) -> String {
@@ -192,20 +192,20 @@ impl CharType for u8 {
 */
 pub trait AllCharsTrait<C:CharType,A>:Clone {
     /// Returns the value for character `u`.
-    fn get(&self, u: C) -> &A;
+    fn get(&self, u: &C) -> &A;
     /// Sets the value for character `u` to `v`.
-    fn set(&mut self, u: C, v:A);
+    fn set(&mut self, u: &C, v:A);
     /// Replaces the value for character `u` with `v`, returning the old value.
-    fn replace(&mut self, u: C, v:A) -> A;
+    fn replace(&mut self, u: &C, v:A) -> A;
 }
 impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
     //#[inline(always)]
-    fn get(&self, u:u8) -> &A { &self[u as usize] }
+    fn get(&self, u:&u8) -> &A { &self[*u as usize] }
    // #[inline(always)]
-    fn set(&mut self, u:u8,v:A) { self[u as usize] = v }
+    fn set(&mut self, u:&u8,v:A) { self[*u as usize] = v }
     // #[inline(always)]
-    fn replace(&mut self, u: u8, v: A) -> A {
-        std::mem::replace(&mut self[u as usize], v)
+    fn replace(&mut self, u: &u8, v: A) -> A {
+        std::mem::replace(&mut self[*u as usize], v)
     }
 }
 
@@ -273,8 +273,8 @@ impl CharType for char {
     fn is_eol_pair(self, next: Self) -> bool {
         next == '\n' // self == '\r'
     }
-    fn as_bytes(&self) -> Vec<u8> {
-        self.to_string().as_bytes().into_iter().map(|u| *u).collect()
+    fn as_bytes(&self) -> &[u8] {
+        self.as_bytes()
     }
 
     fn ident() -> Self::Allchars<Self> {
@@ -307,15 +307,15 @@ impl CharType for char {
 #[derive(Clone)]
 pub struct AllUnicodeChars<A:Default>(PhantomData<A>);
 impl<A:Default+Clone> AllCharsTrait<char,A> for AllUnicodeChars<A> {
-    fn get(&self, u: char) -> &A {
+    fn get(&self, u: &char) -> &A {
         todo!()
     }
 
-    fn set(&mut self, u: char, v: A) {
+    fn set(&mut self, u: &char, v: A) {
         todo!()
     }
 
-    fn replace(&mut self, u: char, v: A) -> A {
+    fn replace(&mut self, u: &char, v: A) -> A {
         todo!()
     }
 }

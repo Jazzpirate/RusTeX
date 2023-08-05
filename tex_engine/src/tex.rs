@@ -1,5 +1,5 @@
 //! Basic TeX concepts, such as [`Token`](token::Token)s, [`CategoryCode`](catcodes::CategoryCode)s
-//! and [`Command`](commands::Command)s.
+//! and [`Command`](commands::BaseCommand)s.
 pub mod catcodes;
 pub mod token;
 pub mod commands;

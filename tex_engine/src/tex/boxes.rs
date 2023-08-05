@@ -5,7 +5,6 @@ use std::sync::RwLock;
 use crate::engine::EngineType;
 use crate::engine::state::modes::BoxMode;
 use crate::engine::stomach::Stomach;
-use crate::tex::numbers::NumSet;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
@@ -29,12 +28,12 @@ impl TeXNode for StandardTeXBox {
     type Bx = StandardTeXBox;
 }
 
-pub struct Whatsit<ET:EngineType>(Ptr<RwLock<Option<Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet) -> Result<(),Box<dyn TeXError<ET::Token>>>>>>>);
+pub struct Whatsit<ET:EngineType>(Ptr<RwLock<Option<Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>>>>);
 impl<ET:EngineType> Whatsit<ET> {
-    pub fn new(f:Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet) -> Result<(),Box<dyn TeXError<ET::Token>>>>) -> Self {
+    pub fn new(f:Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>) -> Self {
         Whatsit(Ptr::new(RwLock::new(Some(f))))
     }
-    pub fn apply(self,stomach:&mut ET::Stomach, state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),Box<dyn TeXError<ET::Token>>> {
+    pub fn apply(self,stomach:&mut ET::Stomach, state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),TeXError<ET::Token>> {
         let f = &mut *self.0.write().unwrap();
         match std::mem::take(f) {
             None => Ok(()),

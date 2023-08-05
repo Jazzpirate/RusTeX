@@ -1,10 +1,154 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use crate::engine::EngineType;
 use crate::tex::commands::Def;
 use crate::tex::token::Token;
 use crate::utils::strings::TeXStr;
+#[derive(Clone,Debug)]
+pub struct TeXError<T:Token> {
+    pub msg:String,
+    pub cause:Option<T>,
+    pub source:Option<Box<TeXError<T>>>,
+}
+impl<T:Token> TeXError<T> {
+    pub fn throw_string(self) -> String {
+        let mut ret = self.msg;
+        match self.cause {
+            Some(tk) => match tk.sourceref_trace() {
+                Some(trace) => {
+                    ret.push_str(format!(": {} - {}",tk,trace).as_str());
+                }
+                None => {
+                    ret.push_str(format!(": {}",tk).as_str());
+                }
+            },
+            None => ()
+        }
+        match self.source {
+            Some(src) => {
+                ret.push_str(format!("\n  caused by: {}",src.throw_string()).as_str());
+            }
+            None => {}
+        }
+        ret
+    }
+}
+impl<T:Token> Display for TeXError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.msg)
+    }
+}
+impl<T:Token> Error for TeXError<T> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match &self.source {
+            Some(src) => Some(&*src),
+            None => None
+        }
+    }
+}
 
+#[macro_export]
+macro_rules! throw {
+    ($arg:expr) => {
+        return Err(TeXError{
+            msg:$arg.to_string(),
+            cause:std::option::Option::None,
+            source:std::option::Option::None
+        })
+    };
+    ($first:expr,$($arg:tt),*) => {
+        return Err(TeXError{
+            msg:format!($first,$($arg),*),
+            cause:std::option::Option::None,
+            source:std::option::Option::None
+        })
+    };
+    ($arg:expr => $cause:expr) => {
+        return Err(TeXError{
+            msg:$arg.to_string(),
+            cause:Some($cause.clone()),
+            source:std::option::Option::None
+        })
+    };
+    ($first:expr,$($arg:tt),* => $cause:expr) => {
+        return Err(TeXError{
+            msg:format!($first,$($arg),*),
+            cause:Some($cause.clone()),
+            source:std::option::Option::None
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! file_end {
+    () => (crate::throw!("File ended unexpectedly"));
+    ($tk:expr) => (crate::throw!("File ended unexpectedly" => $tk));
+}
+
+#[macro_export]
+macro_rules! file_end_prim {
+    ($name:expr,$tk:expr) => (crate::throw!("File ended while scanning {}",$name => $tk.cause.clone()));
+}
+
+#[macro_export]
+macro_rules! catch_prim {
+    ($f:expr => ($name:expr,$cause:expr)) => {
+        match $f {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(TeXError{
+                    msg:format!("Error in \\{}",$name),
+                    cause:Some($cause.cause.clone()),
+                    source:Some(Box::new(e))
+                })
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! catch {
+    ($f:expr => $cause:expr) => {
+        match $f {
+            Ok(x) => x,
+            Err(mut e) => {
+                match e.cause {
+                    Some(_) => (),
+                    std::option::Option::None => e.cause = Some($cause)
+                }
+                return Err(e);
+            }
+        }
+    };
+    ($f:expr ; $msg:expr) => {
+        match $f {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(TeXError{
+                    msg:format!($msg),
+                    cause:std::option::Option::None,
+                    source:Some(Box::new(e))
+                })
+            }
+        }
+    };
+    ($f:expr ; $msg:expr => $cause:expr) => {
+        match $f {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(TeXError{
+                    msg:format!($msg),
+                    cause:Some($cause),
+                    source:Some(Box::new(e))
+                })
+            }
+        }
+    }
+}
+
+
+/*
 pub trait TeXError<T:Token>:Error {
     fn display(&self, f: &mut Formatter<'_>) -> std::fmt::Result;
     fn debug(&self, f: &mut Formatter<'_>) -> std::fmt::Result {self.display(f)}
@@ -147,8 +291,8 @@ impl<T:Token> TeXError<T> for OtherError<T> {
 }
 error_impl!(OtherError);
 
-pub struct ErrorInPrimitive<T:Token>{pub name:&'static str,pub msg:Option<String>,pub cause:Option<T>,pub source:Option<Box<dyn TeXError<T>>>}
-impl<T:Token> TeXError<T> for ErrorInPrimitive<T> {
+pub struct TeXError<T:Token>{pub name:&'static str,pub msg:Option<String>,pub cause:Option<T>,pub source:Option<Box<dyn TeXError<T>>>}
+impl<T:Token> TeXError<T> for TeXError<T> {
     fn display(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.msg {
             Some(ref msg) => write!(f,"Error in {}: {}",self.name,msg),
@@ -349,3 +493,4 @@ macro_rules! catch {
         }
     };
 }
+ */

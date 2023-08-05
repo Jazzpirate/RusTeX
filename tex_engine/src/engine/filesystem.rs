@@ -13,7 +13,7 @@ pub mod kpathsea;
 use std::collections::hash_map::Entry;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard};
 use kpathsea::Kpathsea;
 use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KpseResult;
@@ -21,22 +21,24 @@ use crate::engine::mouth::string_source::{StringSource, StringSourceState};
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::errors::{OtherError, TeXError};
+use crate::throw;
+use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 pub trait File<Char:CharType>:Clone {
+    type OptionRef<'a>: std::ops::Deref<Target=Option<Vec<u8>>> where Self:'a;
     fn path(&self) -> &PathBuf;
     fn exists(&self) -> bool;
-    fn content_string(&self) -> Option<Vec<u8>>;
+    fn content_string(&self) -> Self::OptionRef<'_>;
     fn open_out(&self);
     fn open_in(&self);
     fn close_out(&self);
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>>;
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>>;
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -63,10 +65,11 @@ impl<Char:CharType> PhysicalFile<Char> {
     }
 }
 impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
+    type OptionRef<'a> = &'a Option<Vec<u8>>;
     fn path(&self) -> &PathBuf { &self.path }
     fn exists(&self) -> bool { self.path.exists() }
-    fn content_string(&self) -> Option<Vec<u8>> {
-        self.contents.clone()
+    fn content_string(&self) -> Self::OptionRef<'_> {
+        &self.contents
     }
     fn open_out(&self) {
         todo!("Physical file system not implemented yet")
@@ -86,7 +89,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -94,13 +97,11 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
 
 pub struct VirtualFile<Char:CharType> {path:PathBuf,contents:RwLock<Option<Vec<u8>>>,open:RwLock<Option<StringSource<Char>>>}
 impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
+    type OptionRef<'a> = RwLockReadGuard<'a,Option<Vec<u8>>>;
     fn path(&self) -> &PathBuf { &self.path }
     fn exists(&self) -> bool { self.contents.read().unwrap().is_some() }
-    fn content_string(&self) -> Option<Vec<u8>> {
-        match &*self.contents.read().unwrap() {
-            Some(s) => Some(s.clone()),
-            None => None
-        }
+    fn content_string(&self) -> Self::OptionRef<'_> {
+        self.contents.read().unwrap()
     }
     fn close_out(&self) {}
     fn open_out(&self) {
@@ -126,10 +127,10 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let mut open = self.open.write().unwrap();
         open.as_mut().unwrap().eof::<ET>(state)//.peek().is_none()
     }
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,Box<dyn TeXError<T>>> {
+    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>> {
         let mut open = self.open.write().unwrap();
         match &mut *open {
-            None => Err(OtherError { msg: "File not open".to_string(), source: None, cause: None }.into()),
+            None => throw!("File not open"),
             Some(m) => {
                 let mut ret: Vec<T> = vec!();
                 let mut ingroups = 0;

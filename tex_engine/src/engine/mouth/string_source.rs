@@ -3,12 +3,12 @@
 */
 
 use std::vec::IntoIter;
-use crate::debug_log;
+use crate::{debug_log, throw};
 use crate::engine::EngineType;
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::errors::InvalidCharacter;
+use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType};
 
@@ -123,12 +123,12 @@ impl<C:CharType> StringSourceState<C> {
                     }
                 }
             }
-            _ if *cc.get(a) == CategoryCode::EOL => {
+            _ if *cc.get(&a) == CategoryCode::EOL => {
                 self.skip_line();
                 self.state = MouthState::N;
                 self.next_char(cc,endline)
             }
-            _ if *cc.get(a) == CategoryCode::Superscript => self.maybe_superscript(a,cc,endline),
+            _ if *cc.get(&a) == CategoryCode::Superscript => self.maybe_superscript(a,cc,endline),
             _ => {
                 let ret = Some((a,self.line,self.col));
                 self.col += 1;
@@ -250,7 +250,7 @@ impl<C:CharType> StringSourceState<C> {
         use crate::tex::catcodes::CategoryCode::*;
         debug_log!(trace=>"get_next_immediate:   Escape");
         match self.next_char(cc,endline) {
-            Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
+            Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
                 self.charbuffer.push((a,l,c));
                 self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
@@ -261,19 +261,19 @@ impl<C:CharType> StringSourceState<C> {
                 debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
                 (BaseToken::CS(C::empty_str()), line, col)
             }
-            Some((a,_,_)) if *cc.get(a) == Letter => {
+            Some((a,_,_)) if *cc.get(&a) == Letter => {
                 self.state = MouthState::S;
                 debug_log!(trace=>"get_next_immediate: Next character is Letter");
                 let mut v = Vec::with_capacity(64);
                 v.push(a);
                 loop {
                     match self.next_char(cc,endline) {
-                        Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(a) != EOL => {
+                        Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
                             self.charbuffer.push((a,l,c));
                             self.state = MouthState::N;
                             break
                         }
-                        Some((b,_,_)) if *cc.get(b) == Letter => v.push(b),
+                        Some((b,_,_)) if *cc.get(&b) == Letter => v.push(b),
                         Some(o) => {
                             self.charbuffer.push(o);
                             break
@@ -312,7 +312,7 @@ impl<C:CharType> StringSourceState<C> {
             },
             Some((a,line,col)) => {
                 debug_log!(trace=>"get_next_immediate: Next character: {} (at {};{})",a.char_str(),line,col);
-                match cc.get(a) {
+                match cc.get(&a) {
                     EOL => {
                         debug_log!(trace=>"get_next_immediate:   EOL");
                         match self.state {
@@ -356,7 +356,7 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    pub fn get_next_valid<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,InvalidCharacter<T>> {
+    pub fn get_next_valid<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,TeXError<T>> {
         use CategoryCode::*;
         match self.get_next_immediate(cc,endline) {
             None => {
@@ -376,7 +376,7 @@ impl<C:CharType> StringSourceState<C> {
                 }
                 Invalid => {
                     debug_log!(trace=>"get_next_valid: Invalid. Error");
-                    Err(InvalidCharacter(c))
+                    throw!("Invalid character {}",c)
                 }
                 _ => {
                     debug_log!(trace=>"get_next_valid: valid. Returning");
@@ -387,7 +387,7 @@ impl<C:CharType> StringSourceState<C> {
     }
 
     pub fn read<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>,f:&mut dyn FnMut(T) -> ())
-        -> Result<(),InvalidCharacter<T>> {
+        -> Result<(),TeXError<T>> {
         let mut done = false;
         use CategoryCode::*;
         let currline = self.line;
@@ -397,7 +397,7 @@ impl<C:CharType> StringSourceState<C> {
                 self.charbuffer.push((next,l,c));
                 return Ok(())
             }
-            match cc.get(next) {
+            match cc.get(&next) {
                 Ignored => (),
                 Comment => {
                     self.skip_line();
@@ -409,7 +409,7 @@ impl<C:CharType> StringSourceState<C> {
                 }
                 Invalid => {
                     debug_log!(trace=>"get_next_valid: Invalid. Error");
-                    return Err(InvalidCharacter(next))
+                    throw!("Invalid character {}",c)
                 }
                 EOL => {
                     if done {
@@ -473,7 +473,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    pub fn read<T:Token<Char=C>>(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:&mut dyn FnMut(T) -> ()) -> Result<(),InvalidCharacter<T>> {
+    pub fn read<T:Token<Char=C>>(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:&mut dyn FnMut(T) -> ()) -> Result<(),TeXError<T>> {
         self.state.read(cc,endline,f)
     }
 
@@ -483,7 +483,7 @@ impl<C:CharType> StringSource<C> {
     pub fn preview(&self) -> String { self.state.preview() }
     pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
-    pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<T>> {
+    pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,TeXError<T>> {
         match self.state.get_next_valid(cc, endline)? {
             None => Ok(None),
             Some((n,l,c)) =>

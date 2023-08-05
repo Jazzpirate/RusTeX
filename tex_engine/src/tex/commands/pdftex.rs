@@ -1,4 +1,7 @@
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_gullet, register_int, register_int_assign, register_stomach};
+//! Implementations for the pdfTeX-specific commands.
+//! Use [`initialize_pdftex_primitives`] to register all of these.
+
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
 use crate::engine::EngineType;
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
@@ -7,22 +10,34 @@ use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{GulletCommand, StomachCommand};
-use crate::tex::numbers::{Int,NumSet, Dim};
+use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::errors::{catch_prim, ErrorInPrimitive};
+use crate::tex::commands::{Command, CommandSource, ResolvedToken, TokenCont};
+use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 use crate::utils::Ptr;
 
 
-pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<bool,ErrorInPrimitive<ET::Token>> {
+/// The version number returned by [`\pdftexversion`](pdftexversion) (140).
+pub static PDF_TEX_VERSION: i64 = 140;
+/// The version number returned by [`\pdfmajorversion`](pdfmajorversion) (1).
+pub static PDF_MAJOR_VERSION: i64 = 1;
+/// The version number returned by [`\pdftexrevision`](pdftexrevision) (25).
+pub static PDFTEX_REVISION: i64 = 25;
+
+// --------------------------------------------------------------------------------------------------
+
+/// "ifpdfabsnum"
+pub static IFPDFABSNUM : &str = "ifpdfabsnum";
+/// `\ifpdfabsnum`: Compare the absolute values of two numbers.
+pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET::Token>> {
     debug_log!(trace=>"ifpdfabsnum");
-    let i1 = catch_prim!(gullet.get_int(state) => ("ifpdfabsnum",cmd));
-    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifpdfabsnum",cmd)) {
-        None => return Err(ErrorInPrimitive{name:"ifpdfabsnum",msg:Some("Expected one of '<','>','='".to_string()),cause:Some(cmd.cause),source:None}),
+    let i1 = catch_prim!(gullet.get_int(state) => (IFPDFABSNUM,cmd));
+    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => (IFPDFABSNUM,cmd)) {
+        None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
     };
-    let i2 = catch_prim!(gullet.get_int(state) => ("ifpdfabsnum",cmd));
+    let i2 = catch_prim!(gullet.get_int(state) => (IFPDFABSNUM,cmd));
     match rel {
         "<" => Ok(i1.to_i64().abs() < i2.to_i64().abs()),
         ">" => Ok(i1.to_i64().abs()>i2.to_i64().abs()),
@@ -31,14 +46,17 @@ pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
     }
 }
 
-pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<bool,ErrorInPrimitive<ET::Token>> {
+/// "ifpdfabsdim"
+pub static IFPDFABSDIM : &str = "ifpdfabsdim";
+/// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
+pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET::Token>> {
     debug_log!(trace=>"ifpdfabsdim");
-    let i1 = catch_prim!(gullet.get_dim(state) => ("ifpdfabsdim",cmd));
-    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifpdfabsdim",cmd)) {
-        None => return Err(ErrorInPrimitive{name:"ifpdfabsdim",msg:Some("Expected one of '<','>','='".to_string()),cause:Some(cmd.cause),source:None}),
+    let i1 = catch_prim!(gullet.get_dim(state) => (IFPDFABSDIM,cmd));
+    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => (IFPDFABSDIM,cmd)) {
+        None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
     };
-    let i2 = catch_prim!(gullet.get_dim(state) => ("ifpdfabsdim",cmd));
+    let i2 = catch_prim!(gullet.get_dim(state) => (IFPDFABSDIM,cmd));
     match rel {
         "<" => Ok(i1.to_sp() < i2.to_sp().abs()),
         ">" => Ok(i1.to_sp().abs()>i2.to_sp().abs()),
@@ -47,74 +65,99 @@ pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
     }
 }
 
-fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+/// "pdffilesize"
+pub static PDFFILESIZE : &str = "pdffilesize";
+/// `\pdffilesize`: Get the size of a file (in bytes).
+pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,fun:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"pdffilesize");
-    let ret = catch_prim!(gullet.get_expanded_group(state,false,false,true) => ("pdffilesize",cmd));
+    let mut ret = vec!();
+    catch_prim!(gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
     let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = state.filesystem().get(&filename);
-    match f.content_string() {
-        None => Ok(vec!()),
-        Some(v) => Ok(string_to_tokens(v.len().to_string().as_bytes()))
+    let x = f.content_string();
+    match &*x {
+        None => Ok(()),
+        Some(v) =>{
+            for t in string_to_tokens(v.len().to_string().as_bytes()) { fun(state,t)? };
+            Ok(())
+        }
     }
 }
 
-pub fn pdfglyphtounicode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, stomach:&mut ET::Stomach, cmd:StomachCommand<ET::Token>)
-                                  -> Result<(), ErrorInPrimitive<ET::Token>> {
+/// "pdfglyphtounicode"
+pub static PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
+/// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
+pub fn pdfglyphtounicode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
+                                  -> Result<(), TeXError<ET::Token>> {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state, &mut |_,_|{}) => ("pdfglyphtounicode",cmd));
-    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_,_|{}) => ("pdfglyphtounicode",cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state, &mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
+    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
     Ok(())
 }
 
-fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>) -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
+/// "pdfstrcmp"
+pub static PDFSTRCMP : &str = "pdfstrcmp";
+/// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
+pub fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"pdfstrcmp");
-    let str1 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("pdfstrcmp",cmd))).unwrap();
-    let str2 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("pdfstrcmp",cmd))).unwrap();
+    let str1 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd))).unwrap();
+    let str2 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd))).unwrap();
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    let ret = if str1==str2 {vec!(Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
-        else if str1 < str2 { string_to_tokens("-1".as_bytes())}
-        else {vec!(Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))};
-    Ok(ret)
+    if str1==str2 {f(state,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))?}
+        else if str1 < str2 { for t in string_to_tokens("-1".as_bytes()) {f(state,t)?}}
+        else {f(state,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))?};
+    Ok(())
 }
 
-fn pdftexversion<ET:EngineType>(state:&mut ET::State,_gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
-    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
-    Ok(catch_prim!(ET::Int::from_i64(140) => ("pdftexversion",cmd)))
+/// "pdftexversion"
+pub static PDFTEXVERSION : &str = "pdftexversion";
+/// ` \pdftexversion`: Return the [`PDF_TEX_VERSION`] as [`Int`].
+pub fn pdftexversion<ET:EngineType>(cmd:CommandSource<ET>)
+    -> Result<ET::Int,TeXError<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(PDF_TEX_VERSION) => (PDFTEXVERSION,cmd)))
 }
 
-fn pdfmajorversion<ET:EngineType>(state:&mut ET::State,_gullet:&mut ET::Gullet,cmd:GulletCommand<ET::Token>)
-    -> Result<ET::Int,ErrorInPrimitive<ET::Token>> {
-    Ok(catch_prim!(ET::Int::from_i64(1) => ("pdfmajorversion",cmd)))
+/// "pdfmajorversion"
+pub static PDFMAJORVERSION : &str = "pdfmajorversion";
+/// `\pdfmajorversion`: Return the [`PDF_MAJOR_VERSION`] as [`Int`].
+pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
+    -> Result<ET::Int,TeXError<ET::Token>> {
+    Ok(catch_prim!(ET::Int::from_i64(PDF_MAJOR_VERSION) => (PDFMAJORVERSION,cmd)))
 }
 
-pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,_gullet:&mut ET::Gullet,_cmd:GulletCommand<ET::Token>)
-    -> Result<Vec<ET::Token>,ErrorInPrimitive<ET::Token>> {
-    Ok(string_to_tokens("25".as_bytes()))
+
+/// "pdftexrevision"
+pub static PDFTEXREVISION : &str = "pdftexrevision";
+/// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
+pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
+    -> Result<(),TeXError<ET::Token>> {
+    for v in string_to_tokens(PDFTEX_REVISION.to_string().as_bytes()) { f(state,v)? }
+    Ok(())
 }
 
+/// Initialize a TeX engine with default implementations for all pdfTeX primitives.
 pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
     register_conditional!(ifpdfabsdim,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsdim::<ET>(s,gu,cmd));
     register_conditional!(ifpdfabsnum,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsnum::<ET>(s,gu,cmd));
     register_int_assign!(pdfcompresslevel,state,stomach,gullet);
     register_int_assign!(pdfdecimaldigits,state,stomach,gullet);
-    register_gullet!(pdffilesize,state,stomach,gullet,(s,gu,cmd) =>pdffilesize::<ET>(s,gu,cmd));
+    register_expandable!(pdffilesize,state,stomach,gullet,(s,gu,cmd,f) =>pdffilesize::<ET>(s,gu,cmd,f));
     register_int_assign!(pdfgentounicode,state,stomach,gullet);
-    register_stomach!(pdfglyphtounicode,state,stomach,gullet,(s,gu,sto,cmd,_) =>pdfglyphtounicode::<ET>(s,gu,sto,cmd));
+    register_unexpandable!(pdfglyphtounicode,state,stomach,gullet,(s,gu,cmd) =>pdfglyphtounicode::<ET>(s,gu,cmd));
     register_dim_assign!(pdfhorigin,state,stomach,gullet);
     register_int_assign!(pdfoutput,state,stomach,gullet);
-    register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion::<ET>(s,g,c));
+    register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion::<ET>(c));
     register_int_assign!(pdfminorversion,state,stomach,gullet);
     register_int_assign!(pdfobjcompresslevel,state,stomach,gullet);
     register_dim_assign!(pdfpageheight,state,stomach,gullet);
     register_dim_assign!(pdfpagewidth,state,stomach,gullet);
     register_int_assign!(pdfpkresolution,state,stomach,gullet);
-    register_gullet!(pdfstrcmp,state,stomach,gullet,(s,gu,cmd) =>pdfstrcmp::<ET>(s,gu,cmd));
-    register_gullet!(pdftexrevision,state,stomach,gullet,(s,gu,cmd) =>pdftexrevision::<ET>(s,gu,cmd));
-    register_int!(pdftexversion,state,stomach,gullet,(s,g,c) => pdftexversion::<ET>(s,g,c));
+    register_expandable!(pdfstrcmp,state,stomach,gullet,(s,gu,cmd,f) =>pdfstrcmp::<ET>(s,gu,cmd,f));
+    register_expandable!(pdftexrevision,state,stomach,gullet,(s,gu,cmd,f) =>pdftexrevision::<ET>(s,f));
+    register_int!(pdftexversion,state,stomach,gullet,(s,g,c) => pdftexversion::<ET>(c));
     register_dim_assign!(pdfvorigin,state,stomach,gullet);
     register_int_assign!(tracingstacklevels,state,stomach,gullet);
-
 
     cmtodo!(state,stomach,gullet,efcode);
     cmtodo!(state,stomach,gullet,knaccode);

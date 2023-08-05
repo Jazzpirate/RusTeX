@@ -4,16 +4,15 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField};
 use crate::engine::state::modes::{GroupType, TeXMode};
-use crate::tex::commands::Command;
+use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::Token;
-use crate::utils::errors::{OtherError, TeXError, UndefinedActiveCharacter, UndefinedControlSequence};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::{EngineType, Outputs};
 use crate::engine::stomach::Stomach;
 use crate::tex::boxes::{HVBox, OpenBox, TeXNode};
 use crate::tex::fonts::FontStore;
-use crate::tex::numbers::{Int, MuSkip, NumSet, Skip};
+use crate::tex::numbers::{Int, MuSkip, Skip};
 use crate::utils::{Pool, Ptr};
 
 pub mod fields;
@@ -79,22 +78,14 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     /// set the current newline character (`\newlinechar`)
     fn set_newlinechar(&mut self, c: Option<ET::Char>, globally:bool);
 
-    /// get the current [`Command`] with name `name:`[`TeXStr`]
-    fn get_command(&self, name:&TeXStr<ET::Char>) -> Option<Ptr<Command<ET::Token>>>;
-    /// get the current [`Command`] for the active character `c`
-    fn get_ac_command(&self, c: ET::Char) -> Option<Ptr<Command<ET::Token>>>;
-    /// set the current [`Command`] with name `name:`[`TeXStr`]
-    fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Ptr<Command<ET::Token>>>, globally:bool);
-    /// set the current [`Command`] for the active character `c`
-    fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Ptr<Command<ET::Token>>>, globally:bool);
-    /// get the current [`Command`] with name `name:`[`TeXStr`], or return an error if it is not defined
-    fn need_command(&self, name:&TeXStr<ET::Char>) -> Result<Ptr<Command<ET::Token>>,UndefinedControlSequence<ET::Token>> {
-        self.get_command(name).ok_or(UndefinedControlSequence(name.clone()))
-    }
-    /// get the current [`Command`] for the active character `c`, or return an error if it is not defined
-    fn need_ac_command(&self, c: ET::Char) -> Result<Ptr<Command<ET::Token>>,UndefinedActiveCharacter<ET::Token>> {
-        self.get_ac_command(c).ok_or(UndefinedActiveCharacter(c))
-    }
+    /// get the current [`BaseCommand`] with name `name:`[`TeXStr`]
+    fn get_command(&self, name:&TeXStr<ET::Char>) -> Option<&Command<ET>>;
+    /// get the current [`BaseCommand`] for the active character `c`
+    fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>>;
+    /// set the current [`BaseCommand`] with name `name:`[`TeXStr`]
+    fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Command<ET>>, globally:bool);
+    /// set the current [`BaseCommand`] for the active character `c`
+    fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Command<ET>>, globally:bool);
 
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char>;
@@ -108,12 +99,12 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_sfcode(&mut self, c: ET::Char, v:ET::Int, globally:bool);
 
     /// get the uppercase character for a character
-    fn get_uccode(&self, c: ET::Char) -> ET::Char;
+    fn get_uccode(&self, c: &ET::Char) -> ET::Char;
     /// set the uppercase character for a character
     fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally:bool);
 
     /// get the lowercase character for a character
-    fn get_lccode(&self, c: ET::Char) -> ET::Char;
+    fn get_lccode(&self, c: &ET::Char) -> ET::Char;
     /// set the lowercase character for a character
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally:bool);
 
@@ -216,8 +207,8 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     escapechar: SingleValueField<Option<ET::Char>>,
     newlinechar: SingleValueField<Option<ET::Char>>,
 
-    commands: HashMapField<TeXStr<ET::Char>,Option<Ptr<Command<ET::Token>>>>,
-    ac_commands: CharField<ET::Char,Option<Ptr<Command<ET::Token>>>>,
+    commands: HashMapField<TeXStr<ET::Char>,Option<Command<ET>>>,
+    ac_commands: CharField<ET::Char,Option<Command<ET>>>,
 
     catcodes: CharField<ET::Char,CategoryCode>,
     sfcodes: CharField<ET::Char,ET::Int>,
@@ -315,6 +306,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     fn pool_mut(&mut self) -> &mut Pool<ET::Token> {
         &mut self.pool
     }
+
     fn get_current_font(&self) -> usize {
         *self.current_font.get()
     }
@@ -531,7 +523,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_sfcode(&self, c: &ET::Char) -> ET::Int {
-        self.sfcodes.get(c)
+        *self.sfcodes.get(c).unwrap_or(&ET::Int::default())
     }
     fn set_sfcode(&mut self, c: ET::Char, v: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -544,7 +536,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_mathcode(&self, c: ET::Char) -> ET::Int {
-        self.mathcodes.get(&c)
+        *self.mathcodes.get(&c).unwrap_or(&ET::Int::default())
     }
     fn set_mathcode(&mut self, c: ET::Char, lc: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -557,7 +549,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_delcode(&self, c: ET::Char) -> ET::Int {
-        self.delcodes.get(&c)
+        *self.delcodes.get(&c).unwrap_or(&ET::Int::default())
     }
     fn set_delcode(&mut self, c: ET::Char, lc: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -570,11 +562,14 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     // #[inline(always)]
-    fn get_command(&self, name: &TeXStr<ET::Char>) -> Option<Ptr<Command<ET::Token>>> {
-        self.commands.get(name)
+    fn get_command(&self, name: &TeXStr<ET::Char>) -> Option<&Command<ET>> {
+        match self.commands.get(name) {
+            Some(r) => r.as_ref(),
+            _ => None
+        }//.as_ref().map(|c| *c)
     }
     // #[inline(always)]
-    fn set_command(&mut self, name: TeXStr<ET::Char>, cmd: Option<Ptr<Command<ET::Token>>>, globally: bool) {
+    fn set_command(&mut self, name: TeXStr<ET::Char>, cmd: Option<Command<ET>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -583,10 +578,13 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.commands.set_locally(name,cmd)
         }
     }
-    fn get_ac_command(&self, c: ET::Char) -> Option<Ptr<Command<ET::Token>>> {
-        self.ac_commands.get(&c)
+    fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>> {
+        match self.ac_commands.get(&c) {
+            Some(r) => r.as_ref(),
+            _ => None
+        }
     }
-    fn set_ac_command(&mut self, c: ET::Char, cmd: Option<Ptr<Command<ET::Token>>>, globally: bool) {
+    fn set_ac_command(&mut self, c: ET::Char, cmd: Option<Command<ET>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -613,8 +611,8 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     // #[inline(always)]
-    fn get_uccode(&self, c: ET::Char) -> ET::Char {
-        self.ucchar.get(&c)
+    fn get_uccode(&self, c: &ET::Char) -> ET::Char {
+        *self.ucchar.get(c).unwrap_or(&ET::Char::default())
     }
     // #[inline(always)]
     fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally: bool) {
@@ -628,8 +626,8 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     // #[inline(always)]
-    fn get_lccode(&self, c: ET::Char) -> ET::Char {
-        self.lcchar.get(&c)
+    fn get_lccode(&self, c: &ET::Char) -> ET::Char {
+        *self.lcchar.get(c).unwrap_or(&ET::Char::default())
     }
     // #[inline(always)]
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally: bool) {
@@ -644,7 +642,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
 
     // #[inline(always)]
     fn get_int_register(&self, i: usize) -> ET::Int {
-        self.intregisters.get(&i)
+        *self.intregisters.get(&i).unwrap_or(&ET::Int::default())
     }
     // #[inline(always)]
     fn set_int_register(&mut self, i: usize, v: ET::Int, globally: bool) {
@@ -657,7 +655,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_dim_register(&self, i: usize) -> ET::Dim { self.dimregisters.get(&i) }
+    fn get_dim_register(&self, i: usize) -> ET::Dim { *self.dimregisters.get(&i).unwrap_or(&ET::Dim::default()) }
     fn set_dim_register(&mut self, i: usize, v: ET::Dim, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
@@ -668,7 +666,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_skip_register(&self, i: usize) -> Skip<ET::SkipDim> { self.skipregisters.get(&i) }
+    fn get_skip_register(&self, i: usize) -> Skip<ET::SkipDim> { *self.skipregisters.get(&i).unwrap_or(&Skip::default()) }
     fn set_skip_register(&mut self, i: usize, v: Skip<ET::SkipDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
@@ -679,7 +677,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_muskip_register(&self, i: usize) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> { self.muskipregisters.get(&i) }
+    fn get_muskip_register(&self, i: usize) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> { *self.muskipregisters.get(&i).unwrap_or(&MuSkip::default()) }
     fn set_muskip_register(&mut self, i: usize, v: MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
@@ -690,7 +688,10 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_toks_register(&self, i: usize) -> Vec<ET::Token> { self.toksregisters.get(&i) }
+    fn get_toks_register(&self, i: usize) -> Vec<ET::Token> { match self.toksregisters.get(&i) {
+        None => vec!(),
+        Some(v) => v.clone()
+    }}
     fn set_toks_register(&mut self, i: usize, v: Vec<ET::Token>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
@@ -718,7 +719,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_primitive_int(&self, name: &'static str) -> ET::Int {
-        self.primitive_intregisters.get(&name)
+        *self.primitive_intregisters.get(&name).unwrap_or(&ET::Int::default())
     }
     fn set_primitive_int(&mut self, name: &'static str, v: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -731,7 +732,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_primitive_dim(&self, name: &'static str) -> ET::Dim {
-        self.primitive_dimregisters.get(&name)
+        *self.primitive_dimregisters.get(&name).unwrap_or(&ET::Dim::default())
     }
     fn set_primitive_dim(&mut self, name: &'static str, v: ET::Dim, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -744,7 +745,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_primitive_skip(&self, name: &'static str) -> Skip<ET::SkipDim> {
-        self.primitive_skipregisters.get(&name)
+        *self.primitive_skipregisters.get(&name).unwrap_or(&Skip::default())
     }
     fn set_primitive_skip(&mut self, name: &'static str, v: Skip<ET::SkipDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -757,7 +758,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn get_primitive_muskip(&self, name: &'static str) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
-        self.primitive_muskipregisters.get(&name)
+        *self.primitive_muskipregisters.get(&name).unwrap_or(&MuSkip::default())
     }
     fn set_primitive_muskip(&mut self, name: &'static str, v: MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -769,9 +770,10 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_primitive_toks(&self, name: &'static str) -> Vec<ET::Token> {
-        self.primitive_tokregisters.get(&name)
-    }
+    fn get_primitive_toks(&self, name: &'static str) -> Vec<ET::Token> { match self.primitive_tokregisters.get(&name) {
+        None => vec!(),
+        Some(v) => v.clone()
+    }}
     fn set_primitive_toks(&mut self, name: &'static str, v: Vec<ET::Token>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};

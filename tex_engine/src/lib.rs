@@ -53,7 +53,7 @@ macro_rules! debug_log {
 mod tests {
     use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
     use log::{error, warn, info, debug, trace};
-    use crate::engine::gullet::TeXGullet;
+    use crate::engine::gullet::{Gullet,TeXGullet};
     use crate::engine::mouth::StandardMouth;
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
@@ -67,9 +67,9 @@ mod tests {
     use crate::utils::errors::TeXError;
     use ansi_term::Colour::*;
     use crate::engine::{EngineType, Outputs};
-    use crate::tex::commands::Command;
+    use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command};
     use crate::tex::fonts::{TfmFont, TfmFontStore};
-    use crate::tex::numbers::{DefaultNumSet, Dimi32, Fill, MuFill, Mui32};
+    use crate::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
     use crate::utils::Ptr;
     use crate::utils::strings::CharType;
 
@@ -144,11 +144,11 @@ mod tests {
             write_other:|s| { print!("\n{}",Black.on(Green).paint(s)) },
         };
 
-        #[derive(Clone,Copy)]
+        #[derive(Clone,Copy,Debug)]
         struct Default();
         impl EngineType for Default {
             type Char = u8;
-            type Token = TokenWithSourceref<u8>;
+            type Token = TokenWithSourceref<Self>;
             type File = Ptr<VirtualFile<u8>>;
             type FileSystem = KpseVirtualFileSystem<u8>;
             type Font = TfmFont;
@@ -160,9 +160,9 @@ mod tests {
             type SkipDim = Fill;
             type MuDim = Mui32;
             type MuStretchShrinkDim = MuFill;
-            type Numbers = DefaultNumSet;
+            type CommandReference = ();
             type State = TeXState<Self>;
-            type Mouth = StandardMouth<u8>;
+            type Mouth = StandardMouth<Self::Token>;
             type Gullet = TeXGullet<Self>;
             type Stomach = NoShipoutDefaultStomach<Self>;
         }
@@ -174,23 +174,21 @@ mod tests {
         let stomach = NoShipoutDefaultStomach::new();
         let mut engine = crate::engine::new::<Default>(state,gullet,stomach);
 
-        engine.state.set_command(<u8 as CharType>::from_str("rustexBREAK"),Some(Ptr::new(
-            Command::Stomach {
-                name: "rustexBREAK",
-                index: engine.stomach.register_primitive("rustexBREAK",|_,_,_,_,_| {
-                    println!("HERE!");
-                    std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
-                    env_logger::init();
-                    //trace();
-                    Ok(())
-                })
+        engine.state.set_command(<u8 as CharType>::from_str("rustexBREAK"),Some(Command::new(BaseCommand::Unexpandable {
+            name: "rustexBREAK",
+            apply: |_,_,_| {
+                println!("HERE!");
+                std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
+                env_logger::init();
+                //trace();
+                Ok(())
             }
-        )),true);
+        },None)),true);
 
         match engine.initialize_pdflatex() {
             Ok(_) => {},
             Err(e) => {
-                (outputs.error)(&format!("{}\n\nat:{}",e.throw_string(),engine.gullet.mouth.preview(100)));
+                (outputs.error)(&format!("{}\n\nat:{}",e.throw_string(),engine.gullet.mouth().preview(100)));
                 panic!()
             }
         }

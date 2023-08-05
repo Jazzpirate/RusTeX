@@ -1,16 +1,17 @@
+use std::hint::unreachable_unchecked;
 use std::marker::PhantomData;
-use crate::{catch, debug_log, file_end};
+use crate::{catch, debug_log, file_end, throw};
 use crate::engine::EngineType;
 use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
 use crate::engine::gullet::methods::{get_keyword, get_keywords};
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
+use crate::tex::commands::{ValueCommand, BaseCommand, Command, ResolvedToken};
 use crate::utils::strings::CharType;
-use crate::tex::commands::{Assignable, GulletCommand, StomachCommand, StomachCommandInner};
-use crate::tex::numbers::{MuSkip, NumSet, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim, Numeric};
+use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim, Numeric};
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::errors::{ExpectedInteger, ExpectedUnit, ImplementationError, TeXError};
+use crate::utils::errors::TeXError;
 
 fn is_ascii_digit(u:usize) -> bool {
     u >= 48 && u <= 57
@@ -22,41 +23,35 @@ fn is_ascii_hex_digit(u:usize) -> bool {
     is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
 }
 
-pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Int,Box<dyn TeXError<ET::Token>>> {
+pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Int,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading number {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     gullet.mouth().skip_whitespace::<ET>(state)?;
-
     let mut isnegative = false;
     let mut ishex = false;
     let mut isoct = false;
-
-    while let Some(next) = gullet.get_next_stomach_command(state)? {
-        match next.cmd {
-            StomachCommandInner::Char{char,from_chardef:false} => {
+    while let Some(next) = gullet.get_next_unexpandable(state)? {
+        use crate::tex::commands::BaseCommand::*;
+        match next.command {
+            Def(_) | Conditional{..} | Expandable{..} => unsafe{unreachable_unchecked()},
+            Char{char,catcode} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace::<ET>(state)
-                            => next.cause
-                        );
+                        catch!(gullet.mouth().skip_whitespace::<ET>(state) => next.source.cause);
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace::<ET>(state)
-                        => next.cause
-                    ),
+                    43 => /* + */ catch!(gullet.mouth().skip_whitespace::<ET>(state)=> next.source.cause),
                     34 if !ishex && !isoct => ishex = true, // "
                     39 if !ishex && !isoct => isoct = true, // '
                     96 if !ishex && !isoct => { // `
-                        match catch!(gullet.mouth().get_next::<ET>(state)
-                            => next.cause
-                        ) {
-                            None => file_end!(next.cause),
+                        match catch!(gullet.mouth().get_next::<ET>(state)=> next.source.cause) {
+                            std::option::Option::None => file_end!(next.source.cause),
                             Some((tk,_)) => {
                                 let c = match tk.base() {
                                     BaseToken::Char(c,_) => *c,
                                     BaseToken::CS(str) if str.len() == 1 =>
                                         unsafe{ *str.as_vec().first().unwrap_unchecked() }
-                                    _ => return Err(ExpectedInteger(tk,PhantomData).into())
+                                    _ => return throw!("Number expected" => next.source.cause)
                                 };
                                 catch!(expand_until_space::<ET>(gullet,state) => tk);
                                 let us = c.to_usize() as i64;
@@ -80,115 +75,67 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
                     }
                 }
             }
-            StomachCommandInner::ValueRegister(index,Assignable::Int) => {
-                let val = state.get_int_register(index);
+            Int(ass) => {
+                let val = ass.get(state,gullet,next.source)?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
-            StomachCommandInner::ValueRegister(index,Assignable::Dim) => {
-                let val = state.get_dim_register(index);
-                let val = if isnegative { -val } else { val };
-                debug_log!(trace=>"Returning {}",val);
-                return Ok(ET::Int::from_i64(val.to_sp())?)
-            }
-            StomachCommandInner::Value {index,tp:Assignable::Int,..} => {
-                match gullet.primitive_int(index) {
-                    None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
-                    Some(f) => {
-                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
-                        let val = if isnegative { -val } else { val };
-                        debug_log!(trace=>"Returning {}",val);
-                        return Ok(val)
-                    }
-                }
-            }
-            StomachCommandInner::Value {index,tp:Assignable::Dim,..} => {
-                match gullet.primitive_dim(index) {
-                    None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
-                    Some(f) => {
-                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
-                        let val = if isnegative { -val } else { val };
-                        debug_log!(trace=>"Returning {}",val);
-                        return Ok(ET::Int::from_i64(val.to_sp())?)
-                    }
-                }
-            }
-            StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Int,..} => {
-                match gullet.primitive_int(value_index) {
-                    None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
-                    Some(f) => {
-                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
-                        let val = if isnegative { -val } else { val };
-                        debug_log!(trace=>"Returning {}",val);
-                        return Ok(val)
-                    }
-                }
-            }
-            StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Dim,..} => {
-                match gullet.primitive_dim(value_index) {
-                    None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
-                    Some(f) => {
-                        let val = f(state,gullet,GulletCommand{cause:next.cause})?;
-                        let val = if isnegative { -val } else { val };
-                        debug_log!(trace=>"Returning {}",val.to_sp());
-                        return Ok( ET::Int::from_i64(val.to_sp())?)
-                    }
-                }
-            }
-            StomachCommandInner::AssignableValue {name,tp:Assignable::Int} => {
-                let val = state.get_primitive_int(name);
+            Dim(ass) => {
+                let val = ET::Int::from_i64(ass.get(state,gullet,next.source)?.to_sp())?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
-            StomachCommandInner::Char{char,..} => {
+            CharDef(char) => {
                 let val = ET::Int::from_i64(char.to_usize() as i64)?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
-            StomachCommandInner::MathChar(u) => {
+            MathChar(u) => {
                 let val = ET::Int::from_i64(u as i64)?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
-            o => todo!("Non-char in read_number: {:?} at {}",o,gullet.mouth().file_line())
+            _ => throw!("Number expected" => next.source.cause)
         }
     }
     file_end!()
 }
 
-pub fn expand_until_space<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<(),Box<dyn TeXError<ET::Token>>> {
-    match gullet.get_next_stomach_command(state)? {
-        Some(StomachCommand{cmd:StomachCommandInner::Space,..}) => Ok(()), // eat the space
-        Some(o) => {
-            gullet.mouth().requeue(o.cause);
-            Ok(())
+pub fn expand_until_space<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<(),TeXError<ET::Token>> {
+    match gullet.get_next_unexpandable(state)? {
+        Some(cmd) => match cmd.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => Ok(()), // eat one space
+            _ => {
+                gullet.mouth().requeue(cmd.source.cause);
+                Ok(())
+            }
         }
         None => Ok(())
     }
 }
 
-pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,Box<dyn TeXError<ET::Token>>> {
+pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading decimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
 
-    while let Some(next) = gullet.get_next_stomach_command(state)? {
-        match next.cmd {
-            StomachCommandInner::Char{char,from_chardef:false} => {
+    while let Some(next) = gullet.get_next_unexpandable(state)? {
+        match next.command {
+            BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
+            BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
                 } else {
-                    gullet.mouth().requeue(next.cause);
+                    gullet.mouth().requeue(next.source.cause);
                     break
                 }
             }
-            StomachCommandInner::Space => break, // eat one space
             _ => {
-                gullet.mouth().requeue(next.cause);
+                gullet.mouth().requeue(next.source.cause);
                 break
             }
         }
@@ -199,7 +146,9 @@ pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::
     Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
 }
 
-pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,Box<dyn TeXError<ET::Token>>> {
+pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET::Token>> {
+    todo!()
+    /*
     debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
 
@@ -225,145 +174,113 @@ pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::Stat
     let i = i64::from_str_radix(str,16).unwrap();
     debug_log!(trace=>"Returning {}",i);
     Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
+
+     */
 }
 
 
-pub fn get_dim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Dim,Box<dyn TeXError<ET::Token>>> {
+pub fn get_dim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Dim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let mut isnegative = false;
-    while let Some(next) = gullet.get_next_stomach_command(state)? {
-        match next.cmd {
-            StomachCommandInner::Char{char,from_chardef:false} => {
+    while let Some(next) = gullet.get_next_unexpandable(state)? {
+        match next.command {
+            BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
                         catch!(gullet.mouth().skip_whitespace::<ET>(state)
-                            => next.cause
+                            => next.source.cause
                         );
                     }
                     43 => /* + */ catch!(gullet.mouth().skip_whitespace::<ET>(state)
-                        => next.cause
+                        => next.source.cause
                     ),
-                    _ => return get_dim_inner::<ET>(gullet,state,isnegative,StomachCommandInner::Char{char,from_chardef:false},next.cause)
+                    _ => return get_dim_inner::<ET>(gullet,state,isnegative,next)
                 }
             }
-            o => return get_dim_inner::<ET>(gullet,state,isnegative,o,next.cause)
+            _ => return get_dim_inner::<ET>(gullet,state,isnegative,next)
         }
     }
     file_end!()
 }
-pub fn get_dim_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:StomachCommandInner<ET::Char>,cause:ET::Token)
-    -> Result<ET::Dim,Box<dyn TeXError<ET::Token>>> {
-    match next {
-        StomachCommandInner::Char{char,from_chardef:false} => {
+
+
+pub fn get_dim_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:ResolvedToken<ET>)
+-> Result<ET::Dim,TeXError<ET::Token>> {
+    match next.command {
+        BaseCommand::Char { char,.. } => {
             let us = char.to_usize();
             match us {
                 46 | 44 => /* . / ,*/ {
-                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative)
-                            => cause
-                        );
-                    return read_unit::<ET>(gullet,state,f)
+                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative) => next.source.cause);
+                    return read_unit::<ET>(gullet, state, f)
                 },
                 _ if is_ascii_digit(us) => {
-                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative)
-                            => cause
-                        );
-                    return read_unit::<ET>(gullet,state,f)
+                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative) => next.source.cause);
+                    return read_unit::<ET>(gullet, state, f)
                 },
-                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}",char,us,gullet.mouth().file_line())
+                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}", char, us, gullet.mouth().file_line())
             }
         }
-        StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Dim,..} => {
-            match gullet.primitive_dim(value_index) {
-                None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
-                Some(f) => {
-                    let val = f(state,gullet,GulletCommand{cause})?;
-                    return Ok(if isnegative { -val } else { val })
-                }
-            }
-        }
-        StomachCommandInner::ValueAssignment {value_index,tp:Assignable::Int,..} => {
-            match gullet.primitive_int(value_index) {
-                None => return Err(ImplementationError("Missing implementation for primitive int".to_string(),PhantomData).into()),
-                Some(f) => {
-                    let val = f(state,gullet,GulletCommand{cause})?.to_i64() as f64;
-                    let val = if isnegative { -val } else { val };
-                    return read_unit::<ET>(gullet,state,val)
-                }
-            }
-        }
-        StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
-            let val = state.get_dim_register(i);
+        BaseCommand::Dim(ass) => {
+            let val = ass.get(state,gullet,next.source)?;
             return Ok(if isnegative { -val } else { val })
         }
-        StomachCommandInner::ValueRegister(i,Assignable::Int) => {
-            let val = state.get_int_register(i).to_i64() as f64;
+        BaseCommand::Int(ass) => {
+            let val = ass.get(state,gullet,next.source)?.to_i64() as f64;
             let val = if isnegative { -val } else { val };
-            return read_unit::<ET>(gullet,state,val)
+            return read_unit::<ET>(gullet, state, val)
         }
-        StomachCommandInner::ValueRegister(i,Assignable::Skip) => {
-            let val = state.get_skip_register(i).base;
+        BaseCommand::Skip(ass) => {
+            let val = ass.get(state,gullet,next.source)?.base;
             return Ok(if isnegative { -val } else { val })
         }
-        StomachCommandInner::Value {index,tp:Assignable::Dim,..} => {
-            match gullet.primitive_dim(index) {
-                None => return Err(ImplementationError("Missing implementation for primitive dim".to_string(),PhantomData).into()),
-                Some(f) => {
-                    let val = f(state,gullet,GulletCommand{cause})?;
-                    return Ok(if isnegative { -val } else { val })
-                }
-            }
-        }
-        StomachCommandInner::AssignableValue {name,tp:Assignable::Dim} => {
-            let val = state.get_primitive_dim(name);
-            return Ok(if isnegative { -val } else { val })
-        }
-        StomachCommandInner::Char{char,..} => {
+        BaseCommand::CharDef(char) => {
             let val = char.to_usize() as f64;
             let val = if isnegative { -val } else { val };
-            return read_unit::<ET>(gullet,state,val)
+            return read_unit::<ET>(gullet, state, val)
         }
-        o => todo!("Non-char in read_dim: {:?}\n{}\n at {}",o,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line())
+        o => todo!("Non-char in read_dim: {:?}\n{}\n at {}", o, gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
     }
 }
 
-pub fn read_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64) -> Result<ET::Dim,Box<dyn TeXError<ET::Token>>> {
+pub fn read_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64) -> Result<ET::Dim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    match gullet.get_next_stomach_command(state)? {
-        Some(cmd) => {
-            match cmd.cmd {
-                StomachCommandInner::Char { .. } => {
-                    gullet.mouth().requeue(cmd.cause);
+    match gullet.get_next_unexpandable(state)? {
+        Some(cmd) => match cmd.command {
+            BaseCommand::Dim(ass) => {
+                let val = ass.get(state,gullet,cmd.source)?;
+                Ok(val.tex_mult(float))
+            }
+            BaseCommand::Char { .. } => {
+                gullet.mouth().requeue(cmd.source.cause);
+                gullet.mouth().skip_whitespace::<ET>(state)?;
+                if get_keyword::<ET>(gullet, state, "true")? {
                     gullet.mouth().skip_whitespace::<ET>(state)?;
-                    if get_keyword::<ET>(gullet, state, "true")? {
-                        gullet.mouth().skip_whitespace::<ET>(state)?;
-                        let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
-                        match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
-                            Some(dim) => Ok(ET::Dim::from_float(dim, float * mag)),
-                            _ => Err(ExpectedUnit(PhantomData).into())
-                        }
-                    } else {
-                        match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
-                            Some(dim) => Ok(ET::Dim::from_float(dim, float)),
-                            _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
-                        }
+                    let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
+                    match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
+                        Some(dim) => Ok(ET::Dim::from_float(dim, float * mag)),
+                        _ => throw!("Expexted unit")
+                    }
+                } else {
+                    match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
+                        Some(dim) => Ok(ET::Dim::from_float(dim, float)),
+                        _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
                     }
                 }
-                StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
-                    let val = state.get_dim_register(i);
-                    Ok(val.tex_mult(float))
-                }
-                _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
             }
+            _ => todo!("Non-dimension in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
         }
-        None => file_end!(),
+        None => file_end!()
     }
 }
 
-pub fn get_skip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<Skip<ET::SkipDim>,Box<dyn TeXError<ET::Token>>> {
+pub fn get_skip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<Skip<ET::SkipDim>,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading skip {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    todo!()
+    /*
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
@@ -396,10 +313,12 @@ pub fn get_skip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> 
         }
     }
     file_end!()
-}
 
+     */
+}
+/*
 fn get_skip_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:StomachCommandInner<ET::Char>,cause:ET::Token)
-    -> Result<Skip<ET::SkipDim>,Box<dyn TeXError<ET::Token>>> {
+    -> Result<Skip<ET::SkipDim>,TeXError<ET::Token>> {
     let base = get_dim_inner::<ET>(gullet,state,isnegative,next,cause)?;
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let stretch = if gullet.get_keyword(state,"plus")? {
@@ -412,8 +331,10 @@ fn get_skip_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,is
     Ok(Skip{base,stretch,shrink})
 }
 
-pub fn get_skipdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::SkipDim,Box<dyn TeXError<ET::Token>>> {
+pub fn get_skipdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::SkipDim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    todo!()
+    /*
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
@@ -459,11 +380,16 @@ pub fn get_skipdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) 
         }
     }
     file_end!()
+
+     */
 }
+*/
 
 pub fn read_skip_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64)
-    -> Result<ET::SkipDim,Box<dyn TeXError<ET::Token>>> {
+    -> Result<ET::SkipDim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading skip unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    todo!()
+    /*
     match gullet.get_next_stomach_command(state)? {
         Some(cmd) => match cmd.cmd {
             StomachCommandInner::Char { .. } => {
@@ -491,11 +417,15 @@ pub fn read_skip_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State
         }
         None => file_end!()
     }
+
+     */
 }
 
 pub fn get_muskip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State)
-    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,Box<dyn TeXError<ET::Token>>> {
+    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading muskip {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    todo!()
+    /*
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
@@ -528,10 +458,12 @@ pub fn get_muskip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State)
         }
     }
     file_end!()
-}
 
+     */
+}
+/*
 fn get_muskip_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:StomachCommandInner<ET::Char>,cause:ET::Token)
-    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,Box<dyn TeXError<ET::Token>>> {
+    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET::Token>> {
     let base = get_mudim::<ET>(gullet, state, isnegative, next, cause)?;
     gullet.mouth().skip_whitespace::<ET>(state);
     let stretch = if gullet.get_keyword(state,"plus")? {
@@ -545,7 +477,9 @@ fn get_muskip_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,
 }
 
 pub fn get_mudim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, isnegative:bool, next:StomachCommandInner<ET::Char>, cause:ET::Token)
-    -> Result<ET::MuDim,Box<dyn TeXError<ET::Token>>> {
+    -> Result<ET::MuDim,TeXError<ET::Token>> {
+    todo!()
+    /*
     match next {
         StomachCommandInner::Char{char,from_chardef:false} => {
             let us = char.to_usize();
@@ -567,10 +501,16 @@ pub fn get_mudim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, is
         }
         o => todo!("Non-char in read_mudim: {:?}",o)
     }
+
+     */
 }
 
-pub fn get_mustretchdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::MuStretchShrinkDim,Box<dyn TeXError<ET::Token>>> {
+ */
+
+pub fn get_mustretchdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::MuStretchShrinkDim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading mu stretch/shrink dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
+    todo!()
+    /*
     gullet.mouth().skip_whitespace::<ET>(state)?;
     let mut isnegative = false;
     while let Some(next) = gullet.get_next_stomach_command(state)? {
@@ -606,9 +546,11 @@ pub fn get_mustretchdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::St
         }
     }
     file_end!()
+
+     */
 }
 
-pub fn read_muunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64) -> Result<ET::MuDim,Box<dyn TeXError<ET::Token>>> {
+pub fn read_muunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64) -> Result<ET::MuDim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading mu unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     gullet.mouth().skip_whitespace::<ET>(state)?;
     match get_keywords::<ET>(gullet, state, ET::MuDim::units())? {
@@ -618,7 +560,7 @@ pub fn read_muunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,fl
 }
 
 pub fn read_mustretchunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64)
-    -> Result<ET::MuStretchShrinkDim,Box<dyn TeXError<ET::Token>>> {
+    -> Result<ET::MuStretchShrinkDim,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading mu unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     gullet.mouth().skip_whitespace::<ET>(state)?;
     match get_keywords::<ET>(gullet, state, ET::MuStretchShrinkDim::units())? {
@@ -627,13 +569,14 @@ pub fn read_mustretchunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::S
     }
 }
 
-pub fn read_float<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<f64,Box<dyn TeXError<ET::Token>>> {
+pub fn read_float<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<f64,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading float {}...",(firstchar as char));
     let mut in_float = firstchar == b'.' || firstchar == b',';
     let mut rets = if in_float {vec!(b'0',b'.')} else {vec!(firstchar)};
-    while let Some(next) = gullet.get_next_stomach_command(state)? {
-        match next.cmd {
-            StomachCommandInner::Char{char,from_chardef:false} => {
+    while let Some(next) = gullet.get_next_unexpandable(state)? {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => break, // eat one space
+            BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
@@ -643,13 +586,12 @@ pub fn read_float<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,fir
                     in_float = true;
                 }
                 else {
-                    gullet.mouth().requeue(next.cause.clone());
+                    gullet.mouth().requeue(next.source.cause);
                     break
                 }
             }
-            StomachCommandInner::Space => break, // eat one space
             _ => {
-                gullet.mouth().requeue(next.cause.clone());
+                gullet.mouth().requeue(next.source.cause);
                 break
             }
         }

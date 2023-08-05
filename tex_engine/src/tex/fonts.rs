@@ -4,13 +4,15 @@ pub mod tfm_files;
 
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
+use std::sync::RwLock;
 use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::state::State;
 use crate::tex::fonts::tfm_files::TfmFile;
-use crate::tex::numbers::{NumSet, Dim, Dimi32};
+use crate::tex::numbers::{Dim, Dimi32};
 use crate::tex::token::Token;
-use crate::utils::errors::{OtherError, TeXError};
+use crate::throw;
+use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
@@ -18,11 +20,10 @@ use crate::utils::strings::CharType;
 pub trait FontStore:Clone+'static {
     type Char:CharType;
     type Font:Font<Char=Self::Char>;
-    fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<usize,Box<dyn TeXError<T>>>;
-    fn get(&self,i:usize) -> &Self::Font;
-    fn get_mut(&mut self, i:usize) -> &mut Self::Font;
+    fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<Self::Font,TeXError<T>>;
+    fn null(&self) -> Self::Font;
 }
-pub trait Font:Debug+Display+Clone {
+pub trait Font:Debug+Display+Clone + PartialEq {
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
@@ -33,21 +34,20 @@ pub trait Font:Debug+Display+Clone {
     fn set_skewchar(&mut self,skewchar:i64);
     fn get_skewchar(&self) -> i64;
 
-    fn set_dim<NS:NumSet>(&mut self,i:usize,d:NS::Dim);
-    fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim;
+    fn set_dim<D:Dim>(&mut self,i:usize,d:D);
+    fn get_dim<D:Dim>(&self, i: usize) -> D;
 }
 
 #[derive(Clone)]
 pub struct TfmFontStore {
-    font_files:HMap<PathBuf,Ptr<TfmFile>>,
-    fonts:Vec<TfmFont>
+    font_files:HMap<PathBuf,Ptr<TfmFile>>,null:TfmFont
 }
 impl FontStore for TfmFontStore {
     type Char = u8;
     type Font = TfmFont;
-    fn get_new<T:Token<Char=Self::Char>>(&mut self, s: &str) -> Result<usize,Box<dyn TeXError<T>>> {
+    fn get_new<T:Token<Char=Self::Char>>(&mut self, s: &str) -> Result<Self::Font,TeXError<T>> {
         let path = match KPATHSEA.get(s) {
-            None => return Err(OtherError{msg:format!("Font not found: {}",s),cause:None,source:None}.into()),
+            None => throw!("Font not found: {}",s),
             Some(res) => res.path
         };
         let file = match self.font_files.get(&path) {
@@ -58,23 +58,17 @@ impl FontStore for TfmFontStore {
             },
             Some(file) => file.clone()
         };
-        self.fonts.push(TfmFont{
-            hyphenchar:file.hyphenchar as i64,
-            skewchar:file.skewchar as i64,
+        Ok(Ptr::new(TfmFontInner{
+            hyphenchar:RwLock::new(file.hyphenchar as i64),
+            skewchar:RwLock::new(file.skewchar as i64),
             file,
-            at:None,
-            dimens:HMap::default(),
+            at:RwLock::new(None),
+            dimens:RwLock::new(HMap::default()),
             lps:HMap::default(),
             rps:HMap::default(),
-        });
-        Ok(self.fonts.len() - 1)
+        }))
     }
-    fn get(&self, i: usize) -> &Self::Font {
-        self.fonts.get(i).unwrap()
-    }
-    fn get_mut(&mut self, i:usize) -> &mut Self::Font {
-        self.fonts.get_mut(i).unwrap()
-    }
+    fn null(&self) -> Self::Font { self.null.clone() }
 }
 impl TfmFontStore {
     pub fn new() -> Self {
@@ -94,74 +88,84 @@ impl TfmFontStore {
             name:"nullfont".to_string(),
             filepath:"nullfont".to_string()
         };
-        let font = TfmFont{
-            hyphenchar:null.hyphenchar as i64,
-            skewchar:null.skewchar as i64,
+        let font = Ptr::new(TfmFontInner{
+            hyphenchar:RwLock::new(null.hyphenchar as i64),
+            skewchar:RwLock::new(null.skewchar as i64),
             file:Ptr::new(null),
-            at:None,
-            dimens:HMap::default(),
+            at:RwLock::new(None),
+            dimens:RwLock::new(HMap::default()),
             lps:HMap::default(),
             rps:HMap::default(),
-        };
-        Self{fonts:vec!(font), font_files:HMap::default()}
+        });
+        Self{null:font, font_files:HMap::default()}
     }
 }
 // todo: replace by Arrays, maybe
-#[derive(Clone)]
-pub struct TfmFont {
+pub struct TfmFontInner {
     file:Ptr<TfmFile>,
-    at:Option<i64>,
-    dimens:HMap<usize,i64>,
-    hyphenchar:i64,
-    skewchar:i64,
+    at:RwLock<Option<i64>>,
+    dimens:RwLock<HMap<usize,i64>>,
+    hyphenchar:RwLock<i64>,
+    skewchar:RwLock<i64>,
     lps:HMap<u8,u8>,
     rps:HMap<u8,u8>,
 }
-impl Debug for TfmFont {
+impl PartialEq for TfmFontInner {
+    fn eq(&self, other: &Self) -> bool {
+        self.file == other.file &&
+            *self.at.read().unwrap() == *other.at.read().unwrap() &&
+            *self.hyphenchar.read().unwrap() == *other.hyphenchar.read().unwrap() &&
+            *self.skewchar.read().unwrap() == *other.skewchar.read().unwrap() &&
+            *self.dimens.read().unwrap() == *other.dimens.read().unwrap()
+    }
+}
+
+impl Debug for TfmFontInner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"Font({})",self.file.name)
     }
 }
-impl Display for TfmFont {
+impl Display for TfmFontInner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"{}",self.file.name)?;
-        match self.at {
+        match &*self.at.read().unwrap() {
             None => Ok(()),
-            Some(at) => write!(f," at {}",Dimi32(at as i32))
+            Some(at) => write!(f," at {}",Dimi32(*at as i32))
         }
     }
 }
+pub type TfmFont = Ptr<TfmFontInner>;
 impl Font for TfmFont {
     type Char = u8;
     fn set_at(&mut self,at:i64) {
-        self.at = Some(at);
+        *self.at.write().unwrap() = Some(at);
     }
     fn get_at(&self) -> i64 {
-        match self.at {
-            Some(at) => at,
+        match &*self.at.read().unwrap() {
+            Some(at) => *at,
             None => self.file.size
         }
     }
 
     fn get_hyphenchar(&self) -> i64 {
-        self.hyphenchar
+        self.hyphenchar.read().unwrap().clone()
     }
     fn set_hyphenchar(&mut self, hyphenchar: i64) {
-        self.hyphenchar = hyphenchar;
+        *self.hyphenchar.write().unwrap() = hyphenchar;
     }
 
     fn get_skewchar(&self) -> i64 {
-        self.skewchar
+        self.skewchar.read().unwrap().clone()
     }
     fn set_skewchar(&mut self, skewchar: i64) {
-        self.skewchar = skewchar;
+        *self.skewchar.write().unwrap() = skewchar;
     }
 
-    fn set_dim<NS: NumSet>(&mut self, i: usize, d: NS::Dim) {
-        self.dimens.insert(i,d.to_sp());
+    fn set_dim<D:Dim>(&mut self, i: usize, d: D) {
+        self.dimens.write().unwrap().insert(i,d.to_sp());
     }
-    fn get_dim<NS: NumSet>(&self, i: usize) -> NS::Dim {
-        NS::Dim::from_sp(self.dimens.get(&i).map(|c| *c).unwrap_or(
+    fn get_dim<D:Dim>(&self, i: usize) -> D {
+        D::from_sp(self.dimens.read().unwrap().get(&i).map(|c| *c).unwrap_or(
             if i > 0 && i < 256 {
                 ((self.file.dimen[i] * (self.get_at() as f64)).round() as i64)
             } else {
