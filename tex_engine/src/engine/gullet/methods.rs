@@ -11,7 +11,8 @@ use crate::tex::numbers::Int;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::Ptr;
 use crate::engine::mouth::Mouth;
-use crate::tex::commands::tex::IFCASE;
+use crate::tex::commands::etex::{UNEXPANDED, UNLESS};
+use crate::tex::commands::tex::{ELSE, FI, IFCASE, NOEXPAND, THE};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::FontStore;
 use crate::utils::errors::TeXError;
@@ -23,11 +24,10 @@ use crate::utils::strings::AllCharsTrait;
 /// (or [`None`] if the [`Mouth`] is empty)
 pub fn get_next_unexpandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
     while let Some((next,e)) = gullet.mouth().get_next::<ET>(state)? {
-        if !e {return Ok(Some(ResolvedToken{command:BaseCommand::None,source:CommandSource{cause:next,reference:None},expand:false}))}
-        let mut ret: Vec<ET::Token> = vec!();
-        match expand(gullet,state,next,&mut |_,t| Ok(ret.push(t)))? {
+        if !e {return Ok(Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false}))}
+        match gullet.expand(state,resolve_token(state,next))? {
             Some(r) => return Ok(Some(r)),
-            _ => gullet.mouth().push_tokens(ret)
+            _ => ()
         }
     }
     Ok(None)
@@ -35,12 +35,23 @@ pub fn get_next_unexpandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET
 
 /// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
 /// If not expandable, returns the [`ResolvedToken`] for `tk`
-pub fn expand<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,tk:ET::Token,f:TokenCont<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
-    let ret = resolve_token::<ET>(state,tk);
+pub fn expand<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
     match ret.command {
-        BaseCommand::Def(d) => todo!(),// d.expand(state,gullet.mouth(),ret),
+        BaseCommand::Def(d) => {
+            let mut vec: Vec<ET::Token> = Vec::new();//with_capacity(512);
+            d.expand(state,gullet.mouth(),ret.source,&mut |_,t| Ok(vec.push(t)))?;
+            gullet.mouth().push_tokens(vec);
+            Ok(None)
+        }
+        // expandable commands that do not expand to new tokens
+        BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
+            apply(state, gullet, ret.source, &mut |_,_| Ok(()))?;
+            Ok(None)
+        }
         BaseCommand::Expandable {apply,..} => {
-            apply(state,gullet,ret.source,f)?;
+            let mut vec: Vec<ET::Token> = Vec::new();//with_capacity(512);
+            apply(state,gullet,ret.source,&mut |_,t| Ok(vec.push(t)))?;
+            gullet.mouth().push_tokens(vec);
             Ok(None)
         },
         BaseCommand::Conditional {name,apply} => {
@@ -100,210 +111,6 @@ pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State
     }
 }
 
-/*
-pub fn process_cmd_for_stomach<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, cause:ET::Token, cmd:Ptr<BaseCommand<ET::Token>>) -> Result<Option<StomachCommand<ET::Token>>,TeXError<ET::Token>> {
-match &*cmd {
-    BaseCommand::Relax => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Relax})),
-    BaseCommand::Def(ref def, _) => {
-        let v = def.expand::<ET>(state,gullet.mouth(),cmd.clone(),Ptr::new(cause.clone()))?;
-        if !v.is_empty() {
-            gullet.mouth().push_tokens(v);
-        }
-        Ok(None)
-    }
-    BaseCommand::Conditional{name,index} => {
-        do_conditional::<ET>(gullet,state,cause,name,*index,false)?;
-        Ok(None)
-    },
-    BaseCommand::Expandable {name,index} => {
-        do_expandable::<ET>(gullet,state,cause,name,*index)?;
-        Ok(None)
-    }
-    BaseCommand::MathChar(i) => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::MathChar(*i)})),
-    BaseCommand::Whatsit {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Whatsit{name,index:*index}})),
-    BaseCommand::Value{name,index,tp,..} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Value{name,tp:*tp,index:*index}})),
-    BaseCommand::ValueRegister{index,tp} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::ValueRegister(*index, *tp)})),
-    BaseCommand::ValueAssignment {name,assignment_index,value_index,tp} =>
-        Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::ValueAssignment {name,assignment_index:*assignment_index,value_index:*value_index,tp:*tp}})),
-    BaseCommand::AssignableValue {name,tp} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::AssignableValue {name,tp:*tp}})),
-    BaseCommand::Assignment{name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Assignment{name,index:*index}})),
-    BaseCommand::Unexpandable {name,index} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::Command{name,index:*index}})),
-    BaseCommand::OpenBox {name,index,mode} => Ok(Some(StomachCommand{cause,cmd:StomachCommandInner::OpenBox{name,index:*index,mode:*mode}})),
-    BaseCommand::Char {char,catcode} =>
-        Ok(Some(char_to_command(cause, *char, *catcode,true)))
-}
-}
- */
-
-/*
-pub fn char_to_command<T:Token>(cause:T, char:T::Char, catcode:CategoryCode,from_chardef:bool) -> StomachCommand<T> {
-    use CategoryCode::*;
-    StomachCommand{cause,cmd:match catcode {
-        Superscript => StomachCommandInner::Superscript(char),
-        Subscript => StomachCommandInner::Subscript(char),
-        Space => StomachCommandInner::Space,
-        MathShift => StomachCommandInner::MathShift(char),
-        BeginGroup => StomachCommandInner::BeginGroup(char),
-        EndGroup => StomachCommandInner::EndGroup(char),
-        Letter|Other|AlignmentTab => StomachCommandInner::Char{char,from_chardef},
-        EOF => StomachCommandInner::Relax,
-        Parameter => StomachCommandInner::Parameter(char),
-        _ => unreachable!() // Already excluded: Active, Ignored, EndLine
-        // TODO: exclude: AlignmentTab proper, Parameter
-    }}
-}
-
- */
-
-macro_rules! expand_group_without_unknowns {
-    ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident,$cmd:ident) => $f:expr;$($branch:tt)*) => {
-        if let Some((tk,b)) = $gullet.mouth().get_next::<ET>($state)? {
-            match tk.catcode() {
-                CategoryCode::BeginGroup => (),
-                _ => return Err(ExpectedToken{expected:ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None),found:tk}.into())
-            }
-        }
-        let mut depth = 1;
-        while let Some(($tk,$expand)) = $gullet.mouth().get_next::<ET>($state)? {
-            match $tk.catcode() {
-                CategoryCode::BeginGroup => {
-                    depth += 1;
-                    $f;
-                }
-                CategoryCode::EndGroup => {
-                    depth -= 1;
-                    if depth == 0 { $finish }
-                    if depth < 0 {
-                        return Err(UnexpectedEndgroup($tk).into())
-                    }
-                    $f;
-                },
-                _ => {
-                    match $tk.base() {
-                        BaseToken::CS(n) => {
-                            let $cmd = $state.need_command(n)?;
-                            match &*$cmd {
-                                $($branch)*
-                                Command::Gullet {name,index} => {
-                                    do_expandable::<ET>($gullet,$state,$tk,name,*index)?;
-                                }
-                                Command::Def(def,_) => {
-                                    let v = def.expand::<ET>($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
-                                    if !v.is_empty() {
-                                        $gullet.mouth().push_tokens(v);
-                                    }
-                                }
-                                Command::Conditional {name,index} => {
-                                    do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
-                                }
-                                _ => $f
-                            }
-                        }
-                        BaseToken::Char(c, CategoryCode::Active) => {
-                            let $cmd = $state.need_ac_command(*c)?;
-                            match &*$cmd {
-                                $($branch)*
-                                Command::Gullet {name,index} => {
-                                    do_expandable::<ET>($gullet,$state,$tk,name,*index)?;
-                                }
-                                Command::Def(def,_) => {
-                                    let v = def.expand::<ET>($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
-                                    if !v.is_empty() {
-                                        $gullet.mouth().push_tokens(v);
-                                    }
-                                }
-                                Command::Conditional {name,index} => {
-                                    do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
-                                }
-                                _ => $f
-                            }
-                        }
-                        _ => $f
-                    }
-                }
-            }
-        }
-        file_end!()
-    }
-}
-
-macro_rules! expand_group_with_unknowns {
-    ($state:ident,$gullet:ident,$finish:expr,($tk:ident,$expand:ident,$cmd:ident) => $f:expr;$($branch:tt)*) => {
-        if let Some((tk,b)) = $gullet.mouth().get_next::<ET>($state)? {
-            match tk.catcode() {
-                CategoryCode::BeginGroup => (),
-                _ => return Err(ExpectedToken{expected:ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None),found:tk}.into())
-            }
-        }
-        let mut depth = 1;
-        while let Some(($tk,$expand)) = $gullet.mouth().get_next::<ET>($state)? {
-            match $tk.catcode() {
-                CategoryCode::BeginGroup => {
-                    depth += 1;
-                    $f;
-                }
-                CategoryCode::EndGroup => {
-                    depth -= 1;
-                    if depth == 0 { $finish }
-                    if depth < 0 {
-                        return Err(UnexpectedEndgroup($tk).into())
-                    }
-                    $f;
-                },
-                _ => {
-                    match $tk.base() {
-                        BaseToken::CS(n) => {
-                            match $state.get_command(n) {
-                                None => $f,
-                                Some(_) if !$expand => $f,
-                                Some($cmd) => match &*$cmd {
-                                    $($branch)*,
-                                    Command::Gullet {name,index} => {
-                                        do_expandable::<ET>($gullet,$state,$tk,name,*index)?;
-                                    }
-                                    Command::Def(def,_) => {
-                                        let v = def.expand::<ET>($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
-                                        if !v.is_empty() {
-                                            $gullet.mouth().push_tokens(v);
-                                        }
-                                    }
-                                    Command::Conditional {name,index} => {
-                                        do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
-                                    }
-                                    _ => $f
-                                }
-                            }
-                        }
-                        BaseToken::Char(c, CategoryCode::Active) => {
-                            match $state.get_ac_command(*c) {
-                                None => $f,
-                                Some(_) if !$expand => $f,
-                                Some($cmd) => match &*$cmd {
-                                    $($branch)*,
-                                    Command::Gullet {name,index} => {
-                                        do_expandable::<ET>($gullet,$state,$tk,name,*index)?;
-                                    }
-                                    Command::Def(def,_) => {
-                                        let v = def.expand::<ET>($state,$gullet.mouth(),$cmd.clone(),Ptr::new($tk))?;
-                                        if !v.is_empty() {
-                                            $gullet.mouth().push_tokens(v);
-                                        }
-                                    }
-                                    Command::Conditional {name,index} => {
-                                        do_conditional::<ET>($gullet,$state,$tk,name,*index,false)?;
-                                    }
-                                    _ => $f
-                                }
-                            }
-                        }
-                        _ => $f
-                    }
-                }
-            }
-        }
-        file_end!()
-    }
-}
 
 pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<String,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading string {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
@@ -328,43 +135,26 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
 }
 
 
-pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<Vec<u8>,TeXError<ET::Token>> {
-    todo!()
-    /*
+pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<String,TeXError<ET::Token>> {
     let mut ret = vec!();
+    let cc = state.get_catcode_scheme().clone();
     let esc = state.get_escapechar();
-    expand_group_without_unknowns!(state,gullet,return Ok(ret),(tk,expand,cmd) =>
-        for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
-            ret.push(u)
-        };
-        BaseCommand::Expandable {name:"unexpanded",index} if expand => {
-                match gullet.primitive(*index) {
-                    Some(f) => {
-                        for t in f(state,gullet,GulletCommand{cause:tk.clone()})? {
-                            for u in token_to_string(t,esc,state.get_catcode_scheme()) {
-                                ret.push(u);
-                            }
-                        }
-                    }
-                    None => return Err(OtherError{msg:"\\unexpanded not implemented".to_string(),cause:Some(tk),source:None}.into())
+    gullet.get_expanded_group(state,false,false,true,&mut |s,t| {
+        match t.base() {
+            BaseToken::Char(c,_) => {
+                for u in c.as_bytes() { ret.push(*u) }
+            }
+            BaseToken::CS(name) => {
+                if let Some(c) = esc { for u in c.as_bytes() { ret.push(*u) } }
+                for c in name.as_vec() { for u in c.as_bytes() { ret.push(*u) } }
+                if name.len() > 1 || *cc.get(&name.as_vec()[0]) != CategoryCode::Letter {
+                    ret.push(b' ')
                 }
             }
-        BaseCommand::Expandable {name:"noexpand",..} if expand => {
-            match gullet.mouth().get_next::<ET>(state)? {
-                Some((tk,_)) => for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
-                        ret.push(u)
-                    },
-                None => return Err(UnexpectedEndgroup(tk).into())
-            }
         }
-        BaseCommand::Def(def,_) if def.protected || !expand => {
-            for u in token_to_string(tk,esc,state.get_catcode_scheme()) {
-                ret.push(u)
-            }
-        }
-    );
-
-     */
+        Ok(())
+    })?;
+    Ok(String::from_utf8(ret).unwrap())
 }
 
 pub fn get_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
@@ -387,136 +177,59 @@ pub fn get_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, f
     file_end!()
 }
 
-pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, expand_protected:bool, keep_the:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     match gullet.mouth().get_next::<ET>(state)? {
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         _ => throw!("begin group expected")
     }
     let mut ingroup = 0;
     while let Some(next) = gullet.mouth().get_next::<ET>(state)? {
-        let mut res = resolve_token::<ET>(state,next.0);
-        res.expand = next.1;
-        match res.command {
-            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {ingroup += 1;f(state,res.source.cause)?}
-            BaseCommand::Char{catcode:CategoryCode::EndGroup,..} => {
-                if ingroup == 0 { return Ok(()) } else { ingroup -= 1; }
-                f(state,res.source.cause)?
+        if next.1 {
+            let mut res = resolve_token::<ET>(state, next.0);
+            match res.command {
+                BaseCommand::Char { catcode: CategoryCode::BeginGroup, .. } => {
+                    ingroup += 1;
+                    f(state, res.source.cause)?
+                }
+                BaseCommand::Char { catcode: CategoryCode::EndGroup, .. } => {
+                    if ingroup == 0 { return Ok(()) } else { ingroup -= 1; }
+                    f(state, res.source.cause)?
+                }
+                BaseCommand::Def(d) if d.protected && !expand_protected =>
+                    f(state, res.source.cause)?,
+                BaseCommand::Expandable { name, .. } if name == NOEXPAND => {
+                    match gullet.mouth().get_next::<ET>(state)? {
+                        None => file_end!(),
+                        Some((t, _)) => f(state, t)?
+                    }
+                },
+                BaseCommand::Expandable { name, apply } if name == UNEXPANDED && edef_like => {
+                    apply(state, gullet, res.source, &mut |s, t| {
+                        if t.catcode() == CategoryCode::Parameter { f(s, t.clone())? }
+                        f(s, t)
+                    })?
+                }
+                BaseCommand::Expandable { name, apply } if name == UNEXPANDED => {
+                    apply(state, gullet, res.source, f)?
+                }
+                BaseCommand::Expandable { name, apply } if name == THE && edef_like =>
+                    apply(state, gullet, res.source, &mut |s, t| {
+                        if t.catcode() == CategoryCode::Parameter { f(s, t.clone())? }
+                        f(s, t)
+                    })?,
+                BaseCommand::None if err_on_unknowns => return Err(match res.source.cause.base() {
+                    BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
+                    BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
+                }),
+                _ => match gullet.expand(state, res)? {
+                    Some(res) => f(state, res.source.cause)?,
+                    _ => ()
+                }
             }
-            BaseCommand::Def(d) if res.expand && (!d.protected || expand_protected) => {
-                d.expand(state,gullet.mouth(),res.source,f)?
-            }
-            BaseCommand::Conditional {name,apply} if res.expand => {
-                do_conditional(gullet,state,res.source,name,apply,false)?
-            }
-            BaseCommand::Expandable {name:"noexpand",..} if res.expand => (),
-            BaseCommand::Expandable {name:"unexpanded",apply} if res.expand => {
-                apply(state,gullet,res.source,f)?
-            }
-            BaseCommand::Expandable {name:THE,apply} if res.expand && keep_the =>
-                apply(state,gullet,res.source,f)?,
-            BaseCommand::Expandable {..} if res.expand => todo!(),
-            BaseCommand::None if err_on_unknowns => return Err(match res.source.cause.base() {
-                BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
-                BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
-            }),
-            _ => f(state,res.source.cause)?
-        }
+        } else { f(state,next.0)?}
     }
     file_end!()
-    /*
-    let mut tks = vec!();
-    if err_on_unknowns {
-        expand_group_without_unknowns!(state,gullet,return Ok(tks),(tk,expand,cmd) => tks.push(tk);
-            BaseCommand::Expandable {name:THE,..} if keep_the => todo!("'the' in expansion"),
-            BaseCommand::Expandable {name:"unexpanded",index} if expand => {
-                match gullet.primitive(*index) {
-                    Some(f) => {
-                        for t in f(state,gullet,GulletCommand{cause:tk.clone()})? {
-                            /*if t.catcode() == CategoryCode::Parameter {
-                                tks.push(t.clone());
-                                tks.push(t);
-                            } else {*/
-                                tks.push(t);
-                            //}
-                        }
-                    }
-                    None => return Err(OtherError{msg:"\\unexpanded not implemented".to_string(),cause:Some(tk),source:None}.into())
-                }
-            }
-            BaseCommand::Expandable {name:"noexpand",..} if expand => {
-                match gullet.mouth().get_next::<ET>(state)? {
-                    Some((tk,_)) => tks.push(tk),
-                    None => return Err(UnexpectedEndgroup(tk).into())
-                }
-            }
-            BaseCommand::Def(def,_) if def.protected && !expand_protected => {tks.push(tk)}
-        );
-    } else {
-        expand_group_with_unknowns!(state,gullet,return Ok(tks),(tk,expand,cmd) => tks.push(tk);
-            BaseCommand::Expandable {name:THE,..} if keep_the => todo!("'the' in expansion"),
-            BaseCommand::Expandable {name:"unexpanded",index} if expand => {
-                match gullet.primitive(*index) {
-                    Some(f) => {
-                        for t in f(state,gullet,GulletCommand{cause:tk.clone()})? {
-                            /*if t.catcode() == CategoryCode::Parameter {
-                                tks.push(t.clone());
-                                tks.push(t);
-                            } else {*/
-                                tks.push(t);
-                            //}
-                        }
-                    }
-                    None => return Err(OtherError{msg:"\\unexpanded not implemented".to_string(),cause:Some(tk),source:None}.into())
-                }
-            }
-            BaseCommand::Expandable {name:"noexpand",..} if expand => {
-                match gullet.mouth().get_next::<ET>(state)? {
-                    Some((tk,_)) => tks.push(tk),
-                    None => return Err(UnexpectedEndgroup(tk).into())
-                }
-            }
-            BaseCommand::Def(def,_) if def.protected && !expand_protected => {tks.push(tk)}
-        );
-    }
-
-     */
 }
-
-/*
-pub fn process_token_for_stomach<ET:EngineType>(gullet:&mut ET::Gullet, token:ET::Token, state: &mut ET::State) -> Result<Option<StomachCommand<ET::Token>>,TeXError<ET::Token>> {
-    match token.base() {
-        BaseToken::CS(n) => {
-            let cmd = state.need_command(&n)?;
-            process_cmd_for_stomach::<ET>(gullet, state, token, cmd)
-        }
-        BaseToken::Char(c, CategoryCode::Active) => {
-            let cmd = state.need_ac_command(*c)?;
-            process_cmd_for_stomach::<ET>(gullet, state, token, cmd)
-        }
-        BaseToken::Char(c, cat) => {
-            let c = *c;
-            let cat = *cat;
-            Ok(Some(char_to_command(token, c, cat,false)))
-        }
-    }
-}
-*/
-
-/*
-pub fn do_expandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cause:ET::Token,name:&str,index:usize) -> Result<(),TeXError<ET::Token>> {
-    match gullet.primitive(index) {
-        None => Err(ImplementationError(format!("Missing implementation for primitive command {}",name),PhantomData).into()),
-        Some(f) => {
-            let v = f(state,gullet,GulletCommand{cause})?;
-            if !v.is_empty() {
-                gullet.mouth().push_tokens(v);
-            }
-            Ok(())
-        }
-    }
-}
-
- */
 
 pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"False conditional. Skipping...");
@@ -663,13 +376,13 @@ pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Stat
 pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     let mut current = String::new();
-    let mut read_toks: Vec<ET::Token> = vec!();
+    let mut read_toks: Vec<ET::Token> = Vec::with_capacity(5);
     while let Some(next) = gullet.get_next_unexpandable(state)? {
         read_toks.push(next.source.cause.clone());
         match next.command {
             BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
-                if us < 256 {
+                if us < 256 && keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us as u8) {
                     current.push(us as u8 as char);
                     keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
                     if keywords.is_empty() {
@@ -701,19 +414,22 @@ pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Sta
     file_end!()
 }
 
-pub fn token_to_chars<T:Token>(tk:T,escape:Option<T::Char>,f:&mut dyn FnMut(T) -> Result<(),TeXError<T>>) -> Result<(),TeXError<T>> {
+pub fn token_to_chars<T:Token>(tk:&T,escape:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>,insertspace:bool,f:&mut dyn FnMut(T) -> Result<(),TeXError<T>>) -> Result<(),TeXError<T>> {
     match tk.base() {
-        BaseToken::Char(c,_) if c.to_usize() == 32 => f(T::new(BaseToken::Char(T::Char::from(32),CategoryCode::Space),None)),
-        BaseToken::Char(c,_) => f(T::new(BaseToken::Char(T::Char::from(32),CategoryCode::Other),None)),
+        BaseToken::Char(c,_) if c.to_usize() == 32 => f(T::new(BaseToken::Char(*c,CategoryCode::Space),None)),
+        BaseToken::Char(c,CategoryCode::Space) => f(T::new(BaseToken::Char(*c,CategoryCode::Space),None)),
+        BaseToken::Char(c,_) => f(T::new(BaseToken::Char(*c,CategoryCode::Other),None)),
         BaseToken::CS(str) => {
             match escape {
                 None => (),
                 Some(c) => f(T::new(BaseToken::Char(c,CategoryCode::Other),None))?
             }
             for c in str.as_vec() {
-                f(T::new(BaseToken::Char(T::Char::from(32),
-                                         if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
+                f(T::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
                 ),None))?
+            }
+            if insertspace && !(str.len() == 1 && *cc.get(&str.as_vec()[0]) != CategoryCode::Letter) {
+                f(T::new(BaseToken::Char(T::Char::from(32),CategoryCode::Space),None))?
             }
             Ok(())
         }
@@ -790,13 +506,12 @@ pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>,cc:&Categor
     String::from_utf8(s).unwrap()
 }
 
-pub fn string_to_tokens<T:Token>(str:&[u8]) -> Vec<T> {
-    let mut ret = vec!();
+pub fn string_to_tokens<ET:EngineType>(str:&[u8],state:&ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     for u in str {
-        let c = T::Char::from(*u);
-        ret.push(T::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None));
+        let c = ET::Char::from(*u);
+        f(state,ET::Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None))?;
     }
-    ret
+    Ok(())
 }
 
 
@@ -849,18 +564,14 @@ pub fn get_char<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> R
 }
 
 pub fn get_font<ET:EngineType>(gullet: &mut ET::Gullet,state:&mut ET::State) -> Result<ET::Font,TeXError<ET::Token>> {
-    todo!()
-    /*
-    match gullet.get_next_stomach_command(state)? {
-        Some(cmd) => match cmd.cmd {
-            StomachCommandInner::ValueRegister(i,Assignable::Font) =>
-                Ok(i),
-            StomachCommandInner::ValueAssignment {name:"font",..} =>
-                Ok(state.get_current_font()),
-            o => todo!("get_font: {:?}",o),
-        }
+    match gullet.get_next_unexpandable(state)? {
         None => file_end!(),
+        Some(res) => match res.command {
+            BaseCommand::Font(f) => Ok(f),
+            BaseCommand::FontCommand {get,..} => {
+                get(state,gullet,res.source)
+            }
+            _ => throw!("Expected a font, got {:?}",res.command)
+        }
     }
-
-     */
 }

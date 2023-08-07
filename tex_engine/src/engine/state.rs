@@ -5,7 +5,7 @@ use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField};
 use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::tex::commands::{BaseCommand, Command, CommandSource};
-use crate::tex::token::Token;
+use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::{EngineType, Outputs};
@@ -13,7 +13,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::boxes::{HVBox, OpenBox, TeXNode};
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip};
-use crate::utils::{Pool, Ptr};
+use crate::utils::{Ptr};
 
 pub mod fields;
 pub mod modes;
@@ -86,6 +86,12 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Command<ET>>, globally:bool);
     /// set the current [`BaseCommand`] for the active character `c`
     fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Command<ET>>, globally:bool);
+    fn set_command_for_tk(&mut self, tk:ET::Token, cmd:Option<Command<ET>>, globally:bool) {
+        match tk.take_base() {
+            BaseToken::CS(cs) => self.set_command(cs,cmd, globally),
+            BaseToken::Char(c,_) => self.set_ac_command(c,cmd, globally),
+        }
+    }
 
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char>;
@@ -173,17 +179,13 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_primitive_toks(&mut self, name:&'static str, v:Vec<ET::Token>, globally:bool);
 
     /// get the current font
-    fn get_current_font(&self) -> usize;
+    fn get_current_font(&self) -> &ET::Font;
     /// set the current font
-    fn set_current_font(&mut self, index:usize, globally:bool);
-
-    fn pool(&self) -> &Pool<ET::Token>;
-    fn pool_mut(&mut self) -> &mut Pool<ET::Token>;
+    fn set_current_font(&mut self, f:ET::Font, globally:bool);
 }
 
 #[derive(Clone)]
 pub struct TeXState<ET:EngineType<State=Self>> {
-    pool:Pool<ET::Token>,
     filesystem:ET::FileSystem,
     out_files:Vec<Option<ET::File>>,
     in_files:Vec<Option<ET::File>>,
@@ -192,7 +194,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     box_stack:Vec<OpenBox<ET>>,
     afterassignment:Option<ET::Token>,
 
-    current_font:SingleValueField<usize>,
+    current_font:SingleValueField<ET::Font>,
 
     outputs:Outputs,
 
@@ -234,17 +236,16 @@ use crate::utils::strings::CharType;
 impl<ET:EngineType<State=Self>> TeXState<ET> {
     pub fn new(fs:ET::FileSystem,fontstore:ET::FontStore,outputs:Outputs) -> Self {
         let mut state = Self {
-            pool:Pool::new(),
             filesystem:fs,
             out_files:vec!(),
             in_files:vec!(),
             csnames:0,
+            current_font:SingleValueField::new(fontstore.null()),
             fontstore,
             outputs,
             afterassignment:None,
             aftergroups:vec!(vec!()),
             box_stack:vec!(),
-            current_font:SingleValueField::new(0),
 
             jobname: None,
             start_time: None,
@@ -300,23 +301,16 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
     }
 }
 impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
-    fn pool(&self) -> &Pool<ET::Token> {
-        &self.pool
+    fn get_current_font(&self) -> &ET::Font {
+        self.current_font.get()
     }
-    fn pool_mut(&mut self) -> &mut Pool<ET::Token> {
-        &mut self.pool
-    }
-
-    fn get_current_font(&self) -> usize {
-        *self.current_font.get()
-    }
-    fn set_current_font(&mut self, index:usize, globally: bool) {
+    fn set_current_font(&mut self, f:ET::Font, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
-            self.current_font.set_globally(index)
+            self.current_font.set_globally(f)
         } else {
-            self.current_font.set_locally(index)
+            self.current_font.set_locally(f)
         }
     }
 

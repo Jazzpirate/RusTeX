@@ -1,3 +1,4 @@
+use log::warn;
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
@@ -14,6 +15,7 @@ use crate::tex::numbers::Int;
 use crate::utils::Ptr;
 use crate::tex::commands::Def;
 use crate::engine::filesystem::File;
+use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 
@@ -212,13 +214,15 @@ pub static DETOKENIZE: &str = "detokenize";
 pub fn detokenize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"detokenize");
     let escape = state.get_escapechar();
+    let cc = state.get_catcode_scheme().clone();
+    catch_prim!(expand_until_space::<ET>(gullet,state) => (DETOKENIZE,cmd));
     catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
         BaseToken::Char(c,CategoryCode::Parameter) => {
-            token_to_chars(next.clone(),escape,&mut |t|f(s,t))?;
-            token_to_chars(next,escape,&mut |t|f(s,t))?;
+            token_to_chars::<ET::Token>(&next,escape,&cc,true,&mut |t|f(s,t))?;
+            token_to_chars::<ET::Token>(&next,escape,&cc,true,&mut |t|f(s,t))?;
             Ok(())
         }
-        _ => token_to_chars(next,escape,&mut |t|f(s,t))
+        _ => token_to_chars::<ET::Token>(&next,escape,&cc,true,&mut |t|f(s,t))
     }) => (DETOKENIZE,cmd));
     Ok(())
 }
@@ -241,8 +245,7 @@ pub fn dimexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
 pub fn eTeXrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
-    for t in string_to_tokens(".6".as_bytes()) { f(state,t); }
-    Ok(())
+    string_to_tokens::<ET>(".6".as_bytes(),state,f)
 }
 
 /// `\eTeXversion`: returns the eTeX version number as an [`Int`] (2).
@@ -250,11 +253,11 @@ pub fn eTeXversion<ET:EngineType>(cmd:CommandSource<ET>) -> Result<ET::Int,TeXEr
     Ok(catch_prim!(ET::Int::from_i64(2) => ("eTeXversion",cmd)))
 }
 
-/// `\expanded`: expands its argument exhaustiely, returning the result as a token list.
+/// `\expanded`: expands its argument exhaustively.
 pub fn expanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"expanded");
-    catch_prim!(gullet.get_expanded_group(state,false,false,false,&mut |s,t| f(s,t)) => ("expanded",cmd));
+    catch_prim!(gullet.get_expanded_group(state,false,false,false,f) => ("expanded",cmd));
     Ok(())
 }
 
@@ -392,27 +395,29 @@ pub fn readline<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
     Ok(())
 }
 
+pub static UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
 pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"unexpanded");
-    match catch_prim!(gullet.get_next_stomach_command(state) => ("unexpanded",cmd)) {
+    match catch_prim!(gullet.get_next_stomach_command(state) => (UNEXPANDED,cmd)) {
         None => file_end_prim!("unexpanded",cmd),
         Some(sc) => match sc.command {
             BaseStomachCommand::BeginGroup => (),
             _ => throw!("Expected a begin group after \\unexpanded" => cmd.cause)
         }
     }
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,f) => ("unexpanded",cmd));
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,f) => (UNEXPANDED,cmd));
     Ok(())
 }
 
 /// `\unless`: read a conditional and inverse its result. Notably, this is not itself implemented as a conditional,
 /// since otherwise, e.g. `\unless\ifx` in the [false-loop](crate::engine::gullet::methods::false_loop)
 /// would be interpreted as *two* conditionals, rather than just one.
+pub static UNLESS : &str = "unless";
 pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"unless");
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("unless",cmd)) {
-        None => file_end_prim!("unless",cmd),
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => (UNLESS,cmd)) {
+        None => file_end_prim!(UNLESS,cmd),
         Some((next,true)) => {
             let ncmd = match next.base() {
                 BaseToken::CS(name) => state.get_command(name),
@@ -426,7 +431,7 @@ pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
             match ncmd.base {
                 BaseCommand::Conditional {name,apply} => {
                     catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,
-                        CommandSource{cause:next,reference:ncmd.reference},name,apply,true) => ("unless",cmd));
+                        CommandSource{cause:next,reference:ncmd.reference},name,apply,true) => (UNLESS,cmd));
                     Ok(())
                 }
                 _ => throw!("Expected a conditional after \\unless" => cmd.cause)

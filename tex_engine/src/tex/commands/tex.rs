@@ -1,25 +1,29 @@
 //! TeX primitive [`BaseCommand`]s
 
+use std::collections::VecDeque;
 use std::marker::PhantomData;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{tokens_to_string, string_to_tokens, token_to_chars, get_char};
+use crate::engine::gullet::methods::{tokens_to_string, string_to_tokens, token_to_chars, get_char, resolve_token, expand, do_conditional};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, BoxFun, CloseBoxFun, TokenCont, ValueCommand, CommandSource};
-use crate::tex::commands::methods::parse_signature;
+use crate::tex::commands::methods::{parse_signature, set_relax};
 use crate::tex::numbers::{Int, Skip, Numeric, MuSkip, Dim};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
+use log::warn;
 use crate::engine::{EngineType, gullet};
+use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::tex::boxes::{HBox, HVBox, OpenBox, StomachNode, TeXNode, Whatsit};
+use crate::tex::commands::etex::UNLESS;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
 //use super::etex::protected;
@@ -31,24 +35,19 @@ SPACE
 \-
  */
 
-
-
 pub fn SPACE<ET:EngineType>(_stomach:&mut ET::Stomach,state:&mut ET::State,_cmd:CommandSource<ET>)
                                      -> Result<(),TeXError<ET::Token>> {
     todo!("\\ ")
 }
 
 pub static ADVANCE: &str = "advance";
-
 pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                                      -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"\\advance");
-    todo!()
-    /*
     catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (ADVANCE,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (ADVANCE,cmd)) {
         None => file_end_prim!(ADVANCE,cmd),
-        Some(ncmd) => match ncmd.command.base() {
+        Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
                 macro_rules! finish {
                     ($old:expr,$nv:ident => $set:expr) => {{
@@ -60,9 +59,9 @@ pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                     }}
                 }
                 match a {
-                    ValueCommand::Register(u) => finish!(state.get_int_register(*u),nv => state.set_int_register(*u,nv,global)),
+                    ValueCommand::Register(u) => finish!(state.get_int_register(u),nv => state.set_int_register(u,nv,global)),
                     ValueCommand::Primitive(name) => finish!(state.get_primitive_int(name),nv => state.set_primitive_int(name,nv,global)),
-                    ValueCommand::Complex {name,..} if *name == COUNT => {
+                    ValueCommand::Complex {name,..} if name == COUNT => {
                         let int = catch_prim!(gullet.get_int(state) => (ADVANCE,cmd));
                         let u = match int.try_into() {
                             Ok(u) => u,
@@ -84,9 +83,9 @@ pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                     }}
                 }
                 match a {
-                    ValueCommand::Register(u) => finish!(state.get_dim_register(*u),nv => state.set_dim_register(*u,nv,global)),
+                    ValueCommand::Register(u) => finish!(state.get_dim_register(u),nv => state.set_dim_register(u,nv,global)),
                     ValueCommand::Primitive(name) => finish!(state.get_primitive_dim(name),nv => state.set_primitive_dim(name,nv,global)),
-                    ValueCommand::Complex {name,..} if *name == DIMEN => {
+                    ValueCommand::Complex {name,..} if name == DIMEN => {
                         let int = catch_prim!(gullet.get_int(state) => (ADVANCE,cmd));
                         let u = match int.try_into() {
                             Ok(u) => u,
@@ -97,11 +96,57 @@ pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                     _ => throw!("Unexpected token after \\advance" => cmd.cause)
                 }
             }
+            BaseCommand::Skip(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (ADVANCE,cmd));
+                        let i = catch_prim!(gullet.get_skip(state) => (ADVANCE,cmd));
+                        let $nv = $old + i;
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_skip_register(u),nv => state.set_skip_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_skip(name),nv => state.set_primitive_skip(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == SKIP => {
+                        let int = catch_prim!(gullet.get_int(state) => (ADVANCE,cmd));
+                        let u = match int.try_into() {
+                            Ok(u) => u,
+                            _ => throw!("Not a valid register: {}",int => cmd.cause)
+                        };
+                        finish!(state.get_skip_register(u),nv => state.set_skip_register(u,nv,global))
+                    }
+                    _ => throw!("Unexpected token after \\advance" => cmd.cause)
+                }
+            }
+            BaseCommand::MuSkip(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (ADVANCE,cmd));
+                        let i = catch_prim!(gullet.get_muskip(state) => (ADVANCE,cmd));
+                        let $nv = $old + i;
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_muskip_register(u),nv => state.set_muskip_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_muskip(name),nv => state.set_primitive_muskip(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == MUSKIP => {
+                        let int = catch_prim!(gullet.get_int(state) => (ADVANCE,cmd));
+                        let u = match int.try_into() {
+                            Ok(u) => u,
+                            _ => throw!("Not a valid register: {}",int => cmd.cause)
+                        };
+                        finish!(state.get_muskip_register(u),nv => state.set_muskip_register(u,nv,global))
+                    }
+                    _ => throw!("Unexpected token after \\advance" => cmd.cause)
+                }
+            }
             o => throw!("expected register after \\advance;got:{:?}",o => cmd.cause)
         }
     }
-
-     */
 }
 
 pub fn afterassignment<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<(), TeXError<ET::Token>> {
@@ -150,28 +195,14 @@ pub fn catcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 }
 
 pub static CHARDEF: &str = "chardef";
-
 pub fn chardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"chardef");
-    todo!()
-    /*
     let name = catch_prim!(gullet.get_control_sequence(state) => (CHARDEF,cmd));
     catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (CHARDEF,cmd));
     let char = catch_prim!(get_char::<ET>(gullet,state) => (CHARDEF,cmd));
-    let cmd = Some(ET::Command::new(BaseCommand::CharDef(char),Some(&cmd.cause)));
-    match name {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\chardef: {} = {}",c.char_str(),char.char_str());
-            state.set_ac_command(c, cmd, global);
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\chardef: \\{} = {}",name,char.char_str());
-            state.set_command(name, cmd, global);
-        }
-    }
+    let cmd = Command::new(BaseCommand::CharDef(char),Some(&cmd));
+    state.set_command_for_tk(name, Some(cmd), global);
     Ok(())
-
-     */
 }
 
 pub fn closein<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<(), TeXError<ET::Token>> {
@@ -192,7 +223,7 @@ pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cm
         Ok(i) => i,
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
-    let apply = Box::new(move |_: &mut _,s:&mut ET::State,_: &mut _| {
+    let apply = Box::new(move |s:&mut ET::State,_: &mut _| {
         s.file_closeout(i); // TODO error?
         Ok(())
     });
@@ -200,7 +231,6 @@ pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cm
 }
 
 pub static COUNT : &str = "count";
-
 pub fn count_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Assigning \\count");
     let i = catch_prim!(gullet.get_int(state) => ("count",cmd));
@@ -225,72 +255,53 @@ pub fn count_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
     debug_log!(debug=>"\\count{} == {}",i,v);
     Ok(v)
 }
+
 pub static COUNTDEF : &str = "countdef";
 pub fn countdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"countdef");
-    todo!()
-    /*
     let name = catch_prim!(gullet.get_control_sequence(state) => (COUNTDEF,cmd));
-    super::methods::set_relax::<ET>(state,&name,&cmd.cause,global);
+    catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (COUNTDEF,cmd));
     catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (COUNTDEF,cmd));
     let num = catch_prim!(gullet.get_int(state) => ("countdef",cmd));
     if num.to_i64() < 0 {
         throw!("Invalid count register index: {}",num => cmd.cause)
     }
     let num = num.to_i64() as usize;
-    let cmd = Some(ET::Command::new(BaseCommand::Int(ValueCommand::Register(num)), Some(&cmd.cause)));
-    match name {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\countdef: {} = \\count{}",c.char_str(),num);
-            state.set_ac_command(c, cmd, global);
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\countdef: \\{} = {}",name,num);
-            state.set_command(name, cmd, global);
-        }
-    }
+    let cmd = Command::new(BaseCommand::Int(ValueCommand::Register(num)),Some(&cmd));
+    state.set_command_for_tk(name,Some(cmd),global);
     Ok(())
-
-     */
 }
 
 pub fn get_csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
     -> Result<TeXStr<ET::Char>,TeXError<ET::Token>>{
-    todo!()
-    /*
+    debug_log!(trace=>"get_csname: {}",gullet.mouth().preview(200));
     let csidx = state.push_csname();
-    let mut csname = Vec::new();
+    let mut csname = Vec::with_capacity(16);
     while state.current_csname() == Some(csidx) {
         match catch_prim!(gullet.get_next_unexpandable(state) => (name,cmd)) {
             None => return file_end!(cmd.cause),
-            Some(sc) => match sc.command.base() {
+            Some(sc) => match sc.command {
                 BaseCommand::Unexpandable {name:"endcsname",..} => state.pop_csname(),
-                BaseCommand::Char{char,catcode:CategoryCode::Space} => csname.push(ET::Char::from(b' ')),
-                BaseCommand::Char{char,..} => csname.push(*char),
+                BaseCommand::Char{catcode:CategoryCode::Space,..} => csname.push(ET::Char::from(b' ')),
+                BaseCommand::Char{char,..} => csname.push(char),
                 o => throw!("Unexpected token in {}: {:?}",name,o => cmd.cause)
             }
         }
     }
     Ok(csname.into())
-
-     */
 }
 
 pub fn csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"csname");
-    todo!()
-    /*
-    let str = get_csname::<ET>(state,gullet,cmd,"csname")?;
+    let str = get_csname::<ET>(state,gullet,&cmd,"csname")?;
     debug_log!(trace=>"csname {}",str.to_string());
     match state.get_command(&str) {
-        None => state.set_command(str.clone(), Some(Ptr::new(BaseCommand::Relax)), false),
+        None => state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
     }
-    f(ET::Token::new(BaseToken::CS(str),None));
+    gullet.mouth().requeue(ET::Token::new(BaseToken::CS(str),None));
     Ok(())
-
-     */
 }
 
 pub fn day<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
@@ -301,17 +312,15 @@ pub static DEF : &str = "def";
 pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool,protected:bool,long:bool,outer:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"def");
-    todo!()
-    /*
     let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (DEF,cmd));
-    let cs = match &csO {
+    let cs = match csO {
         None => file_end_prim!(DEF,cmd),
-        Some((t,_)) => t.base()
+        Some((t,_)) => t
     };
-    match cs {
+    match cs.base() {
         BaseToken::Char(_,CategoryCode::Active) => (),
         BaseToken::CS(_) => (),
-        _ => throw!("Command expected after \\def" => csO.unwrap().0)
+        _ => throw!("Command expected after \\def" => cs)
     }
     let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,&cmd,DEF)?;
     let mut replacement: Vec<ExpToken<ET::Token>> = vec!();
@@ -331,20 +340,10 @@ pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comman
             throw!("Expected number after #, got {}",t => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
-    let def = ET::Command::new(BaseCommand::Def(Ptr::new(Def{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd.cause));
-    match cs {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\def: {} = {:?}",c,def);
-            state.set_ac_command(*c,Some(def),global)
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\def: \\{} = {:?}",name,def);
-            state.set_command(name.clone(),Some(def),global)
-        }
-    }
-    return Ok(())
-
-     */
+    let def = Command::new(BaseCommand::Def(Ptr::new(Def{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
+    debug_log!(trace=>"def {:?} = {:?}",cs,def);
+    state.set_command_for_tk(cs,Some(def),global);
+    Ok(())
 }
 
 pub fn delcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
@@ -405,130 +404,141 @@ pub fn dimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
     Ok(v)
 }
 
+pub static DIMENDEF : &str = "dimendef";
 pub fn dimendef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                                      -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"dimendef");
-    todo!()
-    /*
-    let name = catch_prim!(gullet.get_control_sequence(state) => ("dimendef",cmd));
-    match &name {
-        BaseToken::Char(c,_) => {
-            state.set_ac_command(*c, Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-        BaseToken::CS(name) => {
-            state.set_command(name.clone(), Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-    }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("dimendef",cmd));
-    let num = catch_prim!(gullet.get_int(state) => ("dimendef",cmd));
+    let name = catch_prim!(gullet.get_control_sequence(state) => (DIMENDEF,cmd));
+    catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (DIMENDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (DIMENDEF,cmd));
+    let num = catch_prim!(gullet.get_int(state) => (DIMENDEF,cmd));
     if num.to_i64() < 0 {
-        return Err(ErrorInPrimitive{name:"dimendef",msg:Some(format!("Invalid dimen register index: {}",num)),cause:Some(cmd.cause),source:None})
+        throw!("Invalid dimen register index: {}",num => cmd.cause)
     }
     let num = num.to_i64() as usize;
-    let ret = ET::Command::new(BaseCommand::Dim {
-        name:Some(DIMEN),index:Some(num),
-        get:|s,_,_| s.get_dim_register(num),
-        set:Some(|s,g,c,gl| super::methods::assign_dim_register(s,g,num,c,gl))
-    },Some(cmd.cause));
-    match name {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\dimendef: {} = \\dimen{}",c.char_str(),num);
-            state.set_ac_command(c, Some(ret), global);
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\dimendef: \\{} = {}",name,num);
-            state.set_command(name, Some(ret), global);
-        }
-    }
+    let ret = Command::new(BaseCommand::Dim(ValueCommand::Register(num)),Some(&cmd));
+    state.set_command_for_tk(name,Some(ret),global);
     Ok(())
-
-     */
 }
 pub static DIVIDE : &str = "divide";
 pub fn divide<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
     -> Result<(),TeXError<ET::Token>> {
-    todo!()
-    /*
     debug_log!(trace=>"\\divide");
     catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (DIVIDE,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (DIVIDE,cmd)) {
         None => file_end_prim!(DIVIDE,cmd),
-        Some(cmd) => match cmd.command.base() {
-            BaseCommand::Int{name,index,..}  if *name == COUNT => {
-                let u = match index {
-                    Some(u) => *u,
-                    None => {
+        Some(ncmd) => match ncmd.command {
+            BaseCommand::Int(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
+                        if i.to_i64() == 0 {
+                            throw!("Division by zero: {} / {}",$old,i => cmd.cause)
+                        }
+                        let $nv = $old / i;
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_int_register(u),nv => state.set_int_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_int(name),nv => state.set_primitive_int(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == COUNT => {
                         let int = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
-                        match int.try_into() {
+                        let u = match int.try_into() {
                             Ok(u) => u,
                             _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        }
+                        };
+                        finish!(state.get_int_register(u),nv => state.set_int_register(u,nv,global))
                     }
-                };
-                catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
-                let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
-                debug_log!(debug => "  \\count{}",u);
-                let ov = state.get_int_register(u);
-                debug_log!(debug => "  =={}/{}",ov,i);
-                let nv : ET::Int = ov / i;
-                debug_log!(debug => "  ={}",nv);
-                state.set_int_register(u,nv,global);
-                return Ok(())
-            }
-            BaseCommand::Int{name,index:None,..} => { // TODO this covers potentially too many cases
-                debug_log!(debug => "  \\{}",name);
-                catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
-                let ov = state.get_primitive_int(name);
-                let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
-                debug_log!(debug => "  =={}/{}",ov,i);
-                if i.to_i64() == 0 {
-                    throw!("Division by zero: {} / {}",ov,i => cmd.cause)
+                    _ => throw!("Unexpected token after \\divide" => cmd.cause)
                 }
-                let nv : ET::Int = ov / i;
-                debug_log!(debug => "  ={}",nv);
-                state.set_primitive_int(name,nv,global);
-                return Ok(())
             }
-            BaseCommand::Dim{name,index,..}  if *name == DIMEN => {
-                let u = match index {
-                    Some(u) => *u,
-                    None => {
+            BaseCommand::Dim(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd)).to_i64();
+                        if i == 0 {
+                            throw!("Division by zero: {} / {}",$old,i => cmd.cause)
+                        }
+                        let $nv = $old.tex_div(i);
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_dim_register(u),nv => state.set_dim_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_dim(name),nv => state.set_primitive_dim(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == DIMEN => {
                         let int = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
-                        match int.try_into() {
+                        let u = match int.try_into() {
                             Ok(u) => u,
                             _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        }
+                        };
+                        finish!(state.get_dim_register(u),nv => state.set_dim_register(u,nv,global))
                     }
-                };
-                catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
-                let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd)).to_i64();
-                debug_log!(debug => "  \\count{}",u);
-                let ov = state.get_dim_register(u);
-                debug_log!(debug => "  =={}/{}",ov,i);
-                let nv = ov.tex_div(i);
-                debug_log!(debug => "  ={}",nv);
-                state.set_dim_register(u,nv,global);
-                return Ok(())
-            }
-            BaseCommand::Dim{name,index:None,..} => { // TODO this covers potentially too many cases
-            debug_log!(debug => "  \\{}",name);
-                catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
-                let ov = state.get_primitive_dim(name);
-                let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd)).to_i64();
-                debug_log!(debug => "  =={}/{}",ov,i);
-                if i == 0 {
-                    throw!("Division by zero: {} / {}",ov,i => cmd.cause)
+                    _ => throw!("Unexpected token after \\divide" => cmd.cause)
                 }
-                let nv = ov.tex_div(i);
-                debug_log!(debug => "  ={}",nv);
-                state.set_primitive_dim(name,nv,global);
-                return Ok(())
+            }
+            BaseCommand::Skip(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd)).to_i64();
+                        if i == 0 {
+                            throw!("Division by zero: {} / {}",$old,i => cmd.cause)
+                        }
+                        let $nv = $old.tex_div(i);
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_skip_register(u),nv => state.set_skip_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_skip(name),nv => state.set_primitive_skip(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == SKIP => {
+                        let int = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
+                        let u = match int.try_into() {
+                            Ok(u) => u,
+                            _ => throw!("Not a valid register: {}",int => cmd.cause)
+                        };
+                        finish!(state.get_skip_register(u),nv => state.set_skip_register(u,nv,global))
+                    }
+                    _ => throw!("Unexpected token after \\divide" => cmd.cause)
+                }
+            }
+            BaseCommand::MuSkip(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (DIVIDE,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd)).to_i64();
+                        if i == 0 {
+                            throw!("Division by zero: {} / {}",$old,i => cmd.cause)
+                        }
+                        let $nv = $old.tex_div(i);
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_muskip_register(u),nv => state.set_muskip_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_muskip(name),nv => state.set_primitive_muskip(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == MUSKIP => {
+                        let int = catch_prim!(gullet.get_int(state) => (DIVIDE,cmd));
+                        let u = match int.try_into() {
+                            Ok(u) => u,
+                            _ => throw!("Not a valid register: {}",int => cmd.cause)
+                        };
+                        finish!(state.get_muskip_register(u),nv => state.set_muskip_register(u,nv,global))
+                    }
+                    _ => throw!("Unexpected token after \\divide" => cmd.cause)
+                }
             }
             o => throw!("expected register after \\divide;got:{:?}",o => cmd.cause)
         }
     }
-
-     */
 }
 
 pub fn dump<ET:EngineType>()
@@ -538,22 +548,22 @@ pub fn dump<ET:EngineType>()
     Ok(())
 }
 
+pub static EDEF: &str = "edef";
 pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool,protected:bool,long:bool,outer:bool)
                                                 -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"edef");
-    todo!()
-    /*
-    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (DEF,cmd));
-    let cs = match &csO {
+    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (EDEF,cmd));
+    let cs = match csO {
         None => file_end_prim!(DEF,cmd),
-        Some((t,_)) => t.base()
+        Some((t,_)) => t
     };
-    match cs {
+    match cs.base() {
         BaseToken::Char(_,CategoryCode::Active) => (),
         BaseToken::CS(_) => (),
-        _ => throw!("Command expected after \\def" => csO.unwrap().0)
+        _ => throw!("Command expected after \\def" => cs)
     }
-    let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,&cmd,DEF)?;
+    debug_log!(trace=>"edef: {}",cs);
+    let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,&cmd,EDEF)?;
     let mut replacement: Vec<ExpToken<ET::Token>> = vec!();
     let mut partk = None;
     catch_prim!(gullet.get_expanded_group(state,false,true,false,&mut |_,t| match (std::mem::take(&mut partk),t.base()) {
@@ -571,28 +581,19 @@ pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
             throw!("Expected number after #, got {}",t => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
-    let def = ET::Command::new(BaseCommand::Def(Ptr::new(Def{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd.cause));
-    match cs {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\def: {} = {:?}",c,def);
-            state.set_ac_command(*c,Some(def),global)
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\def: \\{} = {:?}",name,def);
-            state.set_command(name.clone(),Some(def),global)
-        }
-    }
-    return Ok(())
-
-     */
+    let def = Command::new(BaseCommand::Def(Ptr::new(Def{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
+    debug_log!(trace=>"edef {:?} = {:?}",cs,def);
+    state.set_command_for_tk(cs,Some(def),global);
+    Ok(())
 }
 
+pub static ELSE: &str = "else";
 pub fn else_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<(),TeXError<ET::Token>> {
     match gullet.current_conditional() {
         (None,_) => throw!("Not in a conditional" => cmd.cause),
         (Some(ConditionalBranch::True(name)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,name,i,false) => ("else",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,name,i,false) => (ELSE,cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
             catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i,false) => ("ifcase",cmd)),
         o => unreachable!("{:?}\nat:{}\n{}\n",o,gullet.mouth().file_line(),gullet.mouth().preview(200))
@@ -660,7 +661,7 @@ pub fn errmessage<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(debug=>"errmessage");
     catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (ERRMESSAGE,cmd));
-    let errmsg = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => (ERRMESSAGE,cmd))).unwrap();
+    let errmsg = catch_prim!(gullet.get_braced_string(state) => (ERRMESSAGE,cmd));
     let eh = state.get_primitive_toks("errhelp");
     // TODO errhelp
     Err(TeXError{
@@ -703,59 +704,29 @@ pub fn escapechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet
     Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
 }
 
+pub static EXPANDAFTER : &str = "expandafter";
 pub fn expandafter<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"expandafter");
-    todo!()
-    /*
-    let (first,exp) = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("expandafter",cmd)){
-        None => file_end_prim!("expandafter",cmd),
-        Some((t,b)) => (t,b)
+    let first = match catch_prim!(gullet.mouth().get_next::<ET>(state) => (EXPANDAFTER,cmd)){
+        None => file_end_prim!(EXPANDAFTER,cmd),
+        Some((t,_)) => t
     };
-    debug_log!(debug=>"expandafter: 1. {}",first);
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("expandafter",cmd)){
-        None => file_end_prim!("expandafter",cmd),
-        Some((t,false)) => {
-            debug_log!(debug=>"expandafter: 2. \\noexpand{}",t);
-            gullet.mouth().push_noexpand(t);
-        }
-        Some((t,_)) => {
-            debug_log!(debug=>"expandafter: 2. {}",t);
-            if let Some(ncmd) = match t.base() {
-                BaseToken::CS(n) => Some(catch_prim!(state.need_command(&n) => ("expandafter",cmd))),
-                BaseToken::Char(c, CategoryCode::Active) =>
-                    Some(catch_prim!(state.need_ac_command(*c) => ("expandafter",cmd))),
-                _ => {
-                    gullet.mouth().requeue(t.clone());
-                    None
-                }
-            } {
-                match &*ncmd {
-                    BaseCommand::Conditional{name,index} =>
-                        catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index,false) => ("expandafter",cmd)),
-                    BaseCommand::Expandable {name,index} =>
-                        catch_prim!(crate::engine::gullet::methods::do_expandable::<ET>(gullet,state,t,name,*index) => ("expandafter",cmd)),
-                    BaseCommand::Def(d, _) => {
-                        let v = catch_prim!(d.expand::<ET>(state,gullet.mouth(),ncmd.clone(),Ptr::new(t.clone())) => ("expandafter",cmd));
-                        if !v.is_empty() {
-                            gullet.mouth().push_tokens(v);
-                        }
-                    }
-                    _ => gullet.mouth().requeue(t)
-                }
-            }
-        }
+    let next = match catch_prim!(gullet.mouth().get_next::<ET>(state) => (EXPANDAFTER,cmd)){
+        None => file_end_prim!(EXPANDAFTER,cmd),
+        Some((t,_)) => t
     };
-    if exp {
-        gullet.mouth().requeue(first);
-    } else {
-        gullet.mouth().push_noexpand(first);
+    match gullet.expand(state,resolve_token::<ET>(state,next))? {
+        None => (),
+        Some(next) => {
+            gullet.mouth().requeue(next.source.cause);
+        }
     }
-    Ok(vec!())
-
-     */
+    gullet.mouth().requeue(first);
+    Ok(())
 }
 
+pub static FI : &str = "fi";
 pub fn fi<ET:EngineType>(_state:&mut ET::State,gullet:&mut ET::Gullet,_cmd:CommandSource<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"...end of conditional.");
@@ -763,47 +734,37 @@ pub fn fi<ET:EngineType>(_state:&mut ET::State,gullet:&mut ET::Gullet,_cmd:Comma
     Ok(())
 }
 
+pub static FONT :&str = "font";
 pub fn font_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Assigning \\font");
-    todo!()
-    /*
-    let cs = catch_prim!(gullet.get_control_sequence(state) => ("font",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("font",cmd));
-    let mut fontname = catch_prim!(gullet.get_string(state) => ("font",cmd)).to_string();
+    let cs = catch_prim!(gullet.get_control_sequence(state) => (FONT,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (FONT,cmd));
+    let mut fontname = catch_prim!(gullet.get_string(state) => (FONT,cmd)).to_string();
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
     }
-    let index = catch_prim!(state.fontstore_mut().get_new(&fontname) => ("font",cmd));
-    match catch_prim!(gullet.get_keywords(state,vec!("at","scaled")) => ("font",cmd)) {
+    let mut font = catch_prim!(state.fontstore_mut().get_new(&fontname) => (FONT,cmd));
+    match catch_prim!(gullet.get_keywords(state,vec!("at","scaled")) => (FONT,cmd)) {
         Some(s) if s == "at" => {
-            let dim = catch_prim!(gullet.get_dim(state) => ("font",cmd));
-            state.fontstore_mut().get_mut(index).set_at(dim.to_sp());
+            let dim = catch_prim!(gullet.get_dim(state) => (FONT,cmd));
+            font.set_at(dim.to_sp());
         }
         Some(s) if s == "scaled" => {
-            let r = catch_prim!(crate::engine::gullet::numeric_methods::read_float::<ET>(gullet,state,b'0',false) => ("font",cmd));
-            let font = state.fontstore_mut().get_mut(index);
+            let r = catch_prim!(crate::engine::gullet::numeric_methods::read_float::<ET>(gullet,state,b'0',false) => (FONT,cmd));
             let new_at = ((font.get_at() as f64) * r).round() as i64;
             font.set_at(new_at);
         }
         _ => ()
     }
-    let fontcmd = BaseCommand::ValueRegister{index,tp:Assignable::Font};
-    match cs.base() {
-        BaseToken::Char(c,CategoryCode::Active) =>
-            state.set_ac_command(*c,Some(Ptr::new(fontcmd)),global),
-        BaseToken::CS(name) =>
-            state.set_command(name.clone(),Some(Ptr::new(fontcmd)),global),
-        _ => unreachable!()
-    }
+    let fontcmd = Command::new(BaseCommand::Font(font),Some(&cmd));
+    state.set_command_for_tk(cs,Some(fontcmd),global);
     Ok(())
-
-     */
 }
 pub fn font_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<ET::Font,TeXError<ET::Token>> {
     debug_log!(trace=>"Getting \\font");
-    todo!("\\font_get")
+    Ok(state.get_current_font().clone())
 }
 
 pub fn fontdimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
@@ -836,18 +797,12 @@ pub fn fontdimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
 pub fn futurelet<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                 -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"\\futurelet");
-    todo!()
-    /*
     let cs = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
         None => file_end_prim!("futurelet",cmd),
         Some((t,_)) => match t.base() {
-            BaseToken::Char(c,CategoryCode::Active) => {
-                BaseToken::Char(*c,CategoryCode::Active)
-            }
-            BaseToken::CS(name) => {
-                BaseToken::CS(name.clone())
-            }
-            _ => return Err(ErrorInPrimitive{name:"futurelet",msg:Some("Expected control sequence after \\futurelet".into()),cause:Some(cmd.cause),source:None})
+            BaseToken::Char(_,CategoryCode::Active) => t,
+            BaseToken::CS(_) => t,
+            _ => throw!("Expected control sequence after \\futurelet" => cmd.cause)
         }
     };
     let first = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
@@ -859,25 +814,15 @@ pub fn futurelet<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
         Some((t,_)) => t
     };
     let newcmd = match second.base() {
-        BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(c),
-        BaseToken::CS(name) => state.get_command(name),
+        BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(c).cloned(),
+        BaseToken::CS(name) => state.get_command(name).cloned(),
         BaseToken::Char(c,cc) =>
-            Some(Ptr::new(BaseCommand::Char{char:*c,catcode:*cc}))
+            Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd)))
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
-    match cs {
-        BaseToken::Char(c,CategoryCode::Active) => {
-            state.set_ac_command(c,newcmd,global);
-        }
-        BaseToken::CS(name) => {
-            state.set_command(name,newcmd,global);
-        }
-        _ => unreachable!()
-    }
+    state.set_command_for_tk(cs,newcmd,global);
     gullet.mouth().push_tokens(vec!(first,second));
     Ok(())
-
-     */
 }
 
 
@@ -885,12 +830,14 @@ pub fn gdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
                                                  -> Result<(),TeXError<ET::Token>> {
     def::<ET>(state,gullet,cmd,true,protected,long,outer)
 }
+
+pub static GLOBAL: &str = "global";
 pub fn global<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global_:bool,protected_:bool,long_:bool,outer_:bool)
                                                  -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace => "\\global");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("global",cmd));
-    match catch_prim!(gullet.get_next_stomach_command(state) => ("global",cmd)) {
-        None => file_end_prim!("global",cmd),
+    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (GLOBAL,cmd));
+    match catch_prim!(gullet.get_next_stomach_command(state) => (GLOBAL,cmd)) {
+        None => file_end_prim!(GLOBAL,cmd),
         Some(c) => match c.command {
             BaseStomachCommand::Assignment {name:Some("global"),..} => global::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
             BaseStomachCommand::Assignment{name:Some("protected"),..} => super::etex::protected::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
@@ -900,49 +847,47 @@ pub fn global<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
             BaseStomachCommand::Assignment {name:Some("edef"),..} => edef::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
             BaseStomachCommand::Assignment {name:Some("gdef"),..} => gdef::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
             BaseStomachCommand::Assignment {name:Some("xdef"),..} => xdef::<ET>(state,gullet,cmd,true,protected_,long_,outer_),
-            BaseStomachCommand::Assignment {set,..} => Ok(catch_prim!(set(state,gullet,c.source,true) => ("global",cmd))),
+            BaseStomachCommand::Assignment {set,..} => Ok(catch_prim!(set(state,gullet,c.source,true) => (GLOBAL,cmd))),
+            BaseStomachCommand::ValueAss(set) => Ok(catch_prim!(set(state,gullet,c.source,true) => (GLOBAL,cmd))),
             o => todo!("global: {:?} at {}",o,gullet.mouth().preview(100))
         }
     }
 }
 
+pub static HBOX: &str = "hbox";
 pub fn hbox<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
                                          -> Result<CloseBoxFun<ET>,TeXError<ET::Token>> {
     debug_log!(trace=>"\\hbox");
-    todo!()
-    /*
-    let (to,spread) = match catch_prim!(gullet.get_keywords(state,vec!("spread","to")) => ("hbox",cmd)) {
+    let (to,spread) = match catch_prim!(gullet.get_keywords(state,vec!("spread","to")) => (HBOX,cmd)) {
         None => (None,None),
         Some(s) if s == "to" => {
-            let a = catch_prim!(gullet.get_dim(state) => ("hbox",cmd));
+            let a = catch_prim!(gullet.get_dim(state) => (HBOX,cmd));
             (Some(a),None)
         },
         Some(s) if s == "spread" => {
-            let a = catch_prim!(gullet.get_dim(state) => ("hbox",cmd));
+            let a = catch_prim!(gullet.get_dim(state) => (HBOX,cmd));
             (None,Some(a))
         },
         _ => unreachable!()
     };
-    while let Some(next) = catch_prim!(gullet.get_next_stomach_command(state) => ("hbox",cmd)) {
-        match next.cmd {
-            StomachCommandInner::Space => {},
-            StomachCommandInner::Relax => {},
-            StomachCommandInner::BeginGroup(_) => {
+    while let Some(next) = catch_prim!(gullet.get_next_unexpandable(state) => (HBOX,cmd)) {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Relax => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
                 state.stack_push(GroupType::Box(BoxMode::H));
                 gullet.mouth().push_tokens(state.get_primitive_toks("everyhbox"));
-                return Ok(Box::new(move |sto,s,gu,children| {
+                return Ok(Box::new(move |s,gu,children| {
                     Some(HVBox::H(HBox {
                         children, to:to.clone(), spread:spread.clone(),
                         ..Default::default()
                     }))
                 }))
             }
-            _ => return Err(ErrorInPrimitive{name:"hbox",msg:Some(format!("Expected begin group, found {:?}",next.cause)),cause:Some(cmd.cause),source:None})
+            _ => throw!("Expected begin group, found {:?}",next.source.cause => cmd.cause)
         }
     }
     file_end_prim!("hbox",cmd);
-
-     */
 }
 
 pub fn hyphenation<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
@@ -973,12 +918,12 @@ pub fn hyphenchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet
 pub fn if_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<bool,TeXError<ET::Token>> {
     debug_log!(trace=>"if");
-    let first = get_if_token::<ET>(state,gullet,cmd.clone(),"if")?;
-    let second = get_if_token::<ET>(state,gullet,cmd,"if")?;
+    let first = get_if_token::<ET>(state,gullet,&cmd,"if")?;
+    let second = get_if_token::<ET>(state,gullet,&cmd,"if")?;
     debug_log!(trace=>"if: {:?} == {:?}",first,second);
     Ok(match (first,second) {
         (None,_) | (_,None) => false,
-        (Some(f),Some(s)) => match (f.base(),s.base()) {
+        (Some(f),Some(s)) => match (f.source.cause.take_base(),s.source.cause.take_base()) {
             (BaseToken::Char(f,_),BaseToken::Char(s,_)) => f == s,
             (BaseToken::CS(_),BaseToken::CS(_)) => true,
             _ => false
@@ -991,85 +936,57 @@ pub fn ifcase<ET:EngineType>() -> Result<bool,TeXError<ET::Token>> {
     unreachable!("executed in Gullet")
 }
 
+pub static IFCAT : &str = "ifcat";
 pub fn ifcat<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<bool,TeXError<ET::Token>> {
     debug_log!(trace=>"ifcat");
-    todo!()
-    /*
-    let first = get_if_token::<ET>(state,gullet,cmd.clone(),"ifcat")?;
-    let second = get_if_token::<ET>(state,gullet,cmd,"ifcat")?;
+    let first = catch_prim!(get_if_token::<ET>(state,gullet,&cmd,IFCAT) => (IFCAT,cmd));
+    let second = catch_prim!(get_if_token::<ET>(state,gullet,&cmd,IFCAT) => (IFCAT,cmd));
     debug_log!(trace=>"ifcat: {:?} == {:?}",first,second);
     let first = match first {
         None => return Ok(false),
-        Some(first) => match first.base() {
-            BaseToken::Char(_,cc) => *cc,
-            BaseToken::CS(name) => match state.get_command(name) {
-                None => CategoryCode::Escape,
-                Some(cmd) => match &*cmd {
-                    BaseCommand::Char {catcode,..} => *catcode,
-                    _ => CategoryCode::Escape
-                }
+        Some(first) => match first.source.cause.take_base() {
+            BaseToken::Char(_,cc) => cc,
+            BaseToken::CS(name) => match first.command {
+                BaseCommand::Char{catcode,..} => catcode,
+                _ => CategoryCode::Escape
             }
         }
     };
     let second = match second {
         None => return Ok(false),
-        Some(first) => match first.base() {
-            BaseToken::Char(_,cc) => *cc,
-            BaseToken::CS(name) => match state.get_command(name) {
-                None => CategoryCode::Escape,
-                Some(cmd) => match &*cmd {
-                    BaseCommand::Char {catcode,..} => *catcode,
-                    _ => CategoryCode::Escape
-                }
+        Some(second) => match second.source.cause.take_base() {
+            BaseToken::Char(_,cc) => cc,
+            BaseToken::CS(name) => match second.command {
+                BaseCommand::Char{catcode,..} => catcode,
+                _ => CategoryCode::Escape
             }
         }
     };
     Ok(first == second)
-
-     */
 }
 
-pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str)
-    -> Result<Option<ET::Token>,TeXError<ET::Token>> {
-    todo!()
-    /*
+pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
+    -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
     // need to be careful not to expand \else and \fi before conditional is done.
     while let Some((t,e)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => (name,cmd)) {
-        let cmdo = match t.base() {
-            BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(*c),
-            BaseToken::CS(n) => state.get_command(n),
-            _ => return Ok(Some(t))
-        };
-        match cmdo {
-            None => return Ok(Some(t)),
-            Some(c) => match &*c {
-                BaseCommand::Conditional{name,index} if e => {
-                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,t,name,*index,false) => (name,cmd));
-                },
-                BaseCommand::Def(d, _) if e => {
-                    let v = catch_prim!(d.expand::<ET>(state,gullet.mouth(),c.clone(),Ptr::new(t.clone())) => (name,cmd));
-                    if !v.is_empty() {
-                        gullet.mouth().push_tokens(v);
-                    }
-                },
-                BaseCommand::Expandable {name,..} if e && (*name == "else" || *name == "fi") && (match gullet.current_conditional() {
-                    (Some(ConditionalBranch::None(_)),_) => true,
-                    _ => false
-                }) => {
-                    gullet.mouth().requeue(t);
-                    return Ok(None)
-                }
-                BaseCommand::Expandable {name,index} if e => {
-                    catch_prim!(crate::engine::gullet::methods::do_expandable::<ET>(gullet,state,t,name,*index) => (name,cmd));
-                },
-                _ => return Ok(Some(t))
+        let r = resolve_token(state,t);
+        match r.command {
+            BaseCommand::Expandable {name,..} if e && (name == ELSE || name == FI) && (match gullet.current_conditional() {
+                (Some(ConditionalBranch::None(_)),_) => true,
+                _ => false
+            }) => {
+                gullet.mouth().requeue(r.source.cause);
+                return Ok(None)
             }
+            _ if e => match gullet.expand(state,r)? {
+                Some(c) => return Ok(Some(c)),
+                None => {}
+            }
+            _ => return Ok(Some(r))
         }
     }
     file_end_prim!(name,cmd)
-
-     */
 }
 
 
@@ -1161,17 +1078,19 @@ pub fn ifvmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 pub fn ifx<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<bool,TeXError<ET::Token>> {
     debug_log!(trace=>"ifx");
-    todo!()
+    let t1 = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
+        None => file_end_prim!("ifx",cmd),
+        Some((t,e)) => resolve_token::<ET>(state,t).with_expand(e)
+    };
+    let t2 = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
+        None => file_end_prim!("ifx",cmd),
+        Some((t,e)) => resolve_token::<ET>(state,t).with_expand(e)
+    };
+    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause,t2.source.cause);
+    Ok(if t1.expand && t2.expand { t1.command == t2.command }
+    else if !t1.expand && !t2.expand { t1.source.cause == t2.source.cause }
+    else { false })
     /*
-    let (t1,exp1) = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
-        None => file_end_prim!("ifx",cmd),
-        Some(t) => t
-    };
-    let (t2,exp2) = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
-        None => file_end_prim!("ifx",cmd),
-        Some(t) => t
-    };
-    debug_log!(trace=>"ifx: {} == {}?",t1,t2);
     match (t1.base(),t2.base()) {
         (BaseToken::Char(c1,CategoryCode::Active),BaseToken::Char(c2,CategoryCode::Active)) => {
             let cmd1 = state.get_ac_command(c1);
@@ -1238,33 +1157,24 @@ pub fn ignorespaces<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet
     }
 }
 
+pub static IMMEDIATE: &str ="immediate";
 pub fn immediate<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
                                                  -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"immediate");
-    todo!()
-    /*
-    match catch_prim!(gullet.get_next_stomach_command(state) => ("immediate",cmd)) {
-        None => file_end_prim!("immediate",cmd),
-        Some(sc) => match sc.cmd {
-            StomachCommandInner::Whatsit {name,index} => {
-                let fun = match stomach.get_whatsit_cmd(index) {
-                    Some(f) => f,
-                    None => return Err(ErrorInPrimitive{name:"immediate",msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Missing implementation for whatsit command {}",name),PhantomData).into()
-                    )})
-                };
-                let wi = catch_prim!(fun(state,gullet,stomach,sc) => ("immediate",cmd));
-                catch_prim!(wi.apply(stomach,state,gullet) => ("immediate",cmd));
+    match catch_prim!(gullet.get_next_stomach_command(state) => (IMMEDIATE,cmd)) {
+        None => file_end_prim!(IMMEDIATE,cmd),
+        Some(sc) => match sc.command {
+            BaseStomachCommand::Whatsit { name, apply } => {
+                let wi = catch_prim!(apply(state,gullet,sc.source) => (IMMEDIATE,cmd));
+                catch_prim!(wi.apply(state,gullet) => (IMMEDIATE,cmd));
                 Ok(())
             }
             _ => {
-                gullet.mouth().requeue(sc.cause);
+                gullet.mouth().requeue(sc.source.cause);
                 Ok(())
             }
         }
     }
-
-     */
 }
 
 pub fn input<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
@@ -1272,6 +1182,9 @@ pub fn input<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
     debug_log!(trace=>"input");
     let filename = catch_prim!(gullet.get_string(state) => ("input",cmd)).to_string();
     debug_log!(trace=>"input: {}",filename);
+    if filename.is_empty() {
+        panic!("HERE: {}",gullet.mouth().file_line())
+    }
     let file = state.filesystem().get(&filename);
     debug_log!(trace=>"input resolved: {:?}",file.path());
     if !file.exists() {
@@ -1292,8 +1205,7 @@ pub fn inputlineno<ET:EngineType>(gullet:&mut ET::Gullet,cmd:CommandSource<ET>) 
 pub fn jobname<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
                          -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"jobname");
-    for t in string_to_tokens(state.get_jobname().as_bytes()) { f(state,t)? }
-    Ok(())
+    string_to_tokens::<ET>(state.get_jobname().as_bytes(),state,f)
 }
 
 pub fn lccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
@@ -1382,6 +1294,7 @@ pub static LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
                                          -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace => "\\lowercase");
+    catch_prim!(expand_until_space::<ET>(gullet,state) => (LOWERCASE,cmd));
     let mut ret = vec!();
     catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
         BaseToken::Char(c,cc) => {
@@ -1394,33 +1307,27 @@ pub fn lowercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
     Ok(())
 }
 
+pub static MATHCHARDEF : &str = "mathchardef";
 pub fn mathchardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,globally:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"mathchardef");
-    todo!()
-    /*
-    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => ("mathchardef",cmd));
-    let cs = match &csO {
-        None => file_end_prim!("mathchardef",cmd),
-        Some((t,_)) => t.base()
+    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (MATHCHARDEF,cmd));
+    let cs = match csO {
+        None => file_end_prim!(MATHCHARDEF,cmd),
+        Some((t,_)) => t
     };
-    match cs {
+    match cs.base() {
         BaseToken::Char(_,CategoryCode::Active) => (),
         BaseToken::CS(_) => (),
-        _ => return Err(ErrorInPrimitive{name:"mathchardef",msg:Some(format!("Command expected after \\mathchardef")),cause:Some(csO.unwrap().0),source:None})
+        _ => throw!("Command expected after \\mathchardef" => cs)
     }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("mathchardef",cmd));
-    let i = catch_prim!(gullet.get_int(state) => ("mathchardef",cmd)).to_i64();
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (MATHCHARDEF,cmd));
+    let i = catch_prim!(gullet.get_int(state) => (MATHCHARDEF,cmd)).to_i64();
     if i < 0 {
-        return Err(ErrorInPrimitive{name:"mathchardef",msg:Some(format!("Invalid math char: {}",i)),cause:Some(csO.unwrap().0),source:None})
+        throw!("Invalid math char: {}",i => cmd.cause)
     }
-    match cs {
-        BaseToken::Char(c,_) => state.set_ac_command(*c, Some(Ptr::new(BaseCommand::MathChar(i as u32))), globally),
-        BaseToken::CS(name) => state.set_command(name.clone(), Some(Ptr::new(BaseCommand::MathChar(i as u32))), globally)
-    }
+    state.set_command_for_tk(cs,Some(Command::new(BaseCommand::MathChar(i as u32),Some(&cmd))),globally);
     Ok(())
-
-     */
 }
 
 pub fn mathcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
@@ -1451,48 +1358,215 @@ pub fn mathcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
     Ok(v)
 }
 
+pub static MEANING : &str = "meaning";
 pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"meaning");
-    todo!()
-    /*
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("meaning",cmd)) {
-        None => file_end_prim!("meaning",cmd),
+    let esc = state.get_escapechar();
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => (MEANING,cmd)) {
+        None => file_end_prim!(MEANING,cmd),
         Some((_,false)) => {
-            match state.get_escapechar() {
-                None => Ok(string_to_tokens("relax".as_bytes())),
-                Some(c) => {
-                    let mut string = vec!();
-                    for u in c.as_bytes() {string.push(u)}
-                    for u in "relax".as_bytes() {string.push(*u)}
-                    Ok(string_to_tokens(&string))
-                }
-            }
+            if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+            string_to_tokens::<ET>(RELAX.as_bytes(),state,f)
         }
-        Some((t,_)) => match t.base() {
-            BaseToken::CS(name) => Ok(meaning_cmd::<ET>(state.get_command(name),state)),
-            BaseToken::Char(c,CategoryCode::Active) => Ok(meaning_cmd::<ET>(state.get_ac_command(*c),state)),
-            BaseToken::Char(c,cc) => Ok(meaning_char(*c,*cc)),
+        Some((t,_)) => {
+            let n:ResolvedToken<ET> = resolve_token::<ET>(state,t);
+            let string = match n.command {
+                BaseCommand::Char{char,catcode:CategoryCode::BeginGroup} => format!("begin-group character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::EndGroup} => format!("end-group character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::MathShift} => format!("math shift character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::AlignmentTab} => format!("alignment tab character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::Parameter} => format!("macro parameter character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::Superscript} => format!("superscript character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::Subscript} => format!("subscript character {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::Space} => format!("blank space {}",char.char_str()),
+                BaseCommand::Char{char,catcode:CategoryCode::Letter} => format!("the letter {}",char.char_str()),
+                BaseCommand::Char{char,..} => format!("the character {}",char.char_str()),
+                BaseCommand::Expandable {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Unexpandable {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::OpenBox {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Whatsit {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Assignment {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Relax => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(RELAX.as_bytes(),state,f)
+                }
+                BaseCommand::Conditional {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::FontCommand {name,..} => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Int(ValueCommand::Value {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Int(ValueCommand::Complex {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Int(ValueCommand::Primitive(name)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Dim(ValueCommand::Value {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Dim(ValueCommand::Complex {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Dim(ValueCommand::Primitive(name)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Skip(ValueCommand::Value {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Skip(ValueCommand::Complex {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Skip(ValueCommand::Primitive(name)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::MuSkip(ValueCommand::Value {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::MuSkip(ValueCommand::Complex {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::MuSkip(ValueCommand::Primitive(name)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Toks(ValueCommand::Value {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Toks(ValueCommand::Complex {name,..}) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Toks(ValueCommand::Primitive(name)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return string_to_tokens::<ET>(name.as_bytes(),state,f)
+                }
+                BaseCommand::Int(ValueCommand::Register(u)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("count{}",u)
+                }
+                BaseCommand::Dim(ValueCommand::Register(u)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("dimen{}",u)
+                }
+                BaseCommand::Skip(ValueCommand::Register(u)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("skip{}",u)
+                }
+                BaseCommand::MuSkip(ValueCommand::Register(u)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("muskip{}",u)
+                }
+                BaseCommand::Toks(ValueCommand::Register(u)) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("toks{}",u)
+                }
+                BaseCommand::CharDef(c) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("char\"{:X}",c.to_usize())
+                }
+                BaseCommand::MathChar(c) => {
+                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    format!("mathchar\"{:X}",c)
+                }
+                BaseCommand::Font(fnt) => {
+                    format!("select font {}",fnt)
+                }
+                BaseCommand::None => {
+                    return string_to_tokens::<ET>("undefined".as_bytes(),state,f)
+                }
+                BaseCommand::Def(d) => {
+                    let cc = state.get_catcode_scheme().clone();
+                    if d.protected {
+                        if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        string_to_tokens::<ET>("protected ".as_bytes(),state,f)?
+                    }
+                    if d.long {
+                        if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        string_to_tokens::<ET>("long ".as_bytes(),state,f)?
+                    }
+                    if d.outer {
+                        if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        string_to_tokens::<ET>("outer ".as_bytes(),state,f)?
+                    }
+                    string_to_tokens::<ET>("macro:".as_bytes(),state,f)?;
+                    let mut i = 0;
+                    for s in &d.signature {
+                        match s {
+                            ParamToken::Token(t) => {
+                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                            }
+                                //ret.extend(tokens_to_string(vec!(t.clone()), state.get_escapechar(), state.get_catcode_scheme()).as_bytes()),
+                            ParamToken::Param => {
+                                i += 1;
+                                string_to_tokens::<ET>(format!("#{}", i).as_bytes(),state,f);
+                            }
+                        }
+                    }
+                    if d.endswithbrace { f(state,ET::Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None))? }
+                    f(state,ET::Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
+                    f(state,ET::Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None))?;
+                    for t in &d.replacement {
+                        match t {
+                            ExpToken::Token(t) => token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?,
+                            ExpToken::ParamToken(t) => {
+                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                            }
+                            ExpToken::Param(t, i) => {
+                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                                string_to_tokens::<ET>(i.to_string().as_bytes(),state,f)?
+                            }
+                        }
+                    }
+                    return Ok(())
+                }
+            };
+            string_to_tokens::<ET>(string.as_bytes(),state,f)
         }
     }
-
-     */
 }
-
+/*
 pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
     match cc {
         CategoryCode::BeginGroup => string_to_tokens(&format!("begin-group character {}",c.char_str()).as_bytes()),
-        CategoryCode::EndGroup => string_to_tokens(&format!("end-group character {}",c.char_str()).as_bytes()),
-        CategoryCode::MathShift => string_to_tokens(&format!("math shift character {}",c.char_str()).as_bytes()),
-        CategoryCode::AlignmentTab => string_to_tokens(&format!("alignment tab character {}",c.char_str()).as_bytes()),
-        CategoryCode::Parameter => string_to_tokens(&format!("macro parameter character {}",c.char_str()).as_bytes()),
-        CategoryCode::Superscript => string_to_tokens(&format!("superscript character {}",c.char_str()).as_bytes()),
-        CategoryCode::Subscript => string_to_tokens(&format!("subscript character {}",c.char_str()).as_bytes()),
-        CategoryCode::Space => string_to_tokens(&format!("blank space {}",c.char_str()).as_bytes()),
-        CategoryCode::Letter => string_to_tokens(&format!("the letter {}",c.char_str()).as_bytes()),
-        _ => string_to_tokens(&format!("the character {}",c).as_bytes()),
     }
 }
+
+ */
 
 /*
 pub fn meaning_cmd<ET:EngineType>(cmd:Option<&ET::Command>, state:&ET::State) -> Vec<ET::Token> {
@@ -1733,7 +1807,7 @@ pub fn message<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(debug=>"message");
     catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("message",cmd));
-    let msg = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => ("message",cmd))).unwrap();
+    let msg = catch_prim!(gullet.get_braced_string(state) => ("message",cmd));
     (state.outputs().message)(&msg);
     Ok(())
 }
@@ -1748,94 +1822,122 @@ pub static MULTIPLY:&str = "multiply";
 pub fn multiply<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                                    -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"\\multiply");
-    todo!()
-    /*
     catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (MULTIPLY,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (MULTIPLY,cmd)) {
         None => file_end_prim!(MULTIPLY,cmd),
-        Some(cmd) => match cmd.command.base() {
-            BaseCommand::Int{name,index,..}  if *name == COUNT => {
-                let u = match index {
-                    Some(u) => *u,
-                    None => {
+        Some(ncmd) => match ncmd.command {
+            BaseCommand::Int(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
+                        let $nv = $old * i;
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_int_register(u),nv => state.set_int_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_int(name),nv => state.set_primitive_int(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == COUNT => {
                         let int = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
-                        match int.try_into() {
+                        let u = match int.try_into() {
                             Ok(u) => u,
                             _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        }
+                        };
+                        finish!(state.get_int_register(u),nv => state.set_int_register(u,nv,global))
                     }
-                };
-                catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
-                let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
-                debug_log!(debug => "  \\count{}",u);
-                let ov = state.get_int_register(u);
-                debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : ET::Int = ov * i;
-                debug_log!(debug => "  ={}",nv);
-                state.set_int_register(u,nv,global);
-                return Ok(())
+                    _ => throw!("Unexpected token after \\multiply" => cmd.cause)
+                }
             }
-            BaseCommand::Int{name,index:None,..} => { // TODO this covers potentially too many cases
-            debug_log!(debug => "  \\{}",name);
-                catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
-                let ov = state.get_primitive_int(name);
-                let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
-                debug_log!(debug => "  =={}*{}",ov,i);
-                let nv : ET::Int = ov * i;
-                debug_log!(debug => "  ={}",nv);
-                state.set_primitive_int(name,nv,global);
-                return Ok(())
-            }
-            BaseCommand::Dim{name,index,..}  if *name == DIMEN => {
-                let u = match index {
-                    Some(u) => *u,
-                    None => {
+            BaseCommand::Dim(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd)).to_i64();
+                        let $nv = $old.tex_mult(i as f64);
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_dim_register(u),nv => state.set_dim_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_dim(name),nv => state.set_primitive_dim(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == DIMEN => {
                         let int = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
-                        match int.try_into() {
+                        let u = match int.try_into() {
                             Ok(u) => u,
                             _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        }
+                        };
+                        finish!(state.get_dim_register(u),nv => state.set_dim_register(u,nv,global))
                     }
-                };
-                catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
-                let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd)).to_i64();
-                debug_log!(debug => "  \\count{}",u);
-                let ov = state.get_dim_register(u);
-                debug_log!(debug => "  =={}*{}",ov,i);
-                let nv = ov.tex_mult(i as f64);
-                debug_log!(debug => "  ={}",nv);
-                state.set_dim_register(u,nv,global);
-                return Ok(())
+                    _ => throw!("Unexpected token after \\multiply" => cmd.cause)
+                }
             }
-            BaseCommand::Dim{name,index:None,..} => { // TODO this covers potentially too many cases
-            debug_log!(debug => "  \\{}",name);
-                catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
-                let ov = state.get_primitive_dim(name);
-                let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd)).to_i64();
-                debug_log!(debug => "  =={}*{}",ov,i);
-                let nv = ov.tex_mult(i as f64);
-                debug_log!(debug => "  ={}",nv);
-                state.set_primitive_dim(name,nv,global);
-                return Ok(())
+            BaseCommand::Skip(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd)).to_i64();
+                        let $nv = $old.tex_mult(i as f64);
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_skip_register(u),nv => state.set_skip_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_skip(name),nv => state.set_primitive_skip(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == SKIP => {
+                        let int = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
+                        let u = match int.try_into() {
+                            Ok(u) => u,
+                            _ => throw!("Not a valid register: {}",int => cmd.cause)
+                        };
+                        finish!(state.get_skip_register(u),nv => state.set_skip_register(u,nv,global))
+                    }
+                    _ => throw!("Unexpected token after \\multiply" => cmd.cause)
+                }
+            }
+            BaseCommand::MuSkip(a) => {
+                macro_rules! finish {
+                    ($old:expr,$nv:ident => $set:expr) => {{
+                        catch_prim!(gullet.get_keyword(state,"by") => (MULTIPLY,cmd));
+                        let i = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd)).to_i64();
+                        let $nv = $old.tex_mult(i as f64);
+                        $set;
+                        Ok(())
+                    }}
+                }
+                match a {
+                    ValueCommand::Register(u) => finish!(state.get_muskip_register(u),nv => state.set_muskip_register(u,nv,global)),
+                    ValueCommand::Primitive(name) => finish!(state.get_primitive_muskip(name),nv => state.set_primitive_muskip(name,nv,global)),
+                    ValueCommand::Complex {name,..} if name == MUSKIP => {
+                        let int = catch_prim!(gullet.get_int(state) => (MULTIPLY,cmd));
+                        let u = match int.try_into() {
+                            Ok(u) => u,
+                            _ => throw!("Not a valid register: {}",int => cmd.cause)
+                        };
+                        finish!(state.get_muskip_register(u),nv => state.set_muskip_register(u,nv,global))
+                    }
+                    _ => throw!("Unexpected token after \\multiply" => cmd.cause)
+                }
             }
             o => throw!("expected register after \\multiply;got:{:?}",o => cmd.cause)
         }
     }
-
-     */
 }
 
-
+pub static MUSKIP : &str = "muskip";
 pub fn muskip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Assigning \\muskip");
-    let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
+    let i = catch_prim!(gullet.get_int(state) => (MUSKIP,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("muskip",cmd));
-    let v = catch_prim!(gullet.get_muskip(state) => ("muskip",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (MUSKIP,cmd));
+    let v = catch_prim!(gullet.get_muskip(state) => (MUSKIP,cmd));
     debug_log!(debug=>"\\muskip{} = {}",i,v);
     state.set_muskip_register(i,v,global);
     Ok(())
@@ -1844,7 +1946,7 @@ pub fn muskip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
 pub fn muskip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) ->
                                                                                                            Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET::Token>> {
     debug_log!(trace=>"Getting \\muskip");
-    let i = catch_prim!(gullet.get_int(state) => ("muskip",cmd));
+    let i = catch_prim!(gullet.get_int(state) => (MUSKIP,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
@@ -1854,37 +1956,20 @@ pub fn muskip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
     Ok(v)
 }
 
+pub static MUSKIPDEF : &str = "muskipdef";
 pub fn muskipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                                      -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"muskipdef");
-    /*
-    let name = catch_prim!(gullet.get_control_sequence(state) => ("muskipdef",cmd));
-    match &name {
-        BaseToken::Char(c,_) => {
-            state.set_ac_command(*c, Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-        BaseToken::CS(name) => {
-            state.set_command(name.clone(), Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-    }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("muskipdef",cmd));
-    let num = catch_prim!(gullet.get_int(state) => ("muskipdef",cmd));
+    let name = catch_prim!(gullet.get_control_sequence(state) => (MUSKIPDEF,cmd));
+    catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (MUSKIPDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (MUSKIPDEF,cmd));
+    let num = catch_prim!(gullet.get_int(state) => (MUSKIPDEF,cmd));
     if num.to_i64() < 0 {
-        return Err(ErrorInPrimitive{name:"muskipdef",msg:Some(format!("Invalid muskip register index: {}",num)),cause:Some(cmd.cause),source:None})
+        throw!("Invalid muskip register index: {}",num => cmd.cause)
     }
     let num = num.to_i64() as usize;
-    match name {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\muskipdef: {} = \\muskip{}",c.char_str(),num);
-            state.set_ac_command(c, Some(Ptr::new(BaseCommand::ValueRegister{index:num,tp:Assignable::MuSkip })), global);
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\muskipdef: \\{} = {}",name,num);
-            state.set_command(name, Some(Ptr::new(BaseCommand::ValueRegister{index:num,tp:Assignable::MuSkip})), global);
-        }
-    }
-
-     */
+    let ret = Command::new(BaseCommand::MuSkip(ValueCommand::Register(num)),Some(&cmd));
+    state.set_command_for_tk(name,Some(ret),global);
     Ok(())
 }
 
@@ -1916,56 +2001,32 @@ pub fn newlinechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
     Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
 }
 
+pub static NOEXPAND: &str = "noexpand";
 /// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
 /// in the first place
 pub fn noexpand<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"\\noexpand");
-    todo!()
-    /*
     match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("noexpand",cmd)) {
         None => file_end_prim!("noexpand",cmd),
-        Some((t,_)) => match t.base() {
-            BaseToken::Char(c,CategoryCode::Active) => {
-                match state.get_ac_command(*c) {
-                    None => gullet.mouth().requeue(t),
-                    Some(ac) => {
-                        match &*ac {
-                            BaseCommand::Def(_, _) => gullet.mouth().push_noexpand(t),
-                            BaseCommand::Expandable {..} => gullet.mouth().push_noexpand(t),
-                            BaseCommand::Conditional {..} => gullet.mouth().push_noexpand(t),
-                            _ => gullet.mouth().requeue(t)
-                        }
-                    }
-                }
+        Some((t,_)) => {
+            let res = resolve_token::<ET>(state,t);
+            match res.command {
+                BaseCommand::Def(_) => gullet.mouth().push_noexpand(res.source.cause),
+                BaseCommand::Expandable {..} => gullet.mouth().push_noexpand(res.source.cause),
+                BaseCommand::Conditional {..} => gullet.mouth().push_noexpand(res.source.cause),
+                _ => f(state,res.source.cause)?
             }
-            BaseToken::CS(name) => {
-                match state.get_command(name) {
-                    None => gullet.mouth().requeue(t),
-                    Some(ac) => {
-                        match &*ac {
-                            BaseCommand::Def(_, _) => gullet.mouth().push_noexpand(t),
-                            BaseCommand::Expandable {..} => gullet.mouth().push_noexpand(t),
-                            BaseCommand::Conditional {..} => gullet.mouth().push_noexpand(t),
-                            _ => gullet.mouth().requeue(t)
-                        }
-                    }
-                }
-            }
-            _ => gullet.mouth().requeue(t)
         }
     }
-    Ok(vec!())
-
-     */
+    Ok(())
 }
 
 pub fn number<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"\\number");
     let num = catch_prim!(gullet.get_int(state) => ("number",cmd));
-    for t in string_to_tokens(num.to_i64().to_string().as_bytes()) {f(state,t)?}
-    Ok(())
+    string_to_tokens::<ET>(num.to_i64().to_string().as_bytes(),state,f)
 }
 
 pub fn openin<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
@@ -1993,7 +2054,7 @@ pub fn openout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd
     };
     catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("openout",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openout",cmd)).to_string();
-    let apply = Box::new(move |_stomach:&mut ET::Stomach,state:&mut ET::State,_gullet:&mut ET::Gullet| {
+    let apply = Box::new(move |state:&mut ET::State,_gullet:&mut ET::Gullet| {
         let f = state.filesystem().get(&filename);
         state.file_openout(i,f); // TODO error?
         Ok(())
@@ -2048,19 +2109,17 @@ pub fn patterns<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cm
 pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,globally:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"read");
-    todo!()
-    /*
     let i = catch_prim!(gullet.get_int(state) => ("read",cmd));
-    let i : usize = match i.clone().try_into() {
+    let i : usize = match i.try_into() {
         Ok(i) => i,
-        Err(_) => return Err(ErrorInPrimitive{name:"read",msg:Some(format!("Invalid file number: {}",i)),cause:Some(cmd.cause),source:None})
+        Err(_) => throw!("Invalid file number" => cmd.cause)
     };
     let file = match state.get_open_in_file(i) {
-        None => return Err(ErrorInPrimitive{name:"read",msg:Some(format!("File {} not open for reading",i)),cause:Some(cmd.cause),source:None}),
+        None => throw!("File {} not open for reading",i),
         Some(f) => f
     };
     if !catch_prim!(gullet.get_keyword(state,"to") => ("read",cmd)) {
-        return Err(ErrorInPrimitive{name:"read",msg:Some("Expected 'to' after \\read".to_string()),cause:Some(cmd.cause),source:None})
+        return throw!("Expected 'to' after \\read" => cmd.cause)
     }
     let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("read",cmd));
     let mut ret = catch_prim!(file.read::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar()) => ("read",cmd));
@@ -2071,38 +2130,19 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
             Some(c) => ret.push(ET::Token::new(BaseToken::Char(c,*state.get_catcode_scheme().get(&c)),None))
         }
     }
-
-/*
-    if TokenList(ret.clone()).to_string().starts_with("102A0;CARIAN LETTER A") {
-        println!("Here!");
-        std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
-        env_logger::init();
-    }
-*/
-
-
-    let ret = ret.into_iter().map(|tk| ExpToken::Token(tk)).collect();
-    let def = Def {
-        protected: false,
-        long: false,
-        outer: false,
-        endswithbrace:false,
-        replacement: ret,
-        arity:0,
-        signature:vec!()
-    };
-    match newcmd {
-        BaseToken::CS(name) => state.set_command(name,Some(Ptr::new(
-            BaseCommand::Def(def, cmd.cause.clone())
-        )),globally),
-        BaseToken::Char(c,_) => state.set_ac_command(c,Some(Ptr::new(
-            BaseCommand::Def(def, cmd.cause.clone())
-        )),globally)
-    }
+    /*
+        if TokenList(ret.clone()).to_string().starts_with("102A0;CARIAN LETTER A") {
+            println!("Here!");
+            std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
+            env_logger::init();
+        }
+    */
+    let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
+    state.set_command_for_tk(newcmd,Some(def),globally);
     Ok(())
-
-     */
 }
+
+pub static RELAX: &str = "relax";
 
 pub fn romannumeral<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
@@ -2170,32 +2210,23 @@ pub fn romannumeral<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
         num -= 1;
         ret.push(b'i');
     }
-    for t in string_to_tokens(&ret) {f(state,t)?}
-    Ok(())
+    string_to_tokens::<ET>(&ret,state,f)
 }
 
+pub static SETBOX: &str = "setbox";
 pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, global:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"\\setbox");
-    todo!()
-    /*
-    let i = catch_prim!(gullet.get_int(state) => ("setbox",cmd)).to_i64();
-    if i < 0  {
-        return Err(ErrorInPrimitive{name:"setbox",msg:Some(format!("Invalid box number: {}",i)),cause:Some(cmd.cause),source:None})
-    }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("setbox",cmd));
-    match catch_prim!(gullet.get_next_stomach_command(state) => ("setbox",cmd)) {
-        None => file_end_prim!("setbox",cmd),
-        Some(c) => match c.cmd {
-            StomachCommandInner::OpenBox {index,name,mode} => {
-                let f = match stomach.get_box_cmd(index) {
-                    None => return Err(ErrorInPrimitive{name:"setbox",msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Command not implemented: {}",name),PhantomData).into()
-                    )}),
-                    Some(f) => catch_prim!(f(state,gullet,stomach,c) => ("setbox",cmd))
-                };
-                state.box_stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |sto,s,gu,v| {
-                    let bx = match f(sto,s,gu,v) {
+    let i = catch_prim!(gullet.get_int(state) => (SETBOX,cmd)).to_i64();
+    if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (SETBOX,cmd));
+    match catch_prim!(gullet.get_next_unexpandable(state) => (SETBOX,cmd)) {
+        None => file_end_prim!(SETBOX,cmd),
+        Some(c) => match c.command {
+            BaseCommand::OpenBox {name,mode,apply} => {
+                let f = catch_prim!(apply(state,gullet,c.source) => (SETBOX,cmd));
+                state.box_stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |s,gu,v| {
+                    let bx = match f(s,gu,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
@@ -2204,12 +2235,9 @@ pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:C
                 })});
                 Ok(())
             }
-            _ => Err(ErrorInPrimitive{name:"setbox",msg:Some(format!("Box expected: {}",c.cause)),cause:Some(cmd.cause),source:None})
+            _ => throw!("Box expected: {}",c.source.cause)
         }
     }
-
-     */
-
 }
 
 pub fn sfcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
@@ -2256,16 +2284,17 @@ pub fn skewchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
     Ok(catch_prim!(ET::Int::from_i64::<ET::Token>(font.get_skewchar()) => ("hyphenchar",cmd)))
 }
 
+pub static SKIP : &str = "skip";
 pub fn skip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Assigning \\skip");
-    let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
+    let i = catch_prim!(gullet.get_int(state) => (SKIP,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("skip",cmd));
-    let v = catch_prim!(gullet.get_skip(state) => ("skip",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (SKIP,cmd));
+    let v = catch_prim!(gullet.get_skip(state) => (SKIP,cmd));
     debug_log!(debug=>"\\skip{} = {}",i,v);
     state.set_skip_register(i,v,global);
     Ok(())
@@ -2274,7 +2303,7 @@ pub fn skip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 pub fn skip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<Skip<ET::SkipDim>,TeXError<ET::Token>> {
     debug_log!(trace=>"Getting \\skip");
-    let i = catch_prim!(gullet.get_int(state) => ("skip",cmd));
+    let i = catch_prim!(gullet.get_int(state) => (SKIP,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
@@ -2284,37 +2313,20 @@ pub fn skip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
     Ok(v)
 }
 
+pub static SKIPDEF : &str = "skipdef";
 pub fn skipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                                      -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"skipdef");
-    /*
-    let name = catch_prim!(gullet.get_control_sequence(state) => ("skipdef",cmd));
-    match &name {
-        BaseToken::Char(c,_) => {
-            state.set_ac_command(*c, Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-        BaseToken::CS(name) => {
-            state.set_command(name.clone(), Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-    }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("skipdef",cmd));
-    let num = catch_prim!(gullet.get_int(state) => ("skipdef",cmd));
+    let name = catch_prim!(gullet.get_control_sequence(state) => (SKIPDEF,cmd));
+    catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (SKIPDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (SKIPDEF,cmd));
+    let num = catch_prim!(gullet.get_int(state) => (SKIPDEF,cmd));
     if num.to_i64() < 0 {
-        return Err(ErrorInPrimitive{name:"skipdef",msg:Some(format!("Invalid skip register index: {}",num)),cause:Some(cmd.cause),source:None})
+        throw!("Invalid skip register index: {}",num => cmd.cause)
     }
     let num = num.to_i64() as usize;
-    match name {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\skipdef: {} = \\skip{}",c.char_str(),num);
-            state.set_ac_command(c, Some(Ptr::new(BaseCommand::ValueRegister{index:num,tp:Assignable::Skip })), global);
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\skipdef: \\{} = {}",name,num);
-            state.set_command(name, Some(Ptr::new(BaseCommand::ValueRegister{index:num,tp:Assignable::Skip})), global);
-        }
-    }
-
-     */
+    let ret = Command::new(BaseCommand::Skip(ValueCommand::Register(num)),Some(&cmd));
+    state.set_command_for_tk(name,Some(ret),global);
     Ok(())
 }
 
@@ -2323,7 +2335,7 @@ pub fn string<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
     debug_log!(trace=>"string");
     match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("string",cmd)) {
         None => file_end_prim!("string",cmd),
-        Some((t,_)) => token_to_chars(t,state.get_escapechar(),&mut |t| f(state,t))?
+        Some((t,_)) => token_to_chars(&t,state.get_escapechar(),state.get_catcode_scheme(),false,&mut |t| f(state,t))?
     }
     Ok(())
 }
@@ -2332,151 +2344,33 @@ pub static THE : &str = "the";
 pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace => "\\the");
-    todo!()
-    /*
-    let next = catch_prim!(gullet.get_next_stomach_command(state) => (THE,cmd));
-    match next {
-        None => file_end_prim!(THE,cmd),
-        Some(c) => match c.cmd {
-            StomachCommandInner::ValueRegister(i,Assignable::Int) => {
-                let val = state.get_int_register(i);
-                let str = format!("{}",val);
-                debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                Ok(ret)
+    match catch_prim!(gullet.get_next_unexpandable(state) => (THE,cmd)) {
+        Some(c) => match c.command {
+            BaseCommand::Int(ass) => {
+                let val = ass.get(state,gullet,c.source)?;
+                string_to_tokens::<ET>(format!("{}",val).as_bytes(),state,f)
             }
-            StomachCommandInner::ValueRegister(i,Assignable::Toks) =>
-                Ok(state.get_toks_register(i)),
-            StomachCommandInner::ValueRegister(i,Assignable::Dim) => {
-                let val = state.get_dim_register(i);
-                let str = format!("{}",val);
-                debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                Ok(ret)
+            BaseCommand::Dim(ass) => {
+                let val = ass.get(state,gullet,c.source)?;
+                string_to_tokens::<ET>(format!("{}",val).as_bytes(),state,f)
             }
-            StomachCommandInner::ValueRegister(i,Assignable::Skip) => {
-                let val = state.get_skip_register(i);
-                let str = format!("{}",val);
-                debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                Ok(ret)
+            BaseCommand::Skip(ass) => {
+                let val = ass.get(state,gullet,c.source)?;
+                string_to_tokens::<ET>(format!("{}",val).as_bytes(),state,f)
             }
-            StomachCommandInner::ValueRegister(_,tp) => todo!("\\the ValueRegister {:?}",tp),
-            StomachCommandInner::AssignableValue {tp:Assignable::Toks,name} =>
-                Ok(state.get_primitive_toks(name)),
-            StomachCommandInner::AssignableValue {tp:Assignable::Int,name} => {
-                let val = state.get_primitive_int(name);
-                let str = format!("{}",val);
-                debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                Ok(ret)
+            BaseCommand::MuSkip(ass) => {
+                let val = ass.get(state,gullet,c.source)?;
+                string_to_tokens::<ET>(format!("{}",val).as_bytes(),state,f)
             }
-            StomachCommandInner::AssignableValue {tp:Assignable::Dim,name} => {
-                let val = state.get_primitive_dim(name);
-                let str = format!("{}",val);
-                debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                Ok(ret)
+            BaseCommand::Toks(ass) => {
+                for t in ass.get(state, gullet, c.source)? { f(state, t)? }
+                Ok(())
             }
-            StomachCommandInner::AssignableValue {tp:Assignable::Skip,name} => {
-                let val = state.get_primitive_skip(name);
-                let str = format!("{}",val);
-                debug_log!(debug => "the: {}",str);
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                Ok(ret)
-            }
-            StomachCommandInner::AssignableValue {tp,..} => todo!("\\the AssignableValue {:?}",tp),
-            StomachCommandInner::Value {name,index,tp:Assignable::Int} => {
-                match gullet.primitive_int(index) {
-                    None =>return Err(ErrorInPrimitive{name:THE,msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
-                    )}),
-                    Some(fun) => {
-                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => (THE,cmd));
-                        let str = format!("{}",val);
-                        debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                        Ok(ret)
-                    }
-                }
-            }
-            StomachCommandInner::Value {name,index,tp:Assignable::Dim} => {
-                match gullet.primitive_dim(index) {
-                    None =>return Err(ErrorInPrimitive{name:THE,msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
-                    )}),
-                    Some(fun) => {
-                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => (THE,cmd));
-                        let str = format!("{}",val);
-                        debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                        Ok(ret)
-                    }
-                }
-            }
-            StomachCommandInner::Value {name,index,tp:Assignable::Skip} => {
-                match gullet.primitive_skip(index) {
-                    None =>return Err(ErrorInPrimitive{name:THE,msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
-                    )}),
-                    Some(fun) => {
-                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => (THE,cmd));
-                        let str = format!("{}",val);
-                        debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                        Ok(ret)
-                    }
-                }
-            }
-            StomachCommandInner::Value {name,index,tp:Assignable::MuSkip} => {
-                match gullet.primitive_muskip(index) {
-                    None =>return Err(ErrorInPrimitive{name:THE,msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
-                    )}),
-                    Some(fun) => {
-                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => (THE,cmd));
-                        let str = format!("{}",val);
-                        debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                        Ok(ret)
-                    }
-                }
-            }
-            StomachCommandInner::ValueAssignment {name,value_index,tp:Assignable::Int,..} => {
-                match gullet.primitive_int(value_index) {
-                    None =>return Err(ErrorInPrimitive{name:THE,msg:None,cause:Some(cmd.cause),source:Some(
-                        ImplementationError(format!("Missing implementation for {}",name),PhantomData).into()
-                    )}),
-                    Some(fun) => {
-                        let val = catch_prim!(fun(state,gullet,cmd.clone()) => (THE,cmd));
-                        let str = format!("{}",val);
-                        debug_log!(debug => "the: {}",str);
-                        let ret = gullet::methods::string_to_tokens::<ET::Token>(&str.as_bytes());
-                        Ok(ret)
-                    }
-                }
-            }
-            StomachCommandInner::Assignment {name:"toks",index} => {
-                let i = catch_prim!(gullet.get_int(state) => ("toks",cmd));
-                let i:usize = match i.clone().try_into() {
-                    Ok(i) => i,
-                    Err(_) => return Err(ErrorInPrimitive{name:"toks",msg:Some(format!("Not a valid register: {}",i)),cause:Some(cmd.cause),source:None})
-                };
-                Ok(state.get_toks_register(i))
-            }
-            StomachCommandInner::Value {name,index,tp:_} => {
-                todo!()
-            }
-            StomachCommandInner::ValueAssignment {..} => todo!(),
-            StomachCommandInner::Char {char,from_chardef:true} => {
-                let ret = gullet::methods::string_to_tokens::<ET::Token>(char.to_usize().to_string().as_bytes());
-                Ok(ret)
-            }
-            _ => return Err(ErrorInPrimitive{name:THE,msg:Some("Expected a value after \\the".to_string()),cause:Some(cmd.cause),source:None})
+            BaseCommand::CharDef(c) => string_to_tokens::<ET>(c.to_usize().to_string().as_bytes(),state,f),
+            _ => throw!("Expected a value after \\the; got: {}", c.source.cause => c.source.cause)
         }
+        None => file_end_prim!(THE,cmd)
     }
-
-     */
 }
 
 pub fn time<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
@@ -2484,61 +2378,52 @@ pub fn time<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result
     Ok(catch_prim!(ET::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
 }
 
-
-pub fn toks<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
+pub static TOKS:&str = "toks";
+pub fn toks_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
     -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Assigning \\toks");
-    let i = catch_prim!(gullet.get_int(state) => ("toks",cmd));
+    let i = catch_prim!(gullet.get_int(state) => (TOKS,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("toks",cmd));
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("toks",cmd)) {
-        None => file_end_prim!("toks",cmd),
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (TOKS,cmd));
+    match catch_prim!(gullet.mouth().get_next::<ET>(state) => (TOKS,cmd)) {
+        None => file_end_prim!(TOKS,cmd),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => throw!("Expected begin group token after \\toks, got: {}",o => cmd.cause)
     }
     let mut v = vec!();
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(v.push(t))) => ("toks",cmd));
+    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v));
     state.set_toks_register(i,v,global);
     Ok(())
 }
+pub fn toks_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
+                -> Result<Vec<ET::Token>,TeXError<ET::Token>> {
+    let i = catch_prim!(gullet.get_int(state) => (TOKS,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    Ok(state.get_toks_register(i))
+}
 
+pub static TOKSDEF : &str = "toksdef";
 pub fn toksdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
                                                       -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"toksdef");
-    todo!()
-    /*
-    let name = catch_prim!(gullet.get_control_sequence(state) => ("toksdef",cmd));
-    match &name {
-        BaseToken::Char(c,_) => {
-            state.set_ac_command(*c, Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-        BaseToken::CS(name) => {
-            state.set_command(name.clone(), Some(Ptr::new(BaseCommand::Relax)), false)
-        }
-    }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("toksdef",cmd));
-    let num = catch_prim!(gullet.get_int(state) => ("toksdef",cmd));
+    let name = catch_prim!(gullet.get_control_sequence(state) => (TOKSDEF,cmd));
+    catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (TOKSDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (TOKSDEF,cmd));
+    let num = catch_prim!(gullet.get_int(state) => (TOKSDEF,cmd));
     if num.to_i64() < 0 {
-        return Err(ErrorInPrimitive{name:"toksdef",msg:Some(format!("Invalid toks register index: {}",num)),cause:Some(cmd.cause),source:None})
+        throw!("Invalid token register index: {}",num => cmd.cause)
     }
     let num = num.to_i64() as usize;
-    match name {
-        BaseToken::Char(c,_) => {
-            debug_log!(debug=>"\\toksdef: {} = \\toks{}",c.char_str(),num);
-            state.set_ac_command(c, Some(Ptr::new(BaseCommand::ValueRegister{index:num,tp:Assignable::Toks })), global);
-        }
-        BaseToken::CS(name) => {
-            debug_log!(debug=>"\\toksdef: \\{} = {}",name,num);
-            state.set_command(name, Some(Ptr::new(BaseCommand::ValueRegister{index:num,tp:Assignable::Toks})), global);
-        }
-    }
+    let ret = Command::new(BaseCommand::Toks(ValueCommand::Register(num)),Some(&cmd));
+    state.set_command_for_tk(name,Some(ret),global);
     Ok(())
-
-     */
 }
 
 pub fn uccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
@@ -2577,6 +2462,7 @@ pub static UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
                                          -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace => "\\uppercase");
+    catch_prim!(expand_until_space::<ET>(gullet,state) => (UPPERCASE,cmd));
     let mut ret = vec!();
     catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
         BaseToken::Char(c,cc) => {
@@ -2604,11 +2490,11 @@ pub fn write<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:C
     let mut tks = vec!();
     catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(tks.push(t))) => ("write",cmd));
 
-    let apply = Box::new(move |_stomach:&mut ET::Stomach,state:&mut ET::State,gullet:&mut ET::Gullet| {
+    let apply = Box::new(move |state:&mut ET::State,gullet:&mut ET::Gullet| {
         tks.push(ET::Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
         tks.insert(0,ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
         let old = gullet.switch_mouth(tks);
-        let string = String::from_utf8(gullet.get_braced_string(state)?).unwrap();
+        let string = catch_prim!(gullet.get_braced_string(state) => ("write",cmd));
         if i == 18 {
             (state.outputs().write_18)(&string)
         }
@@ -2828,7 +2714,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_skip_assign!(tabskip,state,stomach,gullet);
     register_expandable!(the,state,stomach,gullet,(s,g,c,f) => the::<ET>(s,g,c,f));
     register_int!(time,state,stomach,gullet,(s,g,c) => time::<ET>(s,c));
-    register_assign!(toks,state,stomach,gullet,(s,gu,cmd,global) =>toks::<ET>(s,gu,cmd,global));
+    register_value_assign_toks!(toks,state,stomach,gullet);
     register_assign!(toksdef,state,stomach,gullet,(s,gu,cmd,global) =>toksdef::<ET>(s,gu,cmd,global));
     register_int_assign!(tolerance,state,stomach,gullet);
     register_skip_assign!(topskip,state,stomach,gullet);

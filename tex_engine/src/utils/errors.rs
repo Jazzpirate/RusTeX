@@ -57,7 +57,7 @@ macro_rules! throw {
             source:std::option::Option::None
         })
     };
-    ($first:expr,$($arg:tt),*) => {
+    ($first:expr,$($arg:expr),*) => {
         return Err(TeXError{
             msg:format!($first,$($arg),*),
             cause:std::option::Option::None,
@@ -71,7 +71,7 @@ macro_rules! throw {
             source:std::option::Option::None
         })
     };
-    ($first:expr,$($arg:tt),* => $cause:expr) => {
+    ($first:expr,$($arg:expr),* => $cause:expr) => {
         return Err(TeXError{
             msg:format!($first,$($arg),*),
             cause:Some($cause.clone()),

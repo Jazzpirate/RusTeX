@@ -1,13 +1,12 @@
 //! Boxes producing actual output
 
 use std::fmt::{Debug, Formatter};
-use std::sync::RwLock;
 use crate::engine::EngineType;
 use crate::engine::state::modes::BoxMode;
 use crate::engine::stomach::Stomach;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
-use crate::utils::Ptr;
+use crate::utils::{Mut, Ptr};
 
 pub trait TeXNode:Debug+Sized+Clone+'static {
     type Bx:TeXBox;
@@ -28,16 +27,16 @@ impl TeXNode for StandardTeXBox {
     type Bx = StandardTeXBox;
 }
 
-pub struct Whatsit<ET:EngineType>(Ptr<RwLock<Option<Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>>>>);
+pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>>>>);
 impl<ET:EngineType> Whatsit<ET> {
-    pub fn new(f:Box<dyn FnOnce(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>) -> Self {
-        Whatsit(Ptr::new(RwLock::new(Some(f))))
+    pub fn new(f:Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>) -> Self {
+        Whatsit(Ptr::new(Mut::new(Some(f))))
     }
-    pub fn apply(self,stomach:&mut ET::Stomach, state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),TeXError<ET::Token>> {
-        let f = &mut *self.0.write().unwrap();
+    pub fn apply(self,state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),TeXError<ET::Token>> {
+        let f = &mut *self.0.borrow_mut();
         match std::mem::take(f) {
             None => Ok(()),
-            Some(f) => f(stomach,state,gullet)
+            Some(f) => f(state,gullet)
         }
     }
 }
@@ -103,7 +102,7 @@ pub enum OpenBox<ET:EngineType> {
     Box {
         mode:BoxMode,
         list:Vec<StomachNode<ET>>,
-        on_close: Ptr<dyn Fn(&mut ET::Stomach, &mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) ->Option<StomachNode<ET>>>
+        on_close: Ptr<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) ->Option<StomachNode<ET>>>
     },
 }
 impl<ET:EngineType> OpenBox<ET> {

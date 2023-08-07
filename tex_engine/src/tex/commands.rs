@@ -25,6 +25,20 @@ pub struct ResolvedToken<ET:EngineType> {
     pub source: CommandSource<ET>,
     pub expand:bool
 }
+impl<ET:EngineType> Debug for ResolvedToken<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.source.cause,f)
+    }
+}
+impl<ET:EngineType> ResolvedToken<ET> {
+    pub fn with_expand(self,expand:bool) -> Self {
+        Self {
+            command:self.command,
+            source:self.source,
+            expand
+        }
+    }
+}
 
 pub struct StomachCommand<ET:EngineType> {
     pub command:BaseStomachCommand<ET>,
@@ -282,6 +296,7 @@ impl<ET:EngineType> PartialEq for BaseCommand<ET> {
             (BaseCommand::Toks(a), BaseCommand::Toks(b)) =>  a == b,
             (BaseCommand::Font(a), BaseCommand::Font(b)) => a == b,
             (BaseCommand::FontCommand {name:a,..},BaseCommand::FontCommand {name:b,..}) => a == b,
+            (BaseCommand::CharDef(a), BaseCommand::CharDef(b)) => a == b,
             (BaseCommand::Relax, BaseCommand::Relax) => true,
             (BaseCommand::None, BaseCommand::None) => true,
             _ => false
@@ -323,6 +338,7 @@ pub enum BaseStomachCommand<ET:EngineType> {
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
     Char(ET::Char),
     MathChar(u32),
+    Font(ET::Font),
     Relax,
     Space,
     BeginGroup,
@@ -344,6 +360,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
             BaseStomachCommand::ValueAss(_) => write!(f, "Value Assignment"),
             BaseStomachCommand::Relax => write!(f, "Relax"),
             BaseStomachCommand::Space => write!(f, "Space"),
+            BaseStomachCommand::Font(fnt) => write!(f, "Font {}",fnt),
             BaseStomachCommand::BeginGroup => write!(f, "BeginGroup"),
             BaseStomachCommand::EndGroup => write!(f, "EndGroup"),
             BaseStomachCommand::MathShift => write!(f, "MathShift"),
@@ -391,7 +408,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                     move |s,g,c,gl|ass.set(s,g,c,gl)))
             },
             FontCommand {set:Some(set),..} => BaseStomachCommand::Assignment {name:std::option::Option::None,set},
-            Font(_) => todo!(),
+            Font(f) => BaseStomachCommand::Font(f),
             Relax => BaseStomachCommand::Relax,
             MathChar(u) => BaseStomachCommand::MathChar(u),
             Char{char,catcode} => match catcode {
@@ -430,7 +447,7 @@ impl<T:Token> Def<T>{
     /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
     /// error messages.
     pub fn expand<ET:EngineType<Token=T>>(&self, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
-        methods::exand_def::<ET>(self,state,mouth,cmd,f)
+        methods::expand_def::<ET>(self, state, mouth, cmd, f)
     }
     pub fn simple(replacement:Vec<T>) -> Ptr<Self> {
         Ptr::new(Self {

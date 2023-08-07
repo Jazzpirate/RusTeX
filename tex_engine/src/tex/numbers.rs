@@ -223,10 +223,10 @@ pub struct Skip<SD:SkipDim>{
     pub shrink:Option<SD>,
 }
 impl<SD:SkipDim> Skip<SD> {
-    fn tex_mult(&self, other: f64) -> Self {
+    pub fn tex_mult(&self, other: f64) -> Self {
         Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
-    fn tex_div(&self, other: i64) -> Self {
+    pub fn tex_div(&self, other: i64) -> Self {
         Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }
@@ -326,10 +326,10 @@ pub struct MuSkip<MD:MuDim,SD:MuStretchShrinkDim>{
     pub shrink:Option<SD>,
 }
 impl<MD:MuDim,SD:MuStretchShrinkDim> MuSkip<MD,SD> {
-    fn tex_div(&self, other: i64) -> Self {
+    pub fn tex_div(&self, other: i64) -> Self {
         Self{base:self.base.tex_div(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
-    fn tex_mult(&self, other: f64) -> Self {
+    pub fn tex_mult(&self, other: f64) -> Self {
         Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }

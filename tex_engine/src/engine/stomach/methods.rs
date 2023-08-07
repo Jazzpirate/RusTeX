@@ -33,6 +33,14 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
             }
             Ok(())
         }
+        Font(f) => {
+            state.set_current_font(f,false);
+            match state.take_afterassignment() {
+                Some(t) => gullet.mouth().requeue(t),
+                _ => ()
+            }
+            Ok(())
+        }
         OpenBox {..} => todo!("OpenBox"),
         Whatsit {name,..} => todo!("Whatsits"),
         Relax => Ok(()),
@@ -55,7 +63,7 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
             Some((v,GroupType::Box(b))) => {
                 match state.box_stack_mut().pop() {
                     Some(crate::tex::boxes::OpenBox::Box {list,mode,on_close}) if mode == b => {
-                        match on_close(stomach,state,gullet,list) {
+                        match on_close(state,gullet,list) {
                             Some(b) => unsafe{state.box_stack_mut().last_mut().unwrap_unchecked()}.ls().push(b),
                             None => {}
                         }

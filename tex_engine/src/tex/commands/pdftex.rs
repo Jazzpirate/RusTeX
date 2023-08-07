@@ -70,16 +70,15 @@ pub static PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
 pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,fun:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"pdffilesize");
-    let mut ret = vec!();
-    catch_prim!(gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
-    let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
+    let filename = catch_prim!(gullet.get_braced_string(state) => (PDFFILESIZE,cmd));
+    //gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
+    // let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = state.filesystem().get(&filename);
     let x = f.content_string();
     match &*x {
         None => Ok(()),
         Some(v) =>{
-            for t in string_to_tokens(v.len().to_string().as_bytes()) { fun(state,t)? };
-            Ok(())
+            string_to_tokens::<ET>(v.len().to_string().as_bytes(),state,fun)
         }
     }
 }
@@ -101,13 +100,12 @@ pub static PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
 pub fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"pdfstrcmp");
-    let str1 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd))).unwrap();
-    let str2 = String::from_utf8(catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd))).unwrap();
+    let str1 = catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd));
+    let str2 = catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd));
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    if str1==str2 {f(state,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))?}
-        else if str1 < str2 { for t in string_to_tokens("-1".as_bytes()) {f(state,t)?}}
-        else {f(state,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))?};
-    Ok(())
+    if str1==str2 {f(state,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
+        else if str1 < str2 { string_to_tokens::<ET>("-1".as_bytes(),state,f)}
+        else {f(state,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
 }
 
 /// "pdftexversion"
@@ -132,8 +130,7 @@ pub static PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
 pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
     -> Result<(),TeXError<ET::Token>> {
-    for v in string_to_tokens(PDFTEX_REVISION.to_string().as_bytes()) { f(state,v)? }
-    Ok(())
+    string_to_tokens::<ET>(PDFTEX_REVISION.to_string().as_bytes(),state,f)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.

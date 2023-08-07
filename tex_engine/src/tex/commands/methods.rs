@@ -1,12 +1,13 @@
-use crate::{catch, catch_prim, debug_log, file_end_prim, throw};
+use std::hint::unreachable_unchecked;
+use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
 use crate::engine::EngineType;
 use crate::engine::gullet::Gullet;
+use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::state::State;
 use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, ResolvedToken, TokenCont, ValueCommand, CommandSource};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
-use crate::utils::{Pool, Ptr};
 use crate::utils::strings::CharType;
 
 #[macro_export]
@@ -63,19 +64,10 @@ pub fn set_toks_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gu
                                         -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Setting \\toks{}",u);
     catch!(gullet.mouth().skip_eq_char::<ET>(state) => cmd.cause);
-    todo!();
-    /*
-    match catch!(gullet.get_next_stomach_command(state) => cmd.cause) {
-        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup(_),..}) => (),
-        _ => return Err(OtherError{
-            msg:"Begin group token expected".to_string(),cause:Some(cmd.cause),source:None
-        }.into())
-    }
-
-     */
-    let mut tks = vec!();
-    catch!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(tks.push(t))) => cmd.cause);
-    debug_log!(debug=>"\\toks{} = {:?}",u,TokenList(&tks));
+    let mut tks = Vec::with_capacity(32);
+    expand_until_space::<ET>(gullet,state)?;
+    catch!(gullet.get_group(state,&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
+    debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks));
     state.set_toks_register(u,tks,global);
     Ok(())
 }
@@ -116,18 +108,9 @@ pub fn set_primitive_muskip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET:
 pub fn set_primitive_toks<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace=>"Setting {}",name);
     catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
-    todo!();
-    /*
-    match catch_prim!(gullet.get_next_stomach_command(state) => (name,cmd)) {
-        Some(StomachCommand{cmd:StomachCommandInner::BeginGroup(_),..}) => (),
-        _ => return Err(ErrorInPrimitive{
-            name,msg:Some("Begin group token expected".to_string()),cause:Some(cmd.cause),source:None
-        })
-    }
-
-     */
-    let mut tks = vec!();
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(tks.push(t))) => (name,cmd));
+    let mut tks = Vec::with_capacity(32);
+    expand_until_space::<ET>(gullet,state)?;
+    catch_prim!(gullet.get_group(state,&mut |_,t| Ok(tks.push(t))) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks));
     state.set_primitive_toks(name,tks,global);
     Ok(())
@@ -356,6 +339,20 @@ macro_rules! register_value_assign_muskip {
 }
 
 #[macro_export]
+macro_rules! register_value_assign_toks {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
+        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Toks(
+            crate::tex::commands::ValueCommand::Complex{
+                get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
+                set:|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?),
+                name:stringify!($name)
+            }
+        ),None)),true);
+    }};
+}
+
+
+#[macro_export]
 macro_rules! register_value_assign_font {
     ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
         $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::FontCommand{
@@ -366,37 +363,36 @@ macro_rules! register_value_assign_font {
     }};
 }
 
-
-
-pub fn exand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,f:TokenCont<ET>)
-                                -> Result<(),TeXError<ET::Token>> {
-    todo!()
-    /*
-    debug_log!(debug=>"Expanding {}:{:?}\n - {}",cause,d,mouth.preview(150).replace("\n","\\n"));
+pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>, f:TokenCont<ET>)
+                                 -> Result<(),TeXError<ET::Token>> {
+    debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
         // No arguments, we just expand the replacement, replacing `##` with `#`
-        return Ok(expand_simple(d,cause,cmd))
+        return expand_simple(d,cmd,state,f)
     }
     if d.arity == 0 {
         // No arguments, we just expand the replacement, but need to eat the delimiters in the signature
         for elem in &d.signature {
             match elem {
                 ParamToken::Token(delim) => {
-                    if let Some((n,_)) = catch_def!(mouth.get_next::<ET>(state) => (d,cause)) {
+                    if let Some((n,_)) = catch!(mouth.get_next::<ET>(state) => cmd.cause) {
                         if n != *delim {
-                            expected_def!(d,cause,delim,n)
+                            throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                         }
                     } else {
-                        file_end_def!(d,cause)
+                        file_end!(cmd.cause)
                     }
                 }
-                _=> unreachable!() // since arity=0, there can only be tokens
+                _=> unsafe{ unreachable_unchecked() } // since arity=0, there can only be tokens
             }
         }
-        return Ok(expand_simple(d,cause,cmd))
+        return expand_simple(d,cmd,state,f)
     }
+
+    /*
+
 
     // The general case:
     // We parse the arguments according to the signature
@@ -406,74 +402,71 @@ pub fn exand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:
     Ok(replace(d,cause,cmd,state.pool_mut()))
 
      */
+    BUMP.with(|b| {
+        let mut args = [MVec::new(b), MVec::new(b), MVec::new(b),
+            MVec::new(b), MVec::new(b), MVec::new(b), MVec::new(b), MVec::new(b), MVec::new(b)];
+        read_arguments(d, mouth, state, &cmd, &mut args)?;
+        replace(d, cmd, state, args, f)
+    })
 }
 
-fn expand_simple<ET:EngineType>(d:&Def<ET::Token>, cmd:ResolvedToken<ET>) -> Vec<ET::Token> {
-    todo!()
-    /*
-    let mut result = Vec::with_capacity(d.replacement.len());
+fn expand_simple<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>,state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     for r in &d.replacement {
         match r {
-            ExpToken::Token(t) => result.push(t.with_ref(&token,&cmd)),
-            ExpToken::ParamToken(t) => result.push(t.with_ref(&token,&cmd)),
+            ExpToken::Token(t) => f(state,t.with_ref(&cmd))?,
+            ExpToken::ParamToken(t) => f(state,t.with_ref(&cmd))?,
             _ => unreachable!()
         }
     }
-    result
-
-     */
+    Ok(())
 }
 
-use arrayvec::ArrayVec;
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
+use crate::utils::{BUMP, MVec};
 
-fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:ResolvedToken<ET>)
-                                 -> Result<(),TeXError<ET::Token>> {
-    todo!()
-    /*
-    state.pool_mut().clear_args();
-    let mut argnum = 0;
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,args:&mut [MVec<ET::Token>;9])
+                                 -> Result<(),TeXError<ET::Token>> { BUMP.with(|bump|{
+    let mut args = args.iter_mut();
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
             ParamToken::Token(delim) => { // eat the delimiter
-                if let Some((n,_)) = catch_def!(mouth.get_next::<ET>(state) => (d,cause)) {
+                if let Some((n,_)) = catch!(mouth.get_next::<ET>(state) => cmd.cause.clone()) {
                     if n != *delim {
-                        expected_def!(d,cause,delim,n)
+                        throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                     }
                 } else {
-                    file_end_def!(d,cause)
+                    file_end!(cmd.cause.clone())
                 }
             }
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
-                    argnum += 1;
+                    let arg = unsafe{args.next().unwrap_unchecked()};
                     'L: loop {
-                        match if d.long {catch_def!({mouth.get_next::<ET>(state)} => (d,cause))}
-                        else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
+                        match if d.long {catch!({mouth.get_next::<ET>(state)} => cmd.cause.clone())}
+                        else {catch!({mouth.get_next_nopar::<ET>(state)} => cmd.cause.clone())} {
                             Some((t,_)) => {
                                 if t.catcode() == CategoryCode::BeginGroup {
                                     mouth.requeue(t);
                                     break 'L;
                                 } else {
-                                    state.pool_mut().arg(argnum-1).push(t);
+                                    arg.push(t);
                                 }
                             }
-                            None => file_end_def!(d,cause)
+                            None => file_end!(cmd.cause.clone())
                         }
                     }
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
-                    argnum += 1;
-                    catch_def!(mouth.skip_whitespace::<ET>(state) => (d,cause));
-                    let mut f = |s:&mut ET::State,t| s.pool_mut().arg(argnum-1).push(t);
-                    if d.long {catch_def!(mouth.read_argument::<ET>(state,&mut f) => (d,cause))}
-                        else {catch_def!(mouth.read_argument_nopar::<ET>(state,&mut f) => (d,cause))};
+                    let arg = unsafe{args.next().unwrap_unchecked()};
+                    catch!(mouth.skip_whitespace::<ET>(state) => cmd.cause.clone());
+                    if d.long {catch!(mouth.read_argument::<ET>(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
+                    else {catch!(mouth.read_argument_nopar::<ET>(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
-                    argnum += 1;
-                    let mut delims = vec!();
+                    let arg = unsafe{args.next().unwrap_unchecked()};
+                    let mut delims = MVec::new(bump);
                     while let Some(ParamToken::Token(t)) = iter.peek() {
                         delims.push(t.clone());
                         iter.next();
@@ -481,21 +474,20 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
-                        match if d.long {catch_def!({mouth.get_next::<ET>(state)} => (d,cause))}
-                        else {catch_def!({mouth.get_next_nopar::<ET>(state)} => (d,cause))} {
+                        match if d.long {catch!({mouth.get_next::<ET>(state)} => cmd.cause.clone())}
+                        else {catch!({mouth.get_next_nopar::<ET>(state)} => cmd.cause.clone())} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
-                                if state.pool().iter_arg(argnum-1).len() == 0 {
+                                if arg.len() == 0 {
                                     removebraces = Some(-1);
                                 }
-                                state.pool_mut().arg(argnum-1).push(t);
+                                arg.push(t);
                             }
                             Some((t,_)) if t.catcode() == CategoryCode::EndGroup => {
                                 if depth == 0 {
-                                    return Err(ErrorInDef{def:d.clone(),cause:(*cause).clone(),source:crate::utils::errors::UnexpectedEndgroup(t).into()}.into())
+                                    throw!("Unexpected end group token: {}",t => cmd.cause.clone())
                                 } else {
                                     depth -= 1;
-                                    let mut arg = state.pool_mut().arg(argnum-1);
                                     arg.push(t);
                                     if depth == 0 {
                                         match removebraces {
@@ -512,7 +504,6 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                                 }
                             }
                             Some((t,_)) => {
-                                let mut arg = state.pool_mut().arg(argnum-1);
                                 arg.push(t);
                                 if depth == 0 && arg.ends_with(delims.as_slice()) {
                                     for _ in 0..delims.len() {
@@ -521,10 +512,9 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
                                     break 'L;
                                 }
                             }
-                            None => file_end_def!(d,cause)
+                            None => file_end!(cmd.cause.clone())
                         }
                     }
-                    let mut arg = state.pool_mut().arg(argnum-1);
                     match removebraces {
                         Some(i) if i != -1 && arg.len()  == (i as usize) => {
                             arg.remove(0);
@@ -537,31 +527,26 @@ fn read_arguments<ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:
         }
     }
     Ok(())
+})}
 
-     */
-}
-
-fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:ResolvedToken<ET>, args:&mut Pool<ET::Token>) -> Vec<ET::Token> {
-    todo!()
-    /*
+fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut ET::State,args:[MVec<ET::Token>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");
         for i in 0..d.arity {
-            debug_log!(debug=>"  - {}",TokenList(args.arg(i).clone()));
+            debug_log!(debug=>"  - {}",TokenList(&args[i as usize].as_vec()));
         }
     }
-    let mut result: Vec<T> = Vec::with_capacity(32);
     let mut replacement = d.replacement.iter();
     while let Some(next) = replacement.next() {
         match next {
             ExpToken::Param(_,idx) => {
-                for t in args.iter_arg(*idx as usize) {
-                    result.push(t.with_ref(&cause, &cmd))
+                for t in args[*idx as usize].iter() {
+                    f(state,t.with_ref(&cmd))?
                 }
             }
-            ExpToken::ParamToken(t) => result.push(t.with_ref(&cause, &cmd)),
-            ExpToken::Token(t) => result.push(t.with_ref(&cause, &cmd))
+            ExpToken::ParamToken(t) => f(state,t.with_ref(&cmd))?,
+            ExpToken::Token(t) => f(state,t.with_ref(&cmd))?
         }
     }
 /*
@@ -587,9 +572,7 @@ fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:ResolvedToken<ET>, args:&mut Po
         }
     } */
 
-    result
-
-     */
+    Ok(())
 }
 
 pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
@@ -634,32 +617,15 @@ pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
 }
 
 
-macro_rules! catch_def {
-    ($f:expr => ($def:ident,$cause:ident)) => {
-        match $f {
-            Ok(x) => x,
-            Err(e) => return Err(ErrorInDef{def:$def.clone(),cause:(*$cause).clone(),source:e.into()}.into())
-        }
-    }
-}
-macro_rules! file_end_def {
-    ($def:ident,$cause:ident) => {
-        return Err(ErrorInDef{def:$def.clone(),cause:(*$cause).clone(),source:crate::utils::errors::FileEndedUnexpectedly{cause:None}.into()}.into())
-    }
-}
-macro_rules! expected_def {
-    ($def:ident,$cause:ident,$expected:expr,$got:expr) => {
-        return Err(ErrorInDef{def:$def.clone(),cause:(*$cause).clone(),source:crate::utils::errors::ExpectedToken{expected:$expected.clone(),found:$got}.into()}.into())
-    }
-}
-
-pub fn set_relax<ET:EngineType>(state:&mut ET::State,tk:&BaseToken<ET::Char>,source:&CommandSource<ET>,globally:bool) {
-    match tk {
-        BaseToken::Char(c,_) => {
+pub fn set_relax<ET:EngineType>(state:&mut ET::State,tk:&ET::Token,source:&CommandSource<ET>,globally:bool) -> Result<(),TeXError<ET::Token>> {
+    match tk.base() {
+        BaseToken::Char(c,CategoryCode::Active) => {
             state.set_ac_command(*c, Some(Command::new(BaseCommand::Relax,Some(source))), globally)
         }
         BaseToken::CS(name) => {
             state.set_command(name.clone(), Some(Command::new(BaseCommand::Relax,Some(source))), globally)
         }
+        _ => throw!("Command name expected, got {}",tk => source.cause)
     }
+    Ok(())
 }

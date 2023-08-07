@@ -13,7 +13,6 @@ pub mod kpathsea;
 use std::collections::hash_map::Entry;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use std::sync::{RwLock, RwLockReadGuard};
 use kpathsea::Kpathsea;
 use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KpseResult;
@@ -24,7 +23,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
-use crate::utils::Ptr;
+use crate::utils::{Mut, Ptr};
 use crate::utils::strings::CharType;
 
 pub trait File<Char:CharType>:Clone {
@@ -95,23 +94,23 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
 }
 
 
-pub struct VirtualFile<Char:CharType> {path:PathBuf,contents:RwLock<Option<Vec<u8>>>,open:RwLock<Option<StringSource<Char>>>}
+pub struct VirtualFile<Char:CharType> {path:PathBuf,contents:Mut<Option<Vec<u8>>>,open:Mut<Option<StringSource<Char>>>}
 impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
-    type OptionRef<'a> = RwLockReadGuard<'a,Option<Vec<u8>>>;
+    type OptionRef<'a> = core::cell::Ref<'a,Option<Vec<u8>>>;
     fn path(&self) -> &PathBuf { &self.path }
-    fn exists(&self) -> bool { self.contents.read().unwrap().is_some() }
+    fn exists(&self) -> bool { self.contents.borrow().is_some() }
     fn content_string(&self) -> Self::OptionRef<'_> {
-        self.contents.read().unwrap()
+        self.contents.borrow()
     }
     fn close_out(&self) {}
     fn open_out(&self) {
-        let mut w = self.contents.write().unwrap();
+        let mut w = self.contents.borrow_mut();
         *w = Some(vec!());
     }
     fn open_in(&self) {
-        let w = self.contents.read().unwrap();
-        let mut open = self.open.write().unwrap();
-        let (v,eof) = match &*w {
+        let w = &*self.contents.borrow();
+        let mut open = self.open.borrow_mut();
+        let (v,eof) = match w {
             None => (vec!(),true),
             Some(v) => (v.clone(),false)
         };
@@ -120,16 +119,17 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         *open = Some(ss);
     }
     fn close_in(&self) {
-        let mut open = self.open.write().unwrap();
+        let mut open = self.open.borrow_mut();
         *open = None;
     }
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
-        let mut open = self.open.write().unwrap();
-        open.as_mut().unwrap().eof::<ET>(state)//.peek().is_none()
+        let open = &mut *self.open.borrow_mut();
+        let mut open = open.as_mut().unwrap();
+        open.eof::<ET>(state)//.peek().is_none()
     }
     fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>> {
-        let mut open = self.open.write().unwrap();
-        match &mut *open {
+        let mut open = &mut *self.open.borrow_mut();
+        match open {
             None => throw!("File not open"),
             Some(m) => {
                 let mut ret: Vec<T> = vec!();
@@ -148,7 +148,7 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
     }
 
     fn write(&self, string: &str) {
-        let mut write = self.contents.write().unwrap();
+        let write = &mut *self.contents.borrow_mut();
         let mut v = write.as_mut().unwrap();
         v.extend(string.as_bytes());
         v.push(b'\n');
@@ -199,8 +199,8 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
                 let s: Option<Vec<u8>> = self.kpathsea.get(&self.pwd,e.key());
                 let ret = Ptr::new(VirtualFile{
                     path:e.key().clone(),
-                    contents:RwLock::new(s),
-                    open:RwLock::new(None)
+                    contents:Mut::new(s),
+                    open:Mut::new(None)
                 });
                 e.insert(ret.clone());
                 ret

@@ -4,7 +4,6 @@ pub mod tfm_files;
 
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
-use std::sync::RwLock;
 use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::state::State;
@@ -14,7 +13,7 @@ use crate::tex::token::Token;
 use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
-use crate::utils::Ptr;
+use crate::utils::{Mut, Ptr};
 use crate::utils::strings::CharType;
 
 pub trait FontStore:Clone+'static {
@@ -59,11 +58,11 @@ impl FontStore for TfmFontStore {
             Some(file) => file.clone()
         };
         Ok(Ptr::new(TfmFontInner{
-            hyphenchar:RwLock::new(file.hyphenchar as i64),
-            skewchar:RwLock::new(file.skewchar as i64),
+            hyphenchar:Mut::new(file.hyphenchar as i64),
+            skewchar:Mut::new(file.skewchar as i64),
             file,
-            at:RwLock::new(None),
-            dimens:RwLock::new(HMap::default()),
+            at:Mut::new(None),
+            dimens:Mut::new(HMap::default()),
             lps:HMap::default(),
             rps:HMap::default(),
         }))
@@ -89,11 +88,11 @@ impl TfmFontStore {
             filepath:"nullfont".to_string()
         };
         let font = Ptr::new(TfmFontInner{
-            hyphenchar:RwLock::new(null.hyphenchar as i64),
-            skewchar:RwLock::new(null.skewchar as i64),
+            hyphenchar:Mut::new(null.hyphenchar as i64),
+            skewchar:Mut::new(null.skewchar as i64),
             file:Ptr::new(null),
-            at:RwLock::new(None),
-            dimens:RwLock::new(HMap::default()),
+            at:Mut::new(None),
+            dimens:Mut::new(HMap::default()),
             lps:HMap::default(),
             rps:HMap::default(),
         });
@@ -103,20 +102,20 @@ impl TfmFontStore {
 // todo: replace by Arrays, maybe
 pub struct TfmFontInner {
     file:Ptr<TfmFile>,
-    at:RwLock<Option<i64>>,
-    dimens:RwLock<HMap<usize,i64>>,
-    hyphenchar:RwLock<i64>,
-    skewchar:RwLock<i64>,
+    at:Mut<Option<i64>>,
+    dimens:Mut<HMap<usize,i64>>,
+    hyphenchar:Mut<i64>,
+    skewchar:Mut<i64>,
     lps:HMap<u8,u8>,
     rps:HMap<u8,u8>,
 }
 impl PartialEq for TfmFontInner {
     fn eq(&self, other: &Self) -> bool {
         self.file == other.file &&
-            *self.at.read().unwrap() == *other.at.read().unwrap() &&
-            *self.hyphenchar.read().unwrap() == *other.hyphenchar.read().unwrap() &&
-            *self.skewchar.read().unwrap() == *other.skewchar.read().unwrap() &&
-            *self.dimens.read().unwrap() == *other.dimens.read().unwrap()
+            *self.at.borrow() == *other.at.borrow() &&
+            *self.hyphenchar.borrow() == *other.hyphenchar.borrow() &&
+            *self.skewchar.borrow() == *other.skewchar.borrow() &&
+            *self.dimens.borrow() == *other.dimens.borrow()
     }
 }
 
@@ -128,7 +127,7 @@ impl Debug for TfmFontInner {
 impl Display for TfmFontInner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"{}",self.file.name)?;
-        match &*self.at.read().unwrap() {
+        match &*self.at.borrow() {
             None => Ok(()),
             Some(at) => write!(f," at {}",Dimi32(*at as i32))
         }
@@ -138,34 +137,34 @@ pub type TfmFont = Ptr<TfmFontInner>;
 impl Font for TfmFont {
     type Char = u8;
     fn set_at(&mut self,at:i64) {
-        *self.at.write().unwrap() = Some(at);
+        *self.at.borrow_mut() = Some(at);
     }
     fn get_at(&self) -> i64 {
-        match &*self.at.read().unwrap() {
+        match &*self.at.borrow() {
             Some(at) => *at,
             None => self.file.size
         }
     }
 
     fn get_hyphenchar(&self) -> i64 {
-        self.hyphenchar.read().unwrap().clone()
+        self.hyphenchar.borrow().clone()
     }
     fn set_hyphenchar(&mut self, hyphenchar: i64) {
-        *self.hyphenchar.write().unwrap() = hyphenchar;
+        *self.hyphenchar.borrow_mut() = hyphenchar;
     }
 
     fn get_skewchar(&self) -> i64 {
-        self.skewchar.read().unwrap().clone()
+        self.skewchar.borrow().clone()
     }
     fn set_skewchar(&mut self, skewchar: i64) {
-        *self.skewchar.write().unwrap() = skewchar;
+        *self.skewchar.borrow_mut() = skewchar;
     }
 
     fn set_dim<D:Dim>(&mut self, i: usize, d: D) {
-        self.dimens.write().unwrap().insert(i,d.to_sp());
+        self.dimens.borrow_mut().insert(i,d.to_sp());
     }
     fn get_dim<D:Dim>(&self, i: usize) -> D {
-        D::from_sp(self.dimens.read().unwrap().get(&i).map(|c| *c).unwrap_or(
+        D::from_sp(self.dimens.borrow().get(&i).map(|c| *c).unwrap_or(
             if i > 0 && i < 256 {
                 ((self.file.dimen[i] * (self.get_at() as f64)).round() as i64)
             } else {

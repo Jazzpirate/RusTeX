@@ -44,6 +44,12 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         })
     }
 
+    /// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
+    /// If not expandable, returns the [`ResolvedToken`] for `tk`
+    fn expand(&mut self,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
+        methods::expand(self,state,ret)
+    }
+
     /// Reads a number from the input stream.
     fn get_int(&mut self, state:&mut ET::State) -> Result<ET::Int,TeXError<ET::Token>> {
         numeric_methods::get_int::<ET>(self, state)
@@ -72,7 +78,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         methods::get_expanded_group::<ET>(self, state, expand_protected, keep_the, err_on_unknowns,f)
     }
 
-    fn get_braced_string(&mut self, state:&mut ET::State) -> Result<Vec<u8>,TeXError<ET::Token>> {
+    fn get_braced_string(&mut self, state:&mut ET::State) -> Result<String,TeXError<ET::Token>> {
         methods::get_braced_string::<ET>(self, state)
     }
 

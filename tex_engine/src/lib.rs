@@ -125,7 +125,7 @@ mod tests {
     });}
 
     #[test]
-    fn engine() { crate::utils::with_stack_size(16 * 1024 * 1024,|| measure!(engine: {
+    fn engine() { /*crate::utils::with_stack_size(16 * 1024 * 1024,||*/ measure!(engine: {
         //error();
         //trace();
         //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
@@ -133,15 +133,15 @@ mod tests {
         //warn();
 
         let outputs = Outputs {
-            error: |s|  { print!("\n{}",Red.paint(std::format!("{}",s))) },
-            message: |s| { print!("{}",Yellow.paint(s)) },
-            file_open:|pb| { print!("\n{}",Green.paint(format!("({}",pb))) },
-            file_close:|pb| { print!("{}",Green.paint(format!(")"))) },
+            error: |s|  { warn!("\n{}",Red.paint(std::format!("{}",s))) },
+            message: |s| { warn!("{}",Yellow.paint(s)) },
+            file_open:|pb| { warn!("\n{}",Green.paint(format!("({}",pb))) },
+            file_close:|pb| { warn!("{}",Green.paint(format!(")"))) },
             write_18:|_| { },
-            write_17:|s| { print!("{}",s) },
-            write_16:|s| { print!("{}",White.bold().paint(s)) },
-            write_neg1:|s| { print!("\n{}",Black.on(Blue).paint(s)) },
-            write_other:|s| { print!("\n{}",Black.on(Green).paint(s)) },
+            write_17:|s| { warn!("{}",s) },
+            write_16:|s| { warn!("{}",White.bold().paint(s)) },
+            write_neg1:|s| { warn!("\n{}",Black.on(Blue).paint(s)) },
+            write_other:|s| { warn!("\n{}",Black.on(Green).paint(s)) },
         };
 
         #[derive(Clone,Copy,Debug)]
@@ -188,9 +188,9 @@ mod tests {
         match engine.initialize_pdflatex() {
             Ok(_) => {},
             Err(e) => {
-                (outputs.error)(&format!("{}\n\nat:{}",e.throw_string(),engine.gullet.mouth().preview(100)));
+                (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(),engine.gullet.mouth().file_line(),engine.gullet.mouth().preview(100)));
                 panic!()
             }
         }
-    }));}
+    })/*);*/}
 }
