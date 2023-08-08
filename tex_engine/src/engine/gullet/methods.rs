@@ -327,7 +327,11 @@ pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Stat
                 let us = char.to_usize();
                 if us < 256 {
                     current.push(us as u8 as char);
-                    if current == kw { return Ok(true) }
+                    if current == kw {
+                        read_toks = read_toks.reset();
+                        gullet.mouth().push_tokens(read_toks);
+                        return Ok(true)
+                    }
                     else if !kw.starts_with(&current) {
                         gullet.mouth().push_tokens(read_toks);
                         return Ok(false)
@@ -362,9 +366,15 @@ pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Sta
                         gullet.mouth().push_tokens(read_toks);
                         return Ok(None)
                     }
-                    else if keywords.len() == 1 && keywords[0] == current { return Ok(Some(keywords[0])) }
+                    else if keywords.len() == 1 && keywords[0] == current {
+                        read_toks = read_toks.reset();
+                        gullet.mouth().push_tokens(read_toks);
+                        return Ok(Some(keywords[0]))
+                    }
                 } else if keywords.contains(&current.as_str()) {
                     gullet.mouth().requeue(next.source.cause);
+                    read_toks = read_toks.reset();
+                    gullet.mouth().push_tokens(read_toks);
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Ok(Some(keywords[0]))
                 } else {
@@ -374,6 +384,8 @@ pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Sta
             }
             _ if keywords.contains(&current.as_str()) => {
                 gullet.mouth().requeue(next.source.cause);
+                read_toks = read_toks.reset();
+                gullet.mouth().push_tokens(read_toks);
                 keywords = keywords.into_iter().filter(|s| s == &current).collect();
                 return Ok(Some(keywords[0]))
             }

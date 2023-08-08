@@ -131,10 +131,7 @@ impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
 }
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     fn switch_mouth(&mut self, tks: Vec<ET::Token>) -> ET::Mouth {
-        let old = std::mem::replace(&mut self.mouth, ET::Mouth::new());
-        let mut next = self.mouth.new_tokensource();
-        for t in tks {next.push(t)}
-        self.mouth.push_tokens(next);
+        let old = std::mem::replace(&mut self.mouth, ET::Mouth::new_with(tks));
         old
     }
     fn restore_mouth(&mut self, mouth: ET::Mouth) {

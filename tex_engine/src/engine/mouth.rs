@@ -29,6 +29,8 @@ use crate::utils::strings::CharType;
 pub trait Mouth<T:Token>:Sized+ Clone +'static {
     fn new() -> Self;
 
+    fn new_with(tks:Vec<T>) -> Self;
+
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
     fn push_tokens(&mut self,tks:TokenSource<T>);
 
@@ -121,12 +123,14 @@ pub enum TeXMouthSource<T:Token> {
 
 /// A [`TokenSource`] is essentially a pretokenized [`Token`] list
 #[derive(Clone)]
-pub struct TokenSource<T:Token>(Vec<T>,usize);
+pub struct TokenSource<T:Token>(pub Vec<T>,usize,T);
 impl<T:Token> TokenSource<T> {
-    pub fn new() -> Self { Self(Vec::with_capacity(1024),0) }
+    pub fn new() -> Self { Self(Vec::with_capacity(2097152),0,T::new(BaseToken::Char(T::Char::from(b'X'),CategoryCode::Invalid),None)) }
+    fn new_with(v:Vec<T>) -> Self { Self(v,0,T::new(BaseToken::Char(T::Char::from(b'X'),CategoryCode::Invalid),None)) }
     fn is_empty(&self) -> bool { self.0.len() == self.1 }
     fn get_next(&mut self) -> (T,bool) {
-        let ret = unsafe { self.0.get(self.1).unwrap_unchecked().clone() };
+        let mut ret = self.2.clone();
+        unsafe { std::mem::swap(self.0.get_mut(self.1).unwrap_unchecked(),&mut ret) };
         self.1 += 1;
         (ret,self.is_empty())
     }
@@ -135,7 +139,7 @@ impl<T:Token> TokenSource<T> {
         TokenList(tks).to_string()
         //crate::interpreter::tokens_to_string_default(&tks)
     }
-    fn reset(mut self) -> Self {
+    pub(crate) fn reset(mut self) -> Self {
         self.0.clear();
         self.1 = 0;
         self
@@ -146,11 +150,16 @@ impl<T:Token> TokenSource<T> {
 }
 
 #[derive(Clone)]
-pub struct StandardMouth<T:Token>{ sources:Vec<TeXMouthSource<T>>,buffer:Option<T>,news:Vec<TokenSource<T>>}
+pub struct StandardMouth<T:Token>{ pub sources:Vec<TeXMouthSource<T>>,buffer:Option<T>,pub news:Vec<TokenSource<T>>}
 
 impl<T:Token> Mouth<T> for StandardMouth<T> {
     fn new() -> Self {
-        StandardMouth { sources:Vec::with_capacity(64),buffer:None,news:Vec::with_capacity(64)}
+        let mut s = StandardMouth { sources:Vec::with_capacity(32),buffer:None,news:Vec::with_capacity(32)};
+        for _ in (0..32) { s.news.push(TokenSource::new()) }
+        s
+    }
+    fn new_with(tks: Vec<T>) -> Self {
+        StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
     }
 
     fn new_tokensource(&mut self) -> TokenSource<T> {

@@ -35,6 +35,8 @@ ansi_term = "0.12.1"
 chrono = "0.4.23"
 log={version="0.4.19",features=["kv_unstable"]}
 ahash = "0.8.3"
+#interned = "0.1.1"
+#staticize = "0.1.1"
 #bumpalo = {version ="3.13.0", features = ["collections"]}
 #arrayvec = "0.7.4"
 #blink-alloc = "0.3.0"
