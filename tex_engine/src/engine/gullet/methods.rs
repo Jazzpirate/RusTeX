@@ -12,6 +12,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::Ptr;
 use crate::engine::mouth::Mouth;
 use crate::tex::commands::etex::{UNEXPANDED, UNLESS};
+use crate::tex::commands::methods::expand_def;
 use crate::tex::commands::tex::{ELSE, FI, IFCASE, NOEXPAND, THE};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::FontStore;
@@ -33,34 +34,6 @@ pub fn get_next_unexpandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET
     Ok(None)
 }
 
-/// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
-/// If not expandable, returns the [`ResolvedToken`] for `tk`
-pub fn expand<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
-    match ret.command {
-        BaseCommand::Def(d) => {
-            let mut vec: Vec<ET::Token> = Vec::new();//with_capacity(512);
-            d.expand(state,gullet.mouth(),ret.source,&mut |_,t| Ok(vec.push(t)))?;
-            gullet.mouth().push_tokens(vec);
-            Ok(None)
-        }
-        // expandable commands that do not expand to new tokens
-        BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
-            apply(state, gullet, ret.source, &mut |_,_| Ok(()))?;
-            Ok(None)
-        }
-        BaseCommand::Expandable {apply,..} => {
-            let mut vec: Vec<ET::Token> = Vec::new();//with_capacity(512);
-            apply(state,gullet,ret.source,&mut |_,t| Ok(vec.push(t)))?;
-            gullet.mouth().push_tokens(vec);
-            Ok(None)
-        },
-        BaseCommand::Conditional {name,apply} => {
-            do_conditional(gullet, state,ret.source, name,apply, false)?;
-            Ok(None)
-        }
-        _ => Ok(Some(ret))
-    }
-}
 
 /// Resolves the given [`Token`]
 pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:ET::Token) -> ResolvedToken<ET> {
@@ -541,16 +514,10 @@ pub fn get_control_sequence<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET
 fn get_cs_check_command<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, resolved:ResolvedToken<ET>)
                                        -> Result<Option<ET::Token>,TeXError<ET::Token>> {
     match resolved.command {
-        BaseCommand::Expandable {apply,..} => {
-            let mut ret = vec!();
-            apply(state,gullet,resolved.source,&mut |_,t| Ok(ret.push(t)))?;
-            gullet.mouth().push_tokens(ret);
+        BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } => {
+            gullet.expand(state,resolved)?;
             Ok(None)
         },
-        BaseCommand::Conditional {name,apply} => {
-            do_conditional(gullet, state, resolved.source,name,apply, false)?;
-            Ok(None)
-        }
         _ => Ok(Some(resolved.source.cause))
     }
 }

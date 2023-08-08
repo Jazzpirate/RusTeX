@@ -363,7 +363,11 @@ macro_rules! register_value_assign_font {
     }};
 }
 
-pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>, f:TokenCont<ET>)
+/// Expands the [`Def`] into a [`Vec`] of [`Token`]s. `cmd` and `cause` are the command and
+/// token that triggered the expansion, used for constructing the
+/// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
+/// error messages.
+pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,pool:(&mut[Vec<ET::Token>;9],&mut Vec<ET::Token>), f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET::Token>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -402,12 +406,9 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth
     Ok(replace(d,cause,cmd,state.pool_mut()))
 
      */
-    BUMP.with(|b| {
-        let mut args = [MVec::new(b), MVec::new(b), MVec::new(b),
-            MVec::new(b), MVec::new(b), MVec::new(b), MVec::new(b), MVec::new(b), MVec::new(b)];
-        read_arguments(d, mouth, state, &cmd, &mut args)?;
-        replace(d, cmd, state, args, f)
-    })
+    let (mut args,mut delims) = pool;
+    read_arguments(d, mouth, state, &cmd, (args,delims))?;
+    replace(d, cmd, state, args, f)
 }
 
 fn expand_simple<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>,state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
@@ -423,11 +424,10 @@ fn expand_simple<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>,state:&
 
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
-use crate::utils::{BUMP, MVec};
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,args:&mut [MVec<ET::Token>;9])
-                                 -> Result<(),TeXError<ET::Token>> { BUMP.with(|bump|{
-    let mut args = args.iter_mut();
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<ET::Token>;9],&mut Vec<ET::Token>))
+                                 -> Result<(),TeXError<ET::Token>> {
+    let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
@@ -442,7 +442,9 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
             }
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
-                    let arg = unsafe{args.next().unwrap_unchecked()};
+                    let arg = &mut pool.0[argnum];
+                    arg.clear();
+                    argnum += 1;
                     'L: loop {
                         match if d.long {catch!({mouth.get_next::<ET>(state)} => cmd.cause.clone())}
                         else {catch!({mouth.get_next_nopar::<ET>(state)} => cmd.cause.clone())} {
@@ -459,14 +461,19 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
                     }
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
-                    let arg = unsafe{args.next().unwrap_unchecked()};
+                    let arg = &mut pool.0[argnum];
+                    arg.clear();
+                    argnum += 1;
                     catch!(mouth.skip_whitespace::<ET>(state) => cmd.cause.clone());
                     if d.long {catch!(mouth.read_argument::<ET>(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
                     else {catch!(mouth.read_argument_nopar::<ET>(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
-                    let arg = unsafe{args.next().unwrap_unchecked()};
-                    let mut delims = MVec::new(bump);
+                    let arg = &mut pool.0[argnum];
+                    arg.clear();
+                    argnum += 1;
+                    let mut delims = &mut*pool.1;
+                    delims.clear();
                     while let Some(ParamToken::Token(t)) = iter.peek() {
                         delims.push(t.clone());
                         iter.next();
@@ -527,9 +534,9 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
         }
     }
     Ok(())
-})}
+}
 
-fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut ET::State,args:[MVec<ET::Token>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut ET::State,args:&[Vec<ET::Token>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");

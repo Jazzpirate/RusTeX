@@ -24,29 +24,6 @@ use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
-/// Either a [`TokenSource`] or a [`StringSource`]
-#[derive(Clone)]
-pub enum TeXMouthSource<T:Token> {
-    Token(TokenSource<T>),
-    /// Only because of `\noexpand`, which sets the [`Command`](crate::tex::commands::BaseCommand)
-    /// of an expandable [`Token`] to `\relax` (funnily enough, `\unexpanded` does not do that).
-    NoExpand(T),
-    String(StringSource<T::Char>)
-}
-
-/// A [`TokenSource`] is essentially a pretokenized [`Token`] list
-#[derive(Clone)]
-pub struct TokenSource<T:Token>(IntoIter<T>);
-impl<T:Token> TokenSource<T> {
-    pub(crate) fn new(ls:Vec<T>) -> Self { Self(ls.into_iter()) }
-    pub fn get_next(&mut self) -> Option<T> { self.0.next() }
-    fn preview(&self) -> String {
-        let tks : Vec<T> = self.0.clone().collect();
-        TokenList(&tks).to_string()
-        //crate::interpreter::tokens_to_string_default(&tks)
-    }
-}
-
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
 pub trait Mouth<T:Token>:Sized+ Clone +'static {
     fn new() -> Self;
@@ -125,6 +102,30 @@ pub trait Mouth<T:Token>:Sized+ Clone +'static {
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
     fn read_until_endgroup<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
         methods::read_until_endgroup::<ET>(self,state,f)
+    }
+}
+
+
+/// Either a [`TokenSource`] or a [`StringSource`]
+#[derive(Clone)]
+pub enum TeXMouthSource<T:Token> {
+    Token(TokenSource<T>),
+    /// Only because of `\noexpand`, which sets the [`Command`](crate::tex::commands::BaseCommand)
+    /// of an expandable [`Token`] to `\relax` (funnily enough, `\unexpanded` does not do that).
+    NoExpand(T),
+    String(StringSource<T::Char>)
+}
+
+/// A [`TokenSource`] is essentially a pretokenized [`Token`] list
+#[derive(Clone)]
+pub struct TokenSource<T:Token>(IntoIter<T>);
+impl<T:Token> TokenSource<T> {
+    pub(crate) fn new(ls:Vec<T>) -> Self { Self(ls.into_iter()) }
+    pub fn get_next(&mut self) -> Option<T> { self.0.next() }
+    fn preview(&self) -> String {
+        let tks : Vec<T> = self.0.clone().collect();
+        TokenList(&tks).to_string()
+        //crate::interpreter::tokens_to_string_default(&tks)
     }
 }
 
@@ -248,7 +249,6 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
 }
 
 impl<T:Token> StandardMouth<T> {
-
     fn has_next_i(&mut self, cc:&CategoryCodeScheme<T::Char>, endline: Option<T::Char>) -> Result<bool,TeXError<T>> {
         if let Some(source) = self.sources.last_mut() {
             return if let Some(tk) = match source {

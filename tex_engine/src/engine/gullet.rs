@@ -7,13 +7,17 @@ pub mod numeric_methods;
 
 use crate::catch;
 use crate::engine::EngineType;
+use crate::engine::gullet::methods::do_conditional;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Skip, MuSkip};
 use crate::tex::token::{BaseToken, Token};
-use crate::tex::commands::{TokenCont, ResolvedToken, CommandSource, StomachCommand};
+use crate::tex::commands::{TokenCont, ResolvedToken, CommandSource, StomachCommand, BaseCommand};
+use crate::tex::commands::etex::UNLESS;
+use crate::tex::commands::methods::expand_def;
+use crate::tex::commands::tex::{ELSE, FI};
 use crate::utils::errors::TeXError;
 use crate::utils::map::Map;
 use crate::utils::strings::TeXStr;
@@ -46,9 +50,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 
     /// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
     /// If not expandable, returns the [`ResolvedToken`] for `tk`
-    fn expand(&mut self,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
-        methods::expand(self,state,ret)
-    }
+    fn expand(&mut self,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>>;
 
     /// Reads a number from the input stream.
     fn get_int(&mut self, state:&mut ET::State) -> Result<ET::Int,TeXError<ET::Token>> {
@@ -115,11 +117,16 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 #[derive(Clone)]
 pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
     mouth:ET::Mouth,
-    in_conditionals:Vec<ConditionalBranch>
+    in_conditionals:Vec<ConditionalBranch>,
+    args_pool:[Vec<ET::Token>;9],
+    delimiter_pool:Vec<ET::Token>
 }
 impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
     pub fn new(mouth:ET::Mouth) -> Self {
-        Self {mouth, in_conditionals:Vec::new() }
+        Self {mouth, in_conditionals:Vec::new(),
+            args_pool:[Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new()],
+            delimiter_pool:Vec::new()
+        }
     }
 }
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
@@ -152,5 +159,34 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     }
     fn current_conditional(&self) -> (Option<ConditionalBranch>,usize) {
         (self.in_conditionals.last().copied(),self.in_conditionals.len() - 1)
+    }
+
+    fn expand(&mut self, state: &mut ET::State, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET::Token>> {
+        match ret.command {
+            BaseCommand::Def(d) => {
+                let mut vec = Vec::new();
+                expand_def(&*d,state,&mut self.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
+                           &mut |_,t| Ok(vec.push(t))
+                )?;
+                self.mouth.push_tokens(vec.clone());
+                Ok(None)
+            }
+            // expandable commands that do not expand to new tokens
+            BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
+                apply(state, self, ret.source, &mut |_,_| Ok(()))?;
+                Ok(None)
+            }
+            BaseCommand::Expandable {apply,..} => {
+                let mut vec = Vec::new();//with_capacity(512);
+                apply(state,self,ret.source,&mut |_,t| Ok(vec.push(t)))?;
+                self.mouth.push_tokens(vec);
+                Ok(None)
+            },
+            BaseCommand::Conditional {name,apply} => {
+                do_conditional(self, state,ret.source, name,apply, false)?;
+                Ok(None)
+            }
+            _ => Ok(Some(ret))
+        }
     }
 }

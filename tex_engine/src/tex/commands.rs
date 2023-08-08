@@ -442,13 +442,7 @@ pub struct Def<T:Token>{
     pub replacement:Vec<ExpToken<T>>
 }
 impl<T:Token> Def<T>{
-    /// Expands the [`Def`] into a [`Vec`] of [`Token`]s. `cmd` and `cause` are the command and
-    /// token that triggered the expansion, used for constructing the
-    /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
-    /// error messages.
-    pub fn expand<ET:EngineType<Token=T>>(&self, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
-        methods::expand_def::<ET>(self, state, mouth, cmd, f)
-    }
+
     pub fn simple(replacement:Vec<T>) -> Ptr<Self> {
         Ptr::new(Self {
             protected:false,
