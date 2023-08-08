@@ -319,7 +319,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cond
 pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, kw:&'a str) -> Result<bool,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     let mut current = String::new();
-    let mut read_toks: Vec<ET::Token> = vec!();
+    let mut read_toks = gullet.mouth().new_tokensource();
     while let Some(next) = gullet.get_next_unexpandable(state)? {
         read_toks.push(next.source.cause);
         match next.command {
@@ -349,7 +349,7 @@ pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Stat
 pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET::Token>> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     let mut current = String::new();
-    let mut read_toks: Vec<ET::Token> = Vec::with_capacity(5);
+    let mut read_toks = gullet.mouth().new_tokensource();
     while let Some(next) = gullet.get_next_unexpandable(state)? {
         read_toks.push(next.source.cause.clone());
         match next.command {

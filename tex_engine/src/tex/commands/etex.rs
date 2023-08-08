@@ -3,7 +3,7 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end};
 use crate::engine::EngineType;
 use crate::engine::gullet::methods::{string_to_tokens, token_to_chars};
 use crate::tex::catcodes::CategoryCode;
@@ -19,13 +19,46 @@ use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 
+fn next_char<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, syms:&'static [u8]) -> Result<Option<u8>,TeXError<ET::Token>> {
+    match gullet.get_next_unexpandable(state)? {
+        None => file_end!(),
+        Some(res) => match res.command {
+            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                let c = char.as_bytes()[0];
+                if syms.contains(&c) {
+                    Ok(Some(c))
+                } else {
+                    gullet.mouth().requeue(res.source.cause);
+                    Ok(None)
+                }
+            }
+            _ => {
+                gullet.mouth().requeue(res.source.cause);
+                Ok(None)
+            }
+        }
+    }
+}
+
+fn next_char_eq<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet,sym:u8) -> Result<bool,TeXError<ET::Token>> {
+    match gullet.get_next_unexpandable(state)? {
+        None => file_end!(),
+        Some(res) => match res.command {
+            BaseCommand::Char { char, .. } if char.as_bytes() == [sym] => Ok(true),
+            _ => {
+                gullet.mouth().requeue(res.source.cause);
+                Ok(false)
+            }
+        }
+    }
+}
 
 fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&CommandSource<ET>, name:&'static str)
                                                   -> Result<Frac,TeXError<ET::Token>> {
     let mut stack: Vec<(Option<Frac>,Option<fn(Frac,Frac) -> Frac>)> = vec!((None,None));
     'a: loop {
         catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd));
-        if catch_prim!(gullet.get_keyword(state,"(") => (name,cmd.clone())) {
+        if catch_prim!(next_char_eq::<ET>(state,gullet,b'(') => (name,cmd.clone())) {
             stack.push((None,None));
             continue 'a;
         }
@@ -33,9 +66,9 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
         loop {
             catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
             let kw = catch_prim!(
-                if stack.len()>1 {gullet.get_keywords(state,vec!("+","-","*","/",")"))}
-                else {gullet.get_keywords(state,vec!("*","/"))}
-                => ("numexpr",cmd.clone()));
+                if stack.len()>1 {next_char::<ET>(state,gullet,&[b'+',b'-',b'*',b'/',b')'])}
+                else {next_char::<ET>(state,gullet,&[b'*',b'/'])}
+                => (name,cmd.clone()));
             match kw {
                 None => {
                     match stack.last_mut() {
@@ -50,7 +83,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                         _ => throw!("Expected ')'" => cmd.cause.clone())
                     }
                 }
-                Some(r) if r == ")" => {
+                Some(b')' ) => {
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
@@ -67,7 +100,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                         _ => ()
                     }
                 }
-                Some(r) if r == "+" => {
+                Some(b'+') => {
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
@@ -78,7 +111,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                     *stack.last_mut().unwrap() = (Some(first),Some(|a,b| a + b));
                     continue 'a;
                 }
-                Some(r) if r == "-" => {
+                Some(b'-') => {
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
@@ -89,7 +122,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                     *stack.last_mut().unwrap() = (Some(first),Some(|a,b| a - b));
                     continue 'a;
                 }
-                Some(r) if r == "*" => {
+                Some(b'*') => {
                     let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.0,ret.1);
                     match stack.last_mut() {
@@ -100,7 +133,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                         _ => ()
                     }
                 }
-                Some(r) if r == "/" => {
+                Some(b'/') => {
                     let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.1,ret.0);
                     match stack.last_mut() {
@@ -123,7 +156,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
     let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
     'a: loop {
         catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
-        if catch_prim!(gullet.get_keyword(state,"(") => (name,cmd.clone())) {
+        if catch_prim!(next_char_eq::<ET>(state,gullet,b'(') => (name,cmd.clone())) {
             stack.push((None, None));
             continue 'a;
         }
@@ -131,9 +164,9 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
         loop {
             catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (name,cmd.clone()));
             let kw = catch_prim!(
-                if stack.len()>1 {gullet.get_keywords(state,vec!("+","-","*","/",")"))}
-                else {gullet.get_keywords(state,vec!("+","-","*","/"))}
-                => ("numexpr",cmd.clone()));
+                if stack.len()>1 {next_char::<ET>(state,gullet,&[b'+',b'-',b'*',b'/',b')'])}
+                else {next_char::<ET>(state,gullet,&[b'+',b'-',b'*',b'/'])}
+                => (name,cmd.clone()));
             match kw {
                 None => {
                     match stack.last_mut() {
@@ -148,7 +181,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                         _ => throw!("Expected ')'" => cmd.cause.clone())
                     }
                 }
-                Some(r) if r == ")" => {
+                Some(b')') => {
                     match stack.pop() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
@@ -156,7 +189,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                         _ => ()
                     }
                 }
-                Some(r) if r == "+" => {
+                Some(b'+') => {
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
@@ -167,7 +200,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                     *stack.last_mut().unwrap() = (Some(first), Some(|a, b| a + b));
                     continue 'a;
                 }
-                Some(r) if r == "-" => {
+                Some(b'-') => {
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
@@ -178,7 +211,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                     *stack.last_mut().unwrap() = (Some(first), Some(|a, b| a - b));
                     continue 'a;
                 }
-                Some(r) if r == "*" => {
+                Some(b'*') => {
                     let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.0,ret.1);
                     match stack.last_mut() {
@@ -189,7 +222,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                         _ => ()
                     }
                 }
-                Some(r) if r == "/" => {
+                Some(b'/') => {
                     let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.1,ret.0);
                     match stack.last_mut() {

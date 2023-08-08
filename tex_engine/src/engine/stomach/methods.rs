@@ -57,7 +57,9 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
         BeginGroup => Ok(state.stack_push(GroupType::Token)),
         EndGroup => match state.stack_pop() {
             Some((v,GroupType::Token)) => {
-                gullet.mouth().push_tokens(v);
+                let mut ret = gullet.mouth().new_tokensource();
+                for t in v {ret.push(t)}
+                gullet.mouth().push_tokens(ret);
                 Ok(())
             }
             Some((v,GroupType::Box(b))) => {

@@ -10,6 +10,7 @@
 pub mod string_source;
 pub mod methods;
 
+use std::hint::unreachable_unchecked;
 use std::vec::IntoIter;
 use log::debug;
 use crate::engine::EngineType;
@@ -29,7 +30,9 @@ pub trait Mouth<T:Token>:Sized+ Clone +'static {
     fn new() -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
-    fn push_tokens(&mut self,tks:Vec<T>);
+    fn push_tokens(&mut self,tks:TokenSource<T>);
+
+    fn new_tokensource(&mut self) -> TokenSource<T>;
 
     /// Insert a [`File`] into the [`Mouth`], to be processed next
     fn push_file<F:File<T::Char>>(&mut self,file:&F);
@@ -118,38 +121,65 @@ pub enum TeXMouthSource<T:Token> {
 
 /// A [`TokenSource`] is essentially a pretokenized [`Token`] list
 #[derive(Clone)]
-pub struct TokenSource<T:Token>(IntoIter<T>);
+pub struct TokenSource<T:Token>(Vec<T>,usize);
 impl<T:Token> TokenSource<T> {
-    pub(crate) fn new(ls:Vec<T>) -> Self { Self(ls.into_iter()) }
-    pub fn get_next(&mut self) -> Option<T> { self.0.next() }
+    pub fn new() -> Self { Self(Vec::with_capacity(1024),0) }
+    fn is_empty(&self) -> bool { self.0.len() == self.1 }
+    fn get_next(&mut self) -> (T,bool) {
+        let ret = unsafe { self.0.get(self.1).unwrap_unchecked().clone() };
+        self.1 += 1;
+        (ret,self.is_empty())
+    }
     fn preview(&self) -> String {
-        let tks : Vec<T> = self.0.clone().collect();
-        TokenList(&tks).to_string()
+        let tks  = &self.0[self.1..];
+        TokenList(tks).to_string()
         //crate::interpreter::tokens_to_string_default(&tks)
+    }
+    fn reset(mut self) -> Self {
+        self.0.clear();
+        self.1 = 0;
+        self
+    }
+    pub fn push(&mut self,t:T) {
+        self.0.push(t)
     }
 }
 
 #[derive(Clone)]
-pub struct StandardMouth<T:Token>{ sources:Vec<TeXMouthSource<T>>,buffer:Option<T>}
+pub struct StandardMouth<T:Token>{ sources:Vec<TeXMouthSource<T>>,buffer:Option<T>,news:Vec<TokenSource<T>>}
 
 impl<T:Token> Mouth<T> for StandardMouth<T> {
     fn new() -> Self {
-        StandardMouth { sources:Vec::new(),buffer:None}
+        StandardMouth { sources:Vec::with_capacity(64),buffer:None,news:Vec::with_capacity(64)}
+    }
+
+    fn new_tokensource(&mut self) -> TokenSource<T> {
+        match self.news.pop() {
+            Some(t) => t,
+            None => TokenSource::new()
+        }
     }
 
     //#[inline(always)]
-    fn push_tokens(&mut self,mut tks:Vec<T>) {
-        if tks.is_empty() { return }
+    fn push_tokens(&mut self,mut tks:TokenSource<T>) {
+        if tks.is_empty() {
+            self.news.push(tks);
+            return
+        }
         match std::mem::take(&mut self.buffer) {
             Some(t) => tks.push(t),
             _ => ()
         }
-        self.sources.push(TeXMouthSource::Token(TokenSource::new(tks)))
+        self.sources.push(TeXMouthSource::Token(tks))
     }
 
     fn push_noexpand(&mut self, tk: T) {
         match self.buffer.take() {
-            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
+            Some(tk2) => {
+                let mut new = self.new_tokensource();
+                new.push(tk2);
+                self.sources.push(TeXMouthSource::Token(new))
+            }
             None => ()
         }
         self.sources.push(TeXMouthSource::NoExpand(tk))
@@ -158,7 +188,11 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
     fn push_file<F: File<T::Char>>(&mut self, file: &F) {
         debug!("Pushing file {:?}", file.path());
         match self.buffer.take() {
-            Some(tk2) => self.sources.push(TeXMouthSource::Token(TokenSource::new(vec!(tk2)))),
+            Some(tk2) => {
+                let mut new = self.new_tokensource();
+                new.push(tk2);
+                self.sources.push(TeXMouthSource::Token(new))
+            }
             None => ()
         }
         self.sources.push(TeXMouthSource::String(StringSource::new(
@@ -170,7 +204,10 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
     fn requeue(&mut self, tk: T) {
         match self.buffer.take() {
             Some(tk2) => {
-                self.push_tokens(vec!(tk,tk2))
+                let mut next = self.new_tokensource();
+                next.push(tk);
+                next.push(tk2);
+                self.push_tokens(next)
             },
             None => self.buffer = Some(tk)
         }
@@ -179,7 +216,7 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
     fn has_next<ET: EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state: &ET::State) -> Result<bool, TeXError<T>> {
         match self.buffer {
             Some(_) => Ok(true),
-            _ => self.has_next_i(state.get_catcode_scheme(),state.get_endlinechar())
+            _ => self.has_next_i::<ET>(state)
         }
     }
 
@@ -249,67 +286,86 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
 }
 
 impl<T:Token> StandardMouth<T> {
-    fn has_next_i(&mut self, cc:&CategoryCodeScheme<T::Char>, endline: Option<T::Char>) -> Result<bool,TeXError<T>> {
+    fn has_next_i<ET: EngineType<Char=T::Char, Token=T>>(&mut self, state:&ET::State) -> Result<bool, TeXError<T>> {
         if let Some(source) = self.sources.last_mut() {
-            return if let Some(tk) = match source {
-                TeXMouthSource::Token(ts) => ts.get_next(),
-                TeXMouthSource::String(ss) => ss.get_next(cc, endline)?,
-                TeXMouthSource::NoExpand(t) => return Ok(true)
-            } {
-                self.buffer = Some(tk);
-                Ok(true)
-            } else {
-                match source {
-                    TeXMouthSource::String(_) => {
-                        self.buffer = Some(T::new(BaseToken::Char(T::Char::from(b'\n'),CategoryCode::EOF),None));
-                        self.sources.pop();
-                        Ok(true)
-                    }
-                    _ => {
-                        self.sources.pop();
-                        self.has_next_i(cc, endline)
+            match source {
+                TeXMouthSource::Token(ts) => Ok(true),
+                TeXMouthSource::String(ss) => {
+                    match ss.get_next(state.get_catcode_scheme(), state.get_endlinechar())? {
+                        Some(t) => {
+                            self.buffer = Some(t);
+                            Ok(true)
+                        },
+                        None => {
+                            match self.pop_string::<ET>(state) {
+                                None => self.has_next_i::<ET>(state),
+                                Some(t) => {
+                                    self.buffer = Some(t);
+                                    Ok(true)
+                                }
+                            }
+                        }
                     }
                 }
+                TeXMouthSource::NoExpand(t) => return Ok(true)
             }
         } else { Ok(false) }
     }
-    fn get_next_i<ET:EngineType<Char=T::Char,Token=T>>(&mut self, state:&ET::State) -> Result<Option<(T, bool)>,TeXError<T>> {
+    fn get_next_i<ET: EngineType<Char=T::Char, Token=T>>(&mut self, state: &ET::State) -> Result<Option<(T, bool)>, TeXError<T>> {
         loop {
             if let Some(source) = self.sources.last_mut() {
-                if let Some(tk) = match source {
-                    TeXMouthSource::Token(ts) => ts.get_next(),
-                    TeXMouthSource::String(ss) => ss.get_next(state.get_catcode_scheme(), state.get_endlinechar())?,
+                match source {
+                    TeXMouthSource::String(ss) =>
+                        match ss.get_next(state.get_catcode_scheme(), state.get_endlinechar())? {
+                            Some(t) => return Ok(Some((t,true))),
+                            _ => match self.pop_string::<ET>(state) {
+                                None => (),
+                                Some(t) => return Ok(Some((t,true)))
+                            }
+                        }
+                    TeXMouthSource::Token(ts) => match ts.get_next() {
+                        (t, true) => {
+                            let old = unsafe {
+                                match self.sources.pop().unwrap_unchecked() {
+                                    TeXMouthSource::Token(ts) => ts,
+                                    _ => unreachable_unchecked()
+                                }
+                            };
+                            self.news.push(old.reset());
+                            return Ok(Some((t,true)))
+                        }
+                        (t, _) => return Ok(Some((t,true)))
+                    }
                     TeXMouthSource::NoExpand(_) => {
                         match self.sources.pop() {
                             Some(TeXMouthSource::NoExpand(t)) => return Ok(Some((t, false))),
                             _ => unreachable!()
                         }
                     }
-                } {
-                    return Ok(Some((tk, true)))
-                } else {
-                    match source {
-                        TeXMouthSource::String(s) => {
-                            match &s.source {
-                                Some(s) => (state.outputs().file_close)(&*s),
-                                None => ()
-                            }
-                            self.sources.pop();
-                            debug!("file end; inserting \\everyeof");
-                            let mut v = state.get_primitive_toks("everyeof");
-                            if v.is_empty() {
-                                return Ok(Some((T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None), true)))
-                            } else {
-                                v.push(T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None));
-                                self.push_tokens(v);
-                            }
-                        }
-                        _ => {
-                            self.sources.pop();
-                        }
-                    }
                 }
             } else { return Ok(None) }
+        }
+    }
+
+    fn pop_string<ET: EngineType<Char=T::Char, Token=T>>(&mut self,state:&ET::State) -> Option<ET::Token> {
+        let ss = unsafe{ match self.sources.pop() {
+            Some(TeXMouthSource::String(ss)) => ss,
+            _ => unreachable_unchecked()
+        }};
+        match ss.source {
+            Some(s) => (state.outputs().file_close)(&s),
+            None => ()
+        }
+        debug!("file end; inserting \\everyeof");
+        let mut v = state.get_primitive_toks("everyeof"); // TODO
+        if v.is_empty() {
+            Some(T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None))
+        } else {
+            let mut next = self.new_tokensource();
+            next.push(T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None));
+            for t in v { next.push(t);}
+            self.push_tokens(next);
+            None
         }
     }
 }

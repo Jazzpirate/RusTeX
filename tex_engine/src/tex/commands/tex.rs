@@ -612,9 +612,13 @@ pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET:
 
 pub fn endgroup<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<(),TeXError<ET::Token>> {
+    let mut ret = gullet.mouth().new_tokensource();
     match state.stack_pop() {
-        Some((v,GroupType::CS)) => {
-            gullet.mouth().push_tokens(v);
+        Some((mut v,GroupType::CS)) => {
+            for t in v.drain(..) {
+                ret.push(t);
+            }
+            gullet.mouth().push_tokens(ret);
             Ok(())
         }
         _ => throw!("No group to end" => cmd.cause)
@@ -821,7 +825,10 @@ pub fn futurelet<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
     state.set_command_for_tk(cs,newcmd,global);
-    gullet.mouth().push_tokens(vec!(first,second));
+    let mut ret = gullet.mouth().new_tokensource();
+    ret.push(first);
+    ret.push(second);
+    gullet.mouth().push_tokens(ret);
     Ok(())
 }
 
@@ -876,7 +883,11 @@ pub fn hbox<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
             BaseCommand::Relax => {},
             BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
                 state.stack_push(GroupType::Box(BoxMode::H));
-                gullet.mouth().push_tokens(state.get_primitive_toks("everyhbox"));
+                let mut ret = gullet.mouth().new_tokensource();
+                for t in state.get_primitive_toks("everyhbox") {
+                    ret.push(t.clone());
+                }
+                gullet.mouth().push_tokens(ret);
                 return Ok(Box::new(move |s,gu,children| {
                     Some(HVBox::H(HBox {
                         children, to:to.clone(), spread:spread.clone(),
@@ -1295,7 +1306,7 @@ pub fn lowercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
                                          -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace => "\\lowercase");
     catch_prim!(expand_until_space::<ET>(gullet,state) => (LOWERCASE,cmd));
-    let mut ret = vec!();
+    let mut ret = gullet.mouth().new_tokensource();
     catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
         BaseToken::Char(c,cc) => {
             let nc = s.get_lccode(c);
@@ -2399,14 +2410,14 @@ pub fn toks_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
     state.set_toks_register(i,v,global);
     Ok(())
 }
-pub fn toks_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
+pub fn toks_get<'a,ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
                 -> Result<Vec<ET::Token>,TeXError<ET::Token>> {
     let i = catch_prim!(gullet.get_int(state) => (TOKS,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    Ok(state.get_toks_register(i))
+    Ok(state.get_toks_register(i).clone())
 }
 
 pub static TOKSDEF : &str = "toksdef";
@@ -2463,7 +2474,7 @@ pub fn uppercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
                                          -> Result<(),TeXError<ET::Token>> {
     debug_log!(trace => "\\uppercase");
     catch_prim!(expand_until_space::<ET>(gullet,state) => (UPPERCASE,cmd));
-    let mut ret = vec!();
+    let mut ret = gullet.mouth().new_tokensource();
     catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
         BaseToken::Char(c,cc) => {
             let nc = s.get_uccode(c);

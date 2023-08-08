@@ -132,7 +132,9 @@ impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     fn switch_mouth(&mut self, tks: Vec<ET::Token>) -> ET::Mouth {
         let old = std::mem::replace(&mut self.mouth, ET::Mouth::new());
-        self.mouth.push_tokens(tks);
+        let mut next = self.mouth.new_tokensource();
+        for t in tks {next.push(t)}
+        self.mouth.push_tokens(next);
         old
     }
     fn restore_mouth(&mut self, mouth: ET::Mouth) {
@@ -164,11 +166,11 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     fn expand(&mut self, state: &mut ET::State, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET::Token>> {
         match ret.command {
             BaseCommand::Def(d) => {
-                let mut vec = Vec::new();
+                let mut vec = self.mouth.new_tokensource();
                 expand_def(&*d,state,&mut self.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
                            &mut |_,t| Ok(vec.push(t))
                 )?;
-                self.mouth.push_tokens(vec.clone());
+                self.mouth.push_tokens(vec);
                 Ok(None)
             }
             // expandable commands that do not expand to new tokens
@@ -177,7 +179,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
                 Ok(None)
             }
             BaseCommand::Expandable {apply,..} => {
-                let mut vec = Vec::new();//with_capacity(512);
+                let mut vec = self.mouth.new_tokensource();
                 apply(state,self,ret.source,&mut |_,t| Ok(vec.push(t)))?;
                 self.mouth.push_tokens(vec);
                 Ok(None)

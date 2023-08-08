@@ -99,9 +99,9 @@ impl<C:CharType> Token for BaseToken<C> {
 }
 
 /// A list of [`Token`]s
-pub struct TokenList<'a,T:Token>(pub &'a Vec<T>);
+pub struct TokenList<'a,T:Token>(pub &'a [T]);
 impl<'a,T:Token> Into<TokenList<'a,T>> for &'a Vec<T> {
-    fn into(self) -> TokenList<'a,T> { TokenList(self) }
+    fn into(self) -> TokenList<'a,T> { TokenList(self.as_slice()) }
 }
 impl<T:Token> Display for TokenList<'_,T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

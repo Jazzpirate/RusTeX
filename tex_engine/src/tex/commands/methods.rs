@@ -541,7 +541,7 @@ fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut 
     {
         debug_log!(debug=>"Arguments:");
         for i in 0..d.arity {
-            debug_log!(debug=>"  - {}",TokenList(&args[i as usize].as_vec()));
+            debug_log!(debug=>"  - {}",TokenList(&args[i as usize]));
         }
     }
     let mut replacement = d.replacement.iter();
