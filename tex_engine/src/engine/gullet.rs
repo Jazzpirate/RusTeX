@@ -30,18 +30,17 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// Returns a reference to the [`Mouth`].
     fn mouth(&mut self) -> &mut ET::Mouth;
 
-    fn switch_mouth(&mut self,tks:Vec<ET::Token>) -> ET::Mouth;
-    fn restore_mouth(&mut self,mouth:ET::Mouth);
+    fn with_mouth<F:FnMut(&mut Self) -> R,R>(&mut self,tks:Vec<Token<ET>>,f:F) -> R;
 
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
     /// (or [`None`] if the [`Mouth`] is empty)
-    fn get_next_unexpandable(&mut self,state:&mut ET::State) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
+    fn get_next_unexpandable(&mut self,state:&mut ET::State) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
         methods::get_next_unexpandable(self,state)
     }
 
     /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
     /// the input stream, after expanding macros as necessary.
-    fn get_next_stomach_command(&mut self, state: &mut ET::State) -> Result<Option<StomachCommand<ET>>,TeXError<ET::Token>> {
+    fn get_next_stomach_command(&mut self, state: &mut ET::State) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {
         Ok(match self.get_next_unexpandable(state)? {
             Some(rt) => Some(StomachCommand::from_resolved(rt)?),
             None => None
@@ -50,60 +49,60 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 
     /// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
     /// If not expandable, returns the [`ResolvedToken`] for `tk`
-    fn expand(&mut self,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>>;
+    fn expand(&mut self,state:&mut ET::State,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>>;
 
     /// Reads a number from the input stream.
-    fn get_int(&mut self, state:&mut ET::State) -> Result<ET::Int,TeXError<ET::Token>> {
+    fn get_int(&mut self, state:&mut ET::State) -> Result<ET::Int,TeXError<ET>> {
         numeric_methods::get_int::<ET>(self, state)
     }
 
     /// Reads a dimension from the input stream.
-    fn get_dim(&mut self, state:&mut ET::State) -> Result<ET::Dim,TeXError<ET::Token>> {
+    fn get_dim(&mut self, state:&mut ET::State) -> Result<ET::Dim,TeXError<ET>> {
         numeric_methods::get_dim::<ET>(self, state)
     }
 
     /// Reads a skip from the input stream.
-    fn get_skip(&mut self, state:&mut ET::State) -> Result<Skip<ET::SkipDim>,TeXError<ET::Token>> {
+    fn get_skip(&mut self, state:&mut ET::State) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
         numeric_methods::get_skip::<ET>(self, state)
     }
 
     /// Reads a muskip from the input stream.
-    fn get_muskip(&mut self, state:&mut ET::State) -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET::Token>> {
+    fn get_muskip(&mut self, state:&mut ET::State) -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
         numeric_methods::get_muskip::<ET>(self, state)
     }
 
-    fn get_group(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+    fn get_group(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         methods::get_group::<ET>(self, state,f)
     }
 
-    fn get_expanded_group(&mut self, state:&mut ET::State, expand_protected:bool, keep_the:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+    fn get_expanded_group(&mut self, state:&mut ET::State, expand_protected:bool, keep_the:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
         methods::get_expanded_group::<ET>(self, state, expand_protected, keep_the, err_on_unknowns,f)
     }
 
-    fn get_braced_string(&mut self, state:&mut ET::State) -> Result<String,TeXError<ET::Token>> {
+    fn get_braced_string(&mut self, state:&mut ET::State) -> Result<String,TeXError<ET>> {
         methods::get_braced_string::<ET>(self, state)
     }
 
     /// read a single keyword from the input stream; returns `true` if the keyword is found.
-    fn get_keyword<'a>(&mut self, state:&mut ET::State, keyword:&'a str) -> Result<bool,TeXError<ET::Token>> {
+    fn get_keyword<'a>(&mut self, state:&mut ET::State, keyword:&'a str) -> Result<bool,TeXError<ET>> {
         methods::get_keyword::<ET>(self, state, keyword)
     }
 
     /// reads one of several optional keywords from the input stream;
     /// returns `None` if none of the keywords are found.
-    fn get_keywords<'a>(&mut self, state:&mut ET::State, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET::Token>> {
+    fn get_keywords<'a>(&mut self, state:&mut ET::State, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
         methods::get_keywords::<ET>(self, state, keywords)
     }
 
-    fn get_control_sequence(&mut self, state:&mut ET::State) -> Result<ET::Token,TeXError<ET::Token>> {
+    fn get_control_sequence(&mut self, state:&mut ET::State) -> Result<Token<ET>,TeXError<ET>> {
         methods::get_control_sequence::<ET>(self, state)
     }
 
-    fn get_string(&mut self,state:&mut ET::State) -> Result<String,TeXError<ET::Token>> {
+    fn get_string(&mut self,state:&mut ET::State) -> Result<String,TeXError<ET>> {
         methods::get_string::<ET>(self, state)
     }
 
-    fn get_font(&mut self,state:&mut ET::State) -> Result<ET::Font,TeXError<ET::Token>> {
+    fn get_font(&mut self,state:&mut ET::State) -> Result<ET::Font,TeXError<ET>> {
         methods::get_font::<ET>(self, state)
     }
 
@@ -118,8 +117,8 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
     mouth:ET::Mouth,
     in_conditionals:Vec<ConditionalBranch>,
-    args_pool:[Vec<ET::Token>;9],
-    delimiter_pool:Vec<ET::Token>
+    args_pool:[Vec<Token<ET>>;9],
+    delimiter_pool:Vec<Token<ET>>
 }
 impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
     pub fn new(mouth:ET::Mouth) -> Self {
@@ -130,12 +129,11 @@ impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
     }
 }
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
-    fn switch_mouth(&mut self, tks: Vec<ET::Token>) -> ET::Mouth {
+    fn with_mouth<F:FnMut(&mut Self) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
         let old = std::mem::replace(&mut self.mouth, ET::Mouth::new_with(tks));
-        old
-    }
-    fn restore_mouth(&mut self, mouth: ET::Mouth) {
-        self.mouth = mouth
+        let ret = f(self);
+        self.mouth = old;
+        ret
     }
     fn mouth(&mut self) -> &mut ET::Mouth { &mut self.mouth }
 
@@ -160,11 +158,11 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
         (self.in_conditionals.last().copied(),self.in_conditionals.len() - 1)
     }
 
-    fn expand(&mut self, state: &mut ET::State, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET::Token>> {
+    fn expand(&mut self, state: &mut ET::State, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET>> {
         match ret.command {
             BaseCommand::Def(d) => {
                 let mut vec = self.mouth.new_tokensource();
-                expand_def(&*d,state,&mut self.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
+                expand_def(&d,state,&mut self.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
                            &mut |_,t| Ok(vec.push(t))
                 )?;
                 self.mouth.push_tokens(vec);

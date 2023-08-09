@@ -46,7 +46,7 @@ pub struct StomachCommand<ET:EngineType> {
 }
 
 impl <ET:EngineType> StomachCommand<ET> {
-    pub fn from_resolved(resolved:ResolvedToken<ET>) -> Result<Self,TeXError<ET::Token>> {
+    pub fn from_resolved(resolved:ResolvedToken<ET>) -> Result<Self,TeXError<ET>> {
         Ok(Self {
             command:BaseStomachCommand::from_base(resolved.command,&resolved.source)?,
             source:resolved.source
@@ -57,7 +57,7 @@ impl <ET:EngineType> StomachCommand<ET> {
 
 #[derive(Clone,Debug)]
 pub struct CommandSource<ET:EngineType> {
-    pub cause:ET::Token,
+    pub cause:Token<ET>,
     pub reference:Option<ET::CommandReference>
 }
 
@@ -90,37 +90,37 @@ impl<ET:EngineType<CommandReference = Self>> CommandReference<ET> for () {
     fn new(base: &BaseCommand<ET>, source: &CommandSource<ET>) -> Self { () }
 }
 
-pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&ET::State,ET::Token) -> Result<(),TeXError<ET::Token>>;
-pub type UnexpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<(),TeXError<ET::Token>>;
-pub type AssignmentFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET::Token>>;
-pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET::Token>>>;
-pub type ConditionalFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<bool,TeXError<ET::Token>>;
-pub type ExpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,TokenCont<ET>) -> Result<(),TeXError<ET::Token>>;
+pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&ET::State,Token<ET>) -> Result<(),TeXError<ET>>;
+pub type UnexpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<(),TeXError<ET>>;
+pub type AssignmentFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>;
+pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
+pub type ConditionalFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
+pub type ExpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,TokenCont<ET>) -> Result<(),TeXError<ET>>;
 pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<HVBox<ET>>>;
-pub type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET::Token>>;
-pub type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET::Token>>;
+pub type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
+pub type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
 
-pub type ValueFun<ET:EngineType,A> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<A,TeXError<ET::Token>>;
-pub type FontFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<ET::Font,TeXError<ET::Token>>;
+pub type ValueFun<ET:EngineType,A> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<A,TeXError<ET>>;
+pub type FontFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<ET::Font,TeXError<ET>>;
 
 pub trait Assignable<ET:EngineType> {
     fn get_register(state:&ET::State,index:usize) -> Self;
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>>;
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>>;
     fn get_primitive(state:&ET::State,name:&'static str) -> Self;
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>>;
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>>;
 }
 
-impl<ET:EngineType> Assignable<ET> for Vec<ET::Token> {
+impl<ET:EngineType> Assignable<ET> for Vec<Token<ET>> {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_toks_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
         set_toks_register(state,gullet,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_toks(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
         set_primitive_toks(state,gullet,cmd,name,global)
     }
 }
@@ -128,13 +128,13 @@ impl<ET:EngineType<Int=i32>> Assignable<ET> for i32 {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_int_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
         set_int_register(state,gullet,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_int(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
         set_primitive_int(state,gullet,cmd,name,global)
     }
 }
@@ -142,13 +142,13 @@ impl<ET:EngineType<Dim=Dimi32>> Assignable<ET> for Dimi32 {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_dim_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
         set_dim_register(state,gullet,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_dim(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
         set_primitive_dim(state,gullet,cmd,name,global)
     }
 }
@@ -156,13 +156,13 @@ impl<ET:EngineType> Assignable<ET> for Skip<ET::SkipDim> {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_skip_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
         set_skip_register(state,gullet,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_skip(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
         set_primitive_skip(state,gullet,cmd,name,global)
     }
 }
@@ -170,13 +170,13 @@ impl<ET:EngineType> Assignable<ET> for MuSkip<ET::MuDim,ET::MuStretchShrinkDim> 
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_muskip_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
         set_muskip_register(state,gullet,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_muskip(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET::Token>> {
+    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
         set_primitive_muskip(state,gullet,cmd,name,global)
     }
 }
@@ -211,7 +211,7 @@ impl<ET:EngineType,A:Assignable<ET>> Debug for ValueCommand<ET,A> {
     }
 }
 impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
-    pub fn get(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<A,TeXError<ET::Token>> {
+    pub fn get(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<A,TeXError<ET>> {
         match self {
             ValueCommand::Value{get,..} => get(state, gullet, cmd.clone()),
             ValueCommand::Complex{get,..} => get(state, gullet, cmd.clone()),
@@ -219,7 +219,7 @@ impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
             ValueCommand::Register(index) => Ok(A::get_register(state,*index))
         }
     }
-    pub fn set(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
+    pub fn set(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET>> {
         match self {
             ValueCommand::Value{name,..} => throw!("Not allowed to assign to {}",name),
             ValueCommand::Complex{set,..} => set(state, gullet, cmd,global),
@@ -234,7 +234,7 @@ impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
 #[derive(Clone)]
 pub enum BaseCommand<ET:EngineType>{
     /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
-    Def(Ptr<Def<ET::Token>>),
+    Def(Def<ET>),
     /// A conditional, e.g. `\ifnum`, `\ifdim`, `\iftrue`, `\iffalse`, returning `true` or `false`
     Conditional{name:&'static str,apply:ConditionalFun<ET>},
     /// An expandable primitive to be processed in the [`Gullet`](crate::engine::gullet::Gullet), e.g.
@@ -266,7 +266,7 @@ pub enum BaseCommand<ET:EngineType>{
     /// An (optionally) assignable [`MuSkip`](crate::tex::numbers::MuSkip) value, e.g. `\thinmuskip` or the result of a `\muskipdef`
     MuSkip(ValueCommand<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>),
     /// An (optionally) assignable token value, e.g. `\everypar` or the result of a `\toksdef`
-    Toks(ValueCommand<ET,Vec<ET::Token>>),
+    Toks(ValueCommand<ET,Vec<Token<ET>>>),
     /// A [`Font`](crate::tex::fonts::Font)
     Font(ET::Font),
     FontCommand { name:&'static str,get:FontFun<ET>,set:Option<AssignmentFun<ET>> },
@@ -279,7 +279,7 @@ pub enum BaseCommand<ET:EngineType>{
 impl<ET:EngineType> PartialEq for BaseCommand<ET> {
     fn eq(&self, other: &Self) -> bool {
         match (self,other) {
-            (BaseCommand::Def(a), BaseCommand::Def(b)) => a == b,
+            (BaseCommand::Def(a), BaseCommand::Def(b)) => **a == **b,
             (BaseCommand::Conditional{name:a,..}, BaseCommand::Conditional{name:b,..}) => a == b,
             (BaseCommand::Expandable {name:a,..}, BaseCommand::Expandable {name:c,..}) => a == c,
             (BaseCommand::Unexpandable {name:a,..}, BaseCommand::Unexpandable {name:b,..}) => a == b,
@@ -307,7 +307,7 @@ impl<ET:EngineType> PartialEq for BaseCommand<ET> {
 impl<ET:EngineType> Debug for BaseCommand<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            BaseCommand::Def(def) => <Def<ET::Token> as Debug>::fmt(def,f),
+            BaseCommand::Def(def) => <Def<ET> as Debug>::fmt(def,f),
             BaseCommand::Conditional{name,..} => write!(f, "Conditional {}", name),
             BaseCommand::Expandable {name,..} => write!(f, "Gullet Command {}", name),
             BaseCommand::Unexpandable {name,..} => write!(f, "Stomach Command {}", name),
@@ -371,7 +371,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
 }
 
 impl<ET:EngineType> BaseStomachCommand<ET> {
-    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>) -> Result<Self,TeXError<ET::Token>> {
+    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>) -> Result<Self,TeXError<ET>> {
         use BaseCommand::*;
         use CategoryCode::*;
         Ok(match value {
@@ -379,7 +379,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             | Skip(ValueCommand::Value {..})| MuSkip(ValueCommand::Value {..}) | Toks(ValueCommand::Value {..})
             | FontCommand{set:std::option::Option::None,..} =>
                 todo!(),
-            None => match source.cause.base() {
+            None => match &source.cause.base {
                 BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
                 BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
             }
@@ -431,19 +431,27 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
 
 
 /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
-#[derive(PartialEq,Clone)]
-pub struct Def<T:Token>{
+#[derive(Clone)]
+pub struct DefI<ET:EngineType>{
     pub protected:bool,
     pub long:bool,
     pub outer:bool,
     pub endswithbrace:bool,
     pub arity:u8,
-    pub signature:Vec<ParamToken<T>>,
-    pub replacement:Vec<ExpToken<T>>
+    pub signature:Vec<ParamToken<ET>>,
+    pub replacement:Vec<ExpToken<ET>>
 }
-impl<T:Token> Def<T>{
+impl<ET:EngineType> PartialEq for DefI<ET> {
+    fn eq(&self, other: &Self) -> bool {
+        self.protected == other.protected && self.long == other.long && self.outer == other.outer &&
+            self.endswithbrace == other.endswithbrace && self.arity == other.arity &&
+        self.signature == other.signature && self.replacement == other.replacement
+    }
+}
 
-    pub fn simple(replacement:Vec<T>) -> Ptr<Self> {
+pub(crate) type Def<ET> = Ptr<DefI<ET>>;
+impl<ET:EngineType> DefI<ET>{
+    pub fn simple(replacement:Vec<Token<ET>>) -> Def<ET> {
         Ptr::new(Self {
             protected:false,
             long:false,
@@ -455,7 +463,7 @@ impl<T:Token> Def<T>{
         })
     }
 }
-impl<T:Token> Debug for Def<T> {
+impl<ET:EngineType> Debug for DefI<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for x in &self.signature {
             write!(f,"{:?}",x)?;
@@ -468,12 +476,22 @@ impl<T:Token> Debug for Def<T> {
     }
 }
 
-#[derive(Clone,PartialEq)]
-pub enum ParamToken<T:Token> {
+#[derive(Clone)]
+pub enum ParamToken<ET:EngineType> {
     Param,
-    Token(T)
+    Token(Token<ET>)
 }
-impl<T:Token> Debug for ParamToken<T> {
+impl<ET:EngineType> PartialEq for ParamToken<ET> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self,other) {
+            (Self::Param,Self::Param) => true,
+            (Self::Token(t1),Self::Token(t2)) => t1 == t2,
+            _ => false
+        }
+    }
+}
+
+impl<ET:EngineType> Debug for ParamToken<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Param => write!(f,"#i"),
@@ -482,13 +500,23 @@ impl<T:Token> Debug for ParamToken<T> {
     }
 }
 
-#[derive(Clone,PartialEq)]
-pub enum ExpToken<T:Token> {
-    Param(T,u8),
-    Token(T),
-    ParamToken(T)
+#[derive(Clone)]
+pub enum ExpToken<ET:EngineType> {
+    Param(Token<ET>,u8),
+    Token(Token<ET>),
+    ParamToken(Token<ET>)
 }
-impl<T:Token> Debug for ExpToken<T> {
+impl<ET:EngineType> PartialEq for ExpToken<ET> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self,other) {
+            (Self::Param(t1,u1),Self::Param(t2,u2)) => t1 == t2 && u1 == u2,
+            (Self::Token(t1),Self::Token(t2)) => t1 == t2,
+            (Self::ParamToken(t1),Self::ParamToken(t2)) => t1 == t2,
+            _ => false
+        }
+    }
+}
+impl<ET:EngineType> Debug for ExpToken<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Param(t,u8) => write!(f,"{}{}",t,u8+1),

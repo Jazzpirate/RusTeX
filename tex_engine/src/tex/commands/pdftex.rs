@@ -30,7 +30,7 @@ pub static PDFTEX_REVISION: i64 = 25;
 /// "ifpdfabsnum"
 pub static IFPDFABSNUM : &str = "ifpdfabsnum";
 /// `\ifpdfabsnum`: Compare the absolute values of two numbers.
-pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET::Token>> {
+pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsnum");
     let i1 = catch_prim!(gullet.get_int(state) => (IFPDFABSNUM,cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => (IFPDFABSNUM,cmd)) {
@@ -49,7 +49,7 @@ pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 /// "ifpdfabsdim"
 pub static IFPDFABSDIM : &str = "ifpdfabsdim";
 /// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
-pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET::Token>> {
+pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsdim");
     let i1 = catch_prim!(gullet.get_dim(state) => (IFPDFABSDIM,cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => (IFPDFABSDIM,cmd)) {
@@ -68,7 +68,7 @@ pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 /// "pdffilesize"
 pub static PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
-pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,fun:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdffilesize");
     let filename = catch_prim!(gullet.get_braced_string(state) => (PDFFILESIZE,cmd));
     //gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
@@ -87,18 +87,18 @@ pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 pub static PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
 /// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
 pub fn pdfglyphtounicode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-                                  -> Result<(), TeXError<ET::Token>> {
+                                  -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state, &mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
-    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
+    catch_prim!(gullet.mouth().read_argument(state, &mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
+    catch_prim!(gullet.mouth().read_argument(state,&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
     Ok(())
 }
 
 /// "pdfstrcmp"
 pub static PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
-pub fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdfstrcmp");
     let str1 = catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd));
     let str2 = catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd));
@@ -112,7 +112,7 @@ pub fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 pub static PDFTEXVERSION : &str = "pdftexversion";
 /// ` \pdftexversion`: Return the [`PDF_TEX_VERSION`] as [`Int`].
 pub fn pdftexversion<ET:EngineType>(cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(PDF_TEX_VERSION) => (PDFTEXVERSION,cmd)))
 }
 
@@ -120,7 +120,7 @@ pub fn pdftexversion<ET:EngineType>(cmd:CommandSource<ET>)
 pub static PDFMAJORVERSION : &str = "pdfmajorversion";
 /// `\pdfmajorversion`: Return the [`PDF_MAJOR_VERSION`] as [`Int`].
 pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(PDF_MAJOR_VERSION) => (PDFMAJORVERSION,cmd)))
 }
 
@@ -129,7 +129,7 @@ pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
 pub static PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
 pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     string_to_tokens::<ET>(PDFTEX_REVISION.to_string().as_bytes(),state,f)
 }
 

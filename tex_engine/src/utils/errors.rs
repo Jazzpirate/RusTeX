@@ -1,21 +1,19 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::marker::PhantomData;
 use crate::engine::EngineType;
 use crate::tex::commands::Def;
-use crate::tex::token::Token;
-use crate::utils::strings::TeXStr;
+use crate::tex::token::{Token, TokenReference};
 #[derive(Clone,Debug)]
-pub struct TeXError<T:Token> {
+pub struct TeXError<ET:EngineType> {
     pub msg:String,
-    pub cause:Option<T>,
-    pub source:Option<Box<TeXError<T>>>,
+    pub cause:Option<Token<ET>>,
+    pub source:Option<Box<TeXError<ET>>>,
 }
-impl<T:Token> TeXError<T> {
+impl<ET:EngineType> TeXError<ET> {
     pub fn throw_string(self) -> String {
         let mut ret = self.msg;
         match self.cause {
-            Some(tk) => match tk.sourceref_trace() {
+            Some(tk) => match tk.sourceref.as_ref().map(|t| t.trace()).flatten() {
                 Some(trace) => {
                     ret.push_str(format!(": {} - {}",tk,trace).as_str());
                 }
@@ -34,12 +32,12 @@ impl<T:Token> TeXError<T> {
         ret
     }
 }
-impl<T:Token> Display for TeXError<T> {
+impl<ET:EngineType> Display for TeXError<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"{}",self.msg)
     }
 }
-impl<T:Token> Error for TeXError<T> {
+impl<ET:EngineType> Error for TeXError<ET> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match &self.source {
             Some(src) => Some(&*src),

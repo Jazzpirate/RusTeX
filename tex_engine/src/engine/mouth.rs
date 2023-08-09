@@ -11,7 +11,6 @@ pub mod string_source;
 pub mod methods;
 
 use std::hint::unreachable_unchecked;
-use std::vec::IntoIter;
 use log::debug;
 use crate::engine::EngineType;
 use crate::engine::filesystem::File;
@@ -20,44 +19,44 @@ use crate::engine::state::State;
 use crate::{file_end, throw};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::TokenCont;
-use crate::tex::token::{BaseToken, Token, TokenList, TokenWithSourceref};
+use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
-pub trait Mouth<T:Token>:Sized+ Clone +'static {
+pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized+ Clone +'static {
     fn new() -> Self;
 
-    fn new_with(tks:Vec<T>) -> Self;
+    fn new_with(tks:Vec<Token<ET>>) -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
-    fn push_tokens(&mut self,tks:TokenSource<T>);
+    fn push_tokens(&mut self,tks:TokenSource<ET>);
 
-    fn new_tokensource(&mut self) -> TokenSource<T>;
+    fn new_tokensource(&mut self) -> TokenSource<ET>;
 
     /// Insert a [`File`] into the [`Mouth`], to be processed next
-    fn push_file<F:File<T::Char>>(&mut self,file:&F);
+    fn push_file(&mut self,file:&ET::File);
 
     /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
-    fn push_noexpand(&mut self,tk:T);
+    fn push_noexpand(&mut self,tk:Token<ET>);
 
     /// Insert a single [`Token`] into the [`Mouth`], to be processed next
     /// (for implementations with a peek buffer)
-    fn requeue(&mut self,tk:T);
+    fn requeue(&mut self,tk:Token<ET>);
 
-    fn has_next<ET:EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<bool,TeXError<T>>;
+    fn has_next(&mut self, state:&ET::State) -> Result<bool,TeXError<ET>>;
 
     /// Return the next [`Token`] from the [`Mouth`], and whether to expand it (due to `\noexpand`)
     //#[inline(always)]
-    fn get_next<ET:EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self,state:&ET::State) -> Result<Option<(T,bool)>,TeXError<T>>;
+    fn get_next(&mut self,state:&ET::State) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>>;
 
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn get_next_nopar<ET:EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self,state:&ET::State) -> Result<Option<(T,bool)>,TeXError<T>> {
-        match self.get_next::<ET>(state)? {
+    fn get_next_nopar(&mut self,state:&ET::State) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
+        match self.get_next(state)? {
             Some((t,b)) => {
-                match t.base() {
-                    BaseToken::CS(name) if *name == T::Char::par_token() =>
+                match &t.base {
+                    BaseToken::CS(name) if *name == ET::Char::par_token() =>
                         throw!("Paragraph ended while reading argument" => t),
                     BaseToken::Char(_,CategoryCode::EOF) =>
                         file_end!(),
@@ -77,15 +76,15 @@ pub trait Mouth<T:Token>:Sized+ Clone +'static {
 
     fn line_no(&self) -> usize;
 
-    fn endinput<ET:EngineType<Token=T,Mouth=Self>>(&mut self,state:&mut ET::State);
+    fn endinput(&mut self,state:&mut ET::State);
 
     /// Skip whitespace characters from the [`Mouth`]
-    fn skip_whitespace<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&ET::State) -> Result<(),TeXError<T>> {
+    fn skip_whitespace(&mut self, state:&ET::State) -> Result<(),TeXError<ET>> {
         methods::skip_whitespace::<ET>(self,state)
     }
 
     /// read optional `=` characters from the [`Mouth`]
-    fn skip_eq_char<ET:EngineType<Token=T,Mouth=Self>>(&mut self,state:&ET::State) -> Result<(),TeXError<T>> {
+    fn skip_eq_char(&mut self,state:&ET::State) -> Result<(),TeXError<ET>> {
         methods::skip_eq_char::<ET>(self,state)
     }
 
@@ -93,19 +92,19 @@ pub trait Mouth<T:Token>:Sized+ Clone +'static {
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    fn read_argument<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
+    fn read_argument(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         methods::read_argument::<ET>(self,state,f)
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn read_argument_nopar<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
+    fn read_argument_nopar(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         methods::read_argument_nopar::<ET>(self,state,f)
     }
 
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
-    fn read_until_endgroup<ET:EngineType<Token=T,Mouth=Self>>(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<T>> {
+    fn read_until_endgroup(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         methods::read_until_endgroup::<ET>(self,state,f)
     }
 }
@@ -113,22 +112,22 @@ pub trait Mouth<T:Token>:Sized+ Clone +'static {
 
 /// Either a [`TokenSource`] or a [`StringSource`]
 #[derive(Clone)]
-pub enum TeXMouthSource<T:Token> {
-    Token(TokenSource<T>),
+pub enum TeXMouthSource<ET:EngineType> {
+    Token(TokenSource<ET>),
     /// Only because of `\noexpand`, which sets the [`Command`](crate::tex::commands::BaseCommand)
     /// of an expandable [`Token`] to `\relax` (funnily enough, `\unexpanded` does not do that).
-    NoExpand(T),
-    String(StringSource<T::Char>)
+    NoExpand(Token<ET>),
+    String(StringSource<ET::Char>)
 }
 
 /// A [`TokenSource`] is essentially a pretokenized [`Token`] list
 #[derive(Clone)]
-pub struct TokenSource<T:Token>(pub Vec<T>,usize,T);
-impl<T:Token> TokenSource<T> {
-    pub fn new() -> Self { Self(Vec::with_capacity(2097152),0,T::new(BaseToken::Char(T::Char::from(b'X'),CategoryCode::Invalid),None)) }
-    fn new_with(v:Vec<T>) -> Self { Self(v,0,T::new(BaseToken::Char(T::Char::from(b'X'),CategoryCode::Invalid),None)) }
+pub struct TokenSource<ET:EngineType>(pub Vec<Token<ET>>,usize,Token<ET>);
+impl<ET:EngineType> TokenSource<ET> {
+    pub fn new() -> Self { Self(Vec::with_capacity(2097152),0,Token::new(BaseToken::Char(ET::Char::from(b'X'),CategoryCode::Invalid),None)) }
+    fn new_with(v:Vec<Token<ET>>) -> Self { Self(v,0,Token::new(BaseToken::Char(ET::Char::from(b'X'),CategoryCode::Invalid),None)) }
     fn is_empty(&self) -> bool { self.0.len() == self.1 }
-    fn get_next(&mut self) -> (T,bool) {
+    fn get_next(&mut self) -> (Token<ET>,bool) {
         let mut ret = self.2.clone();
         unsafe { std::mem::swap(self.0.get_mut(self.1).unwrap_unchecked(),&mut ret) };
         self.1 += 1;
@@ -144,25 +143,25 @@ impl<T:Token> TokenSource<T> {
         self.1 = 0;
         self
     }
-    pub fn push(&mut self,t:T) {
+    pub fn push(&mut self,t:Token<ET>) {
         self.0.push(t)
     }
 }
 
 #[derive(Clone)]
-pub struct StandardMouth<T:Token>{ pub sources:Vec<TeXMouthSource<T>>,buffer:Option<T>,pub news:Vec<TokenSource<T>>}
+pub struct StandardMouth<ET:EngineType<Mouth=Self>>{ pub sources:Vec<TeXMouthSource<ET>>,buffer:Option<Token<ET>>,pub news:Vec<TokenSource<ET>>}
 
-impl<T:Token> Mouth<T> for StandardMouth<T> {
+impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     fn new() -> Self {
         let mut s = StandardMouth { sources:Vec::with_capacity(32),buffer:None,news:Vec::with_capacity(32)};
         for _ in (0..32) { s.news.push(TokenSource::new()) }
         s
     }
-    fn new_with(tks: Vec<T>) -> Self {
+    fn new_with(tks: Vec<Token<ET>>) -> Self {
         StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
     }
 
-    fn new_tokensource(&mut self) -> TokenSource<T> {
+    fn new_tokensource(&mut self) -> TokenSource<ET> {
         match self.news.pop() {
             Some(t) => t,
             None => TokenSource::new()
@@ -170,7 +169,7 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
     }
 
     //#[inline(always)]
-    fn push_tokens(&mut self,mut tks:TokenSource<T>) {
+    fn push_tokens(&mut self,mut tks:TokenSource<ET>) {
         if tks.is_empty() {
             self.news.push(tks);
             return
@@ -182,7 +181,7 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
         self.sources.push(TeXMouthSource::Token(tks))
     }
 
-    fn push_noexpand(&mut self, tk: T) {
+    fn push_noexpand(&mut self, tk: Token<ET>) {
         match self.buffer.take() {
             Some(tk2) => {
                 let mut new = self.new_tokensource();
@@ -194,7 +193,7 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
         self.sources.push(TeXMouthSource::NoExpand(tk))
     }
 
-    fn push_file<F: File<T::Char>>(&mut self, file: &F) {
+    fn push_file(&mut self, file: &ET::File) {
         debug!("Pushing file {:?}", file.path());
         match self.buffer.take() {
             Some(tk2) => {
@@ -210,7 +209,7 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
         )))
     }
 
-    fn requeue(&mut self, tk: T) {
+    fn requeue(&mut self, tk: Token<ET>) {
         match self.buffer.take() {
             Some(tk2) => {
                 let mut next = self.new_tokensource();
@@ -222,16 +221,16 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
         }
     }
 
-    fn has_next<ET: EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state: &ET::State) -> Result<bool, TeXError<T>> {
+    fn has_next(&mut self, state: &ET::State) -> Result<bool, TeXError<ET>> {
         match self.buffer {
             Some(_) => Ok(true),
-            _ => self.has_next_i::<ET>(state)
+            _ => self.has_next_i(state)
         }
     }
 
-    fn get_next<ET: EngineType<Char=T::Char,Token=T,Mouth=Self>>(&mut self, state: &ET::State) -> Result<Option<(T, bool)>, TeXError<T>> {
+    fn get_next(&mut self, state: &ET::State) -> Result<Option<(Token<ET>, bool)>, TeXError<ET>> {
         if let Some(tk) = std::mem::take(&mut self.buffer) { return Ok(Some((tk,true))) } else {
-            self.get_next_i::<ET>(state)
+            self.get_next_i(state)
         }
     }
 
@@ -262,7 +261,7 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
         0
     }
 
-    fn endinput<ET: EngineType<Token=T,Mouth=Self>>(&mut self, state: &mut ET::State) {
+    fn endinput(&mut self, state: &mut ET::State) {
         for s in self.sources.iter().enumerate().rev() {
             match s.1 {
                 TeXMouthSource::String(ss) => {
@@ -294,8 +293,8 @@ impl<T:Token> Mouth<T> for StandardMouth<T> {
     }
 }
 
-impl<T:Token> StandardMouth<T> {
-    fn has_next_i<ET: EngineType<Char=T::Char, Token=T>>(&mut self, state:&ET::State) -> Result<bool, TeXError<T>> {
+impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
+    fn has_next_i(&mut self, state:&ET::State) -> Result<bool, TeXError<ET>> {
         if let Some(source) = self.sources.last_mut() {
             match source {
                 TeXMouthSource::Token(ts) => Ok(true),
@@ -306,8 +305,8 @@ impl<T:Token> StandardMouth<T> {
                             Ok(true)
                         },
                         None => {
-                            match self.pop_string::<ET>(state) {
-                                None => self.has_next_i::<ET>(state),
+                            match self.pop_string(state) {
+                                None => self.has_next_i(state),
                                 Some(t) => {
                                     self.buffer = Some(t);
                                     Ok(true)
@@ -320,14 +319,14 @@ impl<T:Token> StandardMouth<T> {
             }
         } else { Ok(false) }
     }
-    fn get_next_i<ET: EngineType<Char=T::Char, Token=T>>(&mut self, state: &ET::State) -> Result<Option<(T, bool)>, TeXError<T>> {
+    fn get_next_i(&mut self, state: &ET::State) -> Result<Option<(Token<ET>, bool)>, TeXError<ET>> {
         loop {
             if let Some(source) = self.sources.last_mut() {
                 match source {
                     TeXMouthSource::String(ss) =>
                         match ss.get_next(state.get_catcode_scheme(), state.get_endlinechar())? {
                             Some(t) => return Ok(Some((t,true))),
-                            _ => match self.pop_string::<ET>(state) {
+                            _ => match self.pop_string(state) {
                                 None => (),
                                 Some(t) => return Ok(Some((t,true)))
                             }
@@ -356,7 +355,7 @@ impl<T:Token> StandardMouth<T> {
         }
     }
 
-    fn pop_string<ET: EngineType<Char=T::Char, Token=T>>(&mut self,state:&ET::State) -> Option<ET::Token> {
+    fn pop_string(&mut self,state:&ET::State) -> Option<Token<ET>> {
         let ss = unsafe{ match self.sources.pop() {
             Some(TeXMouthSource::String(ss)) => ss,
             _ => unreachable_unchecked()
@@ -368,10 +367,10 @@ impl<T:Token> StandardMouth<T> {
         debug!("file end; inserting \\everyeof");
         let mut v = state.get_primitive_toks("everyeof"); // TODO
         if v.is_empty() {
-            Some(T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None))
+            Some(Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None))
         } else {
             let mut next = self.new_tokensource();
-            next.push(T::new(BaseToken::Char(T::Char::from(b'\n'), CategoryCode::EOF), None));
+            next.push(Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None));
             for t in v { next.push(t);}
             self.push_tokens(next);
             None

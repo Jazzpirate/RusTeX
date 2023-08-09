@@ -11,7 +11,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, BoxFun, CloseBoxFun, TokenCont, ValueCommand, CommandSource};
+use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, BoxFun, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI};
 use crate::tex::commands::methods::{parse_signature, set_relax};
 use crate::tex::numbers::{Int, Skip, Numeric, MuSkip, Dim};
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -36,15 +36,15 @@ SPACE
  */
 
 pub fn SPACE<ET:EngineType>(_stomach:&mut ET::Stomach,state:&mut ET::State,_cmd:CommandSource<ET>)
-                                     -> Result<(),TeXError<ET::Token>> {
+                                     -> Result<(),TeXError<ET>> {
     todo!("\\ ")
 }
 
 pub static ADVANCE: &str = "advance";
 pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                                     -> Result<(),TeXError<ET::Token>> {
+                                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\advance");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (ADVANCE,cmd));
+    catch_prim!(gullet.mouth().skip_whitespace(state) => (ADVANCE,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (ADVANCE,cmd)) {
         None => file_end_prim!(ADVANCE,cmd),
         Some(ncmd) => match ncmd.command {
@@ -149,9 +149,9 @@ pub fn advance<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
     }
 }
 
-pub fn afterassignment<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<(), TeXError<ET::Token>> {
+pub fn afterassignment<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\afterassignment");
-    let next = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("afterassignment",cmd)) {
+    let next = match catch_prim!(gullet.mouth().get_next(state) => ("afterassignment",cmd)) {
         None => file_end!(cmd.cause),
         Some((t,_)) => t
     };
@@ -159,19 +159,19 @@ pub fn afterassignment<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gul
     Ok(())
 }
 
-pub fn begingroup<ET:EngineType>(state:&mut ET::State)-> Result<(),TeXError<ET::Token>> {
+pub fn begingroup<ET:EngineType>(state:&mut ET::State)-> Result<(),TeXError<ET>> {
     state.stack_push(GroupType::CS);
     Ok(())
 }
 
-pub fn catcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn catcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning category code");
     let i = catch_prim!(gullet.get_int(state) => ("catcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => throw!("Not a valid character: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("catcode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("catcode",cmd));
     let v = catch_prim!(gullet.get_int(state) => ("catcode",cmd)).to_i64();
     if v < 0 || v > 15 {
         throw!("Invalid category code: {}",v => cmd.cause)
@@ -181,7 +181,7 @@ pub fn catcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet
     state.set_catcode(c,cc,global);
     Ok(())
 }
-pub fn catcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn catcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting category code");
     let i = catch_prim!(gullet.get_int(state) => ("catcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
@@ -195,17 +195,17 @@ pub fn catcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 }
 
 pub static CHARDEF: &str = "chardef";
-pub fn chardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn chardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"chardef");
     let name = catch_prim!(gullet.get_control_sequence(state) => (CHARDEF,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (CHARDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (CHARDEF,cmd));
     let char = catch_prim!(get_char::<ET>(gullet,state) => (CHARDEF,cmd));
     let cmd = Command::new(BaseCommand::CharDef(char),Some(&cmd));
     state.set_command_for_tk(name, Some(cmd), global);
     Ok(())
 }
 
-pub fn closein<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<(), TeXError<ET::Token>> {
+pub fn closein<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\closein");
     let i = catch_prim!(gullet.get_int(state) => ("closein",cmd));
     let i : usize = match i.clone().try_into() {
@@ -216,7 +216,7 @@ pub fn closein<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd
     Ok(())
 }
 
-pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<Whatsit<ET>, TeXError<ET::Token>> {
+pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>) -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\closeout");
     let i = catch_prim!(gullet.get_int(state) => ("closeout",cmd));
     let i : usize = match i.clone().try_into() {
@@ -231,20 +231,20 @@ pub fn closeout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cm
 }
 
 pub static COUNT : &str = "count";
-pub fn count_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn count_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\count");
     let i = catch_prim!(gullet.get_int(state) => ("count",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("count",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("count",cmd));
     let v = catch_prim!(gullet.get_int(state) => ("count",cmd));
     debug_log!(debug=>"\\count{} = {}",i,v);
     state.set_int_register(i,v,global);
     Ok(())
 }
-pub fn count_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn count_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\count");
     let i = catch_prim!(gullet.get_int(state) => ("count",cmd));
     let i:usize = match i.clone().try_into() {
@@ -258,11 +258,11 @@ pub fn count_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 
 pub static COUNTDEF : &str = "countdef";
 pub fn countdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"countdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => (COUNTDEF,cmd));
     catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (COUNTDEF,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (COUNTDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (COUNTDEF,cmd));
     let num = catch_prim!(gullet.get_int(state) => ("countdef",cmd));
     if num.to_i64() < 0 {
         throw!("Invalid count register index: {}",num => cmd.cause)
@@ -274,7 +274,7 @@ pub fn countdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 }
 
 pub fn get_csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
-    -> Result<TeXStr<ET::Char>,TeXError<ET::Token>>{
+    -> Result<TeXStr<ET::Char>,TeXError<ET>>{
     debug_log!(trace=>"get_csname: {}",gullet.mouth().preview(200));
     let csidx = state.push_csname();
     let mut csname = Vec::with_capacity(16);
@@ -292,7 +292,7 @@ pub fn get_csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
     Ok(csname.into())
 }
 
-pub fn csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"csname");
     let str = get_csname::<ET>(state,gullet,&cmd,"csname")?;
     debug_log!(trace=>"csname {}",str.to_string());
@@ -300,32 +300,32 @@ pub fn csname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
         None => state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
     }
-    gullet.mouth().requeue(ET::Token::new(BaseToken::CS(str),None));
+    gullet.mouth().requeue(Token::new(BaseToken::CS(str),None));
     Ok(())
 }
 
-pub fn day<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn day<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(state.get_start_time().day() as i64) => ("day",cmd)))
 }
 
 pub static DEF : &str = "def";
 pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool,protected:bool,long:bool,outer:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"def");
-    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (DEF,cmd));
+    let csO = catch_prim!(gullet.mouth().get_next(state) => (DEF,cmd));
     let cs = match csO {
         None => file_end_prim!(DEF,cmd),
         Some((t,_)) => t
     };
-    match cs.base() {
+    match &cs.base {
         BaseToken::Char(_,CategoryCode::Active) => (),
         BaseToken::CS(_) => (),
         _ => throw!("Command expected after \\def" => cs)
     }
     let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,&cmd,DEF)?;
-    let mut replacement: Vec<ExpToken<ET::Token>> = vec!();
+    let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
-    catch_prim!(gullet.get_group(state,&mut |_,t| match (std::mem::take(&mut partk),t.base()) {
+    catch_prim!(gullet.get_group(state,&mut |_,t| match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
             Ok(replacement.push(ExpToken::ParamToken(t))),
@@ -340,21 +340,21 @@ pub fn def<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comman
             throw!("Expected number after #, got {}",t => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
-    let def = Command::new(BaseCommand::Def(Ptr::new(Def{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
     debug_log!(trace=>"def {:?} = {:?}",cs,def);
     state.set_command_for_tk(cs,Some(def),global);
     Ok(())
 }
 
 pub fn delcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                      -> Result<(),TeXError<ET::Token>> {
+                                      -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning delcode");
     let i = catch_prim!(gullet.get_int(state) => ("delcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => throw!("Not a valid character: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("delcode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("delcode",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("delcode",cmd));
     debug_log!(debug=>"\\delcode '{}' = {}",c.char_str(),i);
     state.set_delcode(c,i,global);
@@ -362,7 +362,7 @@ pub fn delcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet
 }
 
 pub fn delcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                                   -> Result<ET::Int,TeXError<ET::Token>> {
+                                   -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting delcode");
     let i = catch_prim!(gullet.get_int(state) => ("delcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
@@ -377,14 +377,14 @@ pub fn delcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 pub static DIMEN : &str = "dimen";
 
 pub fn dimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\dimen");
     let i = catch_prim!(gullet.get_int(state) => ("dimen",cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("dimen",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("dimen",cmd));
     let v = catch_prim!(gullet.get_dim(state) => ("dimen",cmd));
     debug_log!(debug=>"\\dimen{} = {}",i,v);
     state.set_dim_register(i,v,global);
@@ -392,7 +392,7 @@ pub fn dimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
 }
 
 pub fn dimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Dim,TeXError<ET::Token>> {
+    -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"Getting \\dimen");
     let i = catch_prim!(gullet.get_int(state) => ("dimen",cmd));
     let i:usize = match i.clone().try_into() {
@@ -406,11 +406,11 @@ pub fn dimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 
 pub static DIMENDEF : &str = "dimendef";
 pub fn dimendef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                                     -> Result<(),TeXError<ET::Token>> {
+                                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"dimendef");
     let name = catch_prim!(gullet.get_control_sequence(state) => (DIMENDEF,cmd));
     catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (DIMENDEF,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (DIMENDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (DIMENDEF,cmd));
     let num = catch_prim!(gullet.get_int(state) => (DIMENDEF,cmd));
     if num.to_i64() < 0 {
         throw!("Invalid dimen register index: {}",num => cmd.cause)
@@ -422,9 +422,9 @@ pub fn dimendef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 }
 pub static DIVIDE : &str = "divide";
 pub fn divide<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\divide");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (DIVIDE,cmd));
+    catch_prim!(gullet.mouth().skip_whitespace(state) => (DIVIDE,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (DIVIDE,cmd)) {
         None => file_end_prim!(DIVIDE,cmd),
         Some(ncmd) => match ncmd.command {
@@ -542,7 +542,7 @@ pub fn divide<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
 }
 
 pub fn dump<ET:EngineType>()
-                                    -> Result<(), TeXError<ET::Token>> {
+                                    -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\dump");
     // TODO
     Ok(())
@@ -550,23 +550,23 @@ pub fn dump<ET:EngineType>()
 
 pub static EDEF: &str = "edef";
 pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool,protected:bool,long:bool,outer:bool)
-                                                -> Result<(),TeXError<ET::Token>> {
+                                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"edef");
-    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (EDEF,cmd));
+    let csO = catch_prim!(gullet.mouth().get_next(state) => (EDEF,cmd));
     let cs = match csO {
         None => file_end_prim!(DEF,cmd),
         Some((t,_)) => t
     };
-    match cs.base() {
+    match &cs.base {
         BaseToken::Char(_,CategoryCode::Active) => (),
         BaseToken::CS(_) => (),
         _ => throw!("Command expected after \\def" => cs)
     }
     debug_log!(trace=>"edef: {}",cs);
     let (endswithbrace,arity,signature) = parse_signature::<ET>(state,gullet,&cmd,EDEF)?;
-    let mut replacement: Vec<ExpToken<ET::Token>> = vec!();
+    let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
-    catch_prim!(gullet.get_expanded_group(state,false,true,false,&mut |_,t| match (std::mem::take(&mut partk),t.base()) {
+    catch_prim!(gullet.get_expanded_group(state,false,true,false,&mut |_,t| match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
             Ok(replacement.push(ExpToken::ParamToken(t))),
@@ -581,7 +581,7 @@ pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
             throw!("Expected number after #, got {}",t => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
-    let def = Command::new(BaseCommand::Def(Ptr::new(Def{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
     debug_log!(trace=>"edef {:?} = {:?}",cs,def);
     state.set_command_for_tk(cs,Some(def),global);
     Ok(())
@@ -589,7 +589,7 @@ pub fn edef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
 
 pub static ELSE: &str = "else";
 pub fn else_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     match gullet.current_conditional() {
         (None,_) => throw!("Not in a conditional" => cmd.cause),
         (Some(ConditionalBranch::True(name)),i) =>
@@ -602,16 +602,16 @@ pub fn else_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
 }
 
 pub fn end<ET:EngineType>()
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     todo!("end")
 }
 
-pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
     throw!("Unexpected \\endcsname; not in a \\csname" => cmd.cause)
 }
 
 pub fn endgroup<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     let mut ret = gullet.mouth().new_tokensource();
     match state.stack_pop() {
         Some((mut v,GroupType::CS)) => {
@@ -626,15 +626,15 @@ pub fn endgroup<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 }
 
 pub fn endinput<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                            -> Result<(),TeXError<ET::Token>> {
-    gullet.mouth().endinput::<ET>(state);
+                            -> Result<(),TeXError<ET>> {
+    gullet.mouth().endinput(state);
     Ok(())
 }
 
 pub fn endlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\endlinechar");
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("endlinechar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("endlinechar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("endlinechar",cmd));
     let c = match i.to_i64() {
         -1|255 => None,
@@ -648,23 +648,23 @@ pub fn endlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gu
     Ok(())
 }
 pub fn endlinechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\endlinechar");
     let c = match state.get_endlinechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\endlinechar == {:?}",c);
-    Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
+    Ok(ET::Int::from_i64::<ET>(c).unwrap())
 }
 
 // \errhelp
 pub static ERRMESSAGE : &str = "errmessage";
 
 pub fn errmessage<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"errmessage");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (ERRMESSAGE,cmd));
+    catch_prim!(gullet.mouth().skip_whitespace(state) => (ERRMESSAGE,cmd));
     let errmsg = catch_prim!(gullet.get_braced_string(state) => (ERRMESSAGE,cmd));
     let eh = state.get_primitive_toks("errhelp");
     // TODO errhelp
@@ -676,16 +676,16 @@ pub fn errmessage<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
 }
 
 pub fn errorstopmode<ET:EngineType>()
-                                  -> Result<(), TeXError<ET::Token>> {
+                                  -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\errorstopmode");
     // TODO
     Ok(())
 }
 
 pub fn escapechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\escapechar");
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("escapechar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("escapechar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("escapechar",cmd));
     let c = match i.to_i64() {
         -1|255 => None,
@@ -698,25 +698,25 @@ pub fn escapechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gul
     state.set_escapechar(c,global);
     Ok(())
 }
-pub fn escapechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn escapechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\escapechar");
     let c = match state.get_escapechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\escapechar == {}",c);
-    Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
+    Ok(ET::Int::from_i64::<ET>(c).unwrap())
 }
 
 pub static EXPANDAFTER : &str = "expandafter";
 pub fn expandafter<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"expandafter");
-    let first = match catch_prim!(gullet.mouth().get_next::<ET>(state) => (EXPANDAFTER,cmd)){
+    let first = match catch_prim!(gullet.mouth().get_next(state) => (EXPANDAFTER,cmd)){
         None => file_end_prim!(EXPANDAFTER,cmd),
         Some((t,_)) => t
     };
-    let next = match catch_prim!(gullet.mouth().get_next::<ET>(state) => (EXPANDAFTER,cmd)){
+    let next = match catch_prim!(gullet.mouth().get_next(state) => (EXPANDAFTER,cmd)){
         None => file_end_prim!(EXPANDAFTER,cmd),
         Some((t,_)) => t
     };
@@ -732,7 +732,7 @@ pub fn expandafter<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 
 pub static FI : &str = "fi";
 pub fn fi<ET:EngineType>(_state:&mut ET::State,gullet:&mut ET::Gullet,_cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"...end of conditional.");
     gullet.pop_conditional();
     Ok(())
@@ -740,10 +740,10 @@ pub fn fi<ET:EngineType>(_state:&mut ET::State,gullet:&mut ET::Gullet,_cmd:Comma
 
 pub static FONT :&str = "font";
 pub fn font_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\font");
     let cs = catch_prim!(gullet.get_control_sequence(state) => (FONT,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (FONT,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (FONT,cmd));
     let mut fontname = catch_prim!(gullet.get_string(state) => (FONT,cmd)).to_string();
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
@@ -766,13 +766,13 @@ pub fn font_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
     Ok(())
 }
 pub fn font_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Font,TeXError<ET::Token>> {
+    -> Result<ET::Font,TeXError<ET>> {
     debug_log!(trace=>"Getting \\font");
     Ok(state.get_current_font().clone())
 }
 
 pub fn fontdimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\fontdimen");
     let o = catch_prim!(gullet.get_int(state) => ("fontdimen",cmd));
     let i = match o.try_into() {
@@ -780,14 +780,14 @@ pub fn fontdimen_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gull
         Err(_) => throw!("Invalid font dimension index" => cmd.cause)
     };
     let mut font = catch_prim!(gullet.get_font(state) => ("fontdimen",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("fontdimen",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("fontdimen",cmd));
     let dim = catch_prim!(gullet.get_dim(state) => ("fontdimen",cmd));
     font.set_dim::<ET::Dim>(i,dim);
     Ok(())
 }
 
 pub fn fontdimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Dim,TeXError<ET::Token>> {
+    -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"Getting \\fontdimen");
     let o = catch_prim!(gullet.get_int(state) => ("fontdimen",cmd));
     let i = match o.try_into() {
@@ -799,25 +799,25 @@ pub fn fontdimen_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
 }
 
 pub fn futurelet<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                -> Result<(),TeXError<ET::Token>> {
+                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\futurelet");
-    let cs = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
+    let cs = match catch_prim!(gullet.mouth().get_next(state) => ("futurelet",cmd)) {
         None => file_end_prim!("futurelet",cmd),
-        Some((t,_)) => match t.base() {
+        Some((t,_)) => match &t.base {
             BaseToken::Char(_,CategoryCode::Active) => t,
             BaseToken::CS(_) => t,
             _ => throw!("Expected control sequence after \\futurelet" => cmd.cause)
         }
     };
-    let first = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
+    let first = match catch_prim!(gullet.mouth().get_next(state) => ("futurelet",cmd)) {
         None => file_end_prim!("futurelet",cmd),
         Some((t,_)) => t
     };
-    let second = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("futurelet",cmd)) {
+    let second = match catch_prim!(gullet.mouth().get_next(state) => ("futurelet",cmd)) {
         None => file_end_prim!("futurelet",cmd),
         Some((t,_)) => t
     };
-    let newcmd = match second.base() {
+    let newcmd = match &second.base {
         BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(c).cloned(),
         BaseToken::CS(name) => state.get_command(name).cloned(),
         BaseToken::Char(c,cc) =>
@@ -834,15 +834,15 @@ pub fn futurelet<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 
 
 pub fn gdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool,protected:bool,long:bool,outer:bool)
-                                                 -> Result<(),TeXError<ET::Token>> {
+                                                 -> Result<(),TeXError<ET>> {
     def::<ET>(state,gullet,cmd,true,protected,long,outer)
 }
 
 pub static GLOBAL: &str = "global";
 pub fn global<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global_:bool,protected_:bool,long_:bool,outer_:bool)
-                                                 -> Result<(),TeXError<ET::Token>> {
+                                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\global");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (GLOBAL,cmd));
+    catch_prim!(gullet.mouth().skip_whitespace(state) => (GLOBAL,cmd));
     match catch_prim!(gullet.get_next_stomach_command(state) => (GLOBAL,cmd)) {
         None => file_end_prim!(GLOBAL,cmd),
         Some(c) => match c.command {
@@ -863,7 +863,7 @@ pub fn global<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
 
 pub static HBOX: &str = "hbox";
 pub fn hbox<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                                         -> Result<CloseBoxFun<ET>,TeXError<ET::Token>> {
+                                         -> Result<CloseBoxFun<ET>,TeXError<ET>> {
     debug_log!(trace=>"\\hbox");
     let (to,spread) = match catch_prim!(gullet.get_keywords(state,vec!("spread","to")) => (HBOX,cmd)) {
         None => (None,None),
@@ -902,39 +902,39 @@ pub fn hbox<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
 }
 
 pub fn hyphenation<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                               -> Result<(), TeXError<ET::Token>> {
+                               -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\hyphenation");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_,_| Ok(())) => ("hyphenation",cmd));
+    catch_prim!(gullet.mouth().read_argument(state,&mut |_,_| Ok(())) => ("hyphenation",cmd));
     Ok(())
 }
 
 pub fn hyphenchar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\hyphenchar");
     let mut font = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("hyphenchar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("hyphenchar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("hyphenchar",cmd)).to_i64();
     debug_log!(debug=>"\\hyphenchar\\{:?} = {:?}",font,i);
     font.set_hyphenchar(i);
     Ok(())
 }
-pub fn hyphenchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn hyphenchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\hyphenchar");
     let font = catch_prim!(gullet.get_font(state) => ("hyphenchar",cmd));
     debug_log!(debug=>"\\hyphenchar == {:?}",font.get_hyphenchar());
-    Ok(catch_prim!(ET::Int::from_i64::<ET::Token>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
+    Ok(catch_prim!(ET::Int::from_i64::<ET>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
 }
 
 pub fn if_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET::Token>> {
+    -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"if");
     let first = get_if_token::<ET>(state,gullet,&cmd,"if")?;
     let second = get_if_token::<ET>(state,gullet,&cmd,"if")?;
     debug_log!(trace=>"if: {:?} == {:?}",first,second);
     Ok(match (first,second) {
         (None,_) | (_,None) => false,
-        (Some(f),Some(s)) => match (f.source.cause.take_base(),s.source.cause.take_base()) {
+        (Some(f),Some(s)) => match (f.source.cause.base,s.source.cause.base) {
             (BaseToken::Char(f,_),BaseToken::Char(s,_)) => f == s,
             (BaseToken::CS(_),BaseToken::CS(_)) => true,
             _ => false
@@ -943,20 +943,20 @@ pub fn if_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comman
 }
 
 pub static IFCASE: &str = "ifcase";
-pub fn ifcase<ET:EngineType>() -> Result<bool,TeXError<ET::Token>> {
+pub fn ifcase<ET:EngineType>() -> Result<bool,TeXError<ET>> {
     unreachable!("executed in Gullet")
 }
 
 pub static IFCAT : &str = "ifcat";
 pub fn ifcat<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET::Token>> {
+    -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifcat");
     let first = catch_prim!(get_if_token::<ET>(state,gullet,&cmd,IFCAT) => (IFCAT,cmd));
     let second = catch_prim!(get_if_token::<ET>(state,gullet,&cmd,IFCAT) => (IFCAT,cmd));
     debug_log!(trace=>"ifcat: {:?} == {:?}",first,second);
     let first = match first {
         None => return Ok(false),
-        Some(first) => match first.source.cause.take_base() {
+        Some(first) => match first.source.cause.base {
             BaseToken::Char(_,cc) => cc,
             BaseToken::CS(name) => match first.command {
                 BaseCommand::Char{catcode,..} => catcode,
@@ -966,7 +966,7 @@ pub fn ifcat<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
     };
     let second = match second {
         None => return Ok(false),
-        Some(second) => match second.source.cause.take_base() {
+        Some(second) => match second.source.cause.base {
             BaseToken::Char(_,cc) => cc,
             BaseToken::CS(name) => match second.command {
                 BaseCommand::Char{catcode,..} => catcode,
@@ -978,9 +978,9 @@ pub fn ifcat<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
 }
 
 pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
-    -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
+    -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
     // need to be careful not to expand \else and \fi before conditional is done.
-    while let Some((t,e)) = catch_prim!(gullet.mouth().get_next::<ET>(state) => (name,cmd)) {
+    while let Some((t,e)) = catch_prim!(gullet.mouth().get_next(state) => (name,cmd)) {
         let r = resolve_token(state,t);
         match r.command {
             BaseCommand::Expandable {name,..} if e && (name == ELSE || name == FI) && (match gullet.current_conditional() {
@@ -1002,7 +1002,7 @@ pub fn get_if_token<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
 
 
 pub fn ifdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                            -> Result<bool,TeXError<ET::Token>> {
+                            -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifdim");
     let i1 = catch_prim!(gullet.get_dim(state) => ("ifdim",cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifdim",cmd)) {
@@ -1019,7 +1019,7 @@ pub fn ifdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
 }
 
 pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET::Token>> {
+    -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifeof");
     let i = catch_prim!(gullet.get_int(state) => ("ifeof",cmd));
     let i : usize = match i.clone().try_into() {
@@ -1035,7 +1035,7 @@ pub fn ifeof<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
 }
 
 pub fn ifhmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                            -> Result<bool,TeXError<ET::Token>> {
+                            -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifhmode");
     Ok(match state.mode() {
         TeXMode::Horizontal | TeXMode::RestrictedHorizontal => true,
@@ -1044,7 +1044,7 @@ pub fn ifhmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 }
 
 pub fn ifinner<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                              -> Result<bool,TeXError<ET::Token>> {
+                              -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifhmode");
     Ok(match state.mode() {
         TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::Math => true,
@@ -1053,7 +1053,7 @@ pub fn ifinner<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 }
 
 pub fn ifnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET::Token>> {
+    -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifnum");
     let i1 = catch_prim!(gullet.get_int(state) => ("ifnum",cmd));
     let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => ("ifnum",cmd)) {
@@ -1070,7 +1070,7 @@ pub fn ifnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
 }
 
 pub fn ifodd<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET::Token>> {
+    -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifodd");
     let num = catch_prim!(gullet.get_int(state) => ("ifodd",cmd));
     Ok(num.to_i64() % 2 != 0)
@@ -1078,7 +1078,7 @@ pub fn ifodd<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
 
 
 pub fn ifvmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                              -> Result<bool,TeXError<ET::Token>> {
+                              -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifvmode");
     Ok(match state.mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => true,
@@ -1087,13 +1087,13 @@ pub fn ifvmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 }
 
 pub fn ifx<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET::Token>> {
+    -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifx");
-    let t1 = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
+    let t1 = match catch_prim!(gullet.mouth().get_next(state) => ("ifx",cmd)) {
         None => file_end_prim!("ifx",cmd),
         Some((t,e)) => resolve_token::<ET>(state,t).with_expand(e)
     };
-    let t2 = match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("ifx",cmd)) {
+    let t2 = match catch_prim!(gullet.mouth().get_next(state) => ("ifx",cmd)) {
         None => file_end_prim!("ifx",cmd),
         Some((t,e)) => resolve_token::<ET>(state,t).with_expand(e)
     };
@@ -1140,7 +1140,7 @@ pub fn ifx<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comman
      */
 }
 /*
-fn ifx_eq_cmd<ET:EngineType>(cmd1:Option<&ET::Command>, t1:ET::Token, expand1:bool, cmd2:Option<&ET::Command>, t2:ET::Token, expand2:bool) -> bool {
+fn ifx_eq_cmd<ET:EngineType>(cmd1:Option<&ET::Command>, t1:Token<ET>, expand1:bool, cmd2:Option<&ET::Command>, t2:Token<ET>, expand2:bool) -> bool {
     debug_log!(debug=>"ifx_eq_cmd: {:?} == {:?}?",cmd1,cmd2);
     if expand1 && expand2 {cmd1 == cmd2}
     else if !expand1 && !expand2 {
@@ -1152,7 +1152,7 @@ fn ifx_eq_cmd<ET:EngineType>(cmd1:Option<&ET::Command>, t1:ET::Token, expand1:bo
  */
 
 pub fn ignorespaces<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-                                  -> Result<(), TeXError<ET::Token>> {
+                                  -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\ignorespaces");
     loop {
         match catch_prim!(gullet.get_next_stomach_command(state) => ("ignorespaces",cmd)) {
@@ -1170,7 +1170,7 @@ pub fn ignorespaces<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet
 
 pub static IMMEDIATE: &str ="immediate";
 pub fn immediate<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                                                 -> Result<(),TeXError<ET::Token>> {
+                                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"immediate");
     match catch_prim!(gullet.get_next_stomach_command(state) => (IMMEDIATE,cmd)) {
         None => file_end_prim!(IMMEDIATE,cmd),
@@ -1189,7 +1189,7 @@ pub fn immediate<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 }
 
 pub fn input<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"input");
     let filename = catch_prim!(gullet.get_string(state) => ("input",cmd)).to_string();
     debug_log!(trace=>"input: {}",filename);
@@ -1207,27 +1207,27 @@ pub fn input<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
     }
 }
 
-pub fn inputlineno<ET:EngineType>(gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn inputlineno<ET:EngineType>(gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
         gullet.mouth().line_no() as i64
     ) => ("month",cmd)))
 }
 
 pub fn jobname<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
-                         -> Result<(),TeXError<ET::Token>> {
+                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"jobname");
     string_to_tokens::<ET>(state.get_jobname().as_bytes(),state,f)
 }
 
 pub fn lccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning lower case character");
     let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => throw!("Not a valid character: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("lccode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("lccode",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
     let lc: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
@@ -1239,7 +1239,7 @@ pub fn lccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
 }
 
 pub fn lccode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting lower case character");
     let i = catch_prim!(gullet.get_int(state) => ("lccode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
@@ -1253,27 +1253,27 @@ pub fn lccode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
 
 pub static LET : &str = "let";
 pub fn let_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,globally:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"let");
-    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (LET,cmd));
+    let csO = catch_prim!(gullet.mouth().get_next(state) => (LET,cmd));
     let cs = match &csO {
         None => file_end_prim!(LET,cmd),
-        Some((t,_)) => t.base()
+        Some((t,_)) => &t.base
     };
     match cs {
         BaseToken::Char(_,CategoryCode::Active) | BaseToken::CS(_) => (),
         _ => throw!("Expected a control sequence" => csO.unwrap().0)
     }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (LET,cmd));
-    let cm = match catch_prim!(gullet.mouth().get_next::<ET>(state) => (LET,cmd)) {
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (LET,cmd));
+    let cm = match catch_prim!(gullet.mouth().get_next(state) => (LET,cmd)) {
         Some((t,_)) => t,
         None =>file_end_prim!(LET,cmd)
     };
-    let cmd = match cm.base() {
+    let cmd = match cm.base {
         BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(&c).map(|c|c.clone().copy_with(&cmd)),
         BaseToken::CS(name) => state.get_command(&name).map(|c|c.clone().copy_with(&cmd)),
         BaseToken::Char(c,cc) =>
-            Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd))),
+            Some(Command::new(BaseCommand::Char{char:c,catcode:cc},Some(&cmd))),
     };
     debug_log!(debug=>"let: {} = {:?}",cs,cmd);
     match cs {
@@ -1284,7 +1284,7 @@ pub fn let_<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
 }
 
 pub fn long<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd: CommandSource<ET>,global_:bool,protected_:bool,long_:bool,outer_:bool)
-                                                -> Result<(),TeXError<ET::Token>> {
+                                                -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\long");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("long",cmd)) {
         None => file_end_prim!("long",cmd),
@@ -1303,14 +1303,14 @@ pub fn long<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd: Comm
 }
 pub static LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                                         -> Result<(),TeXError<ET::Token>> {
+                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\lowercase");
     catch_prim!(expand_until_space::<ET>(gullet,state) => (LOWERCASE,cmd));
     let mut ret = gullet.mouth().new_tokensource();
-    catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
+    catch_prim!(gullet.get_group(state,&mut |s,next| match &next.base {
         BaseToken::Char(c,cc) => {
             let nc = s.get_lccode(c);
-            Ok(ret.push(ET::Token::new(BaseToken::Char(nc, *cc), None)))
+            Ok(ret.push(Token::new(BaseToken::Char(nc, *cc), None)))
         }
         _ => Ok(ret.push(next))
     }) => (LOWERCASE,cmd));
@@ -1320,19 +1320,19 @@ pub fn lowercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 
 pub static MATHCHARDEF : &str = "mathchardef";
 pub fn mathchardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,globally:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"mathchardef");
-    let csO = catch_prim!(gullet.mouth().get_next::<ET>(state) => (MATHCHARDEF,cmd));
+    let csO = catch_prim!(gullet.mouth().get_next(state) => (MATHCHARDEF,cmd));
     let cs = match csO {
         None => file_end_prim!(MATHCHARDEF,cmd),
         Some((t,_)) => t
     };
-    match cs.base() {
+    match &cs.base {
         BaseToken::Char(_,CategoryCode::Active) => (),
         BaseToken::CS(_) => (),
         _ => throw!("Command expected after \\mathchardef" => cs)
     }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (MATHCHARDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (MATHCHARDEF,cmd));
     let i = catch_prim!(gullet.get_int(state) => (MATHCHARDEF,cmd)).to_i64();
     if i < 0 {
         throw!("Invalid math char: {}",i => cmd.cause)
@@ -1342,14 +1342,14 @@ pub fn mathchardef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 }
 
 pub fn mathcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                    -> Result<(),TeXError<ET::Token>> {
+                                    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning math code");
     let i = catch_prim!(gullet.get_int(state) => ("mathcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => throw!("Not a valid character: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("lccode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("lccode",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("mathcode",cmd));
     debug_log!(debug=>"\\mathcode '{}' = {}",c.char_str(),i);
     state.set_mathcode(c,i,global);
@@ -1357,7 +1357,7 @@ pub fn mathcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
 }
 
 pub fn mathcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                                 -> Result<ET::Int,TeXError<ET::Token>> {
+                                 -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting mathcode");
     let i = catch_prim!(gullet.get_int(state) => ("mathcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
@@ -1371,13 +1371,13 @@ pub fn mathcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
 
 pub static MEANING : &str = "meaning";
 pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"meaning");
     let esc = state.get_escapechar();
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => (MEANING,cmd)) {
+    match catch_prim!(gullet.mouth().get_next(state) => (MEANING,cmd)) {
         None => file_end_prim!(MEANING,cmd),
         Some((_,false)) => {
-            if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+            if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
             string_to_tokens::<ET>(RELAX.as_bytes(),state,f)
         }
         Some((t,_)) => {
@@ -1394,123 +1394,123 @@ pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                 BaseCommand::Char{char,catcode:CategoryCode::Letter} => format!("the letter {}",char.char_str()),
                 BaseCommand::Char{char,..} => format!("the character {}",char.char_str()),
                 BaseCommand::Expandable {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Unexpandable {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::OpenBox {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Whatsit {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Assignment {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Relax => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(RELAX.as_bytes(),state,f)
                 }
                 BaseCommand::Conditional {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::FontCommand {name,..} => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Int(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Int(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Int(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Dim(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Dim(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Dim(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Skip(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Skip(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Skip(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::MuSkip(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::MuSkip(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::MuSkip(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Toks(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Toks(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Toks(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return string_to_tokens::<ET>(name.as_bytes(),state,f)
                 }
                 BaseCommand::Int(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("count{}",u)
                 }
                 BaseCommand::Dim(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("dimen{}",u)
                 }
                 BaseCommand::Skip(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("skip{}",u)
                 }
                 BaseCommand::MuSkip(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("muskip{}",u)
                 }
                 BaseCommand::Toks(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("toks{}",u)
                 }
                 BaseCommand::CharDef(c) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("char\"{:X}",c.to_usize())
                 }
                 BaseCommand::MathChar(c) => {
-                    if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("mathchar\"{:X}",c)
                 }
                 BaseCommand::Font(fnt) => {
@@ -1522,15 +1522,15 @@ pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                 BaseCommand::Def(d) => {
                     let cc = state.get_catcode_scheme().clone();
                     if d.protected {
-                        if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                         string_to_tokens::<ET>("protected ".as_bytes(),state,f)?
                     }
                     if d.long {
-                        if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                         string_to_tokens::<ET>("long ".as_bytes(),state,f)?
                     }
                     if d.outer {
-                        if let Some(c) = esc { f(state,ET::Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        if let Some(c) = esc { f(state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                         string_to_tokens::<ET>("outer ".as_bytes(),state,f)?
                     }
                     string_to_tokens::<ET>("macro:".as_bytes(),state,f)?;
@@ -1538,7 +1538,7 @@ pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                     for s in &d.signature {
                         match s {
                             ParamToken::Token(t) => {
-                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(state,t))?;
                             }
                                 //ret.extend(tokens_to_string(vec!(t.clone()), state.get_escapechar(), state.get_catcode_scheme()).as_bytes()),
                             ParamToken::Param => {
@@ -1547,18 +1547,18 @@ pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
                             }
                         }
                     }
-                    if d.endswithbrace { f(state,ET::Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None))? }
-                    f(state,ET::Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
-                    f(state,ET::Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None))?;
+                    if d.endswithbrace { f(state,Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None))? }
+                    f(state,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
+                    f(state,Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None))?;
                     for t in &d.replacement {
                         match t {
-                            ExpToken::Token(t) => token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?,
+                            ExpToken::Token(t) => token_to_chars::<ET,_>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?,
                             ExpToken::ParamToken(t) => {
-                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
-                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(state,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(state,t))?;
                             }
                             ExpToken::Param(t, i) => {
-                                token_to_chars::<ET::Token>(t,esc.clone(),&cc,true,&mut |t| f(state,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(state,t))?;
                                 string_to_tokens::<ET>(i.to_string().as_bytes(),state,f)?
                             }
                         }
@@ -1580,7 +1580,7 @@ pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
  */
 
 /*
-pub fn meaning_cmd<ET:EngineType>(cmd:Option<&ET::Command>, state:&ET::State) -> Vec<ET::Token> {
+pub fn meaning_cmd<ET:EngineType>(cmd:Option<&ET::Command>, state:&ET::State) -> Vec<Token<ET>> {
 todo!()
 match cmd {
     None => string_to_tokens("undefined".as_bytes()),
@@ -1815,15 +1815,15 @@ match cmd {
  */
 
 pub fn message<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"message");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => ("message",cmd));
+    catch_prim!(gullet.mouth().skip_whitespace(state) => ("message",cmd));
     let msg = catch_prim!(gullet.get_braced_string(state) => ("message",cmd));
     (state.outputs().message)(&msg);
     Ok(())
 }
 
-pub fn month<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn month<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
         state.get_start_time().month() as i64
     ) => ("month",cmd)))
@@ -1831,9 +1831,9 @@ pub fn month<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Resul
 
 pub static MULTIPLY:&str = "multiply";
 pub fn multiply<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                                   -> Result<(),TeXError<ET::Token>> {
+                                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\multiply");
-    catch_prim!(gullet.mouth().skip_whitespace::<ET>(state) => (MULTIPLY,cmd));
+    catch_prim!(gullet.mouth().skip_whitespace(state) => (MULTIPLY,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (MULTIPLY,cmd)) {
         None => file_end_prim!(MULTIPLY,cmd),
         Some(ncmd) => match ncmd.command {
@@ -1940,14 +1940,14 @@ pub fn multiply<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 
 pub static MUSKIP : &str = "muskip";
 pub fn muskip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\muskip");
     let i = catch_prim!(gullet.get_int(state) => (MUSKIP,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (MUSKIP,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (MUSKIP,cmd));
     let v = catch_prim!(gullet.get_muskip(state) => (MUSKIP,cmd));
     debug_log!(debug=>"\\muskip{} = {}",i,v);
     state.set_muskip_register(i,v,global);
@@ -1955,7 +1955,7 @@ pub fn muskip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
 }
 
 pub fn muskip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) ->
-                                                                                                           Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET::Token>> {
+                                                                                                           Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
     debug_log!(trace=>"Getting \\muskip");
     let i = catch_prim!(gullet.get_int(state) => (MUSKIP,cmd));
     let i:usize = match i.clone().try_into() {
@@ -1969,11 +1969,11 @@ pub fn muskip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
 
 pub static MUSKIPDEF : &str = "muskipdef";
 pub fn muskipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                                     -> Result<(),TeXError<ET::Token>> {
+                                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"muskipdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => (MUSKIPDEF,cmd));
     catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (MUSKIPDEF,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (MUSKIPDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (MUSKIPDEF,cmd));
     let num = catch_prim!(gullet.get_int(state) => (MUSKIPDEF,cmd));
     if num.to_i64() < 0 {
         throw!("Invalid muskip register index: {}",num => cmd.cause)
@@ -1986,9 +1986,9 @@ pub fn muskipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 
 
 pub fn newlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\newlinechar");
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("newlinechar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("newlinechar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("newlinechar",cmd));
     let c = match i.to_i64() {
         -1|255 => None,
@@ -2002,23 +2002,23 @@ pub fn newlinechar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gu
     Ok(())
 }
 pub fn newlinechar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\newlinechar");
     let c = match state.get_newlinechar() {
         None => -1,
         Some(c) => c.to_usize() as i64
     };
     debug_log!(debug=>"\\newlinechar == {}",c);
-    Ok(ET::Int::from_i64::<ET::Token>(c).unwrap())
+    Ok(ET::Int::from_i64::<ET>(c).unwrap())
 }
 
 pub static NOEXPAND: &str = "noexpand";
 /// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
 /// in the first place
 pub fn noexpand<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\noexpand");
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("noexpand",cmd)) {
+    match catch_prim!(gullet.mouth().get_next(state) => ("noexpand",cmd)) {
         None => file_end_prim!("noexpand",cmd),
         Some((t,_)) => {
             let res = resolve_token::<ET>(state,t);
@@ -2034,21 +2034,21 @@ pub fn noexpand<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 }
 
 pub fn number<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\number");
     let num = catch_prim!(gullet.get_int(state) => ("number",cmd));
     string_to_tokens::<ET>(num.to_i64().to_string().as_bytes(),state,f)
 }
 
 pub fn openin<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-    -> Result<(), TeXError<ET::Token>> {
+    -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\openin");
     let i = catch_prim!(gullet.get_int(state) => ("openin",cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("openin",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("openin",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openin",cmd)).to_string();
     let f = state.filesystem().get(&filename);
     state.file_openin(i,f); // TODO error?
@@ -2056,14 +2056,14 @@ pub fn openin<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:
 }
 
 pub fn openout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-    -> Result<Whatsit<ET>, TeXError<ET::Token>> {
+    -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\openout");
     let i = catch_prim!(gullet.get_int(state) => ("openout",cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("openout",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("openout",cmd));
     let filename = catch_prim!(gullet.get_string(state) => ("openout",cmd)).to_string();
     let apply = Box::new(move |state:&mut ET::State,_gullet:&mut ET::Gullet| {
         let f = state.filesystem().get(&filename);
@@ -2074,7 +2074,7 @@ pub fn openout<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd
 }
 
 pub fn or<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     match gullet.current_conditional() {
         (Some(ConditionalBranch::Case(_,_)),i) =>
             catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(gullet,state,"ifcase",i,true) => ("or",cmd)),
@@ -2084,7 +2084,7 @@ pub fn or<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Command
 }
 
 pub fn outer<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global_:bool,protected_:bool,long_:bool,outer_:bool)
-                                                      -> Result<(),TeXError<ET::Token>> {
+                                                      -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\outer");
     match catch_prim!(gullet.get_next_stomach_command(state) => ("outer",cmd)) {
         None => file_end_prim!("outer",cmd),
@@ -2102,7 +2102,7 @@ pub fn outer<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comm
     }
 }
 
-pub fn par<ET:EngineType>(state:&mut ET::State,_cmd:CommandSource<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn par<ET:EngineType>(state:&mut ET::State,_cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"par");
     if state.mode().is_vertical() {Ok(())} else {
         todo!("par in horizontal mode")
@@ -2110,15 +2110,15 @@ pub fn par<ET:EngineType>(state:&mut ET::State,_cmd:CommandSource<ET>) -> Result
 }
 
 pub fn patterns<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-                             -> Result<(), TeXError<ET::Token>> {
+                             -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\patterns");
     // TODO
-    catch_prim!(gullet.mouth().read_argument::<ET>(state,&mut |_,_| Ok(())) => ("patterns",cmd));
+    catch_prim!(gullet.mouth().read_argument(state,&mut |_,_| Ok(())) => ("patterns",cmd));
     Ok(())
 }
 
 pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,globally:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"read");
     let i = catch_prim!(gullet.get_int(state) => ("read",cmd));
     let i : usize = match i.try_into() {
@@ -2133,12 +2133,13 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
         return throw!("Expected 'to' after \\read" => cmd.cause)
     }
     let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("read",cmd));
-    let mut ret = catch_prim!(file.read::<ET::Token>(state.get_catcode_scheme(),state.get_endlinechar()) => ("read",cmd));
+    let mut ret = vec!();
+    catch_prim!(file.read::<ET,_>(state.get_catcode_scheme(),state.get_endlinechar(),|t| ret.push(t)) => ("read",cmd));
     debug_log!(trace=>"read: {} = {}",newcmd,TokenList(&ret));
     if ret.is_empty() {
         match state.get_endlinechar() {
             None => (),
-            Some(c) => ret.push(ET::Token::new(BaseToken::Char(c,*state.get_catcode_scheme().get(&c)),None))
+            Some(c) => ret.push(Token::new(BaseToken::Char(c,*state.get_catcode_scheme().get(&c)),None))
         }
     }
     /*
@@ -2148,7 +2149,7 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
             env_logger::init();
         }
     */
-    let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));
     state.set_command_for_tk(newcmd,Some(def),globally);
     Ok(())
 }
@@ -2156,7 +2157,7 @@ pub fn read<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
 pub static RELAX: &str = "relax";
 
 pub fn romannumeral<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"romannumeral");
     let mut num = catch_prim!(gullet.get_int(state) => ("romannumeral",cmd)).to_i64();
     if num <= 0 {
@@ -2226,11 +2227,11 @@ pub fn romannumeral<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,c
 
 pub static SETBOX: &str = "setbox";
 pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\setbox");
     let i = catch_prim!(gullet.get_int(state) => (SETBOX,cmd)).to_i64();
     if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (SETBOX,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (SETBOX,cmd));
     match catch_prim!(gullet.get_next_unexpandable(state) => (SETBOX,cmd)) {
         None => file_end_prim!(SETBOX,cmd),
         Some(c) => match c.command {
@@ -2252,21 +2253,21 @@ pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:C
 }
 
 pub fn sfcode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning space factor code");
     let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => throw!("Not a valid character: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("catcode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("catcode",cmd));
     let v = catch_prim!(gullet.get_int(state) => ("catcode",cmd));
     debug_log!(debug=>"\\sfcode '{}' = {}",c.char_str(),v);
     state.set_sfcode(c,v,global);
     Ok(())
 }
 pub fn sfcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting space factor code");
     let i = catch_prim!(gullet.get_int(state) => ("sfcode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
@@ -2279,32 +2280,32 @@ pub fn sfcode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
 }
 
 pub fn skewchar_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                        -> Result<(),TeXError<ET::Token>> {
+                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\kewchar");
     let mut font = catch_prim!(gullet.get_font(state) => ("skewchar",cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("skewchar",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("skewchar",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("skewchar",cmd)).to_i64();
     debug_log!(debug=>"\\skewchar\\{:?} = {:?}",font,i);
     font.set_skewchar(i);
     Ok(())
 }
-pub fn skewchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn skewchar_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\skewchar");
     let font = catch_prim!(gullet.get_font(state) => ("skewchar",cmd));
     debug_log!(debug=>"\\skewchar == {:?}",font.get_skewchar());
-    Ok(catch_prim!(ET::Int::from_i64::<ET::Token>(font.get_skewchar()) => ("hyphenchar",cmd)))
+    Ok(catch_prim!(ET::Int::from_i64::<ET>(font.get_skewchar()) => ("hyphenchar",cmd)))
 }
 
 pub static SKIP : &str = "skip";
 pub fn skip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\skip");
     let i = catch_prim!(gullet.get_int(state) => (SKIP,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (SKIP,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (SKIP,cmd));
     let v = catch_prim!(gullet.get_skip(state) => (SKIP,cmd));
     debug_log!(debug=>"\\skip{} = {}",i,v);
     state.set_skip_register(i,v,global);
@@ -2312,7 +2313,7 @@ pub fn skip_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 }
 
 pub fn skip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<Skip<ET::SkipDim>,TeXError<ET::Token>> {
+    -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
     debug_log!(trace=>"Getting \\skip");
     let i = catch_prim!(gullet.get_int(state) => (SKIP,cmd));
     let i:usize = match i.clone().try_into() {
@@ -2326,11 +2327,11 @@ pub fn skip_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 
 pub static SKIPDEF : &str = "skipdef";
 pub fn skipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                                     -> Result<(),TeXError<ET::Token>> {
+                                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"skipdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => (SKIPDEF,cmd));
     catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (SKIPDEF,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (SKIPDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (SKIPDEF,cmd));
     let num = catch_prim!(gullet.get_int(state) => (SKIPDEF,cmd));
     if num.to_i64() < 0 {
         throw!("Invalid skip register index: {}",num => cmd.cause)
@@ -2342,9 +2343,9 @@ pub fn skipdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 }
 
 pub fn string<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"string");
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("string",cmd)) {
+    match catch_prim!(gullet.mouth().get_next(state) => ("string",cmd)) {
         None => file_end_prim!("string",cmd),
         Some((t,_)) => token_to_chars(&t,state.get_escapechar(),state.get_catcode_scheme(),false,&mut |t| f(state,t))?
     }
@@ -2353,7 +2354,7 @@ pub fn string<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
 
 pub static THE : &str = "the";
 pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\the");
     match catch_prim!(gullet.get_next_unexpandable(state) => (THE,cmd)) {
         Some(c) => match c.command {
@@ -2384,34 +2385,34 @@ pub fn the<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comman
     }
 }
 
-pub fn time<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn time<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     let t = state.get_start_time();
     Ok(catch_prim!(ET::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
 }
 
 pub static TOKS:&str = "toks";
 pub fn toks_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\toks");
     let i = catch_prim!(gullet.get_int(state) => (TOKS,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (TOKS,cmd));
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => (TOKS,cmd)) {
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (TOKS,cmd));
+    match catch_prim!(gullet.mouth().get_next(state) => (TOKS,cmd)) {
         None => file_end_prim!(TOKS,cmd),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => throw!("Expected begin group token after \\toks, got: {}",o => cmd.cause)
     }
     let mut v = vec!();
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
+    catch_prim!(gullet.mouth().read_until_endgroup(state,&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v));
     state.set_toks_register(i,v,global);
     Ok(())
 }
 pub fn toks_get<'a,ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                -> Result<Vec<ET::Token>,TeXError<ET::Token>> {
+                -> Result<Vec<Token<ET>>,TeXError<ET>> {
     let i = catch_prim!(gullet.get_int(state) => (TOKS,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
@@ -2422,11 +2423,11 @@ pub fn toks_get<'a,ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 
 pub static TOKSDEF : &str = "toksdef";
 pub fn toksdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-                                                      -> Result<(),TeXError<ET::Token>> {
+                                                      -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"toksdef");
     let name = catch_prim!(gullet.get_control_sequence(state) => (TOKSDEF,cmd));
     catch_prim!(set_relax::<ET>(state,&name,&cmd,global) => (TOKSDEF,cmd));
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (TOKSDEF,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (TOKSDEF,cmd));
     let num = catch_prim!(gullet.get_int(state) => (TOKSDEF,cmd));
     if num.to_i64() < 0 {
         throw!("Invalid token register index: {}",num => cmd.cause)
@@ -2438,14 +2439,14 @@ pub fn toksdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 }
 
 pub fn uccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning upper case character");
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
         None => throw!("Not a valid character: {}",i => cmd.cause)
     };
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => ("uccode",cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => ("uccode",cmd));
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
     let lc: ET::Char = match ET::Char::from_i64(i.to_i64()) {
         Some(i) => i,
@@ -2457,7 +2458,7 @@ pub fn uccode_assign<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,
 }
 
 pub fn uccode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET::Token>> {
+    -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting upper case character");
     let i = catch_prim!(gullet.get_int(state) => ("uccode",cmd));
     let c: ET::Char = match ET::Char::from_i64(i.to_i64()) {
@@ -2471,14 +2472,14 @@ pub fn uccode_get<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
 
 pub static UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-                                         -> Result<(),TeXError<ET::Token>> {
+                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\uppercase");
     catch_prim!(expand_until_space::<ET>(gullet,state) => (UPPERCASE,cmd));
     let mut ret = gullet.mouth().new_tokensource();
-    catch_prim!(gullet.get_group(state,&mut |s,next| match next.base() {
+    catch_prim!(gullet.get_group(state,&mut |s,next| match &next.base {
         BaseToken::Char(c,cc) => {
             let nc = s.get_uccode(c);
-            Ok(ret.push(ET::Token::new(BaseToken::Char(nc, *cc), None)))
+            Ok(ret.push(Token::new(BaseToken::Char(nc, *cc), None)))
         }
         _ => Ok(ret.push(next))
 
@@ -2488,52 +2489,52 @@ pub fn uppercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
 }
 
 pub fn write<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-    -> Result<Whatsit<ET>, TeXError<ET::Token>> {
+    -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\write");
     let i = catch_prim!(gullet.get_int(state) => ("write",cmd));
     let i = i.to_i64();
 
-    match catch_prim!(gullet.mouth().get_next::<ET>(state) => ("write",cmd)) {
+    match catch_prim!(gullet.mouth().get_next(state) => ("write",cmd)) {
         None => file_end_prim!("write",cmd),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         Some((o,_)) => throw!("Expected begin group token after \\write, got: {}",o => cmd.cause)
     }
     let mut tks = vec!();
-    catch_prim!(gullet.mouth().read_until_endgroup::<ET>(state,&mut |_,t| Ok(tks.push(t))) => ("write",cmd));
+    catch_prim!(gullet.mouth().read_until_endgroup(state,&mut |_,t| Ok(tks.push(t))) => ("write",cmd));
 
     let apply = Box::new(move |state:&mut ET::State,gullet:&mut ET::Gullet| {
-        tks.push(ET::Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
-        tks.insert(0,ET::Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
-        let old = gullet.switch_mouth(tks);
-        let string = catch_prim!(gullet.get_braced_string(state) => ("write",cmd));
-        if i == 18 {
-            (state.outputs().write_18)(&string)
-        }
-        else if i == 17 {
-            (state.outputs().write_17)(&string)
-        }
-        else if i < 0 {
-            (state.outputs().write_neg1)(&string)
-        }
-        else {
-            match state.get_open_out_file(i as usize) {
-                None =>
-                    (state.outputs().write_other)(&string),
-                Some(f) => f.write(&string)
+        tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
+        tks.insert(0,Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
+        gullet.with_mouth(tks,|gullet| {
+            let string = catch_prim!(gullet.get_braced_string(state) => ("write",cmd));
+            if i == 18 {
+                (state.outputs().write_18)(&string)
             }
-        }
-        gullet.restore_mouth(old);
-        Ok(())
+            else if i == 17 {
+                (state.outputs().write_17)(&string)
+            }
+            else if i < 0 {
+                (state.outputs().write_neg1)(&string)
+            }
+            else {
+                match state.get_open_out_file(i as usize) {
+                    None =>
+                        (state.outputs().write_other)(&string),
+                    Some(f) => f.write(&string)
+                }
+            }
+            Ok(())
+        })
     });
     Ok(Whatsit::new(apply))
 }
 
 pub fn xdef<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool,protected:bool,long:bool,outer:bool)
-                                                 -> Result<(),TeXError<ET::Token>> {
+                                                 -> Result<(),TeXError<ET>> {
     edef::<ET>(state,gullet,cmd,true,protected,long,outer)
 }
 
-pub fn year<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET::Token>> {
+pub fn year<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
         state.get_start_time().year() as i64
     ) => ("year",cmd)))

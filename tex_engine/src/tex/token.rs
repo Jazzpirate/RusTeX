@@ -67,17 +67,48 @@ impl<C:CharType> Debug for BaseToken<C> {
     }
 }
 
-pub trait Token:PartialEq+Clone+Display+Debug+'static{
-    type Char:CharType;
-    /// The actual TeX-relevant data of the [`Token`]
-    fn base(&self) -> &BaseToken<Self::Char>;
+#[derive(Clone,Debug)]
+pub struct Token<ET:EngineType> {
+    pub base:BaseToken<ET::Char>,
+    pub sourceref:Option<ET::TokenReference>
+}
+impl<ET:EngineType> Display for Token<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.base,f)
+    }
+}
+impl<ET:EngineType> PartialEq for Token<ET> {
+    fn eq(&self, other: &Self) -> bool {
+        self.base == other.base
+    }
+}
+impl<ET:EngineType> Token<ET> {
     /// The [`CategoryCode`] of the [`Token`]
-    fn catcode(&self) -> CategoryCode {
-        match self.base() {
+    pub fn catcode(&self) -> CategoryCode {
+        match &self.base {
             BaseToken::Char(_, cat) => *cat,
             BaseToken::CS(_) => CategoryCode::Escape
         }
     }
+    pub fn new(base:BaseToken<ET::Char>, sourceref:Option<FileReference>) -> Self {
+        Self {
+            sourceref:sourceref.map(|fr| ET::TokenReference::from_file(&base,fr)),
+            base
+        }
+    }
+    pub fn with_ref(self, cmd:&ET::TokenReference) -> Self {
+        Self {
+            sourceref: Some(cmd.with_ref(&self.base)),
+            base: self.base
+        }
+    }
+}
+/*
+pub trait Token:PartialEq+Clone+Display+Debug+'static{
+    type Char:CharType;
+    /// The actual TeX-relevant data of the [`Token`]
+    fn base(&self) -> &BaseToken<Self::Char>;
+
     /// Construct a new [`Token`] from a [`BaseToken`]
     fn new(base:BaseToken<Self::Char>,sourceref:Option<(Ptr<String>,(usize,usize),(usize,usize))>) -> Self;
     /// Clone this [`Token`] with a new [`SourceReference`] of type [`SourceReference::Expansion`]
@@ -86,40 +117,101 @@ pub trait Token:PartialEq+Clone+Display+Debug+'static{
     fn sourceref_trace(&self) -> Option<String>;
     fn take_base(self) -> BaseToken<Self::Char>;
 }
+ */
 
-impl<C:CharType> Token for BaseToken<C> {
-    type Char = C;
-    fn base(&self) -> &BaseToken<C> { self }
-    fn new(base:BaseToken<C>,sourceref:Option<(Ptr<String>,(usize,usize),(usize,usize))>) -> Self { base }
-    fn with_ref<ET:EngineType>(&self, _:&CommandSource<ET>) -> Self {
-        self.clone()
-    }
-    fn sourceref_trace(&self) -> Option<String> { None }
-    fn take_base(self) -> BaseToken<C> { self }
+
+#[derive(Clone,Debug,PartialEq)]
+pub struct FileReference {
+    pub filename:Ptr<String>,
+    pub start:(usize,usize),
+    pub end:(usize,usize)
 }
+
+pub trait TokenReference<ET:EngineType<TokenReference = Self>>:Clone + Debug {
+    fn from_expansion(cmd:&CommandSource<ET>) -> Self;
+    fn from_file(base:&BaseToken<ET::Char>,fr:FileReference) -> Self;
+    fn with_ref(&self,base:&BaseToken<ET::Char>) -> Self { self.clone() }
+    fn trace(&self) -> Option<String> { None }
+}
+impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for () {
+    fn from_expansion(_cmd: &CommandSource<ET>) -> Self { () }
+    fn from_file(_base: &BaseToken<ET::Char>, _fr: FileReference) -> Self { () }
+}
+
+#[derive(Clone,Debug,PartialEq)]
+pub enum FileReferenceOnly {
+    File(FileReference), None
+}
+impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileReferenceOnly {
+    fn from_expansion(cmd: &CommandSource<ET>) -> Self {
+        match &cmd.cause.sourceref {
+            None|Some(FileReferenceOnly::None) => FileReferenceOnly::None,
+            Some(FileReferenceOnly::File(fr)) => FileReferenceOnly::File(fr.clone())
+        }
+    }
+    fn from_file(_: &BaseToken<ET::Char>, fr: FileReference) -> Self { FileReferenceOnly::File(fr) }
+}
+
+#[derive(Clone,Debug,PartialEq)]
+pub enum FileTokenReferenceI<ET:EngineType<TokenReference = FileTokenReference<ET>>> {
+    File(FileReference),
+    Expansion{cmd:Option<ET::CommandReference>, token: Token<ET>}
+}
+impl<ET:EngineType<TokenReference = FileTokenReference<ET>>> FileTokenReferenceI<ET> {
+    pub fn trace(&self) -> Option<String> {
+        use FileTokenReferenceI::*;
+        match self {
+            File (FileReference{filename, start,end}) => Some(format!("File {} at {}:{} - {}:{}", filename, start.0,start.1,end.0,end.1)),
+            Expansion {token, ..} => {
+                let mut trace = format!("Expanded from {}",token);
+                match token.sourceref.as_ref().map(|r|r.trace()).flatten() {
+                    Some(s) => {
+                        trace.push_str("\n - ");
+                        trace.push_str(&s)
+                    },
+                    None => ()
+                }
+                Some(trace)
+            }
+        }
+    }
+}
+
+pub type FileTokenReference<ET> = Ptr<FileTokenReferenceI<ET>>;
+impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileTokenReference<ET> {
+    fn from_expansion(cmd: &CommandSource<ET>) -> Self {
+        Ptr::new(FileTokenReferenceI::Expansion{
+            cmd: cmd.reference.clone(),
+            token: cmd.cause.clone()
+        })
+    }
+    fn from_file(_: &BaseToken<ET::Char>, fr: FileReference) -> Self { Ptr::new(FileTokenReferenceI::File(fr)) }
+}
+
 
 /// A list of [`Token`]s
-pub struct TokenList<'a,T:Token>(pub &'a [T]);
-impl<'a,T:Token> Into<TokenList<'a,T>> for &'a Vec<T> {
-    fn into(self) -> TokenList<'a,T> { TokenList(self.as_slice()) }
+pub struct TokenList<'a,ET:EngineType>(pub &'a [Token<ET>]);
+impl<'a,ET:EngineType> Into<TokenList<'a,ET>> for &'a Vec<Token<ET>> {
+    fn into(self) -> TokenList<'a,ET> { TokenList(self.as_slice()) }
 }
-impl<T:Token> Display for TokenList<'_,T> {
+impl<ET:EngineType> Display for TokenList<'_,ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for t in self.0 {
-            write!(f, "{}", t.base())?;
+            write!(f, "{}", t.base)?;
         }
         Ok(())
     }
 }
-impl<T:Token> Debug for TokenList<'_,T> {
+impl<ET:EngineType> Debug for TokenList<'_,ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for t in self.0 {
-            write!(f, "{:?}", t.base())?;
+            write!(f, "{:?}", t.base)?;
         }
         Ok(())
     }
 }
 
+/*
 /// A [`Token`] bundling a [`BaseToken`] with a [`SourceReference`].
 #[derive(Clone)]
 pub struct TokenWithSourceref<ET:EngineType<Token=Self>>{
@@ -191,7 +283,7 @@ pub enum SourceReference<ET:EngineType> {
     /// [`Token`] in the file.
     File{file: Ptr<String>,start:(usize,usize),end:(usize,usize)},
     /// A reference to an expansion, with the [`Token`] that was expanded via [`BaseCommand`].
-    Expansion{token: Box<ET::Token>,cmd:Option<ET::CommandReference>}
+    Expansion{token: Box<Token<ET>>,cmd:Option<ET::CommandReference>}
 }
 impl<ET:EngineType> Debug for SourceReference<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -201,3 +293,5 @@ impl<ET:EngineType> Debug for SourceReference<ET> {
         }
     }
 }
+
+ */

@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
-use std::marker::PhantomData;
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use crate::engine::EngineType;
 use crate::engine::state::fields::IsDefault;
 use crate::tex::token::Token;
 use crate::throw;
@@ -69,7 +69,7 @@ impl Numeric for Frac {
 
 pub trait Int:Numeric +PartialOrd+TryInto<usize>+From<u8>+
 Div<Self,Output=Self>+Mul<Self,Output=Self> {
-    fn from_i64<T:Token>(i:i64) -> Result<Self,TeXError<T>>;
+    fn from_i64<ET:EngineType>(i:i64) -> Result<Self,TeXError<ET>>;
     fn to_i64(&self) -> i64;
 }
 pub trait Dim:Numeric+Add<Self,Output=Self>{
@@ -102,7 +102,7 @@ impl Numeric for i32 {
     }
 }
 impl Int for i32 {
-    fn from_i64<T:Token>(i:i64) -> Result<Self,TeXError<T>> {
+    fn from_i64<ET:EngineType>(i:i64) -> Result<Self,TeXError<ET>> {
         if i < i32::MIN as i64 || i > (i32::MAX as i64) {
             throw!("Integer overflow: {}",i)
         } else {

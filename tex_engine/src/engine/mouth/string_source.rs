@@ -7,7 +7,7 @@ use crate::{debug_log, throw};
 use crate::engine::EngineType;
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{BaseToken, FileReference, Token};
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType};
@@ -356,7 +356,7 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    pub fn get_next_valid<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,TeXError<T>> {
+    pub fn get_next_valid<ET:EngineType<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,TeXError<ET>> {
         use CategoryCode::*;
         match self.get_next_immediate(cc,endline) {
             None => {
@@ -386,8 +386,8 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    pub fn read<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>,f:&mut dyn FnMut(T) -> ())
-        -> Result<(),TeXError<T>> {
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F)
+        -> Result<(),TeXError<ET>> {
         let mut done = false;
         use CategoryCode::*;
         let currline = self.line;
@@ -423,19 +423,19 @@ impl<C:CharType> StringSourceState<C> {
                         MouthState::N => (),
                         _ => {
                             self.state = MouthState::S;
-                            f(T::new(BaseToken::Char(next,Space),None));
+                            f(Token::new(BaseToken::Char(next,Space),None));
                             done = true;
                         }
                     }
                 }
                 Escape => {
                     done = true;
-                    f(T::new(self.get_escape(cc,endline,next,l,c).0,None))
+                    f(Token::new(self.get_escape(cc,endline,next,l,c).0,None))
                 }
                 o => {
                     self.state = MouthState::M;
                     done = true;
-                    f(T::new(BaseToken::Char(next,*o),None))
+                    f(Token::new(BaseToken::Char(next,*o),None))
                 }
             }
         }
@@ -473,7 +473,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    pub fn read<T:Token<Char=C>>(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:&mut dyn FnMut(T) -> ()) -> Result<(),TeXError<T>> {
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:F) -> Result<(),TeXError<ET>> {
         self.state.read(cc,endline,f)
     }
 
@@ -483,13 +483,16 @@ impl<C:CharType> StringSource<C> {
     pub fn preview(&self) -> String { self.state.preview() }
     pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
-    pub fn get_next<T:Token<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,TeXError<T>> {
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<Token<ET>>,TeXError<ET>> {
         match self.state.get_next_valid(cc, endline)? {
             None => Ok(None),
             Some((n,l,c)) =>
-                Ok(Some(T::new(n,self.source.clone().map(|s|
-                    (s,(l,c),self.state.get_next_lc())
-                ))))
+                Ok(Some(Token::new(n,self.source.clone().map(|s|
+                                                                 FileReference {
+                                                                     filename:s,start:(l,c),end:self.state.get_next_lc()
+                                                                 }
+                    )
+                )))
         }
     }
 }

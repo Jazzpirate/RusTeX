@@ -23,8 +23,8 @@ use crate::utils::strings::AllCharsTrait;
 
 /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
 /// (or [`None`] if the [`Mouth`] is empty)
-pub fn get_next_unexpandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<Option<ResolvedToken<ET>>,TeXError<ET::Token>> {
-    while let Some((next,e)) = gullet.mouth().get_next::<ET>(state)? {
+pub fn get_next_unexpandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
+    while let Some((next,e)) = gullet.mouth().get_next(state)? {
         if !e {return Ok(Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false}))}
         match gullet.expand(state,resolve_token(state,next))? {
             Some(r) => return Ok(Some(r)),
@@ -36,8 +36,8 @@ pub fn get_next_unexpandable<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET
 
 
 /// Resolves the given [`Token`]
-pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:ET::Token) -> ResolvedToken<ET> {
-    match match tk.base() {
+pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:Token<ET>) -> ResolvedToken<ET> {
+    match match &tk.base {
         BaseToken::Char(c, CategoryCode::Active) => state.get_ac_command(c),
         BaseToken::CS(name) => state.get_command(name),
         BaseToken::Char(char,catcode) =>
@@ -60,7 +60,7 @@ pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:ET::Token) -> ResolvedTo
     }
 }
 
-pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cmd:CommandSource<ET>,name:&'static str,apply:ConditionalFun<ET>,unless:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cmd:CommandSource<ET>,name:&'static str,apply:ConditionalFun<ET>,unless:bool) -> Result<(),TeXError<ET>> {
     if name == IFCASE {
         debug_log!(trace=>"ifcase");
         let i = gullet.new_conditional(IFCASE);
@@ -85,10 +85,10 @@ pub fn do_conditional<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State
 }
 
 
-pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<String,TeXError<ET::Token>> {
+pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<String,TeXError<ET>> {
     debug_log!(trace=>"Reading string {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     let mut ret = String::new();
-    gullet.mouth().skip_whitespace::<ET>(state)?;
+    gullet.mouth().skip_whitespace(state)?;
     let mut quoted = false;
     while let Some(next) = gullet.get_next_unexpandable(state)? {
         match next.command {
@@ -108,12 +108,12 @@ pub fn get_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) 
 }
 
 
-pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<String,TeXError<ET::Token>> {
+pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State) -> Result<String,TeXError<ET>> {
     let mut ret = vec!();
     let cc = state.get_catcode_scheme().clone();
     let esc = state.get_escapechar();
     gullet.get_expanded_group(state,false,false,true,&mut |s,t| {
-        match t.base() {
+        match &t.base {
             BaseToken::Char(c,_) => {
                 for u in c.as_bytes() { ret.push(*u) }
             }
@@ -130,15 +130,15 @@ pub fn get_braced_string<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::
     Ok(String::from_utf8(ret).unwrap())
 }
 
-pub fn get_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
-    match gullet.mouth().get_next::<ET>(state)? {
+pub fn get_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    match gullet.mouth().get_next(state)? {
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         _ => throw!("begin group expected")
     }
     let mut ingroup = 0;
-    while let Some(next) = gullet.mouth().get_next::<ET>(state)? {
+    while let Some(next) = gullet.mouth().get_next(state)? {
         let tk = next.0;
-        match tk.base() {
+        match &tk.base {
             BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
             BaseToken::Char(_,CategoryCode::EndGroup) => {
                 if ingroup == 0 { return Ok(()) } else { ingroup -= 1; }
@@ -150,13 +150,13 @@ pub fn get_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, f
     file_end!()
 }
 
-pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
-    match gullet.mouth().get_next::<ET>(state)? {
+pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET::State, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    match gullet.mouth().get_next(state)? {
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         _ => throw!("begin group expected")
     }
     let mut ingroup = 0;
-    while let Some(next) = gullet.mouth().get_next::<ET>(state)? {
+    while let Some(next) = gullet.mouth().get_next(state)? {
         if next.1 {
             let mut res = resolve_token::<ET>(state, next.0);
             match res.command {
@@ -171,7 +171,7 @@ pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET:
                 BaseCommand::Def(d) if d.protected && !expand_protected =>
                     f(state, res.source.cause)?,
                 BaseCommand::Expandable { name, .. } if name == NOEXPAND => {
-                    match gullet.mouth().get_next::<ET>(state)? {
+                    match gullet.mouth().get_next(state)? {
                         None => file_end!(),
                         Some((t, _)) => f(state, t)?
                     }
@@ -190,10 +190,10 @@ pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET:
                         if t.catcode() == CategoryCode::Parameter { f(s, t.clone())? }
                         f(s, t)
                     })?,
-                BaseCommand::None if err_on_unknowns => return Err(match res.source.cause.base() {
+                BaseCommand::None if err_on_unknowns => match res.source.cause.base {
                     BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
                     BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
-                }),
+                }
                 _ => match gullet.expand(state, res)? {
                     Some(res) => f(state, res.source.cause)?,
                     _ => ()
@@ -204,14 +204,14 @@ pub fn get_expanded_group<ET:EngineType>(gullet:&mut ET::Gullet, state: &mut ET:
     file_end!()
 }
 
-pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET::Token>> {
+pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"False conditional. Skipping...");
     let mut incond:usize = gullet.current_conditional().1 - condidx;
     for i in 0..incond {
         gullet.pop_conditional();
     }
-    while let Some((next,exp)) = gullet.mouth().get_next::<ET>(state)? {
-        match next.base() {
+    while let Some((next,exp)) = gullet.mouth().get_next(state)? {
+        match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(c).map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
@@ -275,12 +275,12 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,con
     file_end!()
 }
 
-pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\else. Skipping...");
     gullet.set_top_conditional(ConditionalBranch::Else(condname));
     let mut incond:usize = gullet.current_conditional().1 - condidx;
-    while let Some((next,exp)) = gullet.mouth().get_next::<ET>(state)? {
-        match next.base() {
+    while let Some((next,exp)) = gullet.mouth().get_next(state)? {
+        match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(c).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
@@ -316,7 +316,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cond
     Ok(())
 }
 
-pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, kw:&'a str) -> Result<bool,TeXError<ET::Token>> {
+pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, kw:&'a str) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     let mut current = String::new();
     let mut read_toks = gullet.mouth().new_tokensource();
@@ -350,7 +350,7 @@ pub fn get_keyword<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Stat
     file_end!()
 }
 
-pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET::Token>> {
+pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
     let mut current = String::new();
     let mut read_toks = gullet.mouth().new_tokensource();
@@ -399,22 +399,22 @@ pub fn get_keywords<'a,ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::Sta
     file_end!()
 }
 
-pub fn token_to_chars<T:Token>(tk:&T,escape:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>,insertspace:bool,f:&mut dyn FnMut(T) -> Result<(),TeXError<T>>) -> Result<(),TeXError<T>> {
-    match tk.base() {
-        BaseToken::Char(c,_) if c.to_usize() == 32 => f(T::new(BaseToken::Char(*c,CategoryCode::Space),None)),
-        BaseToken::Char(c,CategoryCode::Space) => f(T::new(BaseToken::Char(*c,CategoryCode::Space),None)),
-        BaseToken::Char(c,_) => f(T::new(BaseToken::Char(*c,CategoryCode::Other),None)),
+pub fn token_to_chars<ET:EngineType,F:FnMut(Token<ET>) -> Result<(),TeXError<ET>>>(tk:&Token<ET>,escape:Option<ET::Char>,cc:&CategoryCodeScheme<ET::Char>,insertspace:bool,mut f:F) -> Result<(),TeXError<ET>> {
+    match &tk.base {
+        BaseToken::Char(c,_) if c.to_usize() == 32 => f(Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
+        BaseToken::Char(c,CategoryCode::Space) => f(Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
+        BaseToken::Char(c,_) => f(Token::new(BaseToken::Char(*c,CategoryCode::Other),None)),
         BaseToken::CS(str) => {
             match escape {
                 None => (),
-                Some(c) => f(T::new(BaseToken::Char(c,CategoryCode::Other),None))?
+                Some(c) => f(Token::new(BaseToken::Char(c,CategoryCode::Other),None))?
             }
             for c in str.as_vec() {
-                f(T::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
+                f(Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
                 ),None))?
             }
             if insertspace && !(str.len() == 1 && *cc.get(&str.as_vec()[0]) != CategoryCode::Letter) {
-                f(T::new(BaseToken::Char(T::Char::from(32),CategoryCode::Space),None))?
+                f(Token::new(BaseToken::Char(ET::Char::from(32),CategoryCode::Space),None))?
             }
             Ok(())
         }
@@ -455,11 +455,11 @@ pub fn token_to_bytes<T:Token>(tk:T,escapechar:Option<T::Char>,cc:&CategoryCodeS
 
  */
 
-pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>) -> String {
+pub fn tokens_to_string<ET:EngineType>(v:Vec<Token<ET>>,escapechar:Option<ET::Char>,cc:&CategoryCodeScheme<ET::Char>) -> String {
     let mut s = vec!();
     match escapechar {
         None => for t in v {
-                match t.base() {
+                match &t.base {
                     BaseToken::Char(c,CategoryCode::Space) => s.push(b' '),
                     BaseToken::Char(c,_) => for u in c.as_bytes() {s.push(*u)},  //s.push_str(&c.char_str()),
                     BaseToken::CS(str) => {
@@ -473,7 +473,7 @@ pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>,cc:&Categor
                 }
             }
         Some(escapechar) => for t in v {
-                match t.base() {
+                match &t.base {
                     BaseToken::Char(c,CategoryCode::Space) => s.push(b' '),
                     BaseToken::Char(c,_) => for u in c.as_bytes() {s.push(*u)},
                     BaseToken::CS(str) => {
@@ -491,18 +491,18 @@ pub fn tokens_to_string<T:Token>(v:Vec<T>,escapechar:Option<T::Char>,cc:&Categor
     String::from_utf8(s).unwrap()
 }
 
-pub fn string_to_tokens<ET:EngineType>(str:&[u8],state:&ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn string_to_tokens<ET:EngineType>(str:&[u8],state:&ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     for u in str {
         let c = ET::Char::from(*u);
-        f(state,ET::Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None))?;
+        f(state,Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None))?;
     }
     Ok(())
 }
 
 
-pub fn get_control_sequence<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Token,TeXError<ET::Token>> {
-    gullet.mouth().skip_whitespace::<ET>(state)?;
-    while let Some((next,e)) = gullet.mouth().get_next::<ET>(state)? {
+pub fn get_control_sequence<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<Token<ET>,TeXError<ET>> {
+    gullet.mouth().skip_whitespace(state)?;
+    while let Some((next,e)) = gullet.mouth().get_next(state)? {
         let resolved = resolve_token::<ET>(state,next);
         match resolved.command {
             BaseCommand::Char{char,catcode:CategoryCode::Active} =>
@@ -524,7 +524,7 @@ pub fn get_control_sequence<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET
 }
 
 fn get_cs_check_command<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, resolved:ResolvedToken<ET>)
-                                       -> Result<Option<ET::Token>,TeXError<ET::Token>> {
+                                       -> Result<Option<Token<ET>>,TeXError<ET>> {
     match resolved.command {
         BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } => {
             gullet.expand(state,resolved)?;
@@ -534,7 +534,7 @@ fn get_cs_check_command<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::St
     }
 }
 
-pub fn get_char<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<ET::Char,TeXError<ET::Token>> {
+pub fn get_char<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<ET::Char,TeXError<ET>> {
     let num = gullet.get_int(state)?;
     match ET::Char::from_i64(num.to_i64()) {
         Some(i) => Ok(i),
@@ -542,7 +542,7 @@ pub fn get_char<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> R
     }
 }
 
-pub fn get_font<ET:EngineType>(gullet: &mut ET::Gullet,state:&mut ET::State) -> Result<ET::Font,TeXError<ET::Token>> {
+pub fn get_font<ET:EngineType>(gullet: &mut ET::Gullet,state:&mut ET::State) -> Result<ET::Font,TeXError<ET>> {
     match gullet.get_next_unexpandable(state)? {
         None => file_end!(),
         Some(res) => match res.command {

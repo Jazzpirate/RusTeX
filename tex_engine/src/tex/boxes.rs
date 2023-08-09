@@ -27,12 +27,12 @@ impl TeXNode for StandardTeXBox {
     type Bx = StandardTeXBox;
 }
 
-pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>>>>);
+pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET>>>>>>);
 impl<ET:EngineType> Whatsit<ET> {
-    pub fn new(f:Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET::Token>>>) -> Self {
+    pub fn new(f:Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET>>>) -> Self {
         Whatsit(Ptr::new(Mut::new(Some(f))))
     }
-    pub fn apply(self,state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),TeXError<ET::Token>> {
+    pub fn apply(self,state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),TeXError<ET>> {
         let f = &mut *self.0.borrow_mut();
         match std::mem::take(f) {
             None => Ok(()),

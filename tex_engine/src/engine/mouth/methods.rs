@@ -12,9 +12,9 @@ use crate::utils::strings::CharType;
 
 /// Default implementation for [`Mouth::skip_whitespace`]
 pub fn skip_whitespace<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State)
-                                -> Result<(),TeXError<ET::Token>> {
+                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"skipping whitespace");
-    while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
+    while let Some((tk,_)) = mouth.get_next(state)? {
         match tk.catcode() {
             CategoryCode::Space => (),
             _ => {
@@ -27,13 +27,13 @@ pub fn skip_whitespace<ET:EngineType>(mouth:&mut ET::Mouth, state:&ET::State)
 }
 
 /// Default implementation for [`Mouth::skip_eq_char`]
-pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Result<(),TeXError<ET::Token>> {
-    mouth.skip_whitespace::<ET>(state)?;
+pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Result<(),TeXError<ET>> {
+    mouth.skip_whitespace(state)?;
     debug_log!(trace=>"skipping '='");
-    if let Some((tk,_)) = mouth.get_next::<ET>(state)? {
-        match tk.base() {
+    if let Some((tk,_)) = mouth.get_next(state)? {
+        match &tk.base {
             BaseToken::Char(c,_) if c.to_usize() == 61 => {
-                match mouth.get_next::<ET>(state)? {
+                match mouth.get_next(state)? {
                     Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
                     Some((tk,_)) => mouth.requeue(tk),
                     _ => ()
@@ -46,8 +46,8 @@ pub fn skip_eq_char<ET:EngineType>(mouth:&mut ET::Mouth,state:&ET::State) -> Res
 }
 
 /// Default implementation for [`Mouth::read_argument`]
-pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
-    match mouth.get_next::<ET>(state)? {
+pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    match mouth.get_next(state)? {
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => read_until_endgroup::<ET>(mouth,state,f),
         Some((o,_)) => {
@@ -58,13 +58,13 @@ pub fn read_argument<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f
 }
 
 pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET::Token>> {
-    match mouth.get_next::<ET>(state)? {
+    -> Result<(),TeXError<ET>> {
+    match mouth.get_next(state)? {
         None => file_end!(),
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
             let mut depth = 1;
-            while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
-                match tk.base() {
+            while let Some((tk,_)) = mouth.get_next(state)? {
+                match &tk.base {
                     BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
                     BaseToken::Char(_,CategoryCode::EndGroup) => {
                         depth -= 1;
@@ -87,9 +87,9 @@ pub fn read_argument_nopar<ET:EngineType>(mouth:&mut ET::Mouth, state:&mut ET::S
 }
 
 /// Default implementation for [`Mouth::read_until_endgroup`]
-pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+pub fn read_until_endgroup<ET:EngineType>(mouth: &mut ET::Mouth, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     let mut depth = 1;
-    while let Some((tk,_)) = mouth.get_next::<ET>(state)? {
+    while let Some((tk,_)) = mouth.get_next(state)? {
         match tk.catcode() {
             CategoryCode::BeginGroup => depth += 1,
             CategoryCode::EndGroup => {

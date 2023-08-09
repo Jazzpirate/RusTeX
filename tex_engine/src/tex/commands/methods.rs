@@ -25,45 +25,45 @@ macro_rules! cmstodo {
 }
 
 pub fn set_int_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
-                                       -> Result<(),TeXError<ET::Token>> {
+                                       -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\count{}",u);
-    catch!(gullet.mouth().skip_eq_char::<ET>(state) => cmd.cause);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
     let v = catch!(gullet.get_int(state) => cmd.cause);
     debug_log!(debug=>"\\count{} = {}",u,v);
     state.set_int_register(u,v,global);
     Ok(())
 }
 pub fn set_dim_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
-                                       -> Result<(),TeXError<ET::Token>> {
+                                       -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\dimen{}",u);
-    catch!(gullet.mouth().skip_eq_char::<ET>(state) => cmd.cause);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
     let v = catch!(gullet.get_dim(state) => cmd.cause);
     debug_log!(debug=>"\\dimen{} = {}",u,v);
     state.set_dim_register(u,v,global);
     Ok(())
 }
 pub fn set_skip_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
-                                        -> Result<(),TeXError<ET::Token>> {
+                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\skip{}",u);
-    catch!(gullet.mouth().skip_eq_char::<ET>(state) => cmd.cause);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
     let v = catch!(gullet.get_skip(state) => cmd.cause);
     debug_log!(debug=>"\\skip{} = {}",u,v);
     state.set_skip_register(u,v,global);
     Ok(())
 }
 pub fn set_muskip_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
-                                          -> Result<(),TeXError<ET::Token>> {
+                                          -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\muskip{}",u);
-    catch!(gullet.mouth().skip_eq_char::<ET>(state) => cmd.cause);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
     let v = catch!(gullet.get_muskip(state) => cmd.cause);
     debug_log!(debug=>"\\muskip{} = {}",u,v);
     state.set_muskip_register(u,v,global);
     Ok(())
 }
 pub fn set_toks_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
-                                        -> Result<(),TeXError<ET::Token>> {
+                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting \\toks{}",u);
-    catch!(gullet.mouth().skip_eq_char::<ET>(state) => cmd.cause);
+    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
     let mut tks = Vec::with_capacity(32);
     expand_until_space::<ET>(gullet,state)?;
     catch!(gullet.get_group(state,&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
@@ -72,42 +72,42 @@ pub fn set_toks_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gu
     Ok(())
 }
 
-pub fn set_primitive_int<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn set_primitive_int<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
     let i = catch_prim!(gullet.get_int(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,i);
     state.set_primitive_int(name,i,global);
     Ok(())
 }
-pub fn set_primitive_dim<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn set_primitive_dim<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
     let d = catch_prim!(gullet.get_dim(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_dim(name,d,global);
     Ok(())
 }
-pub fn set_primitive_skip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn set_primitive_skip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
     let d = catch_prim!(gullet.get_skip(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_skip(name,d,global);
     Ok(())
 }
 
-pub fn set_primitive_muskip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn set_primitive_muskip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
     let d = catch_prim!(gullet.get_muskip(state) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
     state.set_primitive_muskip(name,d,global);
     Ok(())
 }
-pub fn set_primitive_toks<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET::Token>> {
+pub fn set_primitive_toks<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char::<ET>(state) => (name,cmd));
+    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
     let mut tks = Vec::with_capacity(32);
     expand_until_space::<ET>(gullet,state)?;
     catch_prim!(gullet.get_group(state,&mut |_,t| Ok(tks.push(t))) => (name,cmd));
@@ -363,12 +363,14 @@ macro_rules! register_value_assign_font {
     }};
 }
 
+use crate::tex::token::TokenReference;
+
 /// Expands the [`Def`] into a [`Vec`] of [`Token`]s. `cmd` and `cause` are the command and
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,pool:(&mut[Vec<ET::Token>;9],&mut Vec<ET::Token>), f:TokenCont<ET>)
-                                 -> Result<(),TeXError<ET::Token>> {
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>), f:TokenCont<ET>)
+                                 -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
@@ -381,7 +383,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth
         for elem in &d.signature {
             match elem {
                 ParamToken::Token(delim) => {
-                    if let Some((n,_)) = catch!(mouth.get_next::<ET>(state) => cmd.cause) {
+                    if let Some((n,_)) = catch!(mouth.get_next(state) => cmd.cause) {
                         if n != *delim {
                             throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                         }
@@ -411,11 +413,12 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET::Token>, state:&mut ET::State, mouth
     replace(d, cmd, state, args, f)
 }
 
-fn expand_simple<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>,state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    let rf = ET::TokenReference::from_expansion(&cmd);
     for r in &d.replacement {
         match r {
-            ExpToken::Token(t) => f(state,t.with_ref(&cmd))?,
-            ExpToken::ParamToken(t) => f(state,t.with_ref(&cmd))?,
+            ExpToken::Token(t) => f(state,t.clone().with_ref(&rf))?,
+            ExpToken::ParamToken(t) => f(state,t.clone().with_ref(&rf))?,
             _ => unreachable!()
         }
     }
@@ -425,14 +428,14 @@ fn expand_simple<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>,state:&
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<ET::Token>;9],&mut Vec<ET::Token>))
-                                 -> Result<(),TeXError<ET::Token>> {
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>))
+                                 -> Result<(),TeXError<ET>> {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
             ParamToken::Token(delim) => { // eat the delimiter
-                if let Some((n,_)) = catch!(mouth.get_next::<ET>(state) => cmd.cause.clone()) {
+                if let Some((n,_)) = catch!(mouth.get_next(state) => cmd.cause.clone()) {
                     if n != *delim {
                         throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                     }
@@ -446,8 +449,8 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
                     arg.clear();
                     argnum += 1;
                     'L: loop {
-                        match if d.long {catch!({mouth.get_next::<ET>(state)} => cmd.cause.clone())}
-                        else {catch!({mouth.get_next_nopar::<ET>(state)} => cmd.cause.clone())} {
+                        match if d.long {catch!({mouth.get_next(state)} => cmd.cause.clone())}
+                        else {catch!({mouth.get_next_nopar(state)} => cmd.cause.clone())} {
                             Some((t,_)) => {
                                 if t.catcode() == CategoryCode::BeginGroup {
                                     mouth.requeue(t);
@@ -464,9 +467,9 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
                     let arg = &mut pool.0[argnum];
                     arg.clear();
                     argnum += 1;
-                    catch!(mouth.skip_whitespace::<ET>(state) => cmd.cause.clone());
-                    if d.long {catch!(mouth.read_argument::<ET>(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
-                    else {catch!(mouth.read_argument_nopar::<ET>(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
+                    catch!(mouth.skip_whitespace(state) => cmd.cause.clone());
+                    if d.long {catch!(mouth.read_argument(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
+                    else {catch!(mouth.read_argument_nopar(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut pool.0[argnum];
@@ -481,8 +484,8 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
-                        match if d.long {catch!({mouth.get_next::<ET>(state)} => cmd.cause.clone())}
-                        else {catch!({mouth.get_next_nopar::<ET>(state)} => cmd.cause.clone())} {
+                        match if d.long {catch!({mouth.get_next(state)} => cmd.cause.clone())}
+                        else {catch!({mouth.get_next_nopar(state)} => cmd.cause.clone())} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
                                 if arg.len() == 0 {
@@ -536,7 +539,8 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET::Token>, mouth:&mut ET::Mouth, sta
     Ok(())
 }
 
-fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut ET::State,args:&[Vec<ET::Token>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET::Token>> {
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, state: &mut ET::State,args:&[Vec<Token<ET>>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    let rf = ET::TokenReference::from_expansion(&cmd);
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");
@@ -549,11 +553,11 @@ fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut 
         match next {
             ExpToken::Param(_,idx) => {
                 for t in args[*idx as usize].iter() {
-                    f(state,t.with_ref(&cmd))?
+                    f(state,t.clone().with_ref(&rf))?
                 }
             }
-            ExpToken::ParamToken(t) => f(state,t.with_ref(&cmd))?,
-            ExpToken::Token(t) => f(state,t.with_ref(&cmd))?
+            ExpToken::ParamToken(t) => f(state,t.clone().with_ref(&rf))?,
+            ExpToken::Token(t) => f(state,t.clone().with_ref(&rf))?
         }
     }
 /*
@@ -583,17 +587,17 @@ fn replace<ET:EngineType>(d:&Def<ET::Token>, cmd:CommandSource<ET>, state: &mut 
 }
 
 pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
-    -> Result<(bool,u8,Vec<ParamToken<ET::Token>>),TeXError<ET::Token>> {
+    -> Result<(bool,u8,Vec<ParamToken<ET>>),TeXError<ET>> {
     let mouth = gullet.mouth();
     let mut arity : u8 = 0;
-    let mut params : Vec<ParamToken<ET::Token>> = vec!();
-    while let Some((next,_)) = catch_prim!(mouth.get_next::<ET>(state) => (name,cmd)) {
-        match next.base() {
+    let mut params : Vec<ParamToken<ET>> = vec!();
+    while let Some((next,_)) = catch_prim!(mouth.get_next(state) => (name,cmd)) {
+        match &next.base {
             BaseToken::Char(_,CategoryCode::Parameter) => {
-                match catch_prim!(mouth.get_next::<ET>(state) => (name,cmd)) {
+                match catch_prim!(mouth.get_next(state) => (name,cmd)) {
                     None => file_end_prim!(name,cmd),
                     Some((next,_)) => {
-                        match next.base() {
+                        match &next.base {
                             BaseToken::Char(_,CategoryCode::BeginGroup) => {
                                 mouth.requeue(next);
                                 return Ok((true, arity, params))
@@ -624,8 +628,8 @@ pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
 }
 
 
-pub fn set_relax<ET:EngineType>(state:&mut ET::State,tk:&ET::Token,source:&CommandSource<ET>,globally:bool) -> Result<(),TeXError<ET::Token>> {
-    match tk.base() {
+pub fn set_relax<ET:EngineType>(state:&mut ET::State,tk:&Token<ET>,source:&CommandSource<ET>,globally:bool) -> Result<(),TeXError<ET>> {
+    match &tk.base {
         BaseToken::Char(c,CategoryCode::Active) => {
             state.set_ac_command(*c, Some(Command::new(BaseCommand::Relax,Some(source))), globally)
         }

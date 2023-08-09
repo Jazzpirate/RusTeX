@@ -4,6 +4,7 @@ pub mod tfm_files;
 
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
+use crate::engine::EngineType;
 use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::state::State;
@@ -19,7 +20,7 @@ use crate::utils::strings::CharType;
 pub trait FontStore:Clone+'static {
     type Char:CharType;
     type Font:Font<Char=Self::Char>;
-    fn get_new<T:Token<Char=Self::Char>>(&mut self,s: &str) -> Result<Self::Font,TeXError<T>>;
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self,s: &str) -> Result<Self::Font,TeXError<ET>>;
     fn null(&self) -> Self::Font;
 }
 pub trait Font:Debug+Display+Clone + PartialEq {
@@ -44,7 +45,7 @@ pub struct TfmFontStore {
 impl FontStore for TfmFontStore {
     type Char = u8;
     type Font = TfmFont;
-    fn get_new<T:Token<Char=Self::Char>>(&mut self, s: &str) -> Result<Self::Font,TeXError<T>> {
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self, s: &str) -> Result<Self::Font,TeXError<ET>> {
         let path = match KPATHSEA.get(s) {
             None => throw!("Font not found: {}",s),
             Some(res) => res.path

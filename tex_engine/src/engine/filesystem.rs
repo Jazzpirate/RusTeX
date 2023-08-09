@@ -37,7 +37,7 @@ pub trait File<Char:CharType>:Clone {
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>>;
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>>;
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -88,7 +88,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>> {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -127,20 +127,19 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let mut open = open.as_mut().unwrap();
         open.eof::<ET>(state)//.peek().is_none()
     }
-    fn read<T:Token<Char=Char>>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>) -> Result<Vec<T>,TeXError<T>> {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) -> Result<(),TeXError<ET>> {
         let mut open = &mut *self.open.borrow_mut();
         match open {
             None => throw!("File not open"),
             Some(m) => {
-                let mut ret: Vec<T> = vec!();
                 let mut ingroups = 0;
                 loop {
-                    m.read(cc,endlinechar,&mut |tk:T| match tk.base() {
-                        BaseToken::Char(c,CategoryCode::BeginGroup) => {ingroups += 1; ret.push(tk)},
-                        BaseToken::Char(c,CategoryCode::EndGroup) => {ingroups += 1; ret.push(tk)},
-                        _ => ret.push(tk)
+                    m.read(cc,endlinechar,|tk| match &tk.base {
+                        BaseToken::Char(c,CategoryCode::BeginGroup) => {ingroups += 1; f(tk)},
+                        BaseToken::Char(c,CategoryCode::EndGroup) => {ingroups += 1; f(tk)},
+                        _ => f(tk)
                     })?;
-                    if ingroups == 0 {return Ok(ret)}
+                    if ingroups == 0 {return Ok(())}
                 }
             }
         }

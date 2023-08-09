@@ -36,8 +36,8 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn box_stack(&self) -> &Vec<OpenBox<ET>>;
     fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>>;
 
-    fn set_afterassignment(&mut self,t:ET::Token);
-    fn take_afterassignment(&mut self) -> Option<ET::Token>;
+    fn set_afterassignment(&mut self,t:Token<ET>);
+    fn take_afterassignment(&mut self) -> Option<Token<ET>>;
 
     /// The current [`TeXMode`]
     fn mode(&self) -> TeXMode;
@@ -57,7 +57,7 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     /// push a new group onto the stack
     fn stack_push(&mut self, g: GroupType);
 
-    fn stack_pop(&mut self) -> Option<(Vec<ET::Token>,GroupType)>;
+    fn stack_pop(&mut self) -> Option<(Vec<Token<ET>>,GroupType)>;
 
     /// get the current group type
     fn get_grouptype(&self) -> GroupType;
@@ -86,8 +86,8 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Command<ET>>, globally:bool);
     /// set the current [`BaseCommand`] for the active character `c`
     fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Command<ET>>, globally:bool);
-    fn set_command_for_tk(&mut self, tk:ET::Token, cmd:Option<Command<ET>>, globally:bool) {
-        match tk.take_base() {
+    fn set_command_for_tk(&mut self, tk:Token<ET>, cmd:Option<Command<ET>>, globally:bool) {
+        match tk.base {
             BaseToken::CS(cs) => self.set_command(cs,cmd, globally),
             BaseToken::Char(c,_) => self.set_ac_command(c,cmd, globally),
         }
@@ -145,9 +145,9 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_muskip_register(&mut self,i:usize,v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,globally:bool);
 
     /// get the value of a skip register
-    fn get_toks_register(&self,i:usize) -> Vec<ET::Token>;
+    fn get_toks_register(&self,i:usize) -> Vec<Token<ET>>;
     /// set the value of a skip register
-    fn set_toks_register(&mut self,i:usize,v:Vec<ET::Token>,globally:bool);
+    fn set_toks_register(&mut self,i:usize,v:Vec<Token<ET>>,globally:bool);
 
     fn get_box_register(&self,i:usize) -> &HVBox<ET>;
     fn set_box_register(&mut self,i:usize,v:HVBox<ET>,globally:bool);
@@ -174,9 +174,9 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_primitive_muskip(&mut self, name:&'static str, v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally:bool);
 
     /// get a primitive token register
-    fn get_primitive_toks(&self, name:&'static str) -> Vec<ET::Token>;
+    fn get_primitive_toks(&self, name:&'static str) -> Vec<Token<ET>>;
     /// set a primitive token register
-    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<ET::Token>, globally:bool);
+    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<Token<ET>>, globally:bool);
 
     /// get the current font
     fn get_current_font(&self) -> &ET::Font;
@@ -192,7 +192,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     csnames:usize,
     fontstore:ET::FontStore,
     box_stack:Vec<OpenBox<ET>>,
-    afterassignment:Option<ET::Token>,
+    afterassignment:Option<Token<ET>>,
 
     current_font:SingleValueField<ET::Font>,
 
@@ -204,7 +204,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     mode: TeXMode,
     /* filesystem: FS,*/
     grouptype: Vec<(GroupType,Option<TeXMode>)>,
-    aftergroups:Vec<Vec<ET::Token>>,
+    aftergroups:Vec<Vec<Token<ET>>>,
     endlinechar: SingleValueField<Option<ET::Char>>,
     escapechar: SingleValueField<Option<ET::Char>>,
     newlinechar: SingleValueField<Option<ET::Char>>,
@@ -223,14 +223,14 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     dimregisters: VecField<ET::Dim>,
     skipregisters: VecField<Skip<ET::SkipDim>>,
     muskipregisters: VecField<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
-    toksregisters:VecField<Vec<ET::Token>>,
+    toksregisters:VecField<Vec<Token<ET>>>,
     boxregisters:BoxField<ET>,
 
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
     primitive_skipregisters: HashMapField<&'static str,Skip<ET::SkipDim>>,
     primitive_muskipregisters: HashMapField<&'static str,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
-    primitive_tokregisters: HashMapField<&'static str,Vec<ET::Token>>,
+    primitive_tokregisters: HashMapField<&'static str,Vec<Token<ET>>>,
 }
 use crate::utils::strings::CharType;
 impl<ET:EngineType<State=Self>> TeXState<ET> {
@@ -280,19 +280,19 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             state.ucchar.set_locally((i as u8).into(),((i-32) as u8).into());
             state.lcchar.set_locally(((i-32) as u8).into(),(i as u8).into());
             state.mathcodes.set_locally(ET::Char::from(i-32),
-                                        ET::Int::from_i64::<ET::Token>((i as i64-32) +
+                                        ET::Int::from_i64::<ET>((i as i64-32) +
                                             (1 * 16 * 16) +
                                             (7 * 16 * 16 * 16)).unwrap()
             );
             state.mathcodes.set_locally(ET::Char::from(i),
-                                        ET::Int::from_i64::<ET::Token>((i as i64) +
+                                        ET::Int::from_i64::<ET>((i as i64) +
                                             (1 * 16 * 16) +
                                             (7 * 16 * 16 * 16)).unwrap()
             );
         }
         for i in 48..58 {
             state.mathcodes.set_locally(ET::Char::from(i),
-                                        ET::Int::from_i64::<ET::Token>((i as i64) +
+                                        ET::Int::from_i64::<ET>((i as i64) +
                                             (0 * 16 * 16) +
                                             (7 * 16 * 16 * 16)).unwrap()
             );
@@ -317,10 +317,10 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     fn box_stack(&self) -> &Vec<OpenBox<ET>> { &self.box_stack }
     fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>> { &mut self.box_stack }
 
-    fn set_afterassignment(&mut self, t: ET::Token) {
+    fn set_afterassignment(&mut self, t: Token<ET>) {
         self.afterassignment = Some(t)
     }
-    fn take_afterassignment(&mut self) -> Option<ET::Token> {
+    fn take_afterassignment(&mut self) -> Option<Token<ET>> {
         self.afterassignment.take()
     }
 
@@ -434,7 +434,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.primitive_tokregisters.push_stack();
         unsafe{self.aftergroups.push(self.aftergroups.last().unwrap_unchecked().clone())};
     }
-    fn stack_pop(&mut self) -> Option<(Vec<ET::Token>,GroupType)> {
+    fn stack_pop(&mut self) -> Option<(Vec<Token<ET>>,GroupType)> {
         let gt = match self.grouptype.pop() {
             None => return None,
             Some((gt,Some(m))) => {
@@ -682,11 +682,11 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_toks_register(&self, i: usize) -> Vec<ET::Token> { match self.toksregisters.get(&i) {
+    fn get_toks_register(&self, i: usize) -> Vec<Token<ET>> { match self.toksregisters.get(&i) {
         None => vec!(),
         Some(v) => v.clone()
     }}
-    fn set_toks_register(&mut self, i: usize, v: Vec<ET::Token>, globally: bool) {
+    fn set_toks_register(&mut self, i: usize, v: Vec<Token<ET>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -764,11 +764,11 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_primitive_toks(&self, name: &'static str) -> Vec<ET::Token> { match self.primitive_tokregisters.get(&name) {
+    fn get_primitive_toks(&self, name: &'static str) -> Vec<Token<ET>> { match self.primitive_tokregisters.get(&name) {
         None => vec!(),
         Some(v) => v.clone()
     }}
-    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<ET::Token>, globally: bool) {
+    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<Token<ET>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {

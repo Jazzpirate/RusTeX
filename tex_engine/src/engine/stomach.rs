@@ -12,7 +12,7 @@ use crate::utils::errors::TeXError;
 use crate::utils::map::Map;
 
 pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
-    fn digest(&mut self,state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET::Token>>;
+    fn digest(&mut self,state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>>;
 
     fn maybe_shipout(&mut self,state:&mut ET::State,force:bool) -> Option<ET::Node> {
         if state.box_stack().len() > 1 { return None }
@@ -30,7 +30,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         }
     }
 
-    fn next_shipout_box(&mut self, state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<Option<ET::Node>,TeXError<ET::Token>> {
+    fn next_shipout_box(&mut self, state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<Option<ET::Node>,TeXError<ET>> {
         loop {
             match self.maybe_shipout(state,false) {
                 Some(b) => {
@@ -69,7 +69,7 @@ impl<ET:EngineType<Stomach=Self>> NoShipoutDefaultStomach<ET> {
     pub fn new() -> Self { Self(PhantomData) }
 }
 impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
-    fn digest(&mut self,state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET::Token>> {
+    fn digest(&mut self,state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>> {
         methods::digest::<ET>(self,state,gullet,cmd)
     }
 }

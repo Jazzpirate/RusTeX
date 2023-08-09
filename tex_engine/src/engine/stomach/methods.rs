@@ -11,7 +11,7 @@ use crate::tex::token::{Token, TokenList};
 use crate::utils::errors::TeXError;
 
 pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>)
-    -> Result<(),TeXError<ET::Token>> {
+    -> Result<(),TeXError<ET>> {
     use BaseStomachCommand::*;
     debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
     match cmd.command {
