@@ -1,11 +1,12 @@
 pub mod methods;
 
 use std::marker::PhantomData;
+use std::os::linux::raw::stat;
 use crate::debug_log;
 use crate::engine::EngineType;
 use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
-use crate::tex::boxes::{StomachNode, OpenBox, TeXNode, Whatsit, HVBox};
+use crate::tex::nodes::{OpenBox, CustomNode, Whatsit, HVBox, TeXNode};
 use crate::tex::commands::{CommandSource, StomachCommand};
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
@@ -15,19 +16,11 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn digest(&mut self,state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>>;
 
     fn maybe_shipout(&mut self,state:&mut ET::State,force:bool) -> Option<ET::Node> {
-        if state.box_stack().len() > 1 { return None }
-        match state.box_stack_mut().first_mut() {
-            None => None,
-            Some(OpenBox::Top { list }) if !list.is_empty() => match list.remove(0) {
-                StomachNode::Node(b) => Some(b),
-                StomachNode::Whatsit(_) => {
-                    todo!("Handle whatsit");
-                    self.maybe_shipout(state,force)
-                }
-                _ => todo!()
-            },
-            _ => None
-        }
+        let sd = state.shipout_data();
+        if force || sd.pagetotal >= sd.pagegoal {
+            if sd.page.is_empty() { return None }
+            todo!("shipout")
+        } else { None }
     }
 
     fn next_shipout_box(&mut self, state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<Option<ET::Node>,TeXError<ET>> {

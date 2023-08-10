@@ -14,7 +14,7 @@
    e.g. the current [`CategoryCodeScheme`](tex::catcodes::CategoryCodeScheme), and allows for
    pushing/popping the stack,
  - a [`Stomach`](engine::stomach::Stomach) that processes the [`StomachCommand`](tex::commands::StomachCommand)s
-   and returns [`TeXBox`](tex::boxes::TeXNode)es.
+   and returns [`TeXBox`](tex::nodes::CustomNode)es.
 
    Almost all algorithms, too, are generic over implementations of these traits.
    The default [`Engine`](engine::Engine) for plain TeX/LaTeX can be found
@@ -58,8 +58,7 @@ mod tests {
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
-    use crate::tex::boxes::{StandardTeXBox, StandardTeXNode};
-    use crate::tex::token::TokenWithSourceref;
+    use crate::tex::nodes::{StandardTeXBox, StandardTeXNode};
     use crate::engine::mouth::Mouth;
 
     use ansi_term::Colour::Green;
@@ -70,6 +69,7 @@ mod tests {
     use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command};
     use crate::tex::fonts::{TfmFont, TfmFontStore};
     use crate::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
+    use crate::tex::token::FileTokenReference;
     use crate::utils::Ptr;
     use crate::utils::strings::CharType;
 
@@ -148,7 +148,6 @@ mod tests {
         struct Default();
         impl EngineType for Default {
             type Char = u8;
-            type Token = TokenWithSourceref<Self>;
             type File = Ptr<VirtualFile<u8>>;
             type FileSystem = KpseVirtualFileSystem<u8>;
             type Font = TfmFont;
@@ -161,16 +160,16 @@ mod tests {
             type MuDim = Mui32;
             type MuStretchShrinkDim = MuFill;
             type CommandReference = ();
+            type TokenReference = FileTokenReference<Self>;
             type State = TeXState<Self>;
-            type Mouth = StandardMouth<Self::Token>;
             type Gullet = TeXGullet<Self>;
             type Stomach = NoShipoutDefaultStomach<Self>;
         }
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new();
         let state = TeXState::new(fs,fonts,outputs.clone());
-        let mouth = StandardMouth::new();
-        let gullet = TeXGullet::new(mouth);
+        //let mouth = StandardMouth::new();
+        let gullet = TeXGullet::new();//(mouth);
         let stomach = NoShipoutDefaultStomach::new();
         let mut engine = crate::engine::new::<Default>(state,gullet,stomach);
 

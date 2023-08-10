@@ -8,7 +8,7 @@ pub mod numeric_methods;
 use crate::catch;
 use crate::engine::EngineType;
 use crate::engine::gullet::methods::do_conditional;
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::{Mouth, StandardMouth};
 use crate::engine::state::State;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::FontStore;
@@ -22,13 +22,15 @@ use crate::utils::errors::TeXError;
 use crate::utils::map::Map;
 use crate::utils::strings::TeXStr;
 
+pub type BMouth<'a,ET:EngineType> = &'a mut Box<dyn Mouth<ET>>;
+
 
 /// The [`Gullet`] trait defines the interface for the part of the TeX engine that reads tokens from the input stream,
 /// and expands macros. It has basically no components other than a [`Mouth`], so it is implemented as a trait
 /// to allow for overriding its methods.
 pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// Returns a reference to the [`Mouth`].
-    fn mouth(&mut self) -> &mut ET::Mouth;
+    fn mouth(&mut self) -> BMouth<'_,ET>;
 
     fn with_mouth<F:FnMut(&mut Self) -> R,R>(&mut self,tks:Vec<Token<ET>>,f:F) -> R;
 
@@ -113,16 +115,24 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     fn current_conditional(&self) -> (Option<ConditionalBranch>,usize);
 }
 
-#[derive(Clone)]
 pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
-    mouth:ET::Mouth,
+    mouth:Box<dyn Mouth<ET>>,
     in_conditionals:Vec<ConditionalBranch>,
     args_pool:[Vec<Token<ET>>;9],
     delimiter_pool:Vec<Token<ET>>
 }
+impl<ET:EngineType<Gullet=Self>> Clone for TeXGullet<ET> {
+    fn clone(&self) -> Self { Self {
+        mouth: Box::new(StandardMouth::new()),
+        in_conditionals: self.in_conditionals.clone(),
+        args_pool: self.args_pool.clone(),
+        delimiter_pool: self.delimiter_pool.clone()
+    }}
+}
+
 impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
-    pub fn new(mouth:ET::Mouth) -> Self {
-        Self {mouth, in_conditionals:Vec::new(),
+    pub fn new() -> Self {
+        Self {mouth:Box::new(StandardMouth::new()), in_conditionals:Vec::new(),
             args_pool:[Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new()],
             delimiter_pool:Vec::new()
         }
@@ -130,12 +140,12 @@ impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
 }
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     fn with_mouth<F:FnMut(&mut Self) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
-        let old = std::mem::replace(&mut self.mouth, ET::Mouth::new_with(tks));
+        let old = std::mem::replace(&mut self.mouth, Box::new(StandardMouth::<ET>::new_with(tks)));
         let ret = f(self);
         self.mouth = old;
         ret
     }
-    fn mouth(&mut self) -> &mut ET::Mouth { &mut self.mouth }
+    fn mouth(&mut self) -> BMouth<'_,ET> { &mut self.mouth }
 
     fn new_conditional(&mut self,name:&'static str) -> usize {
         let ret = self.in_conditionals.len();

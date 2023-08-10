@@ -8,7 +8,7 @@ use crate::engine::mouth::{Mouth, StandardMouth};
 use crate::engine::state::{State, TeXState};
 use crate::engine::stomach::{Stomach, NoShipoutDefaultStomach};
 use crate::tex;
-use crate::tex::boxes::{StandardTeXNode, TeXBox, TeXNode};
+use crate::tex::nodes::{CustomBox, CustomNode};
 use crate::tex::commands::{Assignable, Command, CommandReference};
 use crate::tex::fonts::{Font, FontStore, TfmFontStore};
 use crate::tex::numbers::{Dim, MuDim, MuStretchShrinkDim, SkipDim};
@@ -28,8 +28,8 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type FileSystem:FileSystem<Self::Char,F=Self::File>;
     type Font:Font;
     type FontStore:FontStore<Char=Self::Char,Font=Self::Font>;
-    type Node:TeXNode<Bx=Self::Box>;
-    type Box:TeXBox;
+    type Node: CustomNode<Self,Bx=Self::Box>;
+    type Box: CustomBox<Self>;
     type Int:Int+Assignable<Self>;
     type Dim:Dim+Assignable<Self>;
     type SkipDim:SkipDim<Dim=Self::Dim>;
@@ -38,7 +38,6 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type CommandReference:CommandReference<Self>;
     type TokenReference:TokenReference<Self>;
     type State:State<Self>;
-    type Mouth:Mouth<Self>;
     type Gullet:Gullet<Self>;
     type Stomach:Stomach<Self>;
 }
@@ -71,6 +70,9 @@ pub trait Engine<ET:EngineType> {
         comps.state.set_job(s.with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         let file = comps.state.filesystem().get(s.to_str().unwrap());
         comps.gullet.mouth().push_file(&file);
+        let mut ej = comps.gullet.mouth().new_tokensource();
+        for t in comps.state.get_primitive_toks("everyjob") { ej.push(t) }
+        comps.gullet.mouth().push_tokens(ej);
         let state = &mut comps.state;
         let gullet = &mut comps.gullet;
         while let Some(b) = comps.stomach.next_shipout_box(state,gullet)? {

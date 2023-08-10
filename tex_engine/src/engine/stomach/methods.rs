@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use crate::{catch, debug_log, throw};
 use crate::engine::EngineType;
 use crate::engine::gullet::Gullet;
-use crate::engine::state::modes::GroupType;
+use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
@@ -15,8 +15,16 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
     use BaseStomachCommand::*;
     debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
     match cmd.command {
-        Unexpandable {name,apply} =>
-           Ok(apply(state,gullet,cmd.source)?),
+        Unexpandable {name,apply,starts_paragraph} => {
+            if starts_paragraph  {
+                match state.mode() {
+                    TeXMode::Vertical | TeXMode::InternalVertical =>
+                        todo!(),
+                    _ => ()
+                }
+            }
+            Ok(apply(state, gullet, cmd.source)?)
+        }
         Assignment {name,set} => {
             set(state,gullet,cmd.source,false)?;
             match state.take_afterassignment() {
@@ -63,15 +71,15 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
                 Ok(())
             }
             Some((v,GroupType::Box(b))) => {
-                match state.box_stack_mut().pop() {
-                    Some(crate::tex::boxes::OpenBox::Box {list,mode,on_close}) if mode == b => {
+                match state.shipout_data_mut().box_stack.pop() {
+                    Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(state,gullet,list) {
-                            Some(b) => unsafe{state.box_stack_mut().last_mut().unwrap_unchecked()}.ls().push(b),
+                            Some(b) => state.push_node(b),
                             None => {}
                         }
                         Ok(())
                     }
-                    Some(crate::tex::boxes::OpenBox::Paragraph {list}) =>
+                    Some(crate::tex::nodes::OpenBox::Paragraph {list}) =>
                         todo!("Close paragraph"),
                     _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                 }

@@ -10,7 +10,7 @@ use crate::engine::EngineType;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
-use crate::tex::boxes::{HVBox, StomachNode, Whatsit};
+use crate::tex::nodes::{HVBox, TeXNode, Whatsit};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::methods::{set_primitive_int, set_dim_register, set_int_register, set_muskip_register, set_skip_register, set_toks_register, set_primitive_dim, set_primitive_skip, set_primitive_muskip, set_primitive_toks};
 use crate::tex::numbers::{Dimi32, MuSkip, Skip};
@@ -96,7 +96,7 @@ pub type AssignmentFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, Comm
 pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
 pub type ConditionalFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
 pub type ExpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,TokenCont<ET>) -> Result<(),TeXError<ET>>;
-pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<StomachNode<ET>>) -> Option<HVBox<ET>>>;
+pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
 pub type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
 pub type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
 
@@ -241,14 +241,14 @@ pub enum BaseCommand<ET:EngineType>{
     /// `\the`, `\number`, `\romannumeral`, `\string`, `\meaning`
     Expandable {name:&'static str,apply:ExpandableFun<ET>},
     /// A primitive command to be processed in the [`Stomach`](crate::engine::stomach::Stomach)
-    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>},
+    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, starts_paragraph:bool},
     /// A primitive assignment command, e.g. `\chardef`, `\let`, etc. - importantly
     /// unlike [`Unexpandable`](BaseCommand::Unexpandable), the `\afterassignment`-[`Token`]
     /// (if existent) is inserted after one of these.
     Assignment{name:&'static str,apply:AssignmentFun<ET>},
-    /// A command producing a [`Whatsit`](crate::tex::boxes::Whatsit), executed during shipout or `\immediate`ly
+    /// A command producing a [`Whatsit`](crate::tex::nodes::Whatsit), executed during shipout or `\immediate`ly
     Whatsit {name:&'static str,apply:WhatsitFun<ET>},
-    /// A command opening a new  [`TeXBox`](crate::tex::boxes::TeXBox), e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
+    /// A command opening a new  [`TeXBox`](crate::tex::nodes::CustomBox), e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
     /// A character; also e.g. the result of `\let\foo=a`
     Char{char:ET::Char,catcode:CategoryCode},
@@ -331,7 +331,7 @@ impl<ET:EngineType> Debug for BaseCommand<ET> {
 }
 
 pub enum BaseStomachCommand<ET:EngineType> {
-    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>},
+    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, starts_paragraph:bool},
     Assignment {name:Option<&'static str>, set:AssignmentFun<ET>},
     Whatsit {name:&'static str,apply:WhatsitFun<ET>},
     ValueAss(AssignmentFn<ET>),
@@ -383,7 +383,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                 BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
                 BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
             }
-            Unexpandable {name,apply} => BaseStomachCommand::Unexpandable {name,apply},
+            Unexpandable {name,apply,starts_paragraph} => BaseStomachCommand::Unexpandable {name,apply, starts_paragraph},
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
             Whatsit {name,apply} => BaseStomachCommand::Whatsit {name,apply:apply},
             OpenBox {name,mode,apply} => BaseStomachCommand::OpenBox {name,mode,apply},

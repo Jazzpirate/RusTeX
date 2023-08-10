@@ -1,6 +1,7 @@
 //! TeX primitive [`BaseCommand`]s
 
 use std::collections::VecDeque;
+use std::hint::unreachable_unchecked;
 use std::marker::PhantomData;
 use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks};
 use crate::engine::filesystem::{File, FileSystem};
@@ -22,7 +23,7 @@ use chrono::{Datelike, Timelike};
 use log::warn;
 use crate::engine::{EngineType, gullet};
 use crate::engine::gullet::numeric_methods::expand_until_space;
-use crate::tex::boxes::{HBox, HVBox, OpenBox, StomachNode, TeXNode, Whatsit};
+use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, TeXNode, Whatsit};
 use crate::tex::commands::etex::UNLESS;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
@@ -901,6 +902,33 @@ pub fn hbox<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comma
     file_end_prim!("hbox",cmd);
 }
 
+pub static HRULE: &str = "hrule";
+pub fn hrule<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
+                            -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\hrule");
+    let mut width = None;
+    let mut height = None;
+    let mut depth = None;
+    loop {
+        match catch_prim!(gullet.get_keywords(state,vec!("width","height","depth")) => (HRULE,cmd)) {
+            None => break,
+            Some(s) => {
+                let val = catch_prim!(gullet.get_dim(state) => (HRULE,cmd));
+                match s {
+                    "width" => width = Some(val),
+                    "height" => height = Some(val),
+                    "depth" => depth = Some(val),
+                    _ => unsafe{unreachable_unchecked()}
+                }
+            }
+        }
+    }
+    state.push_node(SimpleNode::Rule {
+        width,height,depth,axis:HorV::Horizontal
+    }.as_node());
+    Ok(())
+}
+
 pub fn hyphenation<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
                                -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\hyphenation");
@@ -1052,6 +1080,15 @@ pub fn ifinner<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
     })
 }
 
+pub fn ifmmode<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
+                              -> Result<bool,TeXError<ET>> {
+    debug_log!(trace=>"ifmmode");
+    Ok(match state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => true,
+        _ => false
+    })
+}
+
 pub fn ifnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifnum");
@@ -1101,55 +1138,7 @@ pub fn ifx<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Comman
     Ok(if t1.expand && t2.expand { t1.command == t2.command }
     else if !t1.expand && !t2.expand { t1.source.cause == t2.source.cause }
     else { false })
-    /*
-    match (t1.base(),t2.base()) {
-        (BaseToken::Char(c1,CategoryCode::Active),BaseToken::Char(c2,CategoryCode::Active)) => {
-            let cmd1 = state.get_ac_command(c1);
-            let cmd2 = state.get_ac_command(c2);
-            Ok(ifx_eq_cmd::<ET>(cmd1,t1,exp1,cmd2,t2,exp2))
-        }
-        (BaseToken::CS(name),BaseToken::Char(c2,CategoryCode::Active)) =>{
-            let cmd1 = state.get_command(name);
-            let cmd2 = state.get_ac_command(c2);
-            Ok(ifx_eq_cmd::<ET>(cmd1,t1,exp1,cmd2,t2,exp2))
-        }
-        (BaseToken::Char(c1,CategoryCode::Active),BaseToken::CS(name)) =>{
-            let cmd1 = state.get_ac_command(c1);
-            let cmd2 = state.get_command(name);
-            Ok(ifx_eq_cmd::<ET>(cmd1,t1,exp1,cmd2,t2,exp2))
-        }
-        (BaseToken::CS(name1),BaseToken::CS(name2)) =>{
-            let cmd1 = state.get_command(name1);
-            let cmd2 = state.get_command(name2);
-            Ok(ifx_eq_cmd::<ET>(cmd1,t1,exp1,cmd2,t2,exp2))
-        }
-        (BaseToken::Char(c1,cc1),BaseToken::Char(c2,cc2)) =>
-            Ok(c1==c2 && cc1 == cc2),
-        (BaseToken::Char(c1,cc1),BaseToken::CS(name)) =>
-            Ok(match state.get_command(name).map(|c| c.base()) {
-                Some(BaseCommand::Char{char,catcode}) => *char == *c1 && *catcode == *cc1,
-                _ => false
-            }),
-        (BaseToken::CS(name),BaseToken::Char(c2,cc2)) =>
-            Ok(match state.get_command(name).map(|c| c.base()) {
-                Some(BaseCommand::Char{char,catcode}) => *char == *c2 && *catcode == *cc2,
-                _ => false
-            })
-    }
-
-     */
 }
-/*
-fn ifx_eq_cmd<ET:EngineType>(cmd1:Option<&ET::Command>, t1:Token<ET>, expand1:bool, cmd2:Option<&ET::Command>, t2:Token<ET>, expand2:bool) -> bool {
-    debug_log!(debug=>"ifx_eq_cmd: {:?} == {:?}?",cmd1,cmd2);
-    if expand1 && expand2 {cmd1 == cmd2}
-    else if !expand1 && !expand2 {
-        t1 == t2
-    }
-    else { false }
-}
-
- */
 
 pub fn ignorespaces<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
                                   -> Result<(), TeXError<ET>> {
@@ -1570,249 +1559,6 @@ pub fn meaning<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
         }
     }
 }
-/*
-pub fn meaning_char<T:Token>(c:T::Char,cc:CategoryCode) -> Vec<T> {
-    match cc {
-        CategoryCode::BeginGroup => string_to_tokens(&format!("begin-group character {}",c.char_str()).as_bytes()),
-    }
-}
-
- */
-
-/*
-pub fn meaning_cmd<ET:EngineType>(cmd:Option<&ET::Command>, state:&ET::State) -> Vec<Token<ET>> {
-todo!()
-match cmd {
-    None => string_to_tokens("undefined".as_bytes()),
-    Some(cmd) => {
-        match cmd.base() {
-            BaseCommand::Def(d) => {
-                let esc = match state.get_escapechar() {
-                    None => vec!(),
-                    Some(c) => c.as_bytes()
-                };
-                let mut ret = vec!();
-                if d.protected {
-                    ret.extend(esc.clone());
-                    ret.extend("protected ".as_bytes());
-                }
-                if d.long {
-                    ret.extend(esc.clone());
-                    ret.extend("long ".as_bytes());
-                }
-                if d.outer {
-                    ret.extend(esc.clone());
-                    ret.extend("outer ".as_bytes());
-                }
-                ret.extend("macro:".as_bytes());
-                let mut i = 0;
-                for s in &d.signature {
-                    match s {
-                        ParamToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes()),
-                        ParamToken::Param => {
-                            i += 1;
-                            ret.extend(format!("#{}",i).as_bytes());
-                        }
-                    }
-                }
-                if d.endswithbrace { ret.push(b'#'); }
-                ret.push(b'-'); ret.push(b'>');
-                for t in &d.replacement {
-                    match t {
-                        ExpToken::Token(t) => ret.extend(tokens_to_string(vec!(t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes()),
-                        ExpToken::ParamToken(t) => ret.extend(tokens_to_string(vec!(t.clone(),t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes()),
-                        ExpToken::Param(t,i) => {
-                            ret.extend(tokens_to_string(vec!(t.clone()),state.get_escapechar(),state.get_catcode_scheme()).as_bytes());
-                            ret.extend(i.to_string().as_bytes());
-                        }
-                    }
-                }
-                debug_log!(debug=>"meaning_cmd: {}",std::str::from_utf8(&ret).unwrap());
-                string_to_tokens(&ret)
-            }
-            BaseCommand::Unexpandable {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::OpenBox {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::AssignableValue {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::Value {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::ValueRegister {tp:Assignable::Int,index} => {
-                let mut string = vec!();
-                match state.get_escapechar() {
-                    None => (),
-                    Some(c) => {
-                        for u in c.as_bytes() {string.push(u)}
-                    }
-                }
-                for u in "count".as_bytes() {string.push(*u)}
-                for u in index.to_string().as_bytes() {string.push(*u)}
-                string_to_tokens(&string)
-            }
-            BaseCommand::ValueRegister {tp:Assignable::Dim,index} => {
-                let mut string = vec!();
-                match state.get_escapechar() {
-                    None => (),
-                    Some(c) => {
-                        for u in c.as_bytes() {string.push(u)}
-                    }
-                }
-                for u in "dimen".as_bytes() {string.push(*u)}
-                for u in index.to_string().as_bytes() {string.push(*u)}
-                string_to_tokens(&string)
-            }
-            BaseCommand::ValueRegister {tp:Assignable::Skip,index} => {
-                let mut string = vec!();
-                match state.get_escapechar() {
-                    None => (),
-                    Some(c) => {
-                        for u in c.as_bytes() {string.push(u)}
-                    }
-                }
-                for u in "skip".as_bytes() {string.push(*u)}
-                for u in index.to_string().as_bytes() {string.push(*u)}
-                string_to_tokens(&string)
-            }
-            BaseCommand::ValueRegister {tp:Assignable::MuSkip,index} => {
-                let mut string = vec!();
-                match state.get_escapechar() {
-                    None => (),
-                    Some(c) => {
-                        for u in c.as_bytes() {string.push(u)}
-                    }
-                }
-                for u in "muskip".as_bytes() {string.push(*u)}
-                for u in index.to_string().as_bytes() {string.push(*u)}
-                string_to_tokens(&string)
-            }
-            BaseCommand::ValueRegister {tp:Assignable::Font,index} => {
-                let mut string = vec!();
-                for u in "select font ".as_bytes() {string.push(*u)}
-                for u in state.fontstore().get(*index).to_string().as_bytes() {string.push(*u)}
-                string_to_tokens(&string)
-            }
-            BaseCommand::ValueRegister {..} => todo!("meaning_cmd: ValueRegister"),
-            BaseCommand::ValueAssignment {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::Assignment {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::Relax => {
-                match state.get_escapechar() {
-                    None => string_to_tokens("relax".as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in "relax".as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::Conditional {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::Expandable {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-            BaseCommand::Char {char,catcode} => meaning_char(*char, *catcode),
-            BaseCommand::MathChar(index) => {
-                let mut string = vec!();
-                match state.get_escapechar() {
-                    None => (),
-                    Some(c) => {
-                        for u in c.as_bytes() {string.push(u)}
-                    }
-                }
-                for u in "mathchar\"".as_bytes() {string.push(*u)}
-                for u in format!("{:X}", index).as_bytes() {string.push(*u)}
-                string_to_tokens(&string)
-            }
-            BaseCommand::Whatsit {name,..} => {
-                match state.get_escapechar() {
-                    None => string_to_tokens(name.as_bytes()),
-                    Some(c) => {
-                        let mut string = vec!();
-                        for u in c.as_bytes() {string.push(u)}
-                        for u in name.as_bytes() {string.push(*u)}
-                        string_to_tokens(&string)
-                    }
-                }
-            }
-        }
-    }
-}
-}
- */
 
 pub fn message<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
     -> Result<(),TeXError<ET>> {
@@ -2237,7 +1983,7 @@ pub fn setbox<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:C
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
                 let f = catch_prim!(apply(state,gullet,c.source) => (SETBOX,cmd));
-                state.box_stack_mut().push(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |s,gu,v| {
+                state.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |s,gu,v| {
                     let bx = match f(s,gu,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
@@ -2488,6 +2234,34 @@ pub fn uppercase<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:
     Ok(())
 }
 
+
+pub static VRULE: &str = "vrule";
+pub fn vrule<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
+                                -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\vrule");
+    let mut width = None;
+    let mut height = None;
+    let mut depth = None;
+    loop {
+        match catch_prim!(gullet.get_keywords(state,vec!("width","height","depth")) => (VRULE,cmd)) {
+            None => break,
+            Some(s) => {
+                let val = catch_prim!(gullet.get_dim(state) => (VRULE,cmd));
+                match s {
+                    "width" => width = Some(val),
+                    "height" => height = Some(val),
+                    "depth" => depth = Some(val),
+                    _ => unsafe{unreachable_unchecked()}
+                }
+            }
+        }
+    }
+    state.push_node(SimpleNode::Rule {
+        width,height,depth,axis:HorV::Vertical
+    }.as_node());
+    Ok(())
+}
+
 pub fn write<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
     -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\write");
@@ -2549,9 +2323,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_skip_assign!(abovedisplayskip,state,stomach,gullet);
     register_int_assign!(adjdemerits,state,stomach,gullet);
     register_assign!(advance,state,stomach,gullet,(s,gu,cmd,global) =>advance::<ET>(s,gu,cmd,global));
-    register_unexpandable!(afterassignment,state,stomach,gullet,(s,gu,cmd) =>afterassignment::<ET>(s,gu,cmd));
+    register_unexpandable!(afterassignment,state,stomach,gullet,false,(s,gu,cmd) =>afterassignment::<ET>(s,gu,cmd));
     register_skip_assign!(baselineskip,state,stomach,gullet);
-    register_unexpandable!(begingroup,state,stomach,gullet,(s,_,_) =>begingroup::<ET>(s));
+    register_unexpandable!(begingroup,state,stomach,gullet,false,(s,_,_) =>begingroup::<ET>(s));
     register_skip_assign!(belowdisplayskip,state,stomach,gullet);
     register_skip_assign!(belowdisplayshortskip,state,stomach,gullet);
     register_int_assign!(binoppenalty,state,stomach,gullet);
@@ -2559,7 +2333,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(brokenpenalty,state,stomach,gullet);
     register_value_assign_int!(catcode,state,stomach,gullet);
     register_assign!(chardef,state,stomach,gullet,(s,gu,cmd,global) =>chardef::<ET>(s,gu,cmd,global));
-    register_unexpandable!(closein,state,stomach,gullet,(s,gu,cmd) =>closein::<ET>(s,gu,cmd));
+    register_unexpandable!(closein,state,stomach,gullet,false,(s,gu,cmd) =>closein::<ET>(s,gu,cmd));
     register_whatsit!(closeout,state,stomach,gullet,(s,gu,cmd) =>closeout::<ET>(s,gu,cmd));
     register_int_assign!(clubpenalty,state,stomach,gullet);
     register_value_assign_int!(count,state,stomach,gullet);
@@ -2579,26 +2353,27 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_dim_assign!(displaywidth,state,stomach,gullet);
     register_assign!(divide,state,stomach,gullet,(s,gu,cmd,global) =>divide::<ET>(s,gu,cmd,global));
     register_int_assign!(doublehyphendemerits,state,stomach,gullet);
-    register_unexpandable!(dump,state,stomach,gullet,(s,sto,cmd) =>dump::<ET>());
+    register_unexpandable!(dump,state,stomach,gullet,false,(s,sto,cmd) =>dump::<ET>());
     register_assign!(edef,state,stomach,gullet,(s,gu,cmd,global) =>edef::<ET>(s,gu,cmd,global,false,false,false));
     register_expandable!(else,state,stomach,gullet,(s,gu,cmd,f) =>else_::<ET>(s,gu,cmd));
     register_dim_assign!(emergencystretch,state,stomach,gullet);
-    register_unexpandable!(end,state,stomach,gullet,(_,_,_) =>end::<ET>());
-    register_unexpandable!(endcsname,state,stomach,gullet,(_,_,cmd) =>endcsname::<ET>(cmd));
+    register_unexpandable!(end,state,stomach,gullet,false,(_,_,_) =>end::<ET>());
+    register_unexpandable!(endcsname,state,stomach,gullet,false,(_,_,cmd) =>endcsname::<ET>(cmd));
     register_expandable!(endinput,state,stomach,gullet,(s,g,c,f) => endinput::<ET>(s,g,c));
-    register_unexpandable!(endgroup,state,stomach,gullet,(s,gu,cmd) =>endgroup::<ET>(s,gu,cmd));
+    register_unexpandable!(endgroup,state,stomach,gullet,false,(s,gu,cmd) =>endgroup::<ET>(s,gu,cmd));
     register_value_assign_int!(endlinechar,state,stomach,gullet);
     register_tok_assign!(errhelp,state,stomach,gullet);
 
     let em = Some(Command::new(BaseCommand::Unexpandable {
         name:ERRMESSAGE,
-        apply:|s,gu,cmd| errmessage::<ET>(s,gu,cmd)
+        apply:|s,gu,cmd| errmessage::<ET>(s,gu,cmd),
+        starts_paragraph:false
     },None));
     state.set_command(ET::Char::from_str("errmessage"),em.clone(),true);
     state.set_command(ET::Char::from_str("LaTeX3 error:"),em,true);
 
     register_int_assign!(errorcontextlines,state,stomach,gullet);
-    register_unexpandable!(errorstopmode,state,stomach,gullet,(s,gu,cmd) =>errorstopmode::<ET>());
+    register_unexpandable!(errorstopmode,state,stomach,gullet,false,(s,gu,cmd) =>errorstopmode::<ET>());
     register_value_assign_int!(escapechar,state,stomach,gullet);
     register_int_assign!(exhyphenpenalty,state,stomach,gullet);
     register_expandable!(expandafter,state,stomach,gullet,(s,g,c,f) => expandafter::<ET>(s,g,c,f));
@@ -2626,8 +2401,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_dim_assign!(hfuzz,state,stomach,gullet);
     register_dim_assign!(hoffset,state,stomach,gullet);
     register_int_assign!(holdinginserts,state,stomach,gullet);
+    register_unexpandable!(hrule,state,stomach,gullet,true,(s,gu,cmd) =>hrule::<ET>(s,gu,cmd));
     register_dim_assign!(hsize,state,stomach,gullet);
-    register_unexpandable!(hyphenation,state,stomach,gullet,(s,gu,cmd) =>hyphenation::<ET>(s,gu,cmd));
+    register_unexpandable!(hyphenation,state,stomach,gullet,false,(s,gu,cmd) =>hyphenation::<ET>(s,gu,cmd));
     register_value_assign_int!(hyphenchar,state,stomach,gullet);
     register_int_assign!(hyphenpenalty,state,stomach,gullet);
     register_conditional!(if,state,stomach,gullet,(s,gu,cmd) =>if_::<ET>(s,gu,cmd));
@@ -2639,7 +2415,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_conditional!(ifhbox,state,stomach,gullet,(s,gu,cmd) =>todo!("ifhbox"));
     register_conditional!(ifhmode,state,stomach,gullet,(s,gu,cmd) =>ifhmode::<ET>(s,gu,cmd));
     register_conditional!(ifinner,state,stomach,gullet,(s,gu,cmd) =>ifinner::<ET>(s,gu,cmd));
-    register_conditional!(ifmmode,state,stomach,gullet,(s,gu,cmd) =>todo!("ifmmode"));
+    register_conditional!(ifmmode,state,stomach,gullet,(s,gu,cmd) =>ifmmode::<ET>(s,gu,cmd));
     register_conditional!(ifnum,state,stomach,gullet,(s,gu,cmd) =>ifnum::<ET>(s,gu,cmd));
     register_conditional!(ifodd,state,stomach,gullet,(s,gu,cmd) =>ifodd::<ET>(s,gu,cmd));
     register_conditional!(iftrue,state,stomach,gullet,(s,gu,cmd) => Ok(true));
@@ -2647,8 +2423,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_conditional!(ifvmode,state,stomach,gullet,(s,gu,cmd) =>ifvmode::<ET>(s,gu,cmd));
     register_conditional!(ifvoid,state,stomach,gullet,(s,gu,cmd) =>todo!("ifvoid"));
     register_conditional!(ifx,state,stomach,gullet,(s,gu,cmd) =>ifx::<ET>(s,gu,cmd));
-    register_unexpandable!(immediate,state,stomach,gullet,(s,gu,cmd) =>immediate::<ET>(s,gu,cmd));
-    register_unexpandable!(ignorespaces,state,stomach,gullet,(s,gu,cmd) => ignorespaces::<ET>(s,gu,cmd));
+    register_unexpandable!(immediate,state,stomach,gullet,false,(s,gu,cmd) =>immediate::<ET>(s,gu,cmd));
+    register_unexpandable!(ignorespaces,state,stomach,gullet,false,(s,gu,cmd) => ignorespaces::<ET>(s,gu,cmd));
     register_expandable!(input,state,stomach,gullet,(s,gu,cmd,f) =>input::<ET>(s,gu,cmd));
     register_int!(inputlineno,state,stomach,gullet,(s,g,c) => inputlineno::<ET>(g,c));
     register_int_assign!(interlinepenalty,state,stomach,gullet);
@@ -2662,7 +2438,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_skip_assign!(lineskip,state,stomach,gullet);
     register_dim_assign!(lineskiplimit,state,stomach,gullet);
     register_assign!(long,state,stomach,gullet,(s,gu,cmd,g) =>long::<ET>(s,gu,cmd,g,false,false,false));
-    register_unexpandable!(lowercase,state,stomach,gullet,(s,gu,cmd) =>lowercase::<ET>(s,gu,cmd));
+    register_unexpandable!(lowercase,state,stomach,gullet,false,(s,gu,cmd) =>lowercase::<ET>(s,gu,cmd));
     register_int_assign!(looseness,state,stomach,gullet);
     register_int_assign!(mag,state,stomach,gullet);
     register_int_assign!(maxdeadcycles,state,stomach,gullet);
@@ -2671,7 +2447,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_value_assign_int!(mathcode,state,stomach,gullet);
     register_dim_assign!(mathsurround,state,stomach,gullet);
     register_expandable!(meaning,state,stomach,gullet,(s,g,c,f) => meaning::<ET>(s,g,c,f));
-    register_unexpandable!(message,state,stomach,gullet,(s,gu,cmd) =>message::<ET>(s,gu,cmd));
+    register_unexpandable!(message,state,stomach,gullet,false,(s,gu,cmd) =>message::<ET>(s,gu,cmd));
     register_int!(month,state,stomach,gullet,(s,g,c) => month::<ET>(s,c));
     register_assign!(multiply,state,stomach,gullet,(s,gu,cmd,global) =>multiply::<ET>(s,gu,cmd,global));
     register_value_assign_muskip!(muskip,state,stomach,gullet);
@@ -2683,7 +2459,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
         BaseCommand::Font(state.fontstore().null())
         ,None)), true);
     register_expandable!(number,state,stomach,gullet,(s,g,c,f) => number::<ET>(s,g,c,f));
-    register_unexpandable!(openin,state,stomach,gullet,(s,gu,cmd) =>openin::<ET>(s,gu,cmd));
+    register_unexpandable!(openin,state,stomach,gullet,false,(s,gu,cmd) =>openin::<ET>(s,gu,cmd));
     register_whatsit!(openout,state,stomach,gullet,(s,gu,cmd) =>openout::<ET>(s,gu,cmd));
     register_expandable!(or,state,stomach,gullet,(s,g,c,f) => or::<ET>(s,g,c));
     register_assign!(outer,state,stomach,gullet,(s,gu,cmd,g) =>outer::<ET>(s,gu,cmd,g,false,false,false));
@@ -2693,12 +2469,13 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
 
     state.set_command(ET::Char::par_token(),Some(Command::new(BaseCommand::Unexpandable {
         name:"par",
-        apply:|s,gu,cmd| par::<ET>(s,cmd)
+        apply:|s,gu,cmd| par::<ET>(s,cmd),
+        starts_paragraph:false
     },None)),true);
     register_skip_assign!(parfillskip,state,stomach,gullet);
     register_dim_assign!(parindent,state,stomach,gullet);
     register_skip_assign!(parskip,state,stomach,gullet);
-    register_unexpandable!(patterns,state,stomach,gullet,(s,gu,cmd) =>patterns::<ET>(s,gu,cmd));
+    register_unexpandable!(patterns,state,stomach,gullet,false,(s,gu,cmd) =>patterns::<ET>(s,gu,cmd));
     register_int_assign!(pausing,state,stomach,gullet);
     register_int_assign!(postdisplaypenalty,state,stomach,gullet);
     register_int_assign!(predisplaypenalty,state,stomach,gullet);
@@ -2741,10 +2518,11 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     register_int_assign!(tracingstats,state,stomach,gullet);
     register_value_assign_int!(uccode,state,stomach,gullet);
     register_int_assign!(uchyph,state,stomach,gullet);
-    register_unexpandable!(uppercase,state,stomach,gullet,(s,gu,cmd) =>uppercase::<ET>(s,gu,cmd));
+    register_unexpandable!(uppercase,state,stomach,gullet,false,(s,gu,cmd) =>uppercase::<ET>(s,gu,cmd));
     register_int_assign!(vbadness,state,stomach,gullet);
     register_dim_assign!(vfuzz,state,stomach,gullet);
     register_dim_assign!(voffset,state,stomach,gullet);
+    register_unexpandable!(vrule,state,stomach,gullet,true,(s,gu,cmd) =>vrule::<ET>(s,gu,cmd));
     register_dim_assign!(vsize,state,stomach,gullet);
     register_int_assign!(widowpenalty,state,stomach,gullet);
     register_whatsit!(write,state,stomach,gullet,(s,gu,cmd) =>write::<ET>(s,gu,cmd));
@@ -2770,6 +2548,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmstodo!(state,stomach,gullet,mathaccent);
     cmstodo!(state,stomach,gullet,radical);
     cmstodo!(state,stomach,gullet,delimiter);
+    cmstodo!(state,stomach,gullet,prevdepth);
 
 
     cmtodo!(state,stomach,gullet,lastpenalty);
@@ -2783,7 +2562,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,scriptfont);
     cmtodo!(state,stomach,gullet,scriptscriptfont);
     cmtodo!(state,stomach,gullet,lastkern);
-    cmtodo!(state,stomach,gullet,prevdepth);
     cmtodo!(state,stomach,gullet,pagegoal);
     cmtodo!(state,stomach,gullet,pagetotal);
     cmtodo!(state,stomach,gullet,pagestretch);
@@ -2834,8 +2612,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mu
     cmtodo!(state,stomach,gullet,leaders);
     cmtodo!(state,stomach,gullet,cleaders);
     cmtodo!(state,stomach,gullet,xleaders);
-    cmtodo!(state,stomach,gullet,vrule);
-    cmtodo!(state,stomach,gullet,hrule);
     cmtodo!(state,stomach,gullet,moveleft);
     cmtodo!(state,stomach,gullet,moveright);
     cmtodo!(state,stomach,gullet,unvbox);

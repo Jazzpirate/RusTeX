@@ -3,7 +3,7 @@
 pub mod catcodes;
 pub mod token;
 pub mod commands;
-pub mod boxes;
+pub mod nodes;
 pub mod numbers;
 pub mod fonts;
 

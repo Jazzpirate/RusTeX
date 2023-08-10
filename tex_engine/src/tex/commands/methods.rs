@@ -1,7 +1,7 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
 use crate::engine::EngineType;
-use crate::engine::gullet::Gullet;
+use crate::engine::gullet::{BMouth, Gullet};
 use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::state::State;
 use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, ResolvedToken, TokenCont, ValueCommand, CommandSource};
@@ -20,7 +20,7 @@ macro_rules! cmtodo {
 #[macro_export]
 macro_rules! cmstodo {
     ($state:ident,$stomach:ident,$gullet:ident,$name:ident) => {
-        register_unexpandable!($name,$state,$stomach,$gullet,(_,g,_) => todo!("{}: {}",stringify!($name),g.mouth().file_line()));
+        register_unexpandable!($name,$state,$stomach,$gullet,false,(_,g,_) => todo!("{}: {}",stringify!($name),g.mouth().file_line()));
     };
 }
 
@@ -248,10 +248,11 @@ macro_rules! register_open_box {
 
 #[macro_export]
 macro_rules! register_unexpandable {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
+    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,$is_h:expr,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
         $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{
             name:stringify!($name),
-            apply:|$s,$gu:&mut ET::Gullet,$cmd| $f
+            apply:|$s,$gu:&mut ET::Gullet,$cmd| $f,
+            starts_paragraph:$is_h
         },None)),true);
     };
 }
@@ -369,7 +370,7 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>), f:TokenCont<ET>)
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:BMouth<'_,ET>, cmd:CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>), f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -428,7 +429,7 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET:
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>))
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:BMouth<'_,ET>, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>))
                                  -> Result<(),TeXError<ET>> {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();

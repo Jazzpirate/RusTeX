@@ -8,6 +8,7 @@ use crate::engine::gullet::methods::{get_keyword, get_keywords};
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{ValueCommand, BaseCommand, Command, ResolvedToken};
+use crate::tex::fonts::Font;
 use crate::utils::strings::CharType;
 use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim, Numeric};
 use crate::tex::token::{BaseToken, Token};
@@ -83,6 +84,12 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
             }
             Dim(ass) => {
                 let val = ET::Int::from_i64(ass.get(state,gullet,next.source)?.to_sp())?;
+                let val = if isnegative { -val } else { val };
+                debug_log!(trace=>"Returning {}",val);
+                return Ok(val)
+            }
+            Skip(ass) => {
+                let val = ET::Int::from_i64(ass.get(state,gullet,next.source)?.base.to_sp())?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
@@ -250,6 +257,10 @@ pub fn read_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,floa
                 let val = ass.get(state,gullet,cmd.source)?;
                 Ok(val.tex_mult(float))
             }
+            BaseCommand::Skip(ass) => {
+                let val = ass.get(state,gullet,cmd.source)?.base;
+                Ok(val.tex_mult(float))
+            }
             BaseCommand::Char { .. } => {
                 gullet.mouth().requeue(cmd.source.cause);
                 gullet.mouth().skip_whitespace(state)?;
@@ -261,7 +272,17 @@ pub fn read_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,floa
                         _ => throw!("Expexted unit")
                     }
                 } else {
-                    match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
+                    let mut units =ET::Dim::units();
+                    units.push("em");units.push("ex");
+                    match get_keywords::<ET>(gullet, state, units)? {
+                        Some("em") => {
+                            let d = state.get_current_font().get_dim::<ET::Dim>(6);
+                            Ok(d.tex_mult(float))
+                        }
+                        Some("ex") => {
+                            let d = state.get_current_font().get_dim::<ET::Dim>(5);
+                            Ok(d.tex_mult(float))
+                        }
                         Some(dim) => Ok(ET::Dim::from_float(dim, float)),
                         _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
                     }

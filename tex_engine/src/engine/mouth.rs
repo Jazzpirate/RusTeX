@@ -16,7 +16,8 @@ use crate::engine::EngineType;
 use crate::engine::filesystem::File;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
-use crate::{file_end, throw};
+use crate::{debug_log, file_end, throw};
+use crate::engine::gullet::BMouth;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::TokenCont;
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -25,10 +26,10 @@ use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
-pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized+ Clone +'static {
-    fn new() -> Self;
+pub trait Mouth<ET:EngineType> {
+    //fn new() -> Self;
 
-    fn new_with(tks:Vec<Token<ET>>) -> Self;
+    //fn new_with(tks:Vec<Token<ET>>) -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
     fn push_tokens(&mut self,tks:TokenSource<ET>);
@@ -80,12 +81,36 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized+ Clone +'static {
 
     /// Skip whitespace characters from the [`Mouth`]
     fn skip_whitespace(&mut self, state:&ET::State) -> Result<(),TeXError<ET>> {
-        methods::skip_whitespace::<ET>(self,state)
+        debug_log!(trace=>"skipping whitespace");
+        while let Some((tk,_)) = self.get_next(state)? {
+            match tk.catcode() {
+                CategoryCode::Space => (),
+                _ => {
+                    self.requeue(tk);
+                    break
+                }
+            }
+        }
+        Ok(())
     }
 
     /// read optional `=` characters from the [`Mouth`]
     fn skip_eq_char(&mut self,state:&ET::State) -> Result<(),TeXError<ET>> {
-        methods::skip_eq_char::<ET>(self,state)
+        self.skip_whitespace(state)?;
+        debug_log!(trace=>"skipping '='");
+        if let Some((tk,_)) = self.get_next(state)? {
+            match &tk.base {
+                BaseToken::Char(c,_) if c.to_usize() == 61 => {
+                    match self.get_next(state)? {
+                        Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
+                        Some((tk,_)) => self.requeue(tk),
+                        _ => ()
+                    }
+                },
+                _ => self.requeue(tk)
+            }
+        }
+        Ok(())
     }
 
     /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
@@ -93,19 +118,63 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized+ Clone +'static {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     fn read_argument(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        methods::read_argument::<ET>(self,state,f)
+        match self.get_next(state)? {
+            None => file_end!(),
+            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => self.read_until_endgroup(state,f),
+            Some((o,_)) => {
+                f(state,o)?;
+                Ok(())
+            }
+        }
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
     fn read_argument_nopar(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        methods::read_argument_nopar::<ET>(self,state,f)
+        match self.get_next(state)? {
+            None => file_end!(),
+            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
+                let mut depth = 1;
+                while let Some((tk,_)) = self.get_next(state)? {
+                    match &tk.base {
+                        BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
+                        BaseToken::Char(_,CategoryCode::EndGroup) => {
+                            depth -= 1;
+                            if depth == 0 { return Ok(()) }
+                        },
+                        BaseToken::CS(n) if *n == ET::Char::par_token() =>
+                            throw!("Paragraph ended while reading argument" => t),
+                        _ => ()
+                    }
+                    f(state,tk)?;
+                }
+                file_end!()
+            }
+            Some((t,_)) if t.catcode() == CategoryCode::EOF => file_end!(),
+            Some((o,_)) => {
+                f(state,o)?;
+                Ok(())
+            }
+        }
     }
 
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
     fn read_until_endgroup(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        methods::read_until_endgroup::<ET>(self,state,f)
+        let mut depth = 1;
+        while let Some((tk,_)) = self.get_next(state)? {
+            match tk.catcode() {
+                CategoryCode::BeginGroup => depth += 1,
+                CategoryCode::EndGroup => {
+                    depth -= 1;
+                    if depth == 0 { return Ok(()) }
+                },
+                CategoryCode::EOF => file_end!(),
+                _ => ()
+            }
+            f(state,tk)?;
+        }
+        file_end!()
     }
 }
 
@@ -149,17 +218,9 @@ impl<ET:EngineType> TokenSource<ET> {
 }
 
 #[derive(Clone)]
-pub struct StandardMouth<ET:EngineType<Mouth=Self>>{ pub sources:Vec<TeXMouthSource<ET>>,buffer:Option<Token<ET>>,pub news:Vec<TokenSource<ET>>}
+pub struct StandardMouth<ET:EngineType>{ pub sources:Vec<TeXMouthSource<ET>>,buffer:Option<Token<ET>>,pub news:Vec<TokenSource<ET>>}
 
-impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
-    fn new() -> Self {
-        let mut s = StandardMouth { sources:Vec::with_capacity(32),buffer:None,news:Vec::with_capacity(32)};
-        for _ in (0..32) { s.news.push(TokenSource::new()) }
-        s
-    }
-    fn new_with(tks: Vec<Token<ET>>) -> Self {
-        StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
-    }
+impl<ET:EngineType> Mouth<ET> for StandardMouth<ET> {
 
     fn new_tokensource(&mut self) -> TokenSource<ET> {
         match self.news.pop() {
@@ -293,7 +354,15 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     }
 }
 
-impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
+impl<ET:EngineType> StandardMouth<ET> {
+    pub fn new() -> Self {
+        let mut s = StandardMouth { sources:Vec::with_capacity(32),buffer:None,news:Vec::with_capacity(32)};
+        for _ in (0..32) { s.news.push(TokenSource::new()) }
+        s
+    }
+    pub fn new_with(tks: Vec<Token<ET>>) -> Self {
+        StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
+    }
     fn has_next_i(&mut self, state:&ET::State) -> Result<bool, TeXError<ET>> {
         if let Some(source) = self.sources.last_mut() {
             match source {

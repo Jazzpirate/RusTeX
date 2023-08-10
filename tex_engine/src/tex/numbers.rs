@@ -1,4 +1,5 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use crate::engine::EngineType;
 use crate::engine::state::fields::IsDefault;
@@ -72,15 +73,16 @@ Div<Self,Output=Self>+Mul<Self,Output=Self> {
     fn from_i64<ET:EngineType>(i:i64) -> Result<Self,TeXError<ET>>;
     fn to_i64(&self) -> i64;
 }
-pub trait Dim:Numeric+Add<Self,Output=Self>{
+pub trait Dim:Numeric+Add<Self,Output=Self> + Debug + Ord + Sum {
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
     fn from_sp(sp:i64) -> Self;
     fn to_sp(&self) -> i64;
     fn tex_mult(&self,other:f64) -> Self;
     fn tex_div(&self,other:i64) -> Self;
+    fn max_val() -> Self;
 }
-pub trait SkipDim:Display+Copy + Clone {
+pub trait SkipDim:Display+Copy + Clone + Debug {
     type Dim:Dim;
     fn units() -> Vec<&'static str>;
     fn from_dim(dim:Self::Dim) -> Self;
@@ -111,7 +113,7 @@ impl Int for i32 {
     }
     fn to_i64(&self) -> i64 { *self as i64 }
 }
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy, Debug,PartialEq,Eq,PartialOrd,Ord)]
 pub struct Dimi32(pub i32);
 impl Dimi32 {
     fn round(&self) -> f64 {
@@ -190,6 +192,11 @@ impl Numeric for Dimi32 {
         Dimi32(((self.0 as i64 * times) / div) as i32)
     }
 }
+impl Sum for Dimi32 {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        Dimi32(iter.map(|a| a.0).sum())
+    }
+}
 impl Dim for Dimi32 {
     fn units() -> Vec<&'static str> {vec!["pt","pc","in","bp","cm","mm","dd","cc","sp"]}
     fn from_float(dim: &str, float: f64) -> Self { match dim {
@@ -208,6 +215,7 @@ impl Dim for Dimi32 {
     fn to_sp(&self) -> i64 { self.0 as i64 }
     fn tex_mult(&self, other: f64) -> Self { Dimi32(((self.0 as f64 * other * 65536.0).floor() / 65536.0).floor() as i32) }
     fn tex_div(&self, other: i64) -> Self { Dimi32(self.0 / other as i32) }
+    fn max_val() -> Self { Self(i32::MAX) }
 }
 impl Neg for Dimi32 {
     type Output = Self;
@@ -216,7 +224,7 @@ impl Neg for Dimi32 {
     }
 }
 
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy, Debug)]
 pub struct Skip<SD:SkipDim>{
     pub base:SD::Dim,
     pub stretch:Option<SD>,
@@ -277,7 +285,7 @@ impl<SD:SkipDim> Numeric for Skip<SD> {
 }
 
 
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,Debug)]
 #[allow(non_camel_case_types)]
 pub enum Fill {
     pt(i32),
@@ -288,7 +296,7 @@ pub enum Fill {
 impl Display for Fill {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Fill::pt(i) => Dimi32(*i).fmt(f),
+            Fill::pt(i) => Display::fmt(&Dimi32(*i),f),
             Fill::fil(i) => write!(f,"{}fil",Dimi32(*i).to_string()),
             Fill::fill(i) => write!(f,"{}fill",Dimi32(*i).to_string()),
         }
@@ -440,7 +448,7 @@ pub enum MuFill {
 impl Display for MuFill {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MuFill::mu(i) => Mui32(*i).fmt(f),
+            MuFill::mu(i) => Display::fmt(&Mui32(*i),f),
             MuFill::fil(i) => write!(f,"{}fil",Dimi32(*i).to_string()),
             MuFill::fill(i) => write!(f,"{}fill",Dimi32(*i).to_string()),
         }

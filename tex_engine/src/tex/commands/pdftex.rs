@@ -141,7 +141,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:
     register_int_assign!(pdfdecimaldigits,state,stomach,gullet);
     register_expandable!(pdffilesize,state,stomach,gullet,(s,gu,cmd,f) =>pdffilesize::<ET>(s,gu,cmd,f));
     register_int_assign!(pdfgentounicode,state,stomach,gullet);
-    register_unexpandable!(pdfglyphtounicode,state,stomach,gullet,(s,gu,cmd) =>pdfglyphtounicode::<ET>(s,gu,cmd));
+    register_unexpandable!(pdfglyphtounicode,state,stomach,gullet,false,(s,gu,cmd) =>pdfglyphtounicode::<ET>(s,gu,cmd));
     register_dim_assign!(pdfhorigin,state,stomach,gullet);
     register_int_assign!(pdfoutput,state,stomach,gullet);
     register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion::<ET>(c));

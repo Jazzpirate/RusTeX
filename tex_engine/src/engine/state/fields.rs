@@ -9,7 +9,7 @@ use crate::utils::strings::{AllCharsTrait, CharType};
 use std::collections::btree_map::Entry;
 use std::hash::Hash;
 use crate::engine::EngineType;
-use crate::tex::boxes::HVBox;
+use crate::tex::nodes::HVBox;
 use crate::utils::map::HMap;
 
 /** A field of the [`State`](crate::engine::state::State) needs to be able to push and pop a new stack frame.

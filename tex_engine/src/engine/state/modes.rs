@@ -63,7 +63,7 @@ impl Default for GroupType {
 }
 
 /// An enum for the different types of boxes in TeX.
-#[derive(Copy,Clone,PartialEq)]
+#[derive(Copy,Clone,PartialEq,Debug)]
 pub enum BoxMode {
     /// A horizontal box
     H,

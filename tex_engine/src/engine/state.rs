@@ -3,20 +3,46 @@
 use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField};
-use crate::engine::state::modes::{GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::{EngineType, Outputs};
 use crate::engine::stomach::Stomach;
-use crate::tex::boxes::{HVBox, OpenBox, TeXNode};
+use crate::tex::nodes::{HVBox, OpenBox, CustomNode, TeXNode, SimpleNode};
 use crate::tex::fonts::FontStore;
-use crate::tex::numbers::{Int, MuSkip, Skip};
+use crate::tex::numbers::{Int, MuSkip, Skip, Dim};
 use crate::utils::{Ptr};
 
 pub mod fields;
 pub mod modes;
+
+#[derive(Debug,Clone)]
+pub struct ShipoutData<ET:EngineType> {
+    pub box_stack:Vec<OpenBox<ET>>,
+    pub page:Vec<TeXNode<ET>>,
+    pub pagegoal:ET::Dim,
+    pub pagetotal:ET::Dim,
+    pub prevdepth: ET::Dim
+}
+impl<ET:EngineType> ShipoutData<ET> {
+    pub fn new() -> Self {
+        ShipoutData {
+            box_stack:Vec::with_capacity(1024),
+            page:Vec::new(),
+            pagegoal:ET::Dim::from_sp(0),
+            pagetotal:ET::Dim::from_sp(0),
+            prevdepth:ET::Dim::from_sp(-65536000)
+        }
+    }
+    pub fn get_page(&mut self) -> Vec<TeXNode<ET>> {
+        let ret = std::mem::replace(&mut self.page,Vec::with_capacity(1024));
+        // TODO moar
+        self.pagetotal = ET::Dim::from_sp(0);
+        ret
+    }
+}
 
 /// A TeX state
 pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
@@ -32,9 +58,34 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn current_csname(&self) -> Option<usize>;
     fn pop_csname(&mut self);
 
+    fn shipout_data(&self) -> &ShipoutData<ET>;
+    fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
+    fn open_box(&mut self,bx:OpenBox<ET>) {
+        self.shipout_data_mut().box_stack.push(bx)
+    }
 
-    fn box_stack(&self) -> &Vec<OpenBox<ET>>;
-    fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>>;
+    fn push_node(&mut self,node:TeXNode<ET>) {
+        let mut sd = self.shipout_data_mut();
+        match sd.box_stack.last_mut() {
+            Some(b) => {
+                if b.is_vertical() {
+                    match &node {
+                        TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
+                        o => sd.prevdepth = o.depth()
+                    }
+                }
+                b.ls().push(node)
+            },
+            _ => {
+                sd.pagetotal = sd.pagetotal + node.height();
+                match &node {
+                    TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
+                    o => sd.prevdepth = o.depth()
+                }
+                sd.page.push(node)
+            }
+        }
+    }
 
     fn set_afterassignment(&mut self,t:Token<ET>);
     fn take_afterassignment(&mut self) -> Option<Token<ET>>;
@@ -191,8 +242,8 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
     fontstore:ET::FontStore,
-    box_stack:Vec<OpenBox<ET>>,
     afterassignment:Option<Token<ET>>,
+    shipout_data:ShipoutData<ET>,
 
     current_font:SingleValueField<ET::Font>,
 
@@ -245,7 +296,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             outputs,
             afterassignment:None,
             aftergroups:vec!(vec!()),
-            box_stack:vec!(),
+            shipout_data:ShipoutData::new(),
 
             jobname: None,
             start_time: None,
@@ -313,9 +364,12 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.current_font.set_locally(f)
         }
     }
-
-    fn box_stack(&self) -> &Vec<OpenBox<ET>> { &self.box_stack }
-    fn box_stack_mut(&mut self) -> &mut Vec<OpenBox<ET>> { &mut self.box_stack }
+    fn shipout_data(&self) -> &ShipoutData<ET> {
+        &self.shipout_data
+    }
+    fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> {
+        &mut self.shipout_data
+    }
 
     fn set_afterassignment(&mut self, t: Token<ET>) {
         self.afterassignment = Some(t)
@@ -402,7 +456,14 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     // #[inline(always)]
     fn stack_push(&mut self, g: GroupType) {
         match g {
-            GroupType::Box(_) => self.grouptype.push((g,Some(self.mode))),
+            GroupType::Box(m) => {
+                self.grouptype.push((g,Some(self.mode)));
+                self.mode = match m {
+                    BoxMode::H | BoxMode::M | BoxMode::DM | BoxMode::LeftRight => TeXMode::RestrictedHorizontal,
+                    BoxMode::V => TeXMode::InternalVertical,
+                    _ => self.mode
+                };
+            },
             _ => self.grouptype.push((g,None))
         }
         self.current_font.push_stack();
