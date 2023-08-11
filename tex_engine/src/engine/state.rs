@@ -18,7 +18,7 @@ use crate::utils::{Ptr};
 pub mod fields;
 pub mod modes;
 
-#[derive(Debug,Clone)]
+#[derive(Clone,Debug)]
 pub struct ShipoutData<ET:EngineType> {
     pub box_stack:Vec<OpenBox<ET>>,
     pub page:Vec<TeXNode<ET>>,

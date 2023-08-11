@@ -58,7 +58,6 @@ mod tests {
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
-    use crate::tex::nodes::{StandardTeXBox, StandardTeXNode};
     use crate::engine::mouth::Mouth;
 
     use ansi_term::Colour::Green;
@@ -152,8 +151,8 @@ mod tests {
             type FileSystem = KpseVirtualFileSystem<u8>;
             type Font = TfmFont;
             type FontStore = TfmFontStore;
-            type Node = StandardTeXNode;
-            type Box = StandardTeXBox;
+            type Node = ();
+            type Box = ();
             type Int = i32;
             type Dim = Dimi32;
             type SkipDim = Fill;
@@ -181,7 +180,7 @@ mod tests {
                 env_logger::init();
                 //trace();
                 Ok(())
-            }
+            },starts_paragraph:false
         },None)),true);
 
         match engine.initialize_pdflatex() {

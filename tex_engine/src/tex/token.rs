@@ -72,6 +72,7 @@ pub struct Token<ET:EngineType> {
     pub base:BaseToken<ET::Char>,
     pub sourceref:Option<ET::TokenReference>
 }
+
 impl<ET:EngineType> Display for Token<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.base,f)
