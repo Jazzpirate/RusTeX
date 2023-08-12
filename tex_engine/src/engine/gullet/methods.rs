@@ -72,7 +72,7 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
             debug_log!(trace=>"True conditional");
             Ok(())
         } else {
-            false_loop::<ET>(engine.gullet,engine.state,IFCASE,i)
+            false_loop::<ET>(engine.gullet,engine.mouth,engine.state,IFCASE,i)
         }
     } else {
         let i = engine.gullet.new_conditional(name);
@@ -81,7 +81,7 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
             engine.gullet.set_conditional(i,ConditionalBranch::True(name));
             debug_log!(trace=>"True conditional");
             Ok(())
-        } else { false_loop::<ET>(engine.gullet, engine.state,name,i) }
+        } else { false_loop::<ET>(engine.gullet, engine.mouth,engine.state,name,i) }
     }
 }
 
@@ -100,7 +100,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<String,TeX
             }
             BaseCommand::Char {char,..} => ret.push_str(std::str::from_utf8(char.as_bytes()).unwrap()), //(char.as_bytes())),//ret.push(char.to_char()),
             _ => {
-                engine.gullet.mouth().requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause);
                 return Ok(ret)
             }
         }
@@ -183,13 +183,13 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_prote
     file_end!()
 }
 
-pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
+pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"False conditional. Skipping...");
     let mut incond:usize = gullet.current_conditional().1 - condidx;
     for i in 0..incond {
         gullet.pop_conditional();
     }
-    while let Some((next,exp)) = gullet.mouth().get_next(state)? {
+    while let Some((next,exp)) = mouth.get_next(state)? {
         match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(c).map(|c| &c.base) {
@@ -254,11 +254,11 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,con
     file_end!()
 }
 
-pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
+pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\else. Skipping...");
     gullet.set_top_conditional(ConditionalBranch::Else(condname));
     let mut incond:usize = gullet.current_conditional().1 - condidx;
-    while let Some((next,exp)) = gullet.mouth().get_next(state)? {
+    while let Some((next,exp)) = mouth.get_next(state)? {
         match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(c).as_deref().map(|c| &c.base) {
@@ -298,7 +298,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,cond
 pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
-    let mut read_toks = engine.gullet.mouth().new_tokensource();
+    let mut read_toks = engine.mouth.new_tokensource();
     while let Some(next) = engine.get_next_unexpandable()? {
         read_toks.push(next.source.cause);
         match next.command {
@@ -308,20 +308,20 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> R
                     current.push(us as u8 as char);
                     if current == kw {
                         read_toks = read_toks.reset();
-                        engine.gullet.mouth().push_tokens(read_toks);
+                        engine.mouth.push_tokens(read_toks);
                         return Ok(true)
                     }
                     else if !kw.starts_with(&current) {
-                        engine.gullet.mouth().push_tokens(read_toks);
+                        engine.mouth.push_tokens(read_toks);
                         return Ok(false)
                     }
                 } else {
-                    engine.gullet.mouth().push_tokens(read_toks);
+                    engine.mouth.push_tokens(read_toks);
                     return Ok(false)
                 }
             }
             _ => {
-                engine.gullet.mouth().push_tokens(read_toks);
+                engine.mouth.push_tokens(read_toks);
                 return Ok(false)
             }
         }
@@ -332,7 +332,7 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> R
 pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
-    let mut read_toks = engine.gullet.mouth().new_tokensource();
+    let mut read_toks = engine.mouth.new_tokensource();
     while let Some(next) = engine.get_next_unexpandable()? {
         read_toks.push(next.source.cause.clone());
         match next.command {
@@ -342,34 +342,34 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Ve
                     current.push(us as u8 as char);
                     keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
                     if keywords.is_empty() {
-                        engine.gullet.mouth().push_tokens(read_toks);
+                        engine.mouth.push_tokens(read_toks);
                         return Ok(None)
                     }
                     else if keywords.len() == 1 && keywords[0] == current {
                         read_toks = read_toks.reset();
-                        engine.gullet.mouth().push_tokens(read_toks);
+                        engine.mouth.push_tokens(read_toks);
                         return Ok(Some(keywords[0]))
                     }
                 } else if keywords.contains(&current.as_str()) {
-                    engine.gullet.mouth().requeue(next.source.cause);
+                    engine.mouth.requeue(next.source.cause);
                     read_toks = read_toks.reset();
-                    engine.gullet.mouth().push_tokens(read_toks);
+                    engine.mouth.push_tokens(read_toks);
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Ok(Some(keywords[0]))
                 } else {
-                    engine.gullet.mouth().push_tokens(read_toks);
+                    engine.mouth.push_tokens(read_toks);
                     return Ok(None)
                 }
             }
             _ if keywords.contains(&current.as_str()) => {
-                engine.gullet.mouth().requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause);
                 read_toks = read_toks.reset();
-                engine.gullet.mouth().push_tokens(read_toks);
+                engine.mouth.push_tokens(read_toks);
                 keywords = keywords.into_iter().filter(|s| s == &current).collect();
                 return Ok(Some(keywords[0]))
             }
             _ => {
-                engine.gullet.mouth().push_tokens(read_toks);
+                engine.mouth.push_tokens(read_toks);
                 return Ok(None)
             }
         }
@@ -619,12 +619,12 @@ impl<ET:EngineType> EngineMut<'_,ET> {
                     if chars.contains(&c) {
                         Ok(Some(c))
                     } else {
-                        self.gullet.mouth().requeue(res.source.cause);
+                        self.mouth.requeue(res.source.cause);
                         Ok(None)
                     }
                 }
                 _ => {
-                    self.gullet.mouth().requeue(res.source.cause);
+                    self.mouth.requeue(res.source.cause);
                     Ok(None)
                 }
             }
@@ -637,7 +637,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             Some(res) => match res.command {
                 BaseCommand::Char { char:c, .. } if c.as_bytes() == [char] => Ok(true),
                 _ => {
-                    self.gullet.mouth().requeue(res.source.cause);
+                    self.mouth.requeue(res.source.cause);
                     Ok(false)
                 }
             }
@@ -649,7 +649,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    self.gullet.mouth().get_until_endgroup(self.state,f)
+                    self.mouth.get_until_endgroup(self.state,f)
                 }
                 _ => throw!("begin group expected")
             }
@@ -666,12 +666,8 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             state: self.state,
             stomach: self.stomach,
             memory: self.memory,
+            mouth: self.mouth,
         })
-    }
-
-    pub fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
-        let (g,mut r) = self.split_gullet();
-        g.with_mouth(&mut r,tks,f)
     }
 }
 
@@ -679,6 +675,7 @@ pub struct EngineMutNoGullet<'a,ET:EngineType> {
     pub state:&'a mut ET::State,
     pub stomach:&'a mut ET::Stomach,
     pub memory:&'a mut Memory<ET>,
+    pub mouth:&'a mut ET::Mouth,
 }
 
 impl<ET:EngineType> EngineMutNoGullet<'_,ET> {
@@ -687,6 +684,7 @@ impl<ET:EngineType> EngineMutNoGullet<'_,ET> {
             state: self.state,
             stomach: self.stomach,
             memory: self.memory,
+            mouth: self.mouth,
             gullet,
         }
     }

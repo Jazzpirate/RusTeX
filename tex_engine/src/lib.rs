@@ -161,20 +161,21 @@ mod tests {
             type CommandReference = ();
             type TokenReference = FileTokenReference<Self>;
             type State = TeXState<Self>;
+            type Mouth = StandardMouth<Self>;
             type Gullet = TeXGullet<Self>;
             type Stomach = NoShipoutDefaultStomach<Self>;
         }
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new();
         let state = TeXState::new(fs,fonts,outputs.clone());
-        //let mouth = StandardMouth::new();
-        let gullet = TeXGullet::new();//(mouth);
+        let mouth = StandardMouth::new();
+        let gullet = TeXGullet::new();
         let stomach = NoShipoutDefaultStomach::new();
-        let mut engine = crate::engine::new::<Default>(state,gullet,stomach);
+        let mut engine = crate::engine::new::<Default>(state,mouth,gullet,stomach);
 
         engine.state.set_command(<u8 as CharType>::from_str("rustexBREAK"),Some(Command::new(BaseCommand::Unexpandable {
             name: "rustexBREAK",
-            apply: |_,_,_| {
+            apply: |_,_| {
                 println!("HERE!");
                 std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
                 env_logger::init();
@@ -186,7 +187,7 @@ mod tests {
         match engine.initialize_pdflatex() {
             Ok(_) => {},
             Err(e) => {
-                (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(),engine.gullet.mouth().file_line(),engine.gullet.mouth().preview(100)));
+                (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(),engine.mouth.file_line(),engine.mouth.preview(100)));
                 panic!()
             }
         }

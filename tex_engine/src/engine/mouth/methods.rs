@@ -4,6 +4,7 @@ use crate::engine::mouth::Mouth;
 use crate::{debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineMut, EngineType};
 use crate::engine::gullet::Gullet;
+use crate::engine::memory::Memory;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::TokenCont;
@@ -14,12 +15,12 @@ use crate::utils::strings::CharType;
 impl<ET:EngineType> EngineMut<'_,ET> {
     /// get the next [`Token`] from the [`Mouth`]
     pub fn get_next_token(&mut self) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
-        self.gullet.mouth().get_next(self.state)
+        self.mouth.get_next(self.state)
     }
 
     /// Skip whitespace characters from the [`Mouth`]
     pub fn skip_whitespace(&mut self) -> Result<(),TeXError<ET>> {
-        self.gullet.mouth().skip_whitespace(self.state)
+        self.mouth.skip_whitespace(self.state)
     }
 
     /// read optional `=` characters from the [`Mouth`]
@@ -31,11 +32,11 @@ impl<ET:EngineType> EngineMut<'_,ET> {
                 BaseToken::Char(c,_) if c.to_usize() == 61 => {
                     match self.get_next_token()? {
                         Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
-                        Some((tk,_)) => self.gullet.mouth().requeue(tk),
+                        Some((tk,_)) => self.mouth.requeue(tk),
                         _ => ()
                     }
                 },
-                _ => self.gullet.mouth().requeue(tk)
+                _ => self.mouth.requeue(tk)
             }
         }
         Ok(())
@@ -46,7 +47,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     pub fn get_argument(&mut self,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        self.gullet.mouth().get_argument(self.state,f)
+        self.mouth.get_argument(self.state,f)
     }
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
@@ -71,14 +72,28 @@ impl<ET:EngineType> EngineMut<'_,ET> {
         file_end!()
     }
 
+    pub fn split_mouth(&mut self) -> (&mut ET::Mouth,EngineMutNoMouth<ET>) {
+        (self.mouth,EngineMutNoMouth {
+            state: self.state,
+            stomach: self.stomach,
+            memory: self.memory,
+            gullet: self.gullet,
+        })
+    }
+
+    pub fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
+        let (m,mut r) = self.split_mouth();
+        m.with_mouth(&mut r,tks,f)
+    }
+
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&mut self,len:usize) -> String {
-        self.gullet.mouth().preview(len)
+        self.mouth.preview(len)
     }
 
     pub fn current_position(&mut self) -> String {
-        self.gullet.mouth().file_line()
+        self.mouth.file_line()
     }
 }
 
@@ -87,10 +102,29 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&self,len:usize) -> String {
-        todo!("make this non-mutable")//self.gullet.mouth().preview(len)
+        self.mouth.preview(len)
     }
 
     pub fn current_position(&self) -> String {
-        todo!("make this non-mutable")//self.gullet.mouth().file_line()
+        self.mouth.file_line()
+    }
+}
+
+pub struct EngineMutNoMouth<'a,ET:EngineType> {
+    pub state:&'a mut ET::State,
+    pub stomach:&'a mut ET::Stomach,
+    pub memory:&'a mut Memory<ET>,
+    pub gullet:&'a mut ET::Gullet,
+}
+
+impl<ET:EngineType> EngineMutNoMouth<'_,ET> {
+    pub fn join_mouth<'b>(&'b mut self,mouth:&'b mut ET::Mouth) -> EngineMut<'b,ET> {
+        EngineMut {
+            state: self.state,
+            stomach: self.stomach,
+            memory: self.memory,
+            mouth,
+            gullet:self.gullet,
+        }
     }
 }

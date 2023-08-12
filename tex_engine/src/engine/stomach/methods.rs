@@ -29,7 +29,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
         Assignment {name,set} => {
             set(engine,cmd.source,false)?;
             match engine.state.take_afterassignment() {
-                Some(t) => engine.gullet.mouth().requeue(t),
+                Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
             Ok(())
@@ -37,7 +37,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
         ValueAss(set) => {
             set(engine,cmd.source,false)?;
             match engine.state.take_afterassignment() {
-                Some(t) => engine.gullet.mouth().requeue(t),
+                Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
             Ok(())
@@ -45,7 +45,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
         Font(f) => {
             engine.state.set_current_font(f,false);
             match engine.state.take_afterassignment() {
-                Some(t) => engine.gullet.mouth().requeue(t),
+                Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
             Ok(())
@@ -66,9 +66,9 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
         BeginGroup => Ok(engine.state.stack_push(GroupType::Token)),
         EndGroup => match engine.state.stack_pop() {
             Some((v,GroupType::Token)) => {
-                let mut ret = engine.gullet.mouth().new_tokensource();
+                let mut ret = engine.mouth.new_tokensource();
                 for t in v {ret.push(t)}
-                engine.gullet.mouth().push_tokens(ret);
+                engine.mouth.push_tokens(ret);
                 Ok(())
             }
             Some((v,GroupType::Box(b))) => {
@@ -93,6 +93,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
 impl<ET:EngineType> EngineMut<'_,ET> {
     pub fn split_stomach(&mut self) -> (&mut ET::Stomach,EngineMutNoStomach<ET>) {
         (self.stomach,EngineMutNoStomach {
+            mouth: self.mouth,
             state: self.state,
             gullet: self.gullet,
             memory: self.memory,
@@ -104,6 +105,7 @@ pub struct EngineMutNoStomach<'a,ET:EngineType> {
     pub state:&'a mut ET::State,
     pub gullet:&'a mut ET::Gullet,
     pub memory:&'a mut Memory<ET>,
+    pub mouth:&'a mut ET::Mouth,
 }
 
 impl<ET:EngineType> EngineMutNoStomach<'_,ET> {
@@ -111,6 +113,7 @@ impl<ET:EngineType> EngineMutNoStomach<'_,ET> {
         EngineMut {
             state: self.state,
             stomach,
+            mouth: self.mouth,
             memory: self.memory,
             gullet:self.gullet,
         }

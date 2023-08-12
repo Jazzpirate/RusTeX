@@ -1,7 +1,7 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
 use crate::engine::{EngineMut, EngineType};
-use crate::engine::gullet::{BMouth, Gullet};
+use crate::engine::gullet::Gullet;
 use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::state::State;
 use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, ResolvedToken, TokenCont, ValueCommand, CommandSource};
@@ -13,14 +13,14 @@ use crate::utils::strings::CharType;
 #[macro_export]
 macro_rules! cmtodo {
     ($engine:ident,$name:ident) => {
-        register_expandable!($name,$engine,(e,_,_) => todo!("{}: {}",stringify!($name),e.gullet.mouth().file_line()));
+        register_expandable!($name,$engine,(e,_,_) => todo!("{}: {}",stringify!($name),e.current_position()));
     };
 }
 
 #[macro_export]
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {
-        register_unexpandable!($name,$engine,false,(e,_) => todo!("{}: {}",stringify!($name),e.gullet.mouth().file_line()));
+        register_unexpandable!($name,$engine,false,(e,_) => todo!("{}: {}",stringify!($name),e.current_position()));
     };
 }
 
@@ -368,7 +368,7 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:BMouth<'_,ET>, cmd:CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>), f:TokenCont<ET>)
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>), f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -427,7 +427,7 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET:
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:BMouth<'_,ET>, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>))
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>))
                                  -> Result<(),TeXError<ET>> {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
@@ -597,7 +597,7 @@ pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSo
                     Some((next,_)) => {
                         match &next.base {
                             BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                                engine.gullet.mouth().requeue(next);
+                                engine.mouth.requeue(next);
                                 return Ok((true, arity, params))
                             }
                             BaseToken::Char(c,_) => {
@@ -615,7 +615,7 @@ pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSo
                 }
             }
             BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                engine.gullet.mouth().requeue(next);
+                engine.mouth.requeue(next);
                 return Ok((false,arity,params))
             }
             BaseToken::Char(_,CategoryCode::EndGroup) => throw!("Unexpected end of group" => cmd.cause),

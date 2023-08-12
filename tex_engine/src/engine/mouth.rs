@@ -12,12 +12,12 @@ pub mod methods;
 
 use std::hint::unreachable_unchecked;
 use log::debug;
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::filesystem::File;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
 use crate::{debug_log, file_end, throw};
-use crate::engine::gullet::BMouth;
+use crate::engine::mouth::methods::EngineMutNoMouth;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::TokenCont;
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -26,10 +26,16 @@ use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
-pub trait Mouth<ET:EngineType> {
-    //fn new() -> Self;
-
-    //fn new_with(tks:Vec<Token<ET>>) -> Self;
+pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
+    fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,tks:Vec<Token<ET>>,mut f:F) -> R {
+        let old = std::mem::replace(self, Self::new_with(tks));
+        let mut engine = engine.join_mouth(self);
+        let ret = f(&mut engine);
+        std::mem::replace(self, old);
+        ret
+    }
+    fn new() -> Self;
+    fn new_with(tks:Vec<Token<ET>>) -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
     fn push_tokens(&mut self,tks:TokenSource<ET>);
@@ -198,9 +204,17 @@ impl<ET:EngineType> TokenSource<ET> {
 }
 
 #[derive(Clone)]
-pub struct StandardMouth<ET:EngineType>{ pub sources:Vec<TeXMouthSource<ET>>,buffer:Option<Token<ET>>,pub news:Vec<TokenSource<ET>>}
+pub struct StandardMouth<ET:EngineType<Mouth=Self>>{ pub sources:Vec<TeXMouthSource<ET>>,buffer:Option<Token<ET>>,pub news:Vec<TokenSource<ET>>}
 
-impl<ET:EngineType> Mouth<ET> for StandardMouth<ET> {
+impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
+    fn new() -> Self {
+        let mut s = StandardMouth { sources:Vec::with_capacity(32),buffer:None,news:Vec::with_capacity(32)};
+        for _ in (0..32) { s.news.push(TokenSource::new()) }
+        s
+    }
+    fn new_with(tks: Vec<Token<ET>>) -> Self {
+        StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
+    }
 
     fn new_tokensource(&mut self) -> TokenSource<ET> {
         match self.news.pop() {
@@ -334,15 +348,7 @@ impl<ET:EngineType> Mouth<ET> for StandardMouth<ET> {
     }
 }
 
-impl<ET:EngineType> StandardMouth<ET> {
-    pub fn new() -> Self {
-        let mut s = StandardMouth { sources:Vec::with_capacity(32),buffer:None,news:Vec::with_capacity(32)};
-        for _ in (0..32) { s.news.push(TokenSource::new()) }
-        s
-    }
-    pub fn new_with(tks: Vec<Token<ET>>) -> Self {
-        StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
-    }
+impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
     fn has_next_i(&mut self, state:&ET::State) -> Result<bool, TeXError<ET>> {
         if let Some(source) = self.sources.last_mut() {
             match source {

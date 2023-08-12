@@ -22,17 +22,11 @@ use crate::utils::errors::TeXError;
 use crate::utils::map::Map;
 use crate::utils::strings::TeXStr;
 
-pub type BMouth<'a,ET:EngineType> = &'a mut Box<dyn Mouth<ET>>;
-
 
 /// The [`Gullet`] trait defines the interface for the part of the TeX engine that reads tokens from the input stream,
 /// and expands macros. It has basically no components other than a [`Mouth`], so it is implemented as a trait
 /// to allow for overriding its methods.
 pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
-    /// Returns a reference to the [`Mouth`].
-    fn mouth(&mut self) -> BMouth<'_,ET>;
-
-    fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,engine:&mut EngineMutNoGullet<ET>,tks:Vec<Token<ET>>,f:F) -> R;
 
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
     /// (or [`None`] if the [`Mouth`] is empty)
@@ -100,14 +94,12 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 }
 
 pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
-    mouth:Box<dyn Mouth<ET>>,
     in_conditionals:Vec<ConditionalBranch>,
     args_pool:[Vec<Token<ET>>;9],
     delimiter_pool:Vec<Token<ET>>
 }
 impl<ET:EngineType<Gullet=Self>> Clone for TeXGullet<ET> {
     fn clone(&self) -> Self { Self {
-        mouth: Box::new(StandardMouth::new()),
         in_conditionals: self.in_conditionals.clone(),
         args_pool: self.args_pool.clone(),
         delimiter_pool: self.delimiter_pool.clone()
@@ -116,22 +108,13 @@ impl<ET:EngineType<Gullet=Self>> Clone for TeXGullet<ET> {
 
 impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
     pub fn new() -> Self {
-        Self {mouth:Box::new(StandardMouth::new()), in_conditionals:Vec::new(),
+        Self {in_conditionals:Vec::new(),
             args_pool:[Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new()],
             delimiter_pool:Vec::new()
         }
     }
 }
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
-    fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,engine:&mut EngineMutNoGullet<ET>,tks:Vec<Token<ET>>,mut f:F) -> R {
-        let old = std::mem::replace(&mut self.mouth, Box::new(StandardMouth::<ET>::new_with(tks)));
-        let mut engine = engine.join_gullet(self);
-        let ret = f(&mut engine);
-        self.mouth = old;
-        ret
-    }
-    fn mouth(&mut self) -> BMouth<'_,ET> { &mut self.mouth }
-
     fn new_conditional(&mut self,name:&'static str) -> usize {
         let ret = self.in_conditionals.len();
         self.in_conditionals.push(ConditionalBranch::None(name));
@@ -156,11 +139,11 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     fn expand(&mut self, engine:&mut EngineMutNoGullet<ET>, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET>> {
         match ret.command {
             BaseCommand::Def(d) => {
-                let mut vec = self.mouth.new_tokensource();
-                expand_def(&d,engine.state,&mut self.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
+                let mut vec = engine.mouth.new_tokensource();
+                expand_def(&d,engine.state,&mut engine.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
                            &mut |_,t| Ok(vec.push(t))
                 )?;
-                self.mouth.push_tokens(vec);
+                engine.mouth.push_tokens(vec);
                 Ok(None)
             }
             // expandable commands that do not expand to new tokens
@@ -170,10 +153,10 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
                 Ok(None)
             }
             BaseCommand::Expandable {apply,..} => {
-                let mut vec = self.mouth.new_tokensource();
+                let mut vec = engine.mouth.new_tokensource();
                 let mut engine = engine.join_gullet(self);
                 apply(&mut engine,ret.source,&mut |_,t| Ok(vec.push(t)))?;
-                engine.gullet.mouth.push_tokens(vec);
+                engine.mouth.push_tokens(vec);
                 Ok(None)
             },
             BaseCommand::Conditional {name,apply} => {

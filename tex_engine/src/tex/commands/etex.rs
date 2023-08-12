@@ -235,9 +235,9 @@ pub fn dimexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) 
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.gullet.mouth().requeue(next)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.gullet.mouth().requeue(next)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -276,9 +276,9 @@ pub fn glueexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.gullet.mouth().requeue(next)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.gullet.mouth().requeue(next)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -324,9 +324,9 @@ pub fn muexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.gullet.mouth().requeue(next)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.gullet.mouth().requeue(next)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -342,9 +342,9 @@ pub fn numexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.gullet.mouth().requeue(next)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.gullet.mouth().requeue(next)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)

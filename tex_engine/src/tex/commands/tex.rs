@@ -298,7 +298,7 @@ pub fn csname<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, 
         None => engine.state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
     }
-    engine.gullet.mouth().requeue(Token::new(BaseToken::CS(str),None));
+    engine.mouth.requeue(Token::new(BaseToken::CS(str),None));
     Ok(())
 }
 
@@ -591,9 +591,9 @@ pub fn else_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     match engine.gullet.current_conditional() {
         (None,_) => throw!("Not in a conditional" => cmd.cause),
         (Some(ConditionalBranch::True(name)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.state,name,i,false) => (ELSE,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,name,i,false) => (ELSE,cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.state,"ifcase",i,false) => ("ifcase",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,"ifcase",i,false) => ("ifcase",cmd)),
         o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
     }
     Ok(())
@@ -610,13 +610,13 @@ pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET>
 
 pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
-    let mut ret = engine.gullet.mouth().new_tokensource();
+    let mut ret = engine.mouth.new_tokensource();
     match engine.state.stack_pop() {
         Some((mut v,GroupType::CS)) => {
             for t in v.drain(..) {
                 ret.push(t);
             }
-            engine.gullet.mouth().push_tokens(ret);
+            engine.mouth.push_tokens(ret);
             Ok(())
         }
         _ => throw!("No group to end" => cmd.cause)
@@ -625,7 +625,7 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 
 pub fn endinput<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
-    engine.gullet.mouth().endinput(engine.state);
+    engine.mouth.endinput(engine.state);
     Ok(())
 }
 
@@ -721,10 +721,10 @@ pub fn expandafter<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     match engine.expand(resolve_token::<ET>(engine.state,next))? {
         None => (),
         Some(next) => {
-            engine.gullet.mouth().requeue(next.source.cause);
+            engine.mouth.requeue(next.source.cause);
         }
     }
-    engine.gullet.mouth().requeue(first);
+    engine.mouth.requeue(first);
     Ok(())
 }
 
@@ -823,10 +823,10 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
     engine.set_command_for_tk(cs,newcmd,global);
-    let mut ret = engine.gullet.mouth().new_tokensource();
+    let mut ret = engine.mouth.new_tokensource();
     ret.push(first);
     ret.push(second);
-    engine.gullet.mouth().push_tokens(ret);
+    engine.mouth.push_tokens(ret);
     Ok(())
 }
 
@@ -881,11 +881,11 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
             BaseCommand::Relax => {},
             BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
                 engine.state.stack_push(GroupType::Box(BoxMode::H));
-                let mut ret = engine.gullet.mouth().new_tokensource();
+                let mut ret = engine.mouth.new_tokensource();
                 for t in engine.state.get_primitive_toks("everyhbox") {
                     ret.push(t.clone());
                 }
-                engine.gullet.mouth().push_tokens(ret);
+                engine.mouth.push_tokens(ret);
                 return Ok(Box::new(move |e,children| {
                     Some(HVBox::H(HBox {
                         children, to:to.clone(), spread:spread.clone(),
@@ -1012,7 +1012,7 @@ pub fn get_if_token<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSourc
                 (Some(ConditionalBranch::None(_)),_) => true,
                 _ => false
             }) => {
-                engine.gullet.mouth().requeue(r.source.cause);
+                engine.mouth.requeue(r.source.cause);
                 return Ok(None)
             }
             _ if e => match engine.expand(r)? {
@@ -1152,7 +1152,7 @@ pub fn ignorespaces<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
             Some(sc) => match sc.command {
                 BaseStomachCommand::Space => (),
                 _ => {
-                    engine.gullet.mouth().requeue(sc.source.cause);
+                    engine.mouth.requeue(sc.source.cause);
                     return Ok(())
                 }
             }
@@ -1173,7 +1173,7 @@ pub fn immediate<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
                 Ok(())
             }
             _ => {
-                engine.gullet.mouth().requeue(sc.source.cause);
+                engine.mouth.requeue(sc.source.cause);
                 Ok(())
             }
         }
@@ -1195,14 +1195,14 @@ pub fn input<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         throw!("I can't find file `{}'",filename => cmd.cause)
     } else {
         (engine.state.outputs().file_open)(file.path().to_str().unwrap());
-        engine.gullet.mouth().push_file(&file);
+        engine.mouth.push_file(&file);
         Ok(())
     }
 }
 
 pub fn inputlineno<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
-        engine.gullet.mouth().line_no() as i64
+        engine.mouth.line_no() as i64
     ) => ("month",cmd)))
 }
 
@@ -1284,7 +1284,7 @@ pub static LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\lowercase");
-    let mut ret = engine.gullet.mouth().new_tokensource();
+    let mut ret = engine.mouth.new_tokensource();
     catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
         BaseToken::Char(c,cc) => {
             let nc = s.get_lccode(c);
@@ -1292,7 +1292,7 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
         }
         _ => Ok(ret.push(next))
     }) => (LOWERCASE,cmd));
-    engine.gullet.mouth().push_tokens(ret);
+    engine.mouth.push_tokens(ret);
     Ok(())
 }
 
@@ -1751,9 +1751,9 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
         Some((t,_)) => {
             let res = resolve_token::<ET>(engine.state,t);
             match res.command {
-                BaseCommand::Def(_) => engine.gullet.mouth().push_noexpand(res.source.cause),
-                BaseCommand::Expandable {..} => engine.gullet.mouth().push_noexpand(res.source.cause),
-                BaseCommand::Conditional {..} => engine.gullet.mouth().push_noexpand(res.source.cause),
+                BaseCommand::Def(_) => engine.mouth.push_noexpand(res.source.cause),
+                BaseCommand::Expandable {..} => engine.mouth.push_noexpand(res.source.cause),
+                BaseCommand::Conditional {..} => engine.mouth.push_noexpand(res.source.cause),
                 _ => f(engine.state,res.source.cause)?
             }
         }
@@ -1809,7 +1809,7 @@ pub fn or<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                          -> Result<(),TeXError<ET>> {
     match engine.gullet.current_conditional() {
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.state,IFCASE,i,true) => (OR,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,IFCASE,i,true) => (OR,cmd)),
         _ => throw!("Not in an \\ifcase" => cmd.cause)
     }
     Ok(())
@@ -2183,7 +2183,7 @@ pub static UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\uppercase");
-    let mut ret = engine.gullet.mouth().new_tokensource();
+    let mut ret = engine.mouth.new_tokensource();
     catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
         BaseToken::Char(c,cc) => {
             let nc = s.get_uccode(c);
@@ -2192,7 +2192,7 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
         _ => Ok(ret.push(next))
 
     }) => (UPPERCASE,cmd));
-    engine.gullet.mouth().push_tokens(ret);
+    engine.mouth.push_tokens(ret);
     Ok(())
 }
 
