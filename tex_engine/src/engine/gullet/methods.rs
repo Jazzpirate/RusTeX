@@ -72,7 +72,7 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
             debug_log!(trace=>"True conditional");
             Ok(())
         } else {
-            false_loop::<ET>(engine.gullet,engine.mouth,engine.state,IFCASE,i)
+            false_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,IFCASE,i)
         }
     } else {
         let i = engine.gullet.new_conditional(name);
@@ -81,7 +81,7 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
             engine.gullet.set_conditional(i,ConditionalBranch::True(name));
             debug_log!(trace=>"True conditional");
             Ok(())
-        } else { false_loop::<ET>(engine.gullet, engine.mouth,engine.state,name,i) }
+        } else { false_loop::<ET>(engine.gullet, engine.mouth,engine.state,engine.memory,name,i) }
     }
 }
 
@@ -183,13 +183,13 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_prote
     file_end!()
 }
 
-pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
+pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,memory:&mut Memory<ET>,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"False conditional. Skipping...");
     let mut incond:usize = gullet.current_conditional().1 - condidx;
     for i in 0..incond {
         gullet.pop_conditional();
     }
-    while let Some((next,exp)) = mouth.get_next(state)? {
+    while let Some((next,exp)) = mouth.get_next(state,memory)? {
         match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(c).map(|c| &c.base) {
@@ -254,11 +254,11 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,sta
     file_end!()
 }
 
-pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
+pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,memory:&mut Memory<ET>,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\else. Skipping...");
     gullet.set_top_conditional(ConditionalBranch::Else(condname));
     let mut incond:usize = gullet.current_conditional().1 - condidx;
-    while let Some((next,exp)) = mouth.get_next(state)? {
+    while let Some((next,exp)) = mouth.get_next(state,memory)? {
         match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
                 match state.get_ac_command(c).as_deref().map(|c| &c.base) {
@@ -641,7 +641,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    self.mouth.get_until_endgroup(self.state,f)
+                    self.mouth.get_until_endgroup(self.state,self.memory,f)
                 }
                 _ => throw!("begin group expected")
             }

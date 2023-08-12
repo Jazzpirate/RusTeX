@@ -10,6 +10,7 @@ use std::fmt::{Display, Formatter, Debug};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::vec::IntoIter;
+use array_init::array_init;
 use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
 use crate::utils::Ptr;
 
@@ -145,42 +146,7 @@ impl CharType for u8 {
         for i in 0..256 { a[i] = i as u8; }
         a
     }
-    fn rep_field<A: Clone+Default>(a: A) -> Self::Allchars<A> {
-        [ // UTTERLY RIDICULOUS
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),
-            a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone(),a.clone()
-        ]
-    }
+    fn rep_field<A: Clone+Default>(a: A) -> Self::Allchars<A> { array_init(|_| a.clone()) }
 
     fn from_i64(i: i64) -> Option<Self> {
         if i == -1 {Some(255)} else if i < 0 || i > 255 { None } else { Some(i as u8) }

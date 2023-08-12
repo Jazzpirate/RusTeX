@@ -1,24 +1,46 @@
+use array_init::array_init;
 use crate::engine::EngineType;
 use crate::tex::token::Token;
 
 const ARRAY_SIZE:usize = 1024;
+const VEC_SIZE:usize = 256;
 
 pub struct Memory<ET:EngineType> {
     token_arrays:Vec<TokenArray<ET>>,
     token_array_vecs:Vec<Vec<TokenArray<ET>>>,
+    args:Option<[Vec<Token<ET>>;9]>,
+    token_vecs:Vec<Vec<Token<ET>>>,
 }
 impl<ET:EngineType> Clone for Memory<ET> {
     fn clone(&self) -> Self { Self::new()}
 }
 impl<ET:EngineType> Memory<ET> {
     pub fn new() -> Self {
-        Memory{token_arrays:Vec::with_capacity(32),token_array_vecs:Vec::with_capacity(32)}
+        Memory{
+            token_arrays:Vec::with_capacity(VEC_SIZE),
+            token_array_vecs:Vec::with_capacity(VEC_SIZE),
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),
+            token_vecs:vec!(Vec::with_capacity(VEC_SIZE),Vec::with_capacity(VEC_SIZE))
+        }
+    }
+    pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
+        std::mem::take(&mut self.args).unwrap()
+    }
+    pub fn return_args(&mut self, mut args:[Vec<Token<ET>>;9]) {
+        self.args = Some(args);
+    }
+    pub fn get_token_vec(&mut self) -> Vec<Token<ET>> {
+        self.token_vecs.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
+    }
+    pub fn return_token_vec(&mut self, mut v: Vec<Token<ET>>) {
+        v.clear();
+        self.token_vecs.push(v);
     }
     pub fn get_token_array(&mut self) -> TokenArray<ET> {
         if let Some(a) = self.token_arrays.pop() {
             a
         } else {
-            TokenArray {array:todo!()/*[None;ARRAY_SIZE]*/,index:0,max:0}
+            TokenArray::new()
         }
     }
     pub fn return_token_array(&mut self, mut a: TokenArray<ET>) {
@@ -27,14 +49,15 @@ impl<ET:EngineType> Memory<ET> {
     }
     pub fn get_expansion_container(&mut self) -> ExpansionContainer<ET> {
         let array = self.get_token_array();
-        let vec = self.token_array_vecs.pop().unwrap_or(Vec::with_capacity(4));
+        let vec = self.token_array_vecs.pop().unwrap_or(Vec::with_capacity(8));
         ExpansionContainer {current:array,former:vec}
     }
 }
 
 pub struct TokenArray<ET:EngineType>{array:[Option<(Token<ET>, bool)>;ARRAY_SIZE],index:usize,max:usize}
 impl<ET:EngineType> TokenArray<ET> {
-    pub fn reset(&mut self) { self.index = 0; self.max= 0; }
+    pub fn new() -> Self { TokenArray {array:array_init(|_| None),index:3,max:3} }
+    pub fn reset(&mut self) { self.index = 3; self.max= 3; } // so we have some room for requeueing
     pub fn has_next(&self) -> bool { self.index < self.max }
     pub fn get_next(&mut self) -> Option<(Token<ET>,bool)> {
         if self.index < self.max {

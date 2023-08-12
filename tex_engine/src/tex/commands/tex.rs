@@ -591,9 +591,9 @@ pub fn else_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     match engine.gullet.current_conditional() {
         (None,_) => throw!("Not in a conditional" => cmd.cause),
         (Some(ConditionalBranch::True(name)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,name,i,false) => (ELSE,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,name,i,false) => (ELSE,cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,"ifcase",i,false) => ("ifcase",cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,IFCASE,i,false) => (IFCASE,cmd)),
         o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
     }
     Ok(())
@@ -1807,7 +1807,7 @@ pub fn or<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                          -> Result<(),TeXError<ET>> {
     match engine.gullet.current_conditional() {
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,IFCASE,i,true) => (OR,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,IFCASE,i,true) => (OR,cmd)),
         _ => throw!("Not in an \\ifcase" => cmd.cause)
     }
     Ok(())

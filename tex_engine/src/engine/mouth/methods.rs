@@ -15,12 +15,12 @@ use crate::utils::strings::CharType;
 impl<ET:EngineType> EngineMut<'_,ET> {
     /// get the next [`Token`] from the [`Mouth`]
     pub fn get_next_token(&mut self) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
-        self.mouth.get_next(self.state)
+        self.mouth.get_next(self.state,self.memory)
     }
 
     /// Skip whitespace characters from the [`Mouth`]
     pub fn skip_whitespace(&mut self) -> Result<(),TeXError<ET>> {
-        self.mouth.skip_whitespace(self.state)
+        self.mouth.skip_whitespace(self.state,self.memory)
     }
 
     /// read optional `=` characters from the [`Mouth`]
@@ -47,7 +47,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     pub fn get_argument(&mut self,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        self.mouth.get_argument(self.state,f)
+        self.mouth.get_argument(self.state,self.memory,f)
     }
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)

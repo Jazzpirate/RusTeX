@@ -3,6 +3,7 @@ use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
 use crate::engine::{EngineMut, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::numeric_methods::expand_until_space;
+use crate::engine::memory::Memory;
 use crate::engine::state::State;
 use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, ResolvedToken, TokenCont, ValueCommand, CommandSource};
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -368,7 +369,7 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>), f:TokenCont<ET>)
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,memory:&mut Memory<ET>, f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -382,7 +383,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut E
         for elem in &d.signature {
             match elem {
                 ParamToken::Token(delim) => {
-                    if let Some((n,_)) = catch!(mouth.get_next(state) => cmd.cause) {
+                    if let Some((n,_)) = catch!(mouth.get_next(state,memory) => cmd.cause) {
                         if n != *delim {
                             throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                         }
@@ -400,16 +401,13 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut E
 
 
     // The general case:
-    // We parse the arguments according to the signature
-    catch_def!(read_arguments::<ET>(d,mouth,state,&cause) => (d,cause));
-
-    // Now we have all the arguments, so we can expand the replacement
-    Ok(replace(d,cause,cmd,state.pool_mut()))
-
+    // We parse the arguments according to the signature, and then substitute them into the replacement
      */
-    let (mut args,mut delims) = pool;
-    read_arguments(d, mouth, state, &cmd, (args,delims))?;
-    replace(d, cmd, state, args, f)
+    let mut args = memory.get_args();
+    read_arguments(d, mouth, state, &cmd, &mut args,memory)?;
+    let r = replace(d, cmd, state, &mut args, f);
+    memory.return_args(args);
+    r
 }
 
 fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
@@ -427,14 +425,14 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET:
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,pool:(&mut[Vec<Token<ET>>;9],&mut Vec<Token<ET>>))
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,args:&mut [Vec<Token<ET>>;9],memory:&mut Memory<ET>)
                                  -> Result<(),TeXError<ET>> {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
             ParamToken::Token(delim) => { // eat the delimiter
-                if let Some((n,_)) = catch!(mouth.get_next(state) => cmd.cause.clone()) {
+                if let Some((n,_)) = catch!(mouth.get_next(state,memory) => cmd.cause.clone()) {
                     if n != *delim {
                         throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                     }
@@ -444,12 +442,12 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
             }
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
-                    let arg = &mut pool.0[argnum];
+                    let arg = &mut args[argnum];
                     arg.clear();
                     argnum += 1;
                     'L: loop {
-                        match if d.long {catch!({mouth.get_next(state)} => cmd.cause.clone())}
-                        else {catch!({mouth.get_next_nopar(state)} => cmd.cause.clone())} {
+                        match if d.long {catch!({mouth.get_next(state,memory)} => cmd.cause.clone())}
+                        else {catch!({mouth.get_next_nopar(state,memory)} => cmd.cause.clone())} {
                             Some((t,_)) => {
                                 if t.catcode() == CategoryCode::BeginGroup {
                                     mouth.requeue(t);
@@ -463,19 +461,18 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                     }
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
-                    let arg = &mut pool.0[argnum];
+                    let arg = &mut args[argnum];
                     arg.clear();
                     argnum += 1;
-                    catch!(mouth.skip_whitespace(state) => cmd.cause.clone());
-                    if d.long {catch!(mouth.get_argument(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
-                    else {catch!(mouth.get_argument_nopar(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
+                    catch!(mouth.skip_whitespace(state,memory) => cmd.cause.clone());
+                    if d.long {catch!(mouth.get_argument(state,memory,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
+                    else {catch!(mouth.get_argument_nopar(state,memory,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
-                    let arg = &mut pool.0[argnum];
+                    let arg = &mut args[argnum];
+                    let mut delims = memory.get_token_vec();
                     arg.clear();
                     argnum += 1;
-                    let mut delims = &mut*pool.1;
-                    delims.clear();
                     while let Some(ParamToken::Token(t)) = iter.peek() {
                         delims.push(t.clone());
                         iter.next();
@@ -483,8 +480,8 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
-                        match if d.long {catch!({mouth.get_next(state)} => cmd.cause.clone())}
-                        else {catch!({mouth.get_next_nopar(state)} => cmd.cause.clone())} {
+                        match if d.long {catch!({mouth.get_next(state,memory)} => cmd.cause.clone())}
+                        else {catch!({mouth.get_next_nopar(state,memory)} => cmd.cause.clone())} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
                                 if arg.len() == 0 {
@@ -531,6 +528,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                         }
                         _ => ()
                     }
+                    memory.return_token_vec(delims)
                 }
             }
         }

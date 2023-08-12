@@ -100,9 +100,10 @@ pub trait Engine<ET:EngineType> {
     }
 }
 
-pub fn new<ET:EngineType>(state:ET::State, mouth:ET::Mouth,gullet: ET::Gullet, stomach:ET::Stomach) -> EngineStruct<ET> {
+pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach) -> EngineStruct<ET> {
+    let mut memory = Memory::new();
     EngineStruct {
-        state, gullet, mouth,stomach,memory:Memory::new()
+        state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory
     }
 }
 /*

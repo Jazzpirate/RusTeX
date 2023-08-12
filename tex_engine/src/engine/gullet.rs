@@ -5,6 +5,7 @@
 pub mod methods;
 pub mod numeric_methods;
 
+use std::marker::PhantomData;
 use crate::catch;
 use crate::engine::{EngineMut, EngineType};
 use crate::engine::gullet::methods::{do_conditional, EngineMutNoGullet};
@@ -94,24 +95,17 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 }
 
 pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
-    in_conditionals:Vec<ConditionalBranch>,
-    args_pool:[Vec<Token<ET>>;9],
-    delimiter_pool:Vec<Token<ET>>
+    in_conditionals:Vec<ConditionalBranch>,phantom:PhantomData<ET>
 }
 impl<ET:EngineType<Gullet=Self>> Clone for TeXGullet<ET> {
     fn clone(&self) -> Self { Self {
-        in_conditionals: self.in_conditionals.clone(),
-        args_pool: self.args_pool.clone(),
-        delimiter_pool: self.delimiter_pool.clone()
+        in_conditionals: self.in_conditionals.clone(),phantom:PhantomData
     }}
 }
 
 impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
     pub fn new() -> Self {
-        Self {in_conditionals:Vec::new(),
-            args_pool:[Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new(),Vec::new()],
-            delimiter_pool:Vec::new()
-        }
+        Self {in_conditionals:Vec::new(),phantom:PhantomData}
     }
 }
 impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
@@ -141,9 +135,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
         match ret.command {
             BaseCommand::Def(d) => {
                 engine.add_expansion(|engine,rs| {
-                    expand_def(&d,engine.state,&mut engine.mouth,ret.source,(&mut engine.gullet.args_pool,&mut engine.gullet.delimiter_pool),
-                               &mut |_,t| Ok(rs.push(t))
-                    )?;
+                    expand_def(&d,engine.state,&mut engine.mouth,ret.source,engine.memory,&mut |_,t| Ok(rs.push(t)))?;
                     Ok(None)
                 })
             }
