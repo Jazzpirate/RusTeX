@@ -137,30 +137,28 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     }
 
     fn expand(&mut self, engine:&mut EngineMutNoGullet<ET>, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET>> {
+        let mut engine = engine.join_gullet(self);
         match ret.command {
             BaseCommand::Def(d) => {
-                let mut vec = engine.mouth.new_tokensource();
-                expand_def(&d,engine.state,&mut engine.mouth,ret.source,(&mut self.args_pool,&mut self.delimiter_pool),
-                           &mut |_,t| Ok(vec.push(t))
-                )?;
-                engine.mouth.push_tokens(vec);
-                Ok(None)
+                engine.add_expansion(|engine,rs| {
+                    expand_def(&d,engine.state,&mut engine.mouth,ret.source,(&mut engine.gullet.args_pool,&mut engine.gullet.delimiter_pool),
+                               &mut |_,t| Ok(rs.push(t))
+                    )?;
+                    Ok(None)
+                })
             }
             // expandable commands that do not expand to new tokens
             BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
-                let mut engine = engine.join_gullet(self);
                 apply(&mut engine, ret.source, &mut |_,_| Ok(()))?;
                 Ok(None)
             }
             BaseCommand::Expandable {apply,..} => {
-                let mut vec = engine.mouth.new_tokensource();
-                let mut engine = engine.join_gullet(self);
-                apply(&mut engine,ret.source,&mut |_,t| Ok(vec.push(t)))?;
-                engine.mouth.push_tokens(vec);
-                Ok(None)
+                engine.add_expansion(|engine,rs| {
+                    apply(engine,ret.source,&mut |_,t| Ok(rs.push(t)))?;
+                    Ok(None)
+                })
             },
             BaseCommand::Conditional {name,apply} => {
-                let mut engine = engine.join_gullet(self);
                 do_conditional(&mut engine,ret.source, name,apply, false)?;
                 Ok(None)
             }

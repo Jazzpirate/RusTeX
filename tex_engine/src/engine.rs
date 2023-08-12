@@ -87,9 +87,11 @@ pub trait Engine<ET:EngineType> {
         comps.state.set_job(s.with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         let file = comps.state.filesystem().get(s.to_str().unwrap());
         comps.mouth.push_file(&file);
-        let mut ej = comps.mouth.new_tokensource();
-        for t in comps.state.get_primitive_toks("everyjob") { ej.push(t) }
-        comps.mouth.push_tokens(ej);
+
+        let everyjob = comps.state.get_primitive_toks("everyjob");
+        if !everyjob.is_empty() {
+            comps.add_expansion(|comps,rs| for t in everyjob {rs.push(t)})
+        }
         let (s,mut r) = comps.split_stomach();
         while let Some(b) = s.next_shipout_box(&mut r)? {
             ret.push(b)

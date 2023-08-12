@@ -66,10 +66,10 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
         BeginGroup => Ok(engine.state.stack_push(GroupType::Token)),
         EndGroup => match engine.state.stack_pop() {
             Some((v,GroupType::Token)) => {
-                let mut ret = engine.mouth.new_tokensource();
-                for t in v {ret.push(t)}
-                engine.mouth.push_tokens(ret);
-                Ok(())
+                engine.add_expansion(|engine,rs| {
+                    for t in v {rs.push(t)}
+                    Ok(())
+                })
             }
             Some((v,GroupType::Box(b))) => {
                 match engine.state.shipout_data_mut().box_stack.pop() {

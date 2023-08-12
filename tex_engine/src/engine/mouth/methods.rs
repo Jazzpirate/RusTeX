@@ -1,6 +1,6 @@
 //! Default implementations for [`Mouth`] methods
 
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::{Mouth, TokenSource};
 use crate::{debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineMut, EngineType};
 use crate::engine::gullet::Gullet;
@@ -84,6 +84,11 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     pub fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
         let (m,mut r) = self.split_mouth();
         m.with_mouth(&mut r,tks,f)
+    }
+
+    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut TokenSource<ET>) -> R {
+        let (m,mut r) = self.split_mouth();
+        m.add_expansion(&mut r,f)
     }
 
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them

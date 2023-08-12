@@ -38,10 +38,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     fn new_with(tks:Vec<Token<ET>>) -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
-    fn push_tokens(&mut self,tks:TokenSource<ET>);
-
-    fn new_tokensource(&mut self) -> TokenSource<ET>;
-
+    fn add_expansion<F,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut TokenSource<ET>) -> R;
     /// Insert a [`File`] into the [`Mouth`], to be processed next
     fn push_file(&mut self,file:&ET::File);
 
@@ -193,10 +190,9 @@ impl<ET:EngineType> TokenSource<ET> {
         TokenList(&tks).to_string()
         //crate::interpreter::tokens_to_string_default(&tks)
     }
-    pub(crate) fn reset(mut self) -> Self {
+    pub fn reset(&mut self) {
         self.0.clear();
         self.1 = 0;
-        self
     }
     pub fn push(&mut self,t:Token<ET>) {
         self.0.push(Some(t))
@@ -216,24 +212,21 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         StandardMouth{buffer:None,news:Vec::new(),sources:vec!(TeXMouthSource::Token(TokenSource::new_with(tks)))}
     }
 
-    fn new_tokensource(&mut self) -> TokenSource<ET> {
-        match self.news.pop() {
-            Some(t) => t,
-            None => TokenSource::new()
-        }
-    }
-
-    //#[inline(always)]
-    fn push_tokens(&mut self,mut tks:TokenSource<ET>) {
-        if tks.is_empty() {
-            self.news.push(tks);
-            return
+    /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
+    fn add_expansion<F,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut TokenSource<ET>) -> R {
+        let mut source = self.new_tokensource();
+        let mut engine = engine.join_mouth(self);
+        let ret = f(&mut engine,&mut source);
+        if source.is_empty() {
+            self.news.push(source);
+            return ret
         }
         match std::mem::take(&mut self.buffer) {
-            Some(t) => tks.push(t),
+            Some(t) => source.push(t),
             _ => ()
         }
-        self.sources.push(TeXMouthSource::Token(tks))
+        self.sources.push(TeXMouthSource::Token(source));
+        ret
     }
 
     fn push_noexpand(&mut self, tk: Token<ET>) {
@@ -270,7 +263,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                 let mut next = self.new_tokensource();
                 next.push(tk);
                 next.push(tk2);
-                self.push_tokens(next)
+                self.sources.push(TeXMouthSource::Token(next))
             },
             None => self.buffer = Some(tk)
         }
@@ -349,6 +342,12 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
 }
 
 impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
+    fn new_tokensource(&mut self) -> TokenSource<ET> {
+        match self.news.pop() {
+            Some(t) => t,
+            None => TokenSource::new()
+        }
+    }
     fn has_next_i(&mut self, state:&ET::State) -> Result<bool, TeXError<ET>> {
         if let Some(source) = self.sources.last_mut() {
             match source {
@@ -389,11 +388,12 @@ impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
                         }
                     TeXMouthSource::Token(ts) => match ts.get_next() {
                         (t, true) => {
-                            let old =  match self.sources.pop() {
+                            let mut old =  match self.sources.pop() {
                                     Some(TeXMouthSource::Token(ts)) => ts,
                                     _ => unsafe { unreachable_unchecked() }
                             };
-                            self.news.push(old.reset());
+                            old.reset();
+                            self.news.push(old);
                             return Ok(Some((t,true)))
                         }
                         (t, _) => return Ok(Some((t,true)))
@@ -426,7 +426,7 @@ impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
             let mut next = self.new_tokensource();
             next.push(Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None));
             for t in v { next.push(t);}
-            self.push_tokens(next);
+            self.sources.push(TeXMouthSource::Token(next));
             None
         }
     }

@@ -610,17 +610,17 @@ pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET>
 
 pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
-    let mut ret = engine.mouth.new_tokensource();
-    match engine.state.stack_pop() {
-        Some((mut v,GroupType::CS)) => {
-            for t in v.drain(..) {
-                ret.push(t);
+    engine.add_expansion(|engine,s| {
+        match engine.state.stack_pop() {
+            Some((mut v,GroupType::CS)) => {
+                for t in v.drain(..) {
+                    s.push(t);
+                }
+                Ok(())
             }
-            engine.mouth.push_tokens(ret);
-            Ok(())
+            _ => throw!("No group to end" => cmd.cause)
         }
-        _ => throw!("No group to end" => cmd.cause)
-    }
+    })
 }
 
 pub fn endinput<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
@@ -823,11 +823,9 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
     engine.set_command_for_tk(cs,newcmd,global);
-    let mut ret = engine.mouth.new_tokensource();
-    ret.push(first);
-    ret.push(second);
-    engine.mouth.push_tokens(ret);
-    Ok(())
+    engine.add_expansion(move |_,s| {
+        s.push(first);s.push(second);Ok(())
+    })
 }
 
 
@@ -881,11 +879,11 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
             BaseCommand::Relax => {},
             BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
                 engine.state.stack_push(GroupType::Box(BoxMode::H));
-                let mut ret = engine.mouth.new_tokensource();
-                for t in engine.state.get_primitive_toks("everyhbox") {
-                    ret.push(t.clone());
-                }
-                engine.mouth.push_tokens(ret);
+                engine.add_expansion(|engine,s| {
+                    for t in engine.state.get_primitive_toks("everyhbox") {
+                        s.push(t.clone());
+                    }
+                });
                 return Ok(Box::new(move |e,children| {
                     Some(HVBox::H(HBox {
                         children, to:to.clone(), spread:spread.clone(),
@@ -1284,16 +1282,16 @@ pub static LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\lowercase");
-    let mut ret = engine.mouth.new_tokensource();
-    catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
-        BaseToken::Char(c,cc) => {
-            let nc = s.get_lccode(c);
-            Ok(ret.push(Token::new(BaseToken::Char(nc, *cc), None)))
-        }
-        _ => Ok(ret.push(next))
-    }) => (LOWERCASE,cmd));
-    engine.mouth.push_tokens(ret);
-    Ok(())
+    engine.add_expansion(|engine,rs|{
+        catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
+            BaseToken::Char(c,cc) => {
+                let nc = s.get_lccode(c);
+                Ok(rs.push(Token::new(BaseToken::Char(nc, *cc), None)))
+            }
+            _ => Ok(rs.push(next))
+        }) => (LOWERCASE,cmd));
+        Ok(())
+    })
 }
 
 pub static MATHCHARDEF : &str = "mathchardef";
@@ -2183,17 +2181,16 @@ pub static UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\uppercase");
-    let mut ret = engine.mouth.new_tokensource();
-    catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
-        BaseToken::Char(c,cc) => {
-            let nc = s.get_uccode(c);
-            Ok(ret.push(Token::new(BaseToken::Char(nc, *cc), None)))
-        }
-        _ => Ok(ret.push(next))
-
-    }) => (UPPERCASE,cmd));
-    engine.mouth.push_tokens(ret);
-    Ok(())
+    engine.add_expansion(|engine,rs| {
+        catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
+            BaseToken::Char(c,cc) => {
+                let nc = s.get_uccode(c);
+                Ok(rs.push(Token::new(BaseToken::Char(nc, *cc), None)))
+            }
+            _ => Ok(rs.push(next))
+        }) => (UPPERCASE,cmd));
+            Ok(())
+    })
 }
 
 

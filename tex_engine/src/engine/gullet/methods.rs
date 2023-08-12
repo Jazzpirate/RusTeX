@@ -298,84 +298,76 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,stat
 pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
-    let mut read_toks = engine.mouth.new_tokensource();
-    while let Some(next) = engine.get_next_unexpandable()? {
-        read_toks.push(next.source.cause);
-        match next.command {
-            BaseCommand::Char {char,..} => {
-                let us = char.to_usize();
-                if us < 256 {
-                    current.push(us as u8 as char);
-                    if current == kw {
-                        read_toks = read_toks.reset();
-                        engine.mouth.push_tokens(read_toks);
-                        return Ok(true)
-                    }
-                    else if !kw.starts_with(&current) {
-                        engine.mouth.push_tokens(read_toks);
+    engine.add_expansion(|engine,rs|{
+        while let Some(next) = engine.get_next_unexpandable()? {
+            rs.push(next.source.cause);
+            match next.command {
+                BaseCommand::Char {char,..} => {
+                    let us = char.to_usize();
+                    if us < 256 {
+                        current.push(us as u8 as char);
+                        if current == kw {
+                            rs.reset();
+                            return Ok(true)
+                        }
+                        else if !kw.starts_with(&current) {
+                            return Ok(false)
+                        }
+                    } else {
                         return Ok(false)
                     }
-                } else {
-                    engine.mouth.push_tokens(read_toks);
+                }
+                _ => {
                     return Ok(false)
                 }
             }
-            _ => {
-                engine.mouth.push_tokens(read_toks);
-                return Ok(false)
-            }
         }
-    }
-    file_end!()
+        file_end!()
+    })
 }
 
 pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
-    let mut read_toks = engine.mouth.new_tokensource();
-    while let Some(next) = engine.get_next_unexpandable()? {
-        read_toks.push(next.source.cause.clone());
-        match next.command {
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
-                if us < 256 && keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us as u8) {
-                    current.push(us as u8 as char);
-                    keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
-                    if keywords.is_empty() {
-                        engine.mouth.push_tokens(read_toks);
+    engine.add_expansion(|engine,rs| {
+        while let Some(next) = engine.get_next_unexpandable()? {
+            rs.push(next.source.cause.clone());
+            match next.command {
+                BaseCommand::Char{char,..} => {
+                    let us = char.to_usize();
+                    if us < 256 && keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us as u8) {
+                        current.push(us as u8 as char);
+                        keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
+                        if keywords.is_empty() {
+                            return Ok(None)
+                        }
+                        else if keywords.len() == 1 && keywords[0] == current {
+                            rs.reset();
+                            return Ok(Some(keywords[0]))
+                        }
+                    } else if keywords.contains(&current.as_str()) {
+                        engine.mouth.requeue(next.source.cause);
+                        rs.reset();
+                        keywords = keywords.into_iter().filter(|s| s == &current).collect();
+                        return Ok(Some(keywords[0]))
+                    } else {
                         return Ok(None)
                     }
-                    else if keywords.len() == 1 && keywords[0] == current {
-                        read_toks = read_toks.reset();
-                        engine.mouth.push_tokens(read_toks);
-                        return Ok(Some(keywords[0]))
-                    }
-                } else if keywords.contains(&current.as_str()) {
+                }
+                _ if keywords.contains(&current.as_str()) => {
                     engine.mouth.requeue(next.source.cause);
-                    read_toks = read_toks.reset();
-                    engine.mouth.push_tokens(read_toks);
+                    rs.reset();
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Ok(Some(keywords[0]))
-                } else {
-                    engine.mouth.push_tokens(read_toks);
+                }
+                _ => {
                     return Ok(None)
                 }
             }
-            _ if keywords.contains(&current.as_str()) => {
-                engine.mouth.requeue(next.source.cause);
-                read_toks = read_toks.reset();
-                engine.mouth.push_tokens(read_toks);
-                keywords = keywords.into_iter().filter(|s| s == &current).collect();
-                return Ok(Some(keywords[0]))
-            }
-            _ => {
-                engine.mouth.push_tokens(read_toks);
-                return Ok(None)
-            }
-        }
 
-    }
-    file_end!()
+        }
+        file_end!()
+    })
 }
 
 pub fn token_to_chars<ET:EngineType,F:FnMut(Token<ET>) -> Result<(),TeXError<ET>>>(tk:&Token<ET>,escape:Option<ET::Char>,cc:&CategoryCodeScheme<ET::Char>,insertspace:bool,mut f:F) -> Result<(),TeXError<ET>> {
