@@ -8,12 +8,14 @@ use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
-use crate::engine::{EngineType, Outputs};
+use crate::engine::{EngineMut, EngineType, Outputs};
 use crate::engine::stomach::Stomach;
 use crate::tex::nodes::{HVBox, OpenBox, CustomNode, TeXNode, SimpleNode};
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip, Dim};
+use crate::throw;
 use crate::utils::{Ptr};
+use crate::utils::errors::TeXError;
 
 pub mod fields;
 pub mod modes;
@@ -137,12 +139,6 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Command<ET>>, globally:bool);
     /// set the current [`BaseCommand`] for the active character `c`
     fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Command<ET>>, globally:bool);
-    fn set_command_for_tk(&mut self, tk:Token<ET>, cmd:Option<Command<ET>>, globally:bool) {
-        match tk.base {
-            BaseToken::CS(cs) => self.set_command(cs,cmd, globally),
-            BaseToken::Char(c,_) => self.set_ac_command(c,cmd, globally),
-        }
-    }
 
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char>;
@@ -838,5 +834,26 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.primitive_tokregisters.set_locally(name,v)
         }
     }
+}
 
+impl<ET:EngineType> EngineMut<'_,ET> {
+    pub fn set_command_for_tk(&mut self, tk:Token<ET>, cmd:Option<Command<ET>>, globally:bool) {
+        match tk.base {
+            BaseToken::CS(cs) => self.state.set_command(cs,cmd, globally),
+            BaseToken::Char(c,_) => self.state.set_ac_command(c,cmd, globally),
+        }
+    }
+
+    pub fn set_relax(&mut self,tk:&Token<ET>,source:&CommandSource<ET>,globally:bool) -> Result<(),TeXError<ET>> {
+        match &tk.base {
+            BaseToken::Char(c,CategoryCode::Active) => {
+                self.state.set_ac_command(*c, Some(Command::new(BaseCommand::Relax,Some(source))), globally)
+            }
+            BaseToken::CS(name) => {
+                self.state.set_command(name.clone(), Some(Command::new(BaseCommand::Relax,Some(source))), globally)
+            }
+            _ => throw!("Command name expected, got {}",tk => source.cause)
+        }
+        Ok(())
+    }
 }

@@ -6,7 +6,7 @@ pub mod methods;
 
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
@@ -91,93 +91,93 @@ impl<ET:EngineType<CommandReference = Self>> CommandReference<ET> for () {
 }
 
 pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&ET::State,Token<ET>) -> Result<(),TeXError<ET>>;
-pub type UnexpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<(),TeXError<ET>>;
-pub type AssignmentFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>;
-pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
-pub type ConditionalFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
-pub type ExpandableFun<ET:EngineType> = fn(&mut ET::State, &mut ET::Gullet, CommandSource<ET>,TokenCont<ET>) -> Result<(),TeXError<ET>>;
-pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
-pub type BoxFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
-pub type WhatsitFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
+pub type UnexpandableFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<(),TeXError<ET>>;
+pub type AssignmentFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>, bool) -> Result<(),TeXError<ET>>;
+pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut EngineMut<ET>, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
+pub type ConditionalFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
+pub type ExpandableFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>, TokenCont<ET>) -> Result<(),TeXError<ET>>;
+pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut EngineMut<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
+pub type BoxFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
+pub type WhatsitFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
 
-pub type ValueFun<ET:EngineType,A> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<A,TeXError<ET>>;
-pub type FontFun<ET:EngineType> = fn(&mut ET::State,&mut ET::Gullet,CommandSource<ET>) -> Result<ET::Font,TeXError<ET>>;
+pub type ValueFun<ET:EngineType,A> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<A,TeXError<ET>>;
+pub type FontFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<ET::Font,TeXError<ET>>;
 
 pub trait Assignable<ET:EngineType> {
     fn get_register(state:&ET::State,index:usize) -> Self;
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>>;
+    fn set_register(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>>;
     fn get_primitive(state:&ET::State,name:&'static str) -> Self;
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>>;
+    fn set_primitive(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>>;
 }
 
 impl<ET:EngineType> Assignable<ET> for Vec<Token<ET>> {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_toks_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
-        set_toks_register(state,gullet,index,cmd,global)
+    fn set_register(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>> {
+        set_toks_register(engine,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_toks(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
-        set_primitive_toks(state,gullet,cmd,name,global)
+    fn set_primitive(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+        set_primitive_toks(engine,cmd,name,global)
     }
 }
 impl<ET:EngineType<Int=i32>> Assignable<ET> for i32 {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_int_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
-        set_int_register(state,gullet,index,cmd,global)
+    fn set_register(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>> {
+        set_int_register(engine,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_int(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
-        set_primitive_int(state,gullet,cmd,name,global)
+    fn set_primitive(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+        set_primitive_int(engine,cmd,name,global)
     }
 }
 impl<ET:EngineType<Dim=Dimi32>> Assignable<ET> for Dimi32 {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_dim_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
-        set_dim_register(state,gullet,index,cmd,global)
+    fn set_register(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>> {
+        set_dim_register(engine,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_dim(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
-        set_primitive_dim(state,gullet,cmd,name,global)
+    fn set_primitive(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+        set_primitive_dim(engine,cmd,name,global)
     }
 }
 impl<ET:EngineType> Assignable<ET> for Skip<ET::SkipDim> {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_skip_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
-        set_skip_register(state,gullet,index,cmd,global)
+    fn set_register(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>> {
+        set_skip_register(engine,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_skip(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
-        set_primitive_skip(state,gullet,cmd,name,global)
+    fn set_primitive(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+        set_primitive_skip(engine,cmd,name,global)
     }
 }
 impl<ET:EngineType> Assignable<ET> for MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_muskip_register(index)
     }
-    fn set_register(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,index:usize,global:bool) -> Result<(),TeXError<ET>> {
-        set_muskip_register(state,gullet,index,cmd,global)
+    fn set_register(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>> {
+        set_muskip_register(engine,index,cmd,global)
     }
     fn get_primitive(state:&ET::State,name:&'static str) -> Self {
         state.get_primitive_muskip(name)
     }
-    fn set_primitive(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,name:&'static str,global:bool) -> Result<(),TeXError<ET>> {
-        set_primitive_muskip(state,gullet,cmd,name,global)
+    fn set_primitive(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+        set_primitive_muskip(engine,cmd,name,global)
     }
 }
 
@@ -211,20 +211,20 @@ impl<ET:EngineType,A:Assignable<ET>> Debug for ValueCommand<ET,A> {
     }
 }
 impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
-    pub fn get(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<A,TeXError<ET>> {
+    pub fn get(&self, engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<A,TeXError<ET>> {
         match self {
-            ValueCommand::Value{get,..} => get(state, gullet, cmd.clone()),
-            ValueCommand::Complex{get,..} => get(state, gullet, cmd.clone()),
-            ValueCommand::Primitive(name) => Ok(A::get_primitive(state,name)),
-            ValueCommand::Register(index) => Ok(A::get_register(state,*index))
+            ValueCommand::Value{get,..} => get(engine, cmd.clone()),
+            ValueCommand::Complex{get,..} => get(engine, cmd.clone()),
+            ValueCommand::Primitive(name) => Ok(A::get_primitive(engine.state,name)),
+            ValueCommand::Register(index) => Ok(A::get_register(engine.state,*index))
         }
     }
-    pub fn set(&self,state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global:bool) -> Result<(),TeXError<ET>> {
+    pub fn set(&self, engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
         match self {
             ValueCommand::Value{name,..} => throw!("Not allowed to assign to {}",name),
-            ValueCommand::Complex{set,..} => set(state, gullet, cmd,global),
-            ValueCommand::Primitive(name) => A::set_primitive(state,gullet,cmd,name,global),
-            ValueCommand::Register(index) => A::set_register(state,gullet,cmd,*index,global)
+            ValueCommand::Complex{set,..} => set(engine, cmd,global),
+            ValueCommand::Primitive(name) => A::set_primitive(engine,cmd,name,global),
+            ValueCommand::Register(index) => A::set_register(engine,cmd,*index,global)
         }
     }
 }
@@ -389,23 +389,23 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             OpenBox {name,mode,apply} => BaseStomachCommand::OpenBox {name,mode,apply},
             Int(ass) => {
                 BaseStomachCommand::ValueAss(Box::new(
-                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+                    move |e,c,gl|ass.set(e,c,gl)))
             },
             Dim(ass) => {
                 BaseStomachCommand::ValueAss(Box::new(
-                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+                    move |e,c,gl|ass.set(e,c,gl)))
             },
             Skip(ass) => {
                 BaseStomachCommand::ValueAss(Box::new(
-                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+                    move |e,c,gl|ass.set(e,c,gl)))
             },
             MuSkip(ass) => {
                 BaseStomachCommand::ValueAss(Box::new(
-                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+                    move |e,c,gl|ass.set(e,c,gl)))
             },
             Toks(ass) => {
                 BaseStomachCommand::ValueAss(Box::new(
-                    move |s,g,c,gl|ass.set(s,g,c,gl)))
+                    move |e,c,gl|ass.set(e,c,gl)))
             },
             FontCommand {set:Some(set),..} => BaseStomachCommand::Assignment {name:std::option::Option::None,set},
             Font(f) => BaseStomachCommand::Font(f),

@@ -1,6 +1,6 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::gullet::{BMouth, Gullet};
 use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::state::State;
@@ -12,118 +12,116 @@ use crate::utils::strings::CharType;
 
 #[macro_export]
 macro_rules! cmtodo {
-    ($state:ident,$stomach:ident,$gullet:ident,$name:ident) => {
-        register_expandable!($name,$state,$stomach,$gullet,(_,g,_,_) => todo!("{}: {}",stringify!($name),g.mouth().file_line()));
+    ($engine:ident,$name:ident) => {
+        register_expandable!($name,$engine,(e,_,_) => todo!("{}: {}",stringify!($name),e.gullet.mouth().file_line()));
     };
 }
 
 #[macro_export]
 macro_rules! cmstodo {
-    ($state:ident,$stomach:ident,$gullet:ident,$name:ident) => {
-        register_unexpandable!($name,$state,$stomach,$gullet,false,(_,g,_) => todo!("{}: {}",stringify!($name),g.mouth().file_line()));
+    ($engine:ident,$name:ident) => {
+        register_unexpandable!($name,$engine,false,(e,_) => todo!("{}: {}",stringify!($name),e.gullet.mouth().file_line()));
     };
 }
 
-pub fn set_int_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_int_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\count{}",u);
-    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
-    let v = catch!(gullet.get_int(state) => cmd.cause);
+    catch!(engine.skip_eq_char() => cmd.cause);
+    let v = catch!(engine.get_int() => cmd.cause);
     debug_log!(debug=>"\\count{} = {}",u,v);
-    state.set_int_register(u,v,global);
+    engine.state.set_int_register(u,v,global);
     Ok(())
 }
-pub fn set_dim_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_dim_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\dimen{}",u);
-    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
-    let v = catch!(gullet.get_dim(state) => cmd.cause);
+    catch!(engine.skip_eq_char() => cmd.cause);
+    let v = catch!(engine.get_dim() => cmd.cause);
     debug_log!(debug=>"\\dimen{} = {}",u,v);
-    state.set_dim_register(u,v,global);
+    engine.state.set_dim_register(u,v,global);
     Ok(())
 }
-pub fn set_skip_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_skip_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\skip{}",u);
-    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
-    let v = catch!(gullet.get_skip(state) => cmd.cause);
+    catch!(engine.skip_eq_char() => cmd.cause);
+    let v = catch!(engine.get_skip() => cmd.cause);
     debug_log!(debug=>"\\skip{} = {}",u,v);
-    state.set_skip_register(u,v,global);
+    engine.state.set_skip_register(u,v,global);
     Ok(())
 }
-pub fn set_muskip_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_muskip_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                           -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\muskip{}",u);
-    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
-    let v = catch!(gullet.get_muskip(state) => cmd.cause);
+    catch!(engine.skip_eq_char() => cmd.cause);
+    let v = catch!(engine.get_muskip() => cmd.cause);
     debug_log!(debug=>"\\muskip{} = {}",u,v);
-    state.set_muskip_register(u,v,global);
+    engine.state.set_muskip_register(u,v,global);
     Ok(())
 }
-pub fn set_toks_register<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_toks_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting \\toks{}",u);
-    catch!(gullet.mouth().skip_eq_char(state) => cmd.cause);
+    catch!(engine.skip_eq_char() => cmd.cause);
     let mut tks = Vec::with_capacity(32);
-    expand_until_space::<ET>(gullet,state)?;
-    catch!(gullet.get_group(state,&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
+    catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
     debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks));
-    state.set_toks_register(u,tks,global);
+    engine.state.set_toks_register(u,tks,global);
     Ok(())
 }
 
-pub fn set_primitive_int<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_int<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
-    let i = catch_prim!(gullet.get_int(state) => (name,cmd));
+    catch_prim!(engine.skip_eq_char() => (name,cmd));
+    let i = catch_prim!(engine.get_int() => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,i);
-    state.set_primitive_int(name,i,global);
+    engine.state.set_primitive_int(name,i,global);
     Ok(())
 }
-pub fn set_primitive_dim<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_dim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
-    let d = catch_prim!(gullet.get_dim(state) => (name,cmd));
+    catch_prim!(engine.skip_eq_char() => (name,cmd));
+    let d = catch_prim!(engine.get_dim() => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
-    state.set_primitive_dim(name,d,global);
+    engine.state.set_primitive_dim(name,d,global);
     Ok(())
 }
-pub fn set_primitive_skip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_skip<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
-    let d = catch_prim!(gullet.get_skip(state) => (name,cmd));
+    catch_prim!(engine.skip_eq_char() => (name,cmd));
+    let d = catch_prim!(engine.get_skip() => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
-    state.set_primitive_skip(name,d,global);
+    engine.state.set_primitive_skip(name,d,global);
     Ok(())
 }
 
-pub fn set_primitive_muskip<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_muskip<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
-    let d = catch_prim!(gullet.get_muskip(state) => (name,cmd));
+    catch_prim!(engine.skip_eq_char() => (name,cmd));
+    let d = catch_prim!(engine.get_muskip() => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,d);
-    state.set_primitive_muskip(name,d,global);
+    engine.state.set_primitive_muskip(name,d,global);
     Ok(())
 }
-pub fn set_primitive_toks<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting {}",name);
-    catch_prim!(gullet.mouth().skip_eq_char(state) => (name,cmd));
+    catch_prim!(engine.skip_eq_char() => (name,cmd));
     let mut tks = Vec::with_capacity(32);
-    expand_until_space::<ET>(gullet,state)?;
-    catch_prim!(gullet.get_group(state,&mut |_,t| Ok(tks.push(t))) => (name,cmd));
+    catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks));
-    state.set_primitive_toks(name,tks,global);
+    engine.state.set_primitive_toks(name,tks,global);
     Ok(())
 }
 
 
 #[macro_export]
 macro_rules! register_int {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
+    ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
-                get:|$s,$gu,$c| $f
+                get:|$e,$c| $f
             }
         ),None)),true);
     };
@@ -131,11 +129,11 @@ macro_rules! register_int {
 
 #[macro_export]
 macro_rules! register_dim {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
+    ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
-                get:|$s,$gu,$c| $f
+                get:|$e,$c| $f
             }
         ),None)),true);
     };
@@ -143,11 +141,11 @@ macro_rules! register_dim {
 
 #[macro_export]
 macro_rules! register_skip {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
+    ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
-                get:|$s,$gu,$c| $f
+                get:|$e,$c| $f
             }
         ),None)),true);
     };
@@ -155,11 +153,11 @@ macro_rules! register_skip {
 
 #[macro_export]
 macro_rules! register_muskip {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$c:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
+    ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
-                get:|$s,$gu,$c| $f
+                get:|$e,$c| $f
             }
         ),None)),true);
     };
@@ -167,8 +165,8 @@ macro_rules! register_muskip {
 
 #[macro_export]
 macro_rules! register_int_assign {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+    ($name:ident,$engine:ident) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Int(crate::tex::commands::ValueCommand::Primitive(stringify!(name))) /*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_int(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_int(s,g,c,stringify!($name),b)?))),
@@ -179,8 +177,8 @@ macro_rules! register_int_assign {
 
 #[macro_export]
 macro_rules! register_dim_assign {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+    ($name:ident,$engine:ident) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Dim(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_dim(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_dim(s,g,c,stringify!($name),b)?))),
@@ -190,8 +188,8 @@ macro_rules! register_dim_assign {
 }
 #[macro_export]
 macro_rules! register_skip_assign {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+    ($name:ident,$engine:ident) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Skip(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_skip(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_skip(s,g,c,stringify!($name),b)?))),
@@ -201,8 +199,8 @@ macro_rules! register_skip_assign {
 }
 #[macro_export]
 macro_rules! register_muskip_assign {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+    ($name:ident,$engine:ident) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::MuSkip(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_muskip(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_muskip(s,g,c,stringify!($name),b)?))),
@@ -214,8 +212,8 @@ macro_rules! register_muskip_assign {
 
 #[macro_export]
 macro_rules! register_tok_assign {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+    ($name:ident,$engine:ident) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Toks(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_toks(stringify!($name)).map(|v| v.clone()).unwrap_or(vec!()))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_toks(s,g,c,stringify!($name),b)?))),
@@ -226,10 +224,10 @@ macro_rules! register_tok_assign {
 
 #[macro_export]
 macro_rules! register_whatsit {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Whatsit{
+    ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Whatsit{
             name:stringify!($name),
-            apply:|$s,$gu,$cmd| $f
+            apply:|$e,$cmd| $f
         },None)),true);
     };
 }
@@ -237,21 +235,21 @@ macro_rules! register_whatsit {
 
 #[macro_export]
 macro_rules! register_open_box {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,$tp:expr,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::OpenBox{
+    ($name:ident,$engine:ident,$tp:expr,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::OpenBox{
             name:stringify!($name),
             mode:$tp,
-            apply:|$s,$gu,$cmd| $f
+            apply:|$e,$cmd| $f
         },None)),true);
     };
 }
 
 #[macro_export]
 macro_rules! register_unexpandable {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,$is_h:expr,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{
+    ($name:ident,$engine:ident,$is_h:expr,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{
             name:stringify!($name),
-            apply:|$s,$gu:&mut ET::Gullet,$cmd| $f,
+            apply:|$e,$cmd| $f,
             starts_paragraph:$is_h
         },None)),true);
     };
@@ -259,41 +257,41 @@ macro_rules! register_unexpandable {
 
 #[macro_export]
 macro_rules! register_expandable {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt,$tk:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Expandable{
+    ($name:ident,$engine:ident,($e:tt,$cmd:tt,$tk:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Expandable{
             name:stringify!($name),
-            apply:|$s,$gu:&mut ET::Gullet,$cmd,$tk| $f
+            apply:|$e,$cmd,$tk| $f
         },None)),true);
     };
 }
 
 #[macro_export]
 macro_rules! register_conditional {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Conditional{
+    ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Conditional{
             name:stringify!($name),
-            apply:|$s,$gu,$cmd| $f
+            apply:|$e,$cmd| $f
         },None)),true);
     };
 }
 
 #[macro_export]
 macro_rules! register_assign {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident,($s:tt,$gu:tt,$cmd:tt,$b:tt) => $f:expr) => {
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Assignment{
+    ($name:ident,$engine:ident,($e:tt,$cmd:tt,$b:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Assignment{
             name:stringify!($name),
-            apply:|$s,$gu,$cmd,$b| Ok($f?)
+            apply:|$e,$cmd,$b| Ok($f?)
         },None)),true);
     };
 }
 
 #[macro_export]
 macro_rules! register_value_assign_int {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
+    ($name:ident,$engine:ident) => {paste::paste!{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
             crate::tex::commands::ValueCommand::Complex{
-                get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
-                set:|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?),
+                get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
+                set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
                 name:stringify!($name)
             }
         ),None)),true);
@@ -302,11 +300,11 @@ macro_rules! register_value_assign_int {
 
 #[macro_export]
 macro_rules! register_value_assign_dim {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
+    ($name:ident,$engine:ident) => {paste::paste!{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
             crate::tex::commands::ValueCommand::Complex{
-                get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
-                set:|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?),
+                get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
+                set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
                 name:stringify!($name)
             }
         ),None)),true);
@@ -315,11 +313,11 @@ macro_rules! register_value_assign_dim {
 
 #[macro_export]
 macro_rules! register_value_assign_skip {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
+    ($name:ident,$engine:ident) => {paste::paste!{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
             crate::tex::commands::ValueCommand::Complex{
-                get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
-                set:|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?),
+                get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
+                set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
                 name:stringify!($name)
             }
         ),None)),true);
@@ -328,11 +326,11 @@ macro_rules! register_value_assign_skip {
 
 #[macro_export]
 macro_rules! register_value_assign_muskip {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
+    ($name:ident,$engine:ident) => {paste::paste!{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
             crate::tex::commands::ValueCommand::Complex{
-                get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
-                set:|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?),
+                get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
+                set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
                 name:stringify!($name)
             }
         ),None)),true);
@@ -341,11 +339,11 @@ macro_rules! register_value_assign_muskip {
 
 #[macro_export]
 macro_rules! register_value_assign_toks {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Toks(
+    ($name:ident,$engine:ident) => {paste::paste!{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Toks(
             crate::tex::commands::ValueCommand::Complex{
-                get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
-                set:|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?),
+                get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
+                set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
                 name:stringify!($name)
             }
         ),None)),true);
@@ -355,10 +353,10 @@ macro_rules! register_value_assign_toks {
 
 #[macro_export]
 macro_rules! register_value_assign_font {
-    ($name:ident,$state:ident,$stomach:ident,$gullet:ident) => {paste::paste!{
-        $state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::FontCommand{
-            get:|s,gu,cmd| [<$name _get>]::<ET>(s,gu,cmd),
-            set:Some(|s,gu,cmd,b| Ok([<$name _assign>]::<ET>(s,gu,cmd,b)?)),
+    ($name:ident,$engine:ident) => {paste::paste!{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::FontCommand{
+            get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
+            set:Some(|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?)),
             name:stringify!($name)
         },None)),true);
     }};
@@ -469,8 +467,8 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:BMouth<'_,ET>, state:&mut 
                     arg.clear();
                     argnum += 1;
                     catch!(mouth.skip_whitespace(state) => cmd.cause.clone());
-                    if d.long {catch!(mouth.read_argument(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
-                    else {catch!(mouth.read_argument_nopar(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
+                    if d.long {catch!(mouth.get_argument(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
+                    else {catch!(mouth.get_argument_nopar(state,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut pool.0[argnum];
@@ -587,20 +585,19 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, state: &mut ET::Sta
     Ok(())
 }
 
-pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:&CommandSource<ET>,name:&'static str)
-    -> Result<(bool,u8,Vec<ParamToken<ET>>),TeXError<ET>> {
-    let mouth = gullet.mouth();
+pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str)
+                                      -> Result<(bool,u8,Vec<ParamToken<ET>>),TeXError<ET>> {
     let mut arity : u8 = 0;
     let mut params : Vec<ParamToken<ET>> = vec!();
-    while let Some((next,_)) = catch_prim!(mouth.get_next(state) => (name,cmd)) {
+    while let Some((next,_)) = catch_prim!(engine.get_next_token() => (name,cmd)) {
         match &next.base {
             BaseToken::Char(_,CategoryCode::Parameter) => {
-                match catch_prim!(mouth.get_next(state) => (name,cmd)) {
+                match catch_prim!(engine.get_next_token() => (name,cmd)) {
                     None => file_end_prim!(name,cmd),
                     Some((next,_)) => {
                         match &next.base {
                             BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                                mouth.requeue(next);
+                                engine.gullet.mouth().requeue(next);
                                 return Ok((true, arity, params))
                             }
                             BaseToken::Char(c,_) => {
@@ -618,7 +615,7 @@ pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
                 }
             }
             BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                mouth.requeue(next);
+                engine.gullet.mouth().requeue(next);
                 return Ok((false,arity,params))
             }
             BaseToken::Char(_,CategoryCode::EndGroup) => throw!("Unexpected end of group" => cmd.cause),
@@ -626,18 +623,4 @@ pub fn parse_signature<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gulle
         }
     }
     file_end_prim!(name,cmd.clone())
-}
-
-
-pub fn set_relax<ET:EngineType>(state:&mut ET::State,tk:&Token<ET>,source:&CommandSource<ET>,globally:bool) -> Result<(),TeXError<ET>> {
-    match &tk.base {
-        BaseToken::Char(c,CategoryCode::Active) => {
-            state.set_ac_command(*c, Some(Command::new(BaseCommand::Relax,Some(source))), globally)
-        }
-        BaseToken::CS(name) => {
-            state.set_command(name.clone(), Some(Command::new(BaseCommand::Relax,Some(source))), globally)
-        }
-        _ => throw!("Command name expected, got {}",tk => source.cause)
-    }
-    Ok(())
 }

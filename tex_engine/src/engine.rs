@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{Gullet, TeXGullet};
+use crate::engine::memory::Memory;
 use crate::engine::mouth::{Mouth, StandardMouth};
 use crate::engine::state::{State, TeXState};
 use crate::engine::stomach::{Stomach, NoShipoutDefaultStomach};
@@ -19,6 +20,7 @@ pub mod mouth;
 pub mod gullet;
 pub mod stomach;
 pub mod filesystem;
+pub mod memory;
 
 /// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`Mouth`]) and [`Stomach`] to
 /// form a complete TeX engine.
@@ -42,40 +44,51 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Stomach:Stomach<Self>;
 }
 
+pub struct EngineMut<'a,ET:EngineType> {
+    pub state:&'a mut ET::State,
+    pub gullet:&'a mut ET::Gullet,
+    pub stomach:&'a mut ET::Stomach,
+    pub memory:&'a mut Memory<ET>,
+}
+
+pub struct EngineRef<'a,ET:EngineType> {
+    pub state:&'a ET::State,
+    pub gullet:&'a ET::Gullet,
+    pub stomach:&'a ET::Stomach,
+}
+
 pub trait Engine<ET:EngineType> {
     /// All components of an [`Engine`] bundled into a struct - this allows the borrow
     /// checker to prove that the individual components are non-overlapping.
-    fn components(&self) -> &EngineStruct<ET>;
-    fn components_mut(&mut self) -> &mut EngineStruct<ET>;
+    fn components(&self) -> EngineRef<ET>;
+    fn components_mut(&mut self) -> EngineMut<ET>;
     fn initialize(&mut self) -> Result<(),TeXError<ET>>;
 
     fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET>> {
         debug!("Initializing with file {}",s);
-        let comps = self.components_mut();
+        let mut comps = self.components_mut();
         let file = comps.state.filesystem().get(s);
         let old = comps.state.filesystem().set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.gullet.mouth().push_file(&file);
         comps.state.set_job(file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string());
-        let state = &mut comps.state;
-        let gullet = &mut comps.gullet;
         // should not produce any boxes, so loop until file end
-        comps.stomach.next_shipout_box(state,gullet)?;
-        comps.state.filesystem().set_pwd(old);
+        let (s,mut r) = comps.split_stomach();
+        s.next_shipout_box(&mut r)?;
+        r.state.filesystem().set_pwd(old);
         Ok(())
     }
     fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {
         debug!("Running file {:?}",s);
         let mut ret = vec!();
-        let comps = self.components_mut();
+        let mut comps = self.components_mut();
         comps.state.set_job(s.with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         let file = comps.state.filesystem().get(s.to_str().unwrap());
         comps.gullet.mouth().push_file(&file);
         let mut ej = comps.gullet.mouth().new_tokensource();
         for t in comps.state.get_primitive_toks("everyjob") { ej.push(t) }
         comps.gullet.mouth().push_tokens(ej);
-        let state = &mut comps.state;
-        let gullet = &mut comps.gullet;
-        while let Some(b) = comps.stomach.next_shipout_box(state,gullet)? {
+        let (s,mut r) = comps.split_stomach();
+        while let Some(b) = s.next_shipout_box(&mut r)? {
             ret.push(b)
         }
         Ok(ret)
@@ -84,8 +97,7 @@ pub trait Engine<ET:EngineType> {
 
 pub fn new<ET:EngineType>(state:ET::State, gullet: ET::Gullet, stomach:ET::Stomach) -> EngineStruct<ET> {
     EngineStruct {
-        state, gullet, stomach,
-        phantom_tk:std::marker::PhantomData,
+        state, gullet, stomach,memory:Memory::new()
     }
 }
 /*
@@ -105,7 +117,7 @@ pub struct EngineStruct<ET:EngineType> {
     pub state:ET::State,
     pub gullet: ET::Gullet,
     pub stomach:ET::Stomach,
-    phantom_tk:std::marker::PhantomData<ET>
+    memory:Memory<ET>,
 }
 
 use crate::tex::numbers::Int;
@@ -113,13 +125,11 @@ use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
 impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
-    fn components(&self) -> &EngineStruct<ET> { self }
-    fn components_mut(&mut self) -> &mut EngineStruct<ET> {
-        self
-    }
+    fn components(&self) -> EngineRef<ET> { EngineRef {state:&self.state, gullet:&self.gullet, stomach:&self.stomach} }
+    fn components_mut(&mut self) -> EngineMut<ET> { EngineMut {state:&mut self.state, gullet:&mut self.gullet, stomach:&mut self.stomach, memory:&mut self.memory} }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
-        tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
+        tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.components_mut());
         self.state.set_primitive_int("mag",ET::Int::from_i64(1000)?,true);
         self.state.set_primitive_int("fam",ET::Int::from_i64(-1)?,true);
         Ok(())
@@ -133,11 +143,11 @@ impl<ET:EngineType> EngineStruct<ET> {
         Ok(())
     }
     pub fn etex(&mut self) -> Result<(),TeXError<ET>> {
-        tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
+        tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.components_mut());
         Ok(())
     }
     pub fn pdftex(&mut self) -> Result<(),TeXError<ET>> {
-        tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.state,&mut self.stomach, &mut self.gullet);
+        tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.components_mut());
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);
         self.init_file("pdftexconfig.tex")
     }

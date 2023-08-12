@@ -52,6 +52,66 @@ pub trait Mouth<ET:EngineType> {
     //#[inline(always)]
     fn get_next(&mut self,state:&ET::State) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>>;
 
+    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
+    /// (for error messages, debugging purposes, etc.)
+    fn preview(&self,len:usize) -> String;
+
+    /// Return the current file and line number as presentable string
+    fn file_line(&self) -> String;
+
+    fn line_no(&self) -> usize;
+
+    fn endinput(&mut self,state:&mut ET::State);
+
+    /// Skip whitespace characters from the [`Mouth`]
+    fn skip_whitespace(&mut self,state:&ET::State) -> Result<(),TeXError<ET>> {
+        debug_log!(trace=>"skipping whitespace");
+        while let Some((tk,_)) = self.get_next(state)? {
+            match tk.catcode() {
+                CategoryCode::Space => (),
+                _ => {
+                    self.requeue(tk);
+                    break
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
+    /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
+    /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
+    /// not enclosed.
+    fn get_argument(&mut self,state:&ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+        match self.get_next(state)? {
+            None => file_end!(),
+            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => self.get_until_endgroup(state,f),
+            Some((o,_)) => {
+                f(state,o)?;
+                Ok(())
+            }
+        }
+    }
+
+    /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
+    /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
+    fn get_until_endgroup(&mut self,state:&ET::State ,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+        let mut depth = 1;
+        while let Some((tk,_)) = self.get_next(state)? {
+            match tk.catcode() {
+                CategoryCode::BeginGroup => depth += 1,
+                CategoryCode::EndGroup => {
+                    depth -= 1;
+                    if depth == 0 { return Ok(()) }
+                },
+                CategoryCode::EOF => file_end!(),
+                _ => ()
+            }
+            f(state,tk)?;
+        }
+        file_end!()
+    }
+
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
     fn get_next_nopar(&mut self,state:&ET::State) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
         match self.get_next(state)? {
@@ -68,68 +128,8 @@ pub trait Mouth<ET:EngineType> {
         }
     }
 
-    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
-    /// (for error messages, debugging purposes, etc.)
-    fn preview(&self,len:usize) -> String;
-
-    /// Return the current file and line number as presentable string
-    fn file_line(&self) -> String;
-
-    fn line_no(&self) -> usize;
-
-    fn endinput(&mut self,state:&mut ET::State);
-
-    /// Skip whitespace characters from the [`Mouth`]
-    fn skip_whitespace(&mut self, state:&ET::State) -> Result<(),TeXError<ET>> {
-        debug_log!(trace=>"skipping whitespace");
-        while let Some((tk,_)) = self.get_next(state)? {
-            match tk.catcode() {
-                CategoryCode::Space => (),
-                _ => {
-                    self.requeue(tk);
-                    break
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// read optional `=` characters from the [`Mouth`]
-    fn skip_eq_char(&mut self,state:&ET::State) -> Result<(),TeXError<ET>> {
-        self.skip_whitespace(state)?;
-        debug_log!(trace=>"skipping '='");
-        if let Some((tk,_)) = self.get_next(state)? {
-            match &tk.base {
-                BaseToken::Char(c,_) if c.to_usize() == 61 => {
-                    match self.get_next(state)? {
-                        Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
-                        Some((tk,_)) => self.requeue(tk),
-                        _ => ()
-                    }
-                },
-                _ => self.requeue(tk)
-            }
-        }
-        Ok(())
-    }
-
-    /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
-    /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
-    /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
-    /// not enclosed.
-    fn read_argument(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        match self.get_next(state)? {
-            None => file_end!(),
-            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => self.read_until_endgroup(state,f),
-            Some((o,_)) => {
-                f(state,o)?;
-                Ok(())
-            }
-        }
-    }
-
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn read_argument_nopar(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    fn get_argument_nopar(&mut self,state:&ET::State, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         match self.get_next(state)? {
             None => file_end!(),
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
@@ -155,26 +155,6 @@ pub trait Mouth<ET:EngineType> {
                 Ok(())
             }
         }
-    }
-
-
-    /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
-    /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
-    fn read_until_endgroup(&mut self, state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        let mut depth = 1;
-        while let Some((tk,_)) = self.get_next(state)? {
-            match tk.catcode() {
-                CategoryCode::BeginGroup => depth += 1,
-                CategoryCode::EndGroup => {
-                    depth -= 1;
-                    if depth == 0 { return Ok(()) }
-                },
-                CategoryCode::EOF => file_end!(),
-                _ => ()
-            }
-            f(state,tk)?;
-        }
-        file_end!()
     }
 }
 
@@ -446,6 +426,8 @@ impl<ET:EngineType> StandardMouth<ET> {
     }
 }
 
+
+/*
 use std::alloc::{alloc,dealloc,Layout};
 use std::ptr;
 
@@ -551,3 +533,5 @@ impl<A> LinkedArrayPrepender<A> {
         }
     }
 }
+
+ */

@@ -1,7 +1,7 @@
 use std::hint::unreachable_unchecked;
 use std::marker::PhantomData;
 use crate::{catch, debug_log, file_end, throw};
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
 use crate::engine::gullet::methods::{get_keyword, get_keywords};
@@ -24,13 +24,13 @@ fn is_ascii_hex_digit(u:usize) -> bool {
     is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
 }
 
-pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Int,TeXError<ET>> {
-    debug_log!(trace=>"Reading number {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
+pub fn get_int<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Int,TeXError<ET>> {
+    debug_log!(trace=>"Reading number {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
     let mut isnegative = false;
     let mut ishex = false;
     let mut isoct = false;
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         use crate::tex::commands::BaseCommand::*;
         match next.command {
             Def(_) | Conditional{..} | Expandable{..} => unsafe{unreachable_unchecked()},
@@ -39,13 +39,13 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace(state) => next.source.cause);
+                        catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)=> next.source.cause),
+                    43 => /* + */ catch!(engine.skip_whitespace()=> next.source.cause),
                     34 if !ishex && !isoct => ishex = true, // "
                     39 if !ishex && !isoct => isoct = true, // '
                     96 if !ishex && !isoct => { // `
-                        match catch!(gullet.mouth().get_next(state)=> next.source.cause) {
+                        match catch!(engine.get_next_token()=> next.source.cause) {
                             std::option::Option::None => file_end!(next.source.cause),
                             Some((tk,_)) => {
                                 let c = match &tk.base {
@@ -54,7 +54,7 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
                                         unsafe{ *str.as_vec().first().unwrap_unchecked() }
                                     _ => throw!("Number expected" => next.source.cause)
                                 };
-                                catch!(expand_until_space::<ET>(gullet,state) => tk);
+                                catch!(expand_until_space::<ET>(engine) => tk);
                                 let us = c.to_usize() as i64;
                                 return Ok(catch!(ET::Int::from_i64(us) => tk))
                             }
@@ -62,10 +62,10 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
                     },
                     _ if is_ascii_hex_digit(us) && ishex =>
                     // TODO: texnically, this requires catcode 12 for 0-9 and catcode 11 or 12 for A-F
-                        return read_hex_number::<ET>(gullet,state,us as u8,isnegative),
+                        return read_hex_number::<ET>(engine,us as u8,isnegative),
                     _ if is_ascii_digit(us) && !isoct =>
                     // TODO: texnically, this requires catcode 12
-                        return read_decimal_number::<ET>(gullet,state,us as u8,isnegative),
+                        return read_decimal_number::<ET>(engine,us as u8,isnegative),
                     _ if is_ascii_oct_digit(us) => // isoct == true
                     // TODO: texnically, this requires catcode 12
                         todo!("Octal digit in read_number"),
@@ -77,19 +77,19 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
                 }
             }
             Int(ass) => {
-                let val = ass.get(state,gullet,next.source)?;
+                let val = ass.get(engine,next.source)?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
             Dim(ass) => {
-                let val = ET::Int::from_i64(ass.get(state,gullet,next.source)?.to_sp())?;
+                let val = ET::Int::from_i64(ass.get(engine,next.source)?.to_sp())?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
             }
             Skip(ass) => {
-                let val = ET::Int::from_i64(ass.get(state,gullet,next.source)?.base.to_sp())?;
+                let val = ET::Int::from_i64(ass.get(engine,next.source)?.base.to_sp())?;
                 let val = if isnegative { -val } else { val };
                 debug_log!(trace=>"Returning {}",val);
                 return Ok(val)
@@ -112,12 +112,12 @@ pub fn get_int<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> R
     file_end!()
 }
 
-pub fn expand_until_space<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State) -> Result<(),TeXError<ET>> {
-    match gullet.get_next_unexpandable(state)? {
+pub fn expand_until_space<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<(),TeXError<ET>> {
+    match engine.get_next_unexpandable()? {
         Some(cmd) => match cmd.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => Ok(()), // eat one space
             _ => {
-                gullet.mouth().requeue(cmd.source.cause);
+                engine.gullet.mouth().requeue(cmd.source.cause);
                 Ok(())
             }
         }
@@ -125,11 +125,11 @@ pub fn expand_until_space<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::S
     }
 }
 
-pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
+pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Reading decimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
 
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} => {
@@ -137,12 +137,12 @@ pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
                 } else {
-                    gullet.mouth().requeue(next.source.cause);
+                    engine.gullet.mouth().requeue(next.source.cause);
                     break
                 }
             }
             _ => {
-                gullet.mouth().requeue(next.source.cause);
+                engine.gullet.mouth().requeue(next.source.cause);
                 break
             }
         }
@@ -153,10 +153,10 @@ pub fn read_decimal_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::
     Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
 }
 
-pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
+pub fn read_hex_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} => {
@@ -164,12 +164,12 @@ pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::Stat
                 if is_ascii_hex_digit(us) {
                     rets.push(us as u8);
                 } else {
-                    gullet.mouth().requeue(next.source.cause);
+                    engine.gullet.mouth().requeue(next.source.cause);
                     break
                 }
             }
             _ => {
-                gullet.mouth().requeue(next.source.cause);
+                engine.gullet.mouth().requeue(next.source.cause);
                 break
             }
         }
@@ -182,187 +182,197 @@ pub fn read_hex_number<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::Stat
 }
 
 
-pub fn get_dim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::Dim,TeXError<ET>> {
-    debug_log!(trace=>"Reading dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
+pub fn get_dim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"Reading dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
     let mut isnegative = false;
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace(state)
+                        catch!(engine.skip_whitespace()
                             => next.source.cause
                         );
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
+                    43 => /* + */ catch!(engine.skip_whitespace()
                         => next.source.cause
                     ),
-                    _ => return get_dim_inner::<ET>(gullet,state,isnegative,next)
+                    _ => return get_dim_inner::<ET>(engine,isnegative,next)
                 }
             }
-            _ => return get_dim_inner::<ET>(gullet,state,isnegative,next)
+            _ => return get_dim_inner::<ET>(engine,isnegative,next)
         }
     }
     file_end!()
 }
 
 
-pub fn get_dim_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:ResolvedToken<ET>)
+pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:ResolvedToken<ET>)
 -> Result<ET::Dim,TeXError<ET>> {
     match next.command {
         BaseCommand::Char { char,.. } => {
             let us = char.to_usize();
             match us {
                 46 | 44 => /* . / ,*/ {
-                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative) => next.source.cause);
-                    return read_unit::<ET>(gullet, state, f)
+                    let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
+                    return read_unit::<ET>(engine, f)
                 },
                 _ if is_ascii_digit(us) => {
-                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative) => next.source.cause);
-                    return read_unit::<ET>(gullet, state, f)
+                    let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
+                    return read_unit::<ET>(engine, f)
                 },
-                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}", char, us, gullet.mouth().file_line())
+                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}", char, us, engine.current_position())
             }
         }
         BaseCommand::Dim(ass) => {
-            let val = ass.get(state,gullet,next.source)?;
+            let val = ass.get(engine,next.source)?;
             return Ok(if isnegative { -val } else { val })
         }
         BaseCommand::Int(ass) => {
-            let val = ass.get(state,gullet,next.source)?.to_i64() as f64;
+            let val = ass.get(engine,next.source)?.to_i64() as f64;
             let val = if isnegative { -val } else { val };
-            return read_unit::<ET>(gullet, state, val)
+            return read_unit::<ET>(engine, val)
         }
         BaseCommand::Skip(ass) => {
-            let val = ass.get(state,gullet,next.source)?.base;
+            let val = ass.get(engine,next.source)?.base;
             return Ok(if isnegative { -val } else { val })
         }
         BaseCommand::CharDef(char) => {
             let val = char.to_usize() as f64;
             let val = if isnegative { -val } else { val };
-            return read_unit::<ET>(gullet, state, val)
+            return read_unit::<ET>(engine, val)
         }
-        o => todo!("Non-char in read_dim: {:?}\n{}\n at {}", o, gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
+        o => todo!("Non-char in read_dim: {:?}\n{}\n at {}", o, engine.preview(50).replace("\n", "\\n"), engine.current_position())
     }
 }
 
-pub fn read_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64) -> Result<ET::Dim,TeXError<ET>> {
-    debug_log!(trace=>"Reading unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    match gullet.get_next_unexpandable(state)? {
+pub fn read_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"Reading unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    match engine.get_next_unexpandable()? {
         Some(cmd) => match cmd.command {
             BaseCommand::Dim(ass) => {
-                let val = ass.get(state,gullet,cmd.source)?;
+                let val = ass.get(engine,cmd.source)?;
                 Ok(val.tex_mult(float))
             }
             BaseCommand::Skip(ass) => {
-                let val = ass.get(state,gullet,cmd.source)?.base;
+                let val = ass.get(engine,cmd.source)?.base;
                 Ok(val.tex_mult(float))
             }
             BaseCommand::Char { .. } => {
-                gullet.mouth().requeue(cmd.source.cause);
-                gullet.mouth().skip_whitespace(state)?;
-                if get_keyword::<ET>(gullet, state, "true")? {
-                    gullet.mouth().skip_whitespace(state)?;
-                    let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
-                    match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
+                engine.gullet.mouth().requeue(cmd.source.cause);
+                engine.skip_whitespace()?;
+                if engine.get_keyword( "true")? {
+                    engine.skip_whitespace()?;
+                    let mag = engine.state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
+                    let mut units =ET::Dim::units();
+                    units.push("em");units.push("ex");
+                    match engine.get_keywords( units)? {
+                        Some("em") => {
+                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(6);
+                            Ok(d.tex_mult(float * mag))
+                        }
+                        Some("ex") => {
+                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(5);
+                            Ok(d.tex_mult(float * mag))
+                        }
                         Some(dim) => Ok(ET::Dim::from_float(dim, float * mag)),
-                        _ => throw!("Expexted unit")
+                        _ => throw!("Expected unit")
                     }
                 } else {
                     let mut units =ET::Dim::units();
                     units.push("em");units.push("ex");
-                    match get_keywords::<ET>(gullet, state, units)? {
+                    match engine.get_keywords( units)? {
                         Some("em") => {
-                            let d = state.get_current_font().get_dim::<ET::Dim>(6);
+                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(6);
                             Ok(d.tex_mult(float))
                         }
                         Some("ex") => {
-                            let d = state.get_current_font().get_dim::<ET::Dim>(5);
+                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(5);
                             Ok(d.tex_mult(float))
                         }
                         Some(dim) => Ok(ET::Dim::from_float(dim, float)),
-                        _ => todo!("Non-unit in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
+                        _ => todo!("Non-unit in read_unit: {}\n at {}", engine.preview(50).replace("\n", "\\n"), engine.current_position())
                     }
                 }
             }
-            _ => todo!("Non-dimension in read_unit: {}\n at {}", gullet.mouth().preview(50).replace("\n", "\\n"), gullet.mouth().file_line())
+            _ => todo!("Non-dimension in read_unit: {}\n at {}", engine.preview(50).replace("\n", "\\n"), engine.current_position())
         }
         None => file_end!()
     }
 }
 
-pub fn get_skip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
-    debug_log!(trace=>"Reading skip {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
+pub fn get_skip<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
+    debug_log!(trace=>"Reading skip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
     let mut isnegative = false;
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace(state) => next.source.cause);
+                        catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state) => next.source.cause),
-                    _ => return get_skip_inner::<ET>(gullet,state,isnegative,next)
+                    43 => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
+                    _ => return get_skip_inner::<ET>(engine,isnegative,next)
                 }
             }
             BaseCommand::Skip(ass) => {
-                let val = ass.get(state,gullet,next.source)?;
+                let val = ass.get(engine,next.source)?;
                 return Ok(if isnegative { -val } else { val })
             }
-            _ => return get_skip_inner::<ET>(gullet,state,isnegative,next)
+            _ => return get_skip_inner::<ET>(engine,isnegative,next)
         }
     }
     file_end!()
 }
 
-fn get_skip_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:ResolvedToken<ET>)
+fn get_skip_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:ResolvedToken<ET>)
     -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
-    let base = get_dim_inner::<ET>(gullet,state,isnegative,next)?;
-    gullet.mouth().skip_whitespace(state)?;
-    let stretch = if gullet.get_keyword(state,"plus")? {
-        Some(get_skipdim::<ET>(gullet,state)?)
+    let base = get_dim_inner::<ET>(engine,isnegative,next)?;
+    engine.skip_whitespace()?;
+    let stretch = if engine.get_keyword("plus")? {
+        Some(get_skipdim::<ET>(engine)?)
     } else {None};
-    gullet.mouth().skip_whitespace(state)?;
-    let shrink = if gullet.get_keyword(state,"minus")? {
-        Some(get_skipdim::<ET>(gullet,state)?)
+    engine.skip_whitespace()?;
+    let shrink = if engine.get_keyword("minus")? {
+        Some(get_skipdim::<ET>(engine)?)
     } else {None};
     Ok(Skip{base,stretch,shrink})
 
 }
 
-pub fn get_skipdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::SkipDim,TeXError<ET>> {
-    debug_log!(trace=>"Reading dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
+pub fn get_skipdim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::SkipDim,TeXError<ET>> {
+    debug_log!(trace=>"Reading dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
     let mut isnegative = false;
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char {char,..} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace(state) => next.source.cause);
+                        catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state) => next.source.cause),
+                    43 => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
                     46 | 44 => /* . / ,*/ {
-                        let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative) => next.source.cause);
-                        return read_skip_unit::<ET>(gullet,state,f)
+                        let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
+                        return read_skip_unit::<ET>(engine,f)
                     },
                     _ if is_ascii_digit(us) => {
-                        let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative) => next.source.cause);
-                        return read_skip_unit::<ET>(gullet,state,f)
+                        let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
+                        return read_skip_unit::<ET>(engine,f)
                     },
                     _ => todo!("Non-digit in read_skipdim")
                 }
             }
             BaseCommand::Dim(ass) => {
-                let val = ass.get(state,gullet,next.source)?;
+                let val = ass.get(engine,next.source)?;
                 let ret = if isnegative { -val } else { val };
                 return Ok(ET::SkipDim::from_dim(ret))
             }
@@ -372,101 +382,97 @@ pub fn get_skipdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) 
     file_end!()
 }
 
-pub fn read_skip_unit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64)
+pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
     -> Result<ET::SkipDim,TeXError<ET>> {
-    debug_log!(trace=>"Reading skip unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    match gullet.get_next_unexpandable(state)? {
+    debug_log!(trace=>"Reading skip unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    match engine.get_next_unexpandable()? {
         None => file_end!(),
         Some(next) => match next.command {
             BaseCommand::Char {char,..} => {
-                gullet.mouth().requeue(next.source.cause);
-                gullet.mouth().skip_whitespace(state)?;
-                if get_keyword::<ET>(gullet, state, "true")? {
-                    gullet.mouth().skip_whitespace(state)?;
-                    let mag = state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
-                    match get_keywords::<ET>(gullet, state, ET::Dim::units())? {
+                engine.gullet.mouth().requeue(next.source.cause);
+                engine.skip_whitespace()?;
+                if engine.get_keyword("true")? {
+                    engine.skip_whitespace()?;
+                    let mag = engine.state.get_primitive_int("mag").to_i64() as f64 / 1000.0;
+                    match engine.get_keywords(ET::Dim::units())? {
                         Some(dim) => Ok(ET::SkipDim::from_float(dim,float * mag)),
                         _ => throw!("Skip unit expected")
                     }
                 } else {
-                    match get_keywords::<ET>(gullet, state, ET::SkipDim::units())? {
+                    match engine.get_keywords(ET::SkipDim::units())? {
                         Some(dim) => Ok(ET::SkipDim::from_float(dim,float)),
-                        _ => todo!("Non-unit in read_skip_unit: {}",gullet.mouth().preview(50).replace("\n","\\n"))
+                        _ => todo!("Non-unit in read_skip_unit: {}",engine.preview(50).replace("\n","\\n"))
                     }
                 }
             }
             BaseCommand::Dim(ass) => {
-                let val = ass.get(state,gullet,next.source)?;
+                let val = ass.get(engine,next.source)?;
                 Ok(ET::SkipDim::from_dim(val.tex_mult(float)))
             }
-            o => todo!("Non-unit in read_skip_unit: {:?}\n{}",o,gullet.mouth().preview(50).replace("\n","\\n"))
+            o => todo!("Non-unit in read_skip_unit: {:?}\n{}",o,engine.preview(50).replace("\n","\\n"))
         }
     }
 }
 
-pub fn get_muskip<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State)
+pub fn get_muskip<ET:EngineType>(engine:&mut EngineMut<ET>)
     -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
-    debug_log!(trace=>"Reading muskip {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
+    debug_log!(trace=>"Reading muskip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
     let mut isnegative = false;
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char {char,..} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace(state)
-                            => next.source.cause
-                        );
+                        catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
-                        => next.source.cause
-                    ),
-                    _ => return get_muskip_inner::<ET>(gullet,state,isnegative,next)
+                    43 => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
+                    _ => return get_muskip_inner::<ET>(engine,isnegative,next)
                 }
             }
             BaseCommand::MuSkip(ass) => {
-                let val = ass.get(state,gullet,next.source)?;
+                let val = ass.get(engine,next.source)?;
                 return Ok(if isnegative { -val } else { val })
             }
-            _ => return get_muskip_inner::<ET>(gullet,state,isnegative,next)
+            _ => return get_muskip_inner::<ET>(engine,isnegative,next)
         }
     }
     file_end!()
 }
 
-fn get_muskip_inner<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State,isnegative:bool,next:ResolvedToken<ET>)
+fn get_muskip_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:ResolvedToken<ET>)
     -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
-    let base = get_mudim::<ET>(gullet, state, isnegative, next)?;
-    gullet.mouth().skip_whitespace(state);
-    let stretch = if gullet.get_keyword(state,"plus")? {
-        Some(get_mustretchdim::<ET>(gullet,state)?)
+    let base = get_mudim::<ET>(engine, isnegative, next)?;
+    engine.skip_whitespace()?;
+    let stretch = if engine.get_keyword("plus")? {
+        Some(get_mustretchdim::<ET>(engine)?)
     } else {None};
-    gullet.mouth().skip_whitespace(state);
-    let shrink = if gullet.get_keyword(state,"minus")? {
-        Some(get_mustretchdim::<ET>(gullet,state)?)
+    engine.skip_whitespace()?;
+    let shrink = if engine.get_keyword("minus")? {
+        Some(get_mustretchdim::<ET>(engine)?)
     } else {None};
     Ok(MuSkip{base,stretch,shrink})
 }
 
-pub fn get_mudim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, isnegative:bool, next:ResolvedToken<ET>)
+pub fn get_mudim<ET:EngineType>(engine:&mut EngineMut<ET>, isnegative:bool, next:ResolvedToken<ET>)
     -> Result<ET::MuDim,TeXError<ET>> {
     match next.command {
         BaseCommand::Char {char,..} => {
             let us = char.to_usize();
             match us {
                 46 | 44 => /* . / ,*/ {
-                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative)
+                    let f = catch!(read_float::<ET>(engine,us as u8,isnegative)
                             => next.source.cause
                         );
-                    return read_muunit::<ET>(gullet,state,f)
+                    return read_muunit::<ET>(engine,f)
                 },
                 _ if is_ascii_digit(us) => {
-                    let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative)
+                    let f = catch!(read_float::<ET>(engine,us as u8,isnegative)
                             => next.source.cause
                         );
-                    return read_muunit::<ET>(gullet,state,f)
+                    return read_muunit::<ET>(engine,f)
                 },
                 _ => todo!("Non-digit in read_mudim")
             }
@@ -475,35 +481,32 @@ pub fn get_mudim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State, is
     }
 }
 
-pub fn get_mustretchdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::State) -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
-    debug_log!(trace=>"Reading mu stretch/shrink dimension {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
+pub fn get_mustretchdim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
+    debug_log!(trace=>"Reading mu stretch/shrink dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
     let mut isnegative = false;
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char{char,..} => {
                 let us = char.to_usize();
                 match us {
                     45 => { // -
                         isnegative = !isnegative;
-                        catch!(gullet.mouth().skip_whitespace(state)
-                            => next.source.cause
-                        );
+                        catch!(engine.skip_whitespace()=> next.source.cause);
                     }
-                    43 => /* + */ catch!(gullet.mouth().skip_whitespace(state)
-                        => next.source.cause
+                    43 => /* + */ catch!(engine.skip_whitespace()=> next.source.cause
                     ),
                     46 | 44 => /* . / ,*/ {
-                        let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative)
+                        let f = catch!(read_float::<ET>(engine,us as u8,isnegative)
                             => next.source.cause
                         );
-                        return read_mustretchunit::<ET>(gullet,state,f)
+                        return read_mustretchunit::<ET>(engine,f)
                     },
                     _ if is_ascii_digit(us) => {
-                        let f = catch!(read_float::<ET>(gullet,state,us as u8,isnegative)
+                        let f = catch!(read_float::<ET>(engine,us as u8,isnegative)
                             => next.source.cause
                         );
-                        return read_mustretchunit::<ET>(gullet,state,f)
+                        return read_mustretchunit::<ET>(engine,f)
                     },
                     _ => todo!("Non-digit in read_skipdim")
                 }
@@ -514,30 +517,30 @@ pub fn get_mustretchdim<ET:EngineType>(gullet:&mut ET::Gullet, state:&mut ET::St
     file_end!()
 }
 
-pub fn read_muunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64) -> Result<ET::MuDim,TeXError<ET>> {
-    debug_log!(trace=>"Reading mu unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
-    match get_keywords::<ET>(gullet, state, ET::MuDim::units())? {
+pub fn read_muunit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result<ET::MuDim,TeXError<ET>> {
+    debug_log!(trace=>"Reading mu unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
+    match engine.get_keywords(ET::MuDim::units())? {
         Some(dim) => Ok(ET::MuDim::from_float(dim,float)),
         _ => todo!("Non-unit in read_unit")
     }
 }
 
-pub fn read_mustretchunit<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,float:f64)
+pub fn read_mustretchunit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
     -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
-    debug_log!(trace=>"Reading mu unit {}...\n at {}",gullet.mouth().preview(50).replace("\n","\\n"),gullet.mouth().file_line());
-    gullet.mouth().skip_whitespace(state)?;
-    match get_keywords::<ET>(gullet, state, ET::MuStretchShrinkDim::units())? {
+    debug_log!(trace=>"Reading mu unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
+    match get_keywords::<ET>(engine, ET::MuStretchShrinkDim::units())? {
         Some(dim) => Ok(ET::MuStretchShrinkDim::from_float(dim,float)),
         _ => todo!("Non-unit in read_unit")
     }
 }
 
-pub fn read_float<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,firstchar:u8,isnegative:bool) -> Result<f64,TeXError<ET>> {
+pub fn read_float<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegative:bool) -> Result<f64,TeXError<ET>> {
     debug_log!(trace=>"Reading float {}...",(firstchar as char));
     let mut in_float = firstchar == b'.' || firstchar == b',';
     let mut rets = if in_float {vec!(b'0',b'.')} else {vec!(firstchar)};
-    while let Some(next) = gullet.get_next_unexpandable(state)? {
+    while let Some(next) = engine.get_next_unexpandable()? {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} => {
@@ -550,12 +553,12 @@ pub fn read_float<ET:EngineType>(gullet:&mut ET::Gullet,state:&mut ET::State,fir
                     in_float = true;
                 }
                 else {
-                    gullet.mouth().requeue(next.source.cause);
+                    engine.gullet.mouth().requeue(next.source.cause);
                     break
                 }
             }
             _ => {
-                gullet.mouth().requeue(next.source.cause);
+                engine.gullet.mouth().requeue(next.source.cause);
                 break
             }
         }

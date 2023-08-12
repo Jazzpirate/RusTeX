@@ -1,7 +1,7 @@
 //! Boxes producing actual output
 
 use std::fmt::{Debug, Formatter};
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::state::modes::BoxMode;
 use crate::engine::stomach::Stomach;
 use crate::tex::numbers::Skip;
@@ -105,21 +105,21 @@ impl<ET:EngineType<Node=()>> CustomNode<ET> for () {
     type Bx = ();
 }
 
-pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET>>>>>>);
+pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut EngineMut<ET>) -> Result<(),TeXError<ET>>>>>>);
 impl<ET:EngineType> Debug for Whatsit<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("Whatsit")
     }
 }
 impl<ET:EngineType> Whatsit<ET> {
-    pub fn new(f:Box<dyn FnOnce(&mut ET::State, &mut ET::Gullet) -> Result<(),TeXError<ET>>>) -> Self {
+    pub fn new(f:Box<dyn FnOnce(&mut EngineMut<ET>) -> Result<(),TeXError<ET>>>) -> Self {
         Whatsit(Ptr::new(Mut::new(Some(f))))
     }
-    pub fn apply(self,state:&mut ET::State, gullet:&mut ET::Gullet) -> Result<(),TeXError<ET>> {
+    pub fn apply(self, e:&mut EngineMut<ET>) -> Result<(),TeXError<ET>> {
         let f = &mut *self.0.borrow_mut();
         match std::mem::take(f) {
             None => Ok(()),
-            Some(f) => f(state,gullet)
+            Some(f) => f(e)
         }
     }
 }
@@ -205,7 +205,7 @@ pub enum OpenBox<ET:EngineType> {
     Box {
         mode:BoxMode,
         list:Vec<TeXNode<ET>>,
-        on_close: Ptr<dyn Fn(&mut ET::State, &mut ET::Gullet,Vec<TeXNode<ET>>) ->Option<TeXNode<ET>>>
+        on_close: Ptr<dyn Fn(&mut EngineMut<ET>,Vec<TeXNode<ET>>) ->Option<TeXNode<ET>>>
     },
 }
 impl<ET:EngineType> Debug for OpenBox<ET> {

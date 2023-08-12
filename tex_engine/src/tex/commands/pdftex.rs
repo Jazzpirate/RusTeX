@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
@@ -30,18 +30,18 @@ pub static PDFTEX_REVISION: i64 = 25;
 /// "ifpdfabsnum"
 pub static IFPDFABSNUM : &str = "ifpdfabsnum";
 /// `\ifpdfabsnum`: Compare the absolute values of two numbers.
-pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
+pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsnum");
-    let i1 = catch_prim!(gullet.get_int(state) => (IFPDFABSNUM,cmd));
-    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => (IFPDFABSNUM,cmd)) {
+    let i1 = catch_prim!(engine.get_int() => (IFPDFABSNUM,cmd));
+    let rel = match catch_prim!(engine.is_next_char_one_of(&super::tex::LGE) => (IFPDFABSNUM,cmd)) {
         None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
     };
-    let i2 = catch_prim!(gullet.get_int(state) => (IFPDFABSNUM,cmd));
+    let i2 = catch_prim!(engine.get_int() => (IFPDFABSNUM,cmd));
     match rel {
-        "<" => Ok(i1.to_i64().abs() < i2.to_i64().abs()),
-        ">" => Ok(i1.to_i64().abs()>i2.to_i64().abs()),
-        "=" => Ok(i1.to_i64().abs()==i2.to_i64().abs()),
+        b'<' => Ok(i1.to_i64().abs() < i2.to_i64().abs()),
+        b'>' => Ok(i1.to_i64().abs()>i2.to_i64().abs()),
+        b'=' => Ok(i1.to_i64().abs()==i2.to_i64().abs()),
         _ => unreachable!()
     }
 }
@@ -49,18 +49,18 @@ pub fn ifpdfabsnum<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 /// "ifpdfabsdim"
 pub static IFPDFABSDIM : &str = "ifpdfabsdim";
 /// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
-pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
+pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsdim");
-    let i1 = catch_prim!(gullet.get_dim(state) => (IFPDFABSDIM,cmd));
-    let rel = match catch_prim!(gullet.get_keywords(state,vec!["<",">","="]) => (IFPDFABSDIM,cmd)) {
+    let i1 = catch_prim!(engine.get_dim() => (IFPDFABSDIM,cmd));
+    let rel = match catch_prim!(engine.is_next_char_one_of(&super::tex::LGE) => (IFPDFABSDIM,cmd)) {
         None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
     };
-    let i2 = catch_prim!(gullet.get_dim(state) => (IFPDFABSDIM,cmd));
+    let i2 = catch_prim!(engine.get_dim() => (IFPDFABSDIM,cmd));
     match rel {
-        "<" => Ok(i1.to_sp() < i2.to_sp().abs()),
-        ">" => Ok(i1.to_sp().abs()>i2.to_sp().abs()),
-        "=" => Ok(i1.to_sp().abs()==i2.to_sp().abs()),
+        b'<' => Ok(i1.to_sp() < i2.to_sp().abs()),
+        b'>' => Ok(i1.to_sp().abs()>i2.to_sp().abs()),
+        b'=' => Ok(i1.to_sp().abs()==i2.to_sp().abs()),
         _ => unreachable!()
     }
 }
@@ -68,17 +68,17 @@ pub fn ifpdfabsdim<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 /// "pdffilesize"
 pub static PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
-pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn pdffilesize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdffilesize");
-    let filename = catch_prim!(gullet.get_braced_string(state) => (PDFFILESIZE,cmd));
+    let filename = catch_prim!(engine.get_braced_string() => (PDFFILESIZE,cmd));
     //gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
     // let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
-    let f = state.filesystem().get(&filename);
+    let f = engine.state.filesystem().get(&filename);
     let x = f.content_string();
     match &*x {
         None => Ok(()),
         Some(v) =>{
-            string_to_tokens::<ET>(v.len().to_string().as_bytes(),state,fun)
+            string_to_tokens::<ET>(v.len().to_string().as_bytes(),engine.state,fun)
         }
     }
 }
@@ -86,26 +86,26 @@ pub fn pdffilesize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cm
 /// "pdfglyphtounicode"
 pub static PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
 /// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
-pub fn pdfglyphtounicode<ET:EngineType>(state: &mut ET::State, gullet:&mut ET::Gullet, cmd:CommandSource<ET>)
-                                  -> Result<(), TeXError<ET>> {
+pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+                                        -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
-    catch_prim!(gullet.mouth().read_argument(state, &mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
-    catch_prim!(gullet.mouth().read_argument(state,&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
+    catch_prim!(engine.get_argument(&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
+    catch_prim!(engine.get_argument(&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
     Ok(())
 }
 
 /// "pdfstrcmp"
 pub static PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
-pub fn pdfstrcmp<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdfstrcmp");
-    let str1 = catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd));
-    let str2 = catch_prim!(gullet.get_braced_string(state) => (PDFSTRCMP,cmd));
+    let str1 = catch_prim!(engine.get_braced_string() => (PDFSTRCMP,cmd));
+    let str2 = catch_prim!(engine.get_braced_string() => (PDFSTRCMP,cmd));
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    if str1==str2 {f(state,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
-        else if str1 < str2 { string_to_tokens::<ET>("-1".as_bytes(),state,f)}
-        else {f(state,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
+    if str1==str2 {f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
+        else if str1 < str2 { string_to_tokens::<ET>("-1".as_bytes(),engine.state,f)}
+        else {f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
 }
 
 /// "pdftexversion"
@@ -134,159 +134,159 @@ pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
-pub fn initialize_pdftex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
-    register_conditional!(ifpdfabsdim,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsdim::<ET>(s,gu,cmd));
-    register_conditional!(ifpdfabsnum,state,stomach,gullet,(s,gu,cmd) =>ifpdfabsnum::<ET>(s,gu,cmd));
-    register_int_assign!(pdfcompresslevel,state,stomach,gullet);
-    register_int_assign!(pdfdecimaldigits,state,stomach,gullet);
-    register_expandable!(pdffilesize,state,stomach,gullet,(s,gu,cmd,f) =>pdffilesize::<ET>(s,gu,cmd,f));
-    register_int_assign!(pdfgentounicode,state,stomach,gullet);
-    register_unexpandable!(pdfglyphtounicode,state,stomach,gullet,false,(s,gu,cmd) =>pdfglyphtounicode::<ET>(s,gu,cmd));
-    register_dim_assign!(pdfhorigin,state,stomach,gullet);
-    register_int_assign!(pdfoutput,state,stomach,gullet);
-    register_int!(pdfmajorversion,state,stomach,gullet,(s,g,c) => pdfmajorversion::<ET>(c));
-    register_int_assign!(pdfminorversion,state,stomach,gullet);
-    register_int_assign!(pdfobjcompresslevel,state,stomach,gullet);
-    register_dim_assign!(pdfpageheight,state,stomach,gullet);
-    register_dim_assign!(pdfpagewidth,state,stomach,gullet);
-    register_int_assign!(pdfpkresolution,state,stomach,gullet);
-    register_expandable!(pdfstrcmp,state,stomach,gullet,(s,gu,cmd,f) =>pdfstrcmp::<ET>(s,gu,cmd,f));
-    register_expandable!(pdftexrevision,state,stomach,gullet,(s,gu,cmd,f) =>pdftexrevision::<ET>(s,f));
-    register_int!(pdftexversion,state,stomach,gullet,(s,g,c) => pdftexversion::<ET>(c));
-    register_dim_assign!(pdfvorigin,state,stomach,gullet);
-    register_int_assign!(tracingstacklevels,state,stomach,gullet);
+pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
+    register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,cmd));
+    register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,cmd));
+    register_int_assign!(pdfcompresslevel,engine);
+    register_int_assign!(pdfdecimaldigits,engine);
+    register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,cmd,f));
+    register_int_assign!(pdfgentounicode,engine);
+    register_unexpandable!(pdfglyphtounicode,engine,false,(e,cmd) =>pdfglyphtounicode::<ET>(e,cmd));
+    register_dim_assign!(pdfhorigin,engine);
+    register_int_assign!(pdfoutput,engine);
+    register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(c));
+    register_int_assign!(pdfminorversion,engine);
+    register_int_assign!(pdfobjcompresslevel,engine);
+    register_dim_assign!(pdfpageheight,engine);
+    register_dim_assign!(pdfpagewidth,engine);
+    register_int_assign!(pdfpkresolution,engine);
+    register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
+    register_expandable!(pdftexrevision,engine,(e,cmd,f) =>pdftexrevision::<ET>(e.state,f));
+    register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(c));
+    register_dim_assign!(pdfvorigin,engine);
+    register_int_assign!(tracingstacklevels,engine);
 
-    cmtodo!(state,stomach,gullet,efcode);
-    cmtodo!(state,stomach,gullet,knaccode);
-    cmtodo!(state,stomach,gullet,knbccode);
-    cmtodo!(state,stomach,gullet,knbscode);
-    cmtodo!(state,stomach,gullet,lpcode);
-    cmtodo!(state,stomach,gullet,pdfadjustinterwordglue);
-    cmtodo!(state,stomach,gullet,pdfadjustspacing);
-    cmtodo!(state,stomach,gullet,pdfappendkern);
-    cmtodo!(state,stomach,gullet,pdfdraftmode);
-    cmtodo!(state,stomach,gullet,pdfforcepagebox);
-    cmtodo!(state,stomach,gullet,pdfgamma);
-    cmtodo!(state,stomach,gullet,pdfimageapplygamma);
-    cmtodo!(state,stomach,gullet,pdfimagegamma);
-    cmtodo!(state,stomach,gullet,pdfimagehicolor);
-    cmtodo!(state,stomach,gullet,pdfimageresolution);
-    cmtodo!(state,stomach,gullet,pdfinclusioncopyfonts);
-    cmtodo!(state,stomach,gullet,pdfinclusionerrorlevel);
-    cmtodo!(state,stomach,gullet,pdfinfoomitdate);
-    cmtodo!(state,stomach,gullet,pdfomitcharset);
-    cmtodo!(state,stomach,gullet,pdfomitinfodict);
-    cmtodo!(state,stomach,gullet,pdfomitprocset);
-    cmtodo!(state,stomach,gullet,pdfpagebox);
-    cmtodo!(state,stomach,gullet,pdfprependkern);
-    cmtodo!(state,stomach,gullet,pdfprotrudechars);
-    cmtodo!(state,stomach,gullet,pdfsuppressptexinfo);
-    cmtodo!(state,stomach,gullet,pdfsuppresswarningdupdest);
-    cmtodo!(state,stomach,gullet,pdfsuppresswarningdupmap);
-    cmtodo!(state,stomach,gullet,pdfsuppresswarningpagegroup);
-    cmtodo!(state,stomach,gullet,pdftracingfonts);
-    cmtodo!(state,stomach,gullet,pdfuniqueresname);
-    cmtodo!(state,stomach,gullet,rpcode);
-    cmtodo!(state,stomach,gullet,shbscode);
-    cmtodo!(state,stomach,gullet,showstream);
-    cmtodo!(state,stomach,gullet,stbscode);
-    cmtodo!(state,stomach,gullet,tagcode);
-    cmtodo!(state,stomach,gullet,pdelapsedtime);
-    cmtodo!(state,stomach,gullet,pdflastannot);
-    cmtodo!(state,stomach,gullet,pdflastlink);
-    cmtodo!(state,stomach,gullet,pdflastobj);
-    cmtodo!(state,stomach,gullet,pdflastxform);
-    cmtodo!(state,stomach,gullet,pdflastximage);
-    cmtodo!(state,stomach,gullet,pdflastximagecolordepth);
-    cmtodo!(state,stomach,gullet,pdflastximagepages);
-    cmtodo!(state,stomach,gullet,pdflastxpos);
-    cmtodo!(state,stomach,gullet,pdflastypos);
-    cmtodo!(state,stomach,gullet,pdfrandomseed);
-    cmtodo!(state,stomach,gullet,pdfretval);
-    cmtodo!(state,stomach,gullet,pdfshellescape);
-    cmtodo!(state,stomach,gullet,pdfdestmargin);
-    cmtodo!(state,stomach,gullet,pdfeachlinedepth);
-    cmtodo!(state,stomach,gullet,pdfeachlineheight);
-    cmtodo!(state,stomach,gullet,pdffirstlineheight);
-    cmtodo!(state,stomach,gullet,pdfignoreddimen);
-    cmtodo!(state,stomach,gullet,pdflastlinedepth);
-    cmtodo!(state,stomach,gullet,pdflinkmargin);
-    cmtodo!(state,stomach,gullet,pdfpxdimen);
-    cmtodo!(state,stomach,gullet,pdfthreadmargin);
-    cmtodo!(state,stomach,gullet,pdfpageattr);
-    cmtodo!(state,stomach,gullet,pdfpageresources);
-    cmtodo!(state,stomach,gullet,pdfpagesattr);
-    cmtodo!(state,stomach,gullet,pdfpkmode);
-    cmtodo!(state,stomach,gullet,ifincsname);
-    cmtodo!(state,stomach,gullet,ifpdfprimitive);
-    cmtodo!(state,stomach,gullet,leftmarginkern);
-    cmtodo!(state,stomach,gullet,pdfcolorstackinit);
-    cmtodo!(state,stomach,gullet,pdfcreationdate);
-    cmtodo!(state,stomach,gullet,pdfescapehex);
-    cmtodo!(state,stomach,gullet,pdfescapename);
-    cmtodo!(state,stomach,gullet,pdfescapestring);
-    cmtodo!(state,stomach,gullet,pdffiledump);
-    cmtodo!(state,stomach,gullet,pdffilemoddate);
-    cmtodo!(state,stomach,gullet,pdffontname);
-    cmtodo!(state,stomach,gullet,pdffontobjnum);
-    cmtodo!(state,stomach,gullet,pdffontsize);
-    cmtodo!(state,stomach,gullet,pdfincludechars);
-    cmtodo!(state,stomach,gullet,pdfinsertht);
-    cmtodo!(state,stomach,gullet,pdflastmatch);
-    cmtodo!(state,stomach,gullet,pdfmatch);
-    cmtodo!(state,stomach,gullet,pdfmdfivesum);
-    cmtodo!(state,stomach,gullet,pdfnormaldeviate);
-    cmtodo!(state,stomach,gullet,pdfpageref);
-    cmtodo!(state,stomach,gullet,pdftexbanner);
-    cmtodo!(state,stomach,gullet,pdfunescapehex);
-    cmtodo!(state,stomach,gullet,pdfuniformdeviate);
-    cmtodo!(state,stomach,gullet,pdfxformname);
-    cmtodo!(state,stomach,gullet,pdfximagebbox);
-    cmtodo!(state,stomach,gullet,rightmarginkern);
+    cmtodo!(engine,efcode);
+    cmtodo!(engine,knaccode);
+    cmtodo!(engine,knbccode);
+    cmtodo!(engine,knbscode);
+    cmtodo!(engine,lpcode);
+    cmtodo!(engine,pdfadjustinterwordglue);
+    cmtodo!(engine,pdfadjustspacing);
+    cmtodo!(engine,pdfappendkern);
+    cmtodo!(engine,pdfdraftmode);
+    cmtodo!(engine,pdfforcepagebox);
+    cmtodo!(engine,pdfgamma);
+    cmtodo!(engine,pdfimageapplygamma);
+    cmtodo!(engine,pdfimagegamma);
+    cmtodo!(engine,pdfimagehicolor);
+    cmtodo!(engine,pdfimageresolution);
+    cmtodo!(engine,pdfinclusioncopyfonts);
+    cmtodo!(engine,pdfinclusionerrorlevel);
+    cmtodo!(engine,pdfinfoomitdate);
+    cmtodo!(engine,pdfomitcharset);
+    cmtodo!(engine,pdfomitinfodict);
+    cmtodo!(engine,pdfomitprocset);
+    cmtodo!(engine,pdfpagebox);
+    cmtodo!(engine,pdfprependkern);
+    cmtodo!(engine,pdfprotrudechars);
+    cmtodo!(engine,pdfsuppressptexinfo);
+    cmtodo!(engine,pdfsuppresswarningdupdest);
+    cmtodo!(engine,pdfsuppresswarningdupmap);
+    cmtodo!(engine,pdfsuppresswarningpagegroup);
+    cmtodo!(engine,pdftracingfonts);
+    cmtodo!(engine,pdfuniqueresname);
+    cmtodo!(engine,rpcode);
+    cmtodo!(engine,shbscode);
+    cmtodo!(engine,showstream);
+    cmtodo!(engine,stbscode);
+    cmtodo!(engine,tagcode);
+    cmtodo!(engine,pdelapsedtime);
+    cmtodo!(engine,pdflastannot);
+    cmtodo!(engine,pdflastlink);
+    cmtodo!(engine,pdflastobj);
+    cmtodo!(engine,pdflastxform);
+    cmtodo!(engine,pdflastximage);
+    cmtodo!(engine,pdflastximagecolordepth);
+    cmtodo!(engine,pdflastximagepages);
+    cmtodo!(engine,pdflastxpos);
+    cmtodo!(engine,pdflastypos);
+    cmtodo!(engine,pdfrandomseed);
+    cmtodo!(engine,pdfretval);
+    cmtodo!(engine,pdfshellescape);
+    cmtodo!(engine,pdfdestmargin);
+    cmtodo!(engine,pdfeachlinedepth);
+    cmtodo!(engine,pdfeachlineheight);
+    cmtodo!(engine,pdffirstlineheight);
+    cmtodo!(engine,pdfignoreddimen);
+    cmtodo!(engine,pdflastlinedepth);
+    cmtodo!(engine,pdflinkmargin);
+    cmtodo!(engine,pdfpxdimen);
+    cmtodo!(engine,pdfthreadmargin);
+    cmtodo!(engine,pdfpageattr);
+    cmtodo!(engine,pdfpageresources);
+    cmtodo!(engine,pdfpagesattr);
+    cmtodo!(engine,pdfpkmode);
+    cmtodo!(engine,ifincsname);
+    cmtodo!(engine,ifpdfprimitive);
+    cmtodo!(engine,leftmarginkern);
+    cmtodo!(engine,pdfcolorstackinit);
+    cmtodo!(engine,pdfcreationdate);
+    cmtodo!(engine,pdfescapehex);
+    cmtodo!(engine,pdfescapename);
+    cmtodo!(engine,pdfescapestring);
+    cmtodo!(engine,pdffiledump);
+    cmtodo!(engine,pdffilemoddate);
+    cmtodo!(engine,pdffontname);
+    cmtodo!(engine,pdffontobjnum);
+    cmtodo!(engine,pdffontsize);
+    cmtodo!(engine,pdfincludechars);
+    cmtodo!(engine,pdfinsertht);
+    cmtodo!(engine,pdflastmatch);
+    cmtodo!(engine,pdfmatch);
+    cmtodo!(engine,pdfmdfivesum);
+    cmtodo!(engine,pdfnormaldeviate);
+    cmtodo!(engine,pdfpageref);
+    cmtodo!(engine,pdftexbanner);
+    cmtodo!(engine,pdfunescapehex);
+    cmtodo!(engine,pdfuniformdeviate);
+    cmtodo!(engine,pdfxformname);
+    cmtodo!(engine,pdfximagebbox);
+    cmtodo!(engine,rightmarginkern);
 
-    cmtodo!(state,stomach,gullet,letterspacefont);
-    cmtodo!(state,stomach,gullet,partokenname);
-    cmtodo!(state,stomach,gullet,pdfannot);
-    cmtodo!(state,stomach,gullet,pdfcatalog);
-    cmtodo!(state,stomach,gullet,pdfcolorstack);
-    cmtodo!(state,stomach,gullet,pdfcopyfont);
-    cmtodo!(state,stomach,gullet,pdfdest);
-    cmtodo!(state,stomach,gullet,pdfendlink);
-    cmtodo!(state,stomach,gullet,pdfendthread);
-    cmtodo!(state,stomach,gullet,pdffakespace);
-    cmtodo!(state,stomach,gullet,pdffontattr);
-    cmtodo!(state,stomach,gullet,pdffontexpand);
-    cmtodo!(state,stomach,gullet,pdfinfo);
-    cmtodo!(state,stomach,gullet,pdfinterwordspaceoff);
-    cmtodo!(state,stomach,gullet,pdfinterwordspaceon);
-    cmtodo!(state,stomach,gullet,pdfliteral);
-    cmtodo!(state,stomach,gullet,pdfmapfile);
-    cmtodo!(state,stomach,gullet,pdfmapline);
-    cmtodo!(state,stomach,gullet,pdfnames);
-    cmtodo!(state,stomach,gullet,pdfnobuiltintounicode);
-    cmtodo!(state,stomach,gullet,pdfnoligatures);
-    cmtodo!(state,stomach,gullet,pdfobj);
-    cmtodo!(state,stomach,gullet,pdfoutline);
-    cmtodo!(state,stomach,gullet,pdfprimitive);
-    cmtodo!(state,stomach,gullet,pdfrefobj);
-    cmtodo!(state,stomach,gullet,pdfrefxform);
-    cmtodo!(state,stomach,gullet,pdfrefximage);
-    cmtodo!(state,stomach,gullet,pdfresettimer);
-    cmtodo!(state,stomach,gullet,pdfrestore);
-    cmtodo!(state,stomach,gullet,pdfrunninglinkoff);
-    cmtodo!(state,stomach,gullet,pdfrunninglinkon);
-    cmtodo!(state,stomach,gullet,pdfsave);
-    cmtodo!(state,stomach,gullet,pdfsavepos);
-    cmtodo!(state,stomach,gullet,pdfsetmatrix);
-    cmtodo!(state,stomach,gullet,pdfsetrandomseed);
-    cmtodo!(state,stomach,gullet,pdfspacefont);
-    cmtodo!(state,stomach,gullet,pdfstartlink);
-    cmtodo!(state,stomach,gullet,pdfthread);
-    cmtodo!(state,stomach,gullet,pdftrailer);
-    cmtodo!(state,stomach,gullet,pdftrailerid);
-    cmtodo!(state,stomach,gullet,pdfstartthread);
-    cmtodo!(state,stomach,gullet,pdfxform);
-    cmtodo!(state,stomach,gullet,pdfximage);
-    cmtodo!(state,stomach,gullet,quitvmode);
+    cmtodo!(engine,letterspacefont);
+    cmtodo!(engine,partokenname);
+    cmtodo!(engine,pdfannot);
+    cmtodo!(engine,pdfcatalog);
+    cmtodo!(engine,pdfcolorstack);
+    cmtodo!(engine,pdfcopyfont);
+    cmtodo!(engine,pdfdest);
+    cmtodo!(engine,pdfendlink);
+    cmtodo!(engine,pdfendthread);
+    cmtodo!(engine,pdffakespace);
+    cmtodo!(engine,pdffontattr);
+    cmtodo!(engine,pdffontexpand);
+    cmtodo!(engine,pdfinfo);
+    cmtodo!(engine,pdfinterwordspaceoff);
+    cmtodo!(engine,pdfinterwordspaceon);
+    cmtodo!(engine,pdfliteral);
+    cmtodo!(engine,pdfmapfile);
+    cmtodo!(engine,pdfmapline);
+    cmtodo!(engine,pdfnames);
+    cmtodo!(engine,pdfnobuiltintounicode);
+    cmtodo!(engine,pdfnoligatures);
+    cmtodo!(engine,pdfobj);
+    cmtodo!(engine,pdfoutline);
+    cmtodo!(engine,pdfprimitive);
+    cmtodo!(engine,pdfrefobj);
+    cmtodo!(engine,pdfrefxform);
+    cmtodo!(engine,pdfrefximage);
+    cmtodo!(engine,pdfresettimer);
+    cmtodo!(engine,pdfrestore);
+    cmtodo!(engine,pdfrunninglinkoff);
+    cmtodo!(engine,pdfrunninglinkon);
+    cmtodo!(engine,pdfsave);
+    cmtodo!(engine,pdfsavepos);
+    cmtodo!(engine,pdfsetmatrix);
+    cmtodo!(engine,pdfsetrandomseed);
+    cmtodo!(engine,pdfspacefont);
+    cmtodo!(engine,pdfstartlink);
+    cmtodo!(engine,pdfthread);
+    cmtodo!(engine,pdftrailer);
+    cmtodo!(engine,pdftrailerid);
+    cmtodo!(engine,pdfstartthread);
+    cmtodo!(engine,pdfxform);
+    cmtodo!(engine,pdfximage);
+    cmtodo!(engine,quitvmode);
 
 }

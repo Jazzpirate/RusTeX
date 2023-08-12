@@ -4,7 +4,7 @@ use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end};
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::gullet::methods::{string_to_tokens, token_to_chars};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, ExpToken, ResolvedToken, TokenCont};
@@ -19,55 +19,24 @@ use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 
-fn next_char<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, syms:&'static [u8]) -> Result<Option<u8>,TeXError<ET>> {
-    match gullet.get_next_unexpandable(state)? {
-        None => file_end!(),
-        Some(res) => match res.command {
-            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
-                let c = char.as_bytes()[0];
-                if syms.contains(&c) {
-                    Ok(Some(c))
-                } else {
-                    gullet.mouth().requeue(res.source.cause);
-                    Ok(None)
-                }
-            }
-            _ => {
-                gullet.mouth().requeue(res.source.cause);
-                Ok(None)
-            }
-        }
-    }
-}
-
-fn next_char_eq<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet,sym:u8) -> Result<bool,TeXError<ET>> {
-    match gullet.get_next_unexpandable(state)? {
-        None => file_end!(),
-        Some(res) => match res.command {
-            BaseCommand::Char { char, .. } if char.as_bytes() == [sym] => Ok(true),
-            _ => {
-                gullet.mouth().requeue(res.source.cause);
-                Ok(false)
-            }
-        }
-    }
-}
-
-fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&CommandSource<ET>, name:&'static str)
-                                                  -> Result<Frac,TeXError<ET>> {
+static PMTDC:[u8;5] = [b'+',b'-',b'*',b'/',b')'];
+static PMTD:[u8;4] = [b'+',b'-',b'*',b'/'];
+static TD:[u8;2] = [b'*',b'/'];
+fn expr_scale_loop<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str)
+                                  -> Result<Frac,TeXError<ET>> {
     let mut stack: Vec<(Option<Frac>,Option<fn(Frac,Frac) -> Frac>)> = vec!((None,None));
     'a: loop {
-        catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd));
-        if catch_prim!(next_char_eq::<ET>(state,gullet,b'(') => (name,cmd.clone())) {
+        catch_prim!(engine.skip_whitespace() => (name,cmd));
+        if catch_prim!(engine.is_next_char(b'(') => (name,cmd.clone())) {
             stack.push((None,None));
             continue 'a;
         }
-        let mut first = Frac::new(catch_prim!(gullet.get_int(state) => (name,cmd)).to_i64(),1);
+        let mut first = Frac::new(catch_prim!(engine.get_int() => (name,cmd)).to_i64(),1);
         loop {
-            catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
+            catch_prim!(engine.skip_whitespace() => (name,cmd.clone()));
             let kw = catch_prim!(
-                if stack.len()>1 {next_char::<ET>(state,gullet,&[b'+',b'-',b'*',b'/',b')'])}
-                else {next_char::<ET>(state,gullet,&[b'*',b'/'])}
+                if stack.len()>1 {engine.is_next_char_one_of(&PMTDC)}
+                else {engine.is_next_char_one_of(&TD)}
                 => (name,cmd.clone()));
             match kw {
                 None => {
@@ -123,7 +92,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                     continue 'a;
                 }
                 Some(b'*') => {
-                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
+                    let ret = catch_prim!(expr_scale_loop::<ET>(engine,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.0,ret.1);
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
@@ -134,7 +103,7 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
                     }
                 }
                 Some(b'/') => {
-                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
+                    let ret = catch_prim!(expr_scale_loop::<ET>(engine,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.1,ret.0);
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
@@ -150,22 +119,22 @@ fn expr_scale_loop<ET:EngineType>(state:&mut ET::State, gullet:&mut ET::Gullet, 
     }
 }
 
-fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gullet, cmd:&CommandSource<ET>, name:&'static str,
-                                get:fn(&mut ET::State, &mut ET::Gullet) -> Result<Num,TeXError<ET>>)
-                                                                  -> Result<Num,TeXError<ET>> {
+fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str,
+                                        get:fn(&mut EngineMut<ET>) -> Result<Num,TeXError<ET>>)
+                                        -> Result<Num,TeXError<ET>> {
     let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
     'a: loop {
-        catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
-        if catch_prim!(next_char_eq::<ET>(state,gullet,b'(') => (name,cmd.clone())) {
+        catch_prim!(engine.skip_whitespace() => (name,cmd.clone()));
+        if catch_prim!(engine.is_next_char(b'(') => (name,cmd.clone())) {
             stack.push((None, None));
             continue 'a;
         }
-        let mut first = catch_prim!(get(state,gullet) => (name,cmd.clone()));
+        let mut first = catch_prim!(get(engine) => (name,cmd.clone()));
         loop {
-            catch_prim!(gullet.mouth().skip_whitespace(state) => (name,cmd.clone()));
+            catch_prim!(engine.skip_whitespace() => (name,cmd.clone()));
             let kw = catch_prim!(
-                if stack.len()>1 {next_char::<ET>(state,gullet,&[b'+',b'-',b'*',b'/',b')'])}
-                else {next_char::<ET>(state,gullet,&[b'+',b'-',b'*',b'/'])}
+                if stack.len()>1 {engine.is_next_char_one_of(&PMTDC)}
+                else {engine.is_next_char_one_of(&PMTD)}
                 => (name,cmd.clone()));
             match kw {
                 None => {
@@ -212,7 +181,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                     continue 'a;
                 }
                 Some(b'*') => {
-                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
+                    let ret = catch_prim!(expr_scale_loop::<ET>(engine,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.0,ret.1);
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
@@ -223,7 +192,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
                     }
                 }
                 Some(b'/') => {
-                    let ret = catch_prim!(expr_scale_loop::<ET>(state,gullet,cmd,&name) => (name,cmd.clone()));
+                    let ret = catch_prim!(expr_scale_loop::<ET>(engine,cmd,&name) => (name,cmd.clone()));
                     first = first.scale(ret.1,ret.0);
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
@@ -244,68 +213,72 @@ fn expr_loop<ET:EngineType,Num:Numeric>(state:&mut ET::State, gullet:&mut ET::Gu
 pub static DETOKENIZE: &str = "detokenize";
 /// `\detokenize`: convert a token list into a string of [`CategoryCode`] [`Other`](CategoryCode::Other)
 /// (except for ` `, which gets code [`Space`](CategoryCode::Space)).
-pub fn detokenize<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn detokenize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"detokenize");
-    let escape = state.get_escapechar();
-    let cc = state.get_catcode_scheme().clone();
-    catch_prim!(expand_until_space::<ET>(gullet,state) => (DETOKENIZE,cmd));
-    catch_prim!(gullet.get_group(state,&mut |s,next| match &next.base {
+    catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
         BaseToken::Char(c,CategoryCode::Parameter) => {
-            token_to_chars::<ET,_>(&next,escape,&cc,true,|t|f(s,t))?;
-            token_to_chars::<ET,_>(&next,escape,&cc,true,|t|f(s,t))?;
+            token_to_chars::<ET,_>(&next,s.get_escapechar(),s.get_catcode_scheme(),true,|t|f(s,t))?;
+            token_to_chars::<ET,_>(&next,s.get_escapechar(),s.get_catcode_scheme(),true,|t|f(s,t))?;
             Ok(())
         }
-        _ => token_to_chars::<ET,_>(&next,escape,&cc,true,|t|f(s,t))
+        _ => token_to_chars::<ET,_>(&next,s.get_escapechar(),s.get_catcode_scheme(),true,|t|f(s,t))
     }) => (DETOKENIZE,cmd));
     Ok(())
 }
 
+pub static DIMEXPR: &str = "dimexpr";
 /// `\dimexpr`: evaluate a dimension expression; returns a [`Dim`].
-pub fn dimexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<ET::Dim,TeXError<ET>> {
-    debug_log!(trace=>"dimexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop::<ET,ET::Dim>(state, gullet, &cmd, "dimexpr", |s, g:&mut ET::Gullet| g.get_dim(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("dimexpr",cmd)) {
+pub fn dimexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"dimexpr: {}",engine.preview(100));
+    let ret = expr_loop::<ET,ET::Dim>(engine, &cmd, DIMEXPR, |e| e.get_dim())?;
+    if let Some((next,_)) = catch_prim!(engine.get_next_token() => (DIMEXPR,cmd)) {
         match &next.base {
-            BaseToken::CS(name) => match state.get_command(name).map(|c| &c.base) {
+            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => gullet.mouth().requeue(next)
+                _ => engine.gullet.mouth().requeue(next)
             }
-            _ => gullet.mouth().requeue(next)
+            _ => engine.gullet.mouth().requeue(next)
         }
     }
     Ok(ret)
 }
 
+pub static E_TEX_REVISION: &str = ".6";
+pub static E_TEX_VERSION: i64 = 2;
+
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
 pub fn eTeXrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-    string_to_tokens::<ET>(".6".as_bytes(),state,f)
+    string_to_tokens::<ET>(E_TEX_REVISION.as_bytes(),state,f)
 }
 
+pub static ETEXVERSION: &str = "eTeXversion";
 /// `\eTeXversion`: returns the eTeX version number as an [`Int`] (2).
 pub fn eTeXversion<ET:EngineType>(cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
-    Ok(catch_prim!(ET::Int::from_i64(2) => ("eTeXversion",cmd)))
+    Ok(catch_prim!(ET::Int::from_i64(E_TEX_VERSION) => (ETEXVERSION,cmd)))
 }
 
+pub static EXPANDED: &str = "expanded";
 /// `\expanded`: expands its argument exhaustively.
-pub fn expanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET>> {
+pub fn expanded<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"expanded");
-    catch_prim!(gullet.get_expanded_group(state,false,false,false,f) => ("expanded",cmd));
+    catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
     Ok(())
 }
 
+pub static GLUEEXPR: &str = "glueexpr";
 /// `\glueexpr`: evaluate a glue expression; returns a [`Skip`].
-pub fn glueexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
-    debug_log!(trace=>"glueexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop::<ET,Skip<ET::SkipDim>>(state, gullet, &cmd, "glueexpr", |s, g:&mut ET::Gullet| g.get_skip(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("glueexpr",cmd)) {
+pub fn glueexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+                               -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
+    debug_log!(trace=>"glueexpr: {}",engine.preview(100));
+    let ret = expr_loop::<ET,Skip<ET::SkipDim>>(engine, &cmd, GLUEEXPR, |e| e.get_skip())?;
+    if let Some((next,_)) = catch_prim!(engine.get_next_token() => (GLUEEXPR,cmd)) {
         match &next.base {
-            BaseToken::CS(name) => match state.get_command(name).map(|c| &c.base) {
+            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => gullet.mouth().requeue(next)
+                _ => engine.gullet.mouth().requeue(next)
             }
-            _ => gullet.mouth().requeue(next)
+            _ => engine.gullet.mouth().requeue(next)
         }
     }
     Ok(ret)
@@ -315,60 +288,63 @@ pub fn glueexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:C
 /// [`\endcsname`](super::tex::endcsname)) and evaluates to true if the resulting control sequence
 /// is defined. Unlike [`\csname`](super::tex::csname), does not define the control sequence as
 /// [`\relax`](super::tex::relax)
-pub fn ifcsname<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET>> {
+pub fn ifcsname<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+                               -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifcsname");
-    let name = get_csname::<ET>(state,gullet,&cmd,"ifcsname")?;
-    Ok(state.get_command(&name).is_some())
+    let name = get_csname::<ET>(engine,&cmd,"ifcsname")?;
+    Ok(engine.state.get_command(&name).is_some())
 }
 
+pub static IFDEFINED: &str = "ifdefined";
 /// `\ifdefined`: evaluates to true if the next token is a control sequence that is defined.
-pub fn ifdefined<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<bool,TeXError<ET>> {
+pub fn ifdefined<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+                                -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifdefined");
-    match catch_prim!(gullet.mouth().get_next(state) => ("ifeof",cmd)) {
-        None => file_end_prim!("ifeof",cmd),
+    match catch_prim!(engine.get_next_token() => (IFDEFINED,cmd)) {
+        None => file_end_prim!("ifdefined",cmd),
         Some((t,_)) => match t.base {
             BaseToken::Char(c,CategoryCode::Active) =>
-                Ok(state.get_ac_command(&c).is_some()),
+                Ok(engine.state.get_ac_command(&c).is_some()),
             BaseToken::CS(name) => {
                 debug_log!(trace => "ifdefined: {}",name.to_string());
-                Ok(state.get_command(&name).is_some())
+                Ok(engine.state.get_command(&name).is_some())
             }
             _ => throw!("Expected a control sequence, got: {:?}",t => cmd.cause)
         }
     }
 }
 
+pub static MUEXPR: &str = "muexpr";
 /// `\muexpr`: evaluate a mu expression; returns a [`MuSkip`].
-pub fn muexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
-    debug_log!(trace=>"muexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop::<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>(state, gullet, &cmd, "muexpr", |s, g:&mut ET::Gullet| g.get_muskip(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("muexpr",cmd)) {
+pub fn muexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+                             -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
+    debug_log!(trace=>"muexpr: {}",engine.preview(100));
+    let ret = expr_loop::<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>(engine, &cmd, MUEXPR, |e| e.get_muskip())?;
+    if let Some((next,_)) = catch_prim!(engine.get_next_token() => (MUEXPR,cmd)) {
         match &next.base {
-            BaseToken::CS(name) => match state.get_command(name).map(|c| &c.base) {
+            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => gullet.mouth().requeue(next)
+                _ => engine.gullet.mouth().requeue(next)
             }
-            _ => gullet.mouth().requeue(next)
+            _ => engine.gullet.mouth().requeue(next)
         }
     }
     Ok(ret)
 }
 
+pub static NUMEXPR: &str = "numexpr";
 /// `\numexpr`: evaluate a number expression; returns an [`Int`].
-pub fn numexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET>> {
-    debug_log!(trace=>"numexpr: {}",gullet.mouth().preview(100));
-    let ret = expr_loop::<ET,ET::Int>(state, gullet, &cmd, "numexpr", |s, g:&mut ET::Gullet| g.get_int(s))?;
-    if let Some((next,_)) = catch_prim!(gullet.mouth().get_next(state) => ("numexpr",cmd)) {
+pub fn numexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+                              -> Result<ET::Int,TeXError<ET>> {
+    debug_log!(trace=>"numexpr: {}",engine.preview(100));
+    let ret = expr_loop::<ET,ET::Int>(engine, &cmd, NUMEXPR, |e| e.get_int())?;
+    if let Some((next,_)) = catch_prim!(engine.get_next_token() => (NUMEXPR,cmd)) {
         match &next.base {
-            BaseToken::CS(name) => match state.get_command(name).map(|c| &c.base) {
+            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => gullet.mouth().requeue(next)
+                _ => engine.gullet.mouth().requeue(next)
             }
-            _ => gullet.mouth().requeue(next)
+            _ => engine.gullet.mouth().requeue(next)
         }
     }
     Ok(ret)
@@ -376,71 +352,58 @@ pub fn numexpr<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Co
 
 
 /// `\protected`: make the next control sequence protected (i.e. not expandable).
-pub fn protected<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,global_:bool,_:bool,long_:bool,outer_:bool)
-                                                      -> Result<(),TeXError<ET>> {
+pub fn protected<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global_:bool, _:bool, long_:bool, outer_:bool)
+                                -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\protected");
-    match catch_prim!(gullet.get_next_stomach_command(state) => ("protected",cmd)) {
+    match catch_prim!(engine.get_next_stomach_command() => ("protected",cmd)) {
         None => file_end_prim!("protected",cmd),
         Some(c) => match c.command {
-            BaseStomachCommand::Assignment {name:Some("global"),..} => global::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("protected"),..} => protected::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("long"),..} => long::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("outer"),..} => outer::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("def"),..} => def::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("edef"),..} => edef::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("gdef"),..} => gdef::<ET>(state,gullet,cmd,global_,true,long_,outer_),
-            BaseStomachCommand::Assignment {name:Some("xdef"),..} => xdef::<ET>(state,gullet,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("global"),..} => global::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("protected"),..} => protected::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("long"),..} => long::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("outer"),..} => outer::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("def"),..} => def::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("edef"),..} => edef::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("gdef"),..} => gdef::<ET>(engine,cmd,global_,true,long_,outer_),
+            BaseStomachCommand::Assignment {name:Some("xdef"),..} => xdef::<ET>(engine,cmd,global_,true,long_,outer_),
             _ => throw!("Expected a macro definition after \\protected" => cmd.cause)
         }
     }
 }
 
+pub static READLINE: &str = "readline";
 /// `\readline`: read a line from a file like [`\read`](super::tex::read), but with all characters
 /// having [`CategoryCode`] [12 (`Other`)](CategoryCode::Other) (except for ` ` [`Space`](CategoryCode::Space))
-pub fn readline<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,globally:bool)
-                           -> Result<(),TeXError<ET>> {
+pub fn readline<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, globally:bool)
+                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"readline");
-    let i = catch_prim!(gullet.get_int(state) => ("readline",cmd));
+    let i = catch_prim!(engine.get_int() => (READLINE,cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
-    let file = match state.get_open_in_file(i) {
+    let file = match engine.state.get_open_in_file(i) {
         None => throw!("File {} not open for reading",i => cmd.cause),
         Some(f) => f
     };
-    if !catch_prim!(gullet.get_keyword(state,"to") => ("readline",cmd)) {
+    if !catch_prim!(engine.get_keyword("to") => (READLINE,cmd)) {
         throw!("Expected 'to' after \\read" => cmd.cause)
     }
-    let newcmd = catch_prim!(gullet.get_control_sequence(state) => ("readline",cmd));
+    let newcmd = catch_prim!(engine.get_control_sequence() => (READLINE,cmd));
     let mut ret = vec!();
-    catch_prim!(file.read::<ET,_>(&ET::Char::other_catcode_scheme(),state.get_endlinechar(),|t| ret.push(t)) => ("readline",cmd));
+    catch_prim!(file.read::<ET,_>(&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READLINE,cmd));
     debug_log!(trace=>"readline: {} = {}",newcmd,TokenList(&ret));
 
-    let def = DefI::simple(ret);
-    match newcmd.base {
-        BaseToken::CS(name) => state.set_command(name,Some(Command::new(
-            BaseCommand::Def(def),Some(&cmd)
-        )),globally),
-        BaseToken::Char(c,_) => state.set_ac_command(c,Some(Command::new(
-            BaseCommand::Def(def),Some(&cmd)
-        )),globally)
-    }
+    let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));
+    engine.set_command_for_tk(newcmd,Some(def),globally);
     Ok(())
 }
 
 pub static UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
-pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn unexpanded<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"unexpanded");
-    match catch_prim!(gullet.get_next_stomach_command(state) => (UNEXPANDED,cmd)) {
-        None => file_end_prim!("unexpanded",cmd),
-        Some(sc) => match sc.command {
-            BaseStomachCommand::BeginGroup => (),
-            _ => throw!("Expected a begin group after \\unexpanded" => cmd.cause)
-        }
-    }
-    catch_prim!(gullet.mouth().read_until_endgroup(state,f) => (UNEXPANDED,cmd));
+    catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
     Ok(())
 }
 
@@ -448,14 +411,14 @@ pub fn unexpanded<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd
 /// since otherwise, e.g. `\unless\ifx` in the [false-loop](crate::engine::gullet::methods::false_loop)
 /// would be interpreted as *two* conditionals, rather than just one.
 pub static UNLESS : &str = "unless";
-pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
+pub fn unless<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"unless");
-    match catch_prim!(gullet.mouth().get_next(state) => (UNLESS,cmd)) {
+    match catch_prim!(engine.get_next_token() => (UNLESS,cmd)) {
         None => file_end_prim!(UNLESS,cmd),
         Some((next,true)) => {
             let ncmd = match &next.base {
-                BaseToken::CS(name) => state.get_command(name),
-                BaseToken::Char(c,CategoryCode::Active) => state.get_ac_command(c),
+                BaseToken::CS(name) => engine.state.get_command(name),
+                BaseToken::Char(c,CategoryCode::Active) => engine.state.get_ac_command(c),
                 _ => throw!("Expected a conditional after \\unless" => cmd.cause)
             };
             let ncmd = match ncmd {
@@ -464,7 +427,7 @@ pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
             };
             match ncmd.base {
                 BaseCommand::Conditional {name,apply} => {
-                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(gullet,state,
+                    catch_prim!(crate::engine::gullet::methods::do_conditional::<ET>(engine,
                         CommandSource{cause:next,reference:ncmd.reference},name,apply,true) => (UNLESS,cmd));
                     Ok(())
                 }
@@ -476,73 +439,73 @@ pub fn unless<ET:EngineType>(state:&mut ET::State,gullet:&mut ET::Gullet,cmd:Com
 }
 
 /// Initialize a TeX engine with default implementations for all eTeX primitives.
-pub fn initialize_etex_primitives<ET:EngineType>(state:&mut ET::State,stomach:&mut ET::Stomach,gullet:&mut ET::Gullet) {
-    register_expandable!(detokenize,state,stomach,gullet,(s,g,c,f) =>detokenize::<ET>(s,g,c,f));
-    register_dim!(dimexpr,state,stomach,gullet,(s,g,c) => dimexpr::<ET>(s,g,c));
-    register_expandable!(eTeXrevision,state,stomach,gullet,(s,g,c,f) => eTeXrevision::<ET>(s,f));
-    register_int!(eTeXversion,state,stomach,gullet,(s,g,c) => eTeXversion::<ET>(c));
-    register_tok_assign!(everyeof,state,stomach,gullet);
-    register_expandable!(expanded,state,stomach,gullet,(s,g,c,f) => expanded::<ET>(s,g,c,f));
-    register_skip!(glueexpr,state,stomach,gullet,(s,g,c) => glueexpr::<ET>(s,g,c));
-    register_conditional!(ifcsname,state,stomach,gullet,(s,gu,cmd) =>ifcsname::<ET>(s,gu,cmd));
-    register_conditional!(ifdefined,state,stomach,gullet,(s,gu,cmd) =>ifdefined::<ET>(s,gu,cmd));
-    register_muskip!(muexpr,state,stomach,gullet,(s,g,c) => muexpr::<ET>(s,g,c));
-    register_int!(numexpr,state,stomach,gullet,(s,g,c) => numexpr::<ET>(s,g,c));
-    register_assign!(readline,state,stomach,gullet,(s,gu,cmd,global) =>readline::<ET>(s,gu,cmd,global));
-    register_int_assign!(savinghyphcodes,state,stomach,gullet);
-    register_int_assign!(tracingassigns,state,stomach,gullet);
-    register_int_assign!(tracinggroups,state,stomach,gullet);
-    register_int_assign!(tracingifs,state,stomach,gullet);
-    register_int_assign!(tracingnesting,state,stomach,gullet);
-    register_int_assign!(tracingscantokens,state,stomach,gullet);
-    register_assign!(protected,state,stomach,gullet,(s,gu,cmd,g) =>protected::<ET>(s,gu,cmd,g,false,false,false));
-    register_expandable!(unexpanded,state,stomach,gullet,(s,g,c,f) => unexpanded::<ET>(s,g,c,f));
-    register_expandable!(unless,state,stomach,gullet,(s,gu,cmd,f) =>unless::<ET>(s,gu,cmd));
+pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
+    register_expandable!(detokenize,engine,(e,c,f) =>detokenize::<ET>(e,c,f));
+    register_dim!(dimexpr,engine,(e,c) => dimexpr::<ET>(e,c));
+    register_expandable!(eTeXrevision,engine,(e,c,f) => eTeXrevision::<ET>(e.state,f));
+    register_int!(eTeXversion,engine,(e,c) => eTeXversion::<ET>(c));
+    register_tok_assign!(everyeof,engine);
+    register_expandable!(expanded,engine,(e,c,f) => expanded::<ET>(e,c,f));
+    register_skip!(glueexpr,engine,(e,c) => glueexpr::<ET>(e,c));
+    register_conditional!(ifcsname,engine,(eu,cmd) =>ifcsname::<ET>(eu,cmd));
+    register_conditional!(ifdefined,engine,(eu,cmd) =>ifdefined::<ET>(eu,cmd));
+    register_muskip!(muexpr,engine,(e,c) => muexpr::<ET>(e,c));
+    register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,c));
+    register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,cmd,global));
+    register_int_assign!(savinghyphcodes,engine);
+    register_int_assign!(tracingassigns,engine);
+    register_int_assign!(tracinggroups,engine);
+    register_int_assign!(tracingifs,engine);
+    register_int_assign!(tracingnesting,engine);
+    register_int_assign!(tracingscantokens,engine);
+    register_assign!(protected,engine,(eu,cmd,g) =>protected::<ET>(eu,cmd,g,false,false,false));
+    register_expandable!(unexpanded,engine,(e,c,f) => unexpanded::<ET>(e,c,f));
+    register_expandable!(unless,engine,(eu,cmd,f) =>unless::<ET>(eu,cmd));
 
-    cmtodo!(state,stomach,gullet,beginL);
-    cmtodo!(state,stomach,gullet,beginR);
-    cmtodo!(state,stomach,gullet,botmarks);
-    cmtodo!(state,stomach,gullet,clubpenalties);
-    cmtodo!(state,stomach,gullet,currentgrouplevel);
-    cmtodo!(state,stomach,gullet,currentgrouptype);
-    cmtodo!(state,stomach,gullet,currentifbranch);
-    cmtodo!(state,stomach,gullet,currentiflevel);
-    cmtodo!(state,stomach,gullet,currentiftype);
-    cmtodo!(state,stomach,gullet,displaywidowpenalties);
-    cmtodo!(state,stomach,gullet,endL);
-    cmtodo!(state,stomach,gullet,endR);
-    cmtodo!(state,stomach,gullet,firstmarks);
-    cmtodo!(state,stomach,gullet,fontchardp);
-    cmtodo!(state,stomach,gullet,fontcharht);
-    cmtodo!(state,stomach,gullet,fontcharic);
-    cmtodo!(state,stomach,gullet,fontcharwd);
-    cmtodo!(state,stomach,gullet,glueshrink);
-    cmtodo!(state,stomach,gullet,glueshrinkorder);
-    cmtodo!(state,stomach,gullet,gluestretch);
-    cmtodo!(state,stomach,gullet,gluestretchorder);
-    cmtodo!(state,stomach,gullet,gluetomu);
-    cmtodo!(state,stomach,gullet,iffontchar);
-    cmtodo!(state,stomach,gullet,interactionmode);
-    cmtodo!(state,stomach,gullet,interlinepenalties);
-    cmtodo!(state,stomach,gullet,lastlinefit);
-    cmtodo!(state,stomach,gullet,lastnodetype);
-    cmtodo!(state,stomach,gullet,marks);
-    cmtodo!(state,stomach,gullet,middle);
-    cmtodo!(state,stomach,gullet,mutoglue);
-    cmtodo!(state,stomach,gullet,pagediscards);
-    cmtodo!(state,stomach,gullet,parshapedimen);
-    cmtodo!(state,stomach,gullet,parshapeindent);
-    cmtodo!(state,stomach,gullet,parshapelength);
-    cmtodo!(state,stomach,gullet,predisplaydirection);
-    cmtodo!(state,stomach,gullet,savingvdiscards);
-    cmtodo!(state,stomach,gullet,scantokens);
-    cmtodo!(state,stomach,gullet,showgroups);
-    cmtodo!(state,stomach,gullet,showifs);
-    cmtodo!(state,stomach,gullet,showtokens);
-    cmtodo!(state,stomach,gullet,splitbotmarks);
-    cmtodo!(state,stomach,gullet,splitdiscards);
-    cmtodo!(state,stomach,gullet,splitfirstmarks);
-    cmtodo!(state,stomach,gullet,TeXXeTstate);
-    cmtodo!(state,stomach,gullet,topmarks);
-    cmtodo!(state,stomach,gullet,widowpenalties);
+    cmtodo!(engine,beginL);
+    cmtodo!(engine,beginR);
+    cmtodo!(engine,botmarks);
+    cmtodo!(engine,clubpenalties);
+    cmtodo!(engine,currentgrouplevel);
+    cmtodo!(engine,currentgrouptype);
+    cmtodo!(engine,currentifbranch);
+    cmtodo!(engine,currentiflevel);
+    cmtodo!(engine,currentiftype);
+    cmtodo!(engine,displaywidowpenalties);
+    cmtodo!(engine,endL);
+    cmtodo!(engine,endR);
+    cmtodo!(engine,firstmarks);
+    cmtodo!(engine,fontchardp);
+    cmtodo!(engine,fontcharht);
+    cmtodo!(engine,fontcharic);
+    cmtodo!(engine,fontcharwd);
+    cmtodo!(engine,glueshrink);
+    cmtodo!(engine,glueshrinkorder);
+    cmtodo!(engine,gluestretch);
+    cmtodo!(engine,gluestretchorder);
+    cmtodo!(engine,gluetomu);
+    cmtodo!(engine,iffontchar);
+    cmtodo!(engine,interactionmode);
+    cmtodo!(engine,interlinepenalties);
+    cmtodo!(engine,lastlinefit);
+    cmtodo!(engine,lastnodetype);
+    cmtodo!(engine,marks);
+    cmtodo!(engine,middle);
+    cmtodo!(engine,mutoglue);
+    cmtodo!(engine,pagediscards);
+    cmtodo!(engine,parshapedimen);
+    cmtodo!(engine,parshapeindent);
+    cmtodo!(engine,parshapelength);
+    cmtodo!(engine,predisplaydirection);
+    cmtodo!(engine,savingvdiscards);
+    cmtodo!(engine,scantokens);
+    cmtodo!(engine,showgroups);
+    cmtodo!(engine,showifs);
+    cmtodo!(engine,showtokens);
+    cmtodo!(engine,splitbotmarks);
+    cmtodo!(engine,splitdiscards);
+    cmtodo!(engine,splitfirstmarks);
+    cmtodo!(engine,TeXXeTstate);
+    cmtodo!(engine,topmarks);
+    cmtodo!(engine,widowpenalties);
 }

@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 use crate::{catch, debug_log, throw};
-use crate::engine::EngineType;
+use crate::engine::{EngineMut, EngineType};
 use crate::engine::gullet::Gullet;
+use crate::engine::memory::Memory;
 use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
@@ -10,41 +11,41 @@ use crate::tex::commands::{methods, BaseStomachCommand, StomachCommand};
 use crate::tex::token::{Token, TokenList};
 use crate::utils::errors::TeXError;
 
-pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gullet:&mut ET::Gullet, cmd:StomachCommand<ET>)
+pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
     -> Result<(),TeXError<ET>> {
     use BaseStomachCommand::*;
     debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
     match cmd.command {
         Unexpandable {name,apply,starts_paragraph} => {
             if starts_paragraph  {
-                match state.mode() {
+                match engine.state.mode() {
                     TeXMode::Vertical | TeXMode::InternalVertical =>
                         todo!(),
                     _ => ()
                 }
             }
-            Ok(apply(state, gullet, cmd.source)?)
+            Ok(apply(engine, cmd.source)?)
         }
         Assignment {name,set} => {
-            set(state,gullet,cmd.source,false)?;
-            match state.take_afterassignment() {
-                Some(t) => gullet.mouth().requeue(t),
+            set(engine,cmd.source,false)?;
+            match engine.state.take_afterassignment() {
+                Some(t) => engine.gullet.mouth().requeue(t),
                 _ => ()
             }
             Ok(())
         }
         ValueAss(set) => {
-            set(state,gullet,cmd.source,false)?;
-            match state.take_afterassignment() {
-                Some(t) => gullet.mouth().requeue(t),
+            set(engine,cmd.source,false)?;
+            match engine.state.take_afterassignment() {
+                Some(t) => engine.gullet.mouth().requeue(t),
                 _ => ()
             }
             Ok(())
         }
         Font(f) => {
-            state.set_current_font(f,false);
-            match state.take_afterassignment() {
-                Some(t) => gullet.mouth().requeue(t),
+            engine.state.set_current_font(f,false);
+            match engine.state.take_afterassignment() {
+                Some(t) => engine.gullet.mouth().requeue(t),
                 _ => ()
             }
             Ok(())
@@ -53,28 +54,28 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
         Whatsit {name,..} => todo!("Whatsits"),
         Relax => Ok(()),
         Char{..} => {
-            let mode = state.mode();
-            todo!("Character in digest: {:?} at {}",mode,gullet.mouth().file_line())
+            let mode = engine.state.mode();
+            todo!("Character in digest: {:?} at {}",mode,engine.current_position())
         }
         MathChar(_) => todo!("Mathchar in digest"),
         Superscript => todo!("Superscript in digest"),
         Subscript => todo!("Subscript in digest"),
-        Space if state.mode().is_vertical() => Ok(()),
+        Space if engine.state.mode().is_vertical() => Ok(()),
         Space => todo!("Space in H mode"),
         MathShift => todo!("MathShift in digest"),
-        BeginGroup => Ok(state.stack_push(GroupType::Token)),
-        EndGroup => match state.stack_pop() {
+        BeginGroup => Ok(engine.state.stack_push(GroupType::Token)),
+        EndGroup => match engine.state.stack_pop() {
             Some((v,GroupType::Token)) => {
-                let mut ret = gullet.mouth().new_tokensource();
+                let mut ret = engine.gullet.mouth().new_tokensource();
                 for t in v {ret.push(t)}
-                gullet.mouth().push_tokens(ret);
+                engine.gullet.mouth().push_tokens(ret);
                 Ok(())
             }
             Some((v,GroupType::Box(b))) => {
-                match state.shipout_data_mut().box_stack.pop() {
+                match engine.state.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
-                        match on_close(state,gullet,list) {
-                            Some(b) => state.push_node(b),
+                        match on_close(engine,list) {
+                            Some(b) => engine.state.push_node(b),
                             None => {}
                         }
                         Ok(())
@@ -85,6 +86,33 @@ pub fn digest<ET:EngineType>(stomach:&mut ET::Stomach, state:&mut ET::State, gul
                 }
             }
             _ => throw!("Unexpected end group" => cmd.source.cause)
+        }
+    }
+}
+
+impl<ET:EngineType> EngineMut<'_,ET> {
+    pub fn split_stomach(&mut self) -> (&mut ET::Stomach,EngineMutNoStomach<ET>) {
+        (self.stomach,EngineMutNoStomach {
+            state: self.state,
+            gullet: self.gullet,
+            memory: self.memory,
+        })
+    }
+}
+
+pub struct EngineMutNoStomach<'a,ET:EngineType> {
+    pub state:&'a mut ET::State,
+    pub gullet:&'a mut ET::Gullet,
+    pub memory:&'a mut Memory<ET>,
+}
+
+impl<ET:EngineType> EngineMutNoStomach<'_,ET> {
+    pub fn join_stomach<'b>(&'b mut self,stomach:&'b mut ET::Stomach) -> EngineMut<'b,ET> {
+        EngineMut {
+            state: self.state,
+            stomach,
+            memory: self.memory,
+            gullet:self.gullet,
         }
     }
 }
