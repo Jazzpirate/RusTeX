@@ -130,7 +130,7 @@ mod tests {
         //trace();
         //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
         //env_logger::init();
-        //warn();
+        warn();
 
         let outputs = Outputs {
             error: |s|  { warn!("\n{}",Red.paint(std::format!("{}",s))) },
@@ -186,7 +186,8 @@ mod tests {
 
         match engine.initialize_pdflatex() {
             Ok(_) => {
-                engine.components().memory.print_stats()
+                engine.components().memory.print_stats();
+                error!("Mouth: {}",engine.mouth.stack.capacity());
             },
             Err(e) => {
                 (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(&mut engine.memory),engine.components_mut().current_position(),engine.components_mut().preview(100)));

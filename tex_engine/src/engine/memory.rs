@@ -7,7 +7,7 @@ use crate::engine::EngineType;
 use crate::tex::token::Token;
 use crate::utils::strings::TeXStr;
 
-const VEC_SIZE:usize = 8;
+const VEC_SIZE:usize = 16;//2097152;
 
 pub struct Memory<ET:EngineType> {
     args:Option<[Vec<Token<ET>>;9]>,
@@ -23,13 +23,17 @@ impl<ET:EngineType> Clone for Memory<ET> {
 }
 impl<ET:EngineType> Memory<ET> {
     pub fn print_stats(&self) {
-        error!("args: {}",self.args.as_ref().unwrap().len());
+        error!("args:");
         for a in self.args.as_ref().unwrap().iter() {
             error!(" -  {}",a.capacity());
         }
         error!("token_vecs: {}",self.token_vecs.len());
         for a in self.token_vecs.iter() {
             error!(" -  {}",a.capacity());
+        }
+        error!("strings: {}",self.strings.len());
+        for s in self.strings.iter() {
+            error!(" -  {}",s.capacity());
         }
     }
     pub fn new_with(mut interner:StringInterner<BufferBackend,ahash::RandomState>) -> Self {
@@ -38,37 +42,44 @@ impl<ET:EngineType> Memory<ET> {
         let par = TeXStr::from_primitive(interner.get_or_intern_static("par"));
         let empty_str = TeXStr::from_primitive(interner.get_or_intern_static(""));
         Memory{
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:Vec::with_capacity(4),token_vecs,interner,relax,par,empty_str
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:(0..8).map(|_|String::with_capacity(64)).collect(),token_vecs,interner,relax,par,empty_str
         }
     }
     pub fn new() -> Self {
-        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
         let mut interner = StringInterner::<BufferBackend,ahash::RandomState>::new();
+        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
         let relax = TeXStr::from_primitive(interner.get_or_intern_static("relax"));
         let par = TeXStr::from_primitive(interner.get_or_intern_static("par"));
         let empty_str = TeXStr::from_primitive(interner.get_or_intern_static(""));
         Memory{
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:Vec::with_capacity(4),token_vecs,interner,relax,par,empty_str
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:(0..8).map(|_|String::with_capacity(64)).collect(),token_vecs,interner,relax,par,empty_str
         }
     }
     pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
         std::mem::take(&mut self.args).unwrap()
     }
     pub fn return_args(&mut self, mut args:[Vec<Token<ET>>;9]) {
+        for a in args.iter_mut() {
+            a.clear();
+            //a.shrink_to(VEC_SIZE)
+        }
         self.args = Some(args);
     }
     pub fn get_token_vec(&mut self) -> Vec<Token<ET>> {
         self.token_vecs.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
+        //Vec::with_capacity(VEC_SIZE)
     }
     pub fn get_string(&mut self) -> String {
-        self.strings.pop().unwrap_or(String::new())
+        self.strings.pop().unwrap_or(String::with_capacity(64))
     }
     pub fn return_string(&mut self, mut s:String) {
         s.clear();
+        //s.shrink_to(VEC_SIZE);
         self.strings.push(s);
     }
     pub fn return_token_vec(&mut self, mut v: Vec<Token<ET>>) {
         v.clear();
+        //v.shrink_to(VEC_SIZE);
         self.token_vecs.push(v);
     }
     /*pub fn get_token_array(&mut self) -> TokenArray<ET> {

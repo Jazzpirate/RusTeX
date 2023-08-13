@@ -173,11 +173,11 @@ pub enum TeXMouthSource<ET:EngineType> {
 }
 
 #[derive(Clone)]
-pub struct StandardMouth<ET:EngineType<Mouth=Self>>{ stack:Vec<TeXMouthSource<ET>> }
+pub struct StandardMouth<ET:EngineType<Mouth=Self>>{ pub stack:Vec<TeXMouthSource<ET>> }
 
 impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     fn new(memory:&mut Memory<ET>) -> Self {
-        StandardMouth { stack:Vec::with_capacity(32)}
+        StandardMouth { stack:Vec::with_capacity(2097152)}
     }
     fn new_with(tks: Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self {
         StandardMouth{stack:tks.into_iter().rev().map(|t| TeXMouthSource::Token((t,true))).collect()}

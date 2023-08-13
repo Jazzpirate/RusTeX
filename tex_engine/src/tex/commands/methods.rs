@@ -449,7 +449,6 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
                     let arg = &mut args[argnum];
-                    arg.clear();
                     argnum += 1;
                     'L: loop {
                         match if d.long {catch!({engine.get_next_token()} => cmd.cause.clone())}
@@ -468,7 +467,6 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
                     let arg = &mut args[argnum];
-                    arg.clear();
                     argnum += 1;
                     catch!(engine.skip_whitespace() => cmd.cause.clone());
                     if d.long {catch!(engine.get_argument(&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
@@ -480,7 +478,6 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut args[argnum];
                     let mut delims = engine.memory.get_token_vec();
-                    arg.clear();
                     argnum += 1;
                     while let Some(ParamToken::Token(t)) = iter.peek() {
                         delims.push(t.clone());
