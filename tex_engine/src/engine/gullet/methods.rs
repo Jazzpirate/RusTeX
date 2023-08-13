@@ -253,7 +253,7 @@ pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,
 
 pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
-    let mut current = String::new();
+    let mut current = engine.memory.get_string();
     engine.add_expansion(|engine,rs|{
         while let Some(next) = engine.get_next_unexpandable()? {
             rs.push(next.source.cause,engine.memory);
@@ -264,16 +264,20 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> R
                         current.push(us as u8 as char);
                         if current == kw {
                             rs.reset(engine.memory);
+                            engine.memory.return_string(current);
                             return Ok(true)
                         }
                         else if !kw.starts_with(&current) {
+                            engine.memory.return_string(current);
                             return Ok(false)
                         }
                     } else {
+                        engine.memory.return_string(current);
                         return Ok(false)
                     }
                 }
                 _ => {
+                    engine.memory.return_string(current);
                     return Ok(false)
                 }
             }

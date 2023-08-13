@@ -133,10 +133,13 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     fn expand(engine:&mut EngineRef<ET>, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET>> {
         match ret.command {
             BaseCommand::Def(d) => {
+                //let mut exp = ET::Mouth::get_expansion(engine);
                 engine.add_expansion(|engine,rs| {
-                    expand_def(&d,engine,ret.source,&mut |engine,t| Ok(rs.push(t,engine.memory)))?;
+                    expand_def(&d,engine,ret.source,&mut exp)?;
                     Ok(None)
                 })
+                //ET::Mouth::push_expansion(engine,exp);
+                //Ok(None)
             }
             // expandable commands that do not expand to new tokens
             BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {

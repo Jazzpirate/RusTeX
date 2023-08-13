@@ -3,7 +3,7 @@ use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::numeric_methods::expand_until_space;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{ExpansionContainer, Memory};
 use crate::engine::state::State;
 use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, ResolvedToken, TokenCont, ValueCommand, CommandSource};
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -369,14 +369,14 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.memory,Some(ET::Char::backslash())),d.as_str(engine.memory),engine.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
         // No arguments, we just expand the replacement, replacing `##` with `#`
-        return expand_simple(d,cmd,engine,f)
+        return expand_simple(d,cmd,engine,exp)
     }
     if d.arity == 0 {
         // No arguments, we just expand the replacement, but need to eat the delimiters in the signature
@@ -397,7 +397,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
                 _=> unsafe{ unreachable_unchecked() } // since arity=0, there can only be tokens
             }
         }
-        return expand_simple(d,cmd,engine,f)
+        return expand_simple(d,cmd,engine,exp)
     }
 
     /*
@@ -408,17 +408,17 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
      */
     let mut args = engine.memory.get_args();
     read_arguments(d, engine, &cmd, &mut args)?;
-    let r = replace(d, cmd, engine, &mut args, f);
+    let r = replace(d, cmd, engine, &mut args, exp);
     engine.memory.return_args(args);
     r
 }
 
-fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut ExpansionContainer<ET>) -> Result<(),TeXError<ET>> {
     let rf = ET::TokenReference::from_expansion(&cmd);
     for r in &d.replacement {
         match r {
-            ExpToken::Token(t) => f(engine,t.clone().with_ref(&rf))?,
-            ExpToken::ParamToken(t) => f(engine,t.clone().with_ref(&rf))?,
+            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
+            ExpToken::ParamToken(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
             _ => unreachable!()
         }
     }
@@ -541,7 +541,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
     Ok(())
 }
 
-fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], exp:&mut ExpansionContainer<ET>) -> Result<(),TeXError<ET>> {
     let rf = ET::TokenReference::from_expansion(&cmd);
     #[cfg(debug_assertions)]
     {
@@ -555,11 +555,11 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut Engine
         match next {
             ExpToken::Param(_,idx) => {
                 for t in args[*idx as usize].iter() {
-                    f(engine,t.clone().with_ref(&rf))?
+                    exp.push(t.clone().with_ref(&rf),engine.memory)
                 }
             }
-            ExpToken::ParamToken(t) => f(engine,t.clone().with_ref(&rf))?,
-            ExpToken::Token(t) => f(engine,t.clone().with_ref(&rf))?
+            ExpToken::ParamToken(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
+            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),engine.memory)
         }
     }
 /*

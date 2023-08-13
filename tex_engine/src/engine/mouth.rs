@@ -36,6 +36,8 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     fn new(memory:&mut Memory<ET>) -> Self;
     fn new_with(tks:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self;
 
+    fn get_expansion(engine:&mut EngineRef<ET>) -> ExpansionContainer<ET>;
+    fn push_expansion(engine:&mut EngineRef<ET>,expansion:ExpansionContainer<ET>);
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
     fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
     /// Insert a [`File`] into the [`Mouth`], to be processed next
@@ -177,6 +179,14 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         StandardMouth{stack:tks.into_iter().rev().map(|t| TeXMouthSource::Token((t,true))).collect()}
     }
 
+    fn get_expansion(engine: &mut EngineRef<ET>) -> ExpansionContainer<ET> {
+        engine.memory.get_expansion_container()
+    }
+    fn push_expansion(engine: &mut EngineRef<ET>, expansion: ExpansionContainer<ET>) {
+        expansion.consume::<_,()>(engine.memory,|s| {
+            engine.mouth.stack.push(TeXMouthSource::Token(s))
+        });
+    }
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
     fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
         let mut source = engine.memory.get_expansion_container();
