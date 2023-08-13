@@ -90,7 +90,7 @@ pub trait Engine<ET:EngineType> {
 
         let everyjob = comps.state.get_primitive_toks("everyjob");
         if !everyjob.is_empty() {
-            comps.add_expansion(|comps,rs| for t in everyjob {rs.push(t)})
+            comps.add_expansion(|comps,rs| for t in everyjob {rs.push(t,comps.memory)})
         }
         let (s,mut r) = comps.split_stomach();
         while let Some(b) = s.next_shipout_box(&mut r)? {

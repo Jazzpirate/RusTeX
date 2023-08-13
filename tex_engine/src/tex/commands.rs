@@ -90,7 +90,7 @@ impl<ET:EngineType<CommandReference = Self>> CommandReference<ET> for () {
     fn new(base: &BaseCommand<ET>, source: &CommandSource<ET>) -> Self { () }
 }
 
-pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&ET::State,Token<ET>) -> Result<(),TeXError<ET>>;
+pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&mut EngineMut<ET>,Token<ET>) -> Result<(),TeXError<ET>>;
 pub type UnexpandableFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>) -> Result<(),TeXError<ET>>;
 pub type AssignmentFun<ET:EngineType> = fn(&mut EngineMut<ET>, CommandSource<ET>, bool) -> Result<(),TeXError<ET>>;
 pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut EngineMut<ET>, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;

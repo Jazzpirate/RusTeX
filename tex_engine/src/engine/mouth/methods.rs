@@ -4,7 +4,7 @@ use crate::engine::mouth::{Mouth, TokenSource};
 use crate::{debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineMut, EngineType};
 use crate::engine::gullet::Gullet;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{ExpansionContainer, Memory};
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::TokenCont;
@@ -32,11 +32,11 @@ impl<ET:EngineType> EngineMut<'_,ET> {
                 BaseToken::Char(c,_) if c.to_usize() == 61 => {
                     match self.get_next_token()? {
                         Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
-                        Some((tk,_)) => self.mouth.requeue(tk),
+                        Some((tk,_)) => self.mouth.requeue(tk,self.memory),
                         _ => ()
                     }
                 },
-                _ => self.mouth.requeue(tk)
+                _ => self.mouth.requeue(tk,self.memory)
             }
         }
         Ok(())
@@ -47,7 +47,8 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     pub fn get_argument(&mut self,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        self.mouth.get_argument(self.state,self.memory,f)
+        let (m,mut r) = self.split_mouth();
+        m.get_argument(&mut r,f)
     }
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
@@ -67,7 +68,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
                 }
                 _ => ()
             }
-            f(self.state,tk)?;
+            f(self,tk)?;
         }
         file_end!()
     }
@@ -86,7 +87,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
         m.with_mouth(&mut r,tks,f)
     }
 
-    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut TokenSource<ET>) -> R {
+    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R {
         let (m,mut r) = self.split_mouth();
         m.add_expansion(&mut r,f)
     }

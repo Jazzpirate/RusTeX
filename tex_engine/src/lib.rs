@@ -127,8 +127,8 @@ mod tests {
     fn engine() { /*crate::utils::with_stack_size(16 * 1024 * 1024,||*/ measure!(engine: {
         //error();
         //trace();
-        //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
-        //env_logger::init();
+        std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
+        env_logger::init();
         //warn();
 
         let outputs = Outputs {

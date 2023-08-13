@@ -117,7 +117,7 @@ pub fn expand_until_space<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<()
         Some(cmd) => match cmd.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => Ok(()), // eat one space
             _ => {
-                engine.mouth.requeue(cmd.source.cause);
+                engine.mouth.requeue(cmd.source.cause,engine.memory);
                 Ok(())
             }
         }
@@ -137,12 +137,12 @@ pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
                 } else {
-                    engine.mouth.requeue(next.source.cause);
+                    engine.mouth.requeue(next.source.cause,engine.memory);
                     break
                 }
             }
             _ => {
-                engine.mouth.requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause,engine.memory);
                 break
             }
         }
@@ -164,12 +164,12 @@ pub fn read_hex_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isn
                 if is_ascii_hex_digit(us) {
                     rets.push(us as u8);
                 } else {
-                    engine.mouth.requeue(next.source.cause);
+                    engine.mouth.requeue(next.source.cause,engine.memory);
                     break
                 }
             }
             _ => {
-                engine.mouth.requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause,engine.memory);
                 break
             }
         }
@@ -262,7 +262,7 @@ pub fn read_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result<E
                 Ok(val.tex_mult(float))
             }
             BaseCommand::Char { .. } => {
-                engine.mouth.requeue(cmd.source.cause);
+                engine.mouth.requeue(cmd.source.cause,engine.memory);
                 engine.skip_whitespace()?;
                 if engine.get_keyword( "true")? {
                     engine.skip_whitespace()?;
@@ -389,7 +389,7 @@ pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
         None => file_end!(),
         Some(next) => match next.command {
             BaseCommand::Char {char,..} => {
-                engine.mouth.requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause,engine.memory);
                 engine.skip_whitespace()?;
                 if engine.get_keyword("true")? {
                     engine.skip_whitespace()?;
@@ -553,12 +553,12 @@ pub fn read_float<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegati
                     in_float = true;
                 }
                 else {
-                    engine.mouth.requeue(next.source.cause);
+                    engine.mouth.requeue(next.source.cause,engine.memory);
                     break
                 }
             }
             _ => {
-                engine.mouth.requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause,engine.memory);
                 break
             }
         }

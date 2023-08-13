@@ -135,7 +135,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
         match ret.command {
             BaseCommand::Def(d) => {
                 engine.add_expansion(|engine,rs| {
-                    expand_def(&d,engine.state,&mut engine.mouth,ret.source,engine.memory,&mut |_,t| Ok(rs.push(t)))?;
+                    expand_def(&d,engine,ret.source,&mut |engine,t| Ok(rs.push(t,engine.memory)))?;
                     Ok(None)
                 })
             }
@@ -146,7 +146,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
             }
             BaseCommand::Expandable {apply,..} => {
                 engine.add_expansion(|engine,rs| {
-                    apply(engine,ret.source,&mut |_,t| Ok(rs.push(t)))?;
+                    apply(engine,ret.source,&mut |engine,t| Ok(rs.push(t,engine.memory)))?;
                     Ok(None)
                 })
             },

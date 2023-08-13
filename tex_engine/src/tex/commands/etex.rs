@@ -5,7 +5,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end};
 use crate::engine::{EngineMut, EngineType};
-use crate::engine::gullet::methods::{string_to_tokens, token_to_chars};
+use crate::engine::gullet::methods::{token_to_chars};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, ExpToken, ResolvedToken, TokenCont};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
@@ -215,13 +215,15 @@ pub static DETOKENIZE: &str = "detokenize";
 /// (except for ` `, which gets code [`Space`](CategoryCode::Space)).
 pub fn detokenize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"detokenize");
-    catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
+    let esc = engine.state.get_escapechar();
+    let cc = engine.state.get_catcode_scheme().clone();
+    catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
         BaseToken::Char(c,CategoryCode::Parameter) => {
-            token_to_chars::<ET,_>(&next,s.get_escapechar(),s.get_catcode_scheme(),true,|t|f(s,t))?;
-            token_to_chars::<ET,_>(&next,s.get_escapechar(),s.get_catcode_scheme(),true,|t|f(s,t))?;
+            token_to_chars::<ET,_>(&next,esc,&cc,true,|t|f(engine,t))?;
+            token_to_chars::<ET,_>(&next,esc,&cc,true,|t|f(engine,t))?;
             Ok(())
         }
-        _ => token_to_chars::<ET,_>(&next,s.get_escapechar(),s.get_catcode_scheme(),true,|t|f(s,t))
+        _ => token_to_chars::<ET,_>(&next,esc,&cc,true,|t|f(engine,t))
     }) => (DETOKENIZE,cmd));
     Ok(())
 }
@@ -235,9 +237,9 @@ pub fn dimexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) 
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
+                _ => engine.mouth.requeue(next,engine.memory)
             }
-            _ => engine.mouth.requeue(next)
+            _ => engine.mouth.requeue(next,engine.memory)
         }
     }
     Ok(ret)
@@ -247,8 +249,8 @@ pub static E_TEX_REVISION: &str = ".6";
 pub static E_TEX_VERSION: i64 = 2;
 
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
-pub fn eTeXrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-    string_to_tokens::<ET>(E_TEX_REVISION.as_bytes(),state,f)
+pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineMut<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    engine.string_to_tokens(E_TEX_REVISION.as_bytes(),f)
 }
 
 pub static ETEXVERSION: &str = "eTeXversion";
@@ -276,9 +278,9 @@ pub fn glueexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
+                _ => engine.mouth.requeue(next,engine.memory)
             }
-            _ => engine.mouth.requeue(next)
+            _ => engine.mouth.requeue(next,engine.memory)
         }
     }
     Ok(ret)
@@ -324,9 +326,9 @@ pub fn muexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
+                _ => engine.mouth.requeue(next,engine.memory)
             }
-            _ => engine.mouth.requeue(next)
+            _ => engine.mouth.requeue(next,engine.memory)
         }
     }
     Ok(ret)
@@ -342,9 +344,9 @@ pub fn numexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
+                _ => engine.mouth.requeue(next,engine.memory)
             }
-            _ => engine.mouth.requeue(next)
+            _ => engine.mouth.requeue(next,engine.memory)
         }
     }
     Ok(ret)
@@ -442,7 +444,7 @@ pub fn unless<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -
 pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_expandable!(detokenize,engine,(e,c,f) =>detokenize::<ET>(e,c,f));
     register_dim!(dimexpr,engine,(e,c) => dimexpr::<ET>(e,c));
-    register_expandable!(eTeXrevision,engine,(e,c,f) => eTeXrevision::<ET>(e.state,f));
+    register_expandable!(eTeXrevision,engine,(e,_,f) => eTeXrevision::<ET>(e,f));
     register_int!(eTeXversion,engine,(e,c) => eTeXversion::<ET>(c));
     register_tok_assign!(everyeof,engine);
     register_expandable!(expanded,engine,(e,c,f) => expanded::<ET>(e,c,f));

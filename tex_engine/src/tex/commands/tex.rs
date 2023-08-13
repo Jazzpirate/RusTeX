@@ -7,7 +7,7 @@ use std::path::Components;
 use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{tokens_to_string, string_to_tokens, token_to_chars, resolve_token};
+use crate::engine::gullet::methods::{tokens_to_string, token_to_chars, resolve_token};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
@@ -298,7 +298,7 @@ pub fn csname<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, 
         None => engine.state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
     }
-    engine.mouth.requeue(Token::new(BaseToken::CS(str),None));
+    engine.mouth.requeue(Token::new(BaseToken::CS(str),None),engine.memory);
     Ok(())
 }
 
@@ -614,7 +614,7 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         match engine.state.stack_pop() {
             Some((mut v,GroupType::CS)) => {
                 for t in v.drain(..) {
-                    s.push(t);
+                    s.push(t,engine.memory);
                 }
                 Ok(())
             }
@@ -625,7 +625,7 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 
 pub fn endinput<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
-    engine.mouth.endinput(engine.state);
+    engine.mouth.endinput(engine.state,engine.memory);
     Ok(())
 }
 
@@ -721,10 +721,10 @@ pub fn expandafter<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     match engine.expand(resolve_token::<ET>(engine.state,next))? {
         None => (),
         Some(next) => {
-            engine.mouth.requeue(next.source.cause);
+            engine.mouth.requeue(next.source.cause,engine.memory);
         }
     }
-    engine.mouth.requeue(first);
+    engine.mouth.requeue(first,engine.memory);
     Ok(())
 }
 
@@ -823,8 +823,8 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
     engine.set_command_for_tk(cs,newcmd,global);
-    engine.add_expansion(move |_,s| {
-        s.push(first);s.push(second);Ok(())
+    engine.add_expansion(move |e,s| {
+        s.push(first,e.memory);s.push(second,e.memory);Ok(())
     })
 }
 
@@ -881,7 +881,7 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                 engine.state.stack_push(GroupType::Box(BoxMode::H));
                 engine.add_expansion(|engine,s| {
                     for t in engine.state.get_primitive_toks("everyhbox") {
-                        s.push(t.clone());
+                        s.push(t.clone(),engine.memory);
                     }
                 });
                 return Ok(Box::new(move |e,children| {
@@ -1010,7 +1010,7 @@ pub fn get_if_token<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSourc
                 (Some(ConditionalBranch::None(_)),_) => true,
                 _ => false
             }) => {
-                engine.mouth.requeue(r.source.cause);
+                engine.mouth.requeue(r.source.cause,engine.memory);
                 return Ok(None)
             }
             _ if e => match engine.expand(r)? {
@@ -1150,7 +1150,7 @@ pub fn ignorespaces<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
             Some(sc) => match sc.command {
                 BaseStomachCommand::Space => (),
                 _ => {
-                    engine.mouth.requeue(sc.source.cause);
+                    engine.mouth.requeue(sc.source.cause,engine.memory);
                     return Ok(())
                 }
             }
@@ -1171,7 +1171,7 @@ pub fn immediate<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
                 Ok(())
             }
             _ => {
-                engine.mouth.requeue(sc.source.cause);
+                engine.mouth.requeue(sc.source.cause,engine.memory);
                 Ok(())
             }
         }
@@ -1204,10 +1204,11 @@ pub fn inputlineno<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     ) => ("month",cmd)))
 }
 
-pub fn jobname<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
+pub fn jobname<ET:EngineType>(engine:&mut EngineMut<ET>,f:TokenCont<ET>)
                          -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"jobname");
-    string_to_tokens::<ET>(state.get_jobname().as_bytes(),state,f)
+    let jobname = engine.state.get_jobname().to_string();
+    engine.string_to_tokens(jobname.as_bytes(),f)
 }
 
 pub static LCCODE: &str = "lccode";
@@ -1283,12 +1284,12 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\lowercase");
     engine.add_expansion(|engine,rs|{
-        catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
+        catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
             BaseToken::Char(c,cc) => {
-                let nc = s.get_lccode(c);
-                Ok(rs.push(Token::new(BaseToken::Char(nc, *cc), None)))
+                let nc = engine.state.get_lccode(c);
+                Ok(rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory))
             }
-            _ => Ok(rs.push(next))
+            _ => Ok(rs.push(next,engine.memory))
         }) => (LOWERCASE,cmd));
         Ok(())
     })
@@ -1346,8 +1347,8 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
     match catch_prim!(engine.get_next_token() => (MEANING,cmd)) {
         None => file_end_prim!(MEANING,cmd),
         Some((_,false)) => {
-            if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-            string_to_tokens::<ET>(RELAX.as_bytes(),engine.state,f)
+            if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+            engine.string_to_tokens(RELAX.as_bytes(),f)
         }
         Some((t,_)) => {
             let n:ResolvedToken<ET> = resolve_token::<ET>(engine.state,t);
@@ -1363,178 +1364,178 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
                 BaseCommand::Char{char,catcode:CategoryCode::Letter} => format!("the letter {}",char.char_str()),
                 BaseCommand::Char{char,..} => format!("the character {}",char.char_str()),
                 BaseCommand::Expandable {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Unexpandable {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::OpenBox {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Whatsit {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Assignment {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Relax => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(RELAX.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(RELAX.as_bytes(),f)
                 }
                 BaseCommand::Conditional {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::FontCommand {name,..} => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Int(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Int(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Int(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Dim(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Dim(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Dim(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Skip(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Skip(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Skip(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::MuSkip(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::MuSkip(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::MuSkip(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Toks(ValueCommand::Value {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Toks(ValueCommand::Complex {name,..}) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Toks(ValueCommand::Primitive(name)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                    return string_to_tokens::<ET>(name.as_bytes(),engine.state,f)
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::Int(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("count{}",u)
                 }
                 BaseCommand::Dim(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("dimen{}",u)
                 }
                 BaseCommand::Skip(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("skip{}",u)
                 }
                 BaseCommand::MuSkip(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("muskip{}",u)
                 }
                 BaseCommand::Toks(ValueCommand::Register(u)) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("toks{}",u)
                 }
                 BaseCommand::CharDef(c) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("char\"{:X}",c.to_usize())
                 }
                 BaseCommand::MathChar(c) => {
-                    if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("mathchar\"{:X}",c)
                 }
                 BaseCommand::Font(fnt) => {
                     format!("select font {}",fnt)
                 }
                 BaseCommand::None => {
-                    return string_to_tokens::<ET>("undefined".as_bytes(),engine.state,f)
+                    return engine.string_to_tokens("undefined".as_bytes(),f)
                 }
                 BaseCommand::Def(d) => {
                     let cc = engine.state.get_catcode_scheme().clone();
                     if d.protected {
-                        if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                        string_to_tokens::<ET>("protected ".as_bytes(),engine.state,f)?
+                        if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        engine.string_to_tokens("protected ".as_bytes(),f)?
                     }
                     if d.long {
-                        if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                        string_to_tokens::<ET>("long ".as_bytes(),engine.state,f)?
+                        if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        engine.string_to_tokens("long ".as_bytes(),f)?
                     }
                     if d.outer {
-                        if let Some(c) = esc { f(engine.state,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
-                        string_to_tokens::<ET>("outer ".as_bytes(),engine.state,f)?
+                        if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
+                        engine.string_to_tokens("outer ".as_bytes(),f)?
                     }
-                    string_to_tokens::<ET>("macro:".as_bytes(),engine.state,f)?;
+                    engine.string_to_tokens("macro:".as_bytes(),f)?;
                     let mut i = 0;
                     for s in &d.signature {
                         match s {
                             ParamToken::Token(t) => {
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine.state,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
                             }
                             ParamToken::Param => {
                                 i += 1;
-                                string_to_tokens::<ET>(format!("#{}", i).as_bytes(),engine.state,f);
+                                engine.string_to_tokens(format!("#{}", i).as_bytes(),f);
                             }
                         }
                     }
-                    if d.endswithbrace { f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None))? }
-                    f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
-                    f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None))?;
+                    if d.endswithbrace { f(engine,Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None))? }
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None))?;
                     for t in &d.replacement {
                         match t {
-                            ExpToken::Token(t) => token_to_chars::<ET,_>(t,esc.clone(),&cc,true,&mut |t| f(engine.state,t))?,
+                            ExpToken::Token(t) => token_to_chars::<ET,_>(t,esc.clone(),&cc,true,&mut |t| f(engine,t))?,
                             ExpToken::ParamToken(t) => {
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine.state,t))?;
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine.state,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
                             }
                             ExpToken::Param(t, i) => {
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine.state,t))?;
-                                string_to_tokens::<ET>(i.to_string().as_bytes(),engine.state,f)?
+                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
+                                engine.string_to_tokens(i.to_string().as_bytes(),f)?
                             }
                         }
                     }
                     return Ok(())
                 }
             };
-            string_to_tokens::<ET>(string.as_bytes(),engine.state,f)
+            engine.string_to_tokens(string.as_bytes(),f)
         }
     }
 }
@@ -1749,10 +1750,10 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
         Some((t,_)) => {
             let res = resolve_token::<ET>(engine.state,t);
             match res.command {
-                BaseCommand::Def(_) => engine.mouth.push_noexpand(res.source.cause),
-                BaseCommand::Expandable {..} => engine.mouth.push_noexpand(res.source.cause),
-                BaseCommand::Conditional {..} => engine.mouth.push_noexpand(res.source.cause),
-                _ => f(engine.state,res.source.cause)?
+                BaseCommand::Def(_) => engine.mouth.push_noexpand(res.source.cause,engine.memory),
+                BaseCommand::Expandable {..} => engine.mouth.push_noexpand(res.source.cause,engine.memory),
+                BaseCommand::Conditional {..} => engine.mouth.push_noexpand(res.source.cause,engine.memory),
+                _ => f(engine,res.source.cause)?
             }
         }
     }
@@ -1764,7 +1765,7 @@ pub fn number<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\number");
     let num = catch_prim!(engine.get_int() => (NUMBER,cmd));
-    string_to_tokens::<ET>(num.to_i64().to_string().as_bytes(),engine.state,f)
+    engine.string_to_tokens(num.to_i64().to_string().as_bytes(),f)
 }
 
 pub static OPENIN: &str = "openin";
@@ -1950,7 +1951,7 @@ pub fn romannumeral<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
         num -= 1;
         ret.push(b'i');
     }
-    string_to_tokens::<ET>(&ret,engine.state,f)
+    engine.string_to_tokens(&ret,f)
 }
 
 pub static SETBOX: &str = "setbox";
@@ -2070,7 +2071,11 @@ pub fn string<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f
     debug_log!(trace=>"string");
     match catch_prim!(engine.get_next_token() => (STRING,cmd)) {
         None => file_end_prim!("string",cmd),
-        Some((t,_)) => token_to_chars(&t,engine.state.get_escapechar(),engine.state.get_catcode_scheme(),false,&mut |t| f(engine.state,t))?
+        Some((t,_)) => {
+            let esc = engine.state.get_escapechar();
+            let cat = engine.state.get_catcode_scheme().clone();
+            token_to_chars(&t,esc,&cat,false,&mut |t| f(engine,t))?
+        }
     }
     Ok(())
 }
@@ -2083,25 +2088,25 @@ pub fn the<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:To
         Some(c) => match c.command {
             BaseCommand::Int(ass) => {
                 let val = ass.get(engine,c.source)?;
-                string_to_tokens::<ET>(format!("{}",val).as_bytes(),engine.state,f)
+                engine.string_to_tokens(format!("{}",val).as_bytes(),f)
             }
             BaseCommand::Dim(ass) => {
                 let val = ass.get(engine,c.source)?;
-                string_to_tokens::<ET>(format!("{}",val).as_bytes(),engine.state,f)
+                engine.string_to_tokens(format!("{}",val).as_bytes(),f)
             }
             BaseCommand::Skip(ass) => {
                 let val = ass.get(engine,c.source)?;
-                string_to_tokens::<ET>(format!("{}",val).as_bytes(),engine.state,f)
+                engine.string_to_tokens(format!("{}",val).as_bytes(),f)
             }
             BaseCommand::MuSkip(ass) => {
                 let val = ass.get(engine,c.source)?;
-                string_to_tokens::<ET>(format!("{}",val).as_bytes(),engine.state,f)
+                engine.string_to_tokens(format!("{}",val).as_bytes(),f)
             }
             BaseCommand::Toks(ass) => {
-                for t in ass.get(engine, c.source)? { f(engine.state, t)? }
+                for t in ass.get(engine, c.source)? { f(engine, t)? }
                 Ok(())
             }
-            BaseCommand::CharDef(c) => string_to_tokens::<ET>(c.to_usize().to_string().as_bytes(),engine.state,f),
+            BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().as_bytes(),f),
             _ => throw!("Expected a value after \\the; got: {}", c.source.cause => c.source.cause)
         }
         None => file_end_prim!(THE,cmd)
@@ -2182,12 +2187,12 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\uppercase");
     engine.add_expansion(|engine,rs| {
-        catch_prim!(engine.expand_until_group(&mut |s,next| match &next.base {
+        catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
             BaseToken::Char(c,cc) => {
-                let nc = s.get_uccode(c);
-                Ok(rs.push(Token::new(BaseToken::Char(nc, *cc), None)))
+                let nc = engine.state.get_uccode(c);
+                Ok(rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory))
             }
-            _ => Ok(rs.push(next))
+            _ => Ok(rs.push(next,engine.memory))
         }) => (UPPERCASE,cmd));
             Ok(())
     })
@@ -2381,7 +2386,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_expandable!(input,engine,(e,cmd,f) =>input::<ET>(e,cmd));
     register_int!(inputlineno,engine,(e,c) => inputlineno::<ET>(e,c));
     register_int_assign!(interlinepenalty,engine);
-    register_expandable!(jobname,engine,(e,cmd,f) =>jobname::<ET>(e.state,f));
+    register_expandable!(jobname,engine,(e,_,f) =>jobname::<ET>(e,f));
     register_int_assign!(language,engine);
     register_value_assign_int!(lccode,engine);
     register_int_assign!(lefthyphenmin,engine);

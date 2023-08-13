@@ -5,7 +5,7 @@ use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, regist
 use crate::engine::{EngineMut, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{string_to_tokens, tokens_to_string};
+use crate::engine::gullet::methods::{tokens_to_string};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
@@ -78,7 +78,7 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     match &*x {
         None => Ok(()),
         Some(v) =>{
-            string_to_tokens::<ET>(v.len().to_string().as_bytes(),engine.state,fun)
+            engine.string_to_tokens(v.len().to_string().as_bytes(),fun)
         }
     }
 }
@@ -103,9 +103,9 @@ pub static PDFSTRCMP : &str = "pdfstrcmp";
     let str1 = catch_prim!(engine.get_braced_string() => (PDFSTRCMP,cmd));
     let str2 = catch_prim!(engine.get_braced_string() => (PDFSTRCMP,cmd));
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    if str1==str2 {f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
-        else if str1 < str2 { string_to_tokens::<ET>("-1".as_bytes(),engine.state,f)}
-        else {f(engine.state,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
+    if str1==str2 {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
+        else if str1 < str2 { engine.string_to_tokens("-1".as_bytes(),f)}
+        else {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
 }
 
 /// "pdftexversion"
@@ -128,9 +128,9 @@ pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
 /// "pdftexrevision"
 pub static PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
-pub fn pdftexrevision<ET:EngineType>(state:&mut ET::State,f:TokenCont<ET>)
+pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineMut<ET>,f:TokenCont<ET>)
     -> Result<(),TeXError<ET>> {
-    string_to_tokens::<ET>(PDFTEX_REVISION.to_string().as_bytes(),state,f)
+    engine.string_to_tokens(PDFTEX_REVISION.to_string().as_bytes(),f)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
@@ -151,7 +151,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
-    register_expandable!(pdftexrevision,engine,(e,cmd,f) =>pdftexrevision::<ET>(e.state,f));
+    register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(c));
     register_dim_assign!(pdfvorigin,engine);
     register_int_assign!(tracingstacklevels,engine);

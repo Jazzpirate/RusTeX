@@ -100,7 +100,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<String,TeX
             }
             BaseCommand::Char {char,..} => ret.push_str(std::str::from_utf8(char.as_bytes()).unwrap()), //(char.as_bytes())),//ret.push(char.to_char()),
             _ => {
-                engine.mouth.requeue(next.source.cause);
+                engine.mouth.requeue(next.source.cause,engine.memory);
                 return Ok(ret)
             }
         }
@@ -111,15 +111,15 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<String,TeX
 
 pub fn get_braced_string<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<String,TeXError<ET>> {
     let mut ret = vec!();
-    engine.get_expanded_group(false,false,true,&mut |s,t| {
+    engine.get_expanded_group(false,false,true,&mut |engine,t| {
         match &t.base {
             BaseToken::Char(c,_) => {
                 for u in c.as_bytes() { ret.push(*u) }
             }
             BaseToken::CS(name) => {
-                if let Some(c) = s.get_escapechar() { for u in c.as_bytes() { ret.push(*u) } }
+                if let Some(c) = engine.state.get_escapechar() { for u in c.as_bytes() { ret.push(*u) } }
                 for c in name.as_vec() { for u in c.as_bytes() { ret.push(*u) } }
-                if name.len() > 1 || *s.get_catcode_scheme().get(&name.as_vec()[0]) != CategoryCode::Letter {
+                if name.len() > 1 || *engine.state.get_catcode_scheme().get(&name.as_vec()[0]) != CategoryCode::Letter {
                     ret.push(b' ')
                 }
             }
@@ -141,18 +141,18 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_prote
             match res.command {
                 BaseCommand::Char { catcode: CategoryCode::BeginGroup, .. } => {
                     ingroup += 1;
-                    f(engine.state, res.source.cause)?
+                    f(engine, res.source.cause)?
                 }
                 BaseCommand::Char { catcode: CategoryCode::EndGroup, .. } => {
                     if ingroup == 0 { return Ok(()) } else { ingroup -= 1; }
-                    f(engine.state, res.source.cause)?
+                    f(engine, res.source.cause)?
                 }
                 BaseCommand::Def(d) if d.protected && !expand_protected =>
-                    f(engine.state, res.source.cause)?,
+                    f(engine, res.source.cause)?,
                 BaseCommand::Expandable { name, .. } if name == NOEXPAND => {
                     match engine.get_next_token()? {
                         None => file_end!(),
-                        Some((t, _)) => f(engine.state, t)?
+                        Some((t, _)) => f(engine, t)?
                     }
                 },
                 BaseCommand::Expandable { name, apply } if name == UNEXPANDED && edef_like => {
@@ -174,11 +174,11 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_prote
                     BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
                 }
                 _ => match engine.expand(res)? {
-                    Some(res) => f(engine.state, res.source.cause)?,
+                    Some(res) => f(engine, res.source.cause)?,
                     _ => ()
                 }
             }
-        } else { f(engine.state,next.0)?}
+        } else { f(engine,next.0)?}
     }
     file_end!()
 }
@@ -300,14 +300,14 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> R
     let mut current = String::new();
     engine.add_expansion(|engine,rs|{
         while let Some(next) = engine.get_next_unexpandable()? {
-            rs.push(next.source.cause);
+            rs.push(next.source.cause,engine.memory);
             match next.command {
                 BaseCommand::Char {char,..} => {
                     let us = char.to_usize();
                     if us < 256 {
                         current.push(us as u8 as char);
                         if current == kw {
-                            rs.reset();
+                            rs.reset(engine.memory);
                             return Ok(true)
                         }
                         else if !kw.starts_with(&current) {
@@ -331,7 +331,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Ve
     let mut current = String::new();
     engine.add_expansion(|engine,rs| {
         while let Some(next) = engine.get_next_unexpandable()? {
-            rs.push(next.source.cause.clone());
+            rs.push(next.source.cause.clone(),engine.memory);
             match next.command {
                 BaseCommand::Char{char,..} => {
                     let us = char.to_usize();
@@ -342,12 +342,12 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Ve
                             return Ok(None)
                         }
                         else if keywords.len() == 1 && keywords[0] == current {
-                            rs.reset();
+                            rs.reset(engine.memory);
                             return Ok(Some(keywords[0]))
                         }
                     } else if keywords.contains(&current.as_str()) {
-                        engine.mouth.requeue(next.source.cause);
-                        rs.reset();
+                        engine.mouth.requeue(next.source.cause,engine.memory);
+                        rs.reset(engine.memory);
                         keywords = keywords.into_iter().filter(|s| s == &current).collect();
                         return Ok(Some(keywords[0]))
                     } else {
@@ -355,8 +355,8 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Ve
                     }
                 }
                 _ if keywords.contains(&current.as_str()) => {
-                    engine.mouth.requeue(next.source.cause);
-                    rs.reset();
+                    engine.mouth.requeue(next.source.cause,engine.memory);
+                    rs.reset(engine.memory);
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Ok(Some(keywords[0]))
                 }
@@ -461,15 +461,6 @@ pub fn tokens_to_string<ET:EngineType>(v:Vec<Token<ET>>,escapechar:Option<ET::Ch
     }
     String::from_utf8(s).unwrap()
 }
-
-pub fn string_to_tokens<ET:EngineType>(str:&[u8],state:&ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-    for u in str {
-        let c = ET::Char::from(*u);
-        f(state,Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None))?;
-    }
-    Ok(())
-}
-
 
 pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Token<ET>,TeXError<ET>> {
     engine.skip_whitespace()?;
@@ -611,12 +602,12 @@ impl<ET:EngineType> EngineMut<'_,ET> {
                     if chars.contains(&c) {
                         Ok(Some(c))
                     } else {
-                        self.mouth.requeue(res.source.cause);
+                        self.mouth.requeue(res.source.cause,self.memory);
                         Ok(None)
                     }
                 }
                 _ => {
-                    self.mouth.requeue(res.source.cause);
+                    self.mouth.requeue(res.source.cause,self.memory);
                     Ok(None)
                 }
             }
@@ -629,7 +620,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             Some(res) => match res.command {
                 BaseCommand::Char { char:c, .. } if c.as_bytes() == [char] => Ok(true),
                 _ => {
-                    self.mouth.requeue(res.source.cause);
+                    self.mouth.requeue(res.source.cause,self.memory);
                     Ok(false)
                 }
             }
@@ -641,11 +632,20 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    self.mouth.get_until_endgroup(self.state,self.memory,f)
+                    let (m,mut re) = self.split_mouth();
+                    m.get_until_endgroup(&mut re,f)
                 }
                 _ => throw!("begin group expected")
             }
         }
+    }
+
+    pub fn string_to_tokens(&mut self,str:&[u8],f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+        for u in str {
+            let c = ET::Char::from(*u);
+            f(self,Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None))?;
+        }
+        Ok(())
     }
 
     pub fn expand(&mut self,r:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {

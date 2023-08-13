@@ -168,7 +168,7 @@ macro_rules! register_muskip {
 macro_rules! register_int_assign {
     ($name:ident,$engine:ident) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
-            crate::tex::commands::BaseCommand::Int(crate::tex::commands::ValueCommand::Primitive(stringify!(name))) /*{
+            crate::tex::commands::BaseCommand::Int(crate::tex::commands::ValueCommand::Primitive(stringify!($name))) /*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_int(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_int(s,g,c,stringify!($name),b)?))),
             name:stringify!($name),index:None
@@ -180,7 +180,7 @@ macro_rules! register_int_assign {
 macro_rules! register_dim_assign {
     ($name:ident,$engine:ident) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
-            crate::tex::commands::BaseCommand::Dim(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
+            crate::tex::commands::BaseCommand::Dim(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_dim(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_dim(s,g,c,stringify!($name),b)?))),
             name:stringify!($name),index:None
@@ -191,7 +191,7 @@ macro_rules! register_dim_assign {
 macro_rules! register_skip_assign {
     ($name:ident,$engine:ident) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
-            crate::tex::commands::BaseCommand::Skip(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
+            crate::tex::commands::BaseCommand::Skip(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_skip(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_skip(s,g,c,stringify!($name),b)?))),
             name:stringify!($name),index:None
@@ -202,7 +202,7 @@ macro_rules! register_skip_assign {
 macro_rules! register_muskip_assign {
     ($name:ident,$engine:ident) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
-            crate::tex::commands::BaseCommand::MuSkip(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
+            crate::tex::commands::BaseCommand::MuSkip(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_muskip(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_muskip(s,g,c,stringify!($name),b)?))),
             name:stringify!($name),index:None
@@ -215,7 +215,7 @@ macro_rules! register_muskip_assign {
 macro_rules! register_tok_assign {
     ($name:ident,$engine:ident) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
-            crate::tex::commands::BaseCommand::Toks(crate::tex::commands::ValueCommand::Primitive(stringify!(name)))/*{
+            crate::tex::commands::BaseCommand::Toks(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_toks(stringify!($name)).map(|v| v.clone()).unwrap_or(vec!()))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_toks(s,g,c,stringify!($name),b)?))),
             name:stringify!($name),index:None
@@ -369,21 +369,21 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut ET::Mouth, cmd:CommandSource<ET>,memory:&mut Memory<ET>, f:TokenCont<ET>)
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET>> {
-    debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,mouth.preview(250).replace("\n","\\n"));
+    debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,engine.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
         // No arguments, we just expand the replacement, replacing `##` with `#`
-        return expand_simple(d,cmd,state,f)
+        return expand_simple(d,cmd,engine,f)
     }
     if d.arity == 0 {
         // No arguments, we just expand the replacement, but need to eat the delimiters in the signature
         for elem in &d.signature {
             match elem {
                 ParamToken::Token(delim) => {
-                    if let Some((n,_)) = catch!(mouth.get_next(state,memory) => cmd.cause) {
+                    if let Some((n,_)) = catch!(engine.get_next_token() => cmd.cause) {
                         if n != *delim {
                             throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                         }
@@ -394,7 +394,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut E
                 _=> unsafe{ unreachable_unchecked() } // since arity=0, there can only be tokens
             }
         }
-        return expand_simple(d,cmd,state,f)
+        return expand_simple(d,cmd,engine,f)
     }
 
     /*
@@ -403,19 +403,19 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, state:&mut ET::State, mouth:&mut E
     // The general case:
     // We parse the arguments according to the signature, and then substitute them into the replacement
      */
-    let mut args = memory.get_args();
-    read_arguments(d, mouth, state, &cmd, &mut args,memory)?;
-    let r = replace(d, cmd, state, &mut args, f);
-    memory.return_args(args);
+    let mut args = engine.memory.get_args();
+    read_arguments(d, engine, &cmd, &mut args)?;
+    let r = replace(d, cmd, engine, &mut args, f);
+    engine.memory.return_args(args);
     r
 }
 
-fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET::State,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,engine:&mut EngineMut<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     let rf = ET::TokenReference::from_expansion(&cmd);
     for r in &d.replacement {
         match r {
-            ExpToken::Token(t) => f(state,t.clone().with_ref(&rf))?,
-            ExpToken::ParamToken(t) => f(state,t.clone().with_ref(&rf))?,
+            ExpToken::Token(t) => f(engine,t.clone().with_ref(&rf))?,
+            ExpToken::ParamToken(t) => f(engine,t.clone().with_ref(&rf))?,
             _ => unreachable!()
         }
     }
@@ -425,14 +425,14 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,state:&mut ET:
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut ET::State, cmd:&CommandSource<ET>,args:&mut [Vec<Token<ET>>;9],memory:&mut Memory<ET>)
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&CommandSource<ET>,args:&mut [Vec<Token<ET>>;9])
                                  -> Result<(),TeXError<ET>> {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
         match next {
             ParamToken::Token(delim) => { // eat the delimiter
-                if let Some((n,_)) = catch!(mouth.get_next(state,memory) => cmd.cause.clone()) {
+                if let Some((n,_)) = catch!(engine.get_next_token() => cmd.cause.clone()) {
                     if n != *delim {
                         throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
                     }
@@ -446,11 +446,11 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                     arg.clear();
                     argnum += 1;
                     'L: loop {
-                        match if d.long {catch!({mouth.get_next(state,memory)} => cmd.cause.clone())}
-                        else {catch!({mouth.get_next_nopar(state,memory)} => cmd.cause.clone())} {
+                        match if d.long {catch!({engine.get_next_token()} => cmd.cause.clone())}
+                        else {catch!({engine.mouth.get_next_nopar(engine.state,engine.memory)} => cmd.cause.clone())} {
                             Some((t,_)) => {
                                 if t.catcode() == CategoryCode::BeginGroup {
-                                    mouth.requeue(t);
+                                    engine.mouth.requeue(t,engine.memory);
                                     break 'L;
                                 } else {
                                     arg.push(t);
@@ -464,13 +464,16 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                     let arg = &mut args[argnum];
                     arg.clear();
                     argnum += 1;
-                    catch!(mouth.skip_whitespace(state,memory) => cmd.cause.clone());
-                    if d.long {catch!(mouth.get_argument(state,memory,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
-                    else {catch!(mouth.get_argument_nopar(state,memory,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())};
+                    catch!(engine.skip_whitespace() => cmd.cause.clone());
+                    if d.long {catch!(engine.get_argument(&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
+                    else {
+                        let (m,mut e) = engine.split_mouth();
+                        catch!(m.get_argument_nopar(&mut e,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())
+                    };
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut args[argnum];
-                    let mut delims = memory.get_token_vec();
+                    let mut delims = engine.memory.get_token_vec();
                     arg.clear();
                     argnum += 1;
                     while let Some(ParamToken::Token(t)) = iter.peek() {
@@ -480,8 +483,8 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
-                        match if d.long {catch!({mouth.get_next(state,memory)} => cmd.cause.clone())}
-                        else {catch!({mouth.get_next_nopar(state,memory)} => cmd.cause.clone())} {
+                        match if d.long {catch!({engine.get_next_token()} => cmd.cause.clone())}
+                        else {catch!({engine.mouth.get_next_nopar(engine.state,engine.memory)} => cmd.cause.clone())} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
                                 if arg.len() == 0 {
@@ -528,7 +531,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
                         }
                         _ => ()
                     }
-                    memory.return_token_vec(delims)
+                    engine.memory.return_token_vec(delims)
                 }
             }
         }
@@ -536,7 +539,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, mouth:&mut ET::Mouth, state:&mut
     Ok(())
 }
 
-fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, state: &mut ET::State,args:&[Vec<Token<ET>>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut EngineMut<ET>,args:&[Vec<Token<ET>>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     let rf = ET::TokenReference::from_expansion(&cmd);
     #[cfg(debug_assertions)]
     {
@@ -550,11 +553,11 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, state: &mut ET::Sta
         match next {
             ExpToken::Param(_,idx) => {
                 for t in args[*idx as usize].iter() {
-                    f(state,t.clone().with_ref(&rf))?
+                    f(engine,t.clone().with_ref(&rf))?
                 }
             }
-            ExpToken::ParamToken(t) => f(state,t.clone().with_ref(&rf))?,
-            ExpToken::Token(t) => f(state,t.clone().with_ref(&rf))?
+            ExpToken::ParamToken(t) => f(engine,t.clone().with_ref(&rf))?,
+            ExpToken::Token(t) => f(engine,t.clone().with_ref(&rf))?
         }
     }
 /*
@@ -595,7 +598,7 @@ pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSo
                     Some((next,_)) => {
                         match &next.base {
                             BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                                engine.mouth.requeue(next);
+                                engine.mouth.requeue(next,engine.memory);
                                 return Ok((true, arity, params))
                             }
                             BaseToken::Char(c,_) => {
@@ -613,7 +616,7 @@ pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSo
                 }
             }
             BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                engine.mouth.requeue(next);
+                engine.mouth.requeue(next,engine.memory);
                 return Ok((false,arity,params))
             }
             BaseToken::Char(_,CategoryCode::EndGroup) => throw!("Unexpected end of group" => cmd.cause),

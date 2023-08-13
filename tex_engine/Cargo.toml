@@ -38,7 +38,7 @@ log={version="0.4.19",features=["kv_unstable"]}
 ahash = "0.8.3"
 hashbrown = {version="0.14.0",features=["raw"]}
 array-init = "2.1.0"
-# string-interner = "0.14.0"
+string-interner = "0.14.0"
 #interned = "0.1.1"
 #staticize = "0.1.1"
 #bumpalo = {version ="3.13.0", features = ["collections"]}
