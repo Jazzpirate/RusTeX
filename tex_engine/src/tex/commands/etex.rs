@@ -5,7 +5,6 @@ use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end};
 use crate::engine::{EngineMut, EngineType};
-use crate::engine::gullet::methods::{token_to_chars};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, ExpToken, ResolvedToken, TokenCont};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
@@ -219,11 +218,11 @@ pub fn detokenize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
     let cc = engine.state.get_catcode_scheme().clone();
     catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
         BaseToken::Char(c,CategoryCode::Parameter) => {
-            token_to_chars::<ET,_>(&next,esc,&cc,true,|t|f(engine,t))?;
-            token_to_chars::<ET,_>(&next,esc,&cc,true,|t|f(engine,t))?;
+            engine.token_to_others(&next,true,f)?;
+            engine.token_to_others(&next,true,f)?;
             Ok(())
         }
-        _ => token_to_chars::<ET,_>(&next,esc,&cc,true,|t|f(engine,t))
+        _ => engine.token_to_others(&next,true,f)
     }) => (DETOKENIZE,cmd));
     Ok(())
 }
@@ -308,7 +307,7 @@ pub fn ifdefined<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
             BaseToken::Char(c,CategoryCode::Active) =>
                 Ok(engine.state.get_ac_command(&c).is_some()),
             BaseToken::CS(name) => {
-                debug_log!(trace => "ifdefined: {}",name.to_string());
+                debug_log!(trace => "ifdefined: {}",name.to_str(engine.memory));
                 Ok(engine.state.get_command(&name).is_some())
             }
             _ => throw!("Expected a control sequence, got: {:?}",t => cmd.cause)
@@ -394,7 +393,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
     let newcmd = catch_prim!(engine.get_control_sequence() => (READLINE,cmd));
     let mut ret = vec!();
     catch_prim!(file.read::<ET,_>(engine.memory,&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READLINE,cmd));
-    debug_log!(trace=>"readline: {} = {}",newcmd,TokenList(&ret));
+    debug_log!(trace=>"readline: {} = {}",newcmd.to_str(engine.memory,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.memory));
 
     let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);

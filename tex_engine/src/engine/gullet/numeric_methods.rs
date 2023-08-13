@@ -50,8 +50,11 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Int,TeXEr
                             Some((tk,_)) => {
                                 let c = match &tk.base {
                                     BaseToken::Char(c,_) => *c,
-                                    BaseToken::CS(str) if str.len() == 1 =>
-                                        unsafe{ *str.as_vec().first().unwrap_unchecked() }
+                                    BaseToken::CS(str) => {
+                                        let str = ET::Char::tokenize(str.to_str(engine.memory));
+                                        if str.len() != 1 { throw!("Number expected" => next.source.cause) }
+                                            str[0]
+                                    }
                                     _ => throw!("Number expected" => next.source.cause)
                                 };
                                 catch!(expand_until_space::<ET>(engine) => tk);

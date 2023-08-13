@@ -11,6 +11,8 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::vec::IntoIter;
 use array_init::array_init;
+use crate::engine::EngineType;
+use crate::engine::memory::Memory;
 use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
 use crate::utils::Ptr;
 
@@ -30,8 +32,12 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
 
     /// Parses a character from a byte iterator. For [`u8`], this is just `iter.next()`.
     fn from_u8_iter(iter:&mut IntoIter<u8>) -> Option<Self>;
-    /// Convert a `&`[`str`] into a [`TeXStr`]`<Self>`.
-    fn from_str(s:&str) -> TeXStr<Self>;
+
+    fn from_str<ET:EngineType<Char=Self>>(s:&'static str,memory:&mut Memory<ET>) -> TeXStr<Self> {
+        TeXStr::from_static(s,memory)
+    }
+
+    fn tokenize(s:&str) -> Vec<Self>;
 
     /** Whether the character is an end-of-line character.
      *
@@ -49,15 +55,6 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
      */
     fn is_eol_pair(self,next:Self) -> bool;
 
-    /// The string "par" as a [`TeXStr`]`<Self>`.
-    fn par_token() -> TeXStr<Self>;
-
-    /// The string "relax" as a [`TeXStr`]`<Self>`.
-    fn relax_token() -> TeXStr<Self>;
-
-    /// The empty string as a [`TeXStr`]`<Self>`.
-    fn empty_str() -> TeXStr<Self>;
-
     /// The starting category code scheme for this character type, see [`struct@STARTING_SCHEME_U8`].
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
 
@@ -72,26 +69,14 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
     fn ident() -> Self::Allchars<Self>;
     fn rep_field<A:Clone+Default>(a:A) -> Self::Allchars<A>;
 
-    /// How to display a [`TeXStr`]`<Self>`.
-    fn display_str(str:&TeXStr<Self>, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for u in &*str.0 { write!(f,"{}",u.char_str())?; }
-        Ok(())
-    }
     fn char_str(&self) -> String;
     fn as_bytes(&self) -> &[u8];
+    fn as_char(&self) -> char;
 
     fn from_i64(i:i64) -> Option<Self>;
     fn to_usize(self) -> usize;
 }
 
-thread_local! {
-    /// "par" as a [`TeXStr`]`<u8>`.
-    pub static PAR_U8: TeXStr<u8> = "par".into();
-    /// "relax" as a [`TeXStr`]`<u8>`.
-    pub static RELAX_U8: TeXStr<u8> = "relax".into();
-    /// The empty string as a [`TeXStr`]`<u8>`.
-    pub static EMPTY_U8: TeXStr<u8> = "".into();
-}
 
 impl CharType for u8 {
     type Allchars<A:Default+Clone> = [A;256];
@@ -108,17 +93,15 @@ impl CharType for u8 {
             _ => Some(false)
         }
     }
-    fn from_str(s: &str) -> TeXStr<Self> {
-        TeXStr::new(s.as_bytes().to_vec())
+    fn tokenize(s:&str) -> Vec<Self> {
+        s.chars().map(|c| c as u8).collect()
     }
+    fn as_char(&self) -> char { *self as char }
     // #[inline(always)]
     fn is_eol_pair(self, next: Self) -> bool {
         // invariant: self == \r
         next == b'\n'
     }
-    fn par_token() -> TeXStr<Self> { PAR_U8.with(|p| p.clone()) }
-    fn relax_token() -> TeXStr<Self> { RELAX_U8.with(|p| p.clone()) }
-    fn empty_str() -> TeXStr<Self> {EMPTY_U8.with(|p| p.clone()) }
     // #[inline(always)]
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
         STARTING_SCHEME_U8.clone()
@@ -178,17 +161,31 @@ impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
 /** A "string" in TeX is a sequence of characters of some [`CharType`]. [`TeXStr`]
 * abstracts away the character type, e.g. for control sequence names.
 */
-#[derive(Clone,PartialEq,Hash,Eq,PartialOrd,Ord)]
-pub struct TeXStr<C:CharType>(Ptr<Vec<C>>);
+#[derive(Clone,Copy,PartialEq,Hash,Eq,PartialOrd,Ord,Debug)]
+pub struct TeXStr<C:CharType>(string_interner::DefaultSymbol,PhantomData<C>);
 impl<C:CharType> TeXStr<C> {
-    pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
-    pub fn len(&self) -> usize { self.0.len() }
-    pub fn as_vec(&self) -> &Vec<C> { &self.0 }
+    //pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
+    //pub fn len(&self) -> usize { self.0.len() }
+    //pub fn as_vec(&self) -> &Vec<C> { &self.0 }
+}
+impl<C:CharType> TeXStr<C> {
+    pub fn to_str<'a,ET:EngineType<Char=C>>(&'a self,memory:&'a Memory<ET>) -> &'a str {
+        memory.interner.resolve(self.0).unwrap()
+    }
+    pub fn from_static<ET:EngineType<Char=C>>(s:&'static str,memory:&mut Memory<ET>) -> Self {
+        Self(memory.interner.get_or_intern_static(s),PhantomData)
+    }
+    pub fn from_string<ET:EngineType<Char=C>>(s:&String, memory:&mut Memory<ET>) -> Self {
+        Self(memory.interner.get_or_intern(s),PhantomData)
+    }
+    pub fn from_primitive(s:string_interner::DefaultSymbol) -> Self {
+        Self(s,PhantomData)
+    }
 }
 
 //#[inline(always)]
 fn is_ascii(u:u8) -> bool { 32 <= u && u <= 126 }
-
+/*
 impl<C:CharType> Display for TeXStr<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         C::display_str(self, f)
@@ -209,7 +206,7 @@ impl<C:CharType> From<Vec<C>> for TeXStr<C> {
         TeXStr::new(v)
     }
 }
-
+*/
 
 
 impl CharType for char {
@@ -217,14 +214,6 @@ impl CharType for char {
     type Allchars<A: Default+Clone> = AllUnicodeChars<A>; // TODO
     fn from_i64(i: i64) -> Option<Self> { if i > 0 && i < 0x110000 { Some(char::from_u32(i as u32).unwrap()) } else { None } }
     fn to_usize(self) -> usize { self as usize }
-    fn from_str(s: &str) -> TeXStr<Self> {
-        TeXStr::new(s.chars().collect())
-    }
-    fn display_str(str: &TeXStr<Self>, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let str : String = str.0.iter().collect();
-        write!(f,"{}",str)
-    }
-
     fn backslash() -> Self { '\\' }
     fn carriage_return() -> Self { '\r' }
     fn newline() -> Self { '\n' }
@@ -236,23 +225,18 @@ impl CharType for char {
             _ => Some(false)
         }
     }
+    fn tokenize(s: &str) -> Vec<Self> {
+        todo!()//&mut s.chars()//s.chars().collect::<Vec<char>>().as_slice()
+    }
     fn is_eol_pair(self, next: Self) -> bool {
         next == '\n' // self == '\r'
     }
     fn as_bytes(&self) -> &[u8] {
         self.as_bytes()
     }
+    fn as_char(&self) -> char { *self }
 
     fn ident() -> Self::Allchars<Self> {
-        todo!()
-    }
-    fn empty_str() -> TeXStr<Self> {
-        todo!()
-    }
-    fn par_token() -> TeXStr<Self> {
-        todo!()
-    }
-    fn relax_token() -> TeXStr<Self> {
         todo!()
     }
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {

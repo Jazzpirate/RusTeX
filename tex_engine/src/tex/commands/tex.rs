@@ -7,7 +7,7 @@ use std::path::Components;
 use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{tokens_to_string, token_to_chars, resolve_token};
+use crate::engine::gullet::methods::{tokens_to_string, resolve_token};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
@@ -275,25 +275,27 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:&CommandSource<E
                                  -> Result<TeXStr<ET::Char>,TeXError<ET>>{
     debug_log!(trace=>"get_csname: {}",engine.preview(200));
     let csidx = engine.state.push_csname();
-    let mut csname = Vec::with_capacity(16);
+    let mut csname = engine.memory.get_string();
     while engine.state.current_csname() == Some(csidx) {
         match catch_prim!(engine.get_next_unexpandable() => (name,cmd)) {
             None => return file_end!(cmd.cause),
             Some(sc) => match sc.command {
                 BaseCommand::Unexpandable {name:"endcsname",..} => engine.state.pop_csname(),
-                BaseCommand::Char{catcode:CategoryCode::Space,..} => csname.push(ET::Char::from(b' ')),
-                BaseCommand::Char{char,..} => csname.push(char),
+                BaseCommand::Char{catcode:CategoryCode::Space,..} => csname.push(' '),
+                BaseCommand::Char{char,..} => csname.push(char.as_char()),
                 o => throw!("Unexpected token in {}: {:?}",name,o => cmd.cause)
             }
         }
     }
-    Ok(csname.into())
+    let ret = TeXStr::from_string(&csname, engine.memory);
+    engine.memory.return_string(csname);
+    Ok(ret)
 }
 
 pub fn csname<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"csname");
     let str = get_csname::<ET>(engine,&cmd,"csname")?;
-    debug_log!(trace=>"csname {}",str.to_string());
+    debug_log!(trace=>"csname {}",str.to_str(engine.memory));
     match engine.state.get_command(&str) {
         None => engine.state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
@@ -323,7 +325,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, glo
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,DEF)?;
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
-    catch_prim!(engine.get_group(&mut |_,t| match (std::mem::take(&mut partk),&t.base) {
+    catch_prim!(engine.get_group(&mut |engine,t| match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
             Ok(replacement.push(ExpToken::ParamToken(t))),
@@ -335,7 +337,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, glo
             Ok(replacement.push(ExpToken::Param(t,(u-49) as u8)))
         }
         (Some(_),_) =>
-            throw!("Expected number after #, got {}",t => cmd.cause.clone()),
+            throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
     let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
@@ -560,11 +562,11 @@ pub fn edef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, gl
         BaseToken::CS(_) => (),
         _ => throw!("Command expected after \\def" => cs)
     }
-    debug_log!(trace=>"edef: {}",cs);
+    debug_log!(trace=>"edef: {}",cs.to_str(engine.memory,Some(ET::Char::backslash())));
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,EDEF)?;
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
-    catch_prim!(engine.get_expanded_group(false,true,false,&mut |_,t| match (std::mem::take(&mut partk),&t.base) {
+    catch_prim!(engine.get_expanded_group(false,true,false,&mut |engine,t| match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
             Ok(replacement.push(ExpToken::ParamToken(t))),
@@ -576,7 +578,7 @@ pub fn edef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, gl
             Ok(replacement.push(ExpToken::Param(t,(u-49) as u8)))
         }
         (Some(_),_) =>
-            throw!("Expected number after #, got {}",t => cmd.cause.clone()),
+            throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
     let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
@@ -663,7 +665,8 @@ pub fn errmessage<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<E
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"errmessage");
     catch_prim!(engine.skip_whitespace() => (ERRMESSAGE,cmd));
-    let errmsg = catch_prim!(engine.get_braced_string() => (ERRMESSAGE,cmd));
+    let mut errmsg = String::new();
+    catch_prim!(engine.get_braced_string(&mut errmsg) => (ERRMESSAGE,cmd));
     let eh = engine.state.get_primitive_toks("errhelp");
     // TODO errhelp
     Err(TeXError{
@@ -742,11 +745,13 @@ pub fn font_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     debug_log!(trace=>"Assigning \\font");
     let cs = catch_prim!(engine.get_control_sequence() => (FONT,cmd));
     catch_prim!(engine.skip_eq_char() => (FONT,cmd));
-    let mut fontname = catch_prim!(engine.get_string() => (FONT,cmd)).to_string();
+    let mut fontname = engine.memory.get_string();
+    catch_prim!(engine.get_string(&mut fontname) => (FONT,cmd));
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
     }
     let mut font = catch_prim!(engine.state.fontstore_mut().get_new(&fontname) => (FONT,cmd));
+    engine.memory.return_string(fontname);
     match catch_prim!(engine.get_keywords(vec!("at","scaled")) => (FONT,cmd)) {
         Some(s) if s == "at" => {
             let dim = catch_prim!(engine.get_dim() => (FONT,cmd));
@@ -821,7 +826,7 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
         BaseToken::Char(c,cc) =>
             Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd)))
     };
-    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs,newcmd);
+    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.to_str(engine.memory,Some(ET::Char::backslash())),newcmd);
     engine.set_command_for_tk(cs,newcmd,global);
     engine.add_expansion(move |e,s| {
         s.push(first,e.memory);s.push(second,e.memory);Ok(())
@@ -1134,7 +1139,7 @@ pub fn ifx<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         None => file_end_prim!("ifx",cmd),
         Some((t,e)) => resolve_token::<ET>(engine.state,t).with_expand(e)
     };
-    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause,t2.source.cause);
+    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause.to_str(engine.memory,Some(ET::Char::backslash())),t2.source.cause.to_str(engine.memory,Some(ET::Char::backslash())));
     Ok(if t1.expand && t2.expand { t1.command == t2.command }
     else if !t1.expand && !t2.expand { t1.source.cause == t2.source.cause }
     else { false })
@@ -1182,7 +1187,8 @@ pub static INPUT: &str = "input";
 pub fn input<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                             -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"input");
-    let filename = catch_prim!(engine.get_string() => (INPUT,cmd)).to_string();
+    let mut filename = engine.memory.get_string();
+    catch_prim!(engine.get_string(&mut filename) => (INPUT,cmd));
     debug_log!(trace=>"input: {}",filename);
     if filename.is_empty() {
         panic!("HERE: {}",engine.current_position())
@@ -1192,8 +1198,9 @@ pub fn input<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     if !file.exists() {
         throw!("I can't find file `{}'",filename => cmd.cause)
     } else {
+        engine.memory.return_string(filename);
         (engine.state.outputs().file_open)(file.path().to_str().unwrap());
-        engine.mouth.push_file(&file);
+        engine.mouth.push_file(&file,engine.memory);
         Ok(())
     }
 }
@@ -1256,7 +1263,7 @@ pub fn let_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, glo
         BaseToken::Char(c,cc) =>
             Some(Command::new(BaseCommand::Char{char:c,catcode:cc},Some(&cmd))),
     };
-    debug_log!(debug=>"let: {} = {:?}",cs,cmd);
+    debug_log!(debug=>"let: {} = {:?}",cs.to_str(engine.memory,Some(ET::Char::backslash())),cmd);
     engine.set_command_for_tk(cs,cmd,globally);
     Ok(())
 }
@@ -1508,7 +1515,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
                     for s in &d.signature {
                         match s {
                             ParamToken::Token(t) => {
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
+                                engine.token_to_others(t, true, f)?;
                             }
                             ParamToken::Param => {
                                 i += 1;
@@ -1521,13 +1528,13 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
                     f(engine,Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None))?;
                     for t in &d.replacement {
                         match t {
-                            ExpToken::Token(t) => token_to_chars::<ET,_>(t,esc.clone(),&cc,true,&mut |t| f(engine,t))?,
+                            ExpToken::Token(t) => engine.token_to_others(t, true, f)?,
                             ExpToken::ParamToken(t) => {
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
+                                engine.token_to_others(t, true, f)?;
+                                engine.token_to_others(t, true, f)?;
                             }
                             ExpToken::Param(t, i) => {
-                                token_to_chars::<ET,_>(t,esc.clone(),&cc,true,|t| f(engine,t))?;
+                                engine.token_to_others(t, true, f)?;
                                 engine.string_to_tokens(i.to_string().as_bytes(),f)?
                             }
                         }
@@ -1545,8 +1552,10 @@ pub fn message<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                               -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"message");
     catch_prim!(engine.skip_whitespace() => (MESSAGE,cmd));
-    let msg = catch_prim!(engine.get_braced_string() => (MESSAGE,cmd));
-    (engine.state.outputs().message)(&msg);
+    let mut string = engine.memory.get_string();
+    let msg = catch_prim!(engine.get_braced_string(&mut string) => (MESSAGE,cmd));
+    (engine.state.outputs().message)(string.as_str());
+    engine.memory.return_string(string);
     Ok(())
 }
 
@@ -1778,9 +1787,11 @@ pub fn openin<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
     catch_prim!(engine.skip_eq_char() => (OPENIN,cmd));
-    let filename = catch_prim!(engine.get_string() => (OPENIN,cmd)).to_string();
+    let mut filename = engine.memory.get_string();
+    catch_prim!(engine.get_string(&mut filename) => (OPENIN,cmd));
     let f = engine.state.filesystem().get(&filename);
-    engine.state.file_openin(i,f); // TODO error?
+    engine.memory.return_string(filename);
+    engine.state.file_openin(i,f,engine.memory); // TODO error?
     Ok(())
 }
 
@@ -1794,9 +1805,11 @@ pub fn openout<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
     catch_prim!(engine.skip_eq_char() => (OPENOUT,cmd));
-    let filename = catch_prim!(engine.get_string() => (OPENOUT,cmd)).to_string();
+    let mut filename = engine.memory.get_string();
+    catch_prim!(engine.get_string(&mut filename) => (OPENOUT,cmd));
     let apply = Box::new(move |e:&mut EngineMut<ET>| {
         let f = e.state.filesystem().get(&filename);
+        e.memory.return_string(filename);
         e.state.file_openout(i,f); // TODO error?
         Ok(())
     });
@@ -1870,7 +1883,7 @@ pub fn read<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, glo
     let newcmd = catch_prim!(engine.get_control_sequence() => (READ,cmd));
     let mut ret = vec!();
     catch_prim!(file.read::<ET,_>(engine.memory,engine.state.get_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READ,cmd));
-    debug_log!(trace=>"read: {} = {}",newcmd,TokenList(&ret));
+    debug_log!(trace=>"read: {} = {}",newcmd.to_str(engine.memory,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.memory));
     if ret.is_empty() {
         match engine.state.get_endlinechar() {
             None => (),
@@ -1976,7 +1989,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, g
                 })});
                 Ok(())
             }
-            _ => throw!("Box expected: {}",c.source.cause)
+            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.memory,Some(ET::Char::backslash())))
         }
     }
 }
@@ -2074,7 +2087,7 @@ pub fn string<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f
         Some((t,_)) => {
             let esc = engine.state.get_escapechar();
             let cat = engine.state.get_catcode_scheme().clone();
-            token_to_chars(&t,esc,&cat,false,&mut |t| f(engine,t))?
+            engine.token_to_others(&t,  false, f)?
         }
     }
     Ok(())
@@ -2107,7 +2120,7 @@ pub fn the<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:To
                 Ok(())
             }
             BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().as_bytes(),f),
-            _ => throw!("Expected a value after \\the; got: {}", c.source.cause => c.source.cause)
+            _ => throw!("Expected a value after \\the; got: {}", c.source.cause.to_str(engine.memory,Some(ET::Char::backslash())) => c.source.cause)
         }
         None => file_end_prim!(THE,cmd)
     }
@@ -2130,7 +2143,7 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     catch_prim!(engine.skip_eq_char() => (TOKS,cmd));
     let mut v = vec!();
     catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
-    debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v));
+    debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(engine.memory));
     engine.state.set_toks_register(i,v,global);
     Ok(())
 }
@@ -2239,7 +2252,8 @@ pub fn write<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
         tks.insert(0,Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
         engine.with_mouth(tks,|engine| {
-            let string = catch_prim!(engine.get_braced_string() => (WRITE,cmd));
+            let mut string = engine.memory.get_string();
+            catch_prim!(engine.get_braced_string(&mut string) => (WRITE,cmd));
             if i == 18 {
                 (engine.state.outputs().write_18)(&string)
             }
@@ -2256,6 +2270,7 @@ pub fn write<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
                     Some(f) => f.write(&string)
                 }
             }
+            engine.memory.return_string(string);
             Ok(())
         })
     });
@@ -2327,8 +2342,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
         apply:|e,cmd| errmessage::<ET>(e,cmd),
         starts_paragraph:false
     },None));
-    engine.state.set_command(ET::Char::from_str("errmessage"),em.clone(),true);
-    engine.state.set_command(ET::Char::from_str("LaTeX3 error:"),em,true);
+    engine.state.set_command(ET::Char::from_str(ERRMESSAGE,engine.memory),em.clone(),true);
+    engine.state.set_command(ET::Char::from_str("LaTeX3 error:",engine.memory),em,true);
 
     register_int_assign!(errorcontextlines,engine);
     register_unexpandable!(errorstopmode,engine,false,(_,cmd) =>errorstopmode::<ET>());
@@ -2413,7 +2428,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_value_assign_int!(newlinechar,engine);
     register_expandable!(noexpand,engine,(e,c,f) => noexpand::<ET>(e,c,f));
     register_dim_assign!(nulldelimiterspace,engine);
-    engine.state.set_command(ET::Char::from_str("nullfont"), Some(Command::new(
+    engine.state.set_command(ET::Char::from_str("nullfont",engine.memory), Some(Command::new(
         BaseCommand::Font(engine.state.fontstore().null())
         ,None)), true);
     register_expandable!(number,engine,(e,c,f) => number::<ET>(e,c,f));
@@ -2425,7 +2440,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_int_assign!(outputpenalty,engine);
     register_dim_assign!(overfullrule,engine);
 
-    engine.state.set_command(ET::Char::par_token(),Some(Command::new(BaseCommand::Unexpandable {
+    engine.state.set_command(ET::Char::from_str("par",engine.memory),Some(Command::new(BaseCommand::Unexpandable {
         name:"par",
         apply:|e,cmd| par::<ET>(e,cmd),
         starts_paragraph:false
@@ -2442,7 +2457,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_int_assign!(righthyphenmin,engine);
     register_int_assign!(pretolerance,engine);
     register_assign!(read,engine,(e,cmd,global) =>read::<ET>(e,cmd,global));
-    engine.state.set_command(ET::Char::relax_token(), Some(Command::new(BaseCommand::Relax,None)), true);
+    engine.state.set_command(engine.memory.relax, Some(Command::new(BaseCommand::Relax,None)), true);
     register_int_assign!(relpenalty,engine);
     register_skip_assign!(rightskip,engine);
     register_expandable!(romannumeral,engine,(e,c,f) => romannumeral::<ET>(e,c,f));

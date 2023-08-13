@@ -70,10 +70,12 @@ pub static PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
 pub fn pdffilesize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdffilesize");
-    let filename = catch_prim!(engine.get_braced_string() => (PDFFILESIZE,cmd));
+    let mut filename = engine.memory.get_string();
+    catch_prim!(engine.get_braced_string(&mut filename) => (PDFFILESIZE,cmd));
     //gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
     // let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = engine.state.filesystem().get(&filename);
+    engine.memory.return_string(filename);
     let x = f.content_string();
     match &*x {
         None => Ok(()),
@@ -100,12 +102,17 @@ pub static PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
     pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdfstrcmp");
-    let str1 = catch_prim!(engine.get_braced_string() => (PDFSTRCMP,cmd));
-    let str2 = catch_prim!(engine.get_braced_string() => (PDFSTRCMP,cmd));
+    let mut str1 = engine.memory.get_string();
+    let mut str2 = engine.memory.get_string();
+    catch_prim!(engine.get_braced_string(&mut str1) => (PDFSTRCMP,cmd));
+    catch_prim!(engine.get_braced_string(&mut str2) => (PDFSTRCMP,cmd));
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    if str1==str2 {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
-        else if str1 < str2 { engine.string_to_tokens("-1".as_bytes(),f)}
-        else {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
+    if str1==str2 {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))?}
+        else if str1 < str2 { engine.string_to_tokens("-1".as_bytes(),f)?}
+        else {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))?}
+    engine.memory.return_string(str1);
+    engine.memory.return_string(str2);
+    Ok(())
 }
 
 /// "pdftexversion"

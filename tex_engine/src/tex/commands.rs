@@ -7,6 +7,7 @@ pub mod methods;
 use std::fmt::{Debug, Formatter};
 use std::hint::unreachable_unchecked;
 use crate::engine::{EngineMut, EngineType};
+use crate::engine::memory::Memory;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
@@ -46,9 +47,9 @@ pub struct StomachCommand<ET:EngineType> {
 }
 
 impl <ET:EngineType> StomachCommand<ET> {
-    pub fn from_resolved(resolved:ResolvedToken<ET>) -> Result<Self,TeXError<ET>> {
+    pub fn from_resolved(resolved:ResolvedToken<ET>,memory:&mut Memory<ET>) -> Result<Self,TeXError<ET>> {
         Ok(Self {
-            command:BaseStomachCommand::from_base(resolved.command,&resolved.source)?,
+            command:BaseStomachCommand::from_base(resolved.command,&resolved.source,memory)?,
             source:resolved.source
         })
     }
@@ -82,7 +83,7 @@ impl<ET:EngineType> Command<ET> {
     }
 }
 
-pub trait CommandReference<ET:EngineType>:Clone+Debug {
+pub trait CommandReference<ET:EngineType>:Clone+Debug + Copy {
     fn new(base:&BaseCommand<ET>, source:&CommandSource<ET>) -> Self;
 }
 
@@ -371,7 +372,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
 }
 
 impl<ET:EngineType> BaseStomachCommand<ET> {
-    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>) -> Result<Self,TeXError<ET>> {
+    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>,memory:&mut Memory<ET>) -> Result<Self,TeXError<ET>> {
         use BaseCommand::*;
         use CategoryCode::*;
         Ok(match value {
@@ -381,7 +382,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                 todo!(),
             None => match &source.cause.base {
                 BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
-                BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
+                BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(memory)),
             }
             Unexpandable {name,apply,starts_paragraph} => BaseStomachCommand::Unexpandable {name,apply, starts_paragraph},
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
@@ -462,6 +463,39 @@ impl<ET:EngineType> DefI<ET>{
             replacement:replacement.into_iter().map(ExpToken::Token).collect()
         })
     }
+    pub fn as_str(&self,memory:&Memory<ET>) -> String {
+        let mut s = String::new();
+        let mut ind = 0;
+        for x in &self.signature {
+            match x {
+                ParamToken::Param => {
+                    ind +=1;
+                    s.push('#');
+                    s.push_str(&ind.to_string());
+                },
+                ParamToken::Token(t) => s.push_str(&t.to_str(memory,Some(ET::Char::backslash())))
+            }
+        }
+        if self.endswithbrace {
+            s.push('#');
+        }
+        s.push('{');
+        for r in &self.replacement {
+            match r {
+                ExpToken::Token(t) => s.push_str(&t.to_str(memory,Some(ET::Char::backslash()))),
+                ExpToken::Param(i,u) => {
+                    s.push('#');
+                    s.push_str(&(u+1).to_string());
+                }
+                ExpToken::ParamToken(t) => {
+                    s.push('#');
+                    s.push('#');
+                }
+            }
+        }
+        s.push('}');
+        s
+    }
 }
 impl<ET:EngineType> Debug for DefI<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -495,7 +529,7 @@ impl<ET:EngineType> Debug for ParamToken<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Param => write!(f,"#i"),
-            Self::Token(t) => write!(f,"{}",t)
+            Self::Token(t) => write!(f,"{:?}",t)
         }
     }
 }
@@ -519,9 +553,9 @@ impl<ET:EngineType> PartialEq for ExpToken<ET> {
 impl<ET:EngineType> Debug for ExpToken<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Param(t,u8) => write!(f,"{}{}",t,u8+1),
-            Self::Token(t) => write!(f,"{}",t),
-            Self::ParamToken(t) => write!(f,"{}{}",t,t)
+            Self::Param(t,u8) => write!(f,"{:?}{}",t,u8+1),
+            Self::Token(t) => write!(f,"{:?}",t),
+            Self::ParamToken(t) => write!(f,"{:?}{:?}",t,t)
         }
     }
 }

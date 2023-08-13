@@ -33,7 +33,7 @@ pub trait File<Char:CharType>:Clone {
     fn exists(&self) -> bool;
     fn content_string(&self) -> Self::OptionRef<'_>;
     fn open_out(&self);
-    fn open_in(&self);
+    fn open_in<ET:EngineType<Char=Char>>(&self,memory:&mut Memory<ET>);
     fn close_out(&self);
     fn close_in(&self);
     fn write(&self,string:&str);
@@ -83,7 +83,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
         todo!("Physical file system not implemented yet")
     }
-    fn open_in(&self) {
+    fn open_in<ET:EngineType<Char=Char>>(&self,memory:&mut Memory<ET>) {
         todo!("Physical file system not implemented yet")
     }
     fn write(&self,_:&str) {
@@ -108,14 +108,14 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let mut w = self.contents.borrow_mut();
         *w = Some(vec!());
     }
-    fn open_in(&self) {
+    fn open_in<ET:EngineType<Char=Char>>(&self,memory:&mut Memory<ET>) {
         let w = &*self.contents.borrow();
         let mut open = self.open.borrow_mut();
         let (v,eof) = match w {
             None => (vec!(),true),
             Some(v) => (v.clone(),false)
         };
-        let mut ss = StringSource::new(v,Some(Ptr::new(self.path.to_str().unwrap().to_string())));
+        let mut ss = StringSource::new(v,Some(memory.interner.get_or_intern(self.path.to_str().unwrap().to_string())));
         ss.state.eof = eof;
         *open = Some(ss);
     }

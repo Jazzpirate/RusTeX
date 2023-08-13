@@ -85,50 +85,6 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
     }
 }
 
-
-pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<String,TeXError<ET>> {
-    debug_log!(trace=>"Reading string {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
-    let mut ret = String::new();
-    engine.skip_whitespace()?;
-    let mut quoted = false;
-    while let Some(next) = engine.get_next_unexpandable()? {
-        match next.command {
-            BaseCommand::Char {catcode:CategoryCode::Space,..} if quoted => ret.push(' '),
-            BaseCommand::Char {catcode:CategoryCode::Space,..} => return Ok(ret),
-            BaseCommand::Char {char,..} if char.to_usize() == 34 => { // "
-                quoted = !quoted;
-            }
-            BaseCommand::Char {char,..} => ret.push_str(std::str::from_utf8(char.as_bytes()).unwrap()), //(char.as_bytes())),//ret.push(char.to_char()),
-            _ => {
-                engine.mouth.requeue(next.source.cause,engine.memory);
-                return Ok(ret)
-            }
-        }
-    }
-    Ok(ret)
-}
-
-
-pub fn get_braced_string<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<String,TeXError<ET>> {
-    let mut ret = vec!();
-    engine.get_expanded_group(false,false,true,&mut |engine,t| {
-        match &t.base {
-            BaseToken::Char(c,_) => {
-                for u in c.as_bytes() { ret.push(*u) }
-            }
-            BaseToken::CS(name) => {
-                if let Some(c) = engine.state.get_escapechar() { for u in c.as_bytes() { ret.push(*u) } }
-                for c in name.as_vec() { for u in c.as_bytes() { ret.push(*u) } }
-                if name.len() > 1 || *engine.state.get_catcode_scheme().get(&name.as_vec()[0]) != CategoryCode::Letter {
-                    ret.push(b' ')
-                }
-            }
-        }
-        Ok(())
-    })?;
-    Ok(String::from_utf8(ret).unwrap())
-}
-
 pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
     match engine.get_next_token()? {
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
@@ -171,7 +127,7 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_prote
                     })?,
                 BaseCommand::None if err_on_unknowns => match res.source.cause.base {
                     BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
-                    BaseToken::CS(name) => throw!("Undefined control sequence {}",name),
+                    BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(engine.memory)),
                 }
                 _ => match engine.expand(res)? {
                     Some(res) => f(engine, res.source.cause)?,
@@ -370,96 +326,82 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Ve
     })
 }
 
-pub fn token_to_chars<ET:EngineType,F:FnMut(Token<ET>) -> Result<(),TeXError<ET>>>(tk:&Token<ET>,escape:Option<ET::Char>,cc:&CategoryCodeScheme<ET::Char>,insertspace:bool,mut f:F) -> Result<(),TeXError<ET>> {
-    match &tk.base {
-        BaseToken::Char(c,_) if c.to_usize() == 32 => f(Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
-        BaseToken::Char(c,CategoryCode::Space) => f(Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
-        BaseToken::Char(c,_) => f(Token::new(BaseToken::Char(*c,CategoryCode::Other),None)),
-        BaseToken::CS(str) => {
-            match escape {
-                None => (),
-                Some(c) => f(Token::new(BaseToken::Char(c,CategoryCode::Other),None))?
+
+pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>,ret:&mut String) -> Result<(),TeXError<ET>> {
+    debug_log!(trace=>"Reading string {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace()?;
+    let mut quoted = false;
+    while let Some(next) = engine.get_next_unexpandable()? {
+        match next.command {
+            BaseCommand::Char {catcode:CategoryCode::Space,..} if quoted => ret.push(' '),
+            BaseCommand::Char {catcode:CategoryCode::Space,..} => return Ok(()),
+            BaseCommand::Char {char,..} if char.to_usize() == 34 => { // "
+                quoted = !quoted;
             }
-            for c in str.as_vec() {
-                f(Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
-                ),None))?
+            BaseCommand::Char {char,..} => ret.push(char.as_char()), //(char.as_bytes())),//ret.push(char.to_char()),
+            _ => {
+                engine.mouth.requeue(next.source.cause,engine.memory);
+                return Ok(())
             }
-            if insertspace && !(str.len() == 1 && *cc.get(&str.as_vec()[0]) != CategoryCode::Letter) {
-                f(Token::new(BaseToken::Char(ET::Char::from(32),CategoryCode::Space),None))?
-            }
-            Ok(())
         }
     }
-}
-/*
-pub fn token_to_bytes<T:Token>(tk:T,escapechar:Option<T::Char>,cc:&CategoryCodeScheme<T::Char>) -> Vec<u8> {
-    match escapechar {
-        None => match tk.base() {
-                BaseToken::Char(c,CategoryCode::Space) => vec!(b' '),
-                BaseToken::Char(c,_) => c.as_bytes(),
-                BaseToken::CS(str) => {
-                    let mut s = vec!();
-                    for c in str.as_vec() {for u in c.as_bytes() {
-                        s.push(u);
-                    }}
-                    s.push(b' ');
-                    s
-                }
-            }
-        Some(escapechar) => match tk.base() {
-                BaseToken::Char(c,CategoryCode::Space) => vec!(b' '),
-                BaseToken::Char(c,_) => c.as_bytes(),
-                BaseToken::CS(str) => {
-                    let mut s = vec!();
-                    for u in escapechar.as_bytes() {s.push(u)};
-                    for c in str.as_vec() {for u in c.as_bytes() {
-                        s.push(u);
-                    }}
-                    if str.as_vec().len() != 1 || *cc.get(&str.as_vec()[0]) != CategoryCode::Letter {
-                        s.push(b' ');
-                    }
-                    s
-                }
-            }
-    }
+    Ok(())
 }
 
- */
+pub fn get_braced_string<ET:EngineType>(engine:&mut EngineMut<ET>,ret:&mut String) -> Result<(),TeXError<ET>> {
+    engine.get_expanded_group(false,false,true,&mut |engine,t| {
+        match &t.base {
+            BaseToken::Char(c,_) => {
+                ret.push(c.as_char())
+            }
+            BaseToken::CS(name) => {
+                if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
+                let str = name.to_str(engine.memory);
+                ret.push_str(str);
+                if str.len() > 1 || *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
+                    ret.push(' ')
+                }
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
 
-pub fn tokens_to_string<ET:EngineType>(v:Vec<Token<ET>>,escapechar:Option<ET::Char>,cc:&CategoryCodeScheme<ET::Char>) -> String {
-    let mut s = vec!();
-    match escapechar {
+pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineMut<ET>,v:&Vec<Token<ET>>,string:&mut String) {
+    let cc = engine.state.get_catcode_scheme();
+    match engine.state.get_escapechar() {
         None => for t in v {
                 match &t.base {
-                    BaseToken::Char(c,CategoryCode::Space) => s.push(b' '),
-                    BaseToken::Char(c,_) => for u in c.as_bytes() {s.push(*u)},  //s.push_str(&c.char_str()),
+                    BaseToken::Char(c,CategoryCode::Space) => string.push(' '),
+                    BaseToken::Char(c,_) => string.push(c.as_char()),
                     BaseToken::CS(str) => {
-                        for c in str.as_vec() {for u in c.as_bytes() {
-                            s.push(*u);
-                        }}
-                        if str.as_vec().len() != 1 || *cc.get(&str.as_vec()[0]) != CategoryCode::Letter {
-                            s.push(b' ');
+                        let str = str.to_str(engine.memory);
+                        string.push_str(str);
+                        if str.len() != 1 || *cc.get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
+                            string.push(' ');
                         }
                     }
                 }
             }
-        Some(escapechar) => for t in v {
+        Some(escapechar) => {
+            let esc = escapechar.as_char();
+            for t in v {
                 match &t.base {
-                    BaseToken::Char(c,CategoryCode::Space) => s.push(b' '),
-                    BaseToken::Char(c,_) => for u in c.as_bytes() {s.push(*u)},
+                    BaseToken::Char(c,CategoryCode::Space) => string.push(' '),
+                    BaseToken::Char(c,_) => string.push(c.as_char()),
                     BaseToken::CS(str) => {
-                        for u in escapechar.as_bytes() {s.push(*u)};
-                        for c in str.as_vec() {for u in c.as_bytes() {
-                            s.push(*u);
-                        }}
-                        if str.as_vec().len() != 1 || *cc.get(&str.as_vec()[0]) != CategoryCode::Letter {
-                            s.push(b' ');
+                        string.push(esc);
+                        let str = str.to_str(engine.memory);
+                        string.push_str(str);
+                        if str.len() != 1 || *cc.get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
+                            string.push(' ');
                         }
                     }
                 }
             }
+        }
     }
-    String::from_utf8(s).unwrap()
 }
 
 pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Token<ET>,TeXError<ET>> {
@@ -579,13 +521,13 @@ impl<ET:EngineType> EngineMut<'_,ET> {
         }
     }
 
-    pub fn get_string(&mut self) -> Result<String,TeXError<ET>> {
+    pub fn get_string(&mut self,string:&mut String) -> Result<(),TeXError<ET>> {
         let (g,mut r) = self.split_gullet();
-        g.get_string(&mut r)
+        g.get_string(&mut r,string)
     }
 
-    pub fn get_braced_string(&mut self) -> Result<String,TeXError<ET>> {
-        get_braced_string::<ET>(self)
+    pub fn get_braced_string(&mut self,string:&mut String) -> Result<(),TeXError<ET>> {
+        get_braced_string::<ET>(self,string)
     }
 
     pub fn get_font(&mut self) -> Result<ET::Font,TeXError<ET>> {
@@ -597,8 +539,8 @@ impl<ET:EngineType> EngineMut<'_,ET> {
         match self.get_next_unexpandable()? {
             None => file_end!(),
             Some(res) => match res.command {
-                BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
-                    let c = char.as_bytes()[0];
+                BaseCommand::Char {char,..} if (char.as_char() as u32) < 256 => {
+                    let c = char.as_char() as u8;
                     if chars.contains(&c) {
                         Ok(Some(c))
                     } else {
@@ -646,6 +588,29 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             f(self,Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None))?;
         }
         Ok(())
+    }
+
+    pub fn token_to_others(&mut self,tk:&Token<ET>, insertspace:bool, mut f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+        match &tk.base {
+            BaseToken::Char(c,_) if c.to_usize() == 32 => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
+            BaseToken::Char(c,CategoryCode::Space) => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
+            BaseToken::Char(c,_) => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Other),None)),
+            BaseToken::CS(str) => {
+                match self.state.get_escapechar() {
+                    None => (),
+                    Some(c) => f(self,Token::new(BaseToken::Char(c,CategoryCode::Other),None))?
+                }
+                let str = ET::Char::tokenize(str.to_str(self.memory)).to_vec();
+                for c in &str {
+                    f(self,Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
+                    ),None))?
+                }
+                if insertspace && !(str.len() == 1 && *self.state.get_catcode_scheme().get(&str[0]) != CategoryCode::Letter) {
+                    f(self,Token::new(BaseToken::Char(ET::Char::from(32),CategoryCode::Space),None))?
+                }
+                Ok(())
+            }
+        }
     }
 
     pub fn expand(&mut self,r:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {

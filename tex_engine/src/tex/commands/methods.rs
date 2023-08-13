@@ -67,7 +67,7 @@ pub fn set_toks_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:
     catch!(engine.skip_eq_char() => cmd.cause);
     let mut tks = Vec::with_capacity(32);
     catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
-    debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks));
+    debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks).to_str(engine.memory));
     engine.state.set_toks_register(u,tks,global);
     Ok(())
 }
@@ -110,7 +110,7 @@ pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandS
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let mut tks = Vec::with_capacity(32);
     catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
-    debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks));
+    debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks).to_str(engine.memory));
     engine.state.set_primitive_toks(name,tks,global);
     Ok(())
 }
@@ -119,7 +119,7 @@ pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandS
 #[macro_export]
 macro_rules! register_int {
     ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
                 get:|$e,$c| $f
@@ -131,7 +131,7 @@ macro_rules! register_int {
 #[macro_export]
 macro_rules! register_dim {
     ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
                 get:|$e,$c| $f
@@ -143,7 +143,7 @@ macro_rules! register_dim {
 #[macro_export]
 macro_rules! register_skip {
     ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
                 get:|$e,$c| $f
@@ -155,7 +155,7 @@ macro_rules! register_skip {
 #[macro_export]
 macro_rules! register_muskip {
     ($name:ident,$engine:ident,($e:tt,$c:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
             crate::tex::commands::ValueCommand::Value{
                 name:stringify!($name),
                 get:|$e,$c| $f
@@ -167,7 +167,7 @@ macro_rules! register_muskip {
 #[macro_export]
 macro_rules! register_int_assign {
     ($name:ident,$engine:ident) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Int(crate::tex::commands::ValueCommand::Primitive(stringify!($name))) /*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_int(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_int(s,g,c,stringify!($name),b)?))),
@@ -179,7 +179,7 @@ macro_rules! register_int_assign {
 #[macro_export]
 macro_rules! register_dim_assign {
     ($name:ident,$engine:ident) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Dim(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_dim(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_dim(s,g,c,stringify!($name),b)?))),
@@ -190,7 +190,7 @@ macro_rules! register_dim_assign {
 #[macro_export]
 macro_rules! register_skip_assign {
     ($name:ident,$engine:ident) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Skip(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_skip(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_skip(s,g,c,stringify!($name),b)?))),
@@ -201,7 +201,7 @@ macro_rules! register_skip_assign {
 #[macro_export]
 macro_rules! register_muskip_assign {
     ($name:ident,$engine:ident) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::MuSkip(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_muskip(stringify!($name)))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_muskip(s,g,c,stringify!($name),b)?))),
@@ -214,7 +214,7 @@ macro_rules! register_muskip_assign {
 #[macro_export]
 macro_rules! register_tok_assign {
     ($name:ident,$engine:ident) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(
             crate::tex::commands::BaseCommand::Toks(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_toks(stringify!($name)).map(|v| v.clone()).unwrap_or(vec!()))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_toks(s,g,c,stringify!($name),b)?))),
@@ -226,7 +226,7 @@ macro_rules! register_tok_assign {
 #[macro_export]
 macro_rules! register_whatsit {
     ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Whatsit{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Whatsit{
             name:stringify!($name),
             apply:|$e,$cmd| $f
         },None)),true);
@@ -237,7 +237,7 @@ macro_rules! register_whatsit {
 #[macro_export]
 macro_rules! register_open_box {
     ($name:ident,$engine:ident,$tp:expr,($e:tt,$cmd:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::OpenBox{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::OpenBox{
             name:stringify!($name),
             mode:$tp,
             apply:|$e,$cmd| $f
@@ -248,7 +248,7 @@ macro_rules! register_open_box {
 #[macro_export]
 macro_rules! register_unexpandable {
     ($name:ident,$engine:ident,$is_h:expr,($e:tt,$cmd:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{
             name:stringify!($name),
             apply:|$e,$cmd| $f,
             starts_paragraph:$is_h
@@ -259,7 +259,7 @@ macro_rules! register_unexpandable {
 #[macro_export]
 macro_rules! register_expandable {
     ($name:ident,$engine:ident,($e:tt,$cmd:tt,$tk:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Expandable{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Expandable{
             name:stringify!($name),
             apply:|$e,$cmd,$tk| $f
         },None)),true);
@@ -269,7 +269,7 @@ macro_rules! register_expandable {
 #[macro_export]
 macro_rules! register_conditional {
     ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Conditional{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Conditional{
             name:stringify!($name),
             apply:|$e,$cmd| $f
         },None)),true);
@@ -279,7 +279,7 @@ macro_rules! register_conditional {
 #[macro_export]
 macro_rules! register_assign {
     ($name:ident,$engine:ident,($e:tt,$cmd:tt,$b:tt) => $f:expr) => {
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Assignment{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Assignment{
             name:stringify!($name),
             apply:|$e,$cmd,$b| Ok($f?)
         },None)),true);
@@ -289,7 +289,7 @@ macro_rules! register_assign {
 #[macro_export]
 macro_rules! register_value_assign_int {
     ($name:ident,$engine:ident) => {paste::paste!{
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Int(
             crate::tex::commands::ValueCommand::Complex{
                 get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
                 set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
@@ -302,7 +302,7 @@ macro_rules! register_value_assign_int {
 #[macro_export]
 macro_rules! register_value_assign_dim {
     ($name:ident,$engine:ident) => {paste::paste!{
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Dim(
             crate::tex::commands::ValueCommand::Complex{
                 get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
                 set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
@@ -315,7 +315,7 @@ macro_rules! register_value_assign_dim {
 #[macro_export]
 macro_rules! register_value_assign_skip {
     ($name:ident,$engine:ident) => {paste::paste!{
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Skip(
             crate::tex::commands::ValueCommand::Complex{
                 get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
                 set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
@@ -328,7 +328,7 @@ macro_rules! register_value_assign_skip {
 #[macro_export]
 macro_rules! register_value_assign_muskip {
     ($name:ident,$engine:ident) => {paste::paste!{
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::MuSkip(
             crate::tex::commands::ValueCommand::Complex{
                 get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
                 set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
@@ -341,7 +341,7 @@ macro_rules! register_value_assign_muskip {
 #[macro_export]
 macro_rules! register_value_assign_toks {
     ($name:ident,$engine:ident) => {paste::paste!{
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Toks(
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Toks(
             crate::tex::commands::ValueCommand::Complex{
                 get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
                 set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
@@ -355,7 +355,7 @@ macro_rules! register_value_assign_toks {
 #[macro_export]
 macro_rules! register_value_assign_font {
     ($name:ident,$engine:ident) => {paste::paste!{
-        $engine.state.set_command(ET::Char::from_str(stringify!($name)),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::FontCommand{
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::FontCommand{
             get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
             set:Some(|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?)),
             name:stringify!($name)
@@ -371,7 +371,7 @@ use crate::tex::token::TokenReference;
 /// error messages.
 pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET>> {
-    debug_log!(debug=>"Expanding {}:{:?}\n - {}",cmd.cause,d,engine.preview(250).replace("\n","\\n"));
+    debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.memory,Some(ET::Char::backslash())),d.as_str(engine.memory),engine.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
@@ -385,7 +385,10 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineMut<ET>, cmd:Com
                 ParamToken::Token(delim) => {
                     if let Some((n,_)) = catch!(engine.get_next_token() => cmd.cause) {
                         if n != *delim {
-                            throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
+                            throw!("Usage of {} does not match its definition: {} expected, found {}",
+                                cmd.cause.to_str(engine.memory,Some(ET::Char::backslash())),
+                                delim.to_str(engine.memory,Some(ET::Char::backslash())),
+                                n.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause)
                         }
                     } else {
                         file_end!(cmd.cause)
@@ -434,7 +437,10 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
             ParamToken::Token(delim) => { // eat the delimiter
                 if let Some((n,_)) = catch!(engine.get_next_token() => cmd.cause.clone()) {
                     if n != *delim {
-                        throw!("Usage of {} does not match its definition: {} expected, found {}",cmd.cause,delim,n => cmd.cause)
+                        throw!("Usage of {} does not match its definition: {} expected, found {}",
+                            cmd.cause.to_str(engine.memory,Some(ET::Char::backslash())),
+                            delim.to_str(engine.memory,Some(ET::Char::backslash())),
+                            n.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause)
                     }
                 } else {
                     file_end!(cmd.cause.clone())
@@ -494,7 +500,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
                             }
                             Some((t,_)) if t.catcode() == CategoryCode::EndGroup => {
                                 if depth == 0 {
-                                    throw!("Unexpected end group token: {}",t => cmd.cause.clone())
+                                    throw!("Unexpected end group token: {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone())
                                 } else {
                                     depth -= 1;
                                     arg.push(t);
@@ -545,7 +551,7 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut Engine
     {
         debug_log!(debug=>"Arguments:");
         for i in 0..d.arity {
-            debug_log!(debug=>"  - {}",TokenList(&args[i as usize]));
+            debug_log!(debug=>"  - {}",TokenList(&args[i as usize]).to_str(engine.memory));
         }
     }
     let mut replacement = d.replacement.iter();
@@ -605,12 +611,12 @@ pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSo
                                 arity += 1;
                                 let u = c.to_usize();
                                 if u < 48 || u - 48 != (arity as usize) {
-                                    throw!("Expected parameter number {}, got {}",arity,next => cmd.cause)
+                                    throw!("Expected parameter number {}, got {}",arity,next.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause)
                                 }
                                 params.push(ParamToken::Param);
                             }
                             _ =>
-                                throw!("Expected parameter number {}, got {}",arity,next => cmd.cause)
+                                throw!("Expected parameter number {}, got {}",arity,next.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause)
                         }
                     }
                 }

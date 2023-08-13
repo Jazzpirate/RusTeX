@@ -39,7 +39,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// the input stream, after expanding macros as necessary.
     fn get_next_stomach_command(&mut self,engine:&mut EngineMutNoGullet<ET>) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {
         Ok(match self.get_next_unexpandable(engine)? {
-            Some(rt) => Some(StomachCommand::from_resolved(rt)?),
+            Some(rt) => Some(StomachCommand::from_resolved(rt,engine.memory)?),
             None => None
         })
     }
@@ -79,8 +79,8 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         methods::get_keywords::<ET>(&mut engine.join_gullet(self), keywords)
     }
 
-    fn get_string(&mut self, engine:&mut EngineMutNoGullet<ET>) -> Result<String,TeXError<ET>> {
-        methods::get_string::<ET>(&mut engine.join_gullet(self))
+    fn get_string(&mut self, engine:&mut EngineMutNoGullet<ET>,string:&mut String) -> Result<(),TeXError<ET>> {
+        methods::get_string::<ET>(&mut engine.join_gullet(self),string)
     }
 
     fn get_font(&mut self,engine:&mut EngineMutNoGullet<ET>) -> Result<ET::Font,TeXError<ET>> {

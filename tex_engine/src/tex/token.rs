@@ -11,6 +11,7 @@
 use std::any::TypeId;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::EngineType;
+use crate::engine::memory::Memory;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, CommandSource};
 use crate::utils::Ptr;
@@ -18,12 +19,23 @@ use crate::utils::strings::{CharType, TeXStr};
 
 /// A [`BaseToken`] bundles the actually TeX-relevant data of a [`Token`], which is cloned often
 /// and required by all [`Token`] implementations
-#[derive(Clone)]
+#[derive(Clone,Copy,Debug)]
 pub enum BaseToken<C:CharType> {
     /// A control sequence token with the provided name
     CS(TeXStr<C>),
     /// An active character token with the provided character
     Char(C, CategoryCode)
+}
+impl<C:CharType> BaseToken<C> {
+    pub fn to_str<ET:EngineType<Char=C>>(& self,memory:&Memory<ET>,escapechar:Option<C>) -> String {
+        match self {
+            BaseToken::Char(c, _) => c.as_char().to_string(),
+            BaseToken::CS(n) => match escapechar {
+                Some(c) => (c.as_char().to_string() + n.to_str(memory)).to_string(),
+                None => n.to_str(memory).to_string()
+            }
+        }
+    }
 }
 impl<C:CharType> PartialEq for BaseToken<C> {
     fn eq(&self, other: &Self) -> bool {
@@ -35,11 +47,12 @@ impl<C:CharType> PartialEq for BaseToken<C> {
         }
     }
 }
+/*
 impl<C:CharType> Display for BaseToken<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             BaseToken::Char(c, _) => write!(f, "{}", c.char_str()),
-            BaseToken::CS(n) => write!(f, "\\{}", n)
+            BaseToken::CS(n) => write!(f, "\\{}", )
         }
     }
 }
@@ -67,15 +80,18 @@ impl<C:CharType> Debug for BaseToken<C> {
     }
 }
 
+ */
+
 #[derive(Clone,Debug)]
 pub struct Token<ET:EngineType> {
     pub base:BaseToken<ET::Char>,
     pub sourceref:Option<ET::TokenReference>
 }
 
-impl<ET:EngineType> Display for Token<ET> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.base,f)
+
+impl<ET:EngineType> Token<ET> {
+    pub fn to_str(&self,memory:&Memory<ET>,escapechar:Option<ET::Char>) -> String {
+        self.base.to_str(memory,escapechar)
     }
 }
 impl<ET:EngineType> PartialEq for Token<ET> {
@@ -121,9 +137,9 @@ pub trait Token:PartialEq+Clone+Display+Debug+'static{
  */
 
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone,Copy,Debug,PartialEq)]
 pub struct FileReference {
-    pub filename:Ptr<String>,
+    pub filename:string_interner::DefaultSymbol,
     pub start:(usize,usize),
     pub end:(usize,usize)
 }
@@ -132,14 +148,14 @@ pub trait TokenReference<ET:EngineType<TokenReference = Self>>:Clone + Debug {
     fn from_expansion(cmd:&CommandSource<ET>) -> Self;
     fn from_file(base:&BaseToken<ET::Char>,fr:FileReference) -> Self;
     fn with_ref(&self,base:&BaseToken<ET::Char>) -> Self { self.clone() }
-    fn trace(&self) -> Option<String> { None }
+    fn trace(&self,memory:&mut Memory<ET>) -> Option<String> { None }
 }
 impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for () {
     fn from_expansion(_cmd: &CommandSource<ET>) -> Self { () }
     fn from_file(_base: &BaseToken<ET::Char>, _fr: FileReference) -> Self { () }
 }
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone,Debug,PartialEq,Copy)]
 pub enum FileReferenceOnly {
     File(FileReference), None
 }
@@ -159,13 +175,13 @@ pub enum FileTokenReferenceI<ET:EngineType<TokenReference = FileTokenReference<E
     Expansion{cmd:Option<ET::CommandReference>, token: Token<ET>}
 }
 impl<ET:EngineType<TokenReference = FileTokenReference<ET>>> FileTokenReferenceI<ET> {
-    pub fn trace(&self) -> Option<String> {
+    pub fn trace(&self,memory:&mut Memory<ET>) -> Option<String> {
         use FileTokenReferenceI::*;
         match self {
-            File (FileReference{filename, start,end}) => Some(format!("File {} at {}:{} - {}:{}", filename, start.0,start.1,end.0,end.1)),
+            File (FileReference{filename, start,end}) => Some(format!("File {} at {}:{} - {}:{}",memory.interner.resolve(*filename).unwrap(), start.0,start.1,end.0,end.1)),
             Expansion {token, ..} => {
-                let mut trace = format!("Expanded from {}",token);
-                match token.sourceref.as_ref().map(|r|r.trace()).flatten() {
+                let mut trace = format!("Expanded from {}",token.to_str(memory,Some(ET::Char::backslash())));
+                match token.sourceref.as_ref().map(|r|r.trace(memory)).flatten() {
                     Some(s) => {
                         trace.push_str("\n - ");
                         trace.push_str(&s)
@@ -192,24 +208,17 @@ impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileTokenRefer
 
 /// A list of [`Token`]s
 pub struct TokenList<'a,ET:EngineType>(pub &'a [Token<ET>]);
+impl <'a,ET:EngineType> TokenList<'a,ET> {
+    pub fn to_str(&self,memory:&Memory<ET>) -> String {
+        let mut s = String::new();
+        for t in self.0 {
+            s.push_str(&t.to_str(memory,Some(ET::Char::backslash())));
+        }
+        s
+    }
+}
 impl<'a,ET:EngineType> Into<TokenList<'a,ET>> for &'a Vec<Token<ET>> {
     fn into(self) -> TokenList<'a,ET> { TokenList(self.as_slice()) }
-}
-impl<ET:EngineType> Display for TokenList<'_,ET> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for t in self.0 {
-            write!(f, "{}", t.base)?;
-        }
-        Ok(())
-    }
-}
-impl<ET:EngineType> Debug for TokenList<'_,ET> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for t in self.0 {
-            write!(f, "{:?}", t.base)?;
-        }
-        Ok(())
-    }
 }
 
 /*

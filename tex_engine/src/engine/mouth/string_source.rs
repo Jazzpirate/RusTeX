@@ -11,7 +11,7 @@ use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, FileReference, Token};
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
-use crate::utils::strings::{AllCharsTrait, CharType};
+use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 
 /// A [`StringSource`] is in one of three states
 #[derive(Copy,Clone,PartialEq,Debug)]
@@ -255,18 +255,18 @@ impl<C:CharType> StringSourceState<C> {
                 self.charbuffer.push((a,l,c));
                 self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
-                (BaseToken::CS(C::empty_str()),line, col)
+                (BaseToken::CS(memory.empty_str),line, col)
             }
             None => {
                 self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
-                (BaseToken::CS(C::empty_str()), line, col)
+                (BaseToken::CS(memory.empty_str), line, col)
             }
             Some((a,_,_)) if *cc.get(&a) == Letter => {
+                let mut str = memory.get_string();
                 self.state = MouthState::S;
                 debug_log!(trace=>"get_next_immediate: Next character is Letter");
-                let mut v = Vec::with_capacity(64);
-                v.push(a);
+                str.push(a.as_char());
                 loop {
                     match self.next_char(cc,endline) {
                         Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
@@ -274,7 +274,8 @@ impl<C:CharType> StringSourceState<C> {
                             self.state = MouthState::N;
                             break
                         }
-                        Some((b,_,_)) if *cc.get(&b) == Letter => v.push(b),
+                        Some((b,_,_)) if *cc.get(&b) == Letter =>
+                            str.push(b.as_char()),
                         Some(o) => {
                             self.charbuffer.push(o);
                             break
@@ -282,14 +283,18 @@ impl<C:CharType> StringSourceState<C> {
                         None => break
                     }
                 }
-                let ret = BaseToken::CS(v.into());
-                debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
+                debug_log!(trace=>"get_next_immediate: Returning \\{:}",str);
+                let ret = BaseToken::CS(TeXStr::from_string(&str,memory));
+                memory.return_string(str);
                 (ret,line, col)
             }
             Some((a,_,_)) => {
                 self.state = MouthState::M;
-                let ret = BaseToken::CS(vec!(a).into());
-                debug_log!(trace=>"get_next_immediate: Returning {:?}",ret);
+                let mut str = memory.get_string();
+                str.push(a.as_char());
+                debug_log!(trace=>"get_next_immediate: Returning \\{}",str);
+                let ret = BaseToken::CS(    TeXStr::from_string(&str,memory));
+                memory.return_string(str);
                 (ret, line, col)
             }
         }
@@ -319,7 +324,7 @@ impl<C:CharType> StringSourceState<C> {
                         match self.state {
                             MouthState::N => {
                                 debug_log!(trace=>"get_next_immediate: State:N; returning \\par");
-                                Some((BaseToken::CS(C::par_token()), line, col))
+                                Some((BaseToken::CS(memory.par), line, col))
                             }
                             MouthState::S => {
                                 self.state = MouthState::N;
@@ -461,13 +466,13 @@ impl<C:CharType> StringSourceState<C> {
 #[derive(Clone)]
 pub struct StringSource<C:CharType> {
     pub(crate) state:StringSourceState<C>,
-    pub source:Option<Ptr<String>>
+    pub source:Option<string_interner::DefaultSymbol>
 }
 impl<C:CharType> StringSource<C> {
     /// Create a new [`StringSource`] from a [`String`] and an optional source reference.
     /// `source` is usually a filename, used to construct [`crate::tex::token::SourceReference`]s for [`Token`]s.
     /// The [`StringSource`] keeps track of the current line and column number.
-    pub fn new(string:Vec<u8>,source:Option<Ptr<String>>) -> StringSource<C> {
+    pub fn new(string:Vec<u8>,source:Option<string_interner::DefaultSymbol>) -> StringSource<C> {
         StringSource {
             state:StringSourceState::new(string),
             source

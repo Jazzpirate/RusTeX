@@ -41,7 +41,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
     fn add_expansion<F,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R;
     /// Insert a [`File`] into the [`Mouth`], to be processed next
-    fn push_file(&mut self,file:&ET::File);
+    fn push_file(&mut self,file:&ET::File,memory:&mut Memory<ET>);
 
     /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
     fn push_noexpand(&mut self,tk:Token<ET>,memory:&mut Memory<ET>);
@@ -56,10 +56,10 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
 
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
-    fn preview(&self,len:usize) -> String;
+    fn preview(&self,len:usize,memory:&Memory<ET>) -> String;
 
     /// Return the current file and line number as presentable string
-    fn file_line(&self) -> String;
+    fn file_line(&self,memory:&Memory<ET>) -> String;
 
     fn line_no(&self) -> usize;
 
@@ -121,7 +121,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
         match self.get_next(state,memory)? {
             Some((t,b)) => {
                 match &t.base {
-                    BaseToken::CS(name) if *name == ET::Char::par_token() =>
+                    BaseToken::CS(name) if *name == memory.par =>
                         throw!("Paragraph ended while reading argument" => t),
                     BaseToken::Char(_,CategoryCode::EOF) =>
                         file_end!(),
@@ -145,7 +145,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
                             depth -= 1;
                             if depth == 0 { return Ok(()) }
                         },
-                        BaseToken::CS(n) if *n == ET::Char::par_token() =>
+                        BaseToken::CS(n) if *n == engine.memory.par =>
                             throw!("Paragraph ended while reading argument" => t),
                         _ => ()
                     }
@@ -200,11 +200,11 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         self.stack.push(TeXMouthSource::Token((tk,false)))
     }
 
-    fn push_file(&mut self, file: &ET::File) {
+    fn push_file(&mut self, file: &ET::File,memory:&mut Memory<ET>) {
         debug!("Pushing file {:?}", file.path());
         let mut source = TeXMouthSource::String(StringSource::new(
             (*file.content_string()).clone().unwrap(),
-            Some(Ptr::new(file.path().to_str().unwrap().to_string()))
+            Some(memory.interner.get_or_intern(file.path().to_str().unwrap().to_string()))
         ));
         self.stack.push(source);
     }
@@ -225,7 +225,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                     None => {
                         match &s.source {
                             None => (),
-                            Some(s) => (state.outputs().file_close)(&s)
+                            Some(s) => (state.outputs().file_close)(memory.interner.resolve(*s).unwrap())
                         }
                         self.stack.pop();
                         debug_log!(debug => "file end; inserting \\everyeof");
@@ -281,12 +281,11 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
          */
     }
 
-    fn preview(&self,len:usize) -> String { // TODO memory
+    fn preview(&self,len:usize,memory:&Memory<ET>) -> String { // TODO memory
         let mut ret = String::new();
-        if ret.len() > len { ret.split_off(len);return ret }
         for s in self.stack.iter().rev() {
             ret.push_str(&match s {
-                TeXMouthSource::Token(ts) => ts.0.base.to_string(),
+                TeXMouthSource::Token(ts) => ts.0.base.to_str(memory,Some(ET::Char::backslash())),
                 TeXMouthSource::String(ss) => ss.preview()
             });
             if ret.len() > len { ret.split_off(len);return ret }
@@ -309,7 +308,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
             match s.1 {
                 TeXMouthSource::String(ss) => {
                     match &ss.source {
-                        Some(s) => (state.outputs().file_close)(&*s),
+                        Some(s) => (state.outputs().file_close)(memory.interner.resolve(*s).unwrap()),
                         None => ()
                     }
                     self.stack.remove(s.0);
@@ -320,12 +319,12 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         }
     }
 
-    fn file_line(&self) -> String {
+    fn file_line(&self,memory:&Memory<ET>) -> String {
         for s in self.stack.iter().rev() {
             match s {
                 TeXMouthSource::String(ss) => {
                     match &ss.source {
-                        Some(s) => return format!("{}:({},{})",s,ss.line(),ss.column()),
+                        Some(s) => return format!("{}:({},{})",memory.interner.resolve(*s).unwrap(),ss.line(),ss.column()),
                         None => ()
                     }
                 }
@@ -487,9 +486,9 @@ impl<ET:EngineType> TokenSource<ET> {
         self.1 += 1;
         (ret,self.is_empty())
     }
-    fn preview(&self) -> String {
+    fn preview(&self,memory:&Memory<ET>) -> String {
         let tks : Vec<Token<ET>> = self.0[self.1..].iter().map(|t| unsafe{t.clone().unwrap_unchecked()}).collect();
-        TokenList(&tks).to_string()
+        TokenList(&tks).to_str(memory)
         //crate::interpreter::tokens_to_string_default(&tks)
     }
     pub fn reset(&mut self) {

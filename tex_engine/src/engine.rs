@@ -73,7 +73,7 @@ pub trait Engine<ET:EngineType> {
         let mut comps = self.components_mut();
         let file = comps.state.filesystem().get(s);
         let old = comps.state.filesystem().set_pwd(file.path().parent().unwrap().to_path_buf());
-        comps.mouth.push_file(&file);
+        comps.mouth.push_file(&file,comps.memory);
         comps.state.set_job(file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         // should not produce any boxes, so loop until file end
         let (s,mut r) = comps.split_stomach();
@@ -87,7 +87,7 @@ pub trait Engine<ET:EngineType> {
         let mut comps = self.components_mut();
         comps.state.set_job(s.with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         let file = comps.state.filesystem().get(s.to_str().unwrap());
-        comps.mouth.push_file(&file);
+        comps.mouth.push_file(&file,comps.memory);
 
         let everyjob = comps.state.get_primitive_toks("everyjob");
         if !everyjob.is_empty() {
@@ -101,9 +101,10 @@ pub trait Engine<ET:EngineType> {
     }
 }
 
-pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,memory:&mut Memory<ET>) -> EngineStruct<ET> {
+pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach) -> EngineStruct<ET> {
+    let mut memory = Memory::new();
     EngineStruct {
-        state, gullet, mouth:ET::Mouth::new(memory),stomach,memory
+        state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory
     }
 }
 /*
@@ -118,19 +119,21 @@ pub fn new_tex_with_source_references<FS:FileSystem<u8>>(fs:FS,outputs:Outputs) 
 
  */
 
-pub struct EngineStruct<'a,ET:EngineType> {
+#[derive(Clone)]
+pub struct EngineStruct<ET:EngineType> {
     pub state:ET::State,
     pub mouth:ET::Mouth,
     pub gullet: ET::Gullet,
     pub stomach:ET::Stomach,
-    pub memory:&'a mut Memory<ET>,
+    pub memory:Memory<ET>,
 }
+
 
 use crate::tex::numbers::Int;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
-impl<ET:EngineType> Engine<ET> for EngineStruct<'_,ET> {
+impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
     fn components(&self) -> EngineRef<ET> { EngineRef {mouth:&self.mouth,state:&self.state, gullet:&self.gullet, stomach:&self.stomach, memory: &self.memory} }
     fn components_mut(&mut self) -> EngineMut<ET> { EngineMut {mouth:&mut self.mouth,state:&mut self.state, gullet:&mut self.gullet, stomach:&mut self.stomach, memory:&mut self.memory} }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
@@ -142,7 +145,7 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<'_,ET> {
     }
 
 }
-impl<ET:EngineType> EngineStruct<'_,ET> {
+impl<ET:EngineType> EngineStruct<ET> {
     pub fn initialize_etex(&mut self) -> Result<(),TeXError<ET>> {
         self.initialize()?;
         self.etex();

@@ -5,16 +5,21 @@ use string_interner::backend::BufferBackend;
 use string_interner::StringInterner;
 use crate::engine::EngineType;
 use crate::tex::token::Token;
+use crate::utils::strings::TeXStr;
 
 const VEC_SIZE:usize = 8;
 
 pub struct Memory<ET:EngineType> {
     args:Option<[Vec<Token<ET>>;9]>,
     token_vecs:Vec<Vec<Token<ET>>>,
-    interner: StringInterner<BufferBackend,ahash::RandomState>
+    strings:Vec<String>,
+    pub interner: StringInterner<BufferBackend,ahash::RandomState>,
+    pub relax:TeXStr<ET::Char>,
+    pub par:TeXStr<ET::Char>,
+    pub empty_str:TeXStr<ET::Char>,
 }
 impl<ET:EngineType> Clone for Memory<ET> {
-    fn clone(&self) -> Self { Self::new()}
+    fn clone(&self) -> Self { Self::new_with(self.interner.clone())}
 }
 impl<ET:EngineType> Memory<ET> {
     pub fn print_stats(&self) {
@@ -27,11 +32,23 @@ impl<ET:EngineType> Memory<ET> {
             error!(" -  {}",a.capacity());
         }
     }
-    pub fn new() -> Self {
-        use ahash::*;
+    pub fn new_with(mut interner:StringInterner<BufferBackend,ahash::RandomState>) -> Self {
         let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
+        let relax = TeXStr::from_primitive(interner.get_or_intern_static("relax"));
+        let par = TeXStr::from_primitive(interner.get_or_intern_static("par"));
+        let empty_str = TeXStr::from_primitive(interner.get_or_intern_static(""));
         Memory{
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),token_vecs,interner:StringInterner::<BufferBackend,ahash::RandomState>::new()
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:Vec::with_capacity(4),token_vecs,interner,relax,par,empty_str
+        }
+    }
+    pub fn new() -> Self {
+        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
+        let mut interner = StringInterner::<BufferBackend,ahash::RandomState>::new();
+        let relax = TeXStr::from_primitive(interner.get_or_intern_static("relax"));
+        let par = TeXStr::from_primitive(interner.get_or_intern_static("par"));
+        let empty_str = TeXStr::from_primitive(interner.get_or_intern_static(""));
+        Memory{
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:Vec::with_capacity(4),token_vecs,interner,relax,par,empty_str
         }
     }
     pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
@@ -42,6 +59,13 @@ impl<ET:EngineType> Memory<ET> {
     }
     pub fn get_token_vec(&mut self) -> Vec<Token<ET>> {
         self.token_vecs.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
+    }
+    pub fn get_string(&mut self) -> String {
+        self.strings.pop().unwrap_or(String::new())
+    }
+    pub fn return_string(&mut self, mut s:String) {
+        s.clear();
+        self.strings.push(s);
     }
     pub fn return_token_vec(&mut self, mut v: Vec<Token<ET>>) {
         v.clear();

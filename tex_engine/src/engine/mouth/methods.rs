@@ -95,11 +95,11 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&mut self,len:usize) -> String {
-        self.mouth.preview(len)
+        self.mouth.preview(len,self.memory)
     }
 
     pub fn current_position(&mut self) -> String {
-        self.mouth.file_line()
+        self.mouth.file_line(self.memory)
     }
 }
 
@@ -108,11 +108,11 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&self,len:usize) -> String {
-        self.mouth.preview(len)
+        self.mouth.preview(len,self.memory)
     }
 
     pub fn current_position(&self) -> String {
-        self.mouth.file_line()
+        self.mouth.file_line(self.memory)
     }
 }
 

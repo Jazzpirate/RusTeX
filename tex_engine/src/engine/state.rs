@@ -9,6 +9,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
 use crate::engine::{EngineMut, EngineType, Outputs};
+use crate::engine::memory::Memory;
 use crate::engine::stomach::Stomach;
 use crate::tex::nodes::{HVBox, OpenBox, CustomNode, TeXNode, SimpleNode};
 use crate::tex::fonts::FontStore;
@@ -99,7 +100,7 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn filesystem(&mut self) -> &mut ET::FileSystem;
     fn file_openout(&mut self,i:usize,f:ET::File);
     fn file_closeout(&mut self, i: usize);
-    fn file_openin(&mut self,i:usize,f:ET::File);
+    fn file_openin(&mut self, i: usize, f: ET::File,memory:&mut Memory<ET>);
     fn file_closein(&mut self, i: usize);
     fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
     fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
@@ -407,11 +408,11 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     fn filesystem(&mut self) -> &mut ET::FileSystem {
         &mut self.filesystem
     }
-    fn file_openin(&mut self, i: usize, f: ET::File) {
+    fn file_openin(&mut self, i: usize, f: ET::File,memory:&mut Memory<ET>) {
         if i >= self.in_files.len() {
             self.in_files.resize(i+1,None);
         }
-        f.open_in();
+        f.open_in(memory);
         self.in_files[i] = Some(f);
     }
     fn file_closein(&mut self, i: usize) {
@@ -852,7 +853,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             BaseToken::CS(name) => {
                 self.state.set_command(name.clone(), Some(Command::new(BaseCommand::Relax,Some(source))), globally)
             }
-            _ => throw!("Command name expected, got {}",tk => source.cause)
+            _ => throw!("Command name expected, got {:?}",tk => source.cause)
         }
         Ok(())
     }

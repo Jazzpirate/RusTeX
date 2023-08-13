@@ -71,7 +71,7 @@ mod tests {
     use crate::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
     use crate::tex::token::FileTokenReference;
     use crate::utils::Ptr;
-    use crate::utils::strings::CharType;
+    use crate::utils::strings::{CharType, TeXStr};
 
     macro_rules! measure {
         ($key:ident:$x:expr) => {{
@@ -130,7 +130,7 @@ mod tests {
         //trace();
         //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
         //env_logger::init();
-        warn();
+        //warn();
 
         let outputs = Outputs {
             error: |s|  { warn!("\n{}",Red.paint(std::format!("{}",s))) },
@@ -171,10 +171,9 @@ mod tests {
         let state = TeXState::new(fs,fonts,outputs.clone());
         let gullet = TeXGullet::new();
         let stomach = NoShipoutDefaultStomach::new();
-        let mut memory = Memory::new();
-        let mut engine = crate::engine::new::<Default>(state,gullet,stomach,&mut memory);
+        let mut engine = crate::engine::new::<Default>(state,gullet,stomach);
 
-        engine.state.set_command(<u8 as CharType>::from_str("rustexBREAK"),Some(Command::new(BaseCommand::Unexpandable {
+        engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.memory),Some(Command::new(BaseCommand::Unexpandable {
             name: "rustexBREAK",
             apply: |_,_| {
                 println!("HERE!");
@@ -190,7 +189,7 @@ mod tests {
                 engine.components().memory.print_stats()
             },
             Err(e) => {
-                (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(),engine.mouth.file_line(),engine.mouth.preview(100)));
+                (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(&mut engine.memory),engine.components_mut().current_position(),engine.components_mut().preview(100)));
                 panic!()
             }
         }
