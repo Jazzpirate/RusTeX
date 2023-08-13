@@ -76,9 +76,8 @@ pub trait Engine<ET:EngineType> {
         comps.mouth.push_file(&file,comps.memory);
         comps.state.set_job(file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         // should not produce any boxes, so loop until file end
-        let (s,mut r) = comps.split_stomach();
-        s.next_shipout_box(&mut r)?;
-        r.state.filesystem().set_pwd(old);
+        ET::Stomach::next_shipout_box(&mut comps)?;
+        comps.state.filesystem().set_pwd(old);
         Ok(())
     }
     fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {
@@ -93,8 +92,7 @@ pub trait Engine<ET:EngineType> {
         if !everyjob.is_empty() {
             comps.add_expansion(|comps,rs| for t in everyjob {rs.push(t,comps.memory)})
         }
-        let (s,mut r) = comps.split_stomach();
-        while let Some(b) = s.next_shipout_box(&mut r)? {
+        while let Some(b) = ET::Stomach::next_shipout_box(&mut comps)? {
             ret.push(b)
         }
         Ok(ret)

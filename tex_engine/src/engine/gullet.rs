@@ -8,7 +8,7 @@ pub mod numeric_methods;
 use std::marker::PhantomData;
 use crate::catch;
 use crate::engine::{EngineMut, EngineType};
-use crate::engine::gullet::methods::{do_conditional, EngineMutNoGullet};
+use crate::engine::gullet::methods::{do_conditional};
 use crate::engine::mouth::{Mouth, StandardMouth};
 use crate::engine::state::State;
 use crate::tex::ConditionalBranch;
@@ -31,14 +31,14 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
     /// (or [`None`] if the [`Mouth`] is empty)
-    fn get_next_unexpandable(&mut self,engine:&mut EngineMutNoGullet<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
-        methods::get_next_unexpandable(&mut engine.join_gullet(self))
+    fn get_next_unexpandable(engine:&mut EngineMut<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
+        methods::get_next_unexpandable(engine)
     }
 
     /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
     /// the input stream, after expanding macros as necessary.
-    fn get_next_stomach_command(&mut self,engine:&mut EngineMutNoGullet<ET>) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {
-        Ok(match self.get_next_unexpandable(engine)? {
+    fn get_next_stomach_command(engine:&mut EngineMut<ET>) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {
+        Ok(match Self::get_next_unexpandable(engine)? {
             Some(rt) => Some(StomachCommand::from_resolved(rt,engine.memory)?),
             None => None
         })
@@ -46,45 +46,45 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 
     /// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
     /// If not expandable, returns the [`ResolvedToken`] for `tk`
-    fn expand(&mut self,engine:&mut EngineMutNoGullet<ET>,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>>;
+    fn expand(engine:&mut EngineMut<ET>,ret:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>>;
 
     /// Reads a number from the input stream.
-    fn get_int(&mut self, engine:&mut EngineMutNoGullet<ET>) -> Result<ET::Int,TeXError<ET>> {
-        numeric_methods::get_int::<ET>(&mut engine.join_gullet(self))
+    fn get_int(engine:&mut EngineMut<ET>) -> Result<ET::Int,TeXError<ET>> {
+        numeric_methods::get_int::<ET>(engine)
     }
 
     /// Reads a dimension from the input stream.
-    fn get_dim(&mut self, engine:&mut EngineMutNoGullet<ET>) -> Result<ET::Dim,TeXError<ET>> {
-        numeric_methods::get_dim::<ET>(&mut engine.join_gullet(self))
+    fn get_dim(engine:&mut EngineMut<ET>) -> Result<ET::Dim,TeXError<ET>> {
+        numeric_methods::get_dim::<ET>(engine)
     }
 
     /// Reads a skip from the input stream.
-    fn get_skip(&mut self, engine:&mut EngineMutNoGullet<ET>) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
-        numeric_methods::get_skip::<ET>(&mut engine.join_gullet(self))
+    fn get_skip(engine:&mut EngineMut<ET>) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
+        numeric_methods::get_skip::<ET>(engine)
     }
 
     /// Reads a muskip from the input stream.
-    fn get_muskip(&mut self, engine:&mut EngineMutNoGullet<ET>) -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
-        numeric_methods::get_muskip::<ET>(&mut engine.join_gullet(self))
+    fn get_muskip(engine:&mut EngineMut<ET>) -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
+        numeric_methods::get_muskip::<ET>(engine)
     }
 
     /// read a single keyword from the input stream; returns `true` if the keyword is found.
-    fn get_keyword<'a>(&mut self, engine:&mut EngineMutNoGullet<ET>, keyword:&'a str) -> Result<bool,TeXError<ET>> {
-        methods::get_keyword::<ET>(&mut engine.join_gullet(self), keyword)
+    fn get_keyword<'a>(engine:&mut EngineMut<ET>, keyword:&'a str) -> Result<bool,TeXError<ET>> {
+        methods::get_keyword::<ET>(engine, keyword)
     }
 
     /// reads one of several optional keywords from the input stream;
     /// returns `None` if none of the keywords are found.
-    fn get_keywords<'a>(&mut self, engine:&mut EngineMutNoGullet<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
-        methods::get_keywords::<ET>(&mut engine.join_gullet(self), keywords)
+    fn get_keywords<'a>(engine:&mut EngineMut<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
+        methods::get_keywords::<ET>(engine, keywords)
     }
 
-    fn get_string(&mut self, engine:&mut EngineMutNoGullet<ET>,string:&mut String) -> Result<(),TeXError<ET>> {
-        methods::get_string::<ET>(&mut engine.join_gullet(self),string)
+    fn get_string(engine:&mut EngineMut<ET>,string:&mut String) -> Result<(),TeXError<ET>> {
+        methods::get_string::<ET>(engine,string)
     }
 
-    fn get_font(&mut self,engine:&mut EngineMutNoGullet<ET>) -> Result<ET::Font,TeXError<ET>> {
-        methods::get_font::<ET>(&mut engine.join_gullet(self))
+    fn get_font(engine:&mut EngineMut<ET>) -> Result<ET::Font,TeXError<ET>> {
+        methods::get_font::<ET>(engine)
     }
 
     fn new_conditional(&mut self,name:&'static str) -> usize;
@@ -130,8 +130,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
         (self.in_conditionals.last().copied(),self.in_conditionals.len() - 1)
     }
 
-    fn expand(&mut self, engine:&mut EngineMutNoGullet<ET>, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET>> {
-        let mut engine = engine.join_gullet(self);
+    fn expand(engine:&mut EngineMut<ET>, ret: ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>, TeXError<ET>> {
         match ret.command {
             BaseCommand::Def(d) => {
                 engine.add_expansion(|engine,rs| {
@@ -141,7 +140,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
             }
             // expandable commands that do not expand to new tokens
             BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
-                apply(&mut engine, ret.source, &mut |_,_| Ok(()))?;
+                apply(engine, ret.source, &mut |_,_| Ok(()))?;
                 Ok(None)
             }
             BaseCommand::Expandable {apply,..} => {
@@ -151,7 +150,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
                 })
             },
             BaseCommand::Conditional {name,apply} => {
-                do_conditional(&mut engine,ret.source, name,apply, false)?;
+                do_conditional(engine,ret.source, name,apply, false)?;
                 Ok(None)
             }
             _ => Ok(Some(ret))

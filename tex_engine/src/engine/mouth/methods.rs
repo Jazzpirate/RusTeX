@@ -47,8 +47,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     pub fn get_argument(&mut self,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        let (m,mut r) = self.split_mouth();
-        m.get_argument(&mut r,f)
+        ET::Mouth::get_argument(self,f)
     }
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
@@ -73,23 +72,12 @@ impl<ET:EngineType> EngineMut<'_,ET> {
         file_end!()
     }
 
-    pub fn split_mouth(&mut self) -> (&mut ET::Mouth,EngineMutNoMouth<ET>) {
-        (self.mouth,EngineMutNoMouth {
-            state: self.state,
-            stomach: self.stomach,
-            memory: self.memory,
-            gullet: self.gullet,
-        })
-    }
-
     pub fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
-        let (m,mut r) = self.split_mouth();
-        m.with_mouth(&mut r,tks,f)
+        ET::Mouth::with_mouth(self,tks,f)
     }
 
     pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R {
-        let (m,mut r) = self.split_mouth();
-        m.add_expansion(&mut r,f)
+        ET::Mouth::add_expansion(self,f)
     }
 
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
@@ -113,24 +101,5 @@ impl<ET:EngineType> EngineRef<'_,ET> {
 
     pub fn current_position(&self) -> String {
         self.mouth.file_line(self.memory)
-    }
-}
-
-pub struct EngineMutNoMouth<'a,ET:EngineType> {
-    pub state:&'a mut ET::State,
-    pub stomach:&'a mut ET::Stomach,
-    pub memory:&'a mut Memory<ET>,
-    pub gullet:&'a mut ET::Gullet,
-}
-
-impl<ET:EngineType> EngineMutNoMouth<'_,ET> {
-    pub fn join_mouth<'b>(&'b mut self,mouth:&'b mut ET::Mouth) -> EngineMut<'b,ET> {
-        EngineMut {
-            state: self.state,
-            stomach: self.stomach,
-            memory: self.memory,
-            mouth,
-            gullet:self.gullet,
-        }
     }
 }

@@ -471,8 +471,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
                     catch!(engine.skip_whitespace() => cmd.cause.clone());
                     if d.long {catch!(engine.get_argument(&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
                     else {
-                        let (m,mut e) = engine.split_mouth();
-                        catch!(m.get_argument_nopar(&mut e,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())
+                        catch!(ET::Mouth::get_argument_nopar(engine,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())
                     };
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument

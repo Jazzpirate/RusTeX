@@ -18,7 +18,6 @@ use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
 use crate::{debug_log, file_end, throw};
 use crate::engine::memory::{ExpansionContainer, Memory, TokenArray};
-use crate::engine::mouth::methods::EngineMutNoMouth;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::TokenCont;
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -28,18 +27,17 @@ use crate::utils::strings::CharType;
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
 pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
-    fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,tks:Vec<Token<ET>>,mut f:F) -> R {
-        let old = std::mem::replace(self, Self::new_with(tks,engine.memory));
-        let mut engine = engine.join_mouth(self);
-        let ret = f(&mut engine);
-        std::mem::replace(self, old);
+    fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(engine:&mut EngineMut<ET>,tks:Vec<Token<ET>>,mut f:F) -> R {
+        let old = std::mem::replace(engine.mouth, Self::new_with(tks,engine.memory));
+        let ret = f(engine);
+        std::mem::replace(engine.mouth, old);
         ret
     }
     fn new(memory:&mut Memory<ET>) -> Self;
     fn new_with(tks:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self;
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
-    fn add_expansion<F,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R;
+    fn add_expansion<F,R>(engine:&mut EngineMut<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R;
     /// Insert a [`File`] into the [`Mouth`], to be processed next
     fn push_file(&mut self,file:&ET::File,memory:&mut Memory<ET>);
 
@@ -84,13 +82,12 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    fn get_argument(&mut self,engine:&mut EngineMutNoMouth<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        match self.get_next(engine.state,engine.memory)? {
+    fn get_argument(engine:&mut EngineMut<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+        match engine.get_next_token()? {
             None => file_end!(),
-            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => self.get_until_endgroup(engine,f),
+            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => Self::get_until_endgroup(engine,f),
             Some((o,_)) => {
-                let mut engine = engine.join_mouth(self);
-                f(&mut engine,o)?;
+                f(engine,o)?;
                 Ok(())
             }
         }
@@ -98,8 +95,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
 
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
-    fn get_until_endgroup(&mut self,engine:&mut EngineMutNoMouth<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        let mut engine = engine.join_mouth(self);
+    fn get_until_endgroup(engine:&mut EngineMut<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         let mut depth = 1;
         while let Some((tk,_)) = engine.get_next_token()? {
             match tk.catcode() {
@@ -111,7 +107,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
                 CategoryCode::EOF => file_end!(),
                 _ => ()
             }
-            f(&mut engine,tk)?;
+            f(engine,tk)?;
         }
         file_end!()
     }
@@ -133,12 +129,12 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn get_argument_nopar(&mut self,engine:&mut EngineMutNoMouth<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        match self.get_next(engine.state,engine.memory)? {
+    fn get_argument_nopar(engine:&mut EngineMut<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+        match engine.get_next_token()? {
             None => file_end!(),
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                 let mut depth = 1;
-                while let Some((tk,_)) = self.get_next(engine.state,engine.memory)? {
+                while let Some((tk,_)) = engine.get_next_token()? {
                     match &tk.base {
                         BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
                         BaseToken::Char(_,CategoryCode::EndGroup) => {
@@ -149,15 +145,13 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
                             throw!("Paragraph ended while reading argument" => t),
                         _ => ()
                     }
-                    let mut engine = engine.join_mouth(self);
-                    f(&mut engine,tk)?;
+                    f(engine,tk)?;
                 }
                 file_end!()
             }
             Some((t,_)) if t.catcode() == CategoryCode::EOF => file_end!(),
             Some((o,_)) => {
-                let mut engine = engine.join_mouth(self);
-                f(&mut engine,o)?;
+                f(engine,o)?;
                 Ok(())
             }
         }
@@ -184,14 +178,13 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     }
 
     /// Insert a [`Vec`] of [`Token`]s into the [`Mouth`], to be processed next
-    fn add_expansion<F,R>(&mut self,engine:&mut EngineMutNoMouth<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R {
+    fn add_expansion<F,R>(engine:&mut EngineMut<ET>,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R {
         let mut source = engine.memory.get_expansion_container();
         let ret = {
-            let mut engine = engine.join_mouth(self);
-            f(&mut engine,&mut source)
+            f(engine,&mut source)
         };
         source.consume::<_,()>(engine.memory,|s| {
-            self.stack.push(TeXMouthSource::Token(s))
+            engine.mouth.stack.push(TeXMouthSource::Token(s))
         });
         ret
     }

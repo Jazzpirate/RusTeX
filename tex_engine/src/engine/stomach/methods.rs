@@ -89,33 +89,3 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
         }
     }
 }
-
-impl<ET:EngineType> EngineMut<'_,ET> {
-    pub fn split_stomach(&mut self) -> (&mut ET::Stomach,EngineMutNoStomach<ET>) {
-        (self.stomach,EngineMutNoStomach {
-            mouth: self.mouth,
-            state: self.state,
-            gullet: self.gullet,
-            memory: self.memory,
-        })
-    }
-}
-
-pub struct EngineMutNoStomach<'a,ET:EngineType> {
-    pub state:&'a mut ET::State,
-    pub gullet:&'a mut ET::Gullet,
-    pub memory:&'a mut Memory<ET>,
-    pub mouth:&'a mut ET::Mouth,
-}
-
-impl<ET:EngineType> EngineMutNoStomach<'_,ET> {
-    pub fn join_stomach<'b>(&'b mut self,stomach:&'b mut ET::Stomach) -> EngineMut<'b,ET> {
-        EngineMut {
-            state: self.state,
-            stomach,
-            mouth: self.mouth,
-            memory: self.memory,
-            gullet:self.gullet,
-        }
-    }
-}

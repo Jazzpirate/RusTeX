@@ -457,52 +457,44 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
     /// (or [`None`] if the [`Mouth`] is empty)
     pub fn get_next_unexpandable(&mut self) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_next_unexpandable(&mut r)
+        ET::Gullet::get_next_unexpandable(self)
     }
 
     /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
     /// the input stream, after expanding macros as necessary.
     pub fn get_next_stomach_command(&mut self) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_next_stomach_command(&mut r)
+        ET::Gullet::get_next_stomach_command(self)
     }
 
     /// read a single keyword from the input stream; returns `true` if the keyword is found.
     pub fn get_keyword<'a>(&mut self, keyword:&'a str) -> Result<bool,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_keyword(&mut r, keyword)
+        ET::Gullet::get_keyword(self, keyword)
     }
 
     /// reads one of several optional keywords from the input stream;
     /// returns `None` if none of the keywords are found.
     pub fn get_keywords<'a>(&mut self, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_keywords(&mut r, keywords)
+        ET::Gullet::get_keywords(self, keywords)
     }
 
     /// Reads a number from the input stream.
     pub fn get_int(&mut self) -> Result<ET::Int,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_int(&mut r)
+        ET::Gullet::get_int(self)
     }
 
     /// Reads a dimension from the input stream.
     pub fn get_dim(&mut self) -> Result<ET::Dim,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_dim(&mut r)
+        ET::Gullet::get_dim(self)
     }
 
     /// Reads a skip from the input stream.
     pub fn get_skip(&mut self) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_skip(&mut r)
+        ET::Gullet::get_skip(self)
     }
 
     /// Reads a muskip from the input stream.
     pub fn get_muskip(&mut self) -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_muskip(&mut r)
+        ET::Gullet::get_muskip(self)
     }
 
     pub fn get_expanded_group(&mut self, expand_protected:bool, keep_the:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
@@ -522,8 +514,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     }
 
     pub fn get_string(&mut self,string:&mut String) -> Result<(),TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_string(&mut r,string)
+        ET::Gullet::get_string(self,string)
     }
 
     pub fn get_braced_string(&mut self,string:&mut String) -> Result<(),TeXError<ET>> {
@@ -531,8 +522,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     }
 
     pub fn get_font(&mut self) -> Result<ET::Font,TeXError<ET>> {
-        let (g,mut r) = self.split_gullet();
-        g.get_font(&mut r)
+        ET::Gullet::get_font(self)
     }
 
     pub fn is_next_char_one_of(&mut self,chars:&'static [u8]) -> Result<Option<u8>,TeXError<ET>> {
@@ -574,8 +564,7 @@ impl<ET:EngineType> EngineMut<'_,ET> {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    let (m,mut re) = self.split_mouth();
-                    m.get_until_endgroup(&mut re,f)
+                    ET::Mouth::get_until_endgroup(self,f)
                 }
                 _ => throw!("begin group expected")
             }
@@ -614,35 +603,6 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     }
 
     pub fn expand(&mut self,r:ResolvedToken<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
-        let (g,mut re) = self.split_gullet();
-        g.expand(&mut re,r)
-    }
-
-    pub fn split_gullet(&mut self) -> (&mut ET::Gullet,EngineMutNoGullet<ET>) {
-        (self.gullet,EngineMutNoGullet {
-            state: self.state,
-            stomach: self.stomach,
-            memory: self.memory,
-            mouth: self.mouth,
-        })
-    }
-}
-
-pub struct EngineMutNoGullet<'a,ET:EngineType> {
-    pub state:&'a mut ET::State,
-    pub stomach:&'a mut ET::Stomach,
-    pub memory:&'a mut Memory<ET>,
-    pub mouth:&'a mut ET::Mouth,
-}
-
-impl<ET:EngineType> EngineMutNoGullet<'_,ET> {
-    pub fn join_gullet<'b>(&'b mut self,gullet:&'b mut ET::Gullet) -> EngineMut<'b,ET> {
-        EngineMut {
-            state: self.state,
-            stomach: self.stomach,
-            memory: self.memory,
-            mouth: self.mouth,
-            gullet,
-        }
+        ET::Gullet::expand(self,r)
     }
 }
