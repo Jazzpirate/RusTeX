@@ -1869,7 +1869,7 @@ pub fn read<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, glo
     }
     let newcmd = catch_prim!(engine.get_control_sequence() => (READ,cmd));
     let mut ret = vec!();
-    catch_prim!(file.read::<ET,_>(engine.state.get_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READ,cmd));
+    catch_prim!(file.read::<ET,_>(engine.memory,engine.state.get_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READ,cmd));
     debug_log!(trace=>"read: {} = {}",newcmd,TokenList(&ret));
     if ret.is_empty() {
         match engine.state.get_endlinechar() {

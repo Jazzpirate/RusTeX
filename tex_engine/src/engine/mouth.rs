@@ -220,7 +220,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                 _ => unreachable!()
             },
             Some(TeXMouthSource::String(ref mut s)) => {
-                match s.get_next(state.get_catcode_scheme(), state.get_endlinechar())? {
+                match s.get_next(memory,state.get_catcode_scheme(), state.get_endlinechar())? {
                     Some(t) => return Ok(Some((t, true))),
                     None => {
                         match &s.source {

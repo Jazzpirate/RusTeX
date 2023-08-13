@@ -1,26 +1,37 @@
+use std::hash::BuildHasher;
 use array_init::array_init;
+use log::error;
+use string_interner::backend::BufferBackend;
+use string_interner::StringInterner;
 use crate::engine::EngineType;
 use crate::tex::token::Token;
 
-const ARRAY_SIZE:usize = 32;
-const VEC_SIZE:usize = 256;
+const VEC_SIZE:usize = 8;
 
 pub struct Memory<ET:EngineType> {
-    token_arrays:Vec<TokenArray<ET>>,
-    token_array_vecs:Vec<Vec<TokenArray<ET>>>,
     args:Option<[Vec<Token<ET>>;9]>,
     token_vecs:Vec<Vec<Token<ET>>>,
+    interner: StringInterner<BufferBackend,ahash::RandomState>
 }
 impl<ET:EngineType> Clone for Memory<ET> {
     fn clone(&self) -> Self { Self::new()}
 }
 impl<ET:EngineType> Memory<ET> {
+    pub fn print_stats(&self) {
+        error!("args: {}",self.args.as_ref().unwrap().len());
+        for a in self.args.as_ref().unwrap().iter() {
+            error!(" -  {}",a.capacity());
+        }
+        error!("token_vecs: {}",self.token_vecs.len());
+        for a in self.token_vecs.iter() {
+            error!(" -  {}",a.capacity());
+        }
+    }
     pub fn new() -> Self {
+        use ahash::*;
+        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
         Memory{
-            token_arrays:Vec::with_capacity(VEC_SIZE),
-            token_array_vecs:Vec::with_capacity(VEC_SIZE),
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),
-            token_vecs:vec!(Vec::with_capacity(VEC_SIZE),Vec::with_capacity(VEC_SIZE))
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),token_vecs,interner:StringInterner::<BufferBackend,ahash::RandomState>::new()
         }
     }
     pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {

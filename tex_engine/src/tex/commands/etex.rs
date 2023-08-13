@@ -393,7 +393,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
     }
     let newcmd = catch_prim!(engine.get_control_sequence() => (READLINE,cmd));
     let mut ret = vec!();
-    catch_prim!(file.read::<ET,_>(&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READLINE,cmd));
+    catch_prim!(file.read::<ET,_>(engine.memory,&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READLINE,cmd));
     debug_log!(trace=>"readline: {} = {}",newcmd,TokenList(&ret));
 
     let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));

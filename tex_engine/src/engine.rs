@@ -58,6 +58,7 @@ pub struct EngineRef<'a,ET:EngineType> {
     pub state:&'a ET::State,
     pub gullet:&'a ET::Gullet,
     pub stomach:&'a ET::Stomach,
+    pub memory:&'a Memory<ET>,
 }
 
 pub trait Engine<ET:EngineType> {
@@ -100,10 +101,9 @@ pub trait Engine<ET:EngineType> {
     }
 }
 
-pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach) -> EngineStruct<ET> {
-    let mut memory = Memory::new();
+pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,memory:&mut Memory<ET>) -> EngineStruct<ET> {
     EngineStruct {
-        state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory
+        state, gullet, mouth:ET::Mouth::new(memory),stomach,memory
     }
 }
 /*
@@ -118,21 +118,20 @@ pub fn new_tex_with_source_references<FS:FileSystem<u8>>(fs:FS,outputs:Outputs) 
 
  */
 
-#[derive(Clone)]
-pub struct EngineStruct<ET:EngineType> {
+pub struct EngineStruct<'a,ET:EngineType> {
     pub state:ET::State,
     pub mouth:ET::Mouth,
     pub gullet: ET::Gullet,
     pub stomach:ET::Stomach,
-    memory:Memory<ET>,
+    pub memory:&'a mut Memory<ET>,
 }
 
 use crate::tex::numbers::Int;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
-impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
-    fn components(&self) -> EngineRef<ET> { EngineRef {mouth:&self.mouth,state:&self.state, gullet:&self.gullet, stomach:&self.stomach} }
+impl<ET:EngineType> Engine<ET> for EngineStruct<'_,ET> {
+    fn components(&self) -> EngineRef<ET> { EngineRef {mouth:&self.mouth,state:&self.state, gullet:&self.gullet, stomach:&self.stomach, memory: &self.memory} }
     fn components_mut(&mut self) -> EngineMut<ET> { EngineMut {mouth:&mut self.mouth,state:&mut self.state, gullet:&mut self.gullet, stomach:&mut self.stomach, memory:&mut self.memory} }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
@@ -143,7 +142,7 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
     }
 
 }
-impl<ET:EngineType> EngineStruct<ET> {
+impl<ET:EngineType> EngineStruct<'_,ET> {
     pub fn initialize_etex(&mut self) -> Result<(),TeXError<ET>> {
         self.initialize()?;
         self.etex();
