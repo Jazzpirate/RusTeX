@@ -2,7 +2,7 @@
 use std::hint::unreachable_unchecked;
 use std::marker::PhantomData;
 use crate::{debug_log, file_end, throw};
-use crate::engine::{EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::Memory;
 use crate::engine::state::State;
@@ -24,7 +24,7 @@ use crate::utils::strings::AllCharsTrait;
 
 /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
 /// (or [`None`] if the [`Mouth`] is empty)
-pub fn get_next_unexpandable<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
+pub fn get_next_unexpandable<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
     while let Some((next,e)) = engine.get_next_token()? {
         if !e {return Ok(Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false}))}
         match engine.expand(resolve_token(engine.state,next))? {
@@ -61,7 +61,7 @@ pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:Token<ET>) -> ResolvedTo
     }
 }
 
-pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, apply:ConditionalFun<ET>, unless:bool) -> Result<(),TeXError<ET>> {
+pub fn do_conditional<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, apply:ConditionalFun<ET>, unless:bool) -> Result<(),TeXError<ET>> {
     if name == IFCASE {
         debug_log!(trace=>"ifcase");
         let i = engine.gullet.new_conditional(IFCASE);
@@ -72,7 +72,7 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
             debug_log!(trace=>"True conditional");
             Ok(())
         } else {
-            false_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,IFCASE,i)
+            false_loop::<ET>(engine,IFCASE,i)
         }
     } else {
         let i = engine.gullet.new_conditional(name);
@@ -81,11 +81,11 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
             engine.gullet.set_conditional(i,ConditionalBranch::True(name));
             debug_log!(trace=>"True conditional");
             Ok(())
-        } else { false_loop::<ET>(engine.gullet, engine.mouth,engine.state,engine.memory,name,i) }
+        } else { false_loop::<ET>(engine,name,i) }
     }
 }
 
-pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineRef<ET>, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
     match engine.get_next_token()? {
         Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
         _ => throw!("begin group expected")
@@ -139,26 +139,26 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineMut<ET>, expand_prote
     file_end!()
 }
 
-pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,memory:&mut Memory<ET>,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
+pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,condidx:usize) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"False conditional. Skipping...");
-    let mut incond:usize = gullet.current_conditional().1 - condidx;
+    let mut incond:usize = engine.gullet.current_conditional().1 - condidx;
     for i in 0..incond {
-        gullet.pop_conditional();
+        engine.gullet.pop_conditional();
     }
-    while let Some((next,exp)) = mouth.get_next(state,memory)? {
+    while let Some((next,exp)) = engine.get_next_token()? {
         match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
-                match state.get_ac_command(c).map(|c| &c.base) {
+                match engine.state.get_ac_command(c).map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
                     Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 => {
                         debug_log!(trace=>"...else branch.");
-                        gullet.set_top_conditional(ConditionalBranch::Else(condname));
+                        engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         return Ok(())
                     }
                     Some(BaseCommand::Expandable {name:"or",..}) if incond == 0 && condname == "ifcase" => {
-                        match gullet.current_conditional() {
+                        match engine.gullet.current_conditional() {
                             (Some(ConditionalBranch::Case(i, j)),_) => {
-                                gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
+                                engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
                                 if i == ((j+1) as i64) {
                                     debug_log!(trace=>"...or branch.");
                                     return Ok(())
@@ -170,23 +170,23 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,sta
                     Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(BaseCommand::Expandable {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
-                        gullet.pop_conditional();
+                        engine.gullet.pop_conditional();
                         return Ok(())
                     }
                     _ => ()
                 }
             BaseToken::CS(name) => {
-                match state.get_command(name).as_deref().map(|c| &c.base) {
+                match engine.state.get_command(name).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
                     Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 => {
-                        gullet.set_top_conditional(ConditionalBranch::Else(condname));
+                        engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         debug_log!(trace=>"...else branch.");
                         return Ok(())
                     }
                     Some(BaseCommand::Expandable {name:"or",..}) if incond == 0 && condname == "ifcase" => {
-                        match gullet.current_conditional() {
+                        match engine.gullet.current_conditional() {
                             (Some(ConditionalBranch::Case(i, j)),_) => {
-                                gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
+                                engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
                                 if i == ((j+1) as i64) {
                                     debug_log!(trace=>"...or branch.");
                                     return Ok(())
@@ -198,7 +198,7 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,sta
                     Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(BaseCommand::Expandable {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
-                        gullet.pop_conditional();
+                        engine.gullet.pop_conditional();
                         return Ok(())
                     }
                     _ => ()
@@ -210,14 +210,14 @@ pub fn false_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,sta
     file_end!()
 }
 
-pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,state:&mut ET::State,memory:&mut Memory<ET>,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
+pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,condidx:usize,allowelse:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\else. Skipping...");
-    gullet.set_top_conditional(ConditionalBranch::Else(condname));
-    let mut incond:usize = gullet.current_conditional().1 - condidx;
-    while let Some((next,exp)) = mouth.get_next(state,memory)? {
+    engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
+    let mut incond:usize = engine.gullet.current_conditional().1 - condidx;
+    while let Some((next,exp)) = engine.get_next_token()? {
         match &next.base {
             BaseToken::Char(c,CategoryCode::Active) =>
-                match state.get_ac_command(c).as_deref().map(|c| &c.base) {
+                match engine.state.get_ac_command(c).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
                     Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 && !allowelse => {
                         throw!("Unexpected \\else" => next)
@@ -225,13 +225,13 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,stat
                     Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(BaseCommand::Expandable {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
-                        gullet.pop_conditional();
+                        engine.gullet.pop_conditional();
                         return Ok(())
                     }
                     _ => ()
                 }
             BaseToken::CS(name) => {
-                match state.get_command(name).as_deref().map(|c| &c.base) {
+                match engine.state.get_command(name).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
                     Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 && !allowelse => {
                         throw!("Unexpected \\else" => next)
@@ -239,7 +239,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,stat
                     Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
                     Some(BaseCommand::Expandable {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
-                        gullet.pop_conditional();
+                        engine.gullet.pop_conditional();
                         return Ok(())
                     }
                     _ => ()
@@ -251,7 +251,7 @@ pub fn else_loop<ET:EngineType>(gullet:&mut ET::Gullet,mouth:&mut ET::Mouth,stat
     Ok(())
 }
 
-pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> Result<bool,TeXError<ET>> {
+pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
     engine.add_expansion(|engine,rs|{
@@ -282,7 +282,7 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineMut<ET>, kw:&'a str) -> R
     })
 }
 
-pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
+pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
     engine.add_expansion(|engine,rs| {
@@ -327,7 +327,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineMut<ET>, mut keywords:Ve
 }
 
 
-pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>,ret:&mut String) -> Result<(),TeXError<ET>> {
+pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Reading string {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut quoted = false;
@@ -348,7 +348,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineMut<ET>,ret:&mut String) -> R
     Ok(())
 }
 
-pub fn get_braced_string<ET:EngineType>(engine:&mut EngineMut<ET>,ret:&mut String) -> Result<(),TeXError<ET>> {
+pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) -> Result<(),TeXError<ET>> {
     engine.get_expanded_group(false,false,true,&mut |engine,t| {
         match &t.base {
             BaseToken::Char(c,_) => {
@@ -368,7 +368,7 @@ pub fn get_braced_string<ET:EngineType>(engine:&mut EngineMut<ET>,ret:&mut Strin
     Ok(())
 }
 
-pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineMut<ET>,v:&Vec<Token<ET>>,string:&mut String) {
+pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineRef<ET>, v:&Vec<Token<ET>>, string:&mut String) {
     let cc = engine.state.get_catcode_scheme();
     match engine.state.get_escapechar() {
         None => for t in v {
@@ -404,7 +404,7 @@ pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineMut<ET>,v:&Vec<Token<ET
     }
 }
 
-pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Token<ET>,TeXError<ET>> {
+pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<Token<ET>,TeXError<ET>> {
     engine.skip_whitespace()?;
     while let Some((next,e)) = engine.get_next_token()? {
         let resolved = resolve_token::<ET>(engine.state,next);
@@ -427,7 +427,7 @@ pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<
     file_end!()
 }
 
-fn get_cs_check_command<ET:EngineType>(engine:&mut EngineMut<ET>, resolved:ResolvedToken<ET>)
+fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:ResolvedToken<ET>)
                                        -> Result<Option<Token<ET>>,TeXError<ET>> {
     match resolved.command {
         BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } => {
@@ -438,7 +438,7 @@ fn get_cs_check_command<ET:EngineType>(engine:&mut EngineMut<ET>, resolved:Resol
     }
 }
 
-pub fn get_font<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Font,TeXError<ET>> {
+pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Font,TeXError<ET>> {
     match engine.get_next_unexpandable()? {
         None => file_end!(),
         Some(res) => match res.command {
@@ -452,7 +452,7 @@ pub fn get_font<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Font,TeX
 }
 
 
-impl<ET:EngineType> EngineMut<'_,ET> {
+impl<ET:EngineType> EngineRef<'_,ET> {
 
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
     /// (or [`None`] if the [`Mouth`] is empty)

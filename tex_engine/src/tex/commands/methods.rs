@@ -1,6 +1,6 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
-use crate::engine::{EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::memory::Memory;
@@ -25,7 +25,7 @@ macro_rules! cmstodo {
     };
 }
 
-pub fn set_int_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_int_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\count{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
@@ -34,7 +34,7 @@ pub fn set_int_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:C
     engine.state.set_int_register(u,v,global);
     Ok(())
 }
-pub fn set_dim_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_dim_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\dimen{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
@@ -43,7 +43,7 @@ pub fn set_dim_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:C
     engine.state.set_dim_register(u,v,global);
     Ok(())
 }
-pub fn set_skip_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_skip_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\skip{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
@@ -52,7 +52,7 @@ pub fn set_skip_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:
     engine.state.set_skip_register(u,v,global);
     Ok(())
 }
-pub fn set_muskip_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_muskip_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                           -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\muskip{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
@@ -61,7 +61,7 @@ pub fn set_muskip_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cm
     engine.state.set_muskip_register(u,v,global);
     Ok(())
 }
-pub fn set_toks_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
+pub fn set_toks_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:CommandSource<ET>, global:bool)
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting \\toks{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
@@ -72,7 +72,7 @@ pub fn set_toks_register<ET:EngineType>(engine:&mut EngineMut<ET>, u:usize, cmd:
     Ok(())
 }
 
-pub fn set_primitive_int<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_int<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let i = catch_prim!(engine.get_int() => (name,cmd));
@@ -80,7 +80,7 @@ pub fn set_primitive_int<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSo
     engine.state.set_primitive_int(name,i,global);
     Ok(())
 }
-pub fn set_primitive_dim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_dim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let d = catch_prim!(engine.get_dim() => (name,cmd));
@@ -88,7 +88,7 @@ pub fn set_primitive_dim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSo
     engine.state.set_primitive_dim(name,d,global);
     Ok(())
 }
-pub fn set_primitive_skip<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_skip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let d = catch_prim!(engine.get_skip() => (name,cmd));
@@ -97,7 +97,7 @@ pub fn set_primitive_skip<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandS
     Ok(())
 }
 
-pub fn set_primitive_muskip<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_muskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let d = catch_prim!(engine.get_muskip() => (name,cmd));
@@ -105,7 +105,7 @@ pub fn set_primitive_muskip<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:Comman
     engine.state.set_primitive_muskip(name,d,global);
     Ok(())
 }
-pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
+pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let mut tks = Vec::with_capacity(32);
@@ -369,7 +369,7 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.memory,Some(ET::Char::backslash())),d.as_str(engine.memory),engine.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -413,7 +413,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineMut<ET>, cmd:Com
     r
 }
 
-fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,engine:&mut EngineMut<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     let rf = ET::TokenReference::from_expansion(&cmd);
     for r in &d.replacement {
         match r {
@@ -428,8 +428,8 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>,engine:&mut En
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::utils::errors::TeXError;
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&CommandSource<ET>,args:&mut [Vec<Token<ET>>;9])
-                                 -> Result<(),TeXError<ET>> {
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, args:&mut [Vec<Token<ET>>;9])
+                                    -> Result<(),TeXError<ET>> {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
@@ -452,7 +452,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
                     argnum += 1;
                     'L: loop {
                         match if d.long {catch!({engine.get_next_token()} => cmd.cause.clone())}
-                        else {catch!({engine.mouth.get_next_nopar(engine.state,engine.memory)} => cmd.cause.clone())} {
+                        else {catch!({engine.mouth.get_next_nopar(engine.state,engine.memory,engine.outputs)} => cmd.cause.clone())} {
                             Some((t,_)) => {
                                 if t.catcode() == CategoryCode::BeginGroup {
                                     engine.mouth.requeue(t,engine.memory);
@@ -486,7 +486,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
                     let mut depth = 0;
                     'L: loop {
                         match if d.long {catch!({engine.get_next_token()} => cmd.cause.clone())}
-                        else {catch!({engine.mouth.get_next_nopar(engine.state,engine.memory)} => cmd.cause.clone())} {
+                        else {catch!({engine.mouth.get_next_nopar(engine.state,engine.memory,engine.outputs)} => cmd.cause.clone())} {
                             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
                                 depth += 1;
                                 if arg.len() == 0 {
@@ -541,7 +541,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineMut<ET>, cmd:&
     Ok(())
 }
 
-fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut EngineMut<ET>,args:&[Vec<Token<ET>>;9],f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     let rf = ET::TokenReference::from_expansion(&cmd);
     #[cfg(debug_assertions)]
     {
@@ -588,7 +588,7 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut Engine
     Ok(())
 }
 
-pub fn parse_signature<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str)
+pub fn parse_signature<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
                                       -> Result<(bool,u8,Vec<ParamToken<ET>>),TeXError<ET>> {
     let mut arity : u8 = 0;
     let mut params : Vec<ParamToken<ET>> = vec!();

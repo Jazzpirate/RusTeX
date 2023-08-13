@@ -8,7 +8,7 @@ use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use chrono::{DateTime,Local};
-use crate::engine::{EngineMut, EngineType, Outputs};
+use crate::engine::{EngineRef, EngineType, Outputs};
 use crate::engine::memory::Memory;
 use crate::engine::stomach::Stomach;
 use crate::tex::nodes::{HVBox, OpenBox, CustomNode, TeXNode, SimpleNode};
@@ -21,74 +21,12 @@ use crate::utils::errors::TeXError;
 pub mod fields;
 pub mod modes;
 
-#[derive(Clone,Debug)]
-pub struct ShipoutData<ET:EngineType> {
-    pub box_stack:Vec<OpenBox<ET>>,
-    pub page:Vec<TeXNode<ET>>,
-    pub pagegoal:ET::Dim,
-    pub pagetotal:ET::Dim,
-    pub prevdepth: ET::Dim
-}
-impl<ET:EngineType> ShipoutData<ET> {
-    pub fn new() -> Self {
-        ShipoutData {
-            box_stack:Vec::with_capacity(1024),
-            page:Vec::new(),
-            pagegoal:ET::Dim::from_sp(0),
-            pagetotal:ET::Dim::from_sp(0),
-            prevdepth:ET::Dim::from_sp(-65536000)
-        }
-    }
-    pub fn get_page(&mut self) -> Vec<TeXNode<ET>> {
-        let ret = std::mem::replace(&mut self.page,Vec::with_capacity(1024));
-        // TODO moar
-        self.pagetotal = ET::Dim::from_sp(0);
-        ret
-    }
-}
-
 /// A TeX state
 pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
-    /// Should be called at the start of a new job with the jobname (name of the main file)
-    fn set_job(&mut self, jobname:String);
-
-    fn get_jobname(&self) -> &str;
-    fn get_start_time(&self) -> DateTime<Local>;
-
-    fn outputs(&self) -> &Outputs;
 
     fn push_csname(&mut self) -> usize;
     fn current_csname(&self) -> Option<usize>;
     fn pop_csname(&mut self);
-
-    fn shipout_data(&self) -> &ShipoutData<ET>;
-    fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
-    fn open_box(&mut self,bx:OpenBox<ET>) {
-        self.shipout_data_mut().box_stack.push(bx)
-    }
-
-    fn push_node(&mut self,node:TeXNode<ET>) {
-        let mut sd = self.shipout_data_mut();
-        match sd.box_stack.last_mut() {
-            Some(b) => {
-                if b.is_vertical() {
-                    match &node {
-                        TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
-                        o => sd.prevdepth = o.depth()
-                    }
-                }
-                b.ls().push(node)
-            },
-            _ => {
-                sd.pagetotal = sd.pagetotal + node.height();
-                match &node {
-                    TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
-                    o => sd.prevdepth = o.depth()
-                }
-                sd.page.push(node)
-            }
-        }
-    }
 
     fn set_afterassignment(&mut self,t:Token<ET>);
     fn take_afterassignment(&mut self) -> Option<Token<ET>>;
@@ -240,14 +178,8 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     csnames:usize,
     fontstore:ET::FontStore,
     afterassignment:Option<Token<ET>>,
-    shipout_data:ShipoutData<ET>,
 
     current_font:SingleValueField<ET::Font>,
-
-    outputs:Outputs,
-
-    jobname: Option<String>,
-    start_time: Option<DateTime<Local>>,
 
     mode: TeXMode,
     /* filesystem: FS,*/
@@ -282,7 +214,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
 }
 use crate::utils::strings::CharType;
 impl<ET:EngineType<State=Self>> TeXState<ET> {
-    pub fn new(fs:ET::FileSystem,fontstore:ET::FontStore,outputs:Outputs) -> Self {
+    pub fn new(fs:ET::FileSystem,fontstore:ET::FontStore) -> Self {
         let mut state = Self {
             filesystem:fs,
             out_files:vec!(),
@@ -290,13 +222,8 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             csnames:0,
             current_font:SingleValueField::new(fontstore.null()),
             fontstore,
-            outputs,
             afterassignment:None,
             aftergroups:vec!(vec!()),
-            shipout_data:ShipoutData::new(),
-
-            jobname: None,
-            start_time: None,
             mode: TeXMode::Vertical,
             /* filesystem: fs,*/
             grouptype: vec![(GroupType::Top,None)],
@@ -361,12 +288,6 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.current_font.set_locally(f)
         }
     }
-    fn shipout_data(&self) -> &ShipoutData<ET> {
-        &self.shipout_data
-    }
-    fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> {
-        &mut self.shipout_data
-    }
 
     fn set_afterassignment(&mut self, t: Token<ET>) {
         self.afterassignment = Some(t)
@@ -381,10 +302,6 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 
     fn mode(&self) -> TeXMode { self.mode }
-    fn set_job(&mut self, jobname: String) {
-        self.jobname = Some(jobname);
-        self.start_time = Some(Local::now());
-    }
     fn push_csname(&mut self) -> usize {
         self.csnames += 1;
         self.csnames
@@ -397,13 +314,6 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
     fn pop_csname(&mut self) {
         self.csnames -= 1;
-    }
-    fn outputs(&self) -> &Outputs { &self.outputs }
-    fn get_jobname(&self) -> &str {
-        self.jobname.as_ref().unwrap().as_str()
-    }
-    fn get_start_time(&self) -> DateTime<Local> {
-        self.start_time.as_ref().unwrap().clone()
     }
     fn filesystem(&mut self) -> &mut ET::FileSystem {
         &mut self.filesystem
@@ -837,7 +747,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
 }
 
-impl<ET:EngineType> EngineMut<'_,ET> {
+impl<ET:EngineType> EngineRef<'_,ET> {
     pub fn set_command_for_tk(&mut self, tk:Token<ET>, cmd:Option<Command<ET>>, globally:bool) {
         match tk.base {
             BaseToken::CS(cs) => self.state.set_command(cs,cmd, globally),

@@ -22,7 +22,7 @@ use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use log::warn;
-use crate::engine::{EngineMut, EngineType, gullet};
+use crate::engine::{EngineRef, EngineType, gullet};
 use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, TeXNode, Whatsit};
 use crate::tex::commands::etex::UNLESS;
@@ -37,13 +37,13 @@ SPACE
 \-
  */
 
-pub fn SPACE<ET:EngineType>(_:&mut EngineMut<ET>, _cmd:CommandSource<ET>)
+pub fn SPACE<ET:EngineType>(_:&mut EngineRef<ET>, _cmd:CommandSource<ET>)
                             -> Result<(),TeXError<ET>> {
     todo!("\\ ")
 }
 
 pub static ADVANCE: &str = "advance";
-pub fn advance<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\advance");
     catch_prim!(engine.skip_whitespace() => (ADVANCE,cmd));
@@ -152,7 +152,7 @@ pub fn advance<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>,
 }
 
 pub static AFTERASSIGNMENT: &str = "afterassignment";
-pub fn afterassignment<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
+pub fn afterassignment<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\afterassignment");
     let next = match catch_prim!(engine.get_next_token() => (AFTERASSIGNMENT,cmd)) {
         None => file_end!(cmd.cause),
@@ -168,7 +168,7 @@ pub fn begingroup<ET:EngineType>(state:&mut ET::State)-> Result<(),TeXError<ET>>
 }
 
 pub static CATCODE: &str = "catcode";
-pub fn catcode_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
+pub fn catcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning category code");
     let c = catch_prim!(engine.get_char() => (CATCODE,cmd));
     catch_prim!(engine.skip_eq_char() => (CATCODE,cmd));
@@ -181,7 +181,7 @@ pub fn catcode_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSour
     engine.state.set_catcode(c,cc,global);
     Ok(())
 }
-pub fn catcode_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn catcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting category code");
     let c = catch_prim!(engine.get_char() => (CATCODE,cmd));
     let cc = *engine.state.get_catcode_scheme().get(&c);
@@ -191,7 +191,7 @@ pub fn catcode_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<
 }
 
 pub static CHARDEF: &str = "chardef";
-pub fn chardef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
+pub fn chardef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"chardef");
     let name = catch_prim!(engine.get_control_sequence() => (CHARDEF,cmd));
     catch_prim!(engine.skip_eq_char() => (CHARDEF,cmd));
@@ -202,7 +202,7 @@ pub fn chardef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>,
 }
 
 pub static CLOSEIN: &str = "closein";
-pub fn closein<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
+pub fn closein<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\closein");
     let i = catch_prim!(engine.get_int() => (CLOSEIN,cmd));
     let i : usize = match i.clone().try_into() {
@@ -214,14 +214,14 @@ pub fn closein<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static CLOSEOUT: &str = "closeout";
-pub fn closeout<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<Whatsit<ET>, TeXError<ET>> {
+pub fn closeout<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\closeout");
     let i = catch_prim!(engine.get_int() => (CLOSEOUT,cmd));
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
     };
-    let apply = Box::new(move |e: &mut EngineMut<ET>| {
+    let apply = Box::new(move |e: &mut EngineRef<ET>| {
         e.state.file_closeout(i); // TODO error?
         Ok(())
     });
@@ -229,7 +229,7 @@ pub fn closeout<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>
 }
 
 pub static COUNT : &str = "count";
-pub fn count_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
+pub fn count_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\count");
     let i = catch_prim!(engine.get_int() => ("count",cmd));
     let i:usize = match i.clone().try_into() {
@@ -242,7 +242,7 @@ pub fn count_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource
     engine.state.set_int_register(i,v,global);
     Ok(())
 }
-pub fn count_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn count_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\count");
     let i = catch_prim!(engine.get_int() => ("count",cmd));
     let i:usize = match i.clone().try_into() {
@@ -255,7 +255,7 @@ pub fn count_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET
 }
 
 pub static COUNTDEF : &str = "countdef";
-pub fn countdef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn countdef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"countdef");
     let name = catch_prim!(engine.get_control_sequence() => (COUNTDEF,cmd));
@@ -271,7 +271,7 @@ pub fn countdef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>
     Ok(())
 }
 
-pub fn get_csname<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str)
+pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
                                  -> Result<TeXStr<ET::Char>,TeXError<ET>>{
     debug_log!(trace=>"get_csname: {}",engine.preview(200));
     let csidx = engine.state.push_csname();
@@ -292,7 +292,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:&CommandSource<E
     Ok(ret)
 }
 
-pub fn csname<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn csname<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"csname");
     let str = get_csname::<ET>(engine,&cmd,"csname")?;
     debug_log!(trace=>"csname {}",str.to_str(engine.memory));
@@ -304,12 +304,12 @@ pub fn csname<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, 
     Ok(())
 }
 
-pub fn day<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
-    Ok(catch_prim!(ET::Int::from_i64(state.get_start_time().day() as i64) => ("day",cmd)))
+pub fn day<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+    Ok(catch_prim!(ET::Int::from_i64(engine.start_time.day() as i64) => ("day",cmd)))
 }
 
 pub static DEF : &str = "def";
-pub fn def<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
+pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
                           -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"def");
     let csO = catch_prim!(engine.get_next_token() => (DEF,cmd));
@@ -346,7 +346,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, glo
     Ok(())
 }
 
-pub fn delcode_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn delcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                      -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning delcode");
     let i = catch_prim!(engine.get_int() => ("delcode",cmd));
@@ -361,7 +361,7 @@ pub fn delcode_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSour
     Ok(())
 }
 
-pub fn delcode_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn delcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
                                   -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting delcode");
     let i = catch_prim!(engine.get_int() => ("delcode",cmd));
@@ -376,7 +376,7 @@ pub fn delcode_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<
 
 pub static DIMEN : &str = "dimen";
 
-pub fn dimen_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn dimen_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\dimen");
     let i = catch_prim!(engine.get_int() => ("dimen",cmd));
@@ -391,7 +391,7 @@ pub fn dimen_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource
     Ok(())
 }
 
-pub fn dimen_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn dimen_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
                                 -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"Getting \\dimen");
     let i = catch_prim!(engine.get_int() => ("dimen",cmd));
@@ -405,7 +405,7 @@ pub fn dimen_get<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET
 }
 
 pub static DIMENDEF : &str = "dimendef";
-pub fn dimendef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn dimendef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"dimendef");
     let name = catch_prim!(engine.get_control_sequence() => (DIMENDEF,cmd));
@@ -421,7 +421,7 @@ pub fn dimendef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>
     Ok(())
 }
 pub static DIVIDE : &str = "divide";
-pub fn divide<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn divide<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\divide");
     catch_prim!(engine.skip_whitespace() => (DIVIDE,cmd));
@@ -549,7 +549,7 @@ pub fn dump<ET:EngineType>()
 }
 
 pub static EDEF: &str = "edef";
-pub fn edef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
+pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
                            -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"edef");
     let csO = catch_prim!(engine.get_next_token() => (EDEF,cmd));
@@ -588,14 +588,14 @@ pub fn edef<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, gl
 }
 
 pub static ELSE: &str = "else";
-pub fn else_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn else_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<(),TeXError<ET>> {
     match engine.gullet.current_conditional() {
         (None,_) => throw!("Not in a conditional" => cmd.cause),
         (Some(ConditionalBranch::True(name)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,name,i,false) => (ELSE,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine,name,i,false) => (ELSE,cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,IFCASE,i,false) => (IFCASE,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine,IFCASE,i,false) => (IFCASE,cmd)),
         o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
     }
     Ok(())
@@ -610,7 +610,7 @@ pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET>
     throw!("Unexpected \\endcsname; not in a \\csname" => cmd.cause)
 }
 
-pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
     engine.add_expansion(|engine,s| {
         match engine.state.stack_pop() {
@@ -625,13 +625,13 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     })
 }
 
-pub fn endinput<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn endinput<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
-    engine.mouth.endinput(engine.state,engine.memory);
+    engine.mouth.endinput(engine.state,engine.memory,engine.outputs);
     Ok(())
 }
 
-pub fn endlinechar_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn endlinechar_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                          -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\endlinechar");
     catch_prim!(engine.skip_eq_char() => ("endlinechar",cmd));
@@ -647,7 +647,7 @@ pub fn endlinechar_assign<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:Command
     engine.state.set_endlinechar(c,global);
     Ok(())
 }
-pub fn endlinechar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn endlinechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                       -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\endlinechar");
     let c = match engine.state.get_endlinechar() {
@@ -661,7 +661,7 @@ pub fn endlinechar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSour
 // \errhelp
 pub static ERRMESSAGE : &str = "errmessage";
 
-pub fn errmessage<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn errmessage<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"errmessage");
     catch_prim!(engine.skip_whitespace() => (ERRMESSAGE,cmd));
@@ -682,7 +682,7 @@ pub fn errorstopmode<ET:EngineType>() -> Result<(), TeXError<ET>> {
     Ok(())
 }
 
-pub fn escapechar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn escapechar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\escapechar");
     catch_prim!(engine.skip_eq_char() => ("escapechar",cmd));
@@ -698,7 +698,7 @@ pub fn escapechar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSo
     engine.state.set_escapechar(c,global);
     Ok(())
 }
-pub fn escapechar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn escapechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\escapechar");
     let c = match engine.state.get_escapechar() {
         None => -1,
@@ -709,7 +709,7 @@ pub fn escapechar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSourc
 }
 
 pub static EXPANDAFTER : &str = "expandafter";
-pub fn expandafter<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn expandafter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"expandafter");
     let first = match catch_prim!(engine.get_next_token() => (EXPANDAFTER,cmd)){
@@ -732,7 +732,7 @@ pub fn expandafter<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
 }
 
 pub static FI : &str = "fi";
-pub fn fi<ET:EngineType>(engine:&mut EngineMut<ET>, _cmd:CommandSource<ET>)
+pub fn fi<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:CommandSource<ET>)
                          -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"...end of conditional.");
     engine.gullet.pop_conditional();
@@ -740,7 +740,7 @@ pub fn fi<ET:EngineType>(engine:&mut EngineMut<ET>, _cmd:CommandSource<ET>)
 }
 
 pub static FONT :&str = "font";
-pub fn font_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn font_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\font");
     let cs = catch_prim!(engine.get_control_sequence() => (FONT,cmd));
@@ -768,13 +768,13 @@ pub fn font_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     engine.set_command_for_tk(cs,Some(fontcmd),global);
     Ok(())
 }
-pub fn font_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn font_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<ET::Font,TeXError<ET>> {
     debug_log!(trace=>"Getting \\font");
     Ok(engine.state.get_current_font().clone())
 }
 
-pub fn fontdimen_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn fontdimen_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                        -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\fontdimen");
     let o = catch_prim!(engine.get_int() => ("fontdimen",cmd));
@@ -789,7 +789,7 @@ pub fn fontdimen_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSou
     Ok(())
 }
 
-pub fn fontdimen_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn fontdimen_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                     -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"Getting \\fontdimen");
     let o = catch_prim!(engine.get_int() => ("fontdimen",cmd));
@@ -801,7 +801,7 @@ pub fn fontdimen_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource
     Ok(font.get_dim::<ET::Dim>(i))
 }
 
-pub fn futurelet<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\futurelet");
     let cs = match catch_prim!(engine.get_next_token() => ("futurelet",cmd)) {
@@ -834,13 +834,13 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 }
 
 
-pub fn gdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
+pub fn gdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
                            -> Result<(),TeXError<ET>> {
     def::<ET>(engine,cmd,true,protected,long,outer)
 }
 
 pub static GLOBAL: &str = "global";
-pub fn global<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool)
+pub fn global<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool)
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\global");
     catch_prim!(engine.skip_whitespace() => (GLOBAL,cmd));
@@ -863,7 +863,7 @@ pub fn global<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, g
 }
 
 pub static HBOX: &str = "hbox";
-pub fn hbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                            -> Result<CloseBoxFun<ET>,TeXError<ET>> {
     debug_log!(trace=>"\\hbox");
     let (to,spread) = match catch_prim!(engine.get_keywords(vec!("spread","to")) => (HBOX,cmd)) {
@@ -903,7 +903,7 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static HRULE: &str = "hrule";
-pub fn hrule<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\hrule");
     let mut width = None;
@@ -923,13 +923,13 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
             }
         }
     }
-    engine.state.push_node(SimpleNode::Rule {
+    engine.stomach.push_node(SimpleNode::Rule {
         width,height,depth,axis:HorV::Horizontal
     }.as_node());
     Ok(())
 }
 
-pub fn hyphenation<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn hyphenation<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                   -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\hyphenation");
     // TODO
@@ -937,7 +937,7 @@ pub fn hyphenation<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     Ok(())
 }
 
-pub fn hyphenchar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn hyphenchar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\hyphenchar");
     let mut font = catch_prim!(engine.get_font() => ("hyphenchar",cmd));
@@ -947,14 +947,14 @@ pub fn hyphenchar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSo
     font.set_hyphenchar(i);
     Ok(())
 }
-pub fn hyphenchar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn hyphenchar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\hyphenchar");
     let font = catch_prim!(engine.get_font() => ("hyphenchar",cmd));
     debug_log!(debug=>"\\hyphenchar == {:?}",font.get_hyphenchar());
     Ok(catch_prim!(ET::Int::from_i64::<ET>(font.get_hyphenchar()) => ("hyphenchar",cmd)))
 }
 
-pub fn if_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn if_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                           -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"if");
     let first = get_if_token::<ET>(engine,&cmd,"if")?;
@@ -976,7 +976,7 @@ pub fn ifcase<ET:EngineType>() -> Result<bool,TeXError<ET>> {
 }
 
 pub static IFCAT : &str = "ifcat";
-pub fn ifcat<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifcat<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifcat");
     let first = catch_prim!(get_if_token::<ET>(engine,&cmd,IFCAT) => (IFCAT,cmd));
@@ -1005,7 +1005,7 @@ pub fn ifcat<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     Ok(first == second)
 }
 
-pub fn get_if_token<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str)
+pub fn get_if_token<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
                                    -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
     // need to be careful not to expand \else and \fi before conditional is done.
     while let Some((t,e)) = catch_prim!(engine.get_next_token() => (name,cmd)) {
@@ -1030,7 +1030,7 @@ pub fn get_if_token<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSourc
 
 pub static LGE : [u8;3] = [b'<',b'>',b'='];
 pub static IFDIM : &str = "ifdim";
-pub fn ifdim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifdim");
     let i1 = catch_prim!(engine.get_dim() => (IFDIM,cmd));
@@ -1048,7 +1048,7 @@ pub fn ifdim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static IFEOF : &str = "ifeof";
-pub fn ifeof<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifeof<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifeof");
     let i = catch_prim!(engine.get_int() => (IFEOF,cmd));
@@ -1064,7 +1064,7 @@ pub fn ifeof<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     Ok(f.eof::<ET>(engine.state))
 }
 
-pub fn ifhmode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifhmode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifhmode");
     Ok(match engine.state.mode() {
@@ -1073,7 +1073,7 @@ pub fn ifhmode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     })
 }
 
-pub fn ifinner<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifhmode");
     Ok(match engine.state.mode() {
@@ -1082,7 +1082,7 @@ pub fn ifinner<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     })
 }
 
-pub fn ifmmode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifmmode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifmmode");
     Ok(match engine.state.mode() {
@@ -1092,7 +1092,7 @@ pub fn ifmmode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static IFNUM : &str = "ifnum";
-pub fn ifnum<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifnum");
     let i1 = catch_prim!(engine.get_int() => (IFNUM,cmd));
@@ -1110,7 +1110,7 @@ pub fn ifnum<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static IFODD: &str = "ifodd";
-pub fn ifodd<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifodd<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifodd");
     let num = catch_prim!(engine.get_int() => (IFODD,cmd));
@@ -1118,7 +1118,7 @@ pub fn ifodd<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 
-pub fn ifvmode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifvmode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifvmode");
     Ok(match engine.state.mode() {
@@ -1128,7 +1128,7 @@ pub fn ifvmode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static IFX : &str = "ifx";
-pub fn ifx<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifx<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                           -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifx");
     let t1 = match catch_prim!(engine.get_next_token() => (IFX,cmd)) {
@@ -1146,7 +1146,7 @@ pub fn ifx<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static IGNORESPACES : &str = "ignorespaces";
-pub fn ignorespaces<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ignorespaces<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                    -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\ignorespaces");
     loop {
@@ -1164,7 +1164,7 @@ pub fn ignorespaces<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
 }
 
 pub static IMMEDIATE: &str ="immediate";
-pub fn immediate<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn immediate<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"immediate");
     match catch_prim!(engine.get_next_stomach_command() => (IMMEDIATE,cmd)) {
@@ -1184,7 +1184,7 @@ pub fn immediate<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 }
 
 pub static INPUT: &str = "input";
-pub fn input<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn input<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"input");
     let mut filename = engine.memory.get_string();
@@ -1199,27 +1199,27 @@ pub fn input<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
         throw!("I can't find file `{}'",filename => cmd.cause)
     } else {
         engine.memory.return_string(filename);
-        (engine.state.outputs().file_open)(file.path().to_str().unwrap());
+        (engine.outputs.file_open)(file.path().to_str().unwrap());
         engine.mouth.push_file(&file,engine.memory);
         Ok(())
     }
 }
 
-pub fn inputlineno<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn inputlineno<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
         engine.mouth.line_no() as i64
     ) => ("month",cmd)))
 }
 
-pub fn jobname<ET:EngineType>(engine:&mut EngineMut<ET>,f:TokenCont<ET>)
-                         -> Result<(),TeXError<ET>> {
+pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
+                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"jobname");
-    let jobname = engine.state.get_jobname().to_string();
+    let jobname = engine.jobname;
     engine.string_to_tokens(jobname.as_bytes(),f)
 }
 
 pub static LCCODE: &str = "lccode";
-pub fn lccode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn lccode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning lower case character");
     let c = catch_prim!(engine.get_char() => (LCCODE,cmd));
@@ -1230,7 +1230,7 @@ pub fn lccode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource
     Ok(())
 }
 
-pub fn lccode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn lccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                  -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting lower case character");
     let c = catch_prim!(engine.get_char() => (LCCODE,cmd));
@@ -1240,7 +1240,7 @@ pub fn lccode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
 }
 
 pub static LET : &str = "let";
-pub fn let_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, globally:bool)
+pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, globally:bool)
                            -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"let");
     let csO = catch_prim!(engine.get_next_token() => (LET,cmd));
@@ -1268,7 +1268,7 @@ pub fn let_<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, glo
     Ok(())
 }
 
-pub fn long<ET:EngineType>(engine:&mut EngineMut<ET>, cmd: CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool)
+pub fn long<ET:EngineType>(engine:&mut EngineRef<ET>, cmd: CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool)
                            -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\long");
     match catch_prim!(engine.get_next_stomach_command() => ("long",cmd)) {
@@ -1287,7 +1287,7 @@ pub fn long<ET:EngineType>(engine:&mut EngineMut<ET>, cmd: CommandSource<ET>, gl
     }
 }
 pub static LOWERCASE : &str = "lowercase";
-pub fn lowercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\lowercase");
     engine.add_expansion(|engine,rs|{
@@ -1303,7 +1303,7 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 }
 
 pub static MATHCHARDEF : &str = "mathchardef";
-pub fn mathchardef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, globally:bool)
+pub fn mathchardef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, globally:bool)
                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"mathchardef");
     let csO = catch_prim!(engine.get_next_token() => (MATHCHARDEF,cmd));
@@ -1326,7 +1326,7 @@ pub fn mathchardef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
 }
 
 pub static MATHCODE : &str = "mathcode";
-pub fn mathcode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn mathcode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                       -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning math code");
     let c = catch_prim!(engine.get_char() => (MATHCODE,cmd));
@@ -1337,7 +1337,7 @@ pub fn mathcode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSour
     Ok(())
 }
 
-pub fn mathcode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn mathcode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                    -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting mathcode");
     let c = catch_prim!(engine.get_char() => (MATHCODE,cmd));
@@ -1347,7 +1347,7 @@ pub fn mathcode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
 }
 
 pub static MEANING : &str = "meaning";
-pub fn meaning<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"meaning");
     let esc = engine.state.get_escapechar();
@@ -1548,25 +1548,25 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
 }
 
 pub static MESSAGE:&str = "message";
-pub fn message<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn message<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"message");
     catch_prim!(engine.skip_whitespace() => (MESSAGE,cmd));
     let mut string = engine.memory.get_string();
     let msg = catch_prim!(engine.get_braced_string(&mut string) => (MESSAGE,cmd));
-    (engine.state.outputs().message)(string.as_str());
+    (engine.outputs.message)(string.as_str());
     engine.memory.return_string(string);
     Ok(())
 }
 
-pub fn month<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn month<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
-        state.get_start_time().month() as i64
+        engine.start_time.month() as i64
     ) => ("month",cmd)))
 }
 
 pub static MULTIPLY:&str = "multiply";
-pub fn multiply<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn multiply<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\multiply");
     catch_prim!(engine.skip_whitespace() => (MULTIPLY,cmd));
@@ -1675,7 +1675,7 @@ pub fn multiply<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
 }
 
 pub static MUSKIP : &str = "muskip";
-pub fn muskip_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn muskip_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\muskip");
     let i = catch_prim!(engine.get_int() => (MUSKIP,cmd));
@@ -1690,7 +1690,7 @@ pub fn muskip_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource
     Ok(())
 }
 
-pub fn muskip_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) ->
+pub fn muskip_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) ->
                                                                                                            Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
     debug_log!(trace=>"Getting \\muskip");
     let i = catch_prim!(engine.get_int() => (MUSKIP,cmd));
@@ -1704,7 +1704,7 @@ pub fn muskip_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
 }
 
 pub static MUSKIPDEF : &str = "muskipdef";
-pub fn muskipdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn muskipdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"muskipdef");
     let name = catch_prim!(engine.get_control_sequence() => (MUSKIPDEF,cmd));
@@ -1721,7 +1721,7 @@ pub fn muskipdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 }
 
 pub static NEWLINECHAR : &str = "newlinechar";
-pub fn newlinechar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn newlinechar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                          -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\newlinechar");
     catch_prim!(engine.skip_eq_char() => (NEWLINECHAR,cmd));
@@ -1737,7 +1737,7 @@ pub fn newlinechar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandS
     engine.state.set_newlinechar(c,global);
     Ok(())
 }
-pub fn newlinechar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn newlinechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                       -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\newlinechar");
     let c = match engine.state.get_newlinechar() {
@@ -1751,7 +1751,7 @@ pub fn newlinechar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSour
 pub static NOEXPAND: &str = "noexpand";
 /// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
 /// in the first place
-pub fn noexpand<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\noexpand");
     match catch_prim!(engine.get_next_token() => (NOEXPAND,cmd)) {
@@ -1770,7 +1770,7 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
 }
 
 pub static NUMBER: &str = "number";
-pub fn number<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn number<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\number");
     let num = catch_prim!(engine.get_int() => (NUMBER,cmd));
@@ -1778,7 +1778,7 @@ pub fn number<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f
 }
 
 pub static OPENIN: &str = "openin";
-pub fn openin<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn openin<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                              -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\openin");
     let i = catch_prim!(engine.get_int() => (OPENIN,cmd));
@@ -1796,7 +1796,7 @@ pub fn openin<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static OPENOUT: &str = "openout";
-pub fn openout<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn openout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\openout");
     let i = catch_prim!(engine.get_int() => (OPENOUT,cmd));
@@ -1807,7 +1807,7 @@ pub fn openout<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     catch_prim!(engine.skip_eq_char() => (OPENOUT,cmd));
     let mut filename = engine.memory.get_string();
     catch_prim!(engine.get_string(&mut filename) => (OPENOUT,cmd));
-    let apply = Box::new(move |e:&mut EngineMut<ET>| {
+    let apply = Box::new(move |e:&mut EngineRef<ET>| {
         let f = e.state.filesystem().get(&filename);
         e.memory.return_string(filename);
         e.state.file_openout(i,f); // TODO error?
@@ -1817,18 +1817,18 @@ pub fn openout<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static OR : &str = "or";
-pub fn or<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn or<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                          -> Result<(),TeXError<ET>> {
     match engine.gullet.current_conditional() {
         (Some(ConditionalBranch::Case(_,_)),i) =>
-            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine.gullet,engine.mouth,engine.state,engine.memory,IFCASE,i,true) => (OR,cmd)),
+            catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine,IFCASE,i,true) => (OR,cmd)),
         _ => throw!("Not in an \\ifcase" => cmd.cause)
     }
     Ok(())
 }
 
 pub static OUTER: &str = "outer";
-pub fn outer<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool)
+pub fn outer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool)
                             -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\outer");
     match catch_prim!(engine.get_next_stomach_command() => (OUTER,cmd)) {
@@ -1848,7 +1848,7 @@ pub fn outer<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, gl
 }
 
 pub static PAR: &str = "par";
-pub fn par<ET:EngineType>(engine:&mut EngineMut<ET>, _cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
+pub fn par<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"par");
     if engine.state.mode().is_vertical() {Ok(())} else {
         todo!("par in horizontal mode")
@@ -1856,7 +1856,7 @@ pub fn par<ET:EngineType>(engine:&mut EngineMut<ET>, _cmd:CommandSource<ET>) -> 
 }
 
 pub static PATTERNS: &str = "patterns";
-pub fn patterns<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn patterns<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\patterns");
     // TODO
@@ -1865,7 +1865,7 @@ pub fn patterns<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static READ: &str = "read";
-pub fn read<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, globally:bool)
+pub fn read<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, globally:bool)
                            -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"read");
     let i = catch_prim!(engine.get_int() => (READ,cmd));
@@ -1898,7 +1898,7 @@ pub fn read<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, glo
 pub static RELAX: &str = "relax";
 
 pub static ROMANNUMERAL: &str = "romannumeral";
-pub fn romannumeral<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn romannumeral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"romannumeral");
     let mut num = catch_prim!(engine.get_int() => (ROMANNUMERAL,cmd)).to_i64();
@@ -1968,7 +1968,7 @@ pub fn romannumeral<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
 }
 
 pub static SETBOX: &str = "setbox";
-pub fn setbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\setbox");
     let i = catch_prim!(engine.get_int() => (SETBOX,cmd)).to_i64();
@@ -1979,7 +1979,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, g
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
                 let f = catch_prim!(apply(engine,c.source) => (SETBOX,cmd));
-                engine.state.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
                     let bx = match f(e,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
@@ -1995,7 +1995,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, g
 }
 
 pub static SFCODE: &str = "sfcode";
-pub fn sfcode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn sfcode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning space factor code");
     let c = catch_prim!(engine.get_char() => (SFCODE,cmd));
@@ -2005,7 +2005,7 @@ pub fn sfcode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource
     engine.state.set_sfcode(c,v,global);
     Ok(())
 }
-pub fn sfcode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn sfcode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                  -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting space factor code");
     let c = catch_prim!(engine.get_char() => (SFCODE,cmd));
@@ -2015,7 +2015,7 @@ pub fn sfcode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
 }
 
 pub static SKEWCHAR: &str = "skewchar";
-pub fn skewchar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn skewchar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                       -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\kewchar");
     let mut font = catch_prim!(engine.get_font() => (SKEWCHAR,cmd));
@@ -2025,7 +2025,7 @@ pub fn skewchar_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSour
     font.set_skewchar(i);
     Ok(())
 }
-pub fn skewchar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn skewchar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting \\skewchar");
     let font = catch_prim!(engine.get_font() => (SKEWCHAR,cmd));
     debug_log!(debug=>"\\skewchar == {:?}",font.get_skewchar());
@@ -2033,7 +2033,7 @@ pub fn skewchar_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<
 }
 
 pub static SKIP : &str = "skip";
-pub fn skip_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn skip_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\skip");
     let i = catch_prim!(engine.get_int() => (SKIP,cmd));
@@ -2048,7 +2048,7 @@ pub fn skip_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     Ok(())
 }
 
-pub fn skip_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn skip_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
     debug_log!(trace=>"Getting \\skip");
     let i = catch_prim!(engine.get_int() => (SKIP,cmd));
@@ -2062,7 +2062,7 @@ pub fn skip_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 }
 
 pub static SKIPDEF : &str = "skipdef";
-pub fn skipdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn skipdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"skipdef");
     let name = catch_prim!(engine.get_control_sequence() => (SKIPDEF,cmd));
@@ -2079,7 +2079,7 @@ pub fn skipdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
 }
 
 pub static STRING: &str = "string";
-pub fn string<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"string");
     match catch_prim!(engine.get_next_token() => (STRING,cmd)) {
@@ -2094,7 +2094,7 @@ pub fn string<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f
 }
 
 pub static THE : &str = "the";
-pub fn the<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                           -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\the");
     match catch_prim!(engine.get_next_unexpandable() => (THE,cmd)) {
@@ -2126,13 +2126,13 @@ pub fn the<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:To
     }
 }
 
-pub fn time<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
-    let t = state.get_start_time();
+pub fn time<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+    let t = engine.start_time;
     Ok(catch_prim!(ET::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
 }
 
 pub static TOKS:&str = "toks";
-pub fn toks_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\toks");
     let i = catch_prim!(engine.get_int() => (TOKS,cmd));
@@ -2147,7 +2147,7 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
     engine.state.set_toks_register(i,v,global);
     Ok(())
 }
-pub fn toks_get<'a,ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn toks_get<'a,ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                   -> Result<Vec<Token<ET>>,TeXError<ET>> {
     let i = catch_prim!(engine.get_int() => (TOKS,cmd));
     let i:usize = match i.clone().try_into() {
@@ -2158,7 +2158,7 @@ pub fn toks_get<'a,ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
 }
 
 pub static TOKSDEF : &str = "toksdef";
-pub fn toksdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn toksdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"toksdef");
     let name = catch_prim!(engine.get_control_sequence() => (TOKSDEF,cmd));
@@ -2175,7 +2175,7 @@ pub fn toksdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, 
 }
 
 pub static UCCODE : &str = "uccode";
-pub fn uccode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool)
+pub fn uccode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                     -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning upper case character");
     let c = catch_prim!(engine.get_char() => (UCCODE,cmd));
@@ -2186,7 +2186,7 @@ pub fn uccode_assign<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource
     Ok(())
 }
 
-pub fn uccode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn uccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                  -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Getting upper case character");
     let c = catch_prim!(engine.get_char() => (UCCODE,cmd));
@@ -2196,7 +2196,7 @@ pub fn uccode_get<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
 }
 
 pub static UPPERCASE: &str = "uppercase";
-pub fn uppercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\uppercase");
     engine.add_expansion(|engine,rs| {
@@ -2213,7 +2213,7 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 
 
 pub static VRULE: &str = "vrule";
-pub fn vrule<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\vrule");
     let mut width = None;
@@ -2233,14 +2233,14 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
             }
         }
     }
-    engine.state.push_node(SimpleNode::Rule {
+    engine.stomach.push_node(SimpleNode::Rule {
         width,height,depth,axis:HorV::Vertical
     }.as_node());
     Ok(())
 }
 
 pub static WRITE: &str = "write";
-pub fn write<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn write<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<Whatsit<ET>, TeXError<ET>> {
     debug_log!(trace=>"\\write");
     let i = catch_prim!(engine.get_int() => (WRITE,cmd));
@@ -2248,25 +2248,25 @@ pub fn write<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     let mut tks = vec!();
     catch_prim!(engine.get_group(&mut |_,t| Ok(tks.push(t))) => (WRITE,cmd));
 
-    let apply = Box::new(move |engine:&mut EngineMut<ET>| {
+    let apply = Box::new(move |engine:&mut EngineRef<ET>| {
         tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
         tks.insert(0,Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
         engine.with_mouth(tks,|engine| {
             let mut string = engine.memory.get_string();
             catch_prim!(engine.get_braced_string(&mut string) => (WRITE,cmd));
             if i == 18 {
-                (engine.state.outputs().write_18)(&string)
+                (engine.outputs.write_18)(&string)
             }
             else if i == 17 {
-                (engine.state.outputs().write_17)(&string)
+                (engine.outputs.write_17)(&string)
             }
             else if i < 0 {
-                (engine.state.outputs().write_neg1)(&string)
+                (engine.outputs.write_neg1)(&string)
             }
             else {
                 match engine.state.get_open_out_file(i as usize) {
                     None =>
-                        (engine.state.outputs().write_other)(&string),
+                        (engine.outputs.write_other)(&string),
                     Some(f) => f.write(&string)
                 }
             }
@@ -2277,21 +2277,21 @@ pub fn write<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
     Ok(Whatsit::new(apply))
 }
 
-pub fn xdef<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
+pub fn xdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool)
                            -> Result<(),TeXError<ET>> {
     edef::<ET>(engine,cmd,true,protected,long,outer)
 }
 
-pub fn year<ET:EngineType>(state:&mut ET::State,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn year<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(
-        state.get_start_time().year() as i64
+        engine.start_time.year() as i64
     ) => ("year",cmd)))
 }
 
 // --------------------------------------------------------------------------------------------------
 
 
-pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
+pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(abovedisplayshortskip,engine);
     register_skip_assign!(abovedisplayskip,engine);
     register_int_assign!(adjdemerits,engine);
@@ -2312,7 +2312,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_value_assign_int!(count,engine);
     register_assign!(countdef,engine,(e,cmd,global) =>countdef::<ET>(e,cmd,global));
     register_expandable!(csname,engine,(e,cmd,f) =>csname::<ET>(e,cmd,f));
-    register_int!(day,engine,(e,c) => day::<ET>(e.state,c));
+    register_int!(day,engine,(e,c) => day::<ET>(e,c));
     register_assign!(def,engine,(e,cmd,global) =>def::<ET>(e,cmd,global,false,false,false));
     register_int_assign!(defaulthyphenchar,engine);
     register_int_assign!(defaultskewchar,engine);
@@ -2421,7 +2421,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_dim_assign!(mathsurround,engine);
     register_expandable!(meaning,engine,(e,c,f) => meaning::<ET>(e,c,f));
     register_unexpandable!(message,engine,false,(e,cmd) =>message::<ET>(e,cmd));
-    register_int!(month,engine,(e,c) => month::<ET>(e.state,c));
+    register_int!(month,engine,(e,c) => month::<ET>(e,c));
     register_assign!(multiply,engine,(e,cmd,global) =>multiply::<ET>(e,cmd,global));
     register_value_assign_muskip!(muskip,engine);
     register_assign!(muskipdef,engine,(e,cmd,global) =>muskipdef::<ET>(e,cmd,global));
@@ -2475,7 +2475,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_expandable!(string,engine,(e,c,f) => string::<ET>(e,c,f));
     register_skip_assign!(tabskip,engine);
     register_expandable!(the,engine,(e,c,f) => the::<ET>(e,c,f));
-    register_int!(time,engine,(e,c) => time::<ET>(e.state,c));
+    register_int!(time,engine,(e,c) => time::<ET>(e,c));
     register_value_assign_toks!(toks,engine);
     register_assign!(toksdef,engine,(e,cmd,global) =>toksdef::<ET>(e,cmd,global));
     register_int_assign!(tolerance,engine);
@@ -2501,7 +2501,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
     register_whatsit!(write,engine,(e,cmd) =>write::<ET>(e,cmd));
     register_assign!(xdef,engine,(e,cmd,global) =>xdef::<ET>(e,cmd,global,false,false,false));
     register_skip_assign!(xspaceskip,engine);
-    register_int!(year,engine,(e,c) => year::<ET>(e.state,c));
+    register_int!(year,engine,(e,c) => year::<ET>(e,c));
 
     register_muskip_assign!(thinmuskip,engine);
     register_muskip_assign!(medmuskip,engine);

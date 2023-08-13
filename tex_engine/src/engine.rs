@@ -1,6 +1,7 @@
 //! Components of a TeX engine, such as [`Mouth`](mouth::NoTracingMouth) and [`State`](state::State)
 use std::fmt::Debug;
 use std::path::PathBuf;
+use chrono::{DateTime, Local};
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{Gullet, TeXGullet};
@@ -45,36 +46,33 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Stomach:Stomach<Self>;
 }
 
-pub struct EngineMut<'a,ET:EngineType> {
+pub struct EngineRef<'a,ET:EngineType> {
     pub state:&'a mut ET::State,
     pub mouth:&'a mut ET::Mouth,
     pub gullet:&'a mut ET::Gullet,
     pub stomach:&'a mut ET::Stomach,
     pub memory:&'a mut Memory<ET>,
-}
-
-pub struct EngineRef<'a,ET:EngineType> {
-    pub mouth:&'a ET::Mouth,
-    pub state:&'a ET::State,
-    pub gullet:&'a ET::Gullet,
-    pub stomach:&'a ET::Stomach,
-    pub memory:&'a Memory<ET>,
+    pub outputs:&'a mut Outputs,
+    pub jobname:&'a str,
+    pub start_time:&'a DateTime<Local>
 }
 
 pub trait Engine<ET:EngineType> {
-    /// All components of an [`Engine`] bundled into a struct - this allows the borrow
-    /// checker to prove that the individual components are non-overlapping.
-    fn components(&self) -> EngineRef<ET>;
-    fn components_mut(&mut self) -> EngineMut<ET>;
+
+    fn components(&mut self) -> EngineRef<ET>;
     fn initialize(&mut self) -> Result<(),TeXError<ET>>;
+    fn jobname(&mut self) -> &mut String;
+    fn start_time(&mut self) -> &mut DateTime<Local>;
+    fn state(&mut self) -> &mut ET::State;
 
     fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET>> {
         debug!("Initializing with file {}",s);
-        let mut comps = self.components_mut();
-        let file = comps.state.filesystem().get(s);
+        let file = self.state().filesystem().get(s);
+        *self.jobname() = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        *self.start_time() =  Local::now();
+        let mut comps = self.components();
         let old = comps.state.filesystem().set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.mouth.push_file(&file,comps.memory);
-        comps.state.set_job(file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string());
         // should not produce any boxes, so loop until file end
         ET::Stomach::next_shipout_box(&mut comps)?;
         comps.state.filesystem().set_pwd(old);
@@ -83,8 +81,9 @@ pub trait Engine<ET:EngineType> {
     fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {
         debug!("Running file {:?}",s);
         let mut ret = vec!();
-        let mut comps = self.components_mut();
-        comps.state.set_job(s.with_extension("").file_name().unwrap().to_str().unwrap().to_string());
+        * self.jobname() = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        *self.start_time() =  Local::now();
+        let mut comps = self.components();
         let file = comps.state.filesystem().get(s.to_str().unwrap());
         comps.mouth.push_file(&file,comps.memory);
 
@@ -99,10 +98,10 @@ pub trait Engine<ET:EngineType> {
     }
 }
 
-pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach) -> EngineStruct<ET> {
+pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,outputs:Outputs) -> EngineStruct<ET> {
     let mut memory = Memory::new();
     EngineStruct {
-        state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory
+        state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory,outputs,jobname:"".to_string(),start_time:Local::now()
     }
 }
 /*
@@ -124,6 +123,9 @@ pub struct EngineStruct<ET:EngineType> {
     pub gullet: ET::Gullet,
     pub stomach:ET::Stomach,
     pub memory:Memory<ET>,
+    pub outputs:Outputs,
+    jobname:String,
+    start_time:DateTime<Local>
 }
 
 
@@ -132,14 +134,27 @@ use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
 impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
-    fn components(&self) -> EngineRef<ET> { EngineRef {mouth:&self.mouth,state:&self.state, gullet:&self.gullet, stomach:&self.stomach, memory: &self.memory} }
-    fn components_mut(&mut self) -> EngineMut<ET> { EngineMut {mouth:&mut self.mouth,state:&mut self.state, gullet:&mut self.gullet, stomach:&mut self.stomach, memory:&mut self.memory} }
+    fn components(&mut self) -> EngineRef<ET> { EngineRef {
+        mouth:&mut self.mouth,
+        state:&mut self.state,
+        gullet:&mut self.gullet,
+        stomach:&mut self.stomach,
+        memory:&mut self.memory,
+        outputs:&mut self.outputs,
+        jobname:&self.jobname,
+        start_time:&self.start_time
+    } }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
-        tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.components_mut());
+        tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.components());
         self.state.set_primitive_int("mag",ET::Int::from_i64(1000)?,true);
         self.state.set_primitive_int("fam",ET::Int::from_i64(-1)?,true);
         Ok(())
+    }
+    fn state(&mut self) -> &mut ET::State { &mut self.state }
+    fn jobname(&mut self) -> &mut String { &mut self.jobname }
+    fn start_time(&mut self) -> &mut DateTime<Local> {
+        &mut self.start_time
     }
 
 }
@@ -150,11 +165,11 @@ impl<ET:EngineType> EngineStruct<ET> {
         Ok(())
     }
     pub fn etex(&mut self) -> Result<(),TeXError<ET>> {
-        tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.components_mut());
+        tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.components());
         Ok(())
     }
     pub fn pdftex(&mut self) -> Result<(),TeXError<ET>> {
-        tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.components_mut());
+        tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.components());
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);
         self.init_file("pdftexconfig.tex")
     }

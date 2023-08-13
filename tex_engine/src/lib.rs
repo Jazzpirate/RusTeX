@@ -168,10 +168,10 @@ mod tests {
         }
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new();
-        let state = TeXState::new(fs,fonts,outputs.clone());
+        let state = TeXState::new(fs,fonts);
         let gullet = TeXGullet::new();
         let stomach = NoShipoutDefaultStomach::new();
-        let mut engine = crate::engine::new::<Default>(state,gullet,stomach);
+        let mut engine = crate::engine::new::<Default>(state,gullet,stomach,outputs);
 
         engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.memory),Some(Command::new(BaseCommand::Unexpandable {
             name: "rustexBREAK",
@@ -190,7 +190,7 @@ mod tests {
                 error!("Mouth: {}",engine.mouth.stack.capacity());
             },
             Err(e) => {
-                (outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(&mut engine.memory),engine.components_mut().current_position(),engine.components_mut().preview(100)));
+                (engine.outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(&mut engine.memory),engine.components().current_position(),engine.components().preview(100)));
                 panic!()
             }
         }

@@ -1,7 +1,7 @@
 use std::hint::unreachable_unchecked;
 use std::marker::PhantomData;
 use crate::{catch, debug_log, file_end, throw};
-use crate::engine::{EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
 use crate::engine::gullet::methods::{get_keyword, get_keywords};
@@ -24,7 +24,7 @@ fn is_ascii_hex_digit(u:usize) -> bool {
     is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
 }
 
-pub fn get_int<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Int,TeXError<ET>> {
+pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Reading number {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut isnegative = false;
@@ -115,7 +115,7 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Int,TeXEr
     file_end!()
 }
 
-pub fn expand_until_space<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<(),TeXError<ET>> {
+pub fn expand_until_space<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<(),TeXError<ET>> {
     match engine.get_next_unexpandable()? {
         Some(cmd) => match cmd.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => Ok(()), // eat one space
@@ -128,7 +128,7 @@ pub fn expand_until_space<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<()
     }
 }
 
-pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
+pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Reading decimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
 
@@ -156,7 +156,7 @@ pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8
     Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
 }
 
-pub fn read_hex_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
+pub fn read_hex_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
     while let Some(next) = engine.get_next_unexpandable()? {
@@ -185,7 +185,7 @@ pub fn read_hex_number<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isn
 }
 
 
-pub fn get_dim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Dim,TeXError<ET>> {
+pub fn get_dim<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"Reading dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut isnegative = false;
@@ -213,8 +213,8 @@ pub fn get_dim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::Dim,TeXEr
 }
 
 
-pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:ResolvedToken<ET>)
--> Result<ET::Dim,TeXError<ET>> {
+pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
+                                    -> Result<ET::Dim,TeXError<ET>> {
     match next.command {
         BaseCommand::Char { char,.. } => {
             let us = char.to_usize();
@@ -252,7 +252,7 @@ pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,ne
     }
 }
 
-pub fn read_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result<ET::Dim,TeXError<ET>> {
+pub fn read_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"Reading unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     match engine.get_next_unexpandable()? {
         Some(cmd) => match cmd.command {
@@ -307,7 +307,7 @@ pub fn read_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result<E
     }
 }
 
-pub fn get_skip<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
+pub fn get_skip<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
     debug_log!(trace=>"Reading skip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut isnegative = false;
@@ -334,8 +334,8 @@ pub fn get_skip<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<Skip<ET::Ski
     file_end!()
 }
 
-fn get_skip_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:ResolvedToken<ET>)
-    -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
+fn get_skip_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
+                                 -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
     let base = get_dim_inner::<ET>(engine,isnegative,next)?;
     engine.skip_whitespace()?;
     let stretch = if engine.get_keyword("plus")? {
@@ -349,7 +349,7 @@ fn get_skip_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:
 
 }
 
-pub fn get_skipdim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::SkipDim,TeXError<ET>> {
+pub fn get_skipdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::SkipDim,TeXError<ET>> {
     debug_log!(trace=>"Reading dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut isnegative = false;
@@ -385,8 +385,8 @@ pub fn get_skipdim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::SkipD
     file_end!()
 }
 
-pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
-    -> Result<ET::SkipDim,TeXError<ET>> {
+pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64)
+                                     -> Result<ET::SkipDim,TeXError<ET>> {
     debug_log!(trace=>"Reading skip unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     match engine.get_next_unexpandable()? {
         None => file_end!(),
@@ -417,7 +417,7 @@ pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
     }
 }
 
-pub fn get_muskip<ET:EngineType>(engine:&mut EngineMut<ET>)
+pub fn get_muskip<ET:EngineType>(engine:&mut EngineRef<ET>)
     -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
     debug_log!(trace=>"Reading muskip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
@@ -445,8 +445,8 @@ pub fn get_muskip<ET:EngineType>(engine:&mut EngineMut<ET>)
     file_end!()
 }
 
-fn get_muskip_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,next:ResolvedToken<ET>)
-    -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
+fn get_muskip_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
+                                   -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
     let base = get_mudim::<ET>(engine, isnegative, next)?;
     engine.skip_whitespace()?;
     let stretch = if engine.get_keyword("plus")? {
@@ -459,8 +459,8 @@ fn get_muskip_inner<ET:EngineType>(engine:&mut EngineMut<ET>,isnegative:bool,nex
     Ok(MuSkip{base,stretch,shrink})
 }
 
-pub fn get_mudim<ET:EngineType>(engine:&mut EngineMut<ET>, isnegative:bool, next:ResolvedToken<ET>)
-    -> Result<ET::MuDim,TeXError<ET>> {
+pub fn get_mudim<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
+                                -> Result<ET::MuDim,TeXError<ET>> {
     match next.command {
         BaseCommand::Char {char,..} => {
             let us = char.to_usize();
@@ -484,7 +484,7 @@ pub fn get_mudim<ET:EngineType>(engine:&mut EngineMut<ET>, isnegative:bool, next
     }
 }
 
-pub fn get_mustretchdim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
+pub fn get_mustretchdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
     debug_log!(trace=>"Reading mu stretch/shrink dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut isnegative = false;
@@ -520,7 +520,7 @@ pub fn get_mustretchdim<ET:EngineType>(engine:&mut EngineMut<ET>) -> Result<ET::
     file_end!()
 }
 
-pub fn read_muunit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result<ET::MuDim,TeXError<ET>> {
+pub fn read_muunit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> Result<ET::MuDim,TeXError<ET>> {
     debug_log!(trace=>"Reading mu unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     match engine.get_keywords(ET::MuDim::units())? {
@@ -529,8 +529,8 @@ pub fn read_muunit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64) -> Result
     }
 }
 
-pub fn read_mustretchunit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
-    -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
+pub fn read_mustretchunit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64)
+                                         -> Result<ET::MuStretchShrinkDim,TeXError<ET>> {
     debug_log!(trace=>"Reading mu unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     match get_keywords::<ET>(engine, ET::MuStretchShrinkDim::units())? {
@@ -539,7 +539,7 @@ pub fn read_mustretchunit<ET:EngineType>(engine:&mut EngineMut<ET>,float:f64)
     }
 }
 
-pub fn read_float<ET:EngineType>(engine:&mut EngineMut<ET>,firstchar:u8,isnegative:bool) -> Result<f64,TeXError<ET>> {
+pub fn read_float<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> Result<f64,TeXError<ET>> {
     debug_log!(trace=>"Reading float {}...",(firstchar as char));
     let mut in_float = firstchar == b'.' || firstchar == b',';
     let mut rets = if in_float {vec!(b'0',b'.')} else {vec!(firstchar)};

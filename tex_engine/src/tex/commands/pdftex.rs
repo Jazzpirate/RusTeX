@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
-use crate::engine::{EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string};
@@ -30,7 +30,7 @@ pub static PDFTEX_REVISION: i64 = 25;
 /// "ifpdfabsnum"
 pub static IFPDFABSNUM : &str = "ifpdfabsnum";
 /// `\ifpdfabsnum`: Compare the absolute values of two numbers.
-pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
+pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsnum");
     let i1 = catch_prim!(engine.get_int() => (IFPDFABSNUM,cmd));
     let rel = match catch_prim!(engine.is_next_char_one_of(&super::tex::LGE) => (IFPDFABSNUM,cmd)) {
@@ -49,7 +49,7 @@ pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
 /// "ifpdfabsdim"
 pub static IFPDFABSDIM : &str = "ifpdfabsdim";
 /// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
-pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
+pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsdim");
     let i1 = catch_prim!(engine.get_dim() => (IFPDFABSDIM,cmd));
     let rel = match catch_prim!(engine.is_next_char_one_of(&super::tex::LGE) => (IFPDFABSDIM,cmd)) {
@@ -68,7 +68,7 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
 /// "pdffilesize"
 pub static PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
-pub fn pdffilesize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdffilesize");
     let mut filename = engine.memory.get_string();
     catch_prim!(engine.get_braced_string(&mut filename) => (PDFFILESIZE,cmd));
@@ -88,7 +88,7 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<E
 /// "pdfglyphtounicode"
 pub static PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
 /// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
-pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                         -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
@@ -100,7 +100,7 @@ pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSo
 /// "pdfstrcmp"
 pub static PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
-    pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdfstrcmp");
     let mut str1 = engine.memory.get_string();
     let mut str2 = engine.memory.get_string();
@@ -135,13 +135,13 @@ pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
 /// "pdftexrevision"
 pub static PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
-pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineMut<ET>,f:TokenCont<ET>)
-    -> Result<(),TeXError<ET>> {
+pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
+                                     -> Result<(),TeXError<ET>> {
     engine.string_to_tokens(PDFTEX_REVISION.to_string().as_bytes(),f)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
-pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
+pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,cmd));
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,cmd));
     register_int_assign!(pdfcompresslevel,engine);

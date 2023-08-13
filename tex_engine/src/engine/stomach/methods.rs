@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use crate::{catch, debug_log, throw};
-use crate::engine::{EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::Memory;
 use crate::engine::state::modes::{GroupType, TeXMode};
@@ -11,8 +11,8 @@ use crate::tex::commands::{methods, BaseStomachCommand, StomachCommand};
 use crate::tex::token::{Token, TokenList};
 use crate::utils::errors::TeXError;
 
-pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
-    -> Result<(),TeXError<ET>> {
+pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
+                             -> Result<(),TeXError<ET>> {
     use BaseStomachCommand::*;
     debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
     match cmd.command {
@@ -72,10 +72,10 @@ pub fn digest<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:StomachCommand<ET>)
                 })
             }
             Some((v,GroupType::Box(b))) => {
-                match engine.state.shipout_data_mut().box_stack.pop() {
+                match engine.stomach.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(engine,list) {
-                            Some(b) => engine.state.push_node(b),
+                            Some(b) => engine.stomach.push_node(b),
                             None => {}
                         }
                         Ok(())

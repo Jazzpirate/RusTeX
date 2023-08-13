@@ -2,7 +2,7 @@
 
 use crate::engine::mouth::{Mouth, TokenSource};
 use crate::{debug_log, file_end, throw};
-use crate::engine::{EngineRef, EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::{ExpansionContainer, Memory};
 use crate::engine::state::State;
@@ -12,15 +12,15 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
-impl<ET:EngineType> EngineMut<'_,ET> {
+impl<ET:EngineType> EngineRef<'_,ET> {
     /// get the next [`Token`] from the [`Mouth`]
     pub fn get_next_token(&mut self) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
-        self.mouth.get_next(self.state,self.memory)
+        self.mouth.get_next(self.state,self.memory,self.outputs)
     }
 
     /// Skip whitespace characters from the [`Mouth`]
     pub fn skip_whitespace(&mut self) -> Result<(),TeXError<ET>> {
-        self.mouth.skip_whitespace(self.state,self.memory)
+        self.mouth.skip_whitespace(self.state,self.memory,self.outputs)
     }
 
     /// read optional `=` characters from the [`Mouth`]
@@ -72,11 +72,11 @@ impl<ET:EngineType> EngineMut<'_,ET> {
         file_end!()
     }
 
-    pub fn with_mouth<F:FnMut(&mut EngineMut<ET>) -> R,R>(&mut self,tks:Vec<Token<ET>>,mut f:F) -> R {
+    pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<Token<ET>>, mut f:F) -> R {
         ET::Mouth::with_mouth(self,tks,f)
     }
 
-    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineMut<ET>,&mut ExpansionContainer<ET>) -> R {
+    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
         ET::Mouth::add_expansion(self,f)
     }
 
@@ -87,19 +87,6 @@ impl<ET:EngineType> EngineMut<'_,ET> {
     }
 
     pub fn current_position(&mut self) -> String {
-        self.mouth.file_line(self.memory)
-    }
-}
-
-impl<ET:EngineType> EngineRef<'_,ET> {
-
-    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
-    /// (for error messages, debugging purposes, etc.)
-    pub fn preview(&self,len:usize) -> String {
-        self.mouth.preview(len,self.memory)
-    }
-
-    pub fn current_position(&self) -> String {
         self.mouth.file_line(self.memory)
     }
 }

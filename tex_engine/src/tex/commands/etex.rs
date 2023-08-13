@@ -4,7 +4,7 @@ use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end};
-use crate::engine::{EngineMut, EngineType};
+use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, ExpToken, ResolvedToken, TokenCont};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
@@ -21,7 +21,7 @@ use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 static PMTDC:[u8;5] = [b'+',b'-',b'*',b'/',b')'];
 static PMTD:[u8;4] = [b'+',b'-',b'*',b'/'];
 static TD:[u8;2] = [b'*',b'/'];
-fn expr_scale_loop<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str)
+fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
                                   -> Result<Frac,TeXError<ET>> {
     let mut stack: Vec<(Option<Frac>,Option<fn(Frac,Frac) -> Frac>)> = vec!((None,None));
     'a: loop {
@@ -118,8 +118,8 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineMut<ET>, cmd:&CommandSource
     }
 }
 
-fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineMut<ET>, cmd:&CommandSource<ET>, name:&'static str,
-                                        get:fn(&mut EngineMut<ET>) -> Result<Num,TeXError<ET>>)
+fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str,
+                                        get:fn(&mut EngineRef<ET>) -> Result<Num,TeXError<ET>>)
                                         -> Result<Num,TeXError<ET>> {
     let mut stack: Vec<(Option<Num>, Option<fn(Num, Num) -> Num>)> = vec!((None, None));
     'a: loop {
@@ -212,7 +212,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineMut<ET>, cmd:&CommandS
 pub static DETOKENIZE: &str = "detokenize";
 /// `\detokenize`: convert a token list into a string of [`CategoryCode`] [`Other`](CategoryCode::Other)
 /// (except for ` `, which gets code [`Space`](CategoryCode::Space)).
-pub fn detokenize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"detokenize");
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
@@ -229,7 +229,7 @@ pub fn detokenize<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
 
 pub static DIMEXPR: &str = "dimexpr";
 /// `\dimexpr`: evaluate a dimension expression; returns a [`Dim`].
-pub fn dimexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<ET::Dim,TeXError<ET>> {
+pub fn dimexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<ET::Dim,TeXError<ET>> {
     debug_log!(trace=>"dimexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,ET::Dim>(engine, &cmd, DIMEXPR, |e| e.get_dim())?;
     if let Some((next,_)) = catch_prim!(engine.get_next_token() => (DIMEXPR,cmd)) {
@@ -248,7 +248,7 @@ pub static E_TEX_REVISION: &str = ".6";
 pub static E_TEX_VERSION: i64 = 2;
 
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
-pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineMut<ET>,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     engine.string_to_tokens(E_TEX_REVISION.as_bytes(),f)
 }
 
@@ -260,7 +260,7 @@ pub fn eTeXversion<ET:EngineType>(cmd:CommandSource<ET>) -> Result<ET::Int,TeXEr
 
 pub static EXPANDED: &str = "expanded";
 /// `\expanded`: expands its argument exhaustively.
-pub fn expanded<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
+pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"expanded");
     catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
@@ -269,7 +269,7 @@ pub fn expanded<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
 
 pub static GLUEEXPR: &str = "glueexpr";
 /// `\glueexpr`: evaluate a glue expression; returns a [`Skip`].
-pub fn glueexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn glueexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<Skip<ET::SkipDim>,TeXError<ET>> {
     debug_log!(trace=>"glueexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,Skip<ET::SkipDim>>(engine, &cmd, GLUEEXPR, |e| e.get_skip())?;
@@ -289,7 +289,7 @@ pub fn glueexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 /// [`\endcsname`](super::tex::endcsname)) and evaluates to true if the resulting control sequence
 /// is defined. Unlike [`\csname`](super::tex::csname), does not define the control sequence as
 /// [`\relax`](super::tex::relax)
-pub fn ifcsname<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifcsname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifcsname");
     let name = get_csname::<ET>(engine,&cmd,"ifcsname")?;
@@ -298,7 +298,7 @@ pub fn ifcsname<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 
 pub static IFDEFINED: &str = "ifdefined";
 /// `\ifdefined`: evaluates to true if the next token is a control sequence that is defined.
-pub fn ifdefined<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn ifdefined<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                 -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifdefined");
     match catch_prim!(engine.get_next_token() => (IFDEFINED,cmd)) {
@@ -317,7 +317,7 @@ pub fn ifdefined<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 
 pub static MUEXPR: &str = "muexpr";
 /// `\muexpr`: evaluate a mu expression; returns a [`MuSkip`].
-pub fn muexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn muexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                              -> Result<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,TeXError<ET>> {
     debug_log!(trace=>"muexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>(engine, &cmd, MUEXPR, |e| e.get_muskip())?;
@@ -335,7 +335,7 @@ pub fn muexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 
 pub static NUMEXPR: &str = "numexpr";
 /// `\numexpr`: evaluate a number expression; returns an [`Int`].
-pub fn numexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
+pub fn numexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                               -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"numexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,ET::Int>(engine, &cmd, NUMEXPR, |e| e.get_int())?;
@@ -353,7 +353,7 @@ pub fn numexpr<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>)
 
 
 /// `\protected`: make the next control sequence protected (i.e. not expandable).
-pub fn protected<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, global_:bool, _:bool, long_:bool, outer_:bool)
+pub fn protected<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global_:bool, _:bool, long_:bool, outer_:bool)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\protected");
     match catch_prim!(engine.get_next_stomach_command() => ("protected",cmd)) {
@@ -375,7 +375,7 @@ pub fn protected<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>
 pub static READLINE: &str = "readline";
 /// `\readline`: read a line from a file like [`\read`](super::tex::read), but with all characters
 /// having [`CategoryCode`] [12 (`Other`)](CategoryCode::Other) (except for ` ` [`Space`](CategoryCode::Space))
-pub fn readline<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, globally:bool)
+pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, globally:bool)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"readline");
     let i = catch_prim!(engine.get_int() => (READLINE,cmd));
@@ -402,7 +402,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>,
 
 pub static UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
-pub fn unexpanded<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"unexpanded");
     catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
     Ok(())
@@ -412,7 +412,7 @@ pub fn unexpanded<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET
 /// since otherwise, e.g. `\unless\ifx` in the [false-loop](crate::engine::gullet::methods::false_loop)
 /// would be interpreted as *two* conditionals, rather than just one.
 pub static UNLESS : &str = "unless";
-pub fn unless<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
+pub fn unless<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"unless");
     match catch_prim!(engine.get_next_token() => (UNLESS,cmd)) {
         None => file_end_prim!(UNLESS,cmd),
@@ -440,7 +440,7 @@ pub fn unless<ET:EngineType>(engine:&mut EngineMut<ET>, cmd:CommandSource<ET>) -
 }
 
 /// Initialize a TeX engine with default implementations for all eTeX primitives.
-pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineMut<ET>) {
+pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(detokenize,engine,(e,c,f) =>detokenize::<ET>(e,c,f));
     register_dim!(dimexpr,engine,(e,c) => dimexpr::<ET>(e,c));
     register_expandable!(eTeXrevision,engine,(e,_,f) => eTeXrevision::<ET>(e,f));
