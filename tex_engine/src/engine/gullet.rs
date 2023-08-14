@@ -135,17 +135,17 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
             BaseCommand::Def(d) => {
                 //let mut exp = ET::Mouth::get_expansion(engine);
                 engine.add_expansion(|engine,rs| {
-                    expand_def(&d,engine,ret.source,&mut exp)?;
+                    expand_def(&d,engine,ret.source,rs)?;//&mut exp)?;
                     Ok(None)
                 })
                 //ET::Mouth::push_expansion(engine,exp);
                 //Ok(None)
             }
             // expandable commands that do not expand to new tokens
-            BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
+            /*BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
                 apply(engine, ret.source, &mut |_,_| Ok(()))?;
                 Ok(None)
-            }
+            }*/
             BaseCommand::Expandable {apply,..} => {
                 engine.add_expansion(|engine,rs| {
                     apply(engine,ret.source,&mut |engine,t| Ok(rs.push(t,engine.memory)))?;

@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::hint::unreachable_unchecked;
 use std::marker::PhantomData;
 use std::path::Components;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::{tokens_to_string, resolve_token};
@@ -325,6 +325,25 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, glo
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,DEF)?;
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
+
+    get_group!(engine,t => match (std::mem::take(&mut partk),&t.base) {
+        (None,BaseToken::Char(c,CategoryCode::Parameter)) => partk = Some(t),
+        (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
+            replacement.push(ExpToken::ParamToken(t)),
+        (Some(t),BaseToken::Char(c,_)) => {
+            let u = c.to_usize();
+            if u < 48 || u - 48 > (arity as usize) {
+                throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
+            }
+            replacement.push(ExpToken::Param(t,(u-49) as u8))
+        }
+        (Some(_),_) =>
+            throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
+        (_,_) => replacement.push(ExpToken::Token(t))
+    });
+
+
+/*
     catch_prim!(engine.get_group(&mut |engine,t| match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
@@ -340,6 +359,8 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, glo
             throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
+*/
+
     let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
     debug_log!(trace=>"def {:?} = {:?}",cs,def);
     engine.set_command_for_tk(cs,Some(def),global);
@@ -566,6 +587,26 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, gl
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,EDEF)?;
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
+
+    use super::etex::UNEXPANDED;
+
+    get_expanded_group!(engine,false,true,false,t => match (std::mem::take(&mut partk),&t.base) {
+        (None,BaseToken::Char(c,CategoryCode::Parameter)) => partk = Some(t),
+        (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
+            replacement.push(ExpToken::ParamToken(t)),
+        (Some(t),BaseToken::Char(c,_)) => {
+            let u = c.to_usize();
+            if u < 48 || u - 48 > (arity as usize) {
+                throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
+            }
+            replacement.push(ExpToken::Param(t,(u-49) as u8))
+        }
+        (Some(_),_) =>
+            throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
+        (_,_) => replacement.push(ExpToken::Token(t))
+    });
+
+/*
     catch_prim!(engine.get_expanded_group(false,true,false,&mut |engine,t| match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
@@ -581,6 +622,10 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, gl
             throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => Ok(replacement.push(ExpToken::Token(t)))
     }) => (DEF,cmd));
+
+ */
+
+
     let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
     debug_log!(trace=>"edef {:?} = {:?}",cs,def);
     engine.set_command_for_tk(cs,Some(def),global);
@@ -933,7 +978,9 @@ pub fn hyphenation<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
                                   -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\hyphenation");
     // TODO
-    catch_prim!(engine.get_argument(&mut |_,_| Ok(())) => ("hyphenation",cmd));
+    let mut v = engine.memory.get_token_vec();
+    catch_prim!(engine.get_argument(&mut v) => ("hyphenation",cmd));
+    engine.memory.return_token_vec(v);
     Ok(())
 }
 
@@ -1291,6 +1338,16 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\lowercase");
     engine.add_expansion(|engine,rs|{
+
+        expand_until_group!(engine,next =>match &next.base {
+            BaseToken::Char(c,cc) => {
+                let nc = engine.state.get_lccode(c);
+                rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory)
+            }
+            _ => rs.push(next,engine.memory)
+        });
+
+/*
         catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_lccode(c);
@@ -1298,6 +1355,9 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
             }
             _ => Ok(rs.push(next,engine.memory))
         }) => (LOWERCASE,cmd));
+
+ */
+
         Ok(())
     })
 }
@@ -1860,7 +1920,9 @@ pub fn patterns<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\patterns");
     // TODO
-    catch_prim!(engine.get_argument(&mut |_,_| Ok(())) => (PATTERNS,cmd));
+    let mut v = engine.memory.get_token_vec();
+    catch_prim!(engine.get_argument(&mut v) => (PATTERNS,cmd));
+    engine.memory.return_token_vec(v);
     Ok(())
 }
 
@@ -2142,7 +2204,10 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
     };
     catch_prim!(engine.skip_eq_char() => (TOKS,cmd));
     let mut v = vec!();
-    catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
+
+    get_group!(engine,t => v.push(t));
+    //catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
+
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(engine.memory));
     engine.state.set_toks_register(i,v,global);
     Ok(())
@@ -2200,6 +2265,16 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\uppercase");
     engine.add_expansion(|engine,rs| {
+
+        expand_until_group!(engine,next => match &next.base {
+            BaseToken::Char(c,cc) => {
+                let nc = engine.state.get_uccode(c);
+                rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory)
+            }
+            _ => rs.push(next,engine.memory)
+        });
+
+/*
         catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_uccode(c);
@@ -2207,7 +2282,10 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
             }
             _ => Ok(rs.push(next,engine.memory))
         }) => (UPPERCASE,cmd));
-            Ok(())
+
+ */
+
+        Ok(())
     })
 }
 
@@ -2246,7 +2324,9 @@ pub fn write<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
     let i = catch_prim!(engine.get_int() => (WRITE,cmd));
     let i = i.to_i64();
     let mut tks = vec!();
-    catch_prim!(engine.get_group(&mut |_,t| Ok(tks.push(t))) => (WRITE,cmd));
+
+    get_group!(engine,t => tks.push(t));
+    //catch_prim!(engine.get_group(&mut |_,t| Ok(tks.push(t))) => (WRITE,cmd));
 
     let apply = Box::new(move |engine:&mut EngineRef<ET>| {
         tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));

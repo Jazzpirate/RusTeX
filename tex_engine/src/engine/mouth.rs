@@ -16,7 +16,7 @@ use crate::engine::{EngineRef, EngineType, Outputs};
 use crate::engine::filesystem::File;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
-use crate::{debug_log, file_end, throw};
+use crate::{debug_log, file_end, get_until_endgroup, throw};
 use crate::engine::memory::{ExpansionContainer, Memory, TokenArray};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::TokenCont;
@@ -66,6 +66,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     fn endinput(&mut self,state:&mut ET::State,memory:&mut Memory<ET>,outputs:&mut Outputs);
 
     /// Skip whitespace characters from the [`Mouth`]
+    #[inline(always)]
     fn skip_whitespace(&mut self,state:&ET::State,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Result<(),TeXError<ET>> {
         debug_log!(trace=>"skipping whitespace");
         while let Some((tk,_)) = self.get_next(state,memory,outputs)? {
@@ -84,17 +85,21 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    fn get_argument(engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<Token<ET>>) -> Result<(),TeXError<ET>> {
         match engine.get_next_token()? {
             None => file_end!(),
-            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => Self::get_until_endgroup(engine,f),
+            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
+                get_until_endgroup!(engine,t => vec.push(t));
+                Ok(())
+                //Self::get_until_endgroup(engine,&mut|_,t| Ok(vec.push(t)))
+            }
             Some((o,_)) => {
-                f(engine,o)?;
+                vec.push(o);
                 Ok(())
             }
         }
     }
-
+/*
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
     fn get_until_endgroup(engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
@@ -114,7 +119,10 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
         file_end!()
     }
 
+ */
+
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
+    #[inline(always)]
     fn get_next_nopar(&mut self,state:&ET::State,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
         match self.get_next(state,memory,outputs)? {
             Some((t,b)) => {
@@ -131,7 +139,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn get_argument_nopar(engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    fn get_argument_nopar(engine:&mut EngineRef<ET>, v:&mut Vec<Token<ET>>) -> Result<(),TeXError<ET>> {
         match engine.get_next_token()? {
             None => file_end!(),
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
@@ -147,13 +155,13 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
                             throw!("Paragraph ended while reading argument" => t),
                         _ => ()
                     }
-                    f(engine,tk)?;
+                    v.push(tk);
                 }
                 file_end!()
             }
             Some((t,_)) if t.catcode() == CategoryCode::EOF => file_end!(),
             Some((o,_)) => {
-                f(engine,o)?;
+                v.push(o);
                 Ok(())
             }
         }
@@ -216,6 +224,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         self.stack.push(TeXMouthSource::Token((tk,true)))
     }
 
+    #[inline(always)]
     fn get_next(&mut self, state: &ET::State,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Result<Option<(Token<ET>, bool)>, TeXError<ET>> {
         match self.stack.last_mut() {
             Some(TeXMouthSource::Token(ref mut tks)) => match self.stack.pop() {

@@ -92,8 +92,10 @@ pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSo
                                         -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
-    catch_prim!(engine.get_argument(&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
-    catch_prim!(engine.get_argument(&mut |_,_|Ok(())) => (PDFGLYPHTOUNICODE,cmd));
+    let mut v = engine.memory.get_token_vec();
+    catch_prim!(engine.get_argument(&mut v) => (PDFGLYPHTOUNICODE,cmd));
+    catch_prim!(engine.get_argument(&mut v) => (PDFGLYPHTOUNICODE,cmd));
+    engine.memory.return_token_vec(v);
     Ok(())
 }
 

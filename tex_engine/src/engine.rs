@@ -159,6 +159,9 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
 
 }
 impl<ET:EngineType> EngineStruct<ET> {
+    pub fn set_state(&mut self,state:ET::State) {
+        self.state = state;
+    }
     pub fn initialize_etex(&mut self) -> Result<(),TeXError<ET>> {
         self.initialize()?;
         self.etex();

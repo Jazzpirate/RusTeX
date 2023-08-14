@@ -1,5 +1,5 @@
 use std::hint::unreachable_unchecked;
-use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
+use crate::{catch, catch_prim, debug_log, expand_until_group, file_end, file_end_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::numeric_methods::expand_until_space;
@@ -66,7 +66,8 @@ pub fn set_toks_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:
     debug_log!(trace=>"Setting \\toks{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
     let mut tks = Vec::with_capacity(32);
-    catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
+    expand_until_group!(engine,t => tks.push(t));
+    //catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
     debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks).to_str(engine.memory));
     engine.state.set_toks_register(u,tks,global);
     Ok(())
@@ -109,7 +110,8 @@ pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandS
     debug_log!(trace=>"Setting {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
     let mut tks = Vec::with_capacity(32);
-    catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
+    expand_until_group!(engine,t => tks.push(t));
+    //catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks).to_str(engine.memory));
     engine.state.set_primitive_toks(name,tks,global);
     Ok(())
@@ -369,6 +371,7 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
+#[inline(never)]
 pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>)
                                  -> Result<(),TeXError<ET>> {
     debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.memory,Some(ET::Char::backslash())),d.as_str(engine.memory),engine.preview(250).replace("\n","\\n"));
@@ -469,9 +472,9 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     let arg = &mut args[argnum];
                     argnum += 1;
                     catch!(engine.skip_whitespace() => cmd.cause.clone());
-                    if d.long {catch!(engine.get_argument(&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())}
+                    if d.long {catch!(engine.get_argument(arg) => cmd.cause.clone())}
                     else {
-                        catch!(ET::Mouth::get_argument_nopar(engine,&mut|_,t| Ok(arg.push(t))) => cmd.cause.clone())
+                        catch!(ET::Mouth::get_argument_nopar(engine,arg) => cmd.cause.clone())
                     };
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
@@ -555,7 +558,7 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut Engine
         match next {
             ExpToken::Param(_,idx) => {
                 for t in args[*idx as usize].iter() {
-                    exp.push(t.clone().with_ref(&rf),engine.memory)
+                    exp.push(t.clone().with_ref(&rf),engine.memory);
                 }
             }
             ExpToken::ParamToken(t) => exp.push(t.clone().with_ref(&rf),engine.memory),

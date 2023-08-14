@@ -251,7 +251,7 @@ pub enum BaseCommand<ET:EngineType>{
     Whatsit {name:&'static str,apply:WhatsitFun<ET>},
     /// A command opening a new  [`TeXBox`](crate::tex::nodes::CustomBox), e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
-    /// A character; also e.g. the result of `\let\foo=a`
+    /// A character; i.e. the result of `\let\foo=a`
     Char{char:ET::Char,catcode:CategoryCode},
     /// The result of a `\chardef`, e.g. `\chardef\foo=97`
     CharDef(ET::Char),

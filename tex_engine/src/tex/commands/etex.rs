@@ -3,7 +3,7 @@ use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::stomach::Stomach;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, ExpToken, ResolvedToken, TokenCont};
@@ -216,6 +216,18 @@ pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET
     debug_log!(trace=>"detokenize");
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
+
+    expand_until_group!(engine,next => match &next.base {
+        BaseToken::Char(c,CategoryCode::Parameter) => {
+            engine.token_to_others(&next,true,f);
+            engine.token_to_others(&next,true,f);
+            Ok(())
+        }
+        _ => engine.token_to_others(&next,true,f)
+    });
+
+
+/*
     catch_prim!(engine.expand_until_group(&mut |engine,next| match &next.base {
         BaseToken::Char(c,CategoryCode::Parameter) => {
             engine.token_to_others(&next,true,f)?;
@@ -224,6 +236,9 @@ pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET
         }
         _ => engine.token_to_others(&next,true,f)
     }) => (DETOKENIZE,cmd));
+
+ */
+
     Ok(())
 }
 
@@ -263,7 +278,11 @@ pub static EXPANDED: &str = "expanded";
 pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"expanded");
-    catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
+    use crate::engine::gullet::methods::resolve_token;
+    use super::tex::NOEXPAND;use super::tex::THE;
+
+    get_expanded_group!(engine,false,false,false,t => f(engine,t)?);
+    //catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
     Ok(())
 }
 
@@ -404,7 +423,8 @@ pub static UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
 pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"unexpanded");
-    catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
+    expand_until_group!(engine,tk => f(engine,tk)?);
+    //catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
     Ok(())
 }
 

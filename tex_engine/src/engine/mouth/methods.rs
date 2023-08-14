@@ -14,6 +14,7 @@ use crate::utils::strings::CharType;
 
 impl<ET:EngineType> EngineRef<'_,ET> {
     /// get the next [`Token`] from the [`Mouth`]
+    #[inline(always)]
     pub fn get_next_token(&mut self) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
         self.mouth.get_next(self.state,self.memory,self.outputs)
     }
@@ -46,10 +47,10 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    pub fn get_argument(&mut self,f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        ET::Mouth::get_argument(self,f)
+    pub fn get_argument(&mut self,vec: &mut Vec<Token<ET>>) -> Result<(),TeXError<ET>> {
+        ET::Mouth::get_argument(self,vec)
     }
-
+/*
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
     /// or throws an error if the next [`Token`] is not a [`BeginGroup`](CategoryCode::BeginGroup)
     pub fn get_group(&mut self, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
@@ -72,6 +73,8 @@ impl<ET:EngineType> EngineRef<'_,ET> {
         file_end!()
     }
 
+ */
+
     pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<Token<ET>>, mut f:F) -> R {
         ET::Mouth::with_mouth(self,tks,f)
     }
@@ -88,5 +91,50 @@ impl<ET:EngineType> EngineRef<'_,ET> {
 
     pub fn current_position(&mut self) -> String {
         self.mouth.file_line(self.memory)
+    }
+}
+
+#[macro_export]
+macro_rules! get_until_endgroup {
+    ($engine:ident,$tk:ident => $f:expr) => {
+        let mut depth = 1;
+        let mut ok = false;
+        while let Some(($tk,_)) = $engine.get_next_token()? {
+            match $tk.catcode() {
+                CategoryCode::BeginGroup => depth += 1,
+                CategoryCode::EndGroup => {
+                    depth -= 1;
+                    if depth == 0 { ok = true; break }
+                },
+                CategoryCode::EOF => file_end!(),
+                _ => ()
+            }
+            $f;
+        }
+        if (!ok) {file_end!()}
+    }
+}
+
+#[macro_export]
+macro_rules! get_group {
+    ($engine:ident,$tk:ident => $f:expr) => {
+        match $engine.get_next_token()? {
+            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
+            _ => throw!("begin group expected")
+        }
+        let mut ingroup = 0;
+        let mut ok = false;
+        while let Some(next) = $engine.get_next_token()? {
+            let $tk = next.0;
+            match &$tk.base {
+                BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
+                BaseToken::Char(_,CategoryCode::EndGroup) => {
+                    if ingroup == 0 { ok = true;break } else { ingroup -= 1; }
+                }
+                _ => ()
+            }
+            $f
+        }
+        if !ok { file_end!() }
     }
 }
