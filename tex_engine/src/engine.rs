@@ -1,6 +1,7 @@
 //! Components of a TeX engine, such as [`Mouth`](mouth::NoTracingMouth) and [`State`](state::State)
 use std::fmt::Debug;
 use std::path::PathBuf;
+use std::time::Instant;
 use chrono::{DateTime, Local};
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
@@ -54,7 +55,8 @@ pub struct EngineRef<'a,ET:EngineType> {
     pub memory:&'a mut Memory<ET>,
     pub outputs:&'a mut Outputs,
     pub jobname:&'a str,
-    pub start_time:&'a DateTime<Local>,
+    pub start_time:&'a mut DateTime<Local>,
+    pub elapsed:&'a mut Instant,
     pub filesystem:&'a mut ET::FileSystem,
     pub fontstore:&'a mut ET::FontStore,
 }
@@ -88,6 +90,8 @@ pub trait Engine<ET:EngineType> {
         let mut comps = self.components();
         let file = comps.filesystem.get(s.to_str().unwrap());
         comps.mouth.push_file(&file,comps.memory);
+        *comps.start_time = Local::now();
+        *comps.elapsed = std::time::Instant::now();
 
         let everyjob = comps.state.get_primitive_toks("everyjob");
         if !everyjob.is_empty() {
@@ -122,6 +126,7 @@ pub struct EngineStruct<ET:EngineType> {
     pub outputs:Outputs,
     jobname:String,
     start_time:DateTime<Local>,
+    elapsed_time_from:Instant,
     filesystem:ET::FileSystem,
     fontstore:ET::FontStore,
 }
@@ -140,7 +145,8 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
         memory:&mut self.memory,
         outputs:&mut self.outputs,
         jobname:&self.jobname,
-        start_time:&self.start_time,
+        start_time:&mut self.start_time,
+        elapsed:&mut self.elapsed_time_from,
         filesystem:&mut self.filesystem,
         fontstore:&mut self.fontstore,
     } }
@@ -164,7 +170,7 @@ impl<ET:EngineType> EngineStruct<ET> {
         let mut memory = Memory::new();
         EngineStruct {
             state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory,outputs,filesystem,fontstore,
-            jobname:"".to_string(),start_time:Local::now()
+            jobname:"".to_string(),start_time:Local::now(),elapsed_time_from:std::time::Instant::now()
         }
     }
     pub fn set_state(&mut self,state:ET::State) {

@@ -1,7 +1,6 @@
 pub mod methods;
 
 use std::marker::PhantomData;
-use std::os::linux::raw::stat;
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;

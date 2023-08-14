@@ -65,6 +65,14 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
     }
 }
 
+
+pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>)
+                                      -> Result<ET::Int,TeXError<ET>> {
+    let r = engine.elapsed.elapsed().as_secs_f64() * 65536.0;
+    let ret = if r > i32::MAX.into() {i32::MAX as i64} else {r.round() as i64};
+    Ok(catch_prim!(ET::Int::from_i64(ret) => ("pdfelapsedtime",cmd)))
+}
+
 /// "pdffilesize"
 pub const PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
@@ -96,6 +104,12 @@ pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSo
     catch_prim!(engine.get_argument(&mut v) => (PDFGLYPHTOUNICODE,cmd));
     catch_prim!(engine.get_argument(&mut v) => (PDFGLYPHTOUNICODE,cmd));
     engine.memory.return_token_vec(v);
+    Ok(())
+}
+pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                                        -> Result<(), TeXError<ET>> {
+    debug_log!(trace=>"\\pdfresettimer");
+        *engine.elapsed = std::time::Instant::now();
     Ok(())
 }
 
@@ -155,6 +169,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,cmd));
     register_int_assign!(pdfcompresslevel,engine);
     register_int_assign!(pdfdecimaldigits,engine);
+    register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,c));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,cmd,f));
     register_int_assign!(pdfgentounicode,engine);
     register_unexpandable!(pdfglyphtounicode,engine,false,(e,cmd) =>pdfglyphtounicode::<ET>(e,cmd));
@@ -166,6 +181,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(pdfpageheight,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
+    register_unexpandable!(pdresettimer,engine,false,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(c));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
     register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
@@ -208,7 +224,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showstream);
     cmtodo!(engine,stbscode);
     cmtodo!(engine,tagcode);
-    cmtodo!(engine,pdelapsedtime);
     cmtodo!(engine,pdflastannot);
     cmtodo!(engine,pdflastlink);
     cmtodo!(engine,pdflastobj);
@@ -287,7 +302,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,pdfrefobj);
     cmtodo!(engine,pdfrefxform);
     cmtodo!(engine,pdfrefximage);
-    cmtodo!(engine,pdfresettimer);
     cmtodo!(engine,pdfrestore);
     cmtodo!(engine,pdfrunninglinkoff);
     cmtodo!(engine,pdfrunninglinkon);

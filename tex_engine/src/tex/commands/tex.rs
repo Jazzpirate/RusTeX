@@ -1926,6 +1926,23 @@ pub fn patterns<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
     Ok(())
 }
 
+
+pub const PREVDEPTH : &str = "prevdepth";
+pub fn prevdepth_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
+                                   -> Result<(),TeXError<ET>> {
+    debug_log!(trace=>"Assigning \\prevdepth");
+    let v = catch_prim!(engine.get_dim() => (PREVDEPTH,cmd));
+    debug_log!(debug=>"\\prevdepth{} = {}",i,v);
+    engine.stomach.shipout_data_mut().prevdepth = v;
+    Ok(())
+}
+
+pub fn prevdepth_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
+                                -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"Getting \\prevdepth");
+    Ok(engine.stomach.shipout_data().prevdepth)
+}
+
 pub const READ: &str = "read";
 pub fn read<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, globally:bool)
                            -> Result<(),TeXError<ET>> {
@@ -2189,7 +2206,7 @@ pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:To
 }
 
 pub fn time<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>) -> Result<ET::Int,TeXError<ET>> {
-    let t = engine.start_time;
+    let t = &engine.start_time;
     Ok(catch_prim!(ET::Int::from_i64( ((t.hour() * 60) + t.minute()) as i64 ) => ("time",cmd)))
 }
 
@@ -2533,6 +2550,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(postdisplaypenalty,engine);
     register_int_assign!(predisplaypenalty,engine);
     register_dim_assign!(predisplaysize,engine);
+    register_value_assign_dim!(prevdepth,engine);
     register_int_assign!(relpenalty,engine);
     register_int_assign!(righthyphenmin,engine);
     register_int_assign!(pretolerance,engine);
@@ -2601,7 +2619,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
     cmstodo!(engine,delimiter);
-    cmstodo!(engine,prevdepth);
 
 
     cmtodo!(engine,lastpenalty);
