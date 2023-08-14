@@ -12,11 +12,12 @@ name = "RusTeX"
 path = "src/main.rs"
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 lto = true
-
+debug = true
 
 [dependencies]
 tex_engine = { path = "../tex_engine" }
 env_logger = "0.10.0"
 log={version="0.4.19",features=["kv_unstable"]}
+ansi_term = "0.12.1"
