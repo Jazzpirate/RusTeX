@@ -19,16 +19,16 @@ use crate::utils::Ptr;
 
 
 /// The version number returned by [`\pdftexversion`](pdftexversion) (140).
-pub static PDF_TEX_VERSION: i64 = 140;
+pub const PDF_TEX_VERSION: i64 = 140;
 /// The version number returned by [`\pdfmajorversion`](pdfmajorversion) (1).
-pub static PDF_MAJOR_VERSION: i64 = 1;
+pub const PDF_MAJOR_VERSION: i64 = 1;
 /// The version number returned by [`\pdftexrevision`](pdftexrevision) (25).
-pub static PDFTEX_REVISION: i64 = 25;
+pub const PDFTEX_REVISION: i64 = 25;
 
 // --------------------------------------------------------------------------------------------------
 
 /// "ifpdfabsnum"
-pub static IFPDFABSNUM : &str = "ifpdfabsnum";
+pub const IFPDFABSNUM : &str = "ifpdfabsnum";
 /// `\ifpdfabsnum`: Compare the absolute values of two numbers.
 pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsnum");
@@ -47,7 +47,7 @@ pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 }
 
 /// "ifpdfabsdim"
-pub static IFPDFABSDIM : &str = "ifpdfabsdim";
+pub const IFPDFABSDIM : &str = "ifpdfabsdim";
 /// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
 pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
     debug_log!(trace=>"ifpdfabsdim");
@@ -66,7 +66,7 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 }
 
 /// "pdffilesize"
-pub static PDFFILESIZE : &str = "pdffilesize";
+pub const PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
 pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdffilesize");
@@ -74,7 +74,7 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
     catch_prim!(engine.get_braced_string(&mut filename) => (PDFFILESIZE,cmd));
     //gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
     // let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
-    let f = engine.state.filesystem().get(&filename);
+    let f = engine.filesystem.get(&filename);
     engine.memory.return_string(filename);
     let x = f.content_string();
     match &*x {
@@ -86,7 +86,7 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 }
 
 /// "pdfglyphtounicode"
-pub static PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
+pub const PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
 /// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
 pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                         -> Result<(), TeXError<ET>> {
@@ -100,7 +100,7 @@ pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSo
 }
 
 /// "pdfstrcmp"
-pub static PDFSTRCMP : &str = "pdfstrcmp";
+pub const PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
     pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"pdfstrcmp");
@@ -118,7 +118,7 @@ pub static PDFSTRCMP : &str = "pdfstrcmp";
 }
 
 /// "pdftexversion"
-pub static PDFTEXVERSION : &str = "pdftexversion";
+pub const PDFTEXVERSION : &str = "pdftexversion";
 /// ` \pdftexversion`: Return the [`PDF_TEX_VERSION`] as [`Int`].
 pub fn pdftexversion<ET:EngineType>(cmd:CommandSource<ET>)
     -> Result<ET::Int,TeXError<ET>> {
@@ -126,16 +126,23 @@ pub fn pdftexversion<ET:EngineType>(cmd:CommandSource<ET>)
 }
 
 /// "pdfmajorversion"
-pub static PDFMAJORVERSION : &str = "pdfmajorversion";
+pub const PDFMAJORVERSION : &str = "pdfmajorversion";
 /// `\pdfmajorversion`: Return the [`PDF_MAJOR_VERSION`] as [`Int`].
 pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
     -> Result<ET::Int,TeXError<ET>> {
     Ok(catch_prim!(ET::Int::from_i64(PDF_MAJOR_VERSION) => (PDFMAJORVERSION,cmd)))
 }
 
+/// "pdfshellescape"
+pub const PDFSHELLESCAPE: &str = "pdfshellescape";
+/// `\pdfmshellescape`: 2 (restricted).
+pub fn pdfshellescape<ET:EngineType>(cmd:CommandSource<ET>)
+                                      -> Result<ET::Int,TeXError<ET>> {
+    Ok(catch_prim!(ET::Int::from_i64(2) => (PDFSHELLESCAPE,cmd)))
+}
 
 /// "pdftexrevision"
-pub static PDFTEXREVISION : &str = "pdftexrevision";
+pub const PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
 pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
                                      -> Result<(),TeXError<ET>> {
@@ -159,6 +166,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(pdfpageheight,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
+    register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(c));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
     register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(c));
@@ -212,7 +220,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,pdflastypos);
     cmtodo!(engine,pdfrandomseed);
     cmtodo!(engine,pdfretval);
-    cmtodo!(engine,pdfshellescape);
     cmtodo!(engine,pdfdestmargin);
     cmtodo!(engine,pdfeachlinedepth);
     cmtodo!(engine,pdfeachlineheight);

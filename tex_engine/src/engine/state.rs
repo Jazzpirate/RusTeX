@@ -34,17 +34,12 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     /// The current [`TeXMode`]
     fn mode(&self) -> TeXMode;
 
-    /// get the [`FileSystem`] used by this state
-    fn filesystem(&mut self) -> &mut ET::FileSystem;
     fn file_openout(&mut self,i:usize,f:ET::File);
     fn file_closeout(&mut self, i: usize);
     fn file_openin(&mut self, i: usize, f: ET::File,memory:&mut Memory<ET>);
     fn file_closein(&mut self, i: usize);
     fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
     fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
-
-    fn fontstore(&self) -> &ET::FontStore;
-    fn fontstore_mut(&mut self) -> &mut ET::FontStore;
 
     /// push a new group onto the stack
     fn stack_push(&mut self, g: GroupType);
@@ -172,11 +167,9 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
 
 #[derive(Clone)]
 pub struct TeXState<ET:EngineType<State=Self>> {
-    filesystem:ET::FileSystem,
     out_files:Vec<Option<ET::File>>,
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
-    fontstore:ET::FontStore,
     afterassignment:Option<Token<ET>>,
 
     current_font:SingleValueField<ET::Font>,
@@ -214,14 +207,12 @@ pub struct TeXState<ET:EngineType<State=Self>> {
 }
 use crate::utils::strings::CharType;
 impl<ET:EngineType<State=Self>> TeXState<ET> {
-    pub fn new(fs:ET::FileSystem,fontstore:ET::FontStore) -> Self {
+    pub fn new(fontstore:&ET::FontStore) -> Self {
         let mut state = Self {
-            filesystem:fs,
             out_files:vec!(),
             in_files:vec!(),
             csnames:0,
             current_font:SingleValueField::new(fontstore.null()),
-            fontstore,
             afterassignment:None,
             aftergroups:vec!(vec!()),
             mode: TeXMode::Vertical,
@@ -296,11 +287,6 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.afterassignment.take()
     }
 
-    fn fontstore(&self) -> &ET::FontStore { &self.fontstore }
-    fn fontstore_mut(&mut self) -> &mut ET::FontStore {
-        &mut self.fontstore
-    }
-
     fn mode(&self) -> TeXMode { self.mode }
     fn push_csname(&mut self) -> usize {
         self.csnames += 1;
@@ -314,9 +300,6 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     }
     fn pop_csname(&mut self) {
         self.csnames -= 1;
-    }
-    fn filesystem(&mut self) -> &mut ET::FileSystem {
-        &mut self.filesystem
     }
     fn file_openin(&mut self, i: usize, f: ET::File,memory:&mut Memory<ET>) {
         if i >= self.in_files.len() {

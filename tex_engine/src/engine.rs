@@ -54,7 +54,9 @@ pub struct EngineRef<'a,ET:EngineType> {
     pub memory:&'a mut Memory<ET>,
     pub outputs:&'a mut Outputs,
     pub jobname:&'a str,
-    pub start_time:&'a DateTime<Local>
+    pub start_time:&'a DateTime<Local>,
+    pub filesystem:&'a mut ET::FileSystem,
+    pub fontstore:&'a mut ET::FontStore,
 }
 
 pub trait Engine<ET:EngineType> {
@@ -67,24 +69,24 @@ pub trait Engine<ET:EngineType> {
 
     fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET>> {
         debug!("Initializing with file {}",s);
-        let file = self.state().filesystem().get(s);
+        let file = self.components().filesystem.get(s);
         *self.jobname() = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         *self.start_time() =  Local::now();
         let mut comps = self.components();
-        let old = comps.state.filesystem().set_pwd(file.path().parent().unwrap().to_path_buf());
+        let old = comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.mouth.push_file(&file,comps.memory);
         // should not produce any boxes, so loop until file end
         ET::Stomach::next_shipout_box(&mut comps)?;
-        comps.state.filesystem().set_pwd(old);
+        comps.filesystem.set_pwd(old);
         Ok(())
     }
     fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {
         debug!("Running file {:?}",s);
         let mut ret = vec!();
-        * self.jobname() = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        *self.jobname() = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         *self.start_time() =  Local::now();
         let mut comps = self.components();
-        let file = comps.state.filesystem().get(s.to_str().unwrap());
+        let file = comps.filesystem.get(s.to_str().unwrap());
         comps.mouth.push_file(&file,comps.memory);
 
         let everyjob = comps.state.get_primitive_toks("everyjob");
@@ -98,12 +100,6 @@ pub trait Engine<ET:EngineType> {
     }
 }
 
-pub fn new<ET:EngineType>(state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,outputs:Outputs) -> EngineStruct<ET> {
-    let mut memory = Memory::new();
-    EngineStruct {
-        state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory,outputs,jobname:"".to_string(),start_time:Local::now()
-    }
-}
 /*
 pub type TeXEngine<T,Sto,S, M,FS> = EngineStruct<T,NoShipoutDefaultStomach<T,TeXState<T,Sto,FS,TfmFontStore,DefaultNumSet>,TeXGullet<T, M,S>, StandardTeXNode>>;
 
@@ -125,7 +121,9 @@ pub struct EngineStruct<ET:EngineType> {
     pub memory:Memory<ET>,
     pub outputs:Outputs,
     jobname:String,
-    start_time:DateTime<Local>
+    start_time:DateTime<Local>,
+    filesystem:ET::FileSystem,
+    fontstore:ET::FontStore,
 }
 
 
@@ -142,7 +140,9 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
         memory:&mut self.memory,
         outputs:&mut self.outputs,
         jobname:&self.jobname,
-        start_time:&self.start_time
+        start_time:&self.start_time,
+        filesystem:&mut self.filesystem,
+        fontstore:&mut self.fontstore,
     } }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
@@ -159,6 +159,14 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
 
 }
 impl<ET:EngineType> EngineStruct<ET> {
+
+    pub fn new(filesystem:ET::FileSystem,fontstore:ET::FontStore,state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,outputs:Outputs) -> Self {
+        let mut memory = Memory::new();
+        EngineStruct {
+            state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory,outputs,filesystem,fontstore,
+            jobname:"".to_string(),start_time:Local::now()
+        }
+    }
     pub fn set_state(&mut self,state:ET::State) {
         self.state = state;
     }
