@@ -1,21 +1,16 @@
 //! Implementations for the pdfTeX-specific commands.
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, catch};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{tokens_to_string};
 use crate::engine::state::State;
-use crate::engine::mouth::Mouth;
-use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
-use crate::tex::commands::{Command, CommandSource, ResolvedToken, TokenCont};
+use crate::tex::commands::{CommandSource, TokenCont};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
-use crate::utils::Ptr;
 
 
 /// The version number returned by [`\pdftexversion`](pdftexversion) (140).
@@ -172,7 +167,7 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
                 None => {
                     engine.memory.return_string(pattern_string);
                     engine.memory.return_string(target_string);
-                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None));
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))?;
                     Ok(())
                 }
                 Some(capture) => { // TODO this is not quite right yet, I think
@@ -196,8 +191,7 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
                         engine.state.pdfmatches().push(retstr);
                     }
                     engine.memory.return_string(target_string);
-                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None));
-                    Ok(())
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
                 }
             }
 

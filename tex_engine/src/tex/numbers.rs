@@ -3,7 +3,6 @@ use std::iter::Sum;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 use crate::engine::EngineType;
 use crate::engine::state::fields::IsDefault;
-use crate::tex::token::Token;
 use crate::throw;
 use crate::utils::errors::TeXError;
 

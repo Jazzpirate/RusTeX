@@ -1,17 +1,15 @@
 use std::hint::unreachable_unchecked;
-use std::marker::PhantomData;
 use crate::{catch, debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
-use crate::engine::gullet::methods::{get_keyword, get_keywords};
+use crate::engine::gullet::methods::get_keywords;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{ValueCommand, BaseCommand, Command, ResolvedToken};
+use crate::tex::commands::{BaseCommand, ResolvedToken};
 use crate::tex::fonts::Font;
 use crate::utils::strings::CharType;
-use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim, Numeric};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim};
+use crate::tex::token::BaseToken;
 use crate::utils::errors::TeXError;
 
 fn is_ascii_digit(u:usize) -> bool {
@@ -55,7 +53,6 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Int,TeXEr
                                         if str.len() != 1 { throw!("Number expected" => next.source.cause) }
                                             str[0]
                                     }
-                                    _ => throw!("Number expected" => next.source.cause)
                                 };
                                 catch!(expand_until_space::<ET>(engine) => tk);
                                 let us = c.to_usize() as i64;
@@ -177,7 +174,6 @@ pub fn read_hex_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, i
             }
         }
     }
-    use std::str::FromStr;
     let str = std::str::from_utf8(&rets).unwrap();
     let i = i64::from_str_radix(str,16).unwrap();
     debug_log!(trace=>"Returning {}",if isnegative { -i } else { i });

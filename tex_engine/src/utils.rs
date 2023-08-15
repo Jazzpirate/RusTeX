@@ -1,14 +1,8 @@
 use std::cell::RefCell;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::marker::PhantomData;
 use std::rc::Rc;
 use std::thread;
 use lazy_static::lazy_static;
 use std::path::PathBuf;
-use crate::tex;
-use crate::tex::token::Token;
-use crate::utils::errors::TeXError;
 
 pub mod strings;
 pub mod errors;

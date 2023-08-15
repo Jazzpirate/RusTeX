@@ -1,31 +1,25 @@
 //! TeX primitive [`BaseCommand`]s
 
-use std::collections::VecDeque;
 use std::hint::unreachable_unchecked;
-use std::marker::PhantomData;
-use std::path::Components;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, catch, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::{tokens_to_string, resolve_token};
+use crate::engine::gullet::methods::resolve_token;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, BoxFun, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI, ToksCommand};
+use crate::tex::catcodes::CategoryCode;
+use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI, ToksCommand};
 use crate::tex::commands::methods::parse_signature;
-use crate::tex::numbers::{Int, Skip, Numeric, MuSkip, Dim};
-use crate::tex::token::{BaseToken, Token, TokenList};
+use crate::tex::numbers::{Int, Skip, MuSkip, Dim};
+use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
-use log::warn;
-use crate::engine::{EngineRef, EngineType, gullet};
-use crate::engine::gullet::numeric_methods::expand_until_space;
+use crate::engine::{EngineRef, EngineType};
 use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
-use crate::tex::commands::etex::UNLESS;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
 //use super::etex::protected;
@@ -1625,7 +1619,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, 
                             }
                             ParamToken::Param => {
                                 i += 1;
-                                engine.string_to_tokens(format!("#{}", i).as_bytes(),f);
+                                engine.string_to_tokens(format!("#{}", i).as_bytes(),f)?;
                             }
                         }
                     }
@@ -2013,7 +2007,7 @@ pub fn read<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, glo
         Some(f) => f
     };
     if !catch_prim!(engine.get_keyword("to") => (READ,cmd)) {
-        return throw!("Expected 'to' after \\read" => cmd.cause)
+        throw!("Expected 'to' after \\read" => cmd.cause)
     }
     let newcmd = catch_prim!(engine.get_control_sequence() => (READ,cmd));
     let mut ret = vec!();

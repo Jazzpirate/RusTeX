@@ -114,7 +114,7 @@ impl TfmFile {
         }
 
         let factor = match dimen[6 - 1] {
-            0.0 => 1.0,
+            p if p == 0.0 => 1.0,
             f => f
         };
 

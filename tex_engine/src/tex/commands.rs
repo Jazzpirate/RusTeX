@@ -5,10 +5,8 @@ pub mod pdftex;
 pub mod methods;
 
 use std::fmt::{Debug, Formatter};
-use std::hint::unreachable_unchecked;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::Memory;
-use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
 use crate::tex::nodes::{HorV, HVBox, TeXNode, Whatsit};
@@ -91,17 +89,17 @@ impl<ET:EngineType<CommandReference = Self>> CommandReference<ET> for () {
     fn new(base: &BaseCommand<ET>, source: &CommandSource<ET>) -> Self { () }
 }
 
-pub type TokenCont<'a,ET:EngineType> = &'a mut dyn FnMut(&mut EngineRef<ET>,Token<ET>) -> Result<(),TeXError<ET>>;
-pub type UnexpandableFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<(),TeXError<ET>>;
-pub type AssignmentFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>, bool) -> Result<(),TeXError<ET>>;
-pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut EngineRef<ET>, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
-pub type ConditionalFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
-pub type ExpandableFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>, TokenCont<ET>) -> Result<(),TeXError<ET>>;
-pub type CloseBoxFun<ET:EngineType> = Ptr<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
-pub type BoxFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
-pub type WhatsitFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
+pub type TokenCont<'a,ET> = &'a mut dyn FnMut(&mut EngineRef<ET>,Token<ET>) -> Result<(),TeXError<ET>>;
+pub type UnexpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<(),TeXError<ET>>;
+pub type AssignmentFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, bool) -> Result<(),TeXError<ET>>;
+pub type AssignmentFn<ET> = Box<dyn Fn(&mut EngineRef<ET>, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
+pub type ConditionalFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
+pub type ExpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, TokenCont<ET>) -> Result<(),TeXError<ET>>;
+pub type CloseBoxFun<ET> = Ptr<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
+pub type BoxFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
+pub type WhatsitFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
 
-pub type ValueFun<ET:EngineType,A> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<A,TeXError<ET>>;
+pub type ValueFun<ET,A> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<A,TeXError<ET>>;
 pub type FontFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<ET::Font,TeXError<ET>>;
 
 pub trait Assignable<ET:EngineType> {

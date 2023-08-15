@@ -5,13 +5,10 @@ pub mod tfm_files;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use crate::engine::EngineType;
-use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::memory::Memory;
-use crate::engine::state::State;
 use crate::tex::fonts::tfm_files::TfmFile;
 use crate::tex::numbers::{Dim, Dimi32};
-use crate::tex::token::Token;
 use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
@@ -55,7 +52,7 @@ impl FontStore for TfmFontStore {
         };
         let file = match self.font_files.get(&path) {
             None => {
-                let mut file = TfmFile::new(path.clone());
+                let file = TfmFile::new(path.clone());
                 self.font_files.insert(path.clone(),Ptr::new(file));
                 self.font_files.get(&path).unwrap().clone()
             },
@@ -174,7 +171,7 @@ impl Font for TfmFont {
     fn get_dim<D:Dim>(&self, i: usize) -> D {
         D::from_sp(self.dimens.borrow().get(&i).map(|c| *c).unwrap_or(
             if i > 0 && i < 256 {
-                ((self.file.dimen[i] * (self.get_at() as f64)).round() as i64)
+                (self.file.dimen[i] * (self.get_at() as f64)).round() as i64
             } else {
                 0
             }

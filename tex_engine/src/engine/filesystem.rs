@@ -17,8 +17,7 @@ use kpathsea::Kpathsea;
 use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KpseResult;
 use crate::engine::memory::Memory;
-use crate::engine::mouth::string_source::{StringSource, StringSourceState};
-use crate::engine::state::State;
+use crate::engine::mouth::string_source::StringSource;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
 use crate::throw;
@@ -125,11 +124,11 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
     }
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
         let open = &mut *self.open.borrow_mut();
-        let mut open = open.as_mut().unwrap();
+        let open = open.as_mut().unwrap();
         open.eof::<ET>(state)//.peek().is_none()
     }
     fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,memory:&mut Memory<ET>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) -> Result<(),TeXError<ET>> {
-        let mut open = &mut *self.open.borrow_mut();
+        let open = &mut *self.open.borrow_mut();
         match open {
             None => throw!("File not open"),
             Some(m) => {
@@ -149,7 +148,7 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
 
     fn write(&self, string: &str) {
         let write = &mut *self.contents.borrow_mut();
-        let mut v = write.as_mut().unwrap();
+        let v = write.as_mut().unwrap();
         v.extend(string.as_bytes());
         v.push(b'\n');
     }

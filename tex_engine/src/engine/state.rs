@@ -1,21 +1,18 @@
 /*! A TeX state */
 
-use crate::engine::filesystem::{File, FileSystem};
+use crate::engine::filesystem::File;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField, TokField, TokMapField};
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
-use chrono::{DateTime,Local};
-use crate::engine::{EngineRef, EngineType, Outputs};
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::Memory;
-use crate::engine::stomach::Stomach;
-use crate::tex::nodes::{HVBox, OpenBox, CustomNode, TeXNode, SimpleNode};
+use crate::tex::nodes::HVBox;
 use crate::tex::fonts::FontStore;
-use crate::tex::numbers::{Int, MuSkip, Skip, Dim};
+use crate::tex::numbers::{Int, MuSkip, Skip};
 use crate::throw;
-use crate::utils::{Ptr};
 use crate::utils::errors::TeXError;
 
 pub mod fields;

@@ -1,20 +1,14 @@
-use log::warn;
-use crate::engine::gullet::Gullet;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
-use crate::engine::stomach::Stomach;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, ExpToken, ResolvedToken, TokenCont};
+use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, TokenCont};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
-use crate::tex::token::{BaseToken, Token, TokenList};
+use crate::tex::token::BaseToken;
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
-use crate::utils::Ptr;
-use crate::tex::commands::Def;
 use crate::engine::filesystem::File;
-use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 
@@ -219,8 +213,8 @@ pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET
 
     expand_until_group!(engine,next => match &next.base {
         BaseToken::Char(c,CategoryCode::Parameter) => {
-            engine.token_to_others(&next,true,f);
-            engine.token_to_others(&next,true,f);
+            engine.token_to_others(&next,true,f)?;
+            engine.token_to_others(&next,true,f)?;
             Ok(())
         }
         _ => engine.token_to_others(&next,true,f)

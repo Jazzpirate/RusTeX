@@ -5,8 +5,7 @@ The [`CharType`] trait allows us to abstract over the character type, and the tr
 abstracts over the string type.
 */
 
-use std::convert::Into;
-use std::fmt::{Display, Formatter, Debug};
+use std::fmt::{Display, Debug};
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::vec::IntoIter;
@@ -14,7 +13,6 @@ use array_init::array_init;
 use crate::engine::EngineType;
 use crate::engine::memory::Memory;
 use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
-use crate::utils::Ptr;
 
 
 
@@ -232,7 +230,7 @@ impl CharType for char {
         next == '\n' // self == '\r'
     }
     fn as_bytes(&self) -> &[u8] {
-        self.as_bytes()
+        todo!()//char::as_bytes(self)//self.as_bytes()
     }
     fn as_char(&self) -> char { *self }
 

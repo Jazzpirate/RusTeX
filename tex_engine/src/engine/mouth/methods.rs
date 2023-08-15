@@ -1,13 +1,10 @@
 //! Default implementations for [`Mouth`] methods
 
-use crate::engine::mouth::{Mouth, TokenSource};
-use crate::{debug_log, file_end, throw};
+use crate::engine::mouth::Mouth;
+use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::Gullet;
-use crate::engine::memory::{ExpansionContainer, Memory};
-use crate::engine::state::State;
+use crate::engine::memory::ExpansionContainer;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::TokenCont;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
@@ -75,7 +72,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
 
  */
 
-    pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<Token<ET>>, mut f:F) -> R {
+    pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<Token<ET>>, f:F) -> R {
         ET::Mouth::with_mouth(self,tks,f)
     }
 

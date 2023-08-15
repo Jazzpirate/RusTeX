@@ -6,22 +6,13 @@ pub mod methods;
 pub mod numeric_methods;
 
 use std::marker::PhantomData;
-use crate::catch;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::methods::{do_conditional};
-use crate::engine::mouth::{Mouth, StandardMouth};
-use crate::engine::state::State;
 use crate::tex::ConditionalBranch;
-use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Skip, MuSkip};
-use crate::tex::token::{BaseToken, Token};
-use crate::tex::commands::{TokenCont, ResolvedToken, CommandSource, StomachCommand, BaseCommand};
-use crate::tex::commands::etex::UNLESS;
+use crate::tex::commands::{ResolvedToken, StomachCommand, BaseCommand};
 use crate::tex::commands::methods::expand_def;
-use crate::tex::commands::tex::{ELSE, FI};
 use crate::utils::errors::TeXError;
-use crate::utils::map::Map;
-use crate::utils::strings::TeXStr;
 
 
 /// The [`Gullet`] trait defines the interface for the part of the TeX engine that reads tokens from the input stream,
@@ -75,7 +66,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
 
     /// reads one of several optional keywords from the input stream;
     /// returns `None` if none of the keywords are found.
-    fn get_keywords<'a>(engine:&mut EngineRef<ET>, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
+    fn get_keywords<'a>(engine:&mut EngineRef<ET>, keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
         methods::get_keywords::<ET>(engine, keywords)
     }
 

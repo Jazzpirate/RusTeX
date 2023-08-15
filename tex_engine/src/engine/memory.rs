@@ -1,4 +1,3 @@
-use std::hash::BuildHasher;
 use array_init::array_init;
 use log::error;
 use string_interner::backend::BufferBackend;
@@ -98,11 +97,6 @@ impl<ET:EngineType> Memory<ET> {
         ExpansionContainer {array}
     }
 }
-
-static OFFSET: usize = 5;
-
-#[derive(Clone)]
-pub struct TokenArray<ET:EngineType>{array:Vec<(Token<ET>,bool)>}
 pub struct ExpansionContainer<ET:EngineType>{array:Vec<Token<ET>>}
 impl<ET:EngineType> ExpansionContainer<ET> {
     pub fn push(&mut self, t:Token<ET>,memory:&mut Memory<ET>) {

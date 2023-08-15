@@ -10,7 +10,6 @@ use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, FileReference, Token};
 use crate::utils::errors::TeXError;
-use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 
 /// A [`StringSource`] is in one of three states

@@ -5,17 +5,17 @@ use std::time::Instant;
 use chrono::{DateTime, Local};
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::gullet::{Gullet, TeXGullet};
+use crate::engine::gullet::Gullet;
 use crate::engine::memory::Memory;
-use crate::engine::mouth::{Mouth, StandardMouth};
-use crate::engine::state::{State, TeXState};
-use crate::engine::stomach::{Stomach, NoShipoutDefaultStomach};
+use crate::engine::mouth::Mouth;
+use crate::engine::state::State;
+use crate::engine::stomach::Stomach;
 use crate::tex;
 use crate::tex::nodes::{CustomBox, CustomNode};
-use crate::tex::commands::{Assignable, Command, CommandReference};
-use crate::tex::fonts::{Font, FontStore, TfmFontStore};
+use crate::tex::commands::{Assignable, CommandReference};
+use crate::tex::fonts::{Font, FontStore};
 use crate::tex::numbers::{Dim, MuDim, MuStretchShrinkDim, SkipDim};
-use crate::tex::token::{BaseToken, Token, TokenReference};
+use crate::tex::token::TokenReference;
 
 pub mod state;
 pub mod mouth;
@@ -181,7 +181,7 @@ impl<ET:EngineType> EngineStruct<ET> {
     }
     pub fn initialize_etex(&mut self) -> Result<(),TeXError<ET>> {
         self.initialize()?;
-        self.etex();
+        self.etex()?;
         Ok(())
     }
     pub fn etex(&mut self) -> Result<(),TeXError<ET>> {

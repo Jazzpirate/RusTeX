@@ -1,15 +1,11 @@
-use std::marker::PhantomData;
-use crate::{catch, debug_log, throw};
+use crate::{debug_log, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::Gullet;
-use crate::engine::memory::Memory;
 use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
-use crate::tex::commands::{methods, BaseStomachCommand, StomachCommand};
+use crate::tex::commands::{BaseStomachCommand, StomachCommand};
 use crate::tex::nodes::{HorV, NodeTrait, TeXNode};
-use crate::tex::token::{Token, TokenList};
 use crate::utils::errors::TeXError;
 
 pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)

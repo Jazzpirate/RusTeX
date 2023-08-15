@@ -1,24 +1,18 @@
 //! Default implementations for [`Gullet`] methods.
-use std::hint::unreachable_unchecked;
-use std::marker::PhantomData;
 use crate::{debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
-use crate::engine::memory::Memory;
 use crate::engine::state::State;
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::{Command, BaseCommand, ResolvedToken, ConditionalFun, TokenCont, CommandSource, StomachCommand};
+use crate::tex::catcodes::CategoryCode;
+use crate::tex::commands::{BaseCommand, ResolvedToken, ConditionalFun, TokenCont, CommandSource, StomachCommand};
 use crate::tex::numbers::{Int, MuSkip, Skip};
 use crate::tex::token::{BaseToken, Token};
-use crate::utils::Ptr;
 use crate::engine::mouth::Mouth;
-use crate::tex::commands::etex::{UNEXPANDED, UNLESS};
-use crate::tex::commands::methods::expand_def;
-use crate::tex::commands::tex::{ELSE, FI, IFCASE, NOEXPAND, THE};
+use crate::tex::commands::etex::UNEXPANDED;
+use crate::tex::commands::tex::{IFCASE, NOEXPAND, THE};
 use crate::tex::ConditionalBranch;
-use crate::tex::fonts::FontStore;
 use crate::utils::errors::TeXError;
-use crate::utils::strings::{CharType, TeXStr};
+use crate::utils::strings::CharType;
 use crate::utils::strings::AllCharsTrait;
 
 
@@ -93,7 +87,7 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineRef<ET>, expand_prote
     let mut ingroup = 0;
     while let Some(next) = engine.get_next_token()? {
         if next.1 {
-            let mut res = resolve_token::<ET>(engine.state, next.0);
+            let res = resolve_token::<ET>(engine.state, next.0);
             match res.command {
                 BaseCommand::Char { catcode: CategoryCode::BeginGroup, .. } => {
                     ingroup += 1;
@@ -498,7 +492,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
 
     /// reads one of several optional keywords from the input stream;
     /// returns `None` if none of the keywords are found.
-    pub fn get_keywords<'a>(&mut self, mut keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
+    pub fn get_keywords<'a>(&mut self, keywords:Vec<&'a str>) -> Result<Option<&'a str>,TeXError<ET>> {
         ET::Gullet::get_keywords(self, keywords)
     }
 
@@ -610,7 +604,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
         Ok(())
     }
 
-    pub fn token_to_others(&mut self,tk:&Token<ET>, insertspace:bool, mut f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    pub fn token_to_others(&mut self,tk:&Token<ET>, insertspace:bool, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
         match &tk.base {
             BaseToken::Char(c,_) if c.to_usize() == 32 => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
             BaseToken::Char(c,CategoryCode::Space) => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
@@ -665,7 +659,7 @@ macro_rules! get_expanded_group {
         let mut ok = false;
         while let Some(next) = $engine.get_next_token()? {
             if next.1 {
-                let mut res = resolve_token::<ET>($engine.state, next.0);
+                let res = resolve_token::<ET>($engine.state, next.0);
                 match res.command {
                     BaseCommand::Char { catcode: CategoryCode::BeginGroup, .. } => {
                         ingroup += 1;

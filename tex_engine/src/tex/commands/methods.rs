@@ -1,15 +1,14 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, expand_until_group, file_end, file_end_prim, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::Gullet;
-use crate::engine::gullet::numeric_methods::expand_until_space;
-use crate::engine::memory::{ExpansionContainer, Memory};
+use crate::engine::memory::ExpansionContainer;
 use crate::engine::state::State;
-use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, ResolvedToken, TokenCont, ValueCommand, CommandSource};
-use crate::tex::token::{BaseToken, Token, TokenList};
+use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
+use crate::tex::token::{BaseToken, Token};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
-use crate::utils::strings::{CharType, TeXStr};
+use crate::utils::strings::CharType;
+use crate::utils::errors::TeXError;
 
 #[macro_export]
 macro_rules! cmtodo {
@@ -434,8 +433,6 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine:&mut E
     Ok(())
 }
 
-use crate::tex::numbers::{MuSkip, Skip};
-use crate::utils::errors::TeXError;
 
 fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, args:&mut [Vec<Token<ET>>;9])
                                     -> Result<(),TeXError<ET>> {

@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::EngineType;
 use crate::engine::memory::Memory;
-use crate::tex::commands::Def;
 use crate::tex::token::{Token, TokenReference};
 use crate::utils::strings::CharType;
 #[derive(Clone,Debug)]

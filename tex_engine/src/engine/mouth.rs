@@ -10,19 +10,16 @@
 pub mod string_source;
 pub mod methods;
 
-use std::hint::unreachable_unchecked;
 use log::debug;
 use crate::engine::{EngineRef, EngineType, Outputs};
 use crate::engine::filesystem::File;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
 use crate::{debug_log, file_end, get_until_endgroup, throw};
-use crate::engine::memory::{ExpansionContainer, Memory, TokenArray};
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::TokenCont;
+use crate::engine::memory::{ExpansionContainer, Memory};
+use crate::tex::catcodes::CategoryCode;
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::TeXError;
-use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
@@ -30,7 +27,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<Token<ET>>, mut f:F) -> R {
         let old = std::mem::replace(engine.mouth, Self::new_with(tks,engine.memory));
         let ret = f(engine);
-        std::mem::replace(engine.mouth, old);
+        *engine.mouth = old;
         ret
     }
     fn new(memory:&mut Memory<ET>) -> Self;
@@ -213,7 +210,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
 
     fn push_file(&mut self, file: &ET::File,memory:&mut Memory<ET>) {
         debug!("Pushing file {:?}", file.path());
-        let mut source = TeXMouthSource::String(StringSource::new(
+        let source = TeXMouthSource::String(StringSource::new(
             (*file.content_string()).clone().unwrap(),
             Some(memory.interner.get_or_intern(file.path().to_str().unwrap().to_string()))
         ));
@@ -302,7 +299,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                 TeXMouthSource::Token(ts) => ts.0.base.to_str(memory,Some(ET::Char::backslash())),
                 TeXMouthSource::String(ss) => ss.preview()
             });
-            if ret.len() > len { ret.split_off(len);return ret }
+            if ret.len() > len { ret.truncate(len);return ret }
         }
         ret
     }
@@ -495,15 +492,13 @@ impl<ET:EngineType> TokenSource<ET> {
     fn new_with(v:Vec<Token<ET>>) -> Self { Self(v.into_iter().map(|t| Some(t)).collect(),0) }
     fn is_empty(&self) -> bool { self.0.len() == self.1 }
     fn get_next(&mut self) -> (Token<ET>,bool) {
-        //let mut ret = self.2.clone();
-        let mut ret = unsafe { std::mem::take(&mut self.0[self.1]).unwrap_unchecked() };
+        let ret = unsafe { std::mem::take(&mut self.0[self.1]).unwrap_unchecked() };
         self.1 += 1;
         (ret,self.is_empty())
     }
     fn preview(&self,memory:&Memory<ET>) -> String {
         let tks : Vec<Token<ET>> = self.0[self.1..].iter().map(|t| unsafe{t.clone().unwrap_unchecked()}).collect();
         TokenList(&tks).to_str(memory)
-        //crate::interpreter::tokens_to_string_default(&tks)
     }
     pub fn reset(&mut self) {
         self.0.clear();

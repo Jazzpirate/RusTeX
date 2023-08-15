@@ -3,7 +3,6 @@
 use std::fmt::{Debug, Formatter};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::BoxMode;
-use crate::engine::stomach::Stomach;
 use crate::tex::commands::CloseBoxFun;
 use crate::tex::numbers::Skip;
 use crate::tex::token::Token;

@@ -1,16 +1,11 @@
 pub mod methods;
 
-use std::marker::PhantomData;
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::Gullet;
-use crate::engine::state::State;
-use crate::tex::nodes::{OpenBox, CustomNode, Whatsit, HVBox, TeXNode, SimpleNode};
-use crate::tex::commands::{CommandSource, StomachCommand};
-use crate::tex::token::Token;
+use crate::tex::nodes::{OpenBox, HVBox, TeXNode, SimpleNode};
+use crate::tex::commands::StomachCommand;
 use crate::tex::numbers::Dim;
 use crate::utils::errors::TeXError;
-use crate::utils::map::Map;
 
 
 #[derive(Clone,Debug)]
@@ -52,7 +47,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     }
 
     fn push_node(&mut self,node:TeXNode<ET>) {
-        let mut sd = self.shipout_data_mut();
+        let sd = self.shipout_data_mut();
         match sd.box_stack.last_mut() {
             Some(b) => {
                 if b.is_vertical() {
