@@ -93,9 +93,11 @@ pub trait Engine<ET:EngineType> {
         *comps.start_time = Local::now();
         *comps.elapsed = std::time::Instant::now();
 
-        let everyjob = comps.state.get_primitive_toks("everyjob");
-        if !everyjob.is_empty() {
-            comps.add_expansion(|comps,rs| for t in everyjob {rs.push(t,comps.memory)})
+        match comps.state.get_primitive_toks("everyjob").cloned() {
+            None => (),
+            Some(v) if v.is_empty() => (),
+            Some(v) =>
+                comps.add_expansion(|comps,rs| for t in v {rs.push(t,comps.memory)})
         }
         while let Some(b) = ET::Stomach::next_shipout_box(&mut comps)? {
             ret.push(b)

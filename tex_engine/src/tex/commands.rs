@@ -11,7 +11,7 @@ use crate::engine::memory::Memory;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
-use crate::tex::nodes::{HVBox, TeXNode, Whatsit};
+use crate::tex::nodes::{HorV, HVBox, TeXNode, Whatsit};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::methods::{set_primitive_int, set_dim_register, set_int_register, set_muskip_register, set_skip_register, set_toks_register, set_primitive_dim, set_primitive_skip, set_primitive_muskip, set_primitive_toks};
 use crate::tex::numbers::{Dimi32, MuSkip, Skip};
@@ -110,21 +110,6 @@ pub trait Assignable<ET:EngineType> {
     fn get_primitive(state:&ET::State,name:&'static str) -> Self;
     fn set_primitive(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>>;
 }
-
-impl<ET:EngineType> Assignable<ET> for Vec<Token<ET>> {
-    fn get_register(state:&ET::State,index:usize) -> Self {
-        state.get_toks_register(index)
-    }
-    fn set_register(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, index:usize, global:bool) -> Result<(),TeXError<ET>> {
-        set_toks_register(engine,index,cmd,global)
-    }
-    fn get_primitive(state:&ET::State,name:&'static str) -> Self {
-        state.get_primitive_toks(name)
-    }
-    fn set_primitive(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
-        set_primitive_toks(engine,cmd,name,global)
-    }
-}
 impl<ET:EngineType<Int=i32>> Assignable<ET> for i32 {
     fn get_register(state:&ET::State,index:usize) -> Self {
         state.get_int_register(index)
@@ -189,6 +174,7 @@ pub enum ValueCommand<ET:EngineType,A:Assignable<ET>> {
     Value{name:&'static str,get:ValueFun<ET,A>},
     Complex{name:&'static str,get:ValueFun<ET,A>,set:AssignmentFun<ET>}
 }
+
 impl<ET:EngineType,A:Assignable<ET>> PartialEq for ValueCommand<ET,A> {
     fn eq(&self, other: &Self) -> bool {
         use ValueCommand::*;
@@ -214,8 +200,8 @@ impl<ET:EngineType,A:Assignable<ET>> Debug for ValueCommand<ET,A> {
 impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
     pub fn get(&self, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<A,TeXError<ET>> {
         match self {
-            ValueCommand::Value{get,..} => get(engine, cmd.clone()),
-            ValueCommand::Complex{get,..} => get(engine, cmd.clone()),
+            ValueCommand::Value{get,..} => get(engine, cmd),
+            ValueCommand::Complex{get,..} => get(engine, cmd),
             ValueCommand::Primitive(name) => Ok(A::get_primitive(engine.state,name)),
             ValueCommand::Register(index) => Ok(A::get_register(engine.state,*index))
         }
@@ -226,6 +212,61 @@ impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
             ValueCommand::Complex{set,..} => set(engine, cmd,global),
             ValueCommand::Primitive(name) => A::set_primitive(engine,cmd,name,global),
             ValueCommand::Register(index) => A::set_register(engine,cmd,*index,global)
+        }
+    }
+}
+
+
+#[derive(Clone)]
+pub enum ToksCommand<ET:EngineType> {
+    Register(usize),
+    Primitive(&'static str),
+    Value{name:&'static str,
+        get: for <'a> fn(&'a mut EngineRef<ET>, CommandSource<ET>) -> Result<Option<&'a Vec<Token<ET>>>,TeXError<ET>>
+    },
+    Complex{name:&'static str,
+        get:for <'a> fn(&'a mut EngineRef<ET>, CommandSource<ET>) -> Result<Option<&'a Vec<Token<ET>>>,TeXError<ET>>,
+        set:AssignmentFun<ET>
+    }
+}
+impl<ET:EngineType> ToksCommand<ET> {
+    pub fn get<'a>(&self, engine:&'a mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<Option<&'a Vec<Token<ET>>>,TeXError<ET>> {
+        match self {
+            ToksCommand::Value{get,..} => get(engine, cmd),
+            ToksCommand::Complex{get,..} => get(engine, cmd),
+            ToksCommand::Primitive(name) => Ok(engine.state.get_primitive_toks(name)),
+            ToksCommand::Register(index) => Ok(engine.state.get_toks_register(*index))
+        }
+    }
+    pub fn set(&self, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool) -> Result<(),TeXError<ET>> {
+        match self {
+            ToksCommand::Value{name,..} => throw!("Not allowed to assign to {}",name),
+            ToksCommand::Complex{set,..} => set(engine, cmd,global),
+            ToksCommand::Primitive(name) => set_primitive_toks(engine,cmd,name,global),
+            ToksCommand::Register(index) => set_toks_register(engine,*index,cmd,global)
+        }
+    }
+}
+
+impl<ET:EngineType> PartialEq for ToksCommand<ET> {
+    fn eq(&self, other: &Self) -> bool {
+        use ToksCommand::*;
+        match (self,other) {
+            (Register(a),Register(b)) => a == b,
+            (Primitive(a),Primitive(b)) => a == b,
+            (Value{name:a,..},Value{name:b,..}) => a == b,
+            (Complex{name:a,..},Complex{name:b,..}) => a == b,
+            _ => false
+        }
+    }
+}
+impl<ET:EngineType> Debug for ToksCommand<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToksCommand::Register(i) => write!(f, "Register {} ", i),
+            ToksCommand::Primitive(s) => write!(f, "\\{}", s),
+            ToksCommand::Value{name,..} => write!(f, "\\{}", name),
+            ToksCommand::Complex{name,..} => write!(f, "\\{}", name)
         }
     }
 }
@@ -242,7 +283,7 @@ pub enum BaseCommand<ET:EngineType>{
     /// `\the`, `\number`, `\romannumeral`, `\string`, `\meaning`
     Expandable {name:&'static str,apply:ExpandableFun<ET>},
     /// A primitive command to be processed in the [`Stomach`](crate::engine::stomach::Stomach)
-    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, starts_paragraph:bool},
+    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, forces_mode:Option<HorV>},
     /// A primitive assignment command, e.g. `\chardef`, `\let`, etc. - importantly
     /// unlike [`Unexpandable`](BaseCommand::Unexpandable), the `\afterassignment`-[`Token`]
     /// (if existent) is inserted after one of these.
@@ -267,7 +308,7 @@ pub enum BaseCommand<ET:EngineType>{
     /// An (optionally) assignable [`MuSkip`](crate::tex::numbers::MuSkip) value, e.g. `\thinmuskip` or the result of a `\muskipdef`
     MuSkip(ValueCommand<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>),
     /// An (optionally) assignable token value, e.g. `\everypar` or the result of a `\toksdef`
-    Toks(ValueCommand<ET,Vec<Token<ET>>>),
+    Toks(ToksCommand<ET>),
     /// A [`Font`](crate::tex::fonts::Font)
     Font(ET::Font),
     FontCommand { name:&'static str,get:FontFun<ET>,set:Option<AssignmentFun<ET>> },
@@ -332,7 +373,7 @@ impl<ET:EngineType> Debug for BaseCommand<ET> {
 }
 
 pub enum BaseStomachCommand<ET:EngineType> {
-    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, starts_paragraph:bool},
+    Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, forces_mode:Option<HorV>},
     Assignment {name:Option<&'static str>, set:AssignmentFun<ET>},
     Whatsit {name:&'static str,apply:WhatsitFun<ET>},
     ValueAss(AssignmentFn<ET>),
@@ -377,14 +418,14 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
         use CategoryCode::*;
         Ok(match value {
             Def(_) | Conditional{..} | Expandable{..} | Int(ValueCommand::Value {..}) | Dim(ValueCommand::Value {..})
-            | Skip(ValueCommand::Value {..})| MuSkip(ValueCommand::Value {..}) | Toks(ValueCommand::Value {..})
+            | Skip(ValueCommand::Value {..})| MuSkip(ValueCommand::Value {..}) | Toks(ToksCommand::Value {..})
             | FontCommand{set:std::option::Option::None,..} =>
                 todo!(),
             None => match &source.cause.base {
                 BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
                 BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(memory)),
             }
-            Unexpandable {name,apply,starts_paragraph} => BaseStomachCommand::Unexpandable {name,apply, starts_paragraph},
+            Unexpandable {name,apply,forces_mode} => BaseStomachCommand::Unexpandable {name,apply, forces_mode},
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
             Whatsit {name,apply} => BaseStomachCommand::Whatsit {name,apply:apply},
             OpenBox {name,mode,apply} => BaseStomachCommand::OpenBox {name,mode,apply},

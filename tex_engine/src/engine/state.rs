@@ -2,7 +2,7 @@
 
 use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField};
+use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField, TokField, TokMapField};
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{BaseToken, Token};
@@ -44,7 +44,7 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     /// push a new group onto the stack
     fn stack_push(&mut self, g: GroupType);
 
-    fn stack_pop(&mut self) -> Option<(Vec<Token<ET>>,GroupType)>;
+    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)>;
 
     /// get the current group type
     fn get_grouptype(&self) -> GroupType;
@@ -126,9 +126,9 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_muskip_register(&mut self,i:usize,v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,globally:bool);
 
     /// get the value of a skip register
-    fn get_toks_register(&self,i:usize) -> Vec<Token<ET>>;
+    fn get_toks_register(&self,i:usize) -> Option<&Vec<Token<ET>>>;
     /// set the value of a skip register
-    fn set_toks_register(&mut self,i:usize,v:Vec<Token<ET>>,globally:bool);
+    fn set_toks_register(&mut self,i:usize,v:Vec<Token<ET>>,globally:bool,memory:&mut Memory<ET>);
 
     fn get_box_register(&self,i:usize) -> &HVBox<ET>;
     fn set_box_register(&mut self,i:usize,v:HVBox<ET>,globally:bool);
@@ -155,9 +155,9 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn set_primitive_muskip(&mut self, name:&'static str, v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally:bool);
 
     /// get a primitive token register
-    fn get_primitive_toks(&self, name:&'static str) -> Vec<Token<ET>>;
+    fn get_primitive_toks(&self, name:&'static str) -> Option<&Vec<Token<ET>>>;
     /// set a primitive token register
-    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<Token<ET>>, globally:bool);
+    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<Token<ET>>, globally:bool,memory:&mut Memory<ET>);
 
     /// get the current font
     fn get_current_font(&self) -> &ET::Font;
@@ -196,14 +196,14 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     dimregisters: VecField<ET::Dim>,
     skipregisters: VecField<Skip<ET::SkipDim>>,
     muskipregisters: VecField<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
-    toksregisters:VecField<Vec<Token<ET>>>,
+    toksregisters:TokField<ET>,
     boxregisters:BoxField<ET>,
 
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
     primitive_skipregisters: HashMapField<&'static str,Skip<ET::SkipDim>>,
     primitive_muskipregisters: HashMapField<&'static str,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
-    primitive_tokregisters: HashMapField<&'static str,Vec<Token<ET>>>,
+    primitive_tokregisters: TokMapField<ET>,
 }
 use crate::utils::strings::CharType;
 impl<ET:EngineType<State=Self>> TeXState<ET> {
@@ -233,14 +233,14 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             dimregisters: VecField::new(),
             skipregisters: VecField::new(),
             muskipregisters: VecField::new(),
-            toksregisters: VecField::new(),
+            toksregisters: TokField::new(),
             boxregisters: BoxField::new(),
 
             primitive_intregisters: HashMapField::new(),
             primitive_dimregisters: HashMapField::new(),
             primitive_skipregisters: HashMapField::new(),
             primitive_muskipregisters: HashMapField::new(),
-            primitive_tokregisters: HashMapField::new(),
+            primitive_tokregisters: TokMapField::new(),
         };
         for i in 97..123 {
             state.ucchar.set_locally((i as u8).into(),((i-32) as u8).into());
@@ -385,7 +385,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.primitive_tokregisters.push_stack();
         unsafe{self.aftergroups.push(self.aftergroups.last().unwrap_unchecked().clone())};
     }
-    fn stack_pop(&mut self) -> Option<(Vec<Token<ET>>,GroupType)> {
+    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)> {
         let gt = match self.grouptype.pop() {
             None => return None,
             Some((gt,Some(m))) => {
@@ -413,14 +413,14 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         self.dimregisters.pop_stack();
         self.skipregisters.pop_stack();
         self.muskipregisters.pop_stack();
-        self.toksregisters.pop_stack();
+        self.toksregisters.pop_stack(memory);
         self.boxregisters.pop_stack();
 
         self.primitive_intregisters.pop_stack();
         self.primitive_dimregisters.pop_stack();
         self.primitive_skipregisters.pop_stack();
         self.primitive_muskipregisters.pop_stack();
-        self.primitive_tokregisters.pop_stack();
+        self.primitive_tokregisters.pop_stack(memory);
 
         Some((self.aftergroups.pop().unwrap_or(vec!()),gt))
     }
@@ -633,17 +633,14 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_toks_register(&self, i: usize) -> Vec<Token<ET>> { match self.toksregisters.get(&i) {
-        None => vec!(),
-        Some(v) => v.clone()
-    }}
-    fn set_toks_register(&mut self, i: usize, v: Vec<Token<ET>>, globally: bool) {
+    fn get_toks_register(&self, i: usize) -> Option<&Vec<Token<ET>>> { self.toksregisters.get(i) }
+    fn set_toks_register(&mut self, i: usize, v: Vec<Token<ET>>, globally: bool,memory:&mut Memory<ET>) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
-            self.toksregisters.set_globally(i,v)
+            self.toksregisters.set_globally(i,v,memory)
         } else {
-            self.toksregisters.set_locally(i,v)
+            self.toksregisters.set_locally(i,v,memory)
         }
     }
 
@@ -715,17 +712,14 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         }
     }
 
-    fn get_primitive_toks(&self, name: &'static str) -> Vec<Token<ET>> { match self.primitive_tokregisters.get(&name) {
-        None => vec!(),
-        Some(v) => v.clone()
-    }}
-    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<Token<ET>>, globally: bool) {
+    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<Token<ET>>> { self.primitive_tokregisters.get(&name) }
+    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<Token<ET>>, globally: bool,memory:&mut Memory<ET>) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
-            self.primitive_tokregisters.set_globally(name,v)
+            self.primitive_tokregisters.set_globally(name,v,memory)
         } else {
-            self.primitive_tokregisters.set_locally(name,v)
+            self.primitive_tokregisters.set_locally(name,v,memory)
         }
     }
 }

@@ -18,8 +18,37 @@ pub trait NodeTrait<ET:EngineType> {
 }
 
 #[derive(Debug,Clone)]
-pub enum TeXNode<ET:EngineType> {
+pub enum SkipNode<ET:EngineType> {
     Skip{val:Skip<ET::SkipDim>,axis:HorV},
+    VFil,VFill,VFilneg,HFil,HFill,HFilneg,Hss,Vss
+}
+
+impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
+    fn as_node(self) -> TeXNode<ET> {
+        TeXNode::Skip(self)
+    }
+    fn depth(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+    fn height(&self) -> ET::Dim {
+        use SkipNode::*;
+        match self {
+            Skip {val,axis:HorV::Vertical} => val.base,
+            _ => ET::Dim::from_sp(0)
+        }
+    }
+    fn width(&self) -> ET::Dim {
+        use SkipNode::*;
+        match self {
+            Skip {val,axis:HorV::Horizontal} => val.base,
+            _ => ET::Dim::from_sp(0)
+        }
+    }
+}
+
+#[derive(Debug,Clone)]
+pub enum TeXNode<ET:EngineType> {
+    Skip(SkipNode<ET>),
     Penalty(i32),
     Kern{val:ET::Dim,axis:HorV},
     Box(HVBox<ET>),
@@ -32,7 +61,7 @@ impl<ET:EngineType> TeXNode<ET> {
     pub fn height(&self) -> ET::Dim {
         use TeXNode::*;
         match self {
-            Skip {val,axis:HorV::Vertical} => val.base,
+            Skip (s) => s.height(),
             Kern {val,axis:HorV::Vertical} => *val,
             Box(b) => b.height(),
             Custom(c) => c.height(),
@@ -43,7 +72,7 @@ impl<ET:EngineType> TeXNode<ET> {
     pub fn width(&self) -> ET::Dim {
         use TeXNode::*;
         match self {
-            Skip {val,axis:HorV::Horizontal} => val.base,
+            Skip(s) => s.width(),
             Kern {val,axis:HorV::Horizontal} => *val,
             Box(b) => b.width(),
             Custom(c) => c.width(),
@@ -68,6 +97,7 @@ pub enum HorV { Horizontal, Vertical }
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
+    VFil,VFill,VFilneg
 }
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
     fn as_node(self) -> TeXNode<ET> {

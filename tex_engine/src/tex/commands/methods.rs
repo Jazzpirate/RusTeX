@@ -21,7 +21,7 @@ macro_rules! cmtodo {
 #[macro_export]
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {
-        register_unexpandable!($name,$engine,false,(e,_) => todo!("{}: {}",stringify!($name),e.current_position()));
+        register_unexpandable!($name,$engine,None,(e,_) => todo!("{}: {}",stringify!($name),e.current_position()));
     };
 }
 
@@ -65,11 +65,11 @@ pub fn set_toks_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:
                                         -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting \\toks{}",u);
     catch!(engine.skip_eq_char() => cmd.cause);
-    let mut tks = Vec::with_capacity(32);
+    let mut tks = engine.memory.get_token_vec();
     expand_until_group!(engine,t => tks.push(t));
     //catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
     debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks).to_str(engine.memory));
-    engine.state.set_toks_register(u,tks,global);
+    engine.state.set_toks_register(u,tks,global,engine.memory);
     Ok(())
 }
 
@@ -109,11 +109,11 @@ pub fn set_primitive_muskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:Comman
 pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, global:bool) -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Setting {}",name);
     catch_prim!(engine.skip_eq_char() => (name,cmd));
-    let mut tks = Vec::with_capacity(32);
+    let mut tks = engine.memory.get_token_vec();
     expand_until_group!(engine,t => tks.push(t));
     //catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks).to_str(engine.memory));
-    engine.state.set_primitive_toks(name,tks,global);
+    engine.state.set_primitive_toks(name,tks,global,engine.memory);
     Ok(())
 }
 
@@ -217,7 +217,7 @@ macro_rules! register_muskip_assign {
 macro_rules! register_tok_assign {
     ($name:ident,$engine:ident) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(
-            crate::tex::commands::BaseCommand::Toks(crate::tex::commands::ValueCommand::Primitive(stringify!($name)))/*{
+            crate::tex::commands::BaseCommand::Toks(crate::tex::commands::ToksCommand::Primitive(stringify!($name)))/*{
             get:Ptr::new(|s,_,_| Ok(s.get_primitive_toks(stringify!($name)).map(|v| v.clone()).unwrap_or(vec!()))),
             set:Some(Ptr::new(|s,g,c,b| Ok(crate::tex::commands::methods::assign_primitive_toks(s,g,c,stringify!($name),b)?))),
             name:stringify!($name),index:None
@@ -253,7 +253,7 @@ macro_rules! register_unexpandable {
         $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{
             name:stringify!($name),
             apply:|$e,$cmd| $f,
-            starts_paragraph:$is_h
+            forces_mode:$is_h
         },None)),true);
     };
 }
@@ -344,7 +344,7 @@ macro_rules! register_value_assign_muskip {
 macro_rules! register_value_assign_toks {
     ($name:ident,$engine:ident) => {paste::paste!{
         $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.memory),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Toks(
-            crate::tex::commands::ValueCommand::Complex{
+            crate::tex::commands::ToksCommand::Complex{
                 get:|e,cmd| [<$name _get>]::<ET>(e,cmd),
                 set:|e,cmd,b| Ok([<$name _assign>]::<ET>(e,cmd,b)?),
                 name:stringify!($name)

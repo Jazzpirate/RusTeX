@@ -181,7 +181,7 @@ mod tests {
                 env_logger::init();
                 //trace();
                 Ok(())
-            },starts_paragraph:false
+            },forces_mode:None
         },None)),true);
 
         match engine.initialize_pdflatex() {

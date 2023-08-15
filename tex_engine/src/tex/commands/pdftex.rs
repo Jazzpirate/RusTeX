@@ -172,7 +172,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,c));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,cmd,f));
     register_int_assign!(pdfgentounicode,engine);
-    register_unexpandable!(pdfglyphtounicode,engine,false,(e,cmd) =>pdfglyphtounicode::<ET>(e,cmd));
+    register_unexpandable!(pdfglyphtounicode,engine,None,(e,cmd) =>pdfglyphtounicode::<ET>(e,cmd));
     register_dim_assign!(pdfhorigin,engine);
     register_int_assign!(pdfoutput,engine);
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(c));
@@ -181,7 +181,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(pdfpageheight,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
-    register_unexpandable!(pdresettimer,engine,false,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
+    register_unexpandable!(pdresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(c));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
     register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));

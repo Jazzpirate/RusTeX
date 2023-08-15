@@ -9,7 +9,9 @@ use crate::utils::strings::{AllCharsTrait, CharType};
 use std::collections::btree_map::Entry;
 use std::hash::Hash;
 use crate::engine::EngineType;
+use crate::engine::memory::Memory;
 use crate::tex::nodes::HVBox;
+use crate::tex::token::Token;
 use crate::utils::map::HMap;
 
 /** A field of the [`State`](crate::engine::state::State) needs to be able to push and pop a new stack frame.
@@ -178,6 +180,78 @@ impl <ET:EngineType> BoxField<ET> {
     }
 }
 
+
+#[derive(Clone)]
+pub struct TokField<ET:EngineType>(Vec<Vec<Token<ET>>>,Vec<BTreeMap<usize,Vec<Token<ET>>>>);
+impl<ET:EngineType> TokField<ET>{
+    /// initializes a new [`TokField`].
+    pub fn new() -> Self { TokField(Vec::with_capacity(255), Vec::new()) }
+    pub(crate) fn get(&self, k: usize) -> Option<&Vec<Token<ET>>> {
+        if k < self.0.len() {
+            Some(&self.0[k])
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn set_locally(&mut self, k: usize, v: Vec<Token<ET>>,memory:&mut Memory<ET>) {
+        if let Some(m) = self.1.last_mut() {
+            match m.entry(k) {
+                Entry::Vacant(e) => {
+                    e.insert(match Self::set_inner(&mut self.0,k,v,memory) {
+                        Some(old) => old,
+                        None => memory.get_token_vec()
+                    });
+                }
+                Entry::Occupied(_) => {
+                    match Self::set_inner(&mut self.0,k,v,memory) {
+                        None => (),
+                        Some(v) => memory.return_token_vec(v)
+                    }
+                }
+            }
+        } else {
+            match Self::set_inner(&mut self.0,k,v,memory) {
+                None => (),
+                Some(v) => memory.return_token_vec(v)
+            }
+        }
+    }
+
+    // #[inline(always)]
+    pub(crate) fn set_globally(&mut self, k: usize, v: Vec<Token<ET>>,memory:&mut Memory<ET>) {
+        Self::set_inner(&mut self.0,k,v,memory);
+        for ov in self.1.iter_mut() {
+            match ov.remove(&k) {
+                None => (),
+                Some(v) => memory.return_token_vec(v)
+            }
+        }
+    }
+    fn set_inner(vec:&mut Vec<Vec<Token<ET>>>,k:usize,v:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Option<Vec<Token<ET>>> {
+        if k < vec.len() {
+            Some(std::mem::replace(&mut vec[k], v))
+        } else {
+            vec.resize(k + 1, memory.get_token_vec());
+            vec[k] = v;
+            None
+        }
+    }
+
+    pub(crate) fn push_stack(&mut self) { self.1.push(BTreeMap::default()) }
+    pub(crate) fn pop_stack(&mut self, memory:&mut Memory<ET>) {
+        if let Some(m) = self.1.pop() {
+            for (k,v) in m {
+                match Self::set_inner(&mut self.0,k,v,memory) {
+                    None => (),
+                    Some(v) => memory.return_token_vec(v)
+                }
+            }
+        }
+    }
+
+}
+
 /// A Vec of values of type A; e.g. [`intregisters`](crate::engine::state::State::get_int_register),
 
 #[derive(Clone)]
@@ -268,6 +342,70 @@ impl<A> IsDefault for Option<A> {
 impl<A> IsDefault for Vec<A> {
     //#[inline(always)]
     fn is_default(&self) -> bool { self.is_empty() }
+}
+/// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::BaseCommand)s,
+#[derive(Clone)]
+pub struct TokMapField<ET:EngineType>(HMap<&'static str,Vec<Token<ET>>>,Vec<BTreeMap<&'static str,Vec<Token<ET>>>>);
+impl<ET:EngineType> TokMapField<ET> {
+    pub fn new() -> Self { Self(HMap::default(),Vec::new()) }
+    pub fn set_i(map:&mut HMap<&'static str,Vec<Token<ET>>>,k:&'static str,v:Vec<Token<ET>>) -> Option<Vec<Token<ET>>> {
+        if v.is_empty() {
+            map.remove(&k)
+        } else {
+            map.insert(k,v)
+        }
+    }
+    // #[inline(always)]
+    pub(crate) fn push_stack(&mut self) { self.1.push(BTreeMap::default()) }
+    // #[inline(always)]
+    pub(crate) fn pop_stack(&mut self, memory:&mut Memory<ET>) {
+        if let Some(m) = self.1.pop() {
+            for (k,v) in m {
+                match Self::set_i(&mut self.0,k,v) {
+                    None => (),
+                    Some(v) => memory.return_token_vec(v)
+                }
+            }
+        }
+    }
+    pub(crate) fn get(&self, k: &'static str) -> Option<&Vec<Token<ET>>> {
+        self.0.get(k)
+    }
+
+    pub(crate) fn set_locally(&mut self, k: &'static str, v: Vec<Token<ET>>, memory:&mut Memory<ET>) {
+        if let Some(m) = self.1.last_mut() {
+            match m.entry(k.clone()) {
+                Entry::Vacant(e) => {
+                    e.insert(Self::set_i(&mut self.0,k,v).unwrap_or(memory.get_token_vec()));
+                }
+                Entry::Occupied(_) => {
+                    match Self::set_i(&mut self.0,k,v) {
+                        None => (),
+                        Some(v) => memory.return_token_vec(v)
+                    }
+                }
+            }
+        } else {
+            match Self::set_i(&mut self.0,k,v) {
+                None => (),
+                Some(v) => memory.return_token_vec(v)
+            }
+        }
+    }
+
+    // #[inline(always)]
+    pub(crate) fn set_globally(&mut self, k: &'static str, v: Vec<Token<ET>>, memory:&mut Memory<ET>) {
+        for ov in self.1.iter_mut() {
+            match ov.remove(&k) {
+                None => (),
+                Some(v) => memory.return_token_vec(v)
+            }
+        }
+        match Self::set_i(&mut self.0,k,v) {
+            None => (),
+            Some(v) => memory.return_token_vec(v)
+        }
+    }
 }
 
 /// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::BaseCommand)s,

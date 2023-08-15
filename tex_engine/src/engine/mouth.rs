@@ -241,15 +241,17 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                         }
                         self.stack.pop();
                         debug_log!(debug => "file end; inserting \\everyeof");
-                        let mut v = state.get_primitive_toks("everyeof"); // TODO
-                        if v.is_empty() {
-                            Ok(Some((Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None),true)))
-                        } else {
-                            self.stack.push(TeXMouthSource::Token((Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None),true)));
-                            for t in v.into_iter().rev() { self.stack.push(TeXMouthSource::Token((t,true))) };
-                            match self.stack.pop() {
-                                Some(TeXMouthSource::Token((t, b))) => Ok(Some((t, b))),
-                                _ => unreachable!()
+                        let eof = (Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None),true);
+                        match state.get_primitive_toks("everyeof") {
+                            None => Ok(Some(eof)),
+                            Some(v) if v.is_empty() => Ok(Some(eof)),
+                            Some(v) => {
+                                self.stack.push(TeXMouthSource::Token(eof));
+                                for t in v.iter().rev() { self.stack.push(TeXMouthSource::Token((t.clone(),true))) };
+                                match self.stack.pop() {
+                                    Some(TeXMouthSource::Token((t, b))) => Ok(Some((t, b))),
+                                    _ => unreachable!()
+                                }
                             }
                         }
                     }

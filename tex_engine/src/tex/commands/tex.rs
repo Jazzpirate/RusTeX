@@ -13,7 +13,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, BoxFun, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI};
+use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, BoxFun, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI, ToksCommand};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, Skip, Numeric, MuSkip, Dim};
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -24,7 +24,7 @@ use chrono::{Datelike, Timelike};
 use log::warn;
 use crate::engine::{EngineRef, EngineType, gullet};
 use crate::engine::gullet::numeric_methods::expand_until_space;
-use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, TeXNode, Whatsit};
+use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, Whatsit};
 use crate::tex::commands::etex::UNLESS;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
@@ -278,7 +278,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let mut csname = engine.memory.get_string();
     while engine.state.current_csname() == Some(csidx) {
         match catch_prim!(engine.get_next_unexpandable() => (name,cmd)) {
-            None => return file_end!(cmd.cause),
+            None => file_end!(cmd.cause),
             Some(sc) => match sc.command {
                 BaseCommand::Unexpandable {name:"endcsname",..} => engine.state.pop_csname(),
                 BaseCommand::Char{catcode:CategoryCode::Space,..} => csname.push(' '),
@@ -658,7 +658,7 @@ pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET>
 pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
     engine.add_expansion(|engine,s| {
-        match engine.state.stack_pop() {
+        match engine.state.stack_pop(engine.memory) {
             Some((mut v,GroupType::CS)) => {
                 for t in v.drain(..) {
                     s.push(t,engine.memory);
@@ -929,11 +929,15 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
             BaseCommand::Relax => {},
             BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
                 engine.state.stack_push(GroupType::Box(BoxMode::H));
-                engine.add_expansion(|engine,s| {
-                    for t in engine.state.get_primitive_toks("everyhbox") {
-                        s.push(t.clone(),engine.memory);
-                    }
-                });
+                match engine.state.get_primitive_toks("everyhbox") {
+                    None => (),
+                    Some(v) if v.is_empty() => (),
+                    Some(v) => for t in v.iter().rev() {engine.mouth.requeue(t.clone(),engine.memory)} /*engine.add_expansion(|engine,s| {
+                            for t in v {
+                                s.push(t.clone(),engine.memory);
+                            }
+                        })*/
+                }
                 return Ok(Box::new(move |e,children| {
                     Some(HVBox::H(HBox {
                         children, to:to.clone(), spread:spread.clone(),
@@ -946,6 +950,40 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
     }
     file_end_prim!("hbox",cmd);
 }
+
+
+pub const HFIL: &str = "hfil";
+pub fn hfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                           -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\hfil");
+    engine.stomach.push_node(SkipNode::HFil.as_node());
+    Ok(())
+}
+
+pub const HFILL: &str = "hfill";
+pub fn hfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                            -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\hfill");
+    engine.stomach.push_node(SkipNode::HFill.as_node());
+    Ok(())
+}
+
+pub const HFILNEG: &str = "hfilneg";
+pub fn hfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                              -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\hfilneg");
+    engine.stomach.push_node(SkipNode::HFilneg.as_node());
+    Ok(())
+}
+
+pub const HSS: &str = "hss";
+pub fn hss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                          -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\hss");
+    engine.stomach.push_node(SkipNode::Hss.as_node());
+    Ok(())
+}
+
 
 pub const HRULE: &str = "hrule";
 pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
@@ -1510,15 +1548,15 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, 
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
-                BaseCommand::Toks(ValueCommand::Value {name,..}) => {
+                BaseCommand::Toks(ToksCommand::Value {name,..}) => {
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
-                BaseCommand::Toks(ValueCommand::Complex {name,..}) => {
+                BaseCommand::Toks(ToksCommand::Complex {name,..}) => {
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
-                BaseCommand::Toks(ValueCommand::Primitive(name)) => {
+                BaseCommand::Toks(ToksCommand::Primitive(name)) => {
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
@@ -1538,7 +1576,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, 
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("muskip{}",u)
                 }
-                BaseCommand::Toks(ValueCommand::Register(u)) => {
+                BaseCommand::Toks(ToksCommand::Register(u)) => {
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None))? }
                     format!("toks{}",u)
                 }
@@ -1932,7 +1970,7 @@ pub fn prevdepth_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSo
                                    -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\prevdepth");
     let v = catch_prim!(engine.get_dim() => (PREVDEPTH,cmd));
-    debug_log!(debug=>"\\prevdepth{} = {}",i,v);
+    debug_log!(debug=>"\\prevdepth = {}",v);
     engine.stomach.shipout_data_mut().prevdepth = v;
     Ok(())
 }
@@ -2195,7 +2233,11 @@ pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:To
                 engine.string_to_tokens(format!("{}",val).as_bytes(),f)
             }
             BaseCommand::Toks(ass) => {
-                for t in ass.get(engine, c.source)? { f(engine, t)? }
+                let v = ass.get(engine, c.source)?.cloned();
+                match v {
+                    None => (),
+                    Some(v) => for t in v { f(engine, t)? }
+                }
                 Ok(())
             }
             BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().as_bytes(),f),
@@ -2220,23 +2262,23 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
     catch_prim!(engine.skip_eq_char() => (TOKS,cmd));
-    let mut v = vec!();
+    let mut v = engine.memory.get_token_vec();
 
     get_group!(engine,t => v.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
 
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(engine.memory));
-    engine.state.set_toks_register(i,v,global);
+    engine.state.set_toks_register(i,v,global,engine.memory);
     Ok(())
 }
-pub fn toks_get<'a,ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
-                                  -> Result<Vec<Token<ET>>,TeXError<ET>> {
+pub fn toks_get<'a,ET:EngineType>(engine:&'a mut EngineRef<ET>, cmd:CommandSource<ET>)
+                                  -> Result<Option<&'a Vec<Token<ET>>>,TeXError<ET>> {
     let i = catch_prim!(engine.get_int() => (TOKS,cmd));
     let i:usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    Ok(engine.state.get_toks_register(i).clone())
+    Ok(engine.state.get_toks_register(i))
 }
 
 pub const TOKSDEF : &str = "toksdef";
@@ -2251,7 +2293,7 @@ pub fn toksdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, 
         throw!("Invalid token register index: {}",num => cmd.cause)
     }
     let num = num.to_i64() as usize;
-    let ret = Command::new(BaseCommand::Toks(ValueCommand::Register(num)),Some(&cmd));
+    let ret = Command::new(BaseCommand::Toks(ToksCommand::Register(num)),Some(&cmd));
     engine.set_command_for_tk(name,Some(ret),global);
     Ok(())
 }
@@ -2304,6 +2346,38 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
 
         Ok(())
     })
+}
+
+pub const VFIL: &str = "vfil";
+pub fn vfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                            -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\vfil");
+    engine.stomach.push_node(SkipNode::VFil.as_node());
+    Ok(())
+}
+
+pub const VFILL: &str = "vfill";
+pub fn vfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                           -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\vfill");
+    engine.stomach.push_node(SkipNode::VFill.as_node());
+    Ok(())
+}
+
+pub const VFILNEG: &str = "vfilneg";
+pub fn vfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                           -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\vfilneg");
+    engine.stomach.push_node(SkipNode::VFilneg.as_node());
+    Ok(())
+}
+
+pub const VSS: &str = "vss";
+pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                              -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\vss");
+    engine.stomach.push_node(SkipNode::Vss.as_node());
+    Ok(())
 }
 
 
@@ -2393,9 +2467,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(abovedisplayskip,engine);
     register_int_assign!(adjdemerits,engine);
     register_assign!(advance,engine,(e,cmd,global) =>advance::<ET>(e,cmd,global));
-    register_unexpandable!(afterassignment,engine,false,(e,cmd) =>afterassignment::<ET>(e,cmd));
+    register_unexpandable!(afterassignment,engine,None,(e,cmd) =>afterassignment::<ET>(e,cmd));
     register_skip_assign!(baselineskip,engine);
-    register_unexpandable!(begingroup,engine,false,(e,_) =>begingroup::<ET>(e.state));
+    register_unexpandable!(begingroup,engine,None,(e,_) =>begingroup::<ET>(e.state));
     register_skip_assign!(belowdisplayskip,engine);
     register_skip_assign!(belowdisplayshortskip,engine);
     register_int_assign!(binoppenalty,engine);
@@ -2403,7 +2477,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(brokenpenalty,engine);
     register_value_assign_int!(catcode,engine);
     register_assign!(chardef,engine,(e,cmd,global) =>chardef::<ET>(e,cmd,global));
-    register_unexpandable!(closein,engine,false,(e,cmd) =>closein::<ET>(e,cmd));
+    register_unexpandable!(closein,engine,None,(e,cmd) =>closein::<ET>(e,cmd));
     register_whatsit!(closeout,engine,(e,cmd) =>closeout::<ET>(e,cmd));
     register_int_assign!(clubpenalty,engine);
     register_value_assign_int!(count,engine);
@@ -2423,27 +2497,27 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(displaywidth,engine);
     register_assign!(divide,engine,(e,cmd,global) =>divide::<ET>(e,cmd,global));
     register_int_assign!(doublehyphendemerits,engine);
-    register_unexpandable!(dump,engine,false,(_,cmd) =>dump::<ET>());
+    register_unexpandable!(dump,engine,None,(_,cmd) =>dump::<ET>());
     register_assign!(edef,engine,(e,cmd,global) =>edef::<ET>(e,cmd,global,false,false,false));
     register_expandable!(else,engine,(e,cmd,f) =>else_::<ET>(e,cmd));
     register_dim_assign!(emergencystretch,engine);
-    register_unexpandable!(end,engine,false,(_,_) =>end::<ET>());
-    register_unexpandable!(endcsname,engine,false,(_,cmd) =>endcsname::<ET>(cmd));
+    register_unexpandable!(end,engine,None,(_,_) =>end::<ET>());
+    register_unexpandable!(endcsname,engine,None,(_,cmd) =>endcsname::<ET>(cmd));
     register_expandable!(endinput,engine,(e,c,f) => endinput::<ET>(e,c));
-    register_unexpandable!(endgroup,engine,false,(e,cmd) =>endgroup::<ET>(e,cmd));
+    register_unexpandable!(endgroup,engine,None,(e,cmd) =>endgroup::<ET>(e,cmd));
     register_value_assign_int!(endlinechar,engine);
     register_tok_assign!(errhelp,engine);
 
     let em = Some(Command::new(BaseCommand::Unexpandable {
         name:ERRMESSAGE,
         apply:|e,cmd| errmessage::<ET>(e,cmd),
-        starts_paragraph:false
+        forces_mode:None
     },None));
     engine.state.set_command(ET::Char::from_str(ERRMESSAGE,engine.memory),em.clone(),true);
     engine.state.set_command(ET::Char::from_str("LaTeX3 error:",engine.memory),em,true);
 
     register_int_assign!(errorcontextlines,engine);
-    register_unexpandable!(errorstopmode,engine,false,(_,cmd) =>errorstopmode::<ET>());
+    register_unexpandable!(errorstopmode,engine,None,(_,cmd) =>errorstopmode::<ET>());
     register_value_assign_int!(escapechar,engine);
     register_int_assign!(exhyphenpenalty,engine);
     register_expandable!(expandafter,engine,(e,c,f) => expandafter::<ET>(e,c,f));
@@ -2468,12 +2542,16 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(hangindent,engine);
     register_int_assign!(hbadness,engine);
     register_open_box!(hbox,engine,BoxMode::H,(e,cmd) =>hbox::<ET>(e,cmd));
+    register_unexpandable!(hfil,engine,Some(HorV::Horizontal),(e,cmd) =>hfil::<ET>(e,cmd));
+    register_unexpandable!(hfill,engine,Some(HorV::Horizontal),(e,cmd) =>hfill::<ET>(e,cmd));
+    register_unexpandable!(hfilneg,engine,Some(HorV::Horizontal),(e,cmd) =>hfilneg::<ET>(e,cmd));
+    register_unexpandable!(hss,engine,Some(HorV::Horizontal),(e,cmd) =>hss::<ET>(e,cmd));
     register_dim_assign!(hfuzz,engine);
     register_dim_assign!(hoffset,engine);
     register_int_assign!(holdinginserts,engine);
-    register_unexpandable!(hrule,engine,true,(e,cmd) =>hrule::<ET>(e,cmd));
+    register_unexpandable!(hrule,engine,Some(HorV::Vertical),(e,cmd) =>hrule::<ET>(e,cmd));
     register_dim_assign!(hsize,engine);
-    register_unexpandable!(hyphenation,engine,false,(e,cmd) =>hyphenation::<ET>(e,cmd));
+    register_unexpandable!(hyphenation,engine,None,(e,cmd) =>hyphenation::<ET>(e,cmd));
     register_value_assign_int!(hyphenchar,engine);
     register_int_assign!(hyphenpenalty,engine);
     register_conditional!(if,engine,(e,cmd) =>if_::<ET>(e,cmd));
@@ -2493,8 +2571,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifvmode,engine,(e,cmd) =>ifvmode::<ET>(e,cmd));
     register_conditional!(ifvoid,engine,(e,cmd) =>todo!("ifvoid"));
     register_conditional!(ifx,engine,(e,cmd) =>ifx::<ET>(e,cmd));
-    register_unexpandable!(immediate,engine,false,(e,cmd) =>immediate::<ET>(e,cmd));
-    register_unexpandable!(ignorespaces,engine,false,(e,cmd) => ignorespaces::<ET>(e,cmd));
+    register_unexpandable!(immediate,engine,None,(e,cmd) =>immediate::<ET>(e,cmd));
+    register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,cmd));
     register_expandable!(input,engine,(e,cmd,f) =>input::<ET>(e,cmd));
     register_int!(inputlineno,engine,(e,c) => inputlineno::<ET>(e,c));
     register_int_assign!(interlinepenalty,engine);
@@ -2508,7 +2586,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(lineskip,engine);
     register_dim_assign!(lineskiplimit,engine);
     register_assign!(long,engine,(e,cmd,g) =>long::<ET>(e,cmd,g,false,false,false));
-    register_unexpandable!(lowercase,engine,false,(e,cmd) =>lowercase::<ET>(e,cmd));
+    register_unexpandable!(lowercase,engine,None,(e,cmd) =>lowercase::<ET>(e,cmd));
     register_int_assign!(looseness,engine);
     register_int_assign!(mag,engine);
     register_int_assign!(maxdeadcycles,engine);
@@ -2517,7 +2595,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_int!(mathcode,engine);
     register_dim_assign!(mathsurround,engine);
     register_expandable!(meaning,engine,(e,c,f) => meaning::<ET>(e,c,f));
-    register_unexpandable!(message,engine,false,(e,cmd) =>message::<ET>(e,cmd));
+    register_unexpandable!(message,engine,None,(e,cmd) =>message::<ET>(e,cmd));
     register_int!(month,engine,(e,c) => month::<ET>(e,c));
     register_assign!(multiply,engine,(e,cmd,global) =>multiply::<ET>(e,cmd,global));
     register_value_assign_muskip!(muskip,engine);
@@ -2529,7 +2607,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
         BaseCommand::Font(engine.fontstore.null())
         ,None)), true);
     register_expandable!(number,engine,(e,c,f) => number::<ET>(e,c,f));
-    register_unexpandable!(openin,engine,false,(e,cmd) =>openin::<ET>(e,cmd));
+    register_unexpandable!(openin,engine,None,(e,cmd) =>openin::<ET>(e,cmd));
     register_whatsit!(openout,engine,(e,cmd) =>openout::<ET>(e,cmd));
     register_expandable!(or,engine,(e,c,f) => or::<ET>(e,c));
     register_assign!(outer,engine,(e,cmd,g) =>outer::<ET>(e,cmd,g,false,false,false));
@@ -2540,12 +2618,12 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.state.set_command(ET::Char::from_str("par",engine.memory),Some(Command::new(BaseCommand::Unexpandable {
         name:"par",
         apply:|e,cmd| par::<ET>(e,cmd),
-        starts_paragraph:false
+        forces_mode:Some(HorV::Vertical)
     },None)),true);
     register_skip_assign!(parfillskip,engine);
     register_dim_assign!(parindent,engine);
     register_skip_assign!(parskip,engine);
-    register_unexpandable!(patterns,engine,false,(e,cmd) =>patterns::<ET>(e,cmd));
+    register_unexpandable!(patterns,engine,None,(e,cmd) =>patterns::<ET>(e,cmd));
     register_int_assign!(pausing,engine);
     register_int_assign!(postdisplaypenalty,engine);
     register_int_assign!(predisplaypenalty,engine);
@@ -2589,11 +2667,15 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(tracingstats,engine);
     register_value_assign_int!(uccode,engine);
     register_int_assign!(uchyph,engine);
-    register_unexpandable!(uppercase,engine,false,(e,cmd) =>uppercase::<ET>(e,cmd));
+    register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,cmd));
     register_int_assign!(vbadness,engine);
+    register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,cmd));
+    register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,cmd));
+    register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,cmd));
+    register_unexpandable!(vss,engine,Some(HorV::Vertical),(e,cmd) =>vss::<ET>(e,cmd));
     register_dim_assign!(vfuzz,engine);
     register_dim_assign!(voffset,engine);
-    register_unexpandable!(vrule,engine,true,(e,cmd) =>vrule::<ET>(e,cmd));
+    register_unexpandable!(vrule,engine,Some(HorV::Horizontal),(e,cmd) =>vrule::<ET>(e,cmd));
     register_dim_assign!(vsize,engine);
     register_int_assign!(widowpenalty,engine);
     register_whatsit!(write,engine,(e,cmd) =>write::<ET>(e,cmd));
@@ -2618,6 +2700,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,mathinner);
     cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
+    cmstodo!(engine,shipout);
     cmstodo!(engine,delimiter);
 
 
@@ -2657,7 +2740,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showbox);
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
-    cmtodo!(engine,shipout);
     cmtodo!(engine,aftergroup);
     cmtodo!(engine,special);
     cmtodo!(engine,penalty);
@@ -2675,10 +2757,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,insert);
     cmtodo!(engine,vadjust);
     cmtodo!(engine,vskip);
-    cmtodo!(engine,vfil);
-    cmtodo!(engine,vfill);
-    cmtodo!(engine,vss);
-    cmtodo!(engine,vfilneg);
     cmtodo!(engine,leaders);
     cmtodo!(engine,cleaders);
     cmtodo!(engine,xleaders);
@@ -2691,10 +2769,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,indent);
     cmtodo!(engine,noindent);
     cmtodo!(engine,noboundary);
-    cmtodo!(engine,hfil);
-    cmtodo!(engine,hfill);
-    cmtodo!(engine,hfilneg);
-    cmtodo!(engine,hss);
     cmtodo!(engine,accent);
     cmtodo!(engine,discretionary);
     cmtodo!(engine,raise);

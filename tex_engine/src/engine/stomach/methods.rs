@@ -8,6 +8,7 @@ use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
 use crate::tex::commands::{methods, BaseStomachCommand, StomachCommand};
+use crate::tex::nodes::HorV;
 use crate::tex::token::{Token, TokenList};
 use crate::utils::errors::TeXError;
 
@@ -16,12 +17,16 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
     use BaseStomachCommand::*;
     debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
     match cmd.command {
-        Unexpandable {name,apply,starts_paragraph} => {
-            if starts_paragraph  {
-                match engine.state.mode() {
-                    TeXMode::Vertical | TeXMode::InternalVertical =>
-                        todo!(),
-                    _ => ()
+        Unexpandable {name,apply,forces_mode} => {
+            match forces_mode {
+                None => (),
+                Some(mode) => {
+                    let currmode = engine.state.mode();
+                    match (currmode,mode) {
+                        (TeXMode::InternalVertical | TeXMode::Vertical,HorV::Vertical) => (),
+                        (TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::Math | TeXMode::Displaymath,HorV::Horizontal) => (),
+                        _ => todo!()
+                    }
                 }
             }
             Ok(apply(engine, cmd.source)?)
@@ -64,7 +69,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         Space => todo!("Space in H mode"),
         MathShift => todo!("MathShift in digest"),
         BeginGroup => Ok(engine.state.stack_push(GroupType::Token)),
-        EndGroup => match engine.state.stack_pop() {
+        EndGroup => match engine.state.stack_pop(engine.memory) {
             Some((v,GroupType::Token)) => {
                 engine.add_expansion(|engine,rs| {
                     for t in v {rs.push(t,engine.memory)}
