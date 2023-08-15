@@ -31,7 +31,7 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Mouth:Mouth<Self>;
     type File:File<Self::Char>;
     type FileSystem:FileSystem<Self::Char,F=Self::File>;
-    type Font:Font;
+    type Font:Font<Char=Self::Char>;
     type FontStore:FontStore<Char=Self::Char,Font=Self::Font>;
     type Node: CustomNode<Self,Bx=Self::Box>;
     type Box: CustomBox<Self>;
@@ -88,6 +88,7 @@ pub trait Engine<ET:EngineType> {
         *self.jobname() = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         *self.start_time() =  Local::now();
         let mut comps = self.components();
+        comps.filesystem.set_pwd(s.parent().unwrap().to_path_buf());
         let file = comps.filesystem.get(s.to_str().unwrap());
         comps.mouth.push_file(&file,comps.memory);
         *comps.start_time = Local::now();

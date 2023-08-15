@@ -57,7 +57,7 @@ mod tests {
     use crate::engine::mouth::StandardMouth;
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, TeXState};
-    use crate::engine::stomach::{NoShipoutDefaultStomach, Stomach};
+    use crate::engine::stomach::{NoShipoutDefaultStomach, ShipoutDefaultStomach, Stomach};
     use crate::engine::mouth::Mouth;
 
     use ansi_term::Colour::Green;
@@ -164,13 +164,13 @@ mod tests {
             type State = TeXState<Self>;
             type Mouth = StandardMouth<Self>;
             type Gullet = TeXGullet<Self>;
-            type Stomach = NoShipoutDefaultStomach<Self>;
+            type Stomach = ShipoutDefaultStomach<Self>;
         }
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new();
         let state = TeXState::new(&fonts);
         let gullet = TeXGullet::new();
-        let stomach = NoShipoutDefaultStomach::new();
+        let stomach = ShipoutDefaultStomach::new();
         let mut engine = crate::engine::EngineStruct::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
 
         engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.memory),Some(Command::new(BaseCommand::Unexpandable {

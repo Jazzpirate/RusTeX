@@ -24,7 +24,7 @@ use chrono::{Datelike, Timelike};
 use log::warn;
 use crate::engine::{EngineRef, EngineType, gullet};
 use crate::engine::gullet::numeric_methods::expand_until_space;
-use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, Whatsit};
+use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
 use crate::tex::commands::etex::UNLESS;
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
@@ -641,7 +641,11 @@ pub fn else_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
             catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine,name,i,false) => (ELSE,cmd)),
         (Some(ConditionalBranch::Case(_,_)),i) =>
             catch_prim!(crate::engine::gullet::methods::else_loop::<ET>(engine,IFCASE,i,false) => (IFCASE,cmd)),
-        o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
+        _ => {
+            engine.mouth.requeue(cmd.cause,engine.memory);
+            engine.mouth.requeue(Token::new(BaseToken::CS(engine.memory.relax),None),engine.memory);
+        }
+        //o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
     }
     Ok(())
 }
@@ -789,13 +793,17 @@ pub fn font_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
                                   -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"Assigning \\font");
     let cs = catch_prim!(engine.get_control_sequence() => (FONT,cmd));
+    let cs = match cs.base {
+        BaseToken::CS(name) => name,
+        _ => throw!("Expected control sequence after \\font" => cmd.cause)
+    };
     catch_prim!(engine.skip_eq_char() => (FONT,cmd));
     let mut fontname = engine.memory.get_string();
     catch_prim!(engine.get_string(&mut fontname) => (FONT,cmd));
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
     }
-    let mut font = catch_prim!(engine.fontstore.get_new(&fontname) => (FONT,cmd));
+    let mut font = catch_prim!(engine.fontstore.get_new(&fontname,cs) => (FONT,cmd));
     engine.memory.return_string(fontname);
     match catch_prim!(engine.get_keywords(vec!("at","scaled")) => (FONT,cmd)) {
         Some(s) if s == "at" => {
@@ -810,7 +818,7 @@ pub fn font_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
         _ => ()
     }
     let fontcmd = Command::new(BaseCommand::Font(font),Some(&cmd));
-    engine.set_command_for_tk(cs,Some(fontcmd),global);
+    engine.state.set_command(cs,Some(fontcmd),global);
     Ok(())
 }
 pub fn font_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
@@ -938,7 +946,7 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             }
                         })*/
                 }
-                return Ok(Box::new(move |e,children| {
+                return Ok(Ptr::new(move |e,children| {
                     Some(HVBox::H(HBox {
                         children, to:to.clone(), spread:spread.clone(),
                         ..Default::default()
@@ -1964,6 +1972,16 @@ pub fn patterns<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
     Ok(())
 }
 
+pub const PENALTY: &str = "penalty";
+pub fn penalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                               -> Result<(), TeXError<ET>> {
+    debug_log!(trace=>"\\penalty");
+    let i = catch_prim!(engine.get_int() => (PENALTY,cmd)).to_i64() as i32;
+    engine.stomach.push_node(TeXNode::Penalty(i));
+    Ok(())
+}
+
+
 
 pub const PREVDEPTH : &str = "prevdepth";
 pub fn prevdepth_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
@@ -2131,6 +2149,30 @@ pub fn sfcode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET
     Ok(v)
 }
 
+pub const SHIPOUT: &str = "shipout";
+pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                                -> Result<(),TeXError<ET>> {
+    debug_log!(trace => "\\shipout");
+    match catch_prim!(engine.get_next_unexpandable() => (SHIPOUT,cmd)) {
+        None => file_end_prim!(SHIPOUT,cmd),
+        Some(c) => match c.command {
+            BaseCommand::OpenBox {name,mode,apply} => {
+                let f = catch_prim!(apply(engine,c.source) => (SHIPOUT,cmd));
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
+                    let bx = match f(e,v) {
+                        Some(r) => {r}
+                        None => {todo!("make void box")}
+                    };
+                    e.stomach.shipout(bx);
+                    None
+                })});
+                Ok(())
+            }
+            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.memory,Some(ET::Char::backslash())))
+        }
+    }
+}
+
 pub const SKEWCHAR: &str = "skewchar";
 pub fn skewchar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
                                       -> Result<(),TeXError<ET>> {
@@ -2240,7 +2282,14 @@ pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:To
                 }
                 Ok(())
             }
-            BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().as_bytes(),f),
+            BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().clone().as_bytes(),f),
+            BaseCommand::Font(fnt) => {
+                f(engine,Token::new(BaseToken::CS(fnt.name()),None))
+            },
+            BaseCommand::FontCommand {get,..} => {
+                let fnt = get(engine,c.source)?;
+                f(engine,Token::new(BaseToken::CS(fnt.name()),None))
+            }
             _ => throw!("Expected a value after \\the; got: {}", c.source.cause.to_str(engine.memory,Some(ET::Char::backslash())) => c.source.cause)
         }
         None => file_end_prim!(THE,cmd)
@@ -2346,6 +2395,47 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
 
         Ok(())
     })
+}
+
+
+pub const VBOX: &str = "vbox";
+pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                           -> Result<CloseBoxFun<ET>,TeXError<ET>> {
+    debug_log!(trace=>"\\vbox");
+    let (to,spread) = match catch_prim!(engine.get_keywords(vec!("spread","to")) => (VBOX,cmd)) {
+        None => (None,None),
+        Some(s) if s == "to" => {
+            let a = catch_prim!(engine.get_dim() => (VBOX,cmd));
+            (Some(a),None)
+        },
+        Some(s) if s == "spread" => {
+            let a = catch_prim!(engine.get_dim() => (VBOX,cmd));
+            (None,Some(a))
+        },
+        _ => unreachable!()
+    };
+    while let Some(next) = catch_prim!(engine.get_next_unexpandable() => (VBOX,cmd)) {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Relax => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
+                engine.state.stack_push(GroupType::Box(BoxMode::V));
+                match engine.state.get_primitive_toks("everyvbox") {
+                    None => (),
+                    Some(v) if v.is_empty() => (),
+                    Some(v) => for t in v.iter().rev() {engine.mouth.requeue(t.clone(),engine.memory)}
+                }
+                return Ok(Ptr::new(move |e,children| {
+                    Some(HVBox::V(VBox {
+                        children, to, spread,
+                        ..Default::default()
+                    }))
+                }))
+            }
+            _ => throw!("Expected begin group, found {:?}",next.source.cause => cmd.cause)
+        }
+    }
+    file_end_prim!("vbox",cmd);
 }
 
 pub const VFIL: &str = "vfil";
@@ -2625,6 +2715,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(parskip,engine);
     register_unexpandable!(patterns,engine,None,(e,cmd) =>patterns::<ET>(e,cmd));
     register_int_assign!(pausing,engine);
+    register_unexpandable!(penalty,engine,None,(e,cmd) =>penalty::<ET>(e,cmd));
     register_int_assign!(postdisplaypenalty,engine);
     register_int_assign!(predisplaypenalty,engine);
     register_dim_assign!(predisplaysize,engine);
@@ -2640,6 +2731,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(scriptspace,engine);
     register_assign!(setbox,engine,(e,cmd,global) =>setbox::<ET>(e,cmd,global));
     register_value_assign_int!(sfcode,engine);
+    register_unexpandable!(shipout,engine,None,(e,cmd) =>shipout::<ET>(e,cmd));
     register_int_assign!(showboxbreadth,engine);
     register_int_assign!(showboxdepth,engine);
     register_value_assign_int!(skewchar,engine);
@@ -2669,6 +2761,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(uchyph,engine);
     register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,cmd));
     register_int_assign!(vbadness,engine);
+    register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,cmd));
     register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,cmd));
     register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,cmd));
     register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,cmd));
@@ -2700,7 +2793,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,mathinner);
     cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
-    cmstodo!(engine,shipout);
     cmstodo!(engine,delimiter);
 
 
@@ -2734,7 +2826,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,copy);
     cmtodo!(engine,lastbox);
     cmtodo!(engine,vsplit);
-    cmtodo!(engine,vbox);
     cmtodo!(engine,vtop);
     cmtodo!(engine,show);
     cmtodo!(engine,showbox);
@@ -2742,7 +2833,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showthe);
     cmtodo!(engine,aftergroup);
     cmtodo!(engine,special);
-    cmtodo!(engine,penalty);
     cmtodo!(engine,kern);
     cmtodo!(engine,mkern);
     cmtodo!(engine,unpenalty);

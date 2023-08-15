@@ -4,6 +4,7 @@ use std::fmt::{Debug, Formatter};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::BoxMode;
 use crate::engine::stomach::Stomach;
+use crate::tex::commands::CloseBoxFun;
 use crate::tex::numbers::Skip;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
@@ -163,6 +164,7 @@ impl<ET:EngineType> Clone for Whatsit<ET> {
 #[derive(Clone,Debug)]
 pub enum HVBox<ET:EngineType> {
     H(HBox<ET>),
+    V(VBox<ET>),
     Void
 }
 impl<ET:EngineType> NodeTrait<ET> for HVBox<ET> {
@@ -170,18 +172,21 @@ impl<ET:EngineType> NodeTrait<ET> for HVBox<ET> {
     fn height(&self) -> ET::Dim {
         match self {
             HVBox::H(b) => b.height(),
+            HVBox::V(b) => b.height(),
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
             HVBox::H(b) => b.depth(),
+            HVBox::V(b) => b.depth(),
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
             HVBox::H(b) => b.width(),
+            HVBox::V(b) => b.width(),
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
@@ -229,13 +234,57 @@ impl<ET:EngineType> Default for HBox<ET> {
     }
 }
 
+
+#[derive(Clone,Debug)]
+pub struct VBox<ET:EngineType> {
+    pub kind:&'static str,
+    pub children:Vec<TeXNode<ET>>,
+    pub spread:Option<ET::Dim>,
+    pub to:Option<ET::Dim>,
+    pub assigned_width:Option<ET::Dim>,
+    pub assigned_height:Option<ET::Dim>,
+    pub assigned_depth:Option<ET::Dim>
+}
+impl<ET:EngineType> NodeTrait<ET> for VBox<ET> {
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Box(HVBox::V(self)) }
+    fn height(&self) -> ET::Dim {
+        self.assigned_height.unwrap_or_else(|| {
+            self.children.iter().map(|c| c.height()).sum()
+        })
+    }
+    fn depth(&self) -> ET::Dim {
+        self.assigned_depth.unwrap_or_else(|| {
+            // TODO not quite - filter penalties etc.
+            self.children.iter().rev().find(|c| c.depth() > ET::Dim::from_sp(0)).map(|c| c.depth()).unwrap_or_else(|| ET::Dim::from_sp(0))
+        })
+    }
+    fn width(&self) -> ET::Dim {
+        self.assigned_width.unwrap_or_else(|| {
+            self.children.iter().map(|c| c.width()).max().unwrap_or_else(|| ET::Dim::from_sp(0))
+        })
+    }
+}
+impl<ET:EngineType> Default for VBox<ET> {
+    fn default() -> Self {
+        Self {
+            kind:"vbox",
+            children:Vec::new(),
+            spread:None,
+            to:None,
+            assigned_width:None,
+            assigned_height:None,
+            assigned_depth:None
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum OpenBox<ET:EngineType> {
     Paragraph { list: Vec<TeXNode<ET>> },
     Box {
         mode:BoxMode,
         list:Vec<TeXNode<ET>>,
-        on_close: Ptr<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) ->Option<TeXNode<ET>>>
+        on_close: CloseBoxFun<ET>
     },
 }
 impl<ET:EngineType> Debug for OpenBox<ET> {

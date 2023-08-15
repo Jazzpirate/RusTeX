@@ -9,7 +9,7 @@ use crate::tex::commands::{Command, BaseCommand, Def, ExpToken, ParamToken, Reso
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
-use crate::utils::strings::CharType;
+use crate::utils::strings::{CharType, TeXStr};
 
 #[macro_export]
 macro_rules! cmtodo {
@@ -113,6 +113,12 @@ pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandS
     expand_until_group!(engine,t => tks.push(t));
     //catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
     debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks).to_str(engine.memory));
+    if name == "output" {
+        if !tks.is_empty() {
+            tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
+            tks.insert(0,Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None))
+        }
+    }
     engine.state.set_primitive_toks(name,tks,global,engine.memory);
     Ok(())
 }

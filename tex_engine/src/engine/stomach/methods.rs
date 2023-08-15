@@ -8,7 +8,7 @@ use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
 use crate::tex::commands::{methods, BaseStomachCommand, StomachCommand};
-use crate::tex::nodes::HorV;
+use crate::tex::nodes::{HorV, NodeTrait, TeXNode};
 use crate::tex::token::{Token, TokenList};
 use crate::utils::errors::TeXError;
 
@@ -55,8 +55,20 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
             }
             Ok(())
         }
-        OpenBox {..} => todo!("OpenBox"),
-        Whatsit {name,..} => todo!("Whatsits"),
+        OpenBox {name, apply, mode} => {
+            let on_close = apply(engine,cmd.source)?;
+            engine.stomach.shipout_data_mut().box_stack.push(
+                crate::tex::nodes::OpenBox::Box {
+                    list:vec!(), mode, on_close
+                }
+            );
+            Ok(())
+        }
+        Whatsit {name,apply} => {
+            let wi = apply(engine,cmd.source)?;
+            engine.stomach.push_node(TeXNode::Whatsit(wi));
+            Ok(())
+        },
         Relax => Ok(()),
         Char{..} => {
             let mode = engine.state.mode();
@@ -80,7 +92,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 match engine.stomach.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(engine,list) {
-                            Some(b) => engine.stomach.push_node(b),
+                            Some(b) => engine.stomach.push_node(b.as_node()),
                             None => {}
                         }
                         Ok(())

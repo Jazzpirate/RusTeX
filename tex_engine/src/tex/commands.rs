@@ -97,7 +97,7 @@ pub type AssignmentFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>
 pub type AssignmentFn<ET:EngineType> = Box<dyn Fn(&mut EngineRef<ET>, CommandSource<ET>,bool) -> Result<(),TeXError<ET>>>;
 pub type ConditionalFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<bool,TeXError<ET>>;
 pub type ExpandableFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>, TokenCont<ET>) -> Result<(),TeXError<ET>>;
-pub type CloseBoxFun<ET:EngineType> = Box<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
+pub type CloseBoxFun<ET:EngineType> = Ptr<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
 pub type BoxFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<CloseBoxFun<ET> ,TeXError<ET>>;
 pub type WhatsitFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Result<Whatsit<ET> ,TeXError<ET>>;
 

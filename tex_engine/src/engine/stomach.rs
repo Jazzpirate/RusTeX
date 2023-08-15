@@ -26,7 +26,7 @@ impl<ET:EngineType> ShipoutData<ET> {
         ShipoutData {
             box_stack:Vec::with_capacity(1024),
             page:Vec::new(),
-            pagegoal:ET::Dim::from_sp(0),
+            pagegoal:ET::Dim::from_sp(i32::MAX as i64),
             pagetotal:ET::Dim::from_sp(0),
             prevdepth:ET::Dim::from_sp(-65536000)
         }
@@ -35,6 +35,7 @@ impl<ET:EngineType> ShipoutData<ET> {
         let ret = std::mem::replace(&mut self.page,Vec::with_capacity(1024));
         // TODO moar
         self.pagetotal = ET::Dim::from_sp(0);
+        self.pagegoal = ET::Dim::from_sp(i32::MAX as i64);
         ret
     }
 }
@@ -44,6 +45,10 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
     fn open_box(&mut self,bx:OpenBox<ET>) {
         self.shipout_data_mut().box_stack.push(bx)
+    }
+
+    fn shipout(&mut self,bx:HVBox<ET>) {
+        todo!("shipout")
     }
 
     fn push_node(&mut self,node:TeXNode<ET>) {
@@ -75,7 +80,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         let sd = engine.stomach.shipout_data();
         if force || sd.pagetotal >= sd.pagegoal {
             if sd.page.is_empty() { return None }
-            todo!("shipout")
+            todo!("shipout: {}>={}\nPage: {:?}",sd.pagetotal,sd.pagegoal,sd.page)
         } else { None }
     }
 
@@ -101,15 +106,25 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         }
     }
 }
-/*
-// TODO
-pub struct ShipoutDefaultStomach<T:Token,S:State<T>,Gu:Gullet<T>,B: TeXNode>{
-    commands:Map<fn(&mut S,&mut S::FS,&mut Gu,&mut Self,StomachCommand<T>,bool) -> Result<(),TeXError<T>>>,
-    //whatsit_cmds:Map<fn(&mut S,&mut Gu,&mut Self,StomachCommand<T>) -> Result<Whatsit<T,Self>,TeXError<T>>>,
-    phantom_box:std::marker::PhantomData<B>
+
+#[derive(Clone)]
+pub struct ShipoutDefaultStomach<ET:EngineType>{
+    shipout_data:ShipoutData<ET>
 }
 
- */
+impl<ET:EngineType<Stomach=Self>> ShipoutDefaultStomach<ET> {
+    pub fn new() -> Self { Self{
+        shipout_data:ShipoutData::new(),
+    } }
+}
+impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
+    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>> {
+        methods::digest::<ET>(engine,cmd)
+    }
+    fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }
+    fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> { &mut self.shipout_data }
+}
+
 
 #[derive(Clone)]
 pub struct NoShipoutDefaultStomach<ET:EngineType> {

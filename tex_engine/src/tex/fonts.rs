@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::engine::EngineType;
 use crate::engine::filesystem::FileSystem;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
+use crate::engine::memory::Memory;
 use crate::engine::state::State;
 use crate::tex::fonts::tfm_files::TfmFile;
 use crate::tex::numbers::{Dim, Dimi32};
@@ -15,18 +16,20 @@ use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
 use crate::utils::{Mut, Ptr};
-use crate::utils::strings::CharType;
+use crate::utils::strings::{CharType, TeXStr};
 
 pub trait FontStore:Clone+'static {
     type Char:CharType;
     type Font:Font<Char=Self::Char>;
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self,s: &str) -> Result<Self::Font,TeXError<ET>>;
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self,s: &str,macroname:TeXStr<Self::Char>) -> Result<Self::Font,TeXError<ET>>;
     fn null(&self) -> Self::Font;
 }
 pub trait Font:Debug+Display+Clone + PartialEq {
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
+
+        fn name(&self) -> TeXStr<Self::Char>;
 
     fn set_hyphenchar(&mut self,hyphenchar:i64);
     fn get_hyphenchar(&self) -> i64;
@@ -45,7 +48,7 @@ pub struct TfmFontStore {
 impl FontStore for TfmFontStore {
     type Char = u8;
     type Font = TfmFont;
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self, s: &str) -> Result<Self::Font,TeXError<ET>> {
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self, s: &str,macroname:TeXStr<Self::Char>) -> Result<Self::Font,TeXError<ET>> {
         let path = match KPATHSEA.get(s) {
             None => throw!("Font not found: {}",s),
             Some(res) => res.path
@@ -59,6 +62,7 @@ impl FontStore for TfmFontStore {
             Some(file) => file.clone()
         };
         Ok(Ptr::new(TfmFontInner{
+            name:macroname,
             hyphenchar:Mut::new(file.hyphenchar as i64),
             skewchar:Mut::new(file.skewchar as i64),
             file,
@@ -71,7 +75,7 @@ impl FontStore for TfmFontStore {
     fn null(&self) -> Self::Font { self.null.clone() }
 }
 impl TfmFontStore {
-    pub fn new() -> Self {
+    pub fn new<ET:EngineType<Char=u8>>(memory:&mut Memory<ET>) -> Self {
         let null = TfmFile {
             hyphenchar:45,
             skewchar:255,
@@ -89,6 +93,7 @@ impl TfmFontStore {
             filepath:"nullfont".to_string()
         };
         let font = Ptr::new(TfmFontInner{
+            name:TeXStr::from_static("nullfont",memory),
             hyphenchar:Mut::new(null.hyphenchar as i64),
             skewchar:Mut::new(null.skewchar as i64),
             file:Ptr::new(null),
@@ -102,6 +107,7 @@ impl TfmFontStore {
 }
 // todo: replace by Arrays, maybe
 pub struct TfmFontInner {
+    name:TeXStr<u8>,
     file:Ptr<TfmFile>,
     at:Mut<Option<i64>>,
     dimens:Mut<HMap<usize,i64>>,
@@ -146,6 +152,7 @@ impl Font for TfmFont {
             None => self.file.size
         }
     }
+    fn name(&self) -> TeXStr<Self::Char> { self.name }
 
     fn get_hyphenchar(&self) -> i64 {
         self.hyphenchar.borrow().clone()
