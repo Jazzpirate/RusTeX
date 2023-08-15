@@ -41,6 +41,8 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
     fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
 
+    fn pdfmatches(&mut self) -> &mut Vec<String>;
+
     /// push a new group onto the stack
     fn stack_push(&mut self, g: GroupType);
 
@@ -171,6 +173,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
     afterassignment:Option<Token<ET>>,
+    pdfmatches:Vec<String>,
 
     current_font:SingleValueField<ET::Font>,
 
@@ -216,6 +219,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             afterassignment:None,
             aftergroups:vec!(vec!()),
             mode: TeXMode::Vertical,
+            pdfmatches:vec!(),
             /* filesystem: fs,*/
             grouptype: vec![(GroupType::Top,None)],
             endlinechar: SingleValueField::new(Some(ET::Char::carriage_return())),
@@ -279,6 +283,7 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.current_font.set_locally(f)
         }
     }
+    fn pdfmatches(&mut self) -> &mut Vec<String> { &mut self.pdfmatches }
 
     fn set_afterassignment(&mut self, t: Token<ET>) {
         self.afterassignment = Some(t)

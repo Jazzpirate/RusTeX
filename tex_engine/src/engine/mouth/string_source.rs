@@ -229,6 +229,7 @@ impl<C:CharType> StringSourceState<C> {
 
     /// Skip the rest of the current line.
     fn skip_line(&mut self) {
+        self.charbuffer.clear();
         self.state = MouthState::S;
         self.line += 1;
         self.col = 0;

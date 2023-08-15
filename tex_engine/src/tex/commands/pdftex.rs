@@ -1,7 +1,7 @@
 //! Implementations for the pdfTeX-specific commands.
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, catch};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
@@ -147,6 +147,68 @@ pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
     Ok(catch_prim!(ET::Int::from_i64(PDF_MAJOR_VERSION) => (PDFMAJORVERSION,cmd)))
 }
 
+
+/// "pdfmatch"
+pub const PDFMATCH : &str = "pdfmatch";
+/// `\pdmatch`
+pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+    debug_log!(trace=>"pdfmatch");
+    let icase = catch_prim!(engine.get_keyword("icase") => (PDFMATCH,cmd));
+    let subcount = if catch_prim!(engine.get_keyword("subcount") => (PDFMATCH,cmd)) {
+        catch_prim!(engine.get_int() => (PDFMATCH,cmd)).to_i64()
+    } else {-1};
+    let mut pattern_string = engine.memory.get_string();
+    if icase {pattern_string.push_str("(?i)")}
+    catch_prim!(engine.get_braced_string(&mut pattern_string) => (PDFMATCH,cmd));
+    let mut target_string = engine.memory.get_string();
+    catch_prim!(engine.get_braced_string(&mut target_string) => (PDFMATCH,cmd));
+
+    for s in engine.state.pdfmatches().drain(..) {
+        engine.memory.return_string(s);
+    }
+    match regex::Regex::new(&pattern_string) {
+        Ok(reg) => {
+            match reg.captures_iter(&target_string).next() {
+                None => {
+                    engine.memory.return_string(pattern_string);
+                    engine.memory.return_string(target_string);
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None));
+                    Ok(())
+                }
+                Some(capture) => { // TODO this is not quite right yet, I think
+                    let cap = capture.get(0).unwrap();
+                    let mut retstr = pattern_string;
+                    retstr.clear();
+                    retstr.push_str(&cap.start().to_string());
+                    retstr.push_str("->");
+                    retstr.push_str(cap.as_str());
+                    engine.state.pdfmatches().push(retstr);
+                    for cap in capture.iter().skip(1) {
+                        let mut retstr = engine.memory.get_string();
+                        match cap {
+                            None => retstr.push_str("-1"),
+                            Some(cap) => {
+                                retstr.push_str(&cap.start().to_string());
+                                retstr.push_str("->");
+                                retstr.push_str(cap.as_str());
+                            }
+                        }
+                        engine.state.pdfmatches().push(retstr);
+                    }
+                    engine.memory.return_string(target_string);
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None));
+                    Ok(())
+                }
+            }
+
+        },
+        Err(e) => {
+            f(engine,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
+            f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
+        }
+    }
+}
+
 /// "pdfshellescape"
 pub const PDFSHELLESCAPE: &str = "pdfshellescape";
 /// `\pdfmshellescape`: 2 (restricted).
@@ -176,6 +238,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(pdfhorigin,engine);
     register_int_assign!(pdfoutput,engine);
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(c));
+    register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,cmd,f));
     register_int_assign!(pdfminorversion,engine);
     register_int_assign!(pdfobjcompresslevel,engine);
     register_dim_assign!(pdfpageheight,engine);
@@ -264,7 +327,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,pdfincludechars);
     cmtodo!(engine,pdfinsertht);
     cmtodo!(engine,pdflastmatch);
-    cmtodo!(engine,pdfmatch);
     cmtodo!(engine,pdfmdfivesum);
     cmtodo!(engine,pdfnormaldeviate);
     cmtodo!(engine,pdfpageref);
