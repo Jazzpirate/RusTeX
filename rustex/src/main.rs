@@ -4,7 +4,7 @@ use log::warn;
 use tex_engine::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
 use tex_engine::engine::gullet::{TeXGullet,Gullet};
 use tex_engine::engine::state::{TeXState,State};
-use tex_engine::engine::stomach::NoShipoutDefaultStomach;
+use tex_engine::engine::stomach::{NoShipoutDefaultStomach, ShipoutDefaultStomach};
 use tex_engine::tex::commands::{BaseCommand, Command};
 use tex_engine::tex::fonts::{TfmFont, TfmFontStore};
 use tex_engine::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
@@ -14,6 +14,7 @@ use tex_engine::utils::strings::{CharType, TeXStr};
 use tex_engine::engine::*;
 use tex_engine::engine::memory::Memory;
 use tex_engine::engine::mouth::{Mouth,StandardMouth};
+use tex_engine::tex::commands::pdftex::PDFTeXNode;
 
 #[derive(Clone,Copy,Debug)]
 struct Default();
@@ -23,19 +24,18 @@ impl EngineType for Default {
     type FileSystem = KpseVirtualFileSystem<u8>;
     type Font = TfmFont;
     type FontStore = TfmFontStore;
-    type Node = ();
-    type Box = ();
+    type Node = PDFTeXNode<Self>;
     type Int = i32;
     type Dim = Dimi32;
     type SkipDim = Fill;
     type MuDim = Mui32;
     type MuStretchShrinkDim = MuFill;
     type CommandReference = ();
-    type TokenReference = FileTokenReference<Self>;
+    type TokenReference = ();//FileTokenReference<Self>;
     type Mouth = StandardMouth<Self>;
     type State = TeXState<Self>;
     type Gullet = TeXGullet<Self>;
-    type Stomach = NoShipoutDefaultStomach<Self>;
+    type Stomach = ShipoutDefaultStomach<Self>;
 }
 
 macro_rules! catch {
@@ -51,8 +51,8 @@ macro_rules! catch {
 }
 
 fn main() {
-    //profile()
-    thesis()
+    profile()
+    //thesis()
 }
 
 fn engine() -> EngineStruct<Default> {
@@ -69,20 +69,23 @@ fn engine() -> EngineStruct<Default> {
     };
 
     let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
-    let fonts = TfmFontStore::new();
+    let mut memory = Memory::new();
+    let fonts = TfmFontStore::new(&mut memory);
     let state = TeXState::new(&fonts);
     let gullet = TeXGullet::new();
-    let stomach = NoShipoutDefaultStomach::new();
+    let stomach = ShipoutDefaultStomach::new();
     let mut engine = tex_engine::engine::EngineStruct::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
+    engine.memory = memory;
     engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.memory),Some(Command::new(BaseCommand::Unexpandable {
         name: "rustexBREAK",
         apply: |_,_| {
             println!("HERE!");
-            std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
-            env_logger::init();
+            //std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
+            //env_logger::init();
+            env_logger::builder().filter_level(log::LevelFilter::Trace).try_init();
             //trace();
             Ok(())
-        },starts_paragraph:false
+        },forces_mode:None
     },None)),true);
     catch!(engine,engine.initialize_etex());
     catch!(engine,engine.pdftex());
