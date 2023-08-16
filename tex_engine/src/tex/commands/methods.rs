@@ -4,7 +4,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;

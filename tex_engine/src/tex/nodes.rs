@@ -1,6 +1,7 @@
 //! Boxes producing actual output
 
 use std::fmt::{Debug, Formatter};
+use std::marker::PhantomData;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::BoxMode;
 use crate::tex::commands::CloseBoxFun;
@@ -17,34 +18,6 @@ pub trait NodeTrait<ET:EngineType> {
     fn width(&self) -> ET::Dim;
 }
 
-#[derive(Debug,Clone)]
-pub enum SkipNode<ET:EngineType> {
-    Skip{val:Skip<ET::SkipDim>,axis:HorV},
-    VFil,VFill,VFilneg,HFil,HFill,HFilneg,Hss,Vss
-}
-
-impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
-    fn as_node(self) -> TeXNode<ET> {
-        TeXNode::Skip(self)
-    }
-    fn depth(&self) -> ET::Dim {
-        ET::Dim::from_sp(0)
-    }
-    fn height(&self) -> ET::Dim {
-        use SkipNode::*;
-        match self {
-            Skip {val,axis:HorV::Vertical} => val.base,
-            _ => ET::Dim::from_sp(0)
-        }
-    }
-    fn width(&self) -> ET::Dim {
-        use SkipNode::*;
-        match self {
-            Skip {val,axis:HorV::Horizontal} => val.base,
-            _ => ET::Dim::from_sp(0)
-        }
-    }
-}
 
 #[derive(Debug,Clone)]
 pub enum TeXNode<ET:EngineType> {
@@ -92,6 +65,36 @@ impl<ET:EngineType> TeXNode<ET> {
 }
 
 #[derive(Debug,Clone)]
+pub enum SkipNode<ET:EngineType> {
+    Skip{val:Skip<ET::SkipDim>,axis:HorV},
+    VFil,VFill,VFilneg,HFil,HFill,HFilneg,Hss,Vss
+}
+
+impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
+    fn as_node(self) -> TeXNode<ET> {
+        TeXNode::Skip(self)
+    }
+    fn depth(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+    fn height(&self) -> ET::Dim {
+        use SkipNode::*;
+        match self {
+            Skip {val,axis:HorV::Vertical} => val.base,
+            _ => ET::Dim::from_sp(0)
+        }
+    }
+    fn width(&self) -> ET::Dim {
+        use SkipNode::*;
+        match self {
+            Skip {val,axis:HorV::Horizontal} => val.base,
+            _ => ET::Dim::from_sp(0)
+        }
+    }
+}
+
+
+#[derive(Debug,Clone)]
 pub enum HorV { Horizontal, Vertical }
 
 #[derive(Debug,Clone)]
@@ -114,12 +117,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
     }
 }
 
-pub trait CustomNode<ET:EngineType>:Debug+Sized+Clone+NodeTrait<ET>+'static {
-    type Bx: CustomBox<ET>;
-}
-pub trait CustomBox<ET:EngineType>: CustomNode<ET,Bx=Self> {
-
-}
+pub trait CustomNode<ET:EngineType>:Debug+Sized+Clone+NodeTrait<ET>+'static {}
 
 
 impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
@@ -130,10 +128,7 @@ impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
     fn depth(&self) -> ET::Dim { ET::Dim::from_sp(0) }
     fn width(&self) -> ET::Dim { ET::Dim::from_sp(0) }
 }
-impl<ET:EngineType<Node=()>> CustomBox<ET> for () {}
-impl<ET:EngineType<Node=()>> CustomNode<ET> for () {
-    type Bx = ();
-}
+impl<ET:EngineType<Node=()>> CustomNode<ET> for () {}
 
 pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut EngineRef<ET>) -> Result<(),TeXError<ET>>>>>>);
 impl<ET:EngineType> Debug for Whatsit<ET> {

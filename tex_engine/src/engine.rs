@@ -11,8 +11,9 @@ use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::tex;
-use crate::tex::nodes::{CustomBox, CustomNode};
+use crate::tex::nodes::CustomNode;
 use crate::tex::commands::{Assignable, CommandReference};
+use crate::tex::commands::pdftex::PDFTeXNode;
 use crate::tex::fonts::{Font, FontStore};
 use crate::tex::numbers::{Dim, MuDim, MuStretchShrinkDim, SkipDim};
 use crate::tex::token::TokenReference;
@@ -33,8 +34,7 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type FileSystem:FileSystem<Self::Char,F=Self::File>;
     type Font:Font<Char=Self::Char>;
     type FontStore:FontStore<Char=Self::Char,Font=Self::Font>;
-    type Node: CustomNode<Self,Bx=Self::Box>;
-    type Box: CustomBox<Self>;
+    type Node: CustomNode<Self>;
     type Int:Int+Assignable<Self>;
     type Dim:Dim+Assignable<Self>;
     type SkipDim:SkipDim<Dim=Self::Dim>;
@@ -168,7 +168,6 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
 
 }
 impl<ET:EngineType> EngineStruct<ET> {
-
     pub fn new(filesystem:ET::FileSystem,fontstore:ET::FontStore,state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,outputs:Outputs) -> Self {
         let mut memory = Memory::new();
         EngineStruct {
@@ -188,21 +187,23 @@ impl<ET:EngineType> EngineStruct<ET> {
         tex::commands::etex::initialize_etex_primitives::<ET>(&mut self.components());
         Ok(())
     }
+    pub fn latex(&mut self) -> Result<(),TeXError<ET>> {
+        self.init_file("latex.ltx")
+    }
+    pub fn initialize_latex(&mut self) -> Result<(),TeXError<ET>> {
+        self.initialize_etex()?;
+        self.init_file("latex.ltx")
+    }
+}
+impl<ET:EngineType> EngineStruct<ET> where ET::Node:From<PDFTeXNode<ET>> {
     pub fn pdftex(&mut self) -> Result<(),TeXError<ET>> {
         tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.components());
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);
         self.init_file("pdftexconfig.tex")
     }
-    pub fn latex(&mut self) -> Result<(),TeXError<ET>> {
-        self.init_file("latex.ltx")
-    }
     pub fn initialize_pdftex(&mut self) -> Result<(),TeXError<ET>> {
         self.initialize()?;
         self.pdftex()
-    }
-    pub fn initialize_latex(&mut self) -> Result<(),TeXError<ET>> {
-        self.initialize_etex()?;
-        self.init_file("latex.ltx")
     }
     pub fn initialize_pdflatex(&mut self) -> Result<(),TeXError<ET>> {
         self.initialize_etex()?;

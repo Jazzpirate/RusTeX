@@ -13,7 +13,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI, ToksCommand};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, Skip, MuSkip, Dim};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};

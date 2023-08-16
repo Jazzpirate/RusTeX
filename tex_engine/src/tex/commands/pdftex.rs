@@ -1,17 +1,19 @@
 //! Implementations for the pdfTeX-specific commands.
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
+use std::marker::PhantomData;
 use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::state::State;
+use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::tex::commands::{CommandSource, TokenCont};
+use crate::tex::nodes::{CustomNode, NodeTrait, TeXNode};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
-
 
 /// The version number returned by [`\pdftexversion`](pdftexversion) (140).
 pub const PDF_TEX_VERSION: i64 = 140;
@@ -19,6 +21,87 @@ pub const PDF_TEX_VERSION: i64 = 140;
 pub const PDF_MAJOR_VERSION: i64 = 1;
 /// The version number returned by [`\pdftexrevision`](pdftexrevision) (25).
 pub const PDFTEX_REVISION: i64 = 25;
+
+// --------------------------------------------------------------------------------------------------
+
+#[derive(Debug,Clone,Copy)]
+pub enum PDFStackAction { Push, Pop, Set, Current}
+impl PDFStackAction {
+    pub fn parse(s:&str) -> Self {
+        match s {
+            "push" => PDFStackAction::Push,
+            "pop" => PDFStackAction::Pop,
+            "set" => PDFStackAction::Set,
+            "current" => PDFStackAction::Current,
+            _ => unreachable!()
+        }
+    }
+}
+const STACK_ACTION_KEYWORDS : [&'static str;4] = ["push","pop","set","current"];
+
+#[derive(Debug,Clone,Copy)]
+pub struct PDFColor{R:u8,G:u8,B:u8}
+impl PDFColor {
+    pub fn parse<ET:EngineType>(s:&str) -> Result<Self,TeXError<ET>> {
+        macro_rules! parse {
+            ($s:expr) => {
+                match $s.parse::<f32>() {
+                    Ok(f) => f,
+                    _ => throw!("Invalid color specification: {}",s)
+                }
+            }
+        }
+        let ls : Vec<_> = s.split(' ').collect();
+        if matches!(ls.last(),Some(&"K")) && ls.len() > 4 {
+            let third = 1.0 - parse!(ls[3]);
+            let r = 255.0*(1.0 - parse!(ls[0])) * third;
+            let g = 255.0*(1.0 - parse!(ls[1])) * third;
+            let b = 255.0*(1.0 - parse!(ls[2])) * third;
+            if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
+                throw!("Invalid color specification: {}",s);
+            }
+            Ok(PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)})
+        } else if matches!(ls.last(),Some(&"RG")) && ls.len() > 3 {
+            let r = 255.0 * parse!(ls[0]);
+            let g = 255.0 * parse!(ls[1]);
+            let b = 255.0 * parse!(ls[2]);
+            if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
+                throw!("Invalid color specification: {}",s);
+            }
+            Ok(PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)})
+        } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
+            let x = 255.0 * parse!(ls[0]);
+            if x > 255.0 || x < 0.0  {
+                throw!("Invalid color specification: {}",s);
+            }
+            let x = (x.round()) as u8;
+            Ok(PDFColor{R:x, G:x, B:x})
+        } else {
+            throw!("Invalid color specification: {}",s);
+        }
+    }
+}
+
+#[derive(Debug,Clone)]
+pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
+    PDFColorstack{action:PDFStackAction, index:usize,color:PDFColor,phantom:PhantomData<ET>}
+}
+
+impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXNode<ET>> {
+    fn as_node(self) -> TeXNode<ET> {
+        TeXNode::Custom(ET::Node::from(self))
+    }
+    fn height(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+    fn depth(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+    fn width(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+}
+impl<ET:EngineType<Node=Self>> CustomNode<ET> for PDFTeXNode<ET> {}
 
 // --------------------------------------------------------------------------------------------------
 
@@ -58,6 +141,26 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
         b'=' => Ok(i1.to_sp().abs()==i2.to_sp().abs()),
         _ => unreachable!()
     }
+}
+
+/// "pdfcolorstack"
+pub const PDFCOLORSTACK: &str = "pdfcolorstack";
+
+pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>>
+    where ET::Node:From<PDFTeXNode<ET>>{
+    debug_log!(trace=>"pdfcolorstack");
+    let index = catch_prim!(engine.get_int() => (PDFCOLORSTACK,cmd)).to_i64();
+    if index < 0 {throw!("Invalid colorstack index: {}",index => cmd.cause)}
+    let action = match catch_prim!(engine.get_keywords(STACK_ACTION_KEYWORDS.to_vec()) => (PDFCOLORSTACK,cmd)) {
+        Some(s) => PDFStackAction::parse(s),
+        None => throw!("Expected one of 'push','pop','set','current'" => cmd.cause)
+    };
+    let mut colorstr = engine.memory.get_string();
+    catch_prim!(engine.get_braced_string(&mut colorstr) => (PDFCOLORSTACK,cmd));
+    let color = catch_prim!(PDFColor::parse::<ET>(colorstr.as_str()) => (PDFCOLORSTACK,cmd));
+    engine.memory.return_string(colorstr);
+    engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color,phantom:PhantomData}.as_node());
+    Ok(())
 }
 
 
@@ -220,9 +323,10 @@ pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
-pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
+pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>> {
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,cmd));
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,cmd));
+    register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,cmd));
     register_int_assign!(pdfcompresslevel,engine);
     register_int_assign!(pdfdecimaldigits,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,c));
@@ -238,7 +342,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(pdfpageheight,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
-    register_unexpandable!(pdresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
+    register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(c));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
     register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
@@ -335,7 +439,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,partokenname);
     cmtodo!(engine,pdfannot);
     cmtodo!(engine,pdfcatalog);
-    cmtodo!(engine,pdfcolorstack);
     cmtodo!(engine,pdfcopyfont);
     cmtodo!(engine,pdfdest);
     cmtodo!(engine,pdfendlink);

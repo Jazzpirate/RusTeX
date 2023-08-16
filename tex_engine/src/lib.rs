@@ -67,6 +67,7 @@ mod tests {
     use crate::engine::{Engine, EngineType, Outputs};
     use crate::engine::memory::Memory;
     use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command};
+    use crate::tex::commands::pdftex::PDFTeXNode;
     use crate::tex::fonts::{TfmFont, TfmFontStore};
     use crate::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
     use crate::tex::token::FileTokenReference;
@@ -152,8 +153,7 @@ mod tests {
             type FileSystem = KpseVirtualFileSystem<u8>;
             type Font = TfmFont;
             type FontStore = TfmFontStore;
-            type Node = ();
-            type Box = ();
+            type Node = PDFTeXNode<Self>;
             type Int = i32;
             type Dim = Dimi32;
             type SkipDim = Fill;
@@ -166,12 +166,14 @@ mod tests {
             type Gullet = TeXGullet<Self>;
             type Stomach = ShipoutDefaultStomach<Self>;
         }
+        let mut memory = Memory::<Default>::new();
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
-        let fonts = TfmFontStore::new();
+        let fonts = TfmFontStore::new(&mut memory);
         let state = TeXState::new(&fonts);
         let gullet = TeXGullet::new();
         let stomach = ShipoutDefaultStomach::new();
         let mut engine = crate::engine::EngineStruct::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
+        engine.memory = memory;
 
         engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.memory),Some(Command::new(BaseCommand::Unexpandable {
             name: "rustexBREAK",

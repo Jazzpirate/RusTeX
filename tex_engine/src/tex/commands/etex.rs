@@ -5,7 +5,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, TokenCont};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
-use crate::tex::token::BaseToken;
+use crate::tex::token::{BaseToken, TokenList};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
