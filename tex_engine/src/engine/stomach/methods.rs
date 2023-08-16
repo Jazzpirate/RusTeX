@@ -79,12 +79,19 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         BeginGroup => Ok(engine.state.stack_push(GroupType::Token)),
         EndGroup => match engine.state.stack_pop(engine.memory) {
             Some((v,GroupType::Token)) => {
-                engine.add_expansion(|engine,rs| {
-                    for t in v {rs.push(t,engine.memory)}
-                    Ok(())
-                })
+                if !v.is_empty() {
+                    engine.add_expansion(|engine, rs| {
+                        for t in v { rs.push(t, engine.memory) }
+                    })
+                }
+                Ok(())
             }
             Some((v,GroupType::Box(b))) => {
+                if !v.is_empty() {
+                    engine.add_expansion(|engine, rs| {
+                        for t in v { rs.push(t, engine.memory) }
+                    })
+                }
                 match engine.stomach.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(engine,list) {

@@ -81,7 +81,7 @@ impl<C:CharType> Debug for BaseToken<C> {
 
  */
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Copy, Debug)]
 pub struct Token<ET:EngineType> {
     pub base:BaseToken<ET::Char>,
     pub sourceref:Option<ET::TokenReference>

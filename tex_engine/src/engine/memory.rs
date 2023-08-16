@@ -6,7 +6,7 @@ use crate::engine::EngineType;
 use crate::tex::token::Token;
 use crate::utils::strings::TeXStr;
 
-const VEC_SIZE:usize = 16;//2097152;
+const VEC_SIZE:usize = 32;
 
 pub struct Memory<ET:EngineType> {
     args:Option<[Vec<Token<ET>>;9]>,
@@ -46,13 +46,7 @@ impl<ET:EngineType> Memory<ET> {
     }
     pub fn new() -> Self {
         let mut interner = StringInterner::<BufferBackend,ahash::RandomState>::new();
-        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
-        let relax = TeXStr::from_primitive(interner.get_or_intern_static("relax"));
-        let par = TeXStr::from_primitive(interner.get_or_intern_static("par"));
-        let empty_str = TeXStr::from_primitive(interner.get_or_intern_static(""));
-        Memory{
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:(0..8).map(|_|String::with_capacity(64)).collect(),token_vecs,interner,relax,par,empty_str
-        }
+        Self::new_with(interner)
     }
     pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
         std::mem::take(&mut self.args).unwrap()

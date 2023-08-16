@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
+use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
@@ -84,7 +85,7 @@ impl PDFColor {
 
 #[derive(Debug,Clone)]
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
-    PDFColorstack{action:PDFStackAction, index:usize,color:PDFColor,phantom:PhantomData<ET>}
+    PDFColorstack{action:PDFStackAction, index:usize,color:Option<PDFColor>,phantom:PhantomData<ET>}
 }
 
 impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -155,11 +156,18 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource
         Some(s) => PDFStackAction::parse(s),
         None => throw!("Expected one of 'push','pop','set','current'" => cmd.cause)
     };
-    let mut colorstr = engine.memory.get_string();
-    catch_prim!(engine.get_braced_string(&mut colorstr) => (PDFCOLORSTACK,cmd));
-    let color = catch_prim!(PDFColor::parse::<ET>(colorstr.as_str()) => (PDFCOLORSTACK,cmd));
-    engine.memory.return_string(colorstr);
-    engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color,phantom:PhantomData}.as_node());
+    match &action {
+        PDFStackAction::Current | PDFStackAction::Pop =>
+            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color:None,phantom:PhantomData}.as_node()),
+        _ => {
+            let mut colorstr = engine.memory.get_string();
+            //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
+            catch_prim!(engine.get_braced_string(&mut colorstr) => (PDFCOLORSTACK,cmd));
+            let color = Some(catch_prim!(PDFColor::parse::<ET>(colorstr.as_str()) => (PDFCOLORSTACK,cmd)));
+            engine.memory.return_string(colorstr);
+            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color,phantom:PhantomData}.as_node());
+        }
+    }
     Ok(())
 }
 

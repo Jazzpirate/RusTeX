@@ -156,6 +156,19 @@ pub fn afterassignment<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSou
     Ok(())
 }
 
+
+pub const AFTERGROUP: &str = "aftergroup";
+pub fn aftergroup<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(), TeXError<ET>> {
+    debug_log!(trace=>"\\aftergroup");
+    let next = match catch_prim!(engine.get_next_token() => (AFTERGROUP,cmd)) {
+        None => file_end!(cmd.cause),
+        Some((t,_)) => t
+    };
+    engine.state.push_aftergroup(next);
+    Ok(())
+}
+
+
 pub fn begingroup<ET:EngineType>(state:&mut ET::State)-> Result<(),TeXError<ET>> {
     state.stack_push(GroupType::CS);
     Ok(())
@@ -655,17 +668,19 @@ pub fn endcsname<ET:EngineType>(cmd:CommandSource<ET>) -> Result<(),TeXError<ET>
 
 pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                -> Result<(),TeXError<ET>> {
-    engine.add_expansion(|engine,s| {
-        match engine.state.stack_pop(engine.memory) {
-            Some((mut v,GroupType::CS)) => {
-                for t in v.drain(..) {
-                    s.push(t,engine.memory);
-                }
-                Ok(())
+    match engine.state.stack_pop(engine.memory) {
+        Some((mut v, GroupType::CS)) => {
+            if !v.is_empty() {
+                engine.add_expansion(|engine, s| {
+                    for t in v.drain(..) {
+                        s.push(t, engine.memory);
+                    }
+                })
             }
-            _ => throw!("No group to end" => cmd.cause)
+            Ok(())
         }
-    })
+        _ => throw!("No group to end" => cmd.cause)
+    }
 }
 
 pub fn endinput<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
@@ -2552,6 +2567,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(adjdemerits,engine);
     register_assign!(advance,engine,(e,cmd,global) =>advance::<ET>(e,cmd,global));
     register_unexpandable!(afterassignment,engine,None,(e,cmd) =>afterassignment::<ET>(e,cmd));
+    register_unexpandable!(aftergroup,engine,None,(e,cmd) =>aftergroup::<ET>(e,cmd));
     register_skip_assign!(baselineskip,engine);
     register_unexpandable!(begingroup,engine,None,(e,_) =>begingroup::<ET>(e.state));
     register_skip_assign!(belowdisplayskip,engine);
@@ -2788,6 +2804,12 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
     cmstodo!(engine,delimiter);
+    cmstodo!(engine,displaystyle);
+    cmstodo!(engine,textstyle);
+    cmstodo!(engine,scriptstyle);
+    cmstodo!(engine,scriptscriptstyle);
+    cmstodo!(engine,mathchar);
+    cmstodo!(engine,mkern);
 
 
     cmtodo!(engine,lastpenalty);
@@ -2825,10 +2847,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showbox);
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
-    cmtodo!(engine,aftergroup);
     cmtodo!(engine,special);
     cmtodo!(engine,kern);
-    cmtodo!(engine,mkern);
     cmtodo!(engine,unpenalty);
     cmtodo!(engine,unkern);
     cmtodo!(engine,unskip);
@@ -2866,10 +2886,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,limits);
     cmtodo!(engine,nolimits);
     cmtodo!(engine,mathchoice);
-    cmtodo!(engine,displaystyle);
-    cmtodo!(engine,textstyle);
-    cmtodo!(engine,scriptstyle);
-    cmtodo!(engine,scriptscriptstyle);
     cmtodo!(engine,left);
     cmtodo!(engine,right);
     cmtodo!(engine,over);
@@ -2888,7 +2904,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,fontname);
     cmtodo!(engine,hskip);
     cmtodo!(engine,italiccorr);
-    cmtodo!(engine,mathchar);
     cmtodo!(engine,medskip);
     cmtodo!(engine,mskip);
     cmtodo!(engine,noalign);

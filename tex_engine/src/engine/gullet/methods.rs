@@ -347,7 +347,6 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) -> 
 }
 
 pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) -> Result<(),TeXError<ET>> {
-
     crate::get_expanded_group!(engine,false,false,true,t => {
         match &t.base {
             BaseToken::Char(c,_) => {

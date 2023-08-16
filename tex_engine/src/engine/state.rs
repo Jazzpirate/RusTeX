@@ -162,6 +162,8 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn get_current_font(&self) -> &ET::Font;
     /// set the current font
     fn set_current_font(&mut self, f:ET::Font, globally:bool);
+
+    fn push_aftergroup(&mut self, t:Token<ET>);
 }
 
 #[derive(Clone)]
@@ -441,6 +443,9 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
         } else {
             self.escapechar.set_locally(c)
         }
+    }
+    fn push_aftergroup(&mut self, t: Token<ET>) {
+        self.aftergroups.last_mut().unwrap().push(t)
     }
 
     // #[inline(always)]
