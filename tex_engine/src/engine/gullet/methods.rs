@@ -29,6 +29,18 @@ pub fn get_next_unexpandable<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result
     Ok(None)
 }
 
+/// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
+/// (or [`None`] if the [`Mouth`] is empty). Throws an error if the file ends in the process
+pub fn get_next_unexpandable_same_file<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
+    while let Some(next) = engine.mouth.get_next_simple(engine.state,engine.interner)? {
+        match engine.expand(resolve_token(engine.state,next))? {
+            Some(r) => return Ok(Some(r)),
+            _ => ()
+        }
+    }
+    Ok(None)
+}
+
 
 /// Resolves the given [`Token`]
 pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:Token<ET>) -> ResolvedToken<ET> {
@@ -249,7 +261,7 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> R
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = engine.memory.get_string();
     engine.add_expansion(|engine,rs|{
-        while let Some(next) = engine.get_next_unexpandable()? {
+        while let Some(next) = engine.get_next_unexpandable_same_file()? {
             rs.push(next.source.cause,engine.memory);
             match next.command {
                 BaseCommand::Char {char,..} => {
@@ -284,7 +296,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
     engine.add_expansion(|engine,rs| {
-        while let Some(next) = engine.get_next_unexpandable()? {
+        while let Some(next) = engine.get_next_unexpandable_same_file()? {
             rs.push(next.source.cause.clone(),engine.memory);
             match next.command {
                 BaseCommand::Char{char,..} => {
@@ -329,7 +341,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) -> 
     debug_log!(trace=>"Reading string {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace()?;
     let mut quoted = false;
-    while let Some(next) = engine.get_next_unexpandable()? {
+    while let Some(next) = engine.get_next_unexpandable_same_file()? {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} if quoted => ret.push(' '),
             BaseCommand::Char {catcode:CategoryCode::Space,..} => return Ok(()),
@@ -457,7 +469,7 @@ fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:Resol
 }
 
 pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Font,TeXError<ET>> {
-    match engine.get_next_unexpandable()? {
+    match engine.get_next_unexpandable_same_file()? {
         None => file_end!(),
         Some(res) => match res.command {
             BaseCommand::Font(f) => Ok(f),
@@ -477,6 +489,11 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     pub fn get_next_unexpandable(&mut self) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
         ET::Gullet::get_next_unexpandable(self)
     }
+
+    pub fn get_next_unexpandable_same_file(&mut self) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
+        ET::Gullet::get_next_unexpandable_same_file(self)
+    }
+
 
     /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
     /// the input stream, after expanding macros as necessary.
@@ -546,7 +563,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     }
 
     pub fn is_next_char_one_of(&mut self,chars:&'static [u8]) -> Result<Option<u8>,TeXError<ET>> {
-        match self.get_next_unexpandable()? {
+        match self.get_next_unexpandable_same_file()? {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char {char,..} if (char.as_char() as u32) < 256 => {
@@ -567,7 +584,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     }
 
     pub fn is_next_char(&mut self,char:u8) -> Result<bool,TeXError<ET>> {
-        match self.get_next_unexpandable()? {
+        match self.get_next_unexpandable_same_file()? {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { char:c, .. } if c.as_bytes() == [char] => Ok(true),
@@ -634,7 +651,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
 #[macro_export]
 macro_rules! expand_until_group {
     ($engine:ident,$tk:ident => $f:expr) => {
-        match $engine.get_next_unexpandable()? {
+        match $engine.get_next_unexpandable_same_file()? {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {

@@ -441,7 +441,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
     while let Some(next) = iter.next() {
         match next {
             ParamToken::Token(delim) => { // eat the delimiter
-                if let Some((n,_)) = catch!(engine.get_next_token() => cmd.cause.clone()) {
+                if let Some(n) = catch!(engine.mouth.get_next_simple(engine.state,engine.interner) => cmd.cause.clone()) {
                     if n != *delim {
                         throw!("Usage of {} does not match its definition: {} expected, found {}",
                             cmd.cause.to_str(engine.interner,Some(ET::Char::backslash())),
@@ -488,6 +488,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                         delims.push(t.clone());
                         iter.next();
                     }
+                    let end_marker = delims.pop().unwrap();
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
                     'L: loop {
@@ -505,6 +506,13 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                                     throw!("Unexpected end group token: {}",t.to_str(engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone())
                                 } else {
                                     depth -= 1;
+                                    if depth == 0 && t == end_marker  && arg.ends_with(delims.as_slice()) {
+                                        for _ in 0..delims.len() {
+                                            arg.pop();
+                                        }
+                                        arg.remove(0);
+                                        break 'L;
+                                    }
                                     arg.push(t);
                                     if depth == 0 {
                                         match removebraces {
@@ -512,22 +520,16 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                                             _ => ()
                                         }
                                     }
-                                    if depth == 0 && arg.ends_with(delims.as_slice()) {
-                                        for _ in 0..delims.len() {
-                                            arg.pop();
-                                        }
-                                        break 'L;
-                                    }
                                 }
                             }
                             Some(t) => {
-                                arg.push(t);
-                                if depth == 0 && arg.ends_with(delims.as_slice()) {
+                                if depth == 0 && t == end_marker && arg.ends_with(delims.as_slice()) {
                                     for _ in 0..delims.len() {
                                         arg.pop();
                                     }
                                     break 'L;
                                 }
+                                arg.push(t);
                             }
                             None => file_end!(cmd.cause.clone())
                         }

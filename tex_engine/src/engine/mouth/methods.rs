@@ -96,7 +96,7 @@ macro_rules! get_until_endgroup {
     ($engine:ident,$tk:ident => $f:expr) => {
         let mut depth = 1;
         let mut ok = false;
-        while let Some(($tk,_)) = $engine.get_next_token()? {
+        while let Some($tk) = $engine.mouth.get_next_simple($engine.state,$engine.interner)? {
             match $tk.catcode() {
                 CategoryCode::BeginGroup => depth += 1,
                 CategoryCode::EndGroup => {

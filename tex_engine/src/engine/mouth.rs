@@ -85,14 +85,14 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<Token<ET>>) -> Result<(),TeXError<ET>> {
-        match engine.get_next_token()? {
+        match engine.mouth.get_next_simple(engine.state,engine.interner)? {
             None => file_end!(),
-            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => {
+            Some(t) if t.catcode() == CategoryCode::BeginGroup => {
                 get_until_endgroup!(engine,t => vec.push(t));
                 Ok(())
                 //Self::get_until_endgroup(engine,&mut|_,t| Ok(vec.push(t)))
             }
-            Some((o,_)) => {
+            Some(o) => {
                 vec.push(o);
                 Ok(())
             }

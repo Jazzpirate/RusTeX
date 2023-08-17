@@ -41,7 +41,7 @@ pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>,
                               -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\advance");
     catch_prim!(engine.skip_whitespace() => (ADVANCE,cmd));
-    match catch_prim!(engine.get_next_unexpandable() => (ADVANCE,cmd)) {
+    match catch_prim!(engine.get_next_unexpandable_same_file() => (ADVANCE,cmd)) {
         None => file_end_prim!(ADVANCE,cmd),
         Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
@@ -284,7 +284,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let csidx = engine.state.push_csname();
     let mut csname = engine.memory.get_string();
     while engine.state.current_csname() == Some(csidx) {
-        match catch_prim!(engine.get_next_unexpandable() => (name,cmd)) {
+        match catch_prim!(engine.get_next_unexpandable_same_file() => (name,cmd)) {
             None => file_end!(cmd.cause),
             Some(sc) => match sc.command {
                 BaseCommand::Unexpandable {name:"endcsname",..} => engine.state.pop_csname(),
@@ -453,7 +453,7 @@ pub fn divide<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, 
                              -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\divide");
     catch_prim!(engine.skip_whitespace() => (DIVIDE,cmd));
-    match catch_prim!(engine.get_next_unexpandable() => (DIVIDE,cmd)) {
+    match catch_prim!(engine.get_next_unexpandable_same_file() => (DIVIDE,cmd)) {
         None => file_end_prim!(DIVIDE,cmd),
         Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
@@ -940,7 +940,7 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
         },
         _ => unreachable!()
     };
-    while let Some(next) = catch_prim!(engine.get_next_unexpandable() => (HBOX,cmd)) {
+    while let Some(next) = catch_prim!(engine.get_next_unexpandable_same_file() => (HBOX,cmd)) {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
             BaseCommand::Relax => {},
@@ -1685,7 +1685,7 @@ pub fn multiply<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
                                -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"\\multiply");
     catch_prim!(engine.skip_whitespace() => (MULTIPLY,cmd));
-    match catch_prim!(engine.get_next_unexpandable() => (MULTIPLY,cmd)) {
+    match catch_prim!(engine.get_next_unexpandable_same_file() => (MULTIPLY,cmd)) {
         None => file_end_prim!(MULTIPLY,cmd),
         Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
@@ -2118,7 +2118,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, g
     let i = catch_prim!(engine.get_int() => (SETBOX,cmd)).to_i64();
     if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
     catch_prim!(engine.skip_eq_char() => (SETBOX,cmd));
-    match catch_prim!(engine.get_next_unexpandable() => (SETBOX,cmd)) {
+    match catch_prim!(engine.get_next_unexpandable_same_file() => (SETBOX,cmd)) {
         None => file_end_prim!(SETBOX,cmd),
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
@@ -2162,7 +2162,7 @@ pub const SHIPOUT: &str = "shipout";
 pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                 -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\shipout");
-    match catch_prim!(engine.get_next_unexpandable() => (SHIPOUT,cmd)) {
+    match catch_prim!(engine.get_next_unexpandable_same_file() => (SHIPOUT,cmd)) {
         None => file_end_prim!(SHIPOUT,cmd),
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
@@ -2265,7 +2265,7 @@ pub const THE : &str = "the";
 pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>)
                           -> Result<(),TeXError<ET>> {
     debug_log!(trace => "\\the");
-    match catch_prim!(engine.get_next_unexpandable() => (THE,cmd)) {
+    match catch_prim!(engine.get_next_unexpandable_same_file() => (THE,cmd)) {
         Some(c) => match c.command {
             BaseCommand::Int(ass) => {
                 let val = ass.get(engine,c.source)?;
@@ -2423,7 +2423,7 @@ pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
         },
         _ => unreachable!()
     };
-    while let Some(next) = catch_prim!(engine.get_next_unexpandable() => (VBOX,cmd)) {
+    while let Some(next) = catch_prim!(engine.get_next_unexpandable_same_file() => (VBOX,cmd)) {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
             BaseCommand::Relax => {},

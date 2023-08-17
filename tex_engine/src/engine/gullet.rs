@@ -26,6 +26,12 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         methods::get_next_unexpandable(engine)
     }
 
+    /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
+    /// (or [`None`] if the [`Mouth`] is empty)
+    fn get_next_unexpandable_same_file(engine:&mut EngineRef<ET>) -> Result<Option<ResolvedToken<ET>>,TeXError<ET>> {
+        methods::get_next_unexpandable_same_file(engine)
+    }
+
     /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
     /// the input stream, after expanding macros as necessary.
     fn get_next_stomach_command(engine:&mut EngineRef<ET>) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {

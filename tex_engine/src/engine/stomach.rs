@@ -14,7 +14,8 @@ pub struct ShipoutData<ET:EngineType> {
     pub page:Vec<TeXNode<ET>>,
     pub pagegoal:ET::Dim,
     pub pagetotal:ET::Dim,
-    pub prevdepth: ET::Dim
+    pub prevdepth: ET::Dim,
+    pub to_ship:Option<ET::Node>
 }
 impl<ET:EngineType> ShipoutData<ET> {
     pub fn new() -> Self {
@@ -23,7 +24,8 @@ impl<ET:EngineType> ShipoutData<ET> {
             page:Vec::new(),
             pagegoal:ET::Dim::from_sp(i32::MAX as i64),
             pagetotal:ET::Dim::from_sp(0),
-            prevdepth:ET::Dim::from_sp(-65536000)
+            prevdepth:ET::Dim::from_sp(-65536000),
+            to_ship:None
         }
     }
     pub fn get_page(&mut self) -> Vec<TeXNode<ET>> {
@@ -71,32 +73,28 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
 
     fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>>;
 
-    fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) -> Option<ET::Node> {
+    fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
         let sd = engine.stomach.shipout_data();
-        if force || sd.pagetotal >= sd.pagegoal {
-            if sd.page.is_empty() { return None }
+        if (force || sd.pagetotal >= sd.pagegoal) && !sd.page.is_empty() {
             todo!("shipout: {}>={}\nPage: {:?}",sd.pagetotal,sd.pagegoal,sd.page)
-        } else { None }
+        }
     }
 
     fn next_shipout_box(engine:&mut EngineRef<ET>) -> Result<Option<ET::Node>,TeXError<ET>> {
         loop {
-            match Self::maybe_shipout(engine,false) {
-                Some(b) => {
-                    debug_log!(trace=>"Shipout box");
-                    return Ok(Some(b))
-                },
-                None => {
+            match engine.stomach.shipout_data().to_ship {
+                None =>
                     match engine.get_next_stomach_command()? {
                         Some(cmd) => {
                             Self::digest(engine,cmd)?
                         }
                         None => {
                             debug_log!(trace=>"No more commands; force shipout box");
-                            return Ok(Self::maybe_shipout(engine,true))
+                            Self::maybe_shipout(engine,true);
+                            return Ok(std::mem::take(&mut engine.stomach.shipout_data_mut().to_ship))
                         }
                     }
-                }
+                Some(_) => todo!()
             }
         }
     }

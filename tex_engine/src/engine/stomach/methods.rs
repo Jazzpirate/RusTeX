@@ -25,6 +25,9 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     }
                 }
             }
+            if engine.state.mode() == TeXMode::Vertical {
+                ET::Stomach::maybe_shipout(engine,true)
+            }
             Ok(apply(engine, cmd.source)?)
         }
         Assignment {name,set} => {
@@ -98,12 +101,15 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                             Some(b) => engine.stomach.push_node(b.as_node()),
                             None => {}
                         }
-                        Ok(())
                     }
                     Some(crate::tex::nodes::OpenBox::Paragraph {list}) =>
                         todo!("Close paragraph"),
                     _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                 }
+                if engine.state.mode() == TeXMode::Vertical {
+                    ET::Stomach::maybe_shipout(engine,true)
+                }
+                Ok(())
             }
             _ => throw!("Unexpected end group" => cmd.source.cause)
         }
