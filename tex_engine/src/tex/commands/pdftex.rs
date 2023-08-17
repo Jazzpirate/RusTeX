@@ -2,11 +2,11 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use std::marker::PhantomData;
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::numeric_methods::expand_until_space;
-use crate::engine::state::State;
+use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
@@ -82,6 +82,9 @@ impl PDFColor {
         }
     }
 }
+
+#[derive(Debug,Clone)]
+pub struct PDFObj {pub content: String} // TODO
 
 #[derive(Debug,Clone)]
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
@@ -212,6 +215,45 @@ pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSo
     engine.memory.return_token_vec(v);
     Ok(())
 }
+
+
+pub fn pdflastobj<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>)
+                                     -> Result<ET::Int,TeXError<ET>> where ET::State:PDFState<ET> {
+    Ok(catch_prim!(ET::Int::from_i64(engine.state.pdfobjs().len() as i64 - 1) => ("pdflastobj",cmd)))
+}
+
+/// "pdfobj"
+pub const PDFOBJ : &str = "pdfobj";
+
+pub const OBJECT_TYPE_SPEC: [&'static str; 3] = ["reserveobjnum","useobjnum","stream"];
+/// `\pdfobj`
+pub fn pdfobj<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
+                                        -> Result<(), TeXError<ET>> where ET::State:PDFState<ET> {
+    debug_log!(trace=>"\\pdfobj");
+    match catch_prim!(engine.get_keywords(OBJECT_TYPE_SPEC.to_vec()) => (PDFOBJ,cmd)) {
+        None => throw!("Expected one of 'reserveobjnum','useobjnum','stream'" => cmd.cause),
+        Some("reserveobjnum") => engine.state.pdfobjs().push(PDFObj { content:String::new()}), // TODO
+        Some("useobjnum") => {
+            let i = catch_prim!(engine.get_int() => (PDFOBJ,cmd)).to_i64();
+            if i < 0 || engine.state.pdfobjs().len() as i64 <= i {throw!("Invalid object number: {}",i => cmd.cause)}
+            let mut str = String::new();
+            catch_prim!(engine.get_braced_string(&mut str) => (PDFOBJ,cmd));
+            *engine.state.pdfobjs().get_mut(i as usize).unwrap() = PDFObj { content:str};
+        },
+        Some("stream") => {
+            catch_prim!(engine.skip_whitespace() => (PDFOBJ,cmd));
+            if catch_prim!(engine.get_keyword("attr") => (PDFOBJ,cmd)) {
+                // TODO
+                let mut ret = engine.memory.get_token_vec();
+                catch_prim!(engine.get_argument(&mut ret) => (PDFOBJ,cmd));
+            }
+        },
+        _ => unreachable!()
+    }
+    Ok(())
+}
+
+
 pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                                         -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\pdfresettimer");
@@ -257,7 +299,8 @@ pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
 /// "pdfmatch"
 pub const PDFMATCH : &str = "pdfmatch";
 /// `\pdmatch`
-pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>>
+    where ET::State:PDFState<ET>{
     debug_log!(trace=>"pdfmatch");
     let icase = catch_prim!(engine.get_keyword("icase") => (PDFMATCH,cmd));
     let subcount = if catch_prim!(engine.get_keyword("subcount") => (PDFMATCH,cmd)) {
@@ -331,7 +374,7 @@ pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
-pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>> {
+pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,cmd));
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,cmd));
     register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,cmd));
@@ -343,11 +386,14 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_unexpandable!(pdfglyphtounicode,engine,None,(e,cmd) =>pdfglyphtounicode::<ET>(e,cmd));
     register_dim_assign!(pdfhorigin,engine);
     register_int_assign!(pdfoutput,engine);
+    register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,c));
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(c));
     register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,cmd,f));
     register_int_assign!(pdfminorversion,engine);
+    register_unexpandable!(pdfobj,engine,None,(e,cmd) =>pdfobj::<ET>(e,cmd));
     register_int_assign!(pdfobjcompresslevel,engine);
     register_dim_assign!(pdfpageheight,engine);
+    register_tok_assign!(pdfpageresources,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
     register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
@@ -395,7 +441,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,tagcode);
     cmtodo!(engine,pdflastannot);
     cmtodo!(engine,pdflastlink);
-    cmtodo!(engine,pdflastobj);
     cmtodo!(engine,pdflastxform);
     cmtodo!(engine,pdflastximage);
     cmtodo!(engine,pdflastximagecolordepth);
@@ -414,7 +459,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfpxdimen);
     cmtodo!(engine,pdfthreadmargin);
     cmtodo!(engine,pdfpageattr);
-    cmtodo!(engine,pdfpageresources);
     cmtodo!(engine,pdfpagesattr);
     cmtodo!(engine,pdfpkmode);
     cmtodo!(engine,ifincsname);
@@ -463,7 +507,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfnames);
     cmtodo!(engine,pdfnobuiltintounicode);
     cmtodo!(engine,pdfnoligatures);
-    cmtodo!(engine,pdfobj);
     cmtodo!(engine,pdfoutline);
     cmtodo!(engine,pdfprimitive);
     cmtodo!(engine,pdfrefobj);

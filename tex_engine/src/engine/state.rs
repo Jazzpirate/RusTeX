@@ -9,6 +9,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory};
+use crate::tex::commands::pdftex::PDFObj;
 use crate::tex::nodes::HVBox;
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip};
@@ -19,7 +20,7 @@ pub mod fields;
 pub mod modes;
 
 /// A TeX state
-pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
+pub trait State<ET:EngineType<State=Self>>:Clone+'static {
 
     fn push_csname(&mut self) -> usize;
     fn current_csname(&self) -> Option<usize>;
@@ -37,8 +38,6 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn file_closein(&mut self, i: usize);
     fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
     fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
-
-    fn pdfmatches(&mut self) -> &mut Vec<String>;
 
     /// push a new group onto the stack
     fn stack_push(&mut self, g: GroupType);
@@ -166,13 +165,19 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
     fn push_aftergroup(&mut self, t:Token<ET>);
 }
 
+pub trait PDFState<ET:EngineType<State=Self>>:State<ET> {
+    fn pdfmatches(&mut self) -> &mut Vec<String>;
+    fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
+}
+
 #[derive(Clone)]
-pub struct TeXState<ET:EngineType<State=Self>> {
+pub struct PDFTeXState<ET:EngineType<State=Self>> {
     out_files:Vec<Option<ET::File>>,
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
     afterassignment:Option<Token<ET>>,
     pdfmatches:Vec<String>,
+    pdfobjs:Vec<PDFObj>,
 
     current_font:SingleValueField<ET::Font>,
 
@@ -208,7 +213,7 @@ pub struct TeXState<ET:EngineType<State=Self>> {
     primitive_tokregisters: TokMapField<ET>,
 }
 use crate::utils::strings::CharType;
-impl<ET:EngineType<State=Self>> TeXState<ET> {
+impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
     pub fn new(fontstore:&ET::FontStore) -> Self {
         let mut state = Self {
             out_files:vec!(),
@@ -219,6 +224,7 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
             aftergroups:vec!(vec!()),
             mode: TeXMode::Vertical,
             pdfmatches:vec!(),
+            pdfobjs:vec!(),
             /* filesystem: fs,*/
             grouptype: vec![(GroupType::Top,None)],
             endlinechar: SingleValueField::new(Some(ET::Char::carriage_return())),
@@ -269,7 +275,13 @@ impl<ET:EngineType<State=Self>> TeXState<ET> {
         state
     }
 }
-impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
+
+impl<ET:EngineType<State=Self>> PDFState<ET> for PDFTeXState<ET> {
+    fn pdfmatches(&mut self) -> &mut Vec<String> { &mut self.pdfmatches }
+    fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
+}
+
+impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
     fn get_current_font(&self) -> &ET::Font {
         self.current_font.get()
     }
@@ -282,7 +294,6 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
             self.current_font.set_locally(f)
         }
     }
-    fn pdfmatches(&mut self) -> &mut Vec<String> { &mut self.pdfmatches }
 
     fn set_afterassignment(&mut self, t: Token<ET>) {
         self.afterassignment = Some(t)

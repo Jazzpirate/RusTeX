@@ -8,7 +8,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::{Interner, Memory};
 use crate::engine::mouth::Mouth;
-use crate::engine::state::State;
+use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
 use crate::tex;
 use crate::tex::nodes::CustomNode;
@@ -199,7 +199,7 @@ impl<ET:EngineType> EngineStruct<ET> {
         self.init_file("latex.ltx")
     }
 }
-impl<ET:EngineType> EngineStruct<ET> where ET::Node:From<PDFTeXNode<ET>> {
+impl<ET:EngineType> EngineStruct<ET> where ET::Node:From<PDFTeXNode<ET>>,ET::State:PDFState<ET> {
     pub fn pdftex(&mut self) -> Result<(),TeXError<ET>> {
         tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.components());
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);

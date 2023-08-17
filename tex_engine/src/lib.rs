@@ -56,7 +56,7 @@ mod tests {
     use crate::engine::gullet::{Gullet,TeXGullet};
     use crate::engine::mouth::StandardMouth;
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
-    use crate::engine::state::{State, TeXState};
+    use crate::engine::state::{State, PDFTeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, ShipoutDefaultStomach, Stomach};
     use crate::engine::mouth::Mouth;
 
@@ -161,7 +161,7 @@ mod tests {
             type MuStretchShrinkDim = MuFill;
             type CommandReference = ();
             type TokenReference = FileTokenReference<Self>;
-            type State = TeXState<Self>;
+            type State = PDFTeXState<Self>;
             type Mouth = StandardMouth<Self>;
             type Gullet = TeXGullet<Self>;
             type Stomach = ShipoutDefaultStomach<Self>;
@@ -169,7 +169,7 @@ mod tests {
         let mut interner = Interner::new();
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new(&mut interner);
-        let state = TeXState::new(&fonts);
+        let state = PDFTeXState::new(&fonts);
         let gullet = TeXGullet::new();
         let stomach = ShipoutDefaultStomach::new();
         let mut engine = crate::engine::EngineStruct::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
