@@ -121,7 +121,7 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineRef<ET>, expand_prote
                     })?,
                 BaseCommand::None if err_on_unknowns => match res.source.cause.base {
                     BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
-                    BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(engine.memory)),
+                    BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(engine.interner)),
                 }
                 _ => match engine.expand(res)? {
                     Some(res) => f(engine, res.source.cause)?,
@@ -300,7 +300,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                             return Ok(Some(keywords[0]))
                         }
                     } else if keywords.contains(&current.as_str()) {
-                        engine.mouth.requeue(next.source.cause,engine.memory);
+                        engine.mouth.requeue(next.source.cause);
                         rs.reset(engine.memory);
                         keywords = keywords.into_iter().filter(|s| s == &current).collect();
                         return Ok(Some(keywords[0]))
@@ -309,7 +309,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                     }
                 }
                 _ if keywords.contains(&current.as_str()) => {
-                    engine.mouth.requeue(next.source.cause,engine.memory);
+                    engine.mouth.requeue(next.source.cause);
                     rs.reset(engine.memory);
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Ok(Some(keywords[0]))
@@ -338,7 +338,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) -> 
             }
             BaseCommand::Char {char,..} => ret.push(char.as_char()), //(char.as_bytes())),//ret.push(char.to_char()),
             _ => {
-                engine.mouth.requeue(next.source.cause,engine.memory);
+                engine.mouth.requeue(next.source.cause);
                 return Ok(())
             }
         }
@@ -354,7 +354,7 @@ pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut Stri
             }
             BaseToken::CS(name) => {
                 if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
-                let str = name.to_str(engine.memory);
+                let str = name.to_str(engine.interner);
                 ret.push_str(str);
                 if str.len() > 1 || *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
                     ret.push(' ')
@@ -394,7 +394,7 @@ pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineRef<ET>, v:&Vec<Token<E
                     BaseToken::Char(c,CategoryCode::Space) => string.push(' '),
                     BaseToken::Char(c,_) => string.push(c.as_char()),
                     BaseToken::CS(str) => {
-                        let str = str.to_str(engine.memory);
+                        let str = str.to_str(engine.interner);
                         string.push_str(str);
                         if str.len() != 1 || *cc.get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
                             string.push(' ');
@@ -410,7 +410,7 @@ pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineRef<ET>, v:&Vec<Token<E
                     BaseToken::Char(c,_) => string.push(c.as_char()),
                     BaseToken::CS(str) => {
                         string.push(esc);
-                        let str = str.to_str(engine.memory);
+                        let str = str.to_str(engine.interner);
                         string.push_str(str);
                         if str.len() != 1 || *cc.get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
                             string.push(' ');
@@ -554,12 +554,12 @@ impl<ET:EngineType> EngineRef<'_,ET> {
                     if chars.contains(&c) {
                         Ok(Some(c))
                     } else {
-                        self.mouth.requeue(res.source.cause,self.memory);
+                        self.mouth.requeue(res.source.cause);
                         Ok(None)
                     }
                 }
                 _ => {
-                    self.mouth.requeue(res.source.cause,self.memory);
+                    self.mouth.requeue(res.source.cause);
                     Ok(None)
                 }
             }
@@ -572,7 +572,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
             Some(res) => match res.command {
                 BaseCommand::Char { char:c, .. } if c.as_bytes() == [char] => Ok(true),
                 _ => {
-                    self.mouth.requeue(res.source.cause,self.memory);
+                    self.mouth.requeue(res.source.cause);
                     Ok(false)
                 }
             }
@@ -613,7 +613,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
                     None => (),
                     Some(c) => f(self,Token::new(BaseToken::Char(c,CategoryCode::Other),None))?
                 }
-                let str = ET::Char::tokenize(str.to_str(self.memory)).to_vec();
+                let str = ET::Char::tokenize(str.to_str(self.interner)).to_vec();
                 for c in &str {
                     f(self,Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
                     ),None))?
@@ -709,7 +709,7 @@ macro_rules! get_expanded_group {
                         })?,
                     BaseCommand::None if $err_on_unknowns => match res.source.cause.base {
                         BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
-                        BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str($engine.memory)),
+                        BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str($engine.interner)),
                     }
                     _ => match $engine.expand(res)? {
                         Some(res) => {

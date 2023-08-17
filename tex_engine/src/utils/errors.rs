@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::EngineType;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::tex::token::{Token, TokenReference};
 use crate::utils::strings::CharType;
 #[derive(Clone,Debug)]
@@ -11,22 +11,22 @@ pub struct TeXError<ET:EngineType> {
     pub source:Option<Box<TeXError<ET>>>,
 }
 impl<ET:EngineType> TeXError<ET> {
-    pub fn throw_string(self,memory:&mut Memory<ET>) -> String {
+    pub fn throw_string(self,interner:&Interner<ET::Char>) -> String {
         let mut ret = self.msg;
         match self.cause {
-            Some(tk) => match tk.sourceref.as_ref().map(|t| t.trace(memory)).flatten() {
+            Some(tk) => match tk.sourceref.as_ref().map(|t| t.trace(interner)).flatten() {
                 Some(trace) => {
-                    ret.push_str(format!(": {} - {}",tk.to_str(memory,Some(ET::Char::backslash())),trace).as_str());
+                    ret.push_str(format!(": {} - {}",tk.to_str(interner,Some(ET::Char::backslash())),trace).as_str());
                 }
                 None => {
-                    ret.push_str(format!(": {}",tk.to_str(memory,Some(ET::Char::backslash()))).as_str());
+                    ret.push_str(format!(": {}",tk.to_str(interner,Some(ET::Char::backslash()))).as_str());
                 }
             },
             None => ()
         }
         match self.source {
             Some(src) => {
-                ret.push_str(format!("\n  caused by: {}",src.throw_string(memory)).as_str());
+                ret.push_str(format!("\n  caused by: {}",src.throw_string(interner)).as_str());
             }
             None => {}
         }

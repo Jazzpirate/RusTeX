@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use kpathsea::Kpathsea;
 use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KpseResult;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::engine::mouth::string_source::StringSource;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
@@ -32,12 +32,12 @@ pub trait File<Char:CharType>:Clone {
     fn exists(&self) -> bool;
     fn content_string(&self) -> Self::OptionRef<'_>;
     fn open_out(&self);
-    fn open_in<ET:EngineType<Char=Char>>(&self,memory:&mut Memory<ET>);
+    fn open_in(&self,interner:&mut Interner<Char>);
     fn close_out(&self);
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,memory:&mut Memory<ET>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>>;
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>>;
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -82,13 +82,13 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
         todo!("Physical file system not implemented yet")
     }
-    fn open_in<ET:EngineType<Char=Char>>(&self,memory:&mut Memory<ET>) {
+    fn open_in(&self,interner:&mut Interner<Char>) {
         todo!("Physical file system not implemented yet")
     }
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,memory:&mut Memory<ET>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -107,14 +107,14 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let mut w = self.contents.borrow_mut();
         *w = Some(vec!());
     }
-    fn open_in<ET:EngineType<Char=Char>>(&self,memory:&mut Memory<ET>) {
+    fn open_in(&self,interner:&mut Interner<Char>) {
         let w = &*self.contents.borrow();
         let mut open = self.open.borrow_mut();
         let (v,eof) = match w {
             None => (vec!(),true),
             Some(v) => (v.clone(),false)
         };
-        let mut ss = StringSource::new(v,Some(memory.interner.get_or_intern(self.path.to_str().unwrap().to_string())));
+        let mut ss = StringSource::new(v,Some(interner.from_string(self.path.to_str().unwrap())));
         ss.state.eof = eof;
         *open = Some(ss);
     }
@@ -127,14 +127,14 @@ impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
         let open = open.as_mut().unwrap();
         open.eof::<ET>(state)//.peek().is_none()
     }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,memory:&mut Memory<ET>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) -> Result<(),TeXError<ET>> {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) -> Result<(),TeXError<ET>> {
         let open = &mut *self.open.borrow_mut();
         match open {
             None => throw!("File not open"),
             Some(m) => {
                 let mut ingroups = 0;
                 loop {
-                    m.read(memory,cc,endlinechar,|tk| match &tk.base {
+                    m.read(interner,cc,endlinechar,|tk| match &tk.base {
                         BaseToken::Char(c,CategoryCode::BeginGroup) => {ingroups += 1; f(tk)},
                         BaseToken::Char(c,CategoryCode::EndGroup) => {ingroups += 1; f(tk)},
                         _ => f(tk)

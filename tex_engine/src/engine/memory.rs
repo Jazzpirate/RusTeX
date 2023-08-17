@@ -1,25 +1,47 @@
 use array_init::array_init;
 use log::error;
 use string_interner::backend::BufferBackend;
-use string_interner::StringInterner;
+use string_interner::{DefaultSymbol, StringInterner};
 use crate::engine::EngineType;
 use crate::tex::token::Token;
-use crate::utils::strings::TeXStr;
+use crate::utils::strings::{CharType, TeXStr};
 
 const VEC_SIZE:usize = 32;
 
+#[derive(Clone)]
+pub struct Interner<Char:CharType> {
+    interner:StringInterner<BufferBackend,ahash::RandomState>,
+    pub relax:TeXStr<Char>,
+    pub par:TeXStr<Char>,
+    pub empty_str:TeXStr<Char>,
+}
+impl<Char:CharType> Interner<Char> {
+    pub fn new() -> Self {
+        let mut interner = StringInterner::<BufferBackend,ahash::RandomState>::new();
+        Interner {
+            relax:TeXStr::from_primitive(interner.get_or_intern_static("relax")),
+            par:TeXStr::from_primitive(interner.get_or_intern_static("par")),
+            empty_str:TeXStr::from_primitive(interner.get_or_intern_static("")),
+            interner
+        }
+    }
+    pub fn resolve(&self,symbol:DefaultSymbol) -> &str {
+        self.interner.resolve(symbol).unwrap()
+    }
+    pub fn from_static(&mut self,s:&'static str) -> TeXStr<Char> {
+        TeXStr::from_primitive(self.interner.get_or_intern_static(s))
+    }
+    pub fn from_string(&mut self,s:&str) -> TeXStr<Char> {
+        TeXStr::from_primitive(self.interner.get_or_intern(s))
+    }
+}
+#[derive(Clone)]
 pub struct Memory<ET:EngineType> {
     args:Option<[Vec<Token<ET>>;9]>,
     token_vecs:Vec<Vec<Token<ET>>>,
     strings:Vec<String>,
-    pub interner: StringInterner<BufferBackend,ahash::RandomState>,
-    pub relax:TeXStr<ET::Char>,
-    pub par:TeXStr<ET::Char>,
-    pub empty_str:TeXStr<ET::Char>,
 }
-impl<ET:EngineType> Clone for Memory<ET> {
-    fn clone(&self) -> Self { Self::new_with(self.interner.clone())}
-}
+
 impl<ET:EngineType> Memory<ET> {
     pub fn print_stats(&self) {
         error!("args:");
@@ -35,18 +57,11 @@ impl<ET:EngineType> Memory<ET> {
             error!(" -  {}",s.capacity());
         }
     }
-    pub fn new_with(mut interner:StringInterner<BufferBackend,ahash::RandomState>) -> Self {
-        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
-        let relax = TeXStr::from_primitive(interner.get_or_intern_static("relax"));
-        let par = TeXStr::from_primitive(interner.get_or_intern_static("par"));
-        let empty_str = TeXStr::from_primitive(interner.get_or_intern_static(""));
-        Memory{
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:(0..8).map(|_|String::with_capacity(64)).collect(),token_vecs,interner,relax,par,empty_str
-        }
-    }
     pub fn new() -> Self {
-        let mut interner = StringInterner::<BufferBackend,ahash::RandomState>::new();
-        Self::new_with(interner)
+        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
+        Memory{
+            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:(0..8).map(|_|String::with_capacity(64)).collect(),token_vecs
+        }
     }
     pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
         std::mem::take(&mut self.args).unwrap()

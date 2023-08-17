@@ -6,7 +6,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::tex::fonts::tfm_files::TfmFile;
 use crate::tex::numbers::{Dim, Dimi32};
 use crate::throw;
@@ -72,7 +72,7 @@ impl FontStore for TfmFontStore {
     fn null(&self) -> Self::Font { self.null.clone() }
 }
 impl TfmFontStore {
-    pub fn new<ET:EngineType<Char=u8>>(memory:&mut Memory<ET>) -> Self {
+    pub fn new(interner:&mut Interner<u8>) -> Self {
         let null = TfmFile {
             hyphenchar:45,
             skewchar:255,
@@ -90,7 +90,7 @@ impl TfmFontStore {
             filepath:"nullfont".to_string()
         };
         let font = Ptr::new(TfmFontInner{
-            name:TeXStr::from_static("nullfont",memory),
+            name:TeXStr::from_static("nullfont",interner),
             hyphenchar:Mut::new(null.hyphenchar as i64),
             skewchar:Mut::new(null.skewchar as i64),
             file:Ptr::new(null),

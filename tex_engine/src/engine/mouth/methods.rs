@@ -13,12 +13,12 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     /// get the next [`Token`] from the [`Mouth`]
     #[inline(always)]
     pub fn get_next_token(&mut self) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
-        self.mouth.get_next(self.state,self.memory,self.outputs)
+        self.mouth.get_next(self.state,self.interner,self.outputs)
     }
 
     /// Skip whitespace characters from the [`Mouth`]
     pub fn skip_whitespace(&mut self) -> Result<(),TeXError<ET>> {
-        self.mouth.skip_whitespace(self.state,self.memory,self.outputs)
+        self.mouth.skip_whitespace(self.state,self.interner)
     }
 
     /// read optional `=` characters from the [`Mouth`]
@@ -30,11 +30,11 @@ impl<ET:EngineType> EngineRef<'_,ET> {
                 BaseToken::Char(c,_) if c.to_usize() == 61 => {
                     match self.get_next_token()? {
                         Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
-                        Some((tk,_)) => self.mouth.requeue(tk,self.memory),
+                        Some((tk,_)) => self.mouth.requeue(tk),
                         _ => ()
                     }
                 },
-                _ => self.mouth.requeue(tk,self.memory)
+                _ => self.mouth.requeue(tk)
             }
         }
         Ok(())
@@ -83,11 +83,11 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&mut self,len:usize) -> String {
-        self.mouth.preview(len,self.memory)
+        self.mouth.preview(len,self.interner)
     }
 
     pub fn current_position(&mut self) -> String {
-        self.mouth.file_line(self.memory)
+        self.mouth.file_line(self.interner)
     }
 }
 

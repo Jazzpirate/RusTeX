@@ -10,7 +10,7 @@
 
 use std::fmt::Debug;
 use crate::engine::EngineType;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::CommandSource;
 use crate::utils::Ptr;
@@ -26,12 +26,12 @@ pub enum BaseToken<C:CharType> {
     Char(C, CategoryCode)
 }
 impl<C:CharType> BaseToken<C> {
-    pub fn to_str<ET:EngineType<Char=C>>(& self,memory:&Memory<ET>,escapechar:Option<C>) -> String {
+    pub fn to_str(& self,interner:&Interner<C>,escapechar:Option<C>) -> String {
         match self {
             BaseToken::Char(c, _) => c.as_char().to_string(),
             BaseToken::CS(n) => match escapechar {
-                Some(c) => (c.as_char().to_string() + n.to_str(memory)).to_string(),
-                None => n.to_str(memory).to_string()
+                Some(c) => (c.as_char().to_string() + n.to_str(interner)).to_string(),
+                None => n.to_str(interner).to_string()
             }
         }
     }
@@ -89,8 +89,8 @@ pub struct Token<ET:EngineType> {
 
 
 impl<ET:EngineType> Token<ET> {
-    pub fn to_str(&self,memory:&Memory<ET>,escapechar:Option<ET::Char>) -> String {
-        self.base.to_str(memory,escapechar)
+    pub fn to_str(&self,interner:&Interner<ET::Char>,escapechar:Option<ET::Char>) -> String {
+        self.base.to_str(interner,escapechar)
     }
 }
 impl<ET:EngineType> PartialEq for Token<ET> {
@@ -147,7 +147,7 @@ pub trait TokenReference<ET:EngineType<TokenReference = Self>>:Clone + Debug {
     fn from_expansion(cmd:&CommandSource<ET>) -> Self;
     fn from_file(base:&BaseToken<ET::Char>,fr:FileReference) -> Self;
     fn with_ref(&self,base:&BaseToken<ET::Char>) -> Self { self.clone() }
-    fn trace(&self,memory:&mut Memory<ET>) -> Option<String> { None }
+    fn trace(&self,interner:&Interner<ET::Char>) -> Option<String> { None }
 }
 impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for () {
     fn from_expansion(_cmd: &CommandSource<ET>) -> Self { () }
@@ -174,13 +174,13 @@ pub enum FileTokenReferenceI<ET:EngineType<TokenReference = FileTokenReference<E
     Expansion{cmd:Option<ET::CommandReference>, token: Token<ET>}
 }
 impl<ET:EngineType<TokenReference = FileTokenReference<ET>>> FileTokenReferenceI<ET> {
-    pub fn trace(&self,memory:&mut Memory<ET>) -> Option<String> {
+    pub fn trace(&self,interner:&Interner<ET::Char>) -> Option<String> {
         use FileTokenReferenceI::*;
         match self {
-            File (FileReference{filename, start,end}) => Some(format!("File {} at {}:{} - {}:{}",memory.interner.resolve(*filename).unwrap(), start.0,start.1,end.0,end.1)),
+            File (FileReference{filename, start,end}) => Some(format!("File {} at {}:{} - {}:{}",interner.resolve(*filename), start.0,start.1,end.0,end.1)),
             Expansion {token, ..} => {
-                let mut trace = format!("Expanded from {}",token.to_str(memory,Some(ET::Char::backslash())));
-                match token.sourceref.as_ref().map(|r|r.trace(memory)).flatten() {
+                let mut trace = format!("Expanded from {}",token.to_str(interner,Some(ET::Char::backslash())));
+                match token.sourceref.as_ref().map(|r|r.trace(interner)).flatten() {
                     Some(s) => {
                         trace.push_str("\n - ");
                         trace.push_str(&s)
@@ -208,10 +208,10 @@ impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileTokenRefer
 /// A list of [`Token`]s
 pub struct TokenList<'a,ET:EngineType>(pub &'a [Token<ET>]);
 impl <'a,ET:EngineType> TokenList<'a,ET> {
-    pub fn to_str(&self,memory:&Memory<ET>) -> String {
+    pub fn to_str(&self,interner:&Interner<ET::Char>) -> String {
         let mut s = String::new();
         for t in self.0 {
-            s.push_str(&t.to_str(memory,Some(ET::Char::backslash())));
+            s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));
         }
         s
     }

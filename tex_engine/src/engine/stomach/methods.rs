@@ -30,7 +30,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         Assignment {name,set} => {
             set(engine,cmd.source,false)?;
             match engine.state.take_afterassignment() {
-                Some(t) => engine.mouth.requeue(t,engine.memory),
+                Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
             Ok(())
@@ -38,7 +38,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         ValueAss(set) => {
             set(engine,cmd.source,false)?;
             match engine.state.take_afterassignment() {
-                Some(t) => engine.mouth.requeue(t,engine.memory),
+                Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
             Ok(())
@@ -46,7 +46,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         Font(f) => {
             engine.state.set_current_font(f,false);
             match engine.state.take_afterassignment() {
-                Some(t) => engine.mouth.requeue(t,engine.memory),
+                Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
             Ok(())

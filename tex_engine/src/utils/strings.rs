@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use std::vec::IntoIter;
 use array_init::array_init;
 use crate::engine::EngineType;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
 
 
@@ -31,8 +31,8 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
     /// Parses a character from a byte iterator. For [`u8`], this is just `iter.next()`.
     fn from_u8_iter(iter:&mut IntoIter<u8>) -> Option<Self>;
 
-    fn from_str<ET:EngineType<Char=Self>>(s:&'static str,memory:&mut Memory<ET>) -> TeXStr<Self> {
-        TeXStr::from_static(s,memory)
+    fn from_str(s:&'static str,interner:&mut Interner<Self>) -> TeXStr<Self> {
+        TeXStr::from_static(s,interner)
     }
 
     fn tokenize(s:&str) -> Vec<Self>;
@@ -165,16 +165,17 @@ impl<C:CharType> TeXStr<C> {
     //pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
     //pub fn len(&self) -> usize { self.0.len() }
     //pub fn as_vec(&self) -> &Vec<C> { &self.0 }
+    pub fn symbol(&self) -> string_interner::DefaultSymbol { self.0 }
 }
 impl<C:CharType> TeXStr<C> {
-    pub fn to_str<'a,ET:EngineType<Char=C>>(&'a self,memory:&'a Memory<ET>) -> &'a str {
-        memory.interner.resolve(self.0).unwrap()
+    pub fn to_str<'a>(&'a self,interner:&'a Interner<C>) -> &'a str {
+        interner.resolve(self.0)
     }
-    pub fn from_static<ET:EngineType<Char=C>>(s:&'static str,memory:&mut Memory<ET>) -> Self {
-        Self(memory.interner.get_or_intern_static(s),PhantomData)
+    pub fn from_static(s:&'static str,interner:&mut Interner<C>) -> Self {
+        interner.from_static(s)
     }
-    pub fn from_string<ET:EngineType<Char=C>>(s:&String, memory:&mut Memory<ET>) -> Self {
-        Self(memory.interner.get_or_intern(s),PhantomData)
+    pub fn from_string(s:&String, interner:&mut Interner<C>) -> Self {
+        interner.from_string(s)
     }
     pub fn from_primitive(s:string_interner::DefaultSymbol) -> Self {
         Self(s,PhantomData)

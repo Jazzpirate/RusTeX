@@ -8,7 +8,7 @@ use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::tex::nodes::HVBox;
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip};
@@ -33,7 +33,7 @@ pub trait State<ET:EngineType<State=Self>>:Sized + Clone+'static {
 
     fn file_openout(&mut self,i:usize,f:ET::File);
     fn file_closeout(&mut self, i: usize);
-    fn file_openin(&mut self, i: usize, f: ET::File,memory:&mut Memory<ET>);
+    fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner<ET::Char>);
     fn file_closein(&mut self, i: usize);
     fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
     fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
@@ -305,11 +305,11 @@ impl<ET:EngineType<State=Self>> State<ET> for TeXState<ET> {
     fn pop_csname(&mut self) {
         self.csnames -= 1;
     }
-    fn file_openin(&mut self, i: usize, f: ET::File,memory:&mut Memory<ET>) {
+    fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner<ET::Char>) {
         if i >= self.in_files.len() {
             self.in_files.resize(i+1,None);
         }
-        f.open_in(memory);
+        f.open_in(interner);
         self.in_files[i] = Some(f);
     }
     fn file_closein(&mut self, i: usize) {

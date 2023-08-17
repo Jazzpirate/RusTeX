@@ -65,7 +65,7 @@ mod tests {
     use crate::utils::errors::TeXError;
     use ansi_term::Colour::*;
     use crate::engine::{Engine, EngineType, Outputs};
-    use crate::engine::memory::Memory;
+    use crate::engine::memory::{Interner, Memory};
     use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command};
     use crate::tex::commands::pdftex::PDFTeXNode;
     use crate::tex::fonts::{TfmFont, TfmFontStore};
@@ -166,16 +166,16 @@ mod tests {
             type Gullet = TeXGullet<Self>;
             type Stomach = ShipoutDefaultStomach<Self>;
         }
-        let mut memory = Memory::<Default>::new();
+        let mut interner = Interner::new();
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
-        let fonts = TfmFontStore::new(&mut memory);
+        let fonts = TfmFontStore::new(&mut interner);
         let state = TeXState::new(&fonts);
         let gullet = TeXGullet::new();
         let stomach = ShipoutDefaultStomach::new();
         let mut engine = crate::engine::EngineStruct::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
-        engine.memory = memory;
+        engine.interner = interner;
 
-        engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.memory),Some(Command::new(BaseCommand::Unexpandable {
+        engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
             name: "rustexBREAK",
             apply: |_,_| {
                 println!("HERE!");
@@ -192,7 +192,7 @@ mod tests {
                 error!("Mouth: {}",engine.mouth.stack.capacity());
             },
             Err(e) => {
-                (engine.outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(&mut engine.memory),engine.components().current_position(),engine.components().preview(100)));
+                (engine.outputs.error)(&format!("{}\n\nat:{}\n   {}...",e.throw_string(&mut engine.interner),engine.components().current_position(),engine.components().preview(100)));
                 panic!()
             }
         }

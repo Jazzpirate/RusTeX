@@ -5,7 +5,7 @@
 use std::vec::IntoIter;
 use crate::{debug_log, throw};
 use crate::engine::EngineType;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, FileReference, Token};
@@ -29,7 +29,8 @@ pub struct StringSourceState<C:CharType> {
     col : usize,
     string:IntoIter<u8>,
     charbuffer:Vec<(C, usize, usize)>,
-    pub(crate) eof:bool
+    pub(crate) eof:bool,
+    tempstr:String
 }
 impl<C:CharType> StringSourceState<C> {
     pub fn new(string: Vec<u8>) -> StringSourceState<C> {
@@ -39,7 +40,8 @@ impl<C:CharType> StringSourceState<C> {
             col: 0,
             string: string.into_iter(),
             charbuffer: Vec::new(),
-            eof: false
+            eof: false,
+            tempstr:String::new()
         }
     }
 
@@ -247,7 +249,7 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    fn get_escape<ET:EngineType<Char=C>>(&mut self,memory:&mut Memory<ET>,cc:&CategoryCodeScheme<C>,endline:Option<C>,a:C,line:usize,col:usize) -> (BaseToken<C>,usize,usize) {
+    fn get_escape(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,endline:Option<C>,a:C,line:usize,col:usize) -> (BaseToken<C>,usize,usize) {
         use crate::tex::catcodes::CategoryCode::*;
         debug_log!(trace=>"get_next_immediate:   Escape");
         match self.next_char(cc,endline) {
@@ -255,18 +257,18 @@ impl<C:CharType> StringSourceState<C> {
                 self.charbuffer.push((a,l,c));
                 self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
-                (BaseToken::CS(memory.empty_str),line, col)
+                (BaseToken::CS(interner.empty_str),line, col)
             }
             None => {
                 self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
-                (BaseToken::CS(memory.empty_str), line, col)
+                (BaseToken::CS(interner.empty_str), line, col)
             }
             Some((a,_,_)) if *cc.get(&a) == Letter => {
-                let mut str = memory.get_string();
+                self.tempstr.clear();
                 self.state = MouthState::S;
                 debug_log!(trace=>"get_next_immediate: Next character is Letter");
-                str.push(a.as_char());
+                self.tempstr.push(a.as_char());
                 loop {
                     match self.next_char(cc,endline) {
                         Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
@@ -275,7 +277,7 @@ impl<C:CharType> StringSourceState<C> {
                             break
                         }
                         Some((b,_,_)) if *cc.get(&b) == Letter =>
-                            str.push(b.as_char()),
+                            self.tempstr.push(b.as_char()),
                         Some(o) => {
                             self.charbuffer.push(o);
                             break
@@ -283,18 +285,16 @@ impl<C:CharType> StringSourceState<C> {
                         None => break
                     }
                 }
-                debug_log!(trace=>"get_next_immediate: Returning \\{:}",str);
-                let ret = BaseToken::CS(TeXStr::from_string(&str,memory));
-                memory.return_string(str);
+                debug_log!(trace=>"get_next_immediate: Returning \\{:}",self.tempstr);
+                let ret = BaseToken::CS(TeXStr::from_string(&self.tempstr,interner));
                 (ret,line, col)
             }
             Some((a,_,_)) => {
                 self.state = MouthState::M;
-                let mut str = memory.get_string();
-                str.push(a.as_char());
-                debug_log!(trace=>"get_next_immediate: Returning \\{}",str);
-                let ret = BaseToken::CS(    TeXStr::from_string(&str,memory));
-                memory.return_string(str);
+                self.tempstr.clear();
+                self.tempstr.push(a.as_char());
+                debug_log!(trace=>"get_next_immediate: Returning \\{}",self.tempstr);
+                let ret = BaseToken::CS(TeXStr::from_string(&self.tempstr,interner));
                 (ret, line, col)
             }
         }
@@ -309,7 +309,7 @@ impl<C:CharType> StringSourceState<C> {
             [`Space`](CategoryCode::Space), `\par` or nothing), and
         - `^^<char>`-syntax resolved.
      */
-    pub fn get_next_immediate<ET:EngineType<Char=C>>(&mut self, memory:&mut Memory<ET>,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<(BaseToken<C>,usize,usize)> {
+    pub fn get_next_immediate(&mut self, interner:&mut Interner<C>,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<(BaseToken<C>,usize,usize)> {
         use crate::tex::catcodes::CategoryCode::*;
         match self.next_char(cc,endline) {
             None => {
@@ -324,11 +324,11 @@ impl<C:CharType> StringSourceState<C> {
                         match self.state {
                             MouthState::N => {
                                 debug_log!(trace=>"get_next_immediate: State:N; returning \\par");
-                                Some((BaseToken::CS(memory.par), line, col))
+                                Some((BaseToken::CS(interner.par), line, col))
                             }
                             MouthState::S => {
                                 self.state = MouthState::N;
-                                return self.get_next_immediate(memory,cc,endline)
+                                return self.get_next_immediate(interner,cc,endline)
                             }
                             _ => {
                                 self.state = MouthState::N;
@@ -340,9 +340,9 @@ impl<C:CharType> StringSourceState<C> {
                     Space => {
                         debug_log!(trace=>"get_next_immediate:   Space");
                         match self.state {
-                            MouthState::S => self.get_next_immediate(memory,cc, endline),
+                            MouthState::S => self.get_next_immediate(interner,cc, endline),
                             MouthState::N => {
-                                self.get_next_immediate(memory,cc, endline)
+                                self.get_next_immediate(interner,cc, endline)
                             }
                             _ => {
                                 self.state = MouthState::S;
@@ -350,7 +350,7 @@ impl<C:CharType> StringSourceState<C> {
                             }
                         }
                     }
-                    Escape => Some(self.get_escape(memory,cc,endline,a,line,col)),
+                    Escape => Some(self.get_escape(interner,cc,endline,a,line,col)),
                     o => {
                         self.state = MouthState::M;
                         let ret = BaseToken::Char(a, *o);
@@ -362,9 +362,9 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    pub fn get_next_valid<ET:EngineType<Char=C>>(&mut self,memory:&mut Memory<ET> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,TeXError<ET>> {
+    pub fn get_next_valid<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,TeXError<ET>> {
         use CategoryCode::*;
-        match self.get_next_immediate(memory,cc,endline) {
+        match self.get_next_immediate(interner,cc,endline) {
             None => {
                 debug_log!(trace=>"get_next_valid: returning None");
                 Ok(None)
@@ -373,12 +373,12 @@ impl<C:CharType> StringSourceState<C> {
             Some((BaseToken::Char(c,code),l,cl)) => match code {
                 Ignored => {
                     debug_log!(trace=>"get_next_valid: Ignored character");
-                    self.get_next_valid(memory,cc, endline)
+                    self.get_next_valid(interner,cc, endline)
                 }
                 Comment => {
                     debug_log!(trace=>"get_next_valid: Comment; skipping line");
                     if self.line == l {self.skip_line();}
-                    self.get_next_valid(memory,cc, endline)
+                    self.get_next_valid(interner,cc, endline)
                 }
                 Invalid => {
                     debug_log!(trace=>"get_next_valid: Invalid. Error");
@@ -392,7 +392,7 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,memory:&mut Memory<ET> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F)
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F)
         -> Result<(),TeXError<ET>> {
         let mut done = false;
         use CategoryCode::*;
@@ -411,7 +411,7 @@ impl<C:CharType> StringSourceState<C> {
                         self.state = MouthState::N;
                         return Ok(())
                     }
-                    return self.read(memory,cc,endline,f)
+                    return self.read(interner,cc,endline,f)
                 }
                 Invalid => {
                     debug_log!(trace=>"get_next_valid: Invalid. Error");
@@ -421,7 +421,7 @@ impl<C:CharType> StringSourceState<C> {
                     if done {
                         return Ok(())
                     }
-                    return self.read(memory,cc,endline,f)
+                    return self.read(interner,cc,endline,f)
                 }
                 Space => {
                     match self.state {
@@ -436,7 +436,7 @@ impl<C:CharType> StringSourceState<C> {
                 }
                 Escape => {
                     done = true;
-                    f(Token::new(self.get_escape(memory,cc,endline,next,l,c).0,None))
+                    f(Token::new(self.get_escape(interner,cc,endline,next,l,c).0,None))
                 }
                 o => {
                     self.state = MouthState::M;
@@ -466,21 +466,21 @@ impl<C:CharType> StringSourceState<C> {
 #[derive(Clone)]
 pub struct StringSource<C:CharType> {
     pub(crate) state:StringSourceState<C>,
-    pub source:Option<string_interner::DefaultSymbol>
+    pub source:Option<TeXStr<C>>
 }
 impl<C:CharType> StringSource<C> {
     /// Create a new [`StringSource`] from a [`String`] and an optional source reference.
     /// `source` is usually a filename, used to construct [`crate::tex::token::SourceReference`]s for [`Token`]s.
     /// The [`StringSource`] keeps track of the current line and column number.
-    pub fn new(string:Vec<u8>,source:Option<string_interner::DefaultSymbol>) -> StringSource<C> {
+    pub fn new(string:Vec<u8>,source:Option<TeXStr<C>>) -> StringSource<C> {
         StringSource {
             state:StringSourceState::new(string),
             source
         }
     }
 
-    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,memory:&mut Memory<ET>,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:F) -> Result<(),TeXError<ET>> {
-        self.state.read(memory,cc,endline,f)
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:F) -> Result<(),TeXError<ET>> {
+        self.state.read(interner,cc,endline,f)
     }
 
     pub fn line(&self) -> usize { self.state.line }
@@ -489,13 +489,13 @@ impl<C:CharType> StringSource<C> {
     pub fn preview(&self) -> String { self.state.preview() }
     pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
-    pub fn get_next<ET:EngineType<Char=C>>(&mut self,memory:&mut Memory<ET> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<Token<ET>>,TeXError<ET>> {
-        match self.state.get_next_valid(memory,cc, endline)? {
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<Token<ET>>,TeXError<ET>> {
+        match self.state.get_next_valid(interner,cc, endline)? {
             None => Ok(None),
             Some((n,l,c)) =>
                 Ok(Some(Token::new(n,self.source.clone().map(|s|
                                                                  FileReference {
-                                                                     filename:s,start:(l,c),end:self.state.get_next_lc()
+                                                                     filename:s.symbol(),start:(l,c),end:self.state.get_next_lc()
                                                                  }
                     )
                 )))

@@ -6,7 +6,7 @@ use chrono::{DateTime, Local};
 use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
@@ -59,6 +59,7 @@ pub struct EngineRef<'a,ET:EngineType> {
     pub elapsed:&'a mut Instant,
     pub filesystem:&'a mut ET::FileSystem,
     pub fontstore:&'a mut ET::FontStore,
+    pub interner:&'a mut Interner<ET::Char>
 }
 
 pub trait Engine<ET:EngineType> {
@@ -76,7 +77,7 @@ pub trait Engine<ET:EngineType> {
         *self.start_time() =  Local::now();
         let mut comps = self.components();
         let old = comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
-        comps.mouth.push_file(&file,comps.memory);
+        comps.mouth.push_file(&file,comps.interner);
         // should not produce any boxes, so loop until file end
         ET::Stomach::next_shipout_box(&mut comps)?;
         comps.filesystem.set_pwd(old);
@@ -90,7 +91,7 @@ pub trait Engine<ET:EngineType> {
         let mut comps = self.components();
         comps.filesystem.set_pwd(s.parent().unwrap().to_path_buf());
         let file = comps.filesystem.get(s.to_str().unwrap());
-        comps.mouth.push_file(&file,comps.memory);
+        comps.mouth.push_file(&file,comps.interner);
         *comps.start_time = Local::now();
         *comps.elapsed = std::time::Instant::now();
 
@@ -125,13 +126,14 @@ pub struct EngineStruct<ET:EngineType> {
     pub mouth:ET::Mouth,
     pub gullet: ET::Gullet,
     pub stomach:ET::Stomach,
-    pub memory:Memory<ET>,
+    memory:Memory<ET>,
     pub outputs:Outputs,
     jobname:String,
     start_time:DateTime<Local>,
     elapsed_time_from:Instant,
     filesystem:ET::FileSystem,
     fontstore:ET::FontStore,
+    pub interner:Interner<ET::Char>
 }
 
 
@@ -152,6 +154,7 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
         elapsed:&mut self.elapsed_time_from,
         filesystem:&mut self.filesystem,
         fontstore:&mut self.fontstore,
+        interner:&mut self.interner
     } }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
@@ -170,9 +173,10 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
 impl<ET:EngineType> EngineStruct<ET> {
     pub fn new(filesystem:ET::FileSystem,fontstore:ET::FontStore,state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,outputs:Outputs) -> Self {
         let mut memory = Memory::new();
+        let mut interner = Interner::new();
         EngineStruct {
             state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory,outputs,filesystem,fontstore,
-            jobname:"".to_string(),start_time:Local::now(),elapsed_time_from:std::time::Instant::now()
+            jobname:"".to_string(),start_time:Local::now(),elapsed_time_from:std::time::Instant::now(),interner
         }
     }
     pub fn set_state(&mut self,state:ET::State) {

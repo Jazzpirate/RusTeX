@@ -30,7 +30,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// the input stream, after expanding macros as necessary.
     fn get_next_stomach_command(engine:&mut EngineRef<ET>) -> Result<Option<StomachCommand<ET>>,TeXError<ET>> {
         Ok(match Self::get_next_unexpandable(engine)? {
-            Some(rt) => Some(StomachCommand::from_resolved(rt,engine.memory)?),
+            Some(rt) => Some(StomachCommand::from_resolved(rt,engine.interner)?),
             None => None
         })
     }

@@ -6,7 +6,7 @@ pub mod methods;
 
 use std::fmt::{Debug, Formatter};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::memory::Memory;
+use crate::engine::memory::{Interner, Memory};
 use crate::engine::state::State;
 use crate::engine::state::modes::BoxMode;
 use crate::tex::nodes::{HorV, HVBox, TeXNode, Whatsit};
@@ -45,9 +45,9 @@ pub struct StomachCommand<ET:EngineType> {
 }
 
 impl <ET:EngineType> StomachCommand<ET> {
-    pub fn from_resolved(resolved:ResolvedToken<ET>,memory:&mut Memory<ET>) -> Result<Self,TeXError<ET>> {
+    pub fn from_resolved(resolved:ResolvedToken<ET>,interner:&Interner<ET::Char>) -> Result<Self,TeXError<ET>> {
         Ok(Self {
-            command:BaseStomachCommand::from_base(resolved.command,&resolved.source,memory)?,
+            command:BaseStomachCommand::from_base(resolved.command,&resolved.source,interner)?,
             source:resolved.source
         })
     }
@@ -411,7 +411,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
 }
 
 impl<ET:EngineType> BaseStomachCommand<ET> {
-    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>,memory:&mut Memory<ET>) -> Result<Self,TeXError<ET>> {
+    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>,interner:&Interner<ET::Char>) -> Result<Self,TeXError<ET>> {
         use BaseCommand::*;
         use CategoryCode::*;
         Ok(match value {
@@ -421,7 +421,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                 todo!(),
             None => match &source.cause.base {
                 BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
-                BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(memory)),
+                BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(interner)),
             }
             Unexpandable {name,apply,forces_mode} => BaseStomachCommand::Unexpandable {name,apply, forces_mode},
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
@@ -502,7 +502,7 @@ impl<ET:EngineType> DefI<ET>{
             replacement:replacement.into_iter().map(ExpToken::Token).collect()
         })
     }
-    pub fn as_str(&self,memory:&Memory<ET>) -> String {
+    pub fn as_str(&self,interner:&Interner<ET::Char>) -> String {
         let mut s = String::new();
         let mut ind = 0;
         for x in &self.signature {
@@ -512,7 +512,7 @@ impl<ET:EngineType> DefI<ET>{
                     s.push('#');
                     s.push_str(&ind.to_string());
                 },
-                ParamToken::Token(t) => s.push_str(&t.to_str(memory,Some(ET::Char::backslash())))
+                ParamToken::Token(t) => s.push_str(&t.to_str(interner,Some(ET::Char::backslash())))
             }
         }
         if self.endswithbrace {
@@ -521,7 +521,7 @@ impl<ET:EngineType> DefI<ET>{
         s.push('{');
         for r in &self.replacement {
             match r {
-                ExpToken::Token(t) => s.push_str(&t.to_str(memory,Some(ET::Char::backslash()))),
+                ExpToken::Token(t) => s.push_str(&t.to_str(interner,Some(ET::Char::backslash()))),
                 ExpToken::Param(i,u) => {
                     s.push('#');
                     s.push_str(&(u+1).to_string());

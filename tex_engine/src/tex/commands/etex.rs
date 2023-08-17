@@ -245,9 +245,9 @@ pub fn dimexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) 
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next,engine.memory)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.mouth.requeue(next,engine.memory)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -290,9 +290,9 @@ pub fn glueexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next,engine.memory)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.mouth.requeue(next,engine.memory)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -320,7 +320,7 @@ pub fn ifdefined<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>
             BaseToken::Char(c,CategoryCode::Active) =>
                 Ok(engine.state.get_ac_command(&c).is_some()),
             BaseToken::CS(name) => {
-                debug_log!(trace => "ifdefined: {}",name.to_str(engine.memory));
+                debug_log!(trace => "ifdefined: {}",name.to_str(engine.interner));
                 Ok(engine.state.get_command(&name).is_some())
             }
             _ => throw!("Expected a control sequence, got: {:?}",t => cmd.cause)
@@ -338,9 +338,9 @@ pub fn muexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next,engine.memory)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.mouth.requeue(next,engine.memory)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -356,9 +356,9 @@ pub fn numexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
         match &next.base {
             BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
                 Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next,engine.memory)
+                _ => engine.mouth.requeue(next)
             }
-            _ => engine.mouth.requeue(next,engine.memory)
+            _ => engine.mouth.requeue(next)
         }
     }
     Ok(ret)
@@ -405,8 +405,8 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
     }
     let newcmd = catch_prim!(engine.get_control_sequence() => (READLINE,cmd));
     let mut ret = vec!();
-    catch_prim!(file.read::<ET,_>(engine.memory,&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READLINE,cmd));
-    debug_log!(trace=>"readline: {} = {}",newcmd.to_str(engine.memory,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.memory));
+    catch_prim!(file.read::<ET,_>(engine.interner,&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t)) => (READLINE,cmd));
+    debug_log!(trace=>"readline: {} = {}",newcmd.to_str(engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.interner));
 
     let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);
