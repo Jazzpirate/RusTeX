@@ -2322,7 +2322,7 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
     catch_prim!(engine.skip_eq_char() => (TOKS,cmd));
     let mut v = engine.memory.get_token_vec();
 
-    get_group!(engine,t => v.push(t));
+    expand_until_group!(engine,t => v.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
 
     debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(engine.interner));

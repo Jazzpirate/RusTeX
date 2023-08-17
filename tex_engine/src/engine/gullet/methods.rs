@@ -658,7 +658,7 @@ macro_rules! expand_until_group {
                     crate::get_until_endgroup!($engine,$tk => $f);
                     //ET::Mouth::get_until_endgroup(self,f)
                 }
-                _ => throw!("begin group expected")
+                _ => throw!("begin group expected; found: {}",res.source.cause.to_str($engine.interner,$engine.state.get_escapechar()))
             }
         }
     };

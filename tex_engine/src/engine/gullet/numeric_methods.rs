@@ -55,7 +55,8 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Int,TeXEr
                                     }
                                 };
                                 catch!(expand_until_space::<ET>(engine) => tk);
-                                let us = c.to_usize() as i64;
+                                let us =  c.to_usize() as i64;
+                                let us = if isnegative { -us } else { us };
                                 return Ok(catch!(ET::Int::from_i64(us) => tk))
                             }
                         }
@@ -68,7 +69,7 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> Result<ET::Int,TeXEr
                         return read_decimal_number::<ET>(engine,us as u8,isnegative),
                     _ if is_ascii_oct_digit(us) => // isoct == true
                     // TODO: texnically, this requires catcode 12
-                        todo!("Octal digit in read_number"),
+                        return read_oct_number::<ET>(engine,us as u8,isnegative),
                     _ => {
                         let c = ET::Int::from_i64(char.to_usize() as i64)?;
                         debug_log!(trace=>"Returning {}",c);
@@ -153,6 +154,35 @@ pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u
     Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
 }
 
+
+pub fn read_oct_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
+    debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
+    let mut rets = vec!(firstchar);
+    while let Some(next) = engine.get_next_unexpandable_same_file()? {
+        match next.command {
+            BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
+            BaseCommand::Char{char,..} => {
+                let us = char.to_usize();
+                if is_ascii_oct_digit(us) {
+                    rets.push(us as u8);
+                } else {
+                    engine.mouth.requeue(next.source.cause);
+                    break
+                }
+            }
+            _ => {
+                engine.mouth.requeue(next.source.cause);
+                break
+            }
+        }
+    }
+    let str = std::str::from_utf8(&rets).unwrap();
+    let i = i64::from_str_radix(str,8).unwrap();
+    debug_log!(trace=>"Returning {}",if isnegative { -i } else { i });
+    Ok(ET::Int::from_i64(if isnegative { -i } else { i })?)
+}
+
+
 pub fn read_hex_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> Result<ET::Int,TeXError<ET>> {
     debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
@@ -223,7 +253,7 @@ pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, 
                     let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
                     return read_unit::<ET>(engine, f)
                 },
-                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}", char, us, engine.current_position())
+                _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}", char.as_char(), us, engine.current_position())
             }
         }
         BaseCommand::Dim(ass) => {

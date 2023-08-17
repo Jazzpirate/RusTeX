@@ -75,7 +75,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
 
     fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
         let sd = engine.stomach.shipout_data();
-        if (force || sd.pagetotal >= sd.pagegoal) && !sd.page.is_empty() {
+        if (force || (  sd.box_stack.is_empty()  &&sd.pagetotal >= sd.pagegoal)) && !sd.page.is_empty() {
             todo!("shipout: {}>={}\nPage: {:?}",sd.pagetotal,sd.pagegoal,sd.page)
         }
     }

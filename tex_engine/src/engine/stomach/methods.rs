@@ -26,7 +26,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 }
             }
             if engine.state.mode() == TeXMode::Vertical {
-                ET::Stomach::maybe_shipout(engine,true)
+                ET::Stomach::maybe_shipout(engine,false)
             }
             Ok(apply(engine, cmd.source)?)
         }
@@ -107,7 +107,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                 }
                 if engine.state.mode() == TeXMode::Vertical {
-                    ET::Stomach::maybe_shipout(engine,true)
+                    ET::Stomach::maybe_shipout(engine,false)
                 }
                 Ok(())
             }
