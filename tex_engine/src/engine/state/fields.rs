@@ -137,6 +137,13 @@ impl <ET:EngineType> BoxField<ET> {
             &HVBox::Void
         }
     }
+    pub fn get_mut(&mut self,k:usize) -> Option<&mut HVBox<ET>> {
+        if k < self.0.len() {
+            Some(&mut self.0[k])
+        } else {
+            None
+        }
+    }
     pub fn take(&mut self, k: usize) -> HVBox<ET> {
         if k < self.0.len() {
             std::mem::replace(&mut self.0[k],HVBox::Void)

@@ -128,7 +128,7 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
     /// set the value of a skip register
     fn set_toks_register(&mut self,i:usize,v:Vec<Token<ET>>,globally:bool,memory:&mut Memory<ET>);
 
-    fn get_box_register(&self,i:usize) -> &HVBox<ET>;
+    fn get_box_register(&mut self,i:usize) -> Option<&mut HVBox<ET>>;
     fn set_box_register(&mut self,i:usize,v:HVBox<ET>,globally:bool);
     fn take_box_register(&mut self,i:usize) -> HVBox<ET>;
 
@@ -662,8 +662,8 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         }
     }
 
-    fn get_box_register(&self, i: usize) -> &HVBox<ET> {
-        self.boxregisters.get(i)
+    fn get_box_register(&mut self, i: usize) -> Option<&mut HVBox<ET>> {
+        self.boxregisters.get_mut(i)
     }
     fn take_box_register(&mut self, i: usize) -> HVBox<ET> {
         self.boxregisters.take(i)

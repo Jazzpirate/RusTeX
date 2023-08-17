@@ -161,6 +161,30 @@ pub enum HVBox<ET:EngineType> {
     V(VBox<ET>),
     Void
 }
+
+impl<ET:EngineType> HVBox<ET> {
+    pub(crate) fn set_height(&mut self, h:ET::Dim) {
+        match self {
+            HVBox::H(b) => b.assigned_height = Some(h),
+            HVBox::V(b) => b.assigned_height = Some(h),
+            HVBox::Void => {}
+        }
+    }
+    pub(crate) fn set_depth(&mut self, d:ET::Dim) {
+        match self {
+            HVBox::H(b) => b.assigned_depth = Some(d),
+            HVBox::V(b) => b.assigned_depth = Some(d),
+            HVBox::Void => {}
+        }
+    }
+    pub(crate) fn set_width(&mut self, w:ET::Dim) {
+        match self {
+            HVBox::H(b) => b.assigned_width = Some(w),
+            HVBox::V(b) => b.assigned_width = Some(w),
+            HVBox::Void => {}
+        }
+    }
+}
 impl<ET:EngineType> NodeTrait<ET> for HVBox<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(self) }
     fn height(&self) -> ET::Dim {

@@ -569,6 +569,35 @@ pub fn divide<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, 
     }
 }
 
+pub const DP : &str = "dp";
+pub fn dp_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
+                                -> Result<(),TeXError<ET>> {
+    debug_log!(trace=>"Assigning \\dp");
+    let i = catch_prim!(engine.get_int() => (DP,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    catch_prim!(engine.skip_eq_char() => (DP,cmd));
+    let v = catch_prim!(engine.get_dim() => (DP,cmd));
+    debug_log!(debug=>"\\dp{} = {}",i,v);
+    if let Some(b) = engine.state.get_box_register(i) {b.set_depth(v)}
+    Ok(())
+}
+
+pub fn dp_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
+                             -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"Getting \\dp");
+    let i = catch_prim!(engine.get_int() => (DP,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    let v = engine.state.get_box_register(i).map(|b|b.depth()).unwrap_or(ET::Dim::from_sp(0));
+    debug_log!(debug=>"\\dp{} == {}",i,v);
+    Ok(v)
+}
+
 pub fn dump<ET:EngineType>()
                                     -> Result<(), TeXError<ET>> {
     debug_log!(trace=>"\\dump");
@@ -1001,6 +1030,34 @@ pub fn hss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
     Ok(())
 }
 
+pub const HT : &str = "ht";
+pub fn ht_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
+                                -> Result<(),TeXError<ET>> {
+    debug_log!(trace=>"Assigning \\ht");
+    let i = catch_prim!(engine.get_int() => (HT,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    catch_prim!(engine.skip_eq_char() => (HT,cmd));
+    let v = catch_prim!(engine.get_dim() => (HT,cmd));
+    debug_log!(debug=>"\\ht{} = {}",i,v);
+    if let Some(b) = engine.state.get_box_register(i) {b.set_height(v)}
+    Ok(())
+}
+
+pub fn ht_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
+                             -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"Getting \\ht");
+    let i = catch_prim!(engine.get_int() => (HT,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    let v = engine.state.get_box_register(i).map(|b| b.height()).unwrap_or(ET::Dim::from_sp(0));
+    debug_log!(debug=>"\\ht{} == {}",i,v);
+    Ok(v)
+}
 
 pub const HRULE: &str = "hrule";
 pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
@@ -2507,6 +2564,38 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
     Ok(())
 }
 
+
+pub const WD : &str = "wd";
+pub fn wd_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool)
+                                   -> Result<(),TeXError<ET>> {
+    debug_log!(trace=>"Assigning \\wd");
+
+
+    let i = catch_prim!(engine.get_int() => (WD,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    catch_prim!(engine.skip_eq_char() => (WD,cmd));
+    let v = catch_prim!(engine.get_dim() => (WD,cmd));
+    debug_log!(debug=>"\\wd{} = {}",i,v);
+    if let Some(b) = engine.state.get_box_register(i){b.set_width(v)}
+    Ok(())
+}
+
+pub fn wd_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:CommandSource<ET>)
+                                -> Result<ET::Dim,TeXError<ET>> {
+    debug_log!(trace=>"Getting \\wd");
+    let i = catch_prim!(engine.get_int() => (WD,cmd));
+    let i:usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
+    };
+    let v = engine.state.get_box_register(i).map(|b| b.width()).unwrap_or(ET::Dim::from_sp(0));
+    debug_log!(debug=>"\\wd{} == {}",i,v);
+    Ok(v)
+}
+
 pub const WRITE: &str = "write";
 pub fn write<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                             -> Result<Whatsit<ET>, TeXError<ET>> {
@@ -2597,6 +2686,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(displaywidth,engine);
     register_assign!(divide,engine,(e,cmd,global) =>divide::<ET>(e,cmd,global));
     register_int_assign!(doublehyphendemerits,engine);
+    register_value_assign_dim!(dp,engine);
     register_unexpandable!(dump,engine,None,(_,cmd) =>dump::<ET>());
     register_assign!(edef,engine,(e,cmd,global) =>edef::<ET>(e,cmd,global,false,false,false));
     register_expandable!(else,engine,(e,cmd,f) =>else_::<ET>(e,cmd));
@@ -2651,6 +2741,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(holdinginserts,engine);
     register_unexpandable!(hrule,engine,Some(HorV::Vertical),(e,cmd) =>hrule::<ET>(e,cmd));
     register_dim_assign!(hsize,engine);
+    register_value_assign_dim!(ht,engine);
     register_unexpandable!(hyphenation,engine,None,(e,cmd) =>hyphenation::<ET>(e,cmd));
     register_value_assign_int!(hyphenchar,engine);
     register_int_assign!(hyphenpenalty,engine);
@@ -2780,6 +2871,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(voffset,engine);
     register_unexpandable!(vrule,engine,Some(HorV::Horizontal),(e,cmd) =>vrule::<ET>(e,cmd));
     register_dim_assign!(vsize,engine);
+    register_value_assign_dim!(wd,engine);
     register_int_assign!(widowpenalty,engine);
     register_whatsit!(write,engine,(e,cmd) =>write::<ET>(e,cmd));
     register_assign!(xdef,engine,(e,cmd,global) =>xdef::<ET>(e,cmd,global,false,false,false));
@@ -2831,9 +2923,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,pagefilllstretch);
     cmtodo!(engine,pageshrink);
     cmtodo!(engine,pagedepth);
-    cmtodo!(engine,ht);
-    cmtodo!(engine,wd);
-    cmtodo!(engine,dp);
     cmtodo!(engine,lastskip);
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
