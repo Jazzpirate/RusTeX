@@ -57,28 +57,28 @@ impl<ET:EngineType> Error for TeXError<ET> {
 #[macro_export]
 macro_rules! throw {
     ($arg:expr) => {
-        return Err(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
             msg:$arg.to_string(),
             cause:std::option::Option::None,
             source:std::option::Option::None
         })
     };
     ($first:expr,$($arg:expr),*) => {
-        return Err(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
             msg:format!($first,$($arg),*),
             cause:std::option::Option::None,
             source:std::option::Option::None
         })
     };
     ($arg:expr => $cause:expr) => {
-        return Err(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
             msg:$arg.to_string(),
             cause:Some($cause.clone()),
             source:std::option::Option::None
         })
     };
     ($first:expr,$($arg:expr),* => $cause:expr) => {
-        return Err(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
             msg:format!($first,$($arg),*),
             cause:Some($cause.clone()),
             source:std::option::Option::None
@@ -99,7 +99,7 @@ macro_rules! file_end_prim {
 
 pub fn catch_test<F,R,ET:EngineType>(f:F,cause:Token<ET>) -> R where
 F:FnOnce() -> R + std::panic::UnwindSafe {
-    match std::panic::catch_unwind(|| f()) {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe( || f())) {
         Ok(x) => x,
         Err(e) => {
             match e.downcast::<TeXError<ET>>() {
@@ -119,14 +119,19 @@ F:FnOnce() -> R + std::panic::UnwindSafe {
 #[macro_export]
 macro_rules! catch_prim {
     ($f:expr => ($name:expr,$cause:expr)) => {
-        match $f {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||$f)) {
             Ok(x) => x,
             Err(e) => {
-                return Err(TeXError{
-                    msg:format!("Error in \\{}",$name),
-                    cause:Some($cause.cause.clone()),
-                    source:Some(Box::new(e))
-                })
+                match e.downcast::<TeXError<ET>>() {
+                    Ok(e) => {
+                        std::panic::resume_unwind(Box::new(TeXError{
+                            msg:format!("Error in \\{}",$name),
+                            cause:Some($cause.cause.clone()),
+                            source:Some(Box::new(*e))
+                        }))
+                    }
+                    Err(e) => std::panic::resume_unwind(e)
+                }
             }
         }
     }
@@ -135,14 +140,19 @@ macro_rules! catch_prim {
 #[macro_export]
 macro_rules! catch {
     ($f:expr => $cause:expr) => {
-        match $f {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||$f)) {
             Ok(x) => x,
             Err(mut e) => {
-                match e.cause {
-                    Some(_) => (),
-                    std::option::Option::None => e.cause = Some($cause)
+                match e.downcast::<TeXError<ET>>() {
+                    Ok(mut e) => {
+                        match e.cause {
+                            Some(_) => (),
+                            std::option::Option::None => e.cause = Some($cause)
+                        }
+                        std::panic::resume_unwind(Box::new(*e))
+                    }
+                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
                 }
-                return Err(e);
             }
         }
     };

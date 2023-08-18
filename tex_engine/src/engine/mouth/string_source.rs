@@ -362,23 +362,23 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    pub fn get_next_valid<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<(BaseToken<C>, usize, usize)>,TeXError<ET>> {
+    pub fn get_next_valid<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<(BaseToken<C>, usize, usize)> {
         use CategoryCode::*;
         match self.get_next_immediate(interner,cc,endline) {
             None => {
                 debug_log!(trace=>"get_next_valid: returning None");
-                Ok(None)
+                None
             }
-            Some((BaseToken::CS(n),l,c)) => Ok(Some((BaseToken::CS(n),l,c))),
+            Some((BaseToken::CS(n),l,c)) => Some((BaseToken::CS(n),l,c)),
             Some((BaseToken::Char(c,code),l,cl)) => match code {
                 Ignored => {
                     debug_log!(trace=>"get_next_valid: Ignored character");
-                    self.get_next_valid(interner,cc, endline)
+                    self.get_next_valid::<ET>(interner,cc, endline)
                 }
                 Comment => {
                     debug_log!(trace=>"get_next_valid: Comment; skipping line");
                     if self.line == l {self.skip_line();}
-                    self.get_next_valid(interner,cc, endline)
+                    self.get_next_valid::<ET>(interner,cc, endline)
                 }
                 Invalid => {
                     debug_log!(trace=>"get_next_valid: Invalid. Error");
@@ -386,7 +386,7 @@ impl<C:CharType> StringSourceState<C> {
                 }
                 _ => {
                     debug_log!(trace=>"get_next_valid: valid. Returning");
-                    Ok(Some((BaseToken::Char(c,code),l,cl)))
+                    Some((BaseToken::Char(c,code),l,cl))
                 }
             }
         }
@@ -489,16 +489,16 @@ impl<C:CharType> StringSource<C> {
     pub fn preview(&self) -> String { self.state.preview() }
     pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
-    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<Token<ET>>,TeXError<ET>> {
-        match self.state.get_next_valid(interner,cc, endline)? {
-            None => Ok(None),
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> {
+        match self.state.get_next_valid::<ET>(interner,cc, endline) {
+            None => None,
             Some((n,l,c)) =>
-                Ok(Some(Token::new(n,self.source.clone().map(|s|
+                Some(Token::new(n,self.source.clone().map(|s|
                                                                  FileReference {
                                                                      filename:s.symbol(),start:(l,c),end:self.state.get_next_lc()
                                                                  }
                     )
-                )))
+                ))
         }
     }
 }

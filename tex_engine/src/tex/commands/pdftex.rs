@@ -44,7 +44,7 @@ const STACK_ACTION_KEYWORDS : [&'static str;4] = ["push","pop","set","current"];
 #[derive(Debug,Clone,Copy)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
 impl PDFColor {
-    pub fn parse<ET:EngineType>(s:&str) -> Result<Self,TeXError<ET>> {
+    pub fn parse<ET:EngineType>(s:&str) -> Self {
         macro_rules! parse {
             ($s:expr) => {
                 match $s.parse::<f32>() {
@@ -62,7 +62,7 @@ impl PDFColor {
             if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
                 throw!("Invalid color specification: {}",s);
             }
-            Ok(PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)})
+            PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
         } else if matches!(ls.last(),Some(&"RG")) && ls.len() > 3 {
             let r = 255.0 * parse!(ls[0]);
             let g = 255.0 * parse!(ls[1]);
@@ -70,14 +70,14 @@ impl PDFColor {
             if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
                 throw!("Invalid color specification: {}",s);
             }
-            Ok(PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)})
+            PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
         } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
             let x = 255.0 * parse!(ls[0]);
             if x > 255.0 || x < 0.0  {
                 throw!("Invalid color specification: {}",s);
             }
             let x = (x.round()) as u8;
-            Ok(PDFColor{R:x, G:x, B:x})
+            PDFColor{R:x, G:x, B:x}
         } else {
             throw!("Invalid color specification: {}",s);
         }
@@ -114,18 +114,18 @@ impl<ET:EngineType<Node=Self>> CustomNode<ET> for PDFTeXNode<ET> {}
 /// "ifpdfabsnum"
 pub const IFPDFABSNUM : &str = "ifpdfabsnum";
 /// `\ifpdfabsnum`: Compare the absolute values of two numbers.
-pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
+pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifpdfabsnum");
-    let i1 = catch_prim!(engine.get_int() => (IFPDFABSNUM,cmd));
-    let rel = match catch_prim!(engine.is_next_char_one_of(&super::tex::LGE) => (IFPDFABSNUM,cmd)) {
+    let i1 = engine.get_int();
+    let rel = match engine.is_next_char_one_of(&super::tex::LGE) {
         None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
     };
-    let i2 = catch_prim!(engine.get_int() => (IFPDFABSNUM,cmd));
+    let i2 = engine.get_int();
     match rel {
-        b'<' => Ok(i1.to_i64().abs() < i2.to_i64().abs()),
-        b'>' => Ok(i1.to_i64().abs()>i2.to_i64().abs()),
-        b'=' => Ok(i1.to_i64().abs()==i2.to_i64().abs()),
+        b'<' => i1.to_i64().abs() < i2.to_i64().abs(),
+        b'>' => i1.to_i64().abs()>i2.to_i64().abs(),
+        b'=' => i1.to_i64().abs()==i2.to_i64().abs(),
         _ => unreachable!()
     }
 }
@@ -133,18 +133,18 @@ pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 /// "ifpdfabsdim"
 pub const IFPDFABSDIM : &str = "ifpdfabsdim";
 /// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
-pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<bool,TeXError<ET>> {
+pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifpdfabsdim");
-    let i1 = catch_prim!(engine.get_dim() => (IFPDFABSDIM,cmd));
-    let rel = match catch_prim!(engine.is_next_char_one_of(&super::tex::LGE) => (IFPDFABSDIM,cmd)) {
+    let i1 = engine.get_dim();
+    let rel = match engine.is_next_char_one_of(&super::tex::LGE) {
         None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
     };
-    let i2 = catch_prim!(engine.get_dim() => (IFPDFABSDIM,cmd));
+    let i2 = engine.get_dim();
     match rel {
-        b'<' => Ok(i1.to_sp() < i2.to_sp().abs()),
-        b'>' => Ok(i1.to_sp().abs()>i2.to_sp().abs()),
-        b'=' => Ok(i1.to_sp().abs()==i2.to_sp().abs()),
+        b'<' => i1.to_sp() < i2.to_sp().abs(),
+        b'>' => i1.to_sp().abs()>i2.to_sp().abs(),
+        b'=' => i1.to_sp().abs()==i2.to_sp().abs(),
         _ => unreachable!()
     }
 }
@@ -152,12 +152,12 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 /// "pdfcolorstack"
 pub const PDFCOLORSTACK: &str = "pdfcolorstack";
 
-pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>>
+pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     where ET::Node:From<PDFTeXNode<ET>>{
     debug_log!(trace=>"pdfcolorstack");
-    let index = catch_prim!(engine.get_int() => (PDFCOLORSTACK,cmd)).to_i64();
+    let index = engine.get_int().to_i64();
     if index < 0 {throw!("Invalid colorstack index: {}",index => cmd.cause)}
-    let action = match catch_prim!(engine.get_keywords(STACK_ACTION_KEYWORDS.to_vec()) => (PDFCOLORSTACK,cmd)) {
+    let action = match engine.get_keywords(STACK_ACTION_KEYWORDS.to_vec()) {
         Some(s) => PDFStackAction::parse(s),
         None => throw!("Expected one of 'push','pop','set','current'" => cmd.cause)
     };
@@ -167,37 +167,34 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource
         _ => {
             let mut colorstr = engine.memory.get_string();
             //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
-            catch_prim!(engine.get_braced_string(&mut colorstr) => (PDFCOLORSTACK,cmd));
-            let color = Some(catch_prim!(PDFColor::parse::<ET>(colorstr.as_str()) => (PDFCOLORSTACK,cmd)));
+            engine.get_braced_string(&mut colorstr);
+            let color = Some(PDFColor::parse::<ET>(colorstr.as_str()));
             engine.memory.return_string(colorstr);
             engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color,phantom:PhantomData}.as_node());
         }
     }
-    Ok(())
 }
 
-
-pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>)
-                                      -> Result<ET::Int,TeXError<ET>> {
+pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
     let r = engine.elapsed.elapsed().as_secs_f64() * 65536.0;
     let ret = if r > i32::MAX.into() {i32::MAX as i64} else {r.round() as i64};
-    Ok(catch_prim!(ET::Int::from_i64(ret) => ("pdfelapsedtime",cmd)))
+    ET::Int::from_i64(ret)
 }
 
 /// "pdffilesize"
 pub const PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
-pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, fun:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, fun:TokenCont<ET>) {
     debug_log!(trace=>"pdffilesize");
     let mut filename = engine.memory.get_string();
-    catch_prim!(engine.get_braced_string(&mut filename) => (PDFFILESIZE,cmd));
+    engine.get_braced_string(&mut filename);
     //gullet.get_expanded_group(state,false,false,true, &mut |_,t| Ok(ret.push(t))) => (PDFFILESIZE,cmd));
     // let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = engine.filesystem.get(&filename);
     engine.memory.return_string(filename);
     let x = f.content_string();
     match &*x {
-        None => Ok(()),
+        None => (),
         Some(v) =>{
             engine.string_to_tokens(v.len().to_string().as_bytes(),fun)
         }
@@ -207,33 +204,29 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 /// "pdfglyphtounicode"
 pub const PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
 /// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
-pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
-                                        -> Result<(), TeXError<ET>> {
+pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\pdfglyphtounicode");
     // TODO
     let mut v = engine.memory.get_token_vec();
-    catch_prim!(engine.get_argument(&mut v) => (PDFGLYPHTOUNICODE,cmd));
-    catch_prim!(engine.get_argument(&mut v) => (PDFGLYPHTOUNICODE,cmd));
+    engine.get_argument(&mut v);
+    engine.get_argument(&mut v);
     engine.memory.return_token_vec(v);
-    Ok(())
 }
 
-
-pub fn pdflastobj<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>)
-                                     -> Result<ET::Int,TeXError<ET>> where ET::State:PDFState<ET> {
-    Ok(catch_prim!(ET::Int::from_i64(engine.state.pdfobjs().len() as i64 - 1) => ("pdflastobj",cmd)))
+pub fn pdflastobj<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>)
+                                     -> ET::Int where ET::State:PDFState<ET> {
+    ET::Int::from_i64(engine.state.pdfobjs().len() as i64 - 1)
 }
 
 /// "pdfliteral"
 pub const PDFLITERAL: &str = "pdfliteral";
 
-pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>>
+pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     where ET::Node:From<PDFTeXNode<ET>>{
     debug_log!(trace=>"pdfliteral");
     let mut literal = String::new();
-    catch_prim!(engine.get_braced_string(&mut literal) => (PDFCOLORSTACK,cmd));
+    engine.get_braced_string(&mut literal);
     engine.stomach.push_node(PDFLiteral {literal,phantom:PhantomData}.as_node());
-    Ok(())
 }
 
 /// "pdfobj"
@@ -241,90 +234,83 @@ pub const PDFOBJ : &str = "pdfobj";
 
 pub const OBJECT_TYPE_SPEC: [&'static str; 3] = ["reserveobjnum","useobjnum","stream"];
 /// `\pdfobj`
-pub fn pdfobj<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
-                                        -> Result<(), TeXError<ET>> where ET::State:PDFState<ET> {
+pub fn pdfobj<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::State:PDFState<ET> {
     debug_log!(trace=>"\\pdfobj");
-    match catch_prim!(engine.get_keywords(OBJECT_TYPE_SPEC.to_vec()) => (PDFOBJ,cmd)) {
+    match engine.get_keywords(OBJECT_TYPE_SPEC.to_vec()) {
         None => throw!("Expected one of 'reserveobjnum','useobjnum','stream'" => cmd.cause),
         Some("reserveobjnum") => engine.state.pdfobjs().push(PDFObj { content:String::new()}), // TODO
         Some("useobjnum") => {
-            let i = catch_prim!(engine.get_int() => (PDFOBJ,cmd)).to_i64();
+            let i = engine.get_int().to_i64();
             if i < 0 || engine.state.pdfobjs().len() as i64 <= i {throw!("Invalid object number: {}",i => cmd.cause)}
             let mut str = String::new();
-            catch_prim!(engine.get_braced_string(&mut str) => (PDFOBJ,cmd));
+            engine.get_braced_string(&mut str);
             *engine.state.pdfobjs().get_mut(i as usize).unwrap() = PDFObj { content:str};
         },
         Some("stream") => {
-            catch_prim!(engine.skip_whitespace() => (PDFOBJ,cmd));
-            if catch_prim!(engine.get_keyword("attr") => (PDFOBJ,cmd)) {
+            engine.skip_whitespace();
+            if engine.get_keyword("attr") {
                 // TODO
                 let mut ret = engine.memory.get_token_vec();
-                catch_prim!(engine.get_argument(&mut ret) => (PDFOBJ,cmd));
+                engine.get_argument(&mut ret);
             }
         },
         _ => unreachable!()
     }
-    Ok(())
 }
 
 
-pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
-                                        -> Result<(), TeXError<ET>> {
+pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\pdfresettimer");
-        *engine.elapsed = std::time::Instant::now();
-    Ok(())
+    *engine.elapsed = std::time::Instant::now();
 }
 
 /// "pdfstrcmp"
 pub const PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
-    pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
+pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
     debug_log!(trace=>"pdfstrcmp");
     let mut str1 = engine.memory.get_string();
     let mut str2 = engine.memory.get_string();
-    catch_prim!(engine.get_braced_string(&mut str1) => (PDFSTRCMP,cmd));
-    catch_prim!(engine.get_braced_string(&mut str2) => (PDFSTRCMP,cmd));
+    engine.get_braced_string(&mut str1);
+    engine.get_braced_string(&mut str2);
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    if str1==str2 {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))?}
-        else if str1 < str2 { engine.string_to_tokens("-1".as_bytes(),f)?}
-        else {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))?}
+    if str1==str2 {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
+        else if str1 < str2 { engine.string_to_tokens("-1".as_bytes(),f)}
+        else {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
     engine.memory.return_string(str1);
     engine.memory.return_string(str2);
-    Ok(())
 }
 
 /// "pdftexversion"
 pub const PDFTEXVERSION : &str = "pdftexversion";
 /// ` \pdftexversion`: Return the [`PDF_TEX_VERSION`] as [`Int`].
-pub fn pdftexversion<ET:EngineType>(cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET>> {
-    Ok(catch_prim!(ET::Int::from_i64(PDF_TEX_VERSION) => (PDFTEXVERSION,cmd)))
+pub fn pdftexversion<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
+    ET::Int::from_i64(PDF_TEX_VERSION)
 }
 
 /// "pdfmajorversion"
 pub const PDFMAJORVERSION : &str = "pdfmajorversion";
 /// `\pdfmajorversion`: Return the [`PDF_MAJOR_VERSION`] as [`Int`].
-pub fn pdfmajorversion<ET:EngineType>(cmd:CommandSource<ET>)
-    -> Result<ET::Int,TeXError<ET>> {
-    Ok(catch_prim!(ET::Int::from_i64(PDF_MAJOR_VERSION) => (PDFMAJORVERSION,cmd)))
+pub fn pdfmajorversion<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
+    ET::Int::from_i64(PDF_MAJOR_VERSION)
 }
-
 
 /// "pdfmatch"
 pub const PDFMATCH : &str = "pdfmatch";
 /// `\pdmatch`
-pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>>
+pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>)
     where ET::State:PDFState<ET>{
     debug_log!(trace=>"pdfmatch");
-    let icase = catch_prim!(engine.get_keyword("icase") => (PDFMATCH,cmd));
-    let subcount = if catch_prim!(engine.get_keyword("subcount") => (PDFMATCH,cmd)) {
-        catch_prim!(engine.get_int() => (PDFMATCH,cmd)).to_i64()
+    let icase = engine.get_keyword("icase");
+    let subcount = if engine.get_keyword("subcount") {
+        engine.get_int().to_i64()
     } else {-1};
     let mut pattern_string = engine.memory.get_string();
     if icase {pattern_string.push_str("(?i)")}
-    catch_prim!(engine.get_braced_string(&mut pattern_string) => (PDFMATCH,cmd));
+    engine.get_braced_string(&mut pattern_string);
     let mut target_string = engine.memory.get_string();
-    catch_prim!(engine.get_braced_string(&mut target_string) => (PDFMATCH,cmd));
+    engine.get_braced_string(&mut target_string);
 
     for s in engine.state.pdfmatches().drain(..) {
         engine.memory.return_string(s);
@@ -335,8 +321,7 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
                 None => {
                     engine.memory.return_string(pattern_string);
                     engine.memory.return_string(target_string);
-                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))?;
-                    Ok(())
+                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None));
                 }
                 Some(capture) => { // TODO this is not quite right yet, I think
                     let cap = capture.get(0).unwrap();
@@ -365,7 +350,7 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
 
         },
         Err(e) => {
-            f(engine,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None))?;
+            f(engine,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None));
             f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
         }
     }
@@ -374,48 +359,46 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>,
 /// "pdfshellescape"
 pub const PDFSHELLESCAPE: &str = "pdfshellescape";
 /// `\pdfmshellescape`: 2 (restricted).
-pub fn pdfshellescape<ET:EngineType>(cmd:CommandSource<ET>)
-                                      -> Result<ET::Int,TeXError<ET>> {
-    Ok(catch_prim!(ET::Int::from_i64(2) => (PDFSHELLESCAPE,cmd)))
+pub fn pdfshellescape<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
+    ET::Int::from_i64(2)
 }
 
 /// "pdftexrevision"
 pub const PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
-pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
-                                     -> Result<(),TeXError<ET>> {
+pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
     engine.string_to_tokens(PDFTEX_REVISION.to_string().as_bytes(),f)
 }
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
 pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
-    register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,cmd));
-    register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,cmd));
-    register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,cmd));
+    register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,&cmd));
+    register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,&cmd));
+    register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,&cmd));
     register_int_assign!(pdfcompresslevel,engine);
     register_int_assign!(pdfdecimaldigits,engine);
-    register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,c));
-    register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,cmd,f));
+    register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
+    register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,&cmd,f));
     register_int_assign!(pdfgentounicode,engine);
-    register_unexpandable!(pdfglyphtounicode,engine,None,(e,cmd) =>pdfglyphtounicode::<ET>(e,cmd));
+    register_unexpandable!(pdfglyphtounicode,engine,None,(e,cmd) =>pdfglyphtounicode::<ET>(e,&cmd));
     register_dim_assign!(pdfhorigin,engine);
     register_int_assign!(pdfoutput,engine);
-    register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,c));
-    register_unexpandable!(pdfliteral,engine,None,(e,cmd) =>pdfliteral::<ET>(e,cmd));
-    register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(c));
-    register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,cmd,f));
+    register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,&c));
+    register_unexpandable!(pdfliteral,engine,None,(e,cmd) =>pdfliteral::<ET>(e,&cmd));
+    register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(&c));
+    register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,&cmd,f));
     register_int_assign!(pdfminorversion,engine);
-    register_unexpandable!(pdfobj,engine,None,(e,cmd) =>pdfobj::<ET>(e,cmd));
+    register_unexpandable!(pdfobj,engine,None,(e,cmd) =>pdfobj::<ET>(e,&cmd));
     register_int_assign!(pdfobjcompresslevel,engine);
     register_dim_assign!(pdfpageheight,engine);
     register_tok_assign!(pdfpageresources,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
-    register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,cmd));
-    register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(c));
-    register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,cmd,f));
+    register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,&cmd));
+    register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(&c));
+    register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,&cmd,f));
     register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
-    register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(c));
+    register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(&c));
     register_dim_assign!(pdfvorigin,engine);
     register_int_assign!(tracingstacklevels,engine);
 

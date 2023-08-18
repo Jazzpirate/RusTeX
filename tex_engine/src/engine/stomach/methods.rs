@@ -8,8 +8,7 @@ use crate::tex::commands::{BaseStomachCommand, StomachCommand};
 use crate::tex::nodes::{HorV, NodeTrait, TeXNode};
 use crate::utils::errors::TeXError;
 
-pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
-                             -> Result<(),TeXError<ET>> {
+pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
     debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
     match cmd.command {
@@ -28,23 +27,21 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
             if engine.state.mode() == TeXMode::Vertical {
                 ET::Stomach::maybe_shipout(engine,false)
             }
-            Ok(apply(engine, cmd.source)?)
+            apply(engine, cmd.source)
         }
         Assignment {name,set} => {
-            set(engine,cmd.source,false)?;
+            set(engine,cmd.source,false);
             match engine.state.take_afterassignment() {
                 Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
-            Ok(())
         }
         ValueAss(set) => {
-            set(engine,cmd.source,false)?;
+            set(engine,cmd.source,false);
             match engine.state.take_afterassignment() {
                 Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
-            Ok(())
         }
         Font(f) => {
             engine.state.set_current_font(f,false);
@@ -52,23 +49,20 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 Some(t) => engine.mouth.requeue(t),
                 _ => ()
             }
-            Ok(())
         }
         OpenBox {name, apply, mode} => {
-            let on_close = apply(engine,cmd.source)?;
+            let on_close = apply(engine,cmd.source);
             engine.stomach.shipout_data_mut().box_stack.push(
                 crate::tex::nodes::OpenBox::Box {
                     list:vec!(), mode, on_close
                 }
             );
-            Ok(())
         }
         Whatsit {name,apply} => {
-            let wi = apply(engine,cmd.source)?;
+            let wi = apply(engine,cmd.source);
             engine.stomach.push_node(TeXNode::Whatsit(wi));
-            Ok(())
         },
-        Relax => Ok(()),
+        Relax => (),
         Char{..} => {
             let mode = engine.state.mode();
             todo!("Character in digest: {:?} at {}\n{}",mode,engine.current_position(),engine.preview(50))
@@ -76,10 +70,10 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         MathChar(_) => todo!("Mathchar in digest"),
         Superscript => todo!("Superscript in digest"),
         Subscript => todo!("Subscript in digest"),
-        Space if engine.state.mode().is_vertical() => Ok(()),
+        Space if engine.state.mode().is_vertical() => (),
         Space => todo!("Space in H mode"),
         MathShift => todo!("MathShift in digest"),
-        BeginGroup => Ok(engine.state.stack_push(GroupType::Token)),
+        BeginGroup => engine.state.stack_push(GroupType::Token),
         EndGroup => match engine.state.stack_pop(engine.memory) {
             Some((v,GroupType::Token)) => {
                 if !v.is_empty() {
@@ -87,7 +81,6 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                         for t in v { rs.push(t, engine.memory) }
                     })
                 }
-                Ok(())
             }
             Some((v,GroupType::Box(b))) => {
                 if !v.is_empty() {
@@ -109,7 +102,6 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 if engine.state.mode() == TeXMode::Vertical {
                     ET::Stomach::maybe_shipout(engine,false)
                 }
-                Ok(())
             }
             _ => throw!("Unexpected end group" => cmd.source.cause)
         }

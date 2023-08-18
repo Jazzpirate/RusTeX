@@ -255,21 +255,21 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
             state.ucchar.set_locally((i as u8).into(),((i-32) as u8).into());
             state.lcchar.set_locally(((i-32) as u8).into(),(i as u8).into());
             state.mathcodes.set_locally(ET::Char::from(i-32),
-                                        ET::Int::from_i64::<ET>((i as i64-32) +
+                                        ET::Int::from_i64((i as i64-32) +
                                             (1 * 16 * 16) +
-                                            (7 * 16 * 16 * 16)).unwrap()
+                                            (7 * 16 * 16 * 16))
             );
             state.mathcodes.set_locally(ET::Char::from(i),
-                                        ET::Int::from_i64::<ET>((i as i64) +
+                                        ET::Int::from_i64((i as i64) +
                                             (1 * 16 * 16) +
-                                            (7 * 16 * 16 * 16)).unwrap()
+                                            (7 * 16 * 16 * 16))
             );
         }
         for i in 48..58 {
             state.mathcodes.set_locally(ET::Char::from(i),
-                                        ET::Int::from_i64::<ET>((i as i64) +
+                                        ET::Int::from_i64((i as i64) +
                                             (0 * 16 * 16) +
-                                            (7 * 16 * 16 * 16)).unwrap()
+                                            (7 * 16 * 16 * 16))
             );
         }
         state

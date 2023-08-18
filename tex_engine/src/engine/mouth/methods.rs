@@ -12,23 +12,23 @@ use crate::utils::strings::CharType;
 impl<ET:EngineType> EngineRef<'_,ET> {
     /// get the next [`Token`] from the [`Mouth`]
     #[inline(always)]
-    pub fn get_next_token(&mut self) -> Result<Option<(Token<ET>,bool)>,TeXError<ET>> {
+    pub fn get_next_token(&mut self) -> Option<(Token<ET>,bool)> {
         self.mouth.get_next(self.state,self.interner,self.outputs)
     }
 
     /// Skip whitespace characters from the [`Mouth`]
-    pub fn skip_whitespace(&mut self) -> Result<(),TeXError<ET>> {
+    pub fn skip_whitespace(&mut self) {
         self.mouth.skip_whitespace(self.state,self.interner)
     }
 
     /// read optional `=` characters from the [`Mouth`]
-    pub fn skip_eq_char(&mut self) -> Result<(),TeXError<ET>> {
-        self.skip_whitespace()?;
+    pub fn skip_eq_char(&mut self) {
+        self.skip_whitespace();
         debug_log!(trace=>"skipping '='");
-        if let Some((tk,_)) = self.get_next_token()? {
+        if let Some((tk,_)) = self.get_next_token() {
             match &tk.base {
                 BaseToken::Char(c,_) if c.to_usize() == 61 => {
-                    match self.get_next_token()? {
+                    match self.get_next_token() {
                         Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
                         Some((tk,_)) => self.mouth.requeue(tk),
                         _ => ()
@@ -37,14 +37,13 @@ impl<ET:EngineType> EngineRef<'_,ET> {
                 _ => self.mouth.requeue(tk)
             }
         }
-        Ok(())
     }
 
     /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    pub fn get_argument(&mut self,vec: &mut Vec<Token<ET>>) -> Result<(),TeXError<ET>> {
+    pub fn get_argument(&mut self,vec: &mut Vec<Token<ET>>) {
         ET::Mouth::get_argument(self,vec)
     }
 /*
@@ -96,7 +95,7 @@ macro_rules! get_until_endgroup {
     ($engine:ident,$tk:ident => $f:expr) => {
         let mut depth = 1;
         let mut ok = false;
-        while let Some($tk) = $engine.mouth.get_next_simple($engine.state,$engine.interner)? {
+        while let Some($tk) = $engine.mouth.get_next_simple($engine.state,$engine.interner) {
             match $tk.catcode() {
                 CategoryCode::BeginGroup => depth += 1,
                 CategoryCode::EndGroup => {
@@ -115,13 +114,13 @@ macro_rules! get_until_endgroup {
 #[macro_export]
 macro_rules! get_group {
     ($engine:ident,$tk:ident => $f:expr) => {
-        match $engine.get_next_token()? {
+        match $engine.get_next_token() {
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
             _ => throw!("begin group expected")
         }
         let mut ingroup = 0;
         let mut ok = false;
-        while let Some(next) = $engine.get_next_token()? {
+        while let Some(next) = $engine.get_next_token() {
             let $tk = next.0;
             match &$tk.base {
                 BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,

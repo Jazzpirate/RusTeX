@@ -18,7 +18,7 @@ use crate::utils::strings::{CharType, TeXStr};
 pub trait FontStore:Clone+'static {
     type Char:CharType;
     type Font:Font<Char=Self::Char>;
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self,s: &str,macroname:TeXStr<Self::Char>) -> Result<Self::Font,TeXError<ET>>;
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self,s: &str,macroname:TeXStr<Self::Char>) -> Self::Font;
     fn null(&self) -> Self::Font;
 }
 pub trait Font:Debug+Display+Clone + PartialEq {
@@ -45,7 +45,7 @@ pub struct TfmFontStore {
 impl FontStore for TfmFontStore {
     type Char = u8;
     type Font = TfmFont;
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self, s: &str,macroname:TeXStr<Self::Char>) -> Result<Self::Font,TeXError<ET>> {
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font>>(&mut self, s: &str,macroname:TeXStr<Self::Char>) -> Self::Font {
         let path = match KPATHSEA.get(s) {
             None => throw!("Font not found: {}",s),
             Some(res) => res.path
@@ -58,7 +58,7 @@ impl FontStore for TfmFontStore {
             },
             Some(file) => file.clone()
         };
-        Ok(Ptr::new(TfmFontInner{
+        Ptr::new(TfmFontInner{
             name:macroname,
             hyphenchar:Mut::new(file.hyphenchar as i64),
             skewchar:Mut::new(file.skewchar as i64),
@@ -67,7 +67,7 @@ impl FontStore for TfmFontStore {
             dimens:Mut::new(HMap::default()),
             lps:HMap::default(),
             rps:HMap::default(),
-        }))
+        })
     }
     fn null(&self) -> Self::Font { self.null.clone() }
 }

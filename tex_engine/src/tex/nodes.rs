@@ -130,20 +130,20 @@ impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
 }
 impl<ET:EngineType<Node=()>> CustomNode<ET> for () {}
 
-pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut EngineRef<ET>) -> Result<(),TeXError<ET>>>>>>);
+pub struct Whatsit<ET:EngineType>(Ptr<Mut<Option<Box<dyn FnOnce(&mut EngineRef<ET>)>>>>);
 impl<ET:EngineType> Debug for Whatsit<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("Whatsit")
     }
 }
 impl<ET:EngineType> Whatsit<ET> {
-    pub fn new(f:Box<dyn FnOnce(&mut EngineRef<ET>) -> Result<(),TeXError<ET>>>) -> Self {
+    pub fn new(f:Box<dyn FnOnce(&mut EngineRef<ET>)>) -> Self {
         Whatsit(Ptr::new(Mut::new(Some(f))))
     }
-    pub fn apply(self, e:&mut EngineRef<ET>) -> Result<(),TeXError<ET>> {
+    pub fn apply(self, e:&mut EngineRef<ET>) {
         let f = &mut *self.0.borrow_mut();
         match std::mem::take(f) {
-            None => Ok(()),
+            None => (),
             Some(f) => f(e)
         }
     }

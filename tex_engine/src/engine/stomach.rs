@@ -71,7 +71,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         }
     }
 
-    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>>;
+    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
 
     fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
         let sd = engine.stomach.shipout_data();
@@ -80,18 +80,18 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         }
     }
 
-    fn next_shipout_box(engine:&mut EngineRef<ET>) -> Result<Option<ET::Node>,TeXError<ET>> {
+    fn next_shipout_box(engine:&mut EngineRef<ET>) -> Option<ET::Node> {
         loop {
             match engine.stomach.shipout_data().to_ship {
                 None =>
-                    match engine.get_next_stomach_command()? {
+                    match engine.get_next_stomach_command() {
                         Some(cmd) => {
-                            Self::digest(engine,cmd)?
+                            Self::digest(engine,cmd)
                         }
                         None => {
                             debug_log!(trace=>"No more commands; force shipout box");
                             Self::maybe_shipout(engine,true);
-                            return Ok(std::mem::take(&mut engine.stomach.shipout_data_mut().to_ship))
+                            return std::mem::take(&mut engine.stomach.shipout_data_mut().to_ship)
                         }
                     }
                 Some(_) => todo!()
@@ -111,7 +111,7 @@ impl<ET:EngineType<Stomach=Self>> ShipoutDefaultStomach<ET> {
     } }
 }
 impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
-    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>> {
+    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
         methods::digest::<ET>(engine,cmd)
     }
     fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }
@@ -130,7 +130,7 @@ impl<ET:EngineType<Stomach=Self>> NoShipoutDefaultStomach<ET> {
 } }
 }
 impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
-    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) -> Result<(),TeXError<ET>> {
+    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
         methods::digest::<ET>(engine,cmd)
     }
     fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }

@@ -70,7 +70,7 @@ pub trait Engine<ET:EngineType> {
     fn start_time(&mut self) -> &mut DateTime<Local>;
     fn state(&mut self) -> &mut ET::State;
 
-    fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET>> {
+    fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET>> {match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||{
         debug!("Initializing with file {}",s);
         let file = self.components().filesystem.get(s);
         *self.jobname() = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
@@ -79,11 +79,16 @@ pub trait Engine<ET:EngineType> {
         let old = comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.mouth.push_file(&file,comps.interner);
         // should not produce any boxes, so loop until file end
-        ET::Stomach::next_shipout_box(&mut comps)?;
+        ET::Stomach::next_shipout_box(&mut comps);
         comps.filesystem.set_pwd(old);
-        Ok(())
-    }
-    fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {
+    })) {
+        Ok(_) => Ok(()),
+        Err(e) => match e.downcast::<TeXError<ET>>() {
+            Ok(e) => Err(*e),
+            Err(e) => Err(TeXError{msg:format!("Panic: {:?}",e),cause:None,source:None})
+        }
+    }}
+    fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||{
         debug!("Running file {:?}",s);
         let mut ret = vec!();
         *self.jobname() = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
@@ -101,11 +106,17 @@ pub trait Engine<ET:EngineType> {
             Some(v) =>
                 comps.add_expansion(|comps,rs| for t in v {rs.push(t,comps.memory)})
         }
-        while let Some(b) = ET::Stomach::next_shipout_box(&mut comps)? {
+        while let Some(b) = ET::Stomach::next_shipout_box(&mut comps) {
             ret.push(b)
         }
-        Ok(ret)
-    }
+        ret
+    })) {
+        Ok(v) => Ok(v),
+        Err(e) => match e.downcast::<TeXError<ET>>() {
+            Ok(e) => Err(*e),
+            Err(e) => Err(TeXError{msg:format!("Panic: {:?}",e),cause:None,source:None})
+        }
+    }}
 }
 
 /*
@@ -159,8 +170,8 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
         tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.components());
-        self.state.set_primitive_int("mag",ET::Int::from_i64(1000)?,true);
-        self.state.set_primitive_int("fam",ET::Int::from_i64(-1)?,true);
+        self.state.set_primitive_int("mag",ET::Int::from_i64(1000),true);
+        self.state.set_primitive_int("fam",ET::Int::from_i64(-1),true);
         Ok(())
     }
     fn state(&mut self) -> &mut ET::State { &mut self.state }

@@ -69,7 +69,7 @@ impl Numeric for Frac {
 
 pub trait Int:Numeric +PartialOrd+TryInto<usize>+From<u8>+
 Div<Self,Output=Self>+Mul<Self,Output=Self> {
-    fn from_i64<ET:EngineType>(i:i64) -> Result<Self,TeXError<ET>>;
+    fn from_i64(i:i64) -> Self;
     fn to_i64(&self) -> i64;
 }
 pub trait Dim:Numeric+Add<Self,Output=Self> + Debug + Ord + Sum {
@@ -103,13 +103,7 @@ impl Numeric for i32 {
     }
 }
 impl Int for i32 {
-    fn from_i64<ET:EngineType>(i:i64) -> Result<Self,TeXError<ET>> {
-        if i < i32::MIN as i64 || i > (i32::MAX as i64) {
-            throw!("Integer overflow: {}",i)
-        } else {
-            Ok(i as i32)
-        }
-    }
+    fn from_i64(i:i64) -> Self { i as i32 }
     fn to_i64(&self) -> i64 { *self as i64 }
 }
 #[derive(Clone,Copy, Debug,PartialEq,Eq,PartialOrd,Ord)]
