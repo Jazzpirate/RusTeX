@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::EngineType;
@@ -10,6 +11,9 @@ pub struct TeXError<ET:EngineType> {
     pub cause:Option<Token<ET>>,
     pub source:Option<Box<TeXError<ET>>>,
 }
+//impl<ET:EngineType> Any for TeXError<ET> {}
+unsafe impl<ET:EngineType> Send for TeXError<ET> {}
+
 impl<ET:EngineType> TeXError<ET> {
     pub fn throw_string(self,interner:&Interner<ET::Char>) -> String {
         let mut ret = self.msg;
@@ -46,6 +50,9 @@ impl<ET:EngineType> Error for TeXError<ET> {
         }
     }
 }
+
+// TODO: switch to panic, using std::panic::panic_any::<crate::utils::errors::TeXError<ET>>()
+// and match panic::catch_unwind(|| f) { Ok(x) => x, Err(e) => panic::resume_unwind(e) }
 
 #[macro_export]
 macro_rules! throw {
@@ -88,6 +95,25 @@ macro_rules! file_end {
 #[macro_export]
 macro_rules! file_end_prim {
     ($name:expr,$tk:expr) => (crate::throw!("File ended while scanning {}",$name => $tk.cause.clone()));
+}
+
+pub fn catch_test<F,R,ET:EngineType>(f:F,cause:Token<ET>) -> R where
+F:FnOnce() -> R + std::panic::UnwindSafe {
+    match std::panic::catch_unwind(|| f()) {
+        Ok(x) => x,
+        Err(e) => {
+            match e.downcast::<TeXError<ET>>() {
+                Ok(e) => {
+                    let mut e = *e;
+                    e.cause = Some(cause);
+                    std::panic::resume_unwind(Box::new(e))
+                }
+                Err(e) => {
+                    std::panic::resume_unwind(e)
+                }
+            }
+        }
+    }
 }
 
 #[macro_export]

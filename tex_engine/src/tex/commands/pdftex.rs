@@ -12,6 +12,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::tex::commands::{CommandSource, TokenCont};
+use crate::tex::commands::pdftex::PDFTeXNode::PDFLiteral;
 use crate::tex::nodes::{CustomNode, NodeTrait, TeXNode};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
@@ -88,7 +89,8 @@ pub struct PDFObj {pub content: String} // TODO
 
 #[derive(Debug,Clone)]
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
-    PDFColorstack{action:PDFStackAction, index:usize,color:Option<PDFColor>,phantom:PhantomData<ET>}
+    PDFColorstack{action:PDFStackAction, index:usize,color:Option<PDFColor>,phantom:PhantomData<ET>},
+    PDFLiteral{literal:String,phantom:PhantomData<ET>},
 }
 
 impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -220,6 +222,18 @@ pub fn pdfglyphtounicode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSo
 pub fn pdflastobj<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:CommandSource<ET>)
                                      -> Result<ET::Int,TeXError<ET>> where ET::State:PDFState<ET> {
     Ok(catch_prim!(ET::Int::from_i64(engine.state.pdfobjs().len() as i64 - 1) => ("pdflastobj",cmd)))
+}
+
+/// "pdfliteral"
+pub const PDFLITERAL: &str = "pdfliteral";
+
+pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>) -> Result<(),TeXError<ET>>
+    where ET::Node:From<PDFTeXNode<ET>>{
+    debug_log!(trace=>"pdfliteral");
+    let mut literal = String::new();
+    catch_prim!(engine.get_braced_string(&mut literal) => (PDFCOLORSTACK,cmd));
+    engine.stomach.push_node(PDFLiteral {literal,phantom:PhantomData}.as_node());
+    Ok(())
 }
 
 /// "pdfobj"
@@ -387,6 +401,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_dim_assign!(pdfhorigin,engine);
     register_int_assign!(pdfoutput,engine);
     register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,c));
+    register_unexpandable!(pdfliteral,engine,None,(e,cmd) =>pdfliteral::<ET>(e,cmd));
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(c));
     register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,cmd,f));
     register_int_assign!(pdfminorversion,engine);
@@ -501,7 +516,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfinfo);
     cmtodo!(engine,pdfinterwordspaceoff);
     cmtodo!(engine,pdfinterwordspaceon);
-    cmtodo!(engine,pdfliteral);
     cmtodo!(engine,pdfmapfile);
     cmtodo!(engine,pdfmapline);
     cmtodo!(engine,pdfnames);

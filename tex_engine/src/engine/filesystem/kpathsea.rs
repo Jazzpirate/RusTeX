@@ -1,6 +1,7 @@
 //! An implementation of (the central part of) kpathsea, the path searching library used by TeX.
 
 use std::collections::hash_map::Entry;
+use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
 use lazy_static::lazy_static;
@@ -86,6 +87,9 @@ pub struct KpseResult {
 pub struct KpathseaBase {
     set: Vec<PathBuf>,
     recdot:bool
+}
+impl Debug for KpathseaBase {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f,"KPATHSEA") }
 }
 impl KpathseaBase {
     pub fn get(&self,filestr:&str) -> Option<KpseResult> {
