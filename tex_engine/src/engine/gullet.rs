@@ -112,16 +112,29 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
         ret
     }
     fn set_conditional(&mut self,idx:usize,branch:ConditionalBranch) {
-        // TODO throw error
-        *self.in_conditionals.get_mut(idx).unwrap() = branch;
+        match self.in_conditionals.get_mut(idx) {
+            None =>
+                panic!("Conditional index out of bounds"),
+            Some(r) => {
+                *r = branch;
+            }
+        }
     }
     fn set_top_conditional(&mut self,branch:ConditionalBranch) {
-        // TODO throw error
-        *self.in_conditionals.last_mut().unwrap() = branch;
+        match self.in_conditionals.last_mut() {
+            None =>
+                panic!("Conditional index out of bounds"),
+            Some(r) => {
+                *r = branch;
+            }
+        }
     }
     fn pop_conditional(&mut self) {
-        // TODO throw error
-        self.in_conditionals.pop();
+        match self.in_conditionals.pop() {
+            None =>
+                panic!("Conditional index out of bounds"),
+            Some(_) => ()
+        }
     }
     fn current_conditional(&self) -> (Option<ConditionalBranch>,usize) {
         (self.in_conditionals.last().copied(),self.in_conditionals.len() - 1)

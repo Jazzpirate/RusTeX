@@ -22,6 +22,10 @@ impl Kpathsea {
         Kpathsea { pwd, local, global }
     }
     pub fn kpsewhich(&self,filestr:&str) -> KpseResult {
+        if filestr.contains("xkey") {
+            println!("HERE: {}",filestr);
+            print!("Go!");
+        }
         if filestr.starts_with("|kpsewhich") {
             return KpseResult{path:self.pwd.join(filestr),local:true}
         }
@@ -34,19 +38,20 @@ impl Kpathsea {
         }
         let pb = PathBuf::from(filestr);
         if pb.is_absolute() {
-            return KpseResult{path:pb,local:false}
+            if pb.is_file() {return KpseResult{path:pb,local:false} }
+            else {return KpseResult{path:pb.join(".tex"),local:true} }
         }
         for l in &self.local {
             let mut p = l.join(filestr);
-            if p.exists() { return KpseResult{path:p,local:true} }
+            if p.is_file() { return KpseResult{path:p,local:true} }
             p = l.join(format!("{}.tex",filestr));
-            if p.exists() { return KpseResult{path:p,local:true} }
+            if p.is_file() { return KpseResult{path:p,local:true} }
         }
         for l in &self.global.set {
             let mut p = l.join(filestr);
-            if p.exists() { return KpseResult{path:p,local:false} }
+            if p.is_file() { return KpseResult{path:p,local:false} }
             p = l.join(format!("{}.tex",filestr));
-            if p.exists() { return KpseResult{path:p,local:false} }
+            if p.is_file() { return KpseResult{path:p,local:false} }
         }
         KpseResult{path:self.pwd.join(filestr),local:true}
     }
@@ -191,7 +196,7 @@ impl KpathseaBase {
     }
 
     fn fill_set(set: &mut Vec<PathBuf>, path : PathBuf, recurse: bool) {
-        if path.is_dir() {
+        if path.is_dir() && !path.ends_with(".git") {
             set.push(path.clone());
             if recurse {
                 for entry in std::fs::read_dir(path).unwrap() {

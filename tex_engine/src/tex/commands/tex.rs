@@ -819,10 +819,18 @@ pub fn expandafter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<E
 }
 
 pub const FI : &str = "fi";
-pub fn fi<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:CommandSource<ET>)
+pub fn fi<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>)
                          -> Result<(),TeXError<ET>> {
     debug_log!(trace=>"...end of conditional.");
-    engine.gullet.pop_conditional();
+    match engine.gullet.current_conditional().0 {
+        None => throw!("Not in a conditional" => cmd.cause),
+        Some(ConditionalBranch::True(_) | ConditionalBranch::Case(_,_) | ConditionalBranch::Else(_)) =>
+            engine.gullet.pop_conditional(),
+        _ => {
+            engine.mouth.requeue(cmd.cause);
+            engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
+        }
+    }
     Ok(())
 }
 
