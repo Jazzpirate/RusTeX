@@ -380,6 +380,34 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     engine.set_command_for_tk(newcmd,Some(def),globally);
 }
 
+
+pub const SCANTOKENS: &str = "scantokens";
+/// `\detokenize`: convert a token list into a string
+/// (except for ` `, which gets code [`Space`](CategoryCode::Space)) and reparse/tokenize it.
+pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+    use crate::utils::strings::AllCharsTrait;
+    debug_log!(trace=>"scantokens");
+    let esc = engine.state.get_escapechar();
+    let cc = engine.state.get_catcode_scheme().clone();
+    let mut ret = String::new();
+    expand_until_group!(engine,t => match &t.base {
+        BaseToken::Char(c,_) => {
+            ret.push(c.as_char())
+        }
+        BaseToken::CS(name) => {
+            let str = name.to_str(engine.interner);
+            if str.len() == 1 && *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
+                ret.push_str(str);
+            } else {
+                if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
+                ret.push_str(str);
+                ret.push(' ')
+            }
+        }
+    });
+    engine.mouth.push_string(ret.into_bytes());
+}
+
 pub const UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
 pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
@@ -433,6 +461,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,&c));
     register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,&cmd,global));
     register_int_assign!(savinghyphcodes,engine);
+    register_expandable!(scantokens,engine,(e,c,f) =>scantokens::<ET>(e,&c,f));
     register_int_assign!(tracingassigns,engine);
     register_int_assign!(tracinggroups,engine);
     register_int_assign!(tracingifs,engine);
@@ -478,7 +507,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,parshapelength);
     cmtodo!(engine,predisplaydirection);
     cmtodo!(engine,savingvdiscards);
-    cmtodo!(engine,scantokens);
     cmtodo!(engine,showgroups);
     cmtodo!(engine,showifs);
     cmtodo!(engine,showtokens);

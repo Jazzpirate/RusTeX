@@ -90,8 +90,10 @@ pub struct PDFObj {pub content: String} // TODO
 pub struct PDFXForm<ET:EngineType> {pub attr: String, pub resources:String, pub bx:HVBox<ET>} // TODO
 
 #[derive(Debug,Clone)]
+pub struct PDFColorstack(pub Vec<PDFColor>); // TODO
+
+#[derive(Debug,Clone)]
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
-    PDFColorstack{action:PDFStackAction, index:usize,color:Option<PDFColor>},
     PDFLiteral{literal:String},
     PDFXForm{form:PDFXForm<ET>},
 }
@@ -170,7 +172,7 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
 pub const PDFCOLORSTACK: &str = "pdfcolorstack";
 
 pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-    where ET::Node:From<PDFTeXNode<ET>>{
+    where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
     debug_log!(trace=>"pdfcolorstack");
     let index = engine.get_int().to_i64();
     if index < 0 {throw!("Invalid colorstack index: {}",index => cmd.cause)}
@@ -179,17 +181,41 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
         None => throw!("Expected one of 'push','pop','set','current'" => cmd.cause)
     };
     match &action {
-        PDFStackAction::Current | PDFStackAction::Pop =>
-            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color:None}.as_node()),
-        _ => {
+        PDFStackAction::Current =>
+            engine.state.set_current_colorstack(index as usize),
+        PDFStackAction::Pop => {engine.state.get_colorstack(index as usize).0.pop();}
+        PDFStackAction::Set => {
             let mut colorstr = engine.memory.get_string();
             //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
             engine.get_braced_string(&mut colorstr);
-            let color = Some(PDFColor::parse::<ET>(colorstr.as_str()));
+            let color = PDFColor::parse::<ET>(colorstr.as_str());
             engine.memory.return_string(colorstr);
-            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color}.as_node());
+            *engine.state.get_colorstack(index as usize).0.last_mut().unwrap() = color;
+        }
+        PDFStackAction::Push => {
+            let mut colorstr = engine.memory.get_string();
+            //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
+            engine.get_braced_string(&mut colorstr);
+            let color = PDFColor::parse::<ET>(colorstr.as_str());
+            engine.memory.return_string(colorstr);
+            engine.state.get_colorstack(index as usize).0.push(color);
         }
     }
+}
+
+pub fn pdfcolorstackinit<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int
+    where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
+    debug_log!(trace=>"pdfcolorstackinit");
+    engine.get_keyword("page"); // TODO
+    engine.get_keyword("direct");
+    let mut colorstr = engine.memory.get_string();
+    //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
+    engine.get_braced_string(&mut colorstr);
+    let color = PDFColor::parse::<ET>(colorstr.as_str());
+    engine.memory.return_string(colorstr);
+    let idx = engine.state.pdfcolorstacks().len();
+    engine.state.pdfcolorstacks().push(PDFColorstack(vec!(color)));
+    ET::Int::from_i64(idx as i64)
 }
 
 pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -426,6 +452,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,&cmd));
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,&cmd));
     register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,&cmd));
+    register_int!(pdfcolorstackinit,engine,(e,c) => pdfcolorstackinit::<ET>(e,&c));
     register_int_assign!(pdfcompresslevel,engine);
     register_int_assign!(pdfdecimaldigits,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
@@ -516,7 +543,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,ifincsname);
     cmtodo!(engine,ifpdfprimitive);
     cmtodo!(engine,leftmarginkern);
-    cmtodo!(engine,pdfcolorstackinit);
     cmtodo!(engine,pdfcreationdate);
     cmtodo!(engine,pdfescapehex);
     cmtodo!(engine,pdfescapename);

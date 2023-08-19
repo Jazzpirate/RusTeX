@@ -10,7 +10,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory};
-use crate::tex::commands::pdftex::{PDFObj, PDFXForm};
+use crate::tex::commands::pdftex::{PDFColorstack, PDFObj, PDFXForm};
 use crate::tex::nodes::HVBox;
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip};
@@ -171,6 +171,9 @@ pub trait PDFState<ET:EngineType<State=Self>>:State<ET> {
     fn pdfmatches(&mut self) -> &mut Vec<String>;
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
+    fn pdfcolorstacks(&mut self) -> &mut Vec<PDFColorstack>;
+    fn set_current_colorstack(&mut self,index:usize);
+    fn get_colorstack(&mut self,u:usize) -> &mut PDFColorstack;
 }
 
 #[derive(Clone)]
@@ -183,6 +186,8 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     pdfmatches:Vec<String>,
     pdfobjs:Vec<PDFObj>,
     pdfxforms:Vec<PDFXForm<ET>>,
+    pdfcolorstacks:Vec<PDFColorstack>,
+    current_colorstack:usize,
 
     current_font:SingleValueField<ET::Font>,
 
@@ -231,6 +236,8 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
             pdfmatches:vec!(),
             pdfobjs:vec!(),
             pdfxforms:vec!(),
+            pdfcolorstacks:vec!(PDFColorstack(vec!())),
+            current_colorstack:0,
             /* filesystem: fs,*/
             grouptype: vec![(GroupType::Top,None)],
             endlinechar: SingleValueField::new(Some(ET::Char::carriage_return())),
@@ -286,6 +293,15 @@ impl<ET:EngineType<State=Self>> PDFState<ET> for PDFTeXState<ET> {
     fn pdfmatches(&mut self) -> &mut Vec<String> { &mut self.pdfmatches }
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
+    fn pdfcolorstacks(&mut self) -> &mut Vec<PDFColorstack> {
+        &mut self.pdfcolorstacks
+    }
+    fn get_colorstack(&mut self, u: usize) -> &mut PDFColorstack {
+        &mut self.pdfcolorstacks[u]
+    }
+    fn set_current_colorstack(&mut self, index: usize) {
+        self.current_colorstack = index
+    }
 }
 
 impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {

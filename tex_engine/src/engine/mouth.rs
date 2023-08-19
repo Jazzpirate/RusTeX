@@ -39,6 +39,7 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
     /// Insert a [`File`] into the [`Mouth`], to be processed next
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>);
+    fn push_string(&mut self,str:Vec<u8>);
 
     /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
     fn push_noexpand(&mut self,tk:Token<ET>,memory:&mut Memory<ET>);
@@ -212,6 +213,11 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
             (*file.content_string()).clone().unwrap(),
             Some(interner.from_string(file.path().to_str().unwrap()))
         ));
+        self.stack.push(source);
+    }
+
+    fn push_string(&mut self, str: Vec<u8>) {
+        let source = TeXMouthSource::String(StringSource::new(str,None));
         self.stack.push(source);
     }
 
