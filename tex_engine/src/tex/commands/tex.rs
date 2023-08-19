@@ -1217,7 +1217,7 @@ pub fn ignorespaces<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
 pub const IMMEDIATE: &str ="immediate";
 pub fn immediate<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"immediate");
-    match engine.get_next_stomach_command() {
+    match engine.get_next_stomach_command() { // TODO: pdfxform, pdfobj
         None => file_end_prim!(IMMEDIATE,cmd),
         Some(sc) => match sc.command {
             BaseStomachCommand::Whatsit { name, apply } => {
@@ -1302,7 +1302,7 @@ pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         BaseToken::Char(c,cc) =>
             Some(Command::new(BaseCommand::Char{char:c,catcode:cc},Some(&cmd))),
     };
-    debug_log!(debug=>"let: {} = {:?}",cs.to_str(engine.interner,Some(ET::Char::backslash())),cmd);
+    debug_log!(debug=>"let: {} = {:?}",cs.to_str(engine.interner,Some(ET::Char::backslash())),cmd.as_ref().unwrap_or(&Command::new(BaseCommand::None,None)));
     engine.set_command_for_tk(cs,cmd,globally);
 }
 

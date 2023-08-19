@@ -160,7 +160,7 @@ impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
 * abstracts away the character type, e.g. for control sequence names.
 */
 #[derive(Clone,Copy,PartialEq,Hash,Eq,PartialOrd,Ord,Debug)]
-pub struct TeXStr<C:CharType>(string_interner::DefaultSymbol,PhantomData<C>);
+pub struct TeXStr<C:CharType>(pub string_interner::DefaultSymbol,PhantomData<C>);
 impl<C:CharType> TeXStr<C> {
     //pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
     //pub fn len(&self) -> usize { self.0.len() }

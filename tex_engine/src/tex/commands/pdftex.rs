@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use std::marker::PhantomData;
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::numeric_methods::expand_until_space;
@@ -12,8 +12,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::tex::commands::{CommandSource, TokenCont};
-use crate::tex::commands::pdftex::PDFTeXNode::PDFLiteral;
-use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode};
+use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode, Whatsit};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
@@ -112,6 +111,20 @@ impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXN
     }
 }
 impl<ET:EngineType<Node=Self>> CustomNode<ET> for PDFTeXNode<ET> {}
+impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNode<ET>> {
+    fn as_node(self) -> TeXNode<ET> {
+        PDFTeXNode::PDFXForm{form:self}.as_node()
+    }
+    fn height(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+    fn depth(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+    fn width(&self) -> ET::Dim {
+        ET::Dim::from_sp(0)
+    }
+}
 
 // --------------------------------------------------------------------------------------------------
 
@@ -222,6 +235,11 @@ pub fn pdflastobj<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET
     ET::Int::from_i64(engine.state.pdfobjs().len() as i64 - 1)
 }
 
+pub fn pdflastxform<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>)
+                                 -> ET::Int where ET::State:PDFState<ET> {
+    ET::Int::from_i64(engine.state.pdfxforms().len() as i64 - 1)
+}
+
 /// "pdfliteral"
 pub const PDFLITERAL: &str = "pdfliteral";
 
@@ -230,7 +248,7 @@ pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"pdfliteral");
     let mut literal = String::new();
     engine.get_braced_string(&mut literal);
-    engine.stomach.push_node(PDFLiteral {literal}.as_node());
+    engine.stomach.push_node(PDFTeXNode::PDFLiteral {literal}.as_node());
 }
 
 /// "pdfobj"
@@ -263,6 +281,13 @@ pub fn pdfobj<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     }
 }
 
+pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+                            -> Whatsit<ET> where ET::State:PDFState<ET>,ET::Node:From<PDFTeXNode<ET>> {
+    debug_log!(trace=>"\\pdfrefxform");
+    let i = engine.get_int().to_i64();
+    if i < 0 || engine.state.pdfxforms().len() as i64 <= i {throw!("Invalid xform number: {}",i => cmd.cause)}
+    Whatsit::new(Box::new(move |e| e.stomach.push_node(e.state.pdfxforms().remove(i as usize).as_node())))
+}
 
 pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\pdfresettimer");
@@ -410,6 +435,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_dim_assign!(pdfhorigin,engine);
     register_int_assign!(pdfoutput,engine);
     register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,&c));
+    register_int!(pdflastxform,engine,(e,c) => pdflastxform::<ET>(e,&c));
     register_unexpandable!(pdfliteral,engine,None,(e,cmd) =>pdfliteral::<ET>(e,&cmd));
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(&c));
     register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,&cmd,f));
@@ -420,6 +446,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_tok_assign!(pdfpageresources,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
+    register_whatsit!(pdfrefxform,engine,(e,cmd) =>pdfrefxform::<ET>(e,&cmd));
     register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,&cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(&c));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,&cmd,f));
@@ -467,7 +494,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,tagcode);
     cmtodo!(engine,pdflastannot);
     cmtodo!(engine,pdflastlink);
-    cmtodo!(engine,pdflastxform);
     cmtodo!(engine,pdflastximage);
     cmtodo!(engine,pdflastximagecolordepth);
     cmtodo!(engine,pdflastximagepages);
@@ -535,7 +561,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfoutline);
     cmtodo!(engine,pdfprimitive);
     cmtodo!(engine,pdfrefobj);
-    cmtodo!(engine,pdfrefxform);
     cmtodo!(engine,pdfrefximage);
     cmtodo!(engine,pdfrestore);
     cmtodo!(engine,pdfrunninglinkoff);

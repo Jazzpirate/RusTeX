@@ -192,7 +192,7 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     escapechar: SingleValueField<Option<ET::Char>>,
     newlinechar: SingleValueField<Option<ET::Char>>,
 
-    commands: HashMapField<TeXStr<ET::Char>,Option<Command<ET>>>,
+    pub commands: HashMapField<TeXStr<ET::Char>,Option<Command<ET>>>,
     ac_commands: CharField<ET::Char,Option<Command<ET>>>,
 
     catcodes: CharField<ET::Char,CategoryCode>,

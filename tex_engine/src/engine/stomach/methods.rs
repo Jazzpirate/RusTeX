@@ -7,10 +7,11 @@ use crate::engine::mouth::Mouth;
 use crate::tex::commands::{BaseStomachCommand, StomachCommand};
 use crate::tex::nodes::{HorV, NodeTrait, TeXNode};
 use crate::utils::errors::TeXError;
+use crate::utils::strings::CharType;
 
 pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
-    debug_log!(trace=>"digesting command \"{:?}\" ({:?})",cmd.command,cmd.source.cause);
+    debug_log!(trace=>"digesting command {:?} ({})",cmd.command,cmd.source.cause.to_str(engine.interner,Some(ET::Char::backslash())));
     match cmd.command {
         Unexpandable {name,apply,forces_mode} => {
             match forces_mode {

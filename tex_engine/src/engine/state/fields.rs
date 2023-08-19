@@ -417,7 +417,7 @@ impl<ET:EngineType> TokMapField<ET> {
 
 /// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::BaseCommand)s,
 #[derive(Clone)]
-pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(HMap<K,V>, Vec<BTreeMap<K,V>>);
+pub struct HashMapField<K:Eq+Hash+Clone,V:Default+Clone+IsDefault>(pub HMap<K,V>, Vec<BTreeMap<K,V>>);
 impl<K:Eq+Hash+Clone,V:Default+Clone+IsDefault> HashMapField<K,V> {
     /// initializes a new [`HashMapField`].
     //#[inline(always)]
