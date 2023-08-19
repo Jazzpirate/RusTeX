@@ -31,8 +31,7 @@ SPACE
 \-
  */
 
-pub fn SPACE<ET:EngineType>(_:&mut EngineRef<ET>, _cmd:&CommandSource<ET>)
-                            -> Result<(),TeXError<ET>> {
+pub fn SPACE<ET:EngineType>(_:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
     todo!("\\ ")
 }
 
@@ -333,7 +332,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
     });
 
     let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
-    debug_log!(trace=>"def {:?} = {:?}",cs,def);
+    debug_log!(trace=>"def {} = {:?}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def);
     engine.set_command_for_tk(cs,Some(def),global);
 }
 
@@ -1278,6 +1277,8 @@ pub fn lccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(debug=>"\\lccode '{}' == {}",c.char_str(),v);
     v
 }
+
+use string_interner::Symbol;
 
 pub const LET : &str = "let";
 pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
@@ -2642,6 +2643,13 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_muskip_assign!(thinmuskip,engine);
     register_muskip_assign!(medmuskip,engine);
     register_muskip_assign!(thickmuskip,engine);
+
+    engine.state.set_command(ET::Char::from_str(" ",engine.interner),Some(
+        Command::new(BaseCommand::Unexpandable {
+            name:" ",
+            apply:|e,cmd| SPACE::<ET>(e,&cmd),
+            forces_mode:Some(HorV::Horizontal)
+        },None)),true);
     
 
     // TODOS ---------------------------------------------------------------------

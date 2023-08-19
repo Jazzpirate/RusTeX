@@ -1,4 +1,4 @@
-use crate::{debug_log, throw};
+use crate::{catch, debug_log, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::{GroupType, TeXMode};
 use crate::engine::state::State;
@@ -64,16 +64,16 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             engine.stomach.push_node(TeXNode::Whatsit(wi));
         },
         Relax => (),
-        Char{..} => {
+        Char{..} => catch!({
             let mode = engine.state.mode();
             todo!("Character in digest: {:?} at {}\n{}",mode,engine.current_position(),engine.preview(50))
-        }
-        MathChar(_) => todo!("Mathchar in digest"),
-        Superscript => todo!("Superscript in digest"),
-        Subscript => todo!("Subscript in digest"),
+        } => cmd.source.cause),
+        MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
+        Superscript => catch!( todo!("Superscript in digest") => cmd.source.cause),
+        Subscript => catch!( todo!("Subscript in digest") => cmd.source.cause),
         Space if engine.state.mode().is_vertical() => (),
-        Space => todo!("Space in H mode"),
-        MathShift => todo!("MathShift in digest"),
+        Space => catch!( todo!("Space in H mode") => cmd.source.cause),
+        MathShift => catch!( todo!("MathShift in digest") => cmd.source.cause),
         BeginGroup => engine.state.stack_push(GroupType::Token),
         EndGroup => match engine.state.stack_pop(engine.memory) {
             Some((v,GroupType::Token)) => {

@@ -1,6 +1,6 @@
 use array_init::array_init;
 use log::error;
-use string_interner::backend::BufferBackend;
+use string_interner::backend::{BufferBackend, StringBackend};
 use string_interner::{DefaultSymbol, StringInterner};
 use crate::engine::EngineType;
 use crate::tex::token::Token;
@@ -10,14 +10,14 @@ const VEC_SIZE:usize = 32;
 
 #[derive(Clone)]
 pub struct Interner<Char:CharType> {
-    interner:StringInterner<BufferBackend,ahash::RandomState>,
+    interner:StringInterner<StringBackend,ahash::RandomState>,
     pub relax:TeXStr<Char>,
     pub par:TeXStr<Char>,
     pub empty_str:TeXStr<Char>,
 }
 impl<Char:CharType> Interner<Char> {
     pub fn new() -> Self {
-        let mut interner = StringInterner::<BufferBackend,ahash::RandomState>::new();
+        let mut interner = StringInterner::<StringBackend,ahash::RandomState>::new();
         Interner {
             relax:TeXStr::from_primitive(interner.get_or_intern_static("relax")),
             par:TeXStr::from_primitive(interner.get_or_intern_static("par")),
@@ -114,7 +114,7 @@ impl<ET:EngineType> ExpansionContainer<ET> {
     pub fn reset(&mut self,memory:&mut Memory<ET>) {
         self.array.clear();
     }
-    #[inline]
+
     pub fn consume<F,R>(mut self,memory:&mut Memory<ET>,mut f:F) where F:FnMut((Token<ET>,bool)) {
         for t in self.array.drain(..).rev() {
             f((t,true));

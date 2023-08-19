@@ -14,7 +14,7 @@ use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 
 /// A [`StringSource`] is in one of three states
 #[derive(Copy,Clone,PartialEq,Debug)]
-enum MouthState {
+pub enum MouthState {
     /// Beginning of line
     N,
     /// After a space (or control sequence)
@@ -62,15 +62,16 @@ impl<C:CharType> StringSourceState<C> {
     /// Process an [`end-of-line`](crate::tex::catcodes::CategoryCode::EOL) character:
     /// If `\endline==None`, ignore it and obtain the next character. Otherwise, return the
     /// `\endlinechar` character.
-    pub fn do_eol(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>) -> Option<(C,usize,usize)> {
+    pub fn do_eol(&mut self,cc:&CategoryCodeScheme<C>,endline:Option<C>) -> Option<(C,usize,usize,Option<MouthState>)> {
         match endline {
             None => {
                 self.line += 1;
                 self.col = 0;
+                self.state = MouthState::N;
                 self.next_char(cc,endline)
             }
             Some(endline) => {
-                let ret = Some((endline,self.line,self.col));
+                let ret = Some((endline,self.line,self.col,Some(MouthState::N)));
                 self.line += 1;
                 self.col = 0;
                 ret
@@ -80,9 +81,9 @@ impl<C:CharType> StringSourceState<C> {
 
     /// Get the next character from the [`StringSource`], or return [`None`]
     /// if the end of the [`StringSource`] has been reached.
-    fn next_char(&mut self,cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Option<(C, usize, usize)> {
-        if let Some(c) = self.charbuffer.pop() {
-            return Some(c)
+    fn next_char(&mut self,cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Option<(C, usize, usize,Option<MouthState>)> {
+        if let Some((c,a,b)) = self.charbuffer.pop() {
+            return Some((c,a,b,None))
         }
         match C::from_u8_iter(&mut self.string) {
             Some(a) => self.do_char(a,cc,endline),
@@ -94,7 +95,7 @@ impl<C:CharType> StringSourceState<C> {
         }
     }
 
-    fn do_char(&mut self,a:C,cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Option<(C, usize, usize)> {
+    fn do_char(&mut self,a:C,cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Option<(C, usize, usize,Option<MouthState>)> {
         match a.is_eol() {
             Some(true) => // `\n`
                 self.do_eol(cc,endline),
@@ -111,11 +112,12 @@ impl<C:CharType> StringSourceState<C> {
                             None => { // return b
                                 self.line += 1;
                                 self.col = 0;
-                                Some((b,self.line,0))
+                                self.state =MouthState::N;
+                                Some((b,self.line,0,None))
                             }
                             Some(endline) => {
                                 // return \endlinechar
-                                let ret = Some((endline,self.line,self.col));
+                                let ret = Some((endline,self.line,self.col,Some(MouthState::N)));
                                 self.line += 1;
                                 self.col = 1;
                                 self.charbuffer.push((b, self.line, 0));
@@ -132,38 +134,38 @@ impl<C:CharType> StringSourceState<C> {
             }
             _ if *cc.get(&a) == CategoryCode::Superscript => self.maybe_superscript(a,cc,endline),
             _ => {
-                let ret = Some((a,self.line,self.col));
+                let ret = Some((a,self.line,self.col,None));
                 self.col += 1;
                 ret
             }
         }
     }
 
-    fn maybe_superscript(&mut self,a:C,cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Option<(C, usize, usize)> {
+    fn maybe_superscript(&mut self,a:C,cc:&CategoryCodeScheme<C>, endline: Option<C>) -> Option<(C, usize, usize,Option<MouthState>)> {
         debug_log!(trace=>"next_char:   Superscript");
         if let Some(a2) = C::from_u8_iter(&mut self.string) {
             if a == a2 {
                 //fn cond(i: u8) -> bool { (48 <= i && i <= 57) || (97 <= i && i <= 102) }
                 let (l,c) = (self.line,self.col);
                 self.col += 2;
-                if let Some((first, lf, cf)) = self.next_char(cc, endline) {
+                if let Some((first, lf, cf,_)) = self.next_char(cc, endline) {
                     if lf != l {
                         self.charbuffer.push((first, lf, cf));
                         self.charbuffer.push((a2,l,c+1));
-                        Some((a,l,c))
+                        Some((a,l,c,None))
                     } else {
-                        if let Some((second,ls,cs)) = self.next_char(cc,endline) {
+                        if let Some((second,ls,cs,_)) = self.next_char(cc,endline) {
                             if ls != l {
                                 self.charbuffer.push((second, ls, cs));
                                 let firstu = first.to_usize();
                                 if firstu < 128 {
                                     let u = firstu as u8;
                                     let ch : C = (if u < 64 {u + 64} else {u - 64}).into();
-                                    Some((ch,l,c))
+                                    Some((ch,l,c,None))
                                 } else {
                                     self.charbuffer.push((first,lf,cf));
                                     self.charbuffer.push((a2,l,c+1));
-                                    Some((a,l,c))
+                                    Some((a,l,c,None))
                                 }
                             } else {
                                 let firstu = first.to_usize();
@@ -174,17 +176,17 @@ impl<C:CharType> StringSourceState<C> {
                                         std::str::from_utf8(&[firstu as u8, secondu as u8]).unwrap(),
                                         16
                                     ).unwrap();
-                                    Some((char.into(),l,c))
+                                    Some((char.into(),l,c,None))
                                 } else {
                                     self.charbuffer.push((second, ls, cs));
                                     if firstu < 128 {
                                         let u = firstu as u8;
                                         let ch : C = (if u < 64 {u + 64} else {u - 64}).into();
-                                        Some((ch,l,c))
+                                        Some((ch,l,c,None))
                                     } else {
                                         self.charbuffer.push((first,lf,cf));
                                         self.charbuffer.push((a2,l,c+1));
-                                        Some((a,l,c))
+                                        Some((a,l,c,None))
                                     }
                                 }
                             }
@@ -193,28 +195,28 @@ impl<C:CharType> StringSourceState<C> {
                             if firstu < 128 {
                                 let u = firstu as u8;
                                 let ch : C = (if u < 64 {u + 64} else {u - 64}).into();
-                                Some((ch,l,c))
+                                Some((ch,l,c,None))
                             } else {
                                 self.charbuffer.push((first,lf,cf));
                                 self.charbuffer.push((a2,l,c+1));
-                                Some((a,l,c))
+                                Some((a,l,c,None))
                             }
                         }
                     }
                 } else {
                     self.charbuffer.push((a2,l,c+1));
-                    Some((a,l,c))
+                    Some((a,l,c,None))
                 }
             } else {
-                let ret = Some((a,self.line,self.col));
+                let ret = Some((a,self.line,self.col,None));
                 self.col += 1;
-                if let Some(x) = self.do_char(a2,cc,endline) {
-                    self.charbuffer.push(x);
+                if let Some((x,s,e,_)) = self.do_char(a2,cc,endline) {
+                    self.charbuffer.push((x,s,e));
                 }
                 ret
             }
         } else {
-            let ret = Some((a,self.line,self.col));
+            let ret = Some((a,self.line,self.col,None));
             self.col += 1;
             ret
         }
@@ -253,7 +255,7 @@ impl<C:CharType> StringSourceState<C> {
         use crate::tex::catcodes::CategoryCode::*;
         debug_log!(trace=>"get_next_immediate:   Escape");
         match self.next_char(cc,endline) {
-            Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
+            Some((a,l,c,_)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
                 self.charbuffer.push((a,l,c));
                 self.state = MouthState::N;
                 debug_log!(trace=>"get_next_immediate: EOL; returning empty CS");
@@ -264,22 +266,22 @@ impl<C:CharType> StringSourceState<C> {
                 debug_log!(trace=>"get_next_immediate: Stream empty; returning empty CS");
                 (BaseToken::CS(interner.empty_str), line, col)
             }
-            Some((a,_,_)) if *cc.get(&a) == Letter => {
+            Some((a,_,_,_)) if *cc.get(&a) == Letter => {
                 self.tempstr.clear();
                 self.state = MouthState::S;
                 debug_log!(trace=>"get_next_immediate: Next character is Letter");
                 self.tempstr.push(a.as_char());
                 loop {
                     match self.next_char(cc,endline) {
-                        Some((a,l,c)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
+                        Some((a,l,c,_)) if self.get_next_lc().1 == 0 && *cc.get(&a) != EOL => {
                             self.charbuffer.push((a,l,c));
                             self.state = MouthState::N;
                             break
                         }
-                        Some((b,_,_)) if *cc.get(&b) == Letter =>
+                        Some((b,_,_,_)) if *cc.get(&b) == Letter =>
                             self.tempstr.push(b.as_char()),
-                        Some(o) => {
-                            self.charbuffer.push(o);
+                        Some((o,s,l,_)) => {
+                            self.charbuffer.push((o,s,l));
                             break
                         }
                         None => break
@@ -289,7 +291,7 @@ impl<C:CharType> StringSourceState<C> {
                 let ret = BaseToken::CS(TeXStr::from_string(&self.tempstr,interner));
                 (ret,line, col)
             }
-            Some((a,_,_)) => {
+            Some((a,_,_,_)) => {
                 self.state = MouthState::M;
                 self.tempstr.clear();
                 self.tempstr.push(a.as_char());
@@ -316,7 +318,7 @@ impl<C:CharType> StringSourceState<C> {
                 debug_log!(trace=>"get_next_immediate: No more characters");
                 None
             },
-            Some((a,line,col)) => {
+            Some((a,line,col,nst)) => {
                 debug_log!(trace=>"get_next_immediate: Next character: {} (at {};{})",a.char_str(),line,col);
                 match cc.get(&a) {
                     EOL => {
@@ -324,14 +326,17 @@ impl<C:CharType> StringSourceState<C> {
                         match self.state {
                             MouthState::N => {
                                 debug_log!(trace=>"get_next_immediate: State:N; returning \\par");
+                                if let Some(st) = nst { self.state = st}
                                 Some((BaseToken::CS(interner.par), line, col))
                             }
                             MouthState::S => {
                                 self.state = MouthState::N;
+                                if let Some(st) = nst { self.state = st}
                                 return self.get_next_immediate(interner,cc,endline)
                             }
                             _ => {
                                 self.state = MouthState::N;
+                                if let Some(st) = nst { self.state = st}
                                 debug_log!(trace=>"get_next_immediate: State:{:?}; returning Space",self.state);
                                 Some((BaseToken::Char(a, Space),line, col))
                             }
@@ -340,19 +345,31 @@ impl<C:CharType> StringSourceState<C> {
                     Space => {
                         debug_log!(trace=>"get_next_immediate:   Space");
                         match self.state {
-                            MouthState::S => self.get_next_immediate(interner,cc, endline),
+                            MouthState::S => {
+                                if let Some(st) = nst { self.state = st};
+                                self.get_next_immediate(interner,cc, endline)
+                            },
                             MouthState::N => {
+                                if let Some(st) = nst { self.state = st};
                                 self.get_next_immediate(interner,cc, endline)
                             }
                             _ => {
                                 self.state = MouthState::S;
+                                if let Some(st) = nst { self.state = st}
                                 Some((BaseToken::Char(a, Space),line, col))
                             }
                         }
                     }
                     Escape => Some(self.get_escape(interner,cc,endline,a,line,col)),
+                    Ignored => {
+                        let ret = BaseToken::Char(a, Ignored);
+                        if let Some(st) = nst { self.state = st}
+                        debug_log!(trace=>"get_next_immediate: returning {:?}",ret);
+                        Some((ret, line, col))
+                    }
                     o => {
                         self.state = MouthState::M;
+                        if let Some(st) = nst { self.state = st}
                         let ret = BaseToken::Char(a, *o);
                         debug_log!(trace=>"get_next_immediate: returning {:?}",ret);
                         Some((ret, line, col))
@@ -397,14 +414,15 @@ impl<C:CharType> StringSourceState<C> {
         let mut done = false;
         use CategoryCode::*;
         let currline = self.line;
-        while let Some((next,l,c)) = self.next_char(cc,endline) {
+        while let Some((next,l,c,nst)) = self.next_char(cc,endline) {
             if l != currline {
                 self.state = MouthState::N;
+                if let Some(st) = nst { self.state = st}
                 self.charbuffer.push((next,l,c));
                 return Ok(())
             }
             match cc.get(&next) {
-                Ignored => (),
+                Ignored => { if let Some(st) = nst { self.state = st}},
                 Comment => {
                     self.skip_line();
                     if done {
@@ -418,6 +436,7 @@ impl<C:CharType> StringSourceState<C> {
                     throw!("Invalid character {}",c)
                 }
                 EOL => {
+                    if let Some(st) = nst { self.state = st}
                     if done {
                         return Ok(())
                     }
@@ -433,6 +452,7 @@ impl<C:CharType> StringSourceState<C> {
                             done = true;
                         }
                     }
+                    if let Some(st) = nst { self.state = st}
                 }
                 Escape => {
                     done = true;
@@ -440,6 +460,7 @@ impl<C:CharType> StringSourceState<C> {
                 }
                 o => {
                     self.state = MouthState::M;
+                    if let Some(st) = nst { self.state = st}
                     done = true;
                     f(Token::new(BaseToken::Char(next,*o),None))
                 }
@@ -453,7 +474,7 @@ impl<C:CharType> StringSourceState<C> {
             Some(_) => false,
             None => match self.next_char(state.get_catcode_scheme(), state.get_endlinechar()) {
                 None => true,
-                Some((c, l, co)) => {
+                Some((c, l, co,_)) => {
                     self.charbuffer.push((c, l, co));
                     false
                 }

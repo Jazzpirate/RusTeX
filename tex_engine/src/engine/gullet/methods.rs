@@ -360,10 +360,12 @@ pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut Stri
                 ret.push(c.as_char())
             }
             BaseToken::CS(name) => {
-                if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
                 let str = name.to_str(engine.interner);
-                ret.push_str(str);
-                if str.len() > 1 || *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
+                if str.len() == 1 && *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
+                    ret.push_str(str);
+                } else {
+                    if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
+                    ret.push_str(str);
                     ret.push(' ')
                 }
             }

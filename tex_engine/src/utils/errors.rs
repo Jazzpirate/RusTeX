@@ -151,7 +151,7 @@ macro_rules! catch {
                         }
                         std::panic::resume_unwind(e)
                     }
-                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
+                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:Some($cause),source:std::option::Option::None}))
                 }
             }
         }
@@ -168,7 +168,7 @@ macro_rules! catch {
                             source:Some(e)
                         }))
                     }
-                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
+                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("{} (caused by panic)",$msg),cause:std::option::Option::None,source:std::option::Option::None}))
                 }
             }
         }
@@ -185,7 +185,7 @@ macro_rules! catch {
                             source:Some(e)
                         }))
                     }
-                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
+                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("{} (caused by panic)",$msg),cause:Some($cause),source:std::option::Option::None}))
                 }
             }
         }

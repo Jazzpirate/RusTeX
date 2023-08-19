@@ -1,5 +1,6 @@
 /*! A TeX state */
 
+use string_interner::Symbol;
 use crate::engine::filesystem::File;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField, TokField, TokMapField};
@@ -43,6 +44,7 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
     fn stack_push(&mut self, g: GroupType);
 
     fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)>;
+    fn grouplevel(&self) -> usize;
 
     /// get the current group type
     fn get_grouptype(&self) -> GroupType;
@@ -192,7 +194,7 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     escapechar: SingleValueField<Option<ET::Char>>,
     newlinechar: SingleValueField<Option<ET::Char>>,
 
-    pub commands: HashMapField<TeXStr<ET::Char>,Option<Command<ET>>>,
+    pub commands: VecField<Option<Command<ET>>>,
     ac_commands: CharField<ET::Char,Option<Command<ET>>>,
 
     catcodes: CharField<ET::Char,CategoryCode>,
@@ -234,7 +236,7 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
             endlinechar: SingleValueField::new(Some(ET::Char::carriage_return())),
             escapechar: SingleValueField::new(Some(ET::Char::backslash())),
             newlinechar: SingleValueField::new(Some(ET::Char::newline())),
-            commands: HashMapField::new(),
+            commands: VecField::new(),
             ac_commands: CharField::new(ET::Char::rep_field(None)),
             catcodes: CharField::new(ET::Char::starting_catcode_scheme()),
             sfcodes: CharField::new(ET::Char::rep_field(ET::Int::default())),
@@ -298,6 +300,9 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         } else {
             self.current_font.set_locally(f)
         }
+    }
+    fn grouplevel(&self) -> usize {
+        self.grouptype.len()
     }
 
     fn set_afterassignment(&mut self, t: Token<ET>) {
@@ -531,7 +536,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
 
     // #[inline(always)]
     fn get_command(&self, name: &TeXStr<ET::Char>) -> Option<&Command<ET>> {
-        match self.commands.get(name) {
+        match self.commands.get(&name.0.to_usize()) {
             Some(r) => r.as_ref(),
             _ => None
         }//.as_ref().map(|c| *c)
@@ -541,9 +546,9 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
-            self.commands.set_globally(name,cmd)
+            self.commands.set_globally(name.0.to_usize(),cmd)
         } else {
-            self.commands.set_locally(name,cmd)
+            self.commands.set_locally(name.0.to_usize(),cmd)
         }
     }
     fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>> {

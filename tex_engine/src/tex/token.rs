@@ -202,6 +202,9 @@ impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileTokenRefer
         })
     }
     fn from_file(_: &BaseToken<ET::Char>, fr: FileReference) -> Self { Ptr::new(FileTokenReferenceI::File(fr)) }
+    fn trace(&self, interner: &Interner<ET::Char>) -> Option<String> {
+        FileTokenReferenceI::trace(self,interner)
+    }
 }
 
 
