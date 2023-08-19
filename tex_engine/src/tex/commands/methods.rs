@@ -13,14 +13,14 @@ use crate::utils::errors::TeXError;
 #[macro_export]
 macro_rules! cmtodo {
     ($engine:ident,$name:ident) => {
-        register_expandable!($name,$engine,(e,cmd,_) => todo!("{}: {}",stringify!($name),e.current_position()));
+        register_expandable!($name,$engine,(e,cmd,_) => throw!("TODO: {}: {}",stringify!($name),e.current_position()));
     };
 }
 
 #[macro_export]
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {
-        register_unexpandable!($name,$engine,None,(e,cmd) => todo!("{}: {}",stringify!($name),e.current_position()));
+        register_unexpandable!($name,$engine,None,(e,cmd) => throw!("TODO: {}: {}",stringify!($name),e.current_position()));
     };
 }
 
@@ -363,20 +363,20 @@ use crate::tex::token::TokenReference;
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
 #[inline(never)]
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>) {
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>) { catch!({
     debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.interner,Some(ET::Char::backslash())),d.as_str(engine.interner),engine.preview(250).replace("\n","\\n"));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
         // No arguments, we just expand the replacement, replacing `##` with `#`
-        return expand_simple(d,cmd,engine,exp)
+        return expand_simple(d,&cmd,engine,exp)
     }
     if d.arity == 0 {
         // No arguments, we just expand the replacement, but need to eat the delimiters in the signature
         for elem in &d.signature {
             match elem {
                 ParamToken::Token(delim) => {
-                    if let Some((n,_)) = catch!(engine.get_next_token() => cmd.cause) {
+                    if let Some((n,_)) = engine.get_next_token() {
                         if n != *delim {
                             throw!("Usage of {} does not match its definition: {} expected, found {}",
                                 cmd.cause.to_str(engine.interner,Some(ET::Char::backslash())),
@@ -390,7 +390,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
                 _=> unsafe{ unreachable_unchecked() } // since arity=0, there can only be tokens
             }
         }
-        return expand_simple(d,cmd,engine,exp)
+        return expand_simple(d,&cmd,engine,exp)
     }
 
     /*
@@ -401,11 +401,11 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
      */
     let mut args = engine.memory.get_args();
     read_arguments(d, engine, &cmd, &mut args);
-    replace(d, cmd, engine, &mut args, exp);
+    replace(d, &cmd, engine, &mut args, exp);
     engine.memory.return_args(args);
-}
+}; format!("Error expanding {}",cmd.cause.to_str(engine.interner,engine.state.get_escapechar())) => cmd.cause.clone())}
 
-fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut ExpansionContainer<ET>) {
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut ExpansionContainer<ET>) {
     let rf = ET::TokenReference::from_expansion(&cmd);
     for r in &d.replacement {
         match r {
@@ -417,7 +417,7 @@ fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine:&mut E
 }
 
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, args:&mut [Vec<Token<ET>>;9]) {catch!({
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, args:&mut [Vec<Token<ET>>;9]) {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
@@ -526,10 +526,10 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
             }
         }
     }
-} => cmd.cause.clone())}
+}
 
-fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], exp:&mut ExpansionContainer<ET>) {
-    let rf = ET::TokenReference::from_expansion(&cmd);
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], exp:&mut ExpansionContainer<ET>) {
+    let rf = ET::TokenReference::from_expansion(cmd);
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");
@@ -549,28 +549,6 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:CommandSource<ET>, engine: &mut Engine
             ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),engine.memory)
         }
     }
-/*
-        match next.catcode() {
-            CategoryCode::Parameter => { // #i or ## => replace by argument
-                let numorpar = unsafe{replacement.next().unwrap_unchecked()}; // safe because otherwise `\def` would have failed
-                match numorpar.catcode() {
-                    CategoryCode::Parameter => // `##` => `#`
-                        result.push(numorpar.with_ref(&cause, &cmd)),
-                    _ => match numorpar.base() { // #i
-                        BaseToken::Char(c, _) => {
-                            let idx:usize = c.to_usize() - 49; // argument index
-                            let argls:&Vec<T> = unsafe { args.get_unchecked(idx) }; // safe because otherwise `\def` would have failed
-                            for t in argls {
-                                result.push(t.with_ref(&cause, &cmd))
-                            }
-                        }
-                        _ => unreachable!() // otherwise, `\def` would have failed
-                    }
-                }
-            }
-            _ => result.push(next.with_ref(&cause, &cmd))
-        }
-    } */
 }
 
 pub fn parse_signature<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)

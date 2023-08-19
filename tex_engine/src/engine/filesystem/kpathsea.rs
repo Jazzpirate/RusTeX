@@ -23,10 +23,6 @@ impl Kpathsea {
         Kpathsea { pwd, local, global }
     }
     pub fn kpsewhich(&self,filestr:&str) -> KpseResult {
-        if filestr.contains("xkey") {
-            println!("HERE: {}",filestr);
-            print!("Go!");
-        }
         if filestr.starts_with("|kpsewhich") {
             return KpseResult{path:self.pwd.join(filestr),local:true}
         }

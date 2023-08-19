@@ -127,7 +127,7 @@ macro_rules! catch_prim {
                         std::panic::resume_unwind(Box::new(TeXError{
                             msg:format!("Error in \\{}",$name),
                             cause:Some($cause.cause.clone()),
-                            source:Some(Box::new(*e))
+                            source:Some(e)
                         }))
                     }
                     Err(e) => std::panic::resume_unwind(e)
@@ -149,7 +149,7 @@ macro_rules! catch {
                             Some(_) => (),
                             std::option::Option::None => e.cause = Some($cause)
                         }
-                        std::panic::resume_unwind(Box::new(*e))
+                        std::panic::resume_unwind(e)
                     }
                     Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
                 }
@@ -157,26 +157,36 @@ macro_rules! catch {
         }
     };
     ($f:expr ; $msg:expr) => {
-        match $f {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||$f)) {
             Ok(x) => x,
-            Err(e) => {
-                return Err(TeXError{
-                    msg:format!($msg),
-                    cause:std::option::Option::None,
-                    source:Some(Box::new(e))
-                })
+            Err(mut e) => {
+                match e.downcast::<TeXError<ET>>() {
+                    Ok(mut e) => {
+                        std::panic::resume_unwind(Box::new(TeXError::<ET>{
+                            msg:format!($msg),
+                            cause:std::option::Option::None,
+                            source:Some(e)
+                        }))
+                    }
+                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
+                }
             }
         }
     };
     ($f:expr ; $msg:expr => $cause:expr) => {
-        match $f {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||$f)) {
             Ok(x) => x,
-            Err(e) => {
-                return Err(TeXError{
-                    msg:format!($msg),
-                    cause:Some($cause),
-                    source:Some(Box::new(e))
-                })
+            Err(mut e) => {
+                match e.downcast::<TeXError<ET>>() {
+                    Ok(mut e) => {
+                        std::panic::resume_unwind(Box::new(TeXError::<ET>{
+                            msg:$msg,
+                            cause:Some($cause),
+                            source:Some(e)
+                        }))
+                    }
+                    Err(e) => std::panic::resume_unwind(Box::new(TeXError::<ET>{msg:format!("Panic: {:?}",e),cause:std::option::Option::None,source:std::option::Option::None}))
+                }
             }
         }
     }

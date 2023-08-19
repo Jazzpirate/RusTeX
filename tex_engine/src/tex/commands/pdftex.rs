@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use std::marker::PhantomData;
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::numeric_methods::expand_until_space;
@@ -13,7 +13,7 @@ use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::tex::commands::{CommandSource, TokenCont};
 use crate::tex::commands::pdftex::PDFTeXNode::PDFLiteral;
-use crate::tex::nodes::{CustomNode, NodeTrait, TeXNode};
+use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
@@ -88,9 +88,13 @@ impl PDFColor {
 pub struct PDFObj {pub content: String} // TODO
 
 #[derive(Debug,Clone)]
+pub struct PDFXForm<ET:EngineType> {pub attr: String, pub resources:String, pub bx:HVBox<ET>} // TODO
+
+#[derive(Debug,Clone)]
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
-    PDFColorstack{action:PDFStackAction, index:usize,color:Option<PDFColor>,phantom:PhantomData<ET>},
-    PDFLiteral{literal:String,phantom:PhantomData<ET>},
+    PDFColorstack{action:PDFStackAction, index:usize,color:Option<PDFColor>},
+    PDFLiteral{literal:String},
+    PDFXForm{form:PDFXForm<ET>},
 }
 
 impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -163,14 +167,14 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
     };
     match &action {
         PDFStackAction::Current | PDFStackAction::Pop =>
-            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color:None,phantom:PhantomData}.as_node()),
+            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color:None}.as_node()),
         _ => {
             let mut colorstr = engine.memory.get_string();
             //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
             engine.get_braced_string(&mut colorstr);
             let color = Some(PDFColor::parse::<ET>(colorstr.as_str()));
             engine.memory.return_string(colorstr);
-            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color,phantom:PhantomData}.as_node());
+            engine.stomach.push_node(PDFTeXNode::PDFColorstack{action,index: index as usize,color}.as_node());
         }
     }
 }
@@ -226,7 +230,7 @@ pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"pdfliteral");
     let mut literal = String::new();
     engine.get_braced_string(&mut literal);
-    engine.stomach.push_node(PDFLiteral {literal,phantom:PhantomData}.as_node());
+    engine.stomach.push_node(PDFLiteral {literal}.as_node());
 }
 
 /// "pdfobj"
@@ -370,6 +374,28 @@ pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>)
     engine.string_to_tokens(PDFTEX_REVISION.to_string().as_bytes(),f)
 }
 
+
+pub fn pdfxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::State:PDFState<ET> {
+    debug_log!(trace=>"\\pdfxform");
+    let mut attr = String::new();
+    if engine.get_keyword("attr") {
+        engine.skip_whitespace();
+        engine.get_braced_string(&mut attr)
+    }
+    let mut resources = String::new();
+    if engine.get_keyword("resources") {
+        engine.skip_whitespace();
+        engine.get_braced_string(&mut attr)
+    }
+    engine.skip_whitespace();
+    let bx = engine.get_int().to_i64();
+    if bx < 0 {throw!("Invalid box number: {}",bx => cmd.cause)}
+    let bx = engine.state.take_box_register(bx as usize);
+    engine.state.pdfxforms().push(PDFXForm{attr,resources,bx});
+}
+
+
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
 pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,&cmd));
@@ -400,7 +426,9 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(&c));
     register_dim_assign!(pdfvorigin,engine);
+    register_unexpandable!(pdfxform,engine,None,(e,cmd) =>pdfxform::<ET>(e,&cmd));
     register_int_assign!(tracingstacklevels,engine);
+
 
     cmtodo!(engine,efcode);
     cmtodo!(engine,knaccode);
@@ -522,7 +550,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdftrailer);
     cmtodo!(engine,pdftrailerid);
     cmtodo!(engine,pdfstartthread);
-    cmtodo!(engine,pdfxform);
     cmtodo!(engine,pdfximage);
     cmtodo!(engine,quitvmode);
 

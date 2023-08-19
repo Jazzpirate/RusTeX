@@ -9,7 +9,7 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::strings::TeXStr;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory};
-use crate::tex::commands::pdftex::PDFObj;
+use crate::tex::commands::pdftex::{PDFObj, PDFXForm};
 use crate::tex::nodes::HVBox;
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip};
@@ -168,6 +168,7 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
 pub trait PDFState<ET:EngineType<State=Self>>:State<ET> {
     fn pdfmatches(&mut self) -> &mut Vec<String>;
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
+    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
 }
 
 #[derive(Clone)]
@@ -176,8 +177,10 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
     afterassignment:Option<Token<ET>>,
+
     pdfmatches:Vec<String>,
     pdfobjs:Vec<PDFObj>,
+    pdfxforms:Vec<PDFXForm<ET>>,
 
     current_font:SingleValueField<ET::Font>,
 
@@ -225,6 +228,7 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
             mode: TeXMode::Vertical,
             pdfmatches:vec!(),
             pdfobjs:vec!(),
+            pdfxforms:vec!(),
             /* filesystem: fs,*/
             grouptype: vec![(GroupType::Top,None)],
             endlinechar: SingleValueField::new(Some(ET::Char::carriage_return())),
@@ -279,6 +283,7 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
 impl<ET:EngineType<State=Self>> PDFState<ET> for PDFTeXState<ET> {
     fn pdfmatches(&mut self) -> &mut Vec<String> { &mut self.pdfmatches }
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
+    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
 }
 
 impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
