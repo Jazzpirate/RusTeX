@@ -36,7 +36,7 @@ impl<ET:EngineType> ShipoutData<ET> {
         ret
     }
 }
-
+use crate::tex::nodes::NodeTrait;
 pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data(&self) -> &ShipoutData<ET>;
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
@@ -58,7 +58,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                         o => sd.prevdepth = o.depth()
                     }
                 }
-                b.ls().push(node)
+                b.ls_mut().push(node)
             },
             _ => {
                 sd.pagetotal = sd.pagetotal + node.height();

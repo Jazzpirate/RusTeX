@@ -1,7 +1,7 @@
 //! TeX primitive [`BaseCommand`]s
 
 use std::hint::unreachable_unchecked;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group, register_box};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group, register_box, register_skip};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
@@ -1291,6 +1291,20 @@ pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         TeXMode::Vertical | TeXMode::InternalVertical => HorV::Vertical,
         _ => HorV::Horizontal
     }});
+}
+
+
+pub fn lastskip<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> Skip<ET::SkipDim> {
+    let ls = match engine.stomach.shipout_data().box_stack.last() {
+        None => &engine.stomach.shipout_data().page,
+        Some(bx) => bx.ls()
+    };
+    for n in ls.iter().rev() { match n {
+        TeXNode::Skip(SkipNode::Skip {val,..}) => return val.clone(),
+        TeXNode::Penalty(_) => (),
+        _ => return Skip::default()
+    }}
+    Skip::default()
 }
 
 pub const LCCODE: &str = "lccode";
@@ -2621,6 +2635,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(jobname,engine,(e,_,f) =>jobname::<ET>(e,f));
     register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
     register_int_assign!(language,engine);
+    register_skip!(lastskip,engine,(e,cmd) => lastskip::<ET>(e,&cmd));
     register_value_assign_int!(lccode,engine);
     register_int_assign!(lefthyphenmin,engine);
     register_skip_assign!(leftskip,engine);
@@ -2784,7 +2799,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,pagefilllstretch);
     cmtodo!(engine,pageshrink);
     cmtodo!(engine,pagedepth);
-    cmtodo!(engine,lastskip);
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);

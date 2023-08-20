@@ -16,7 +16,9 @@ pub trait NodeTrait<ET:EngineType> {
     fn height(&self) -> ET::Dim;
     fn depth(&self) -> ET::Dim;
     fn width(&self) -> ET::Dim;
+    fn nodetype(&self) -> u8;
 }
+
 
 
 #[derive(Debug,Clone)]
@@ -30,8 +32,8 @@ pub enum TeXNode<ET:EngineType> {
     Custom(ET::Node),
     Simple(SimpleNode<ET>),
 }
-impl<ET:EngineType> TeXNode<ET> {
-    pub fn height(&self) -> ET::Dim {
+impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
+    fn height(&self) -> ET::Dim {
         use TeXNode::*;
         match self {
             Skip (s) => s.height(),
@@ -42,7 +44,7 @@ impl<ET:EngineType> TeXNode<ET> {
             _ => ET::Dim::from_sp(0)
         }
     }
-    pub fn width(&self) -> ET::Dim {
+    fn width(&self) -> ET::Dim {
         use TeXNode::*;
         match self {
             Skip(s) => s.width(),
@@ -53,13 +55,27 @@ impl<ET:EngineType> TeXNode<ET> {
             _ => ET::Dim::from_sp(0)
         }
     }
-    pub fn depth(&self) -> ET::Dim {
+    fn depth(&self) -> ET::Dim {
         use TeXNode::*;
         match self {
             Box(b) => b.depth(),
             Custom(c) => c.depth(),
             Simple(s) => s.depth(),
             _ => ET::Dim::from_sp(0)
+        }
+    }
+    fn as_node(self) -> TeXNode<ET> { self }
+    fn nodetype(&self) -> u8 {
+        use TeXNode::*;
+        match self {
+            Skip(_) => 11,
+            Penalty(_) => 13,
+            Kern{ ..} => 12,
+            Box(b) =>b.nodetype(),
+            Whatsit(_) => 9,
+            Mark(_) => 5,
+            Custom(n) => n.nodetype(),
+            Simple(n) => n.nodetype()
         }
     }
 }
@@ -91,6 +107,7 @@ impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
             _ => ET::Dim::from_sp(0)
         }
     }
+    fn nodetype(&self) -> u8 { 11 }
 }
 
 
@@ -100,9 +117,9 @@ pub enum HorV { Horizontal, Vertical }
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
-    VFil,VFill,VFilneg,
     Raise{by:ET::Dim, node:HVBox<ET>},
 }
+
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Simple(self)
@@ -134,10 +151,16 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             _ => ET::Dim::from_sp(0)
         }
     }
+    fn nodetype(&self) -> u8 {
+        use SimpleNode::*;
+        match self {
+            Rule{..} => 3,
+            Raise{node,..} => node.nodetype()
+        }
+    }
 }
 
 pub trait CustomNode<ET:EngineType>:Debug+Sized+Clone+NodeTrait<ET>+'static {}
-
 
 impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
     fn as_node(self) -> TeXNode<ET> {
@@ -146,6 +169,7 @@ impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
     fn height(&self) -> ET::Dim { ET::Dim::from_sp(0) }
     fn depth(&self) -> ET::Dim { ET::Dim::from_sp(0) }
     fn width(&self) -> ET::Dim { ET::Dim::from_sp(0) }
+    fn nodetype(&self) -> u8 {9 }
 }
 impl<ET:EngineType<Node=()>> CustomNode<ET> for () {}
 
@@ -227,6 +251,13 @@ impl<ET:EngineType> NodeTrait<ET> for HVBox<ET> {
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
+    fn nodetype(&self) -> u8 {
+        match self {
+            HVBox::H(_) => 1,
+            HVBox::V(_) => 2,
+            HVBox::Void => unreachable!()
+        }
+    }
 }
 
 #[derive(Clone,Debug)]
@@ -256,6 +287,7 @@ impl<ET:EngineType> NodeTrait<ET> for HBox<ET> {
             self.children.iter().map(|c| c.width()).sum()
         })
     }
+    fn nodetype(&self) -> u8 {1 }
 }
 impl<ET:EngineType> Default for HBox<ET> {
     fn default() -> Self {
@@ -300,6 +332,7 @@ impl<ET:EngineType> NodeTrait<ET> for VBox<ET> {
             self.children.iter().map(|c| c.width()).max().unwrap_or_else(|| ET::Dim::from_sp(0))
         })
     }
+    fn nodetype(&self) -> u8 {2 }
 }
 impl<ET:EngineType> Default for VBox<ET> {
     fn default() -> Self {
@@ -333,7 +366,13 @@ impl<ET:EngineType> Debug for OpenBox<ET> {
     }
 }
 impl<ET:EngineType> OpenBox<ET> {
-    pub fn ls(&mut self) -> &mut Vec<TeXNode<ET>> {
+    pub fn ls_mut(&mut self) -> &mut Vec<TeXNode<ET>> {
+        match self {
+            Self::Paragraph { list } => list,
+            Self::Box { list, .. } => list
+        }
+    }
+    pub fn ls(&self) -> &Vec<TeXNode<ET>>{
         match self {
             Self::Paragraph { list } => list,
             Self::Box { list, .. } => list

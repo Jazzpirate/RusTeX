@@ -9,7 +9,9 @@ use crate::tex::token::{BaseToken, TokenList};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
+use crate::engine::stomach::Stomach;
 use crate::tex::fonts::Font;
+use crate::tex::nodes::NodeTrait;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 
@@ -331,6 +333,28 @@ pub fn iffontchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     fnt.exists(char)
 }
 
+pub fn lastnodetype<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
+    let ls = match engine.stomach.shipout_data().box_stack.last() {
+        None => &engine.stomach.shipout_data().page,
+        Some(b) => b.ls()
+    };
+    match ls.last() {
+        None => ET::Int::from_i64(-1),
+        Some(e) => ET::Int::from_i64(e.nodetype() as i64)
+    }
+    /*
+    -1: none (empty list)    8: disc node
+    0: char node             9: whatsit node
+    1: hlist node           10: math node
+    2: vlist node           11: glue node
+    3: rule node            12: kern node
+    4: ins node             13: penalty node
+    5: mark node            14: unset node
+    6: adjust node          15: math mode nodes
+    7: ligature node
+     */
+}
+
 pub const MUEXPR: &str = "muexpr";
 /// `\muexpr`: evaluate a mu expression; returns a [`MuSkip`].
 pub fn muexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -496,6 +520,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifcsname,engine,(eu,cmd) =>ifcsname::<ET>(eu,&cmd));
     register_conditional!(ifdefined,engine,(eu,cmd) =>ifdefined::<ET>(eu,&cmd));
     register_conditional!(iffontchar,engine,(e,cmd) =>iffontchar::<ET>(e,&cmd));
+    register_int!(lastnodetype,engine,(e,c) => lastnodetype::<ET>(e,&c));
     register_muskip!(muexpr,engine,(e,c) => muexpr::<ET>(e,&c));
     register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,&c));
     register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,&cmd,global));
@@ -531,7 +556,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,interactionmode);
     cmtodo!(engine,interlinepenalties);
     cmtodo!(engine,lastlinefit);
-    cmtodo!(engine,lastnodetype);
     cmtodo!(engine,marks);
     cmtodo!(engine,middle);
     cmtodo!(engine,mutoglue);

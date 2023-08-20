@@ -83,6 +83,7 @@ pub struct PDFColorstack(pub Vec<PDFColor>); // TODO
 
 #[derive(Debug,Clone)]
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
+    PDFCatalog {literal:String,action:Option<ActionSpec>},
     PDFLiteral{literal:String},
     PDFXForm{form:PDFXForm<ET>},
     PDFOutline{attr:String,action:ActionSpec,content:String,count:Option<i64>},
@@ -101,6 +102,7 @@ impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXN
     fn width(&self) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
+    fn nodetype(&self) -> u8 { 9 }
 }
 impl<ET:EngineType<Node=Self>> CustomNode<ET> for PDFTeXNode<ET> {}
 impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -116,6 +118,7 @@ impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNod
     fn width(&self) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
+    fn nodetype(&self) -> u8 { 9 }
 }
 
 #[derive(Debug,Clone)]
@@ -138,28 +141,39 @@ pub enum NumOrName { Num(i64),Name(String) }
 pub enum PDFStruct { Num(i64),Name(String),Other(String) }
 
 pub fn action_spec<ET:EngineType>(engine:&mut EngineRef<ET>) -> ActionSpec {
+    engine.skip_whitespace();
     match engine.get_keywords(vec!("user","goto","thread")) {
         Some("user") => {
             let mut ret = String::new();
+            engine.skip_whitespace();
             engine.get_braced_string(&mut ret);
             ActionSpec::User(ret)
         }
         Some("goto") => {
+            engine.skip_whitespace();
             let file = if engine.get_keyword("file") {
                 let mut file = String::new();
+                engine.skip_whitespace();
                 engine.get_braced_string(&mut file);
+                engine.skip_whitespace();
                 Some(file)
             } else {None};
             let struct_ = if engine.get_keyword("struct") {
+                engine.skip_whitespace();
                 match engine.get_keywords(vec!("num","name")) {
                     None => {
                         let mut ret = String::new();
+                        engine.skip_whitespace();
                         engine.get_braced_string(&mut ret);
                         Some(PDFStruct::Other(ret))
                     },
-                    Some("num") => Some(PDFStruct::Num(engine.get_int().to_i64())),
+                    Some("num") => {
+                        engine.skip_whitespace();
+                        Some(PDFStruct::Num(engine.get_int().to_i64()))
+                    },
                     Some("name") => {
                         let mut ret = String::new();
+                        engine.skip_whitespace();
                         engine.get_braced_string(&mut ret);
                         Some(PDFStruct::Name(ret))
                     },
@@ -168,12 +182,15 @@ pub fn action_spec<ET:EngineType>(engine:&mut EngineRef<ET>) -> ActionSpec {
             } else {None};
             match file {
                 None => {
+                    engine.skip_whitespace();
                     match engine.get_keywords(vec!("num","name")) {
                         None => {
+                            engine.skip_whitespace();
                             let page = if engine.get_keyword("page") {
                                 Some(engine.get_int().to_i64())
                             } else {None};
                             let mut str = String::new();
+                            engine.skip_whitespace();
                             engine.get_braced_string(&mut str);
                             ActionSpec::Goto(GotoAction::Current{
                                 struct_,page,target:NumOrName::Name(str)
@@ -184,6 +201,7 @@ pub fn action_spec<ET:EngineType>(engine:&mut EngineRef<ET>) -> ActionSpec {
                             }),
                         Some("name") => {
                             let mut str = String::new();
+                            engine.skip_whitespace();
                             engine.get_braced_string(&mut str);
                             ActionSpec::Goto(GotoAction::Current{
                                 struct_,page:None,target:NumOrName::Name(str)
@@ -300,6 +318,19 @@ pub fn lpcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<
     let fnt = engine.get_font();
     let char = engine.get_char();
     fnt.get_lpcode(char)
+}
+
+
+pub fn pdfcatalog<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::Node:From<PDFTeXNode<ET>>{
+    debug_log!(trace=>"\\pdfcatalog");
+    let mut literal = String::new();
+    engine.get_braced_string(&mut literal);
+    let action = if engine.get_keyword("openaction") {
+        Some(action_spec(engine))
+    } else {None};
+
+    engine.stomach.push_node(PDFTeXNode::PDFCatalog {literal,action}.as_node());
 }
 
 /// "pdfcolorstack"
@@ -579,6 +610,29 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     }
 }
 
+pub fn pdfmdfivesum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+    use crate::engine::filesystem::File;
+    debug_log!(trace=>"pdfmdfivesum");
+    let domd = if engine.get_keyword("file") {
+        let mut filename = engine.memory.get_string();
+        engine.get_braced_string(&mut filename);
+        let file = engine.filesystem.get(&filename);
+        engine.memory.return_string(filename);
+        let x = match &*file.content_string() {
+            None => md5::compute(""),
+            Some(v) => md5::compute(v)
+        };
+        x
+    } else {
+        let mut ret = String::new();
+        engine.get_braced_string(&mut ret);
+        let r = md5::compute(&ret);
+        engine.memory.return_string(ret);
+        r
+    };
+    engine.string_to_tokens(format!("{:X}",domd).as_bytes(),f)
+}
+
 /// "pdfshellescape"
 pub const PDFSHELLESCAPE: &str = "pdfshellescape";
 /// `\pdfmshellescape`: 2 (restricted).
@@ -638,6 +692,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,&cmd));
     register_value_assign_int!(lpcode,engine);
     register_int_assign!(pdfadjustspacing,engine);
+    register_unexpandable!(pdfcatalog,engine,None,(e,cmd) =>pdfcatalog::<ET>(e,&cmd));
     register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,&cmd));
     register_int!(pdfcolorstackinit,engine,(e,c) => pdfcolorstackinit::<ET>(e,&c));
     register_int_assign!(pdfcompresslevel,engine);
@@ -656,6 +711,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_unexpandable!(pdfliteral,engine,None,(e,cmd) =>pdfliteral::<ET>(e,&cmd));
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(&c));
     register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,&cmd,f));
+    register_expandable!(pdfmdfivesum,engine,(e,cmd,f) =>pdfmdfivesum::<ET>(e,&cmd,f));
     register_int_assign!(pdfminorversion,engine);
     register_unexpandable!(pdfobj,engine,None,(e,cmd) =>pdfobj::<ET>(e,&cmd));
     register_int_assign!(pdfobjcompresslevel,engine);
@@ -742,7 +798,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfincludechars);
     cmtodo!(engine,pdfinsertht);
     cmtodo!(engine,pdflastmatch);
-    cmtodo!(engine,pdfmdfivesum);
     cmtodo!(engine,pdfnormaldeviate);
     cmtodo!(engine,pdfpageref);
     cmtodo!(engine,pdftexbanner);
@@ -755,7 +810,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,letterspacefont);
     cmtodo!(engine,partokenname);
     cmtodo!(engine,pdfannot);
-    cmtodo!(engine,pdfcatalog);
     cmtodo!(engine,pdfcopyfont);
     cmtodo!(engine,pdfdest);
     cmtodo!(engine,pdfendlink);
