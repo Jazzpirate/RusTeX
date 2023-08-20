@@ -391,15 +391,18 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let cc = engine.state.get_catcode_scheme().clone();
     let mut ret = String::new();
     expand_until_group!(engine,t => match &t.base {
+        BaseToken::Char(_,CategoryCode::Space) => {
+            ret.push(' ');
+        }
         BaseToken::Char(c,_) => {
             ret.push(c.as_char())
         }
         BaseToken::CS(name) => {
+            if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
             let str = name.to_str(engine.interner);
             if str.len() == 1 && *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
                 ret.push_str(str);
             } else {
-                if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
                 ret.push_str(str);
                 ret.push(' ')
             }

@@ -316,12 +316,13 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
     let mut partk = None;
 
     get_group!(engine,t => match (std::mem::take(&mut partk),&t.base) {
-        (None,BaseToken::Char(c,CategoryCode::Parameter)) => partk = Some(t),
+        (None,BaseToken::Char(c,CategoryCode::Parameter)) =>
+            partk = Some(t),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
             replacement.push(ExpToken::ParamToken(t)),
         (Some(t),BaseToken::Char(c,_)) => {
             let u = c.to_usize();
-            if u < 48 || u - 48 > (arity as usize) {
+            if u < 49 || u - 48 > (arity as usize) {
                 throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
             }
             replacement.push(ExpToken::Param(t,(u-49) as u8))
@@ -330,9 +331,9 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
             throw!("Expected number after #, got {}",t.to_str(engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => replacement.push(ExpToken::Token(t))
     });
-
-    let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
-    debug_log!(trace=>"def {} = {:?}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def);
+    let def = DefI{protected,long,outer,endswithbrace,arity,signature,replacement};
+    debug_log!(trace=>"def {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def.as_str(engine.interner));
+    let def = Command::new(BaseCommand::Def(Ptr::new(def)),Some(&cmd));
     engine.set_command_for_tk(cs,Some(def),global);
 }
 
@@ -604,8 +605,9 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
  */
 
 
-    let def = Command::new(BaseCommand::Def(Ptr::new(DefI{protected,long,outer,endswithbrace,arity,signature,replacement})),Some(&cmd));
-    debug_log!(trace=>"edef {:?} = {:?}",cs,def);
+    let def = DefI{protected,long,outer,endswithbrace,arity,signature,replacement};
+    debug_log!(trace=>"edef {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def.as_str(engine.interner));
+    let def = Command::new(BaseCommand::Def(Ptr::new(def)),Some(&cmd));
     engine.set_command_for_tk(cs,Some(def),global);
 }
 
@@ -1191,6 +1193,8 @@ pub fn ifx<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> 
         Some((t,e)) => resolve_token::<ET>(engine.state,t).with_expand(e)
     };
     debug_log!(trace=>"ifx: {} == {}?",t1.source.cause.to_str(engine.interner,Some(ET::Char::backslash())),t2.source.cause.to_str(engine.interner,Some(ET::Char::backslash())));
+    debug_log!(trace=>"First : {}",t1.command.as_str(engine.interner));
+    debug_log!(trace=>"Second: {}",t2.command.as_str(engine.interner));
     if t1.expand && t2.expand { t1.command == t2.command }
     else if !t1.expand && !t2.expand { t1.source.cause == t2.source.cause }
     else { false }
@@ -1331,7 +1335,8 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         expand_until_group!(engine,next =>match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_lccode(c);
-                rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory)
+                if nc.to_usize() == 0 { rs.push(next,engine.memory) }
+                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory) }
             }
             _ => rs.push(next,engine.memory)
         });
@@ -1565,7 +1570,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                             }
                             ExpToken::Param(t, i) => {
                                 engine.token_to_others(t, true, f);
-                                engine.string_to_tokens(i.to_string().as_bytes(),f)
+                                engine.string_to_tokens((i+1).to_string().as_bytes(),f)
                             }
                         }
                     }
@@ -2149,7 +2154,8 @@ pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:T
                     Some(v) => for t in v { f(engine, t) }
                 }
             }
-            BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().clone().as_bytes(),f),
+            BaseCommand::MathChar(u) => engine.string_to_tokens(u.to_string().as_bytes(),f),
+            BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().as_bytes(),f),
             BaseCommand::Font(fnt) => {
                 f(engine,Token::new(BaseToken::CS(fnt.name()),None))
             },
@@ -2238,7 +2244,8 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         expand_until_group!(engine,next => match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_uccode(c);
-                rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory)
+                if nc.to_usize() == 0 { rs.push(next,engine.memory) }
+                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory) }
             }
             _ => rs.push(next,engine.memory)
         });

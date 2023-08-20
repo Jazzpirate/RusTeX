@@ -356,6 +356,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
 pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
     crate::get_expanded_group!(engine,false,false,true,t => {
         match &t.base {
+            BaseToken::Char(_,CategoryCode::Space) => ret.push(' '),
             BaseToken::Char(c,_) => {
                 ret.push(c.as_char())
             }

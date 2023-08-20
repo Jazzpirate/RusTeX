@@ -455,6 +455,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int!(pdfcolorstackinit,engine,(e,c) => pdfcolorstackinit::<ET>(e,&c));
     register_int_assign!(pdfcompresslevel,engine);
     register_int_assign!(pdfdecimaldigits,engine);
+    register_int_assign!(pdfdraftmode,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,&cmd,f));
     register_int_assign!(pdfgentounicode,engine);
@@ -463,6 +464,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int_assign!(pdfoutput,engine);
     register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,&c));
     register_int!(pdflastxform,engine,(e,c) => pdflastxform::<ET>(e,&c));
+    register_dim_assign!(pdflinkmargin,engine);
     register_unexpandable!(pdfliteral,engine,None,(e,cmd) =>pdfliteral::<ET>(e,&cmd));
     register_int!(pdfmajorversion,engine,(_,c) => pdfmajorversion::<ET>(&c));
     register_expandable!(pdfmatch,engine,(e,cmd,f) =>pdfmatch::<ET>(e,&cmd,f));
@@ -492,7 +494,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfadjustinterwordglue);
     cmtodo!(engine,pdfadjustspacing);
     cmtodo!(engine,pdfappendkern);
-    cmtodo!(engine,pdfdraftmode);
     cmtodo!(engine,pdfforcepagebox);
     cmtodo!(engine,pdfgamma);
     cmtodo!(engine,pdfimageapplygamma);
@@ -534,7 +535,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdffirstlineheight);
     cmtodo!(engine,pdfignoreddimen);
     cmtodo!(engine,pdflastlinedepth);
-    cmtodo!(engine,pdflinkmargin);
     cmtodo!(engine,pdfpxdimen);
     cmtodo!(engine,pdfthreadmargin);
     cmtodo!(engine,pdfpageattr);

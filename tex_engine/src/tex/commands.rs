@@ -344,6 +344,33 @@ impl<ET:EngineType> PartialEq for BaseCommand<ET> {
     }
 }
 
+impl<ET:EngineType> BaseCommand<ET> {
+    fn as_str(&self,interner:&Interner<ET::Char>) -> String {
+        match self {
+            BaseCommand::Def(d) => d.as_str(interner),
+            BaseCommand::Conditional{name,..} => format!("\\{}", name),
+            BaseCommand::Expandable {name,..} => format!("\\{}", name),
+            BaseCommand::Unexpandable {name,..} => format!("\\{}", name),
+            BaseCommand::Assignment {name,..} => format!("\\{}", name),
+            BaseCommand::Whatsit {name,..} => format!("\\{}", name),
+            BaseCommand::OpenBox {name,..} => format!("\\{}", name),
+            BaseCommand::Char{char,catcode} => format!("Character '{}' (catcode {})", (char as &ET::Char).char_str(), catcode),
+            BaseCommand::CharDef(char) => format!("Character Definition '{}'", (char as &ET::Char).char_str()),
+            BaseCommand::MathChar(n) => format!("Math Character {:X}", n),
+            BaseCommand::Int(a) => format!("Int {:?}", a),
+            BaseCommand::Dim(a) => format!("Dim {:?}", a),
+            BaseCommand::Skip(a) => format!("Skip {:?}", a),
+            BaseCommand::MuSkip(a) => format!("MuSkip {:?}", a),
+            BaseCommand::Toks(a) => format!( "Toks {:?}", a),
+            BaseCommand::Font(font) => format!("Font {:?}", font),
+            BaseCommand::FontCommand {..} => "\\font".to_string(),
+            BaseCommand::Relax =>"\\relax".to_string(),
+            BaseCommand::None => "None".to_string(),
+
+        }
+    }
+}
+
 impl<ET:EngineType> Debug for BaseCommand<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
