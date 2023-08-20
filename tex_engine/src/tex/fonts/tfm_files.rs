@@ -12,8 +12,6 @@ pub struct TfmFile {
     pub heights: [f64;256],
     pub depths: [f64;256],
     pub ics:[f64;256],
-    pub lps:[u8;256],
-    pub rps:[u8;256],
     pub ligs:HMap<(u8,u8),u8>,
     pub name:String,
     pub filepath:String,
@@ -45,8 +43,6 @@ impl TfmFile {
         let mut heights: [f64;256] = [0.0;256];
         let mut depths: [f64;256] = [0.0;256];
         let mut ics: [f64;256] = [0.0;256];
-        let lps: [u8;256] = [0;256];
-        let rps: [u8;256] = [0;256];
         let mut ligs:HMap<(u8,u8),u8> = HMap::default();
 
         let (lf,lh) = state.read_int();
@@ -147,7 +143,7 @@ impl TfmFile {
 
         TfmFile {
             hyphenchar,skewchar,dimen,size,typestr,widths,
-            heights,depths,ics,lps,rps,ligs,name,filepath
+            heights,depths,ics,ligs,name,filepath
         }
     }
 }

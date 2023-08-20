@@ -1,7 +1,7 @@
 //! TeX primitive [`BaseCommand`]s
 
 use std::hint::unreachable_unchecked;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group, register_box};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
@@ -168,7 +168,7 @@ pub fn begingroup<ET:EngineType>(state:&mut ET::State) {
 pub const CATCODE: &str = "catcode";
 pub fn catcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning category code");
-    let c = catch_prim!(engine.get_char() => (CATCODE,cmd));
+    let c = engine.get_char();
     engine.skip_eq_char();
     let v = engine.get_int().to_i64();
     if v < 0 || v > 15 {
@@ -211,7 +211,7 @@ pub fn closein<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>
 pub const CLOSEOUT: &str = "closeout";
 pub fn closeout<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> Whatsit<ET> {
     debug_log!(trace=>"\\closeout");
-    let i = catch_prim!(engine.get_int() => (CLOSEOUT,cmd));
+    let i = engine.get_int();
     let i : usize = match i.clone().try_into() {
         Ok(i) => i,
         Err(_) => throw!("Invalid file number: {}",i => cmd.cause)
@@ -220,6 +220,20 @@ pub fn closeout<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET
         e.state.file_closeout(i); // TODO error?
     });
     Whatsit::new(apply)
+}
+
+pub fn copy<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> HVBox<ET> {
+    debug_log!(trace=>"\\copy");
+    let i = engine.get_int();
+    let i : usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Invalid box number: {}",i => cmd.cause)
+    };
+    match engine.state.get_box_register(i) {
+        Some(b) => b.clone(),
+        None => HVBox::Void
+    }
+
 }
 
 pub const COUNT : &str = "count";
@@ -1020,7 +1034,10 @@ pub fn if_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> 
     debug_log!(trace=>"if");
     let first = get_if_token::<ET>(engine,&cmd,"if");
     let second = get_if_token::<ET>(engine,&cmd,"if");
-    debug_log!(trace=>"if: {:?} == {:?}",first,second);
+    debug_log!(trace=>"if: {:?} == {:?}",
+        first.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash()))),
+        second.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+    );
     match (first,second) {
         (None,_) | (_,None) => false,
         (Some(f),Some(s)) => match (f.source.cause.base,s.source.cause.base) {
@@ -1042,7 +1059,10 @@ pub fn ifcat<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     debug_log!(trace=>"ifcat");
     let first = get_if_token::<ET>(engine,&cmd,IFCAT);
     let second = get_if_token::<ET>(engine,&cmd,IFCAT);
-    debug_log!(trace=>"ifcat: {:?} == {:?}",first,second);
+    debug_log!(trace=>"ifcat: {:?} == {:?}",
+        first.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash()))),
+        second.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+    );
     let first = match first {
         None => return false,
         Some(first) => match first.source.cause.base {
@@ -1152,6 +1172,7 @@ pub const IFNUM : &str = "ifnum";
 pub fn ifnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifnum");
     let i1 = engine.get_int();
+    engine.skip_whitespace();
     let rel = match engine.is_next_char_one_of(&LGE) {
         None => throw!("Expected one of '<','>','='" => cmd.cause),
         Some(r) => r
@@ -1264,6 +1285,14 @@ pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
     engine.string_to_tokens(jobname.as_bytes(),f)
 }
 
+pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let dim = engine.get_dim();
+    engine.stomach.push_node(TeXNode::Kern {dim,axis:match engine.state.mode() {
+        TeXMode::Vertical | TeXMode::InternalVertical => HorV::Vertical,
+        _ => HorV::Horizontal
+    }});
+}
+
 pub const LCCODE: &str = "lccode";
 pub fn lccode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning lower case character");
@@ -1328,6 +1357,30 @@ pub fn long<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         }
     }
 }
+
+pub const LOWER: &str = "lower";
+pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\lower");
+    let i = engine.get_dim();
+    match engine.get_next_unexpandable_same_file() {
+        None => file_end_prim!(RAISE,cmd),
+        Some(c) => match c.command {
+            BaseCommand::OpenBox {name,mode,apply} => {
+                let f = apply(engine,c.source);
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
+                    let bx = match f(e,v) {
+                        Some(r) => {r}
+                        None => {todo!("make void box")}
+                    };
+                    e.stomach.push_node(SimpleNode::Raise {by:-i,node:bx}.as_node());
+                    None
+                })})
+            }
+            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+        }
+    }
+}
+
 pub const LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\lowercase");
@@ -1414,6 +1467,10 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
                 BaseCommand::OpenBox {name,..} => {
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }
+                    return engine.string_to_tokens(name.as_bytes(),f)
+                }
+                BaseCommand::FinishedBox {name,..} => {
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
@@ -1780,6 +1837,7 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
                 BaseCommand::Def(_) => engine.mouth.push_noexpand(res.source.cause,engine.memory),
                 BaseCommand::Expandable {..} => engine.mouth.push_noexpand(res.source.cause,engine.memory),
                 BaseCommand::Conditional {..} => engine.mouth.push_noexpand(res.source.cause,engine.memory),
+                BaseCommand::Char{catcode:CategoryCode::EOF,..} => (),
                 _ => f(engine,res.source.cause)
             }
         }
@@ -1890,6 +1948,29 @@ pub fn prevdepth_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandS
 pub fn prevdepth_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
     debug_log!(trace=>"Getting \\prevdepth");
     engine.stomach.shipout_data().prevdepth
+}
+
+pub const RAISE: &str = "raise";
+pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\raise");
+    let i = engine.get_dim();
+    match engine.get_next_unexpandable_same_file() {
+        None => file_end_prim!(RAISE,cmd),
+        Some(c) => match c.command {
+            BaseCommand::OpenBox {name,mode,apply} => {
+                let f = apply(engine,c.source);
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
+                    let bx = match f(e,v) {
+                        Some(r) => {r}
+                        None => {todo!("make void box")}
+                    };
+                    e.stomach.push_node(SimpleNode::Raise {by:i,node:bx}.as_node());
+                    None
+                })})
+            }
+            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+        }
+    }
 }
 
 pub const READ: &str = "read";
@@ -2438,6 +2519,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(closein,engine,None,(e,cmd) =>closein::<ET>(e,&cmd));
     register_whatsit!(closeout,engine,(e,cmd) =>closeout::<ET>(e,&cmd));
     register_int_assign!(clubpenalty,engine);
+    register_box!(copy,engine,(e,cmd) =>copy::<ET>(e,&cmd));
     register_value_assign_int!(count,engine);
     register_assign!(countdef,engine,(e,cmd,global) =>countdef::<ET>(e,&cmd,global));
     register_expandable!(csname,engine,(e,cmd,f) =>csname::<ET>(e,&cmd,f));
@@ -2537,6 +2619,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int!(inputlineno,engine,(e,cmd) => inputlineno::<ET>(e,&cmd));
     register_int_assign!(interlinepenalty,engine);
     register_expandable!(jobname,engine,(e,_,f) =>jobname::<ET>(e,f));
+    register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
     register_int_assign!(language,engine);
     register_value_assign_int!(lccode,engine);
     register_int_assign!(lefthyphenmin,engine);
@@ -2546,8 +2629,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(lineskip,engine);
     register_dim_assign!(lineskiplimit,engine);
     register_assign!(long,engine,(e,cmd,g) =>long::<ET>(e,&cmd,g,false,false,false));
-    register_unexpandable!(lowercase,engine,None,(e,cmd) =>lowercase::<ET>(e,&cmd));
     register_int_assign!(looseness,engine);
+    register_unexpandable!(lower,engine,Some(HorV::Horizontal),(e,cmd) =>lower::<ET>(e,&cmd));
+    register_unexpandable!(lowercase,engine,None,(e,cmd) =>lowercase::<ET>(e,&cmd));
     register_int_assign!(mag,engine);
     register_int_assign!(maxdeadcycles,engine);
     register_dim_assign!(maxdepth,engine);
@@ -2593,6 +2677,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(relpenalty,engine);
     register_int_assign!(righthyphenmin,engine);
     register_int_assign!(pretolerance,engine);
+    register_unexpandable!(raise,engine,Some(HorV::Horizontal),(e,cmd) =>raise::<ET>(e,&cmd));
     register_assign!(read,engine,(e,cmd,global) =>read::<ET>(e,&cmd,global));
     engine.state.set_command(engine.interner.relax, Some(Command::new(BaseCommand::Relax,None)), true);
     register_int_assign!(relpenalty,engine);
@@ -2704,7 +2789,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);
     cmtodo!(engine,box);
-    cmtodo!(engine,copy);
     cmtodo!(engine,lastbox);
     cmtodo!(engine,vsplit);
     cmtodo!(engine,vtop);
@@ -2713,7 +2797,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
     cmtodo!(engine,special);
-    cmtodo!(engine,kern);
     cmtodo!(engine,unpenalty);
     cmtodo!(engine,unkern);
     cmtodo!(engine,unskip);
@@ -2740,8 +2823,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,noboundary);
     cmtodo!(engine,accent);
     cmtodo!(engine,discretionary);
-    cmtodo!(engine,raise);
-    cmtodo!(engine,lower);
     cmtodo!(engine,setlanguage);
     cmtodo!(engine,nonscript);
     cmtodo!(engine,vcenter);

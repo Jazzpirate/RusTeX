@@ -23,7 +23,7 @@ pub trait NodeTrait<ET:EngineType> {
 pub enum TeXNode<ET:EngineType> {
     Skip(SkipNode<ET>),
     Penalty(i32),
-    Kern{val:ET::Dim,axis:HorV},
+    Kern{ dim:ET::Dim,axis:HorV},
     Box(HVBox<ET>),
     Whatsit(Whatsit<ET>),
     Mark(Vec<Token<ET>>),
@@ -35,7 +35,7 @@ impl<ET:EngineType> TeXNode<ET> {
         use TeXNode::*;
         match self {
             Skip (s) => s.height(),
-            Kern {val,axis:HorV::Vertical} => *val,
+            Kern { dim: val,axis:HorV::Vertical} => *val,
             Box(b) => b.height(),
             Custom(c) => c.height(),
             Simple(s) => s.height(),
@@ -46,7 +46,7 @@ impl<ET:EngineType> TeXNode<ET> {
         use TeXNode::*;
         match self {
             Skip(s) => s.width(),
-            Kern {val,axis:HorV::Horizontal} => *val,
+            Kern { dim: val,axis:HorV::Horizontal} => *val,
             Box(b) => b.width(),
             Custom(c) => c.width(),
             Simple(s) => s.width(),
@@ -100,20 +100,39 @@ pub enum HorV { Horizontal, Vertical }
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
-    VFil,VFill,VFilneg
+    VFil,VFill,VFilneg,
+    Raise{by:ET::Dim, node:HVBox<ET>},
 }
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Simple(self)
     }
     fn depth(&self) -> ET::Dim {
-        todo!()
+        match self {
+            SimpleNode::Rule{depth,..} => depth.unwrap_or_else(|| ET::Dim::from_sp(0)),
+            SimpleNode::Raise{node,by} => {
+                let d = node.depth() - *by;
+                if d > ET::Dim::from_sp(0) { d } else { ET::Dim::from_sp(0) }
+            },
+            _ => ET::Dim::from_sp(0)
+        }
     }
     fn height(&self) -> ET::Dim {
-        todo!()
+        match self {
+            SimpleNode::Rule{height,..} => height.unwrap_or_else(|| ET::Dim::from_sp(0)),
+            SimpleNode::Raise{node,by} => {
+                let h = node.height() + *by;
+                if h > ET::Dim::from_sp(0) { h } else { ET::Dim::from_sp(0) }
+            },
+            _ => ET::Dim::from_sp(0)
+        }
     }
     fn width(&self) -> ET::Dim {
-        todo!()
+        match self {
+            SimpleNode::Rule{width,..} => width.unwrap_or_else(|| ET::Dim::from_sp(0)),
+            SimpleNode::Raise{node,..} => node.width(),
+            _ => ET::Dim::from_sp(0)
+        }
     }
 }
 

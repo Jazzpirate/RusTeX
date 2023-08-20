@@ -8,7 +8,7 @@ use crate::engine::EngineType;
 use crate::engine::filesystem::kpathsea::KPATHSEA;
 use crate::engine::memory::{Interner, Memory};
 use crate::tex::fonts::tfm_files::TfmFile;
-use crate::tex::numbers::{Dim, Dimi32};
+use crate::tex::numbers::{Dim, Dimi32, Int};
 use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::map::HMap;
@@ -27,9 +27,19 @@ pub trait Font:Debug+Display+Clone + PartialEq {
     fn get_at(&self) -> i64;
 
         fn name(&self) -> TeXStr<Self::Char>;
+    fn exists(&self,char:Self::Char) -> bool;
+    fn char_wd<D:Dim>(&self,char:Self::Char) -> D;
+    fn char_ht<D:Dim>(&self,char:Self::Char) -> D;
+    fn char_dp<D:Dim>(&self,char:Self::Char) -> D;
+    fn char_ic<D:Dim>(&self,char:Self::Char) -> D;
 
     fn set_hyphenchar(&mut self,hyphenchar:i64);
     fn get_hyphenchar(&self) -> i64;
+
+    fn get_lpcode<I:Int>(&self,char:Self::Char) -> I;
+    fn get_rpcode<I:Int>(&self,char:Self::Char) -> I;
+    fn set_lpcode<I:Int>(&mut self,char:Self::Char,code:I);
+    fn set_rpcode<I:Int>(&mut self,char:Self::Char,code:I);
 
     fn set_skewchar(&mut self,skewchar:i64);
     fn get_skewchar(&self) -> i64;
@@ -65,8 +75,8 @@ impl FontStore for TfmFontStore {
             file,
             at:Mut::new(None),
             dimens:Mut::new(HMap::default()),
-            lps:HMap::default(),
-            rps:HMap::default(),
+            lps:Mut::new(HMap::default()),
+            rps:Mut::new(HMap::default()),
         })
     }
     fn null(&self) -> Self::Font { self.null.clone() }
@@ -83,8 +93,6 @@ impl TfmFontStore {
             heights:[0.0;256],
             depths:[0.0;256],
             ics:[0.0;256],
-            lps:[0;256],
-            rps:[0;256],
             ligs:HMap::default(),
             name:"nullfont".to_string(),
             filepath:"nullfont".to_string()
@@ -96,8 +104,8 @@ impl TfmFontStore {
             file:Ptr::new(null),
             at:Mut::new(None),
             dimens:Mut::new(HMap::default()),
-            lps:HMap::default(),
-            rps:HMap::default(),
+            lps:Mut::new(HMap::default()),
+            rps:Mut::new(HMap::default()),
         });
         Self{null:font, font_files:HMap::default()}
     }
@@ -110,8 +118,8 @@ pub struct TfmFontInner {
     dimens:Mut<HMap<usize,i64>>,
     hyphenchar:Mut<i64>,
     skewchar:Mut<i64>,
-    lps:HMap<u8,u8>,
-    rps:HMap<u8,u8>,
+    lps:Mut<HMap<u8,i16>>,
+    rps:Mut<HMap<u8,i16>>,
 }
 impl PartialEq for TfmFontInner {
     fn eq(&self, other: &Self) -> bool {
@@ -150,6 +158,43 @@ impl Font for TfmFont {
         }
     }
     fn name(&self) -> TeXStr<Self::Char> { self.name }
+    fn exists(&self, char: Self::Char) -> bool {
+        self.file.heights[char as usize] > 0.0 ||
+            self.file.widths[char as usize] > 0.0 ||
+            self.file.depths[char as usize] > 0.0
+    }
+    fn char_ht<D: Dim>(&self, char: Self::Char) -> D {
+        D::from_sp((self.file.heights[char as usize] * (self.get_at() as f64)).round() as i64)
+    }
+    fn char_wd<D: Dim>(&self, char: Self::Char) -> D {
+        D::from_sp((self.file.widths[char as usize] * (self.get_at() as f64)).round() as i64)
+    }
+    fn char_dp<D: Dim>(&self, char: Self::Char) -> D {
+        D::from_sp((self.file.depths[char as usize] * (self.get_at() as f64)).round() as i64)
+    }
+    fn char_ic<D: Dim>(&self, char: Self::Char) -> D {
+        D::from_sp((self.file.ics[char as usize] * (self.get_at() as f64)).round() as i64)
+    }
+    fn get_lpcode<I: Int>(&self, char: Self::Char) -> I {
+        match self.lps.borrow().get(&char) {
+            None => I::from_i64(0) ,
+            Some(i) => I::from_i64(*i as i64)
+        }
+    }
+    fn get_rpcode<I: Int>(&self, char: Self::Char) -> I {
+        match self.rps.borrow().get(&char) {
+            None => I::from_i64(0) ,
+            Some(i) => I::from_i64(*i as i64)
+        }
+    }
+    fn set_lpcode<I: Int>(&mut self, char: Self::Char, code: I) {
+        let i = std::cmp::min(std::cmp::max(code.to_i64(),-1000),1000) as i16;
+        self.lps.borrow_mut().insert(char,i);
+    }
+    fn set_rpcode<I: Int>(&mut self, char: Self::Char, code: I) {
+        let i = std::cmp::min(std::cmp::max(code.to_i64(),-1000),1000) as i16;
+        self.rps.borrow_mut().insert(char,i);
+    }
 
     fn get_hyphenchar(&self) -> i64 {
         self.hyphenchar.borrow().clone()

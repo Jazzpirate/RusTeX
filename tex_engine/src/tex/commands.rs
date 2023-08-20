@@ -290,6 +290,8 @@ pub enum BaseCommand<ET:EngineType>{
     Whatsit {name:&'static str,apply:WhatsitFun<ET>},
     /// A command opening a new  [`TeXBox`](crate::tex::nodes::CustomBox), e.g. `\hbox`, `\vbox`, `\vtop`, `\vcenter`
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
+    /// A command yielding a finished [`TeXBox`](crate::tex::nodes::CustomBox), e.g. `\box`, `\copy`
+    FinishedBox{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> HVBox<ET>},
     /// A character; i.e. the result of `\let\foo=a`
     Char{char:ET::Char,catcode:CategoryCode},
     /// The result of a `\chardef`, e.g. `\chardef\foo=97`
@@ -354,6 +356,7 @@ impl<ET:EngineType> BaseCommand<ET> {
             BaseCommand::Assignment {name,..} => format!("\\{}", name),
             BaseCommand::Whatsit {name,..} => format!("\\{}", name),
             BaseCommand::OpenBox {name,..} => format!("\\{}", name),
+            BaseCommand::FinishedBox {name,..} => format!("\\{}", name),
             BaseCommand::Char{char,catcode} => format!("Character '{}' (catcode {})", (char as &ET::Char).char_str(), catcode),
             BaseCommand::CharDef(char) => format!("Character Definition '{}'", (char as &ET::Char).char_str()),
             BaseCommand::MathChar(n) => format!("Math Character {:X}", n),
@@ -381,6 +384,7 @@ impl<ET:EngineType> Debug for BaseCommand<ET> {
             BaseCommand::Assignment {name,..} => write!(f, "Assignment {}", name),
             BaseCommand::Whatsit {name,..} => write!(f, "Whatsit {}", name),
             BaseCommand::OpenBox {name,..} => write!(f, "Open Box {}", name),
+            BaseCommand::FinishedBox {name,..} => write!(f, "Open Box {}", name),
             BaseCommand::Char{char,catcode} => write!(f, "Character '{}' (catcode {})", (char as &ET::Char).char_str(), catcode),
             BaseCommand::CharDef(char) => write!(f, "Character Definition '{}'", (char as &ET::Char).char_str()),
             BaseCommand::MathChar(n) => write!(f, "Math Character {:X}", n),
@@ -403,6 +407,7 @@ pub enum BaseStomachCommand<ET:EngineType> {
     Whatsit {name:&'static str,apply:WhatsitFun<ET>},
     ValueAss(AssignmentFn<ET>),
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
+    FinishedBox{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> HVBox<ET>},
     Char(ET::Char),
     MathChar(u32),
     Font(ET::Font),
@@ -422,6 +427,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
             BaseStomachCommand::Assignment{name,..} => write!(f, "Assignment {}", name.unwrap_or("")),
             BaseStomachCommand::Whatsit{name,..} => write!(f, "Whatsit {}", name),
             BaseStomachCommand::OpenBox{name,..} => write!(f, "Open Box {}", name),
+            BaseStomachCommand::FinishedBox{name,..} => write!(f, "Box {}", name),
             BaseStomachCommand::Char(ch) => write!(f, "Character {}", ch.char_str()),
             BaseStomachCommand::MathChar(n) => write!(f, "Math Character {:X}", n),
             BaseStomachCommand::ValueAss(_) => write!(f, "Value Assignment"),
@@ -454,6 +460,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
             Whatsit {name,apply} => BaseStomachCommand::Whatsit {name,apply:apply},
             OpenBox {name,mode,apply} => BaseStomachCommand::OpenBox {name,mode,apply},
+            FinishedBox {name,get} => BaseStomachCommand::FinishedBox {name,get},
             Int(ass) => {
                 BaseStomachCommand::ValueAss(Box::new(
                     move |e,c,gl|ass.set(e,c,gl)))

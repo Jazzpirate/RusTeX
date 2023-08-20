@@ -59,6 +59,10 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 }
             );
         }
+        FinishedBox {name,get} => {
+            let b = get(engine,cmd.source);
+            engine.stomach.push_node(b.as_node());
+        }
         Whatsit {name,apply} => {
             let wi = apply(engine,cmd.source);
             engine.stomach.push_node(TeXNode::Whatsit(wi));

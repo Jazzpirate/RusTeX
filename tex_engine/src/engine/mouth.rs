@@ -87,6 +87,8 @@ pub trait Mouth<ET:EngineType<Mouth=Self>>:Sized {
     fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<Token<ET>>) {
         match engine.mouth.get_next_simple(engine.state,engine.interner) {
             None => file_end!(),
+            Some(t) if t.catcode() == CategoryCode::EOF =>
+                file_end!(),
             Some(t) if t.catcode() == CategoryCode::BeginGroup => {
                 get_until_endgroup!(engine,t => vec.push(t));
                 //Self::get_until_endgroup(engine,&mut|_,t| Ok(vec.push(t)))
@@ -264,11 +266,8 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                             Some(v) if v.is_empty() => Some(eof),
                             Some(v) => {
                                 self.stack.push(TeXMouthSource::Token(eof));
-                                for t in v.iter().rev() { self.stack.push(TeXMouthSource::Token((t.clone(),true))) };
-                                match self.stack.pop() {
-                                    Some(TeXMouthSource::Token((t, b))) => Some((t, b)),
-                                    _ => unreachable!()
-                                }
+                                for t in v.iter().skip(1).rev() { self.stack.push(TeXMouthSource::Token((t.clone(),true))) };
+                                Some((v.first().unwrap().clone(),true))
                             }
                         }
                     }

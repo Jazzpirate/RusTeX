@@ -127,6 +127,8 @@ macro_rules! get_group {
                 BaseToken::Char(_,CategoryCode::EndGroup) => {
                     if ingroup == 0 { ok = true;break } else { ingroup -= 1; }
                 }
+                BaseToken::Char(_,CategoryCode::EOF) =>
+                    crate::file_end!(),
                 _ => ()
             }
             $f

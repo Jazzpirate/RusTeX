@@ -9,6 +9,7 @@ use crate::tex::token::{BaseToken, TokenList};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
+use crate::tex::fonts::Font;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
 
@@ -254,6 +255,28 @@ pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     //catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
 }
 
+
+pub fn fontchardp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.char_dp(char)
+}
+pub fn fontcharht<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.char_ht(char)
+}
+pub fn fontcharic<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.char_ic(char)
+}
+pub fn fontcharwd<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.char_wd(char)
+}
+
 pub const GLUEEXPR: &str = "glueexpr";
 /// `\glueexpr`: evaluate a glue expression; returns a [`Skip`].
 pub fn glueexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> Skip<ET::SkipDim> {
@@ -297,6 +320,15 @@ pub fn ifdefined<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
             _ => throw!("Expected a control sequence, got: {:?}",t => cmd.cause)
         }
     }
+}
+
+pub const IFFONTCHAR: &str = "iffontchar";
+/// `\iffontchar`
+pub fn iffontchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
+    debug_log!(trace=>"iffontchar");
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.exists(char)
 }
 
 pub const MUEXPR: &str = "muexpr";
@@ -457,9 +489,14 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int!(eTeXversion,engine,(e,c) => eTeXversion::<ET>(&c));
     register_tok_assign!(everyeof,engine);
     register_expandable!(expanded,engine,(e,c,f) => expanded::<ET>(e,&c,f));
+    register_dim!(fontchardp,engine,(e,c) => fontchardp::<ET>(e,&c));
+    register_dim!(fontcharht,engine,(e,c) => fontcharht::<ET>(e,&c));
+    register_dim!(fontcharic,engine,(e,c) => fontcharic::<ET>(e,&c));
+    register_dim!(fontcharwd,engine,(e,c) => fontcharwd::<ET>(e,&c));
     register_skip!(glueexpr,engine,(e,c) => glueexpr::<ET>(e,&c));
     register_conditional!(ifcsname,engine,(eu,cmd) =>ifcsname::<ET>(eu,&cmd));
     register_conditional!(ifdefined,engine,(eu,cmd) =>ifdefined::<ET>(eu,&cmd));
+    register_conditional!(iffontchar,engine,(e,cmd) =>iffontchar::<ET>(e,&cmd));
     register_muskip!(muexpr,engine,(e,c) => muexpr::<ET>(e,&c));
     register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,&c));
     register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,&cmd,global));
@@ -487,16 +524,11 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,endL);
     cmtodo!(engine,endR);
     cmtodo!(engine,firstmarks);
-    cmtodo!(engine,fontchardp);
-    cmtodo!(engine,fontcharht);
-    cmtodo!(engine,fontcharic);
-    cmtodo!(engine,fontcharwd);
     cmtodo!(engine,glueshrink);
     cmtodo!(engine,glueshrinkorder);
     cmtodo!(engine,gluestretch);
     cmtodo!(engine,gluestretchorder);
     cmtodo!(engine,gluetomu);
-    cmtodo!(engine,iffontchar);
     cmtodo!(engine,interactionmode);
     cmtodo!(engine,interlinepenalties);
     cmtodo!(engine,lastlinefit);

@@ -239,6 +239,17 @@ macro_rules! register_open_box {
 }
 
 #[macro_export]
+macro_rules! register_box {
+    ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.interner),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::FinishedBox{
+            name:stringify!($name),
+            get:|$e,$cmd| crate::catch_prim!($f => (stringify!($name),$cmd))
+        },None)),true);
+    };
+}
+
+
+#[macro_export]
 macro_rules! register_unexpandable {
     ($name:ident,$engine:ident,$is_h:expr,($e:tt,$cmd:tt) => $f:expr) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.interner),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Unexpandable{

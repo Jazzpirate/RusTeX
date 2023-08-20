@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use std::marker::PhantomData;
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit};
+use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit, register_value_assign_int};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::numeric_methods::expand_until_space;
@@ -12,6 +12,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::tex::commands::{CommandSource, TokenCont};
+use crate::tex::fonts::Font;
 use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode, Whatsit};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
@@ -168,6 +169,23 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     }
 }
 
+
+pub const LPCODE: &str = "lpcode";
+pub fn lpcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning lpcode");
+    let mut fnt = engine.get_font();
+    let char = engine.get_char();
+    engine.skip_eq_char();
+    let val = engine.get_int();
+    fnt.set_lpcode(char,val);
+}
+pub fn lpcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
+    debug_log!(trace=>"Getting lpcode");
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.get_lpcode(char)
+}
+
 /// "pdfcolorstack"
 pub const PDFCOLORSTACK: &str = "pdfcolorstack";
 
@@ -242,6 +260,16 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
             engine.string_to_tokens(v.len().to_string().as_bytes(),fun)
         }
     }
+}
+
+
+pub fn pdffontexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"pdffontexpand"); // TODO
+    let _ = engine.get_font();
+    let _ = engine.get_int();
+    let _ = engine.get_int();
+    let _ = engine.get_int();
+    engine.get_keyword("autoexpand");
 }
 
 /// "pdfglyphtounicode"
@@ -447,10 +475,29 @@ pub fn pdfxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 }
 
 
+pub const RPCODE: &str = "rpcode";
+pub fn rpcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning rpcode");
+    let mut fnt = engine.get_font();
+    let char = engine.get_char();
+    engine.skip_eq_char();
+    let val = engine.get_int();
+    fnt.set_rpcode(char,val);
+}
+pub fn rpcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
+    debug_log!(trace=>"Getting rpcode");
+    let fnt = engine.get_font();
+    let char = engine.get_char();
+    fnt.get_rpcode(char)
+}
+
+
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
 pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,&cmd));
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,&cmd));
+    register_value_assign_int!(lpcode,engine);
+    register_int_assign!(pdfadjustspacing,engine);
     register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,&cmd));
     register_int!(pdfcolorstackinit,engine,(e,c) => pdfcolorstackinit::<ET>(e,&c));
     register_int_assign!(pdfcompresslevel,engine);
@@ -458,10 +505,10 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int_assign!(pdfdraftmode,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,&cmd,f));
+    register_unexpandable!(pdffontexpand,engine,None,(e,cmd) =>pdffontexpand::<ET>(e,&cmd));
     register_int_assign!(pdfgentounicode,engine);
     register_unexpandable!(pdfglyphtounicode,engine,None,(e,cmd) =>pdfglyphtounicode::<ET>(e,&cmd));
     register_dim_assign!(pdfhorigin,engine);
-    register_int_assign!(pdfoutput,engine);
     register_int!(pdflastobj,engine,(e,c) => pdflastobj::<ET>(e,&c));
     register_int!(pdflastxform,engine,(e,c) => pdflastxform::<ET>(e,&c));
     register_dim_assign!(pdflinkmargin,engine);
@@ -471,10 +518,12 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int_assign!(pdfminorversion,engine);
     register_unexpandable!(pdfobj,engine,None,(e,cmd) =>pdfobj::<ET>(e,&cmd));
     register_int_assign!(pdfobjcompresslevel,engine);
+    register_int_assign!(pdfoutput,engine);
     register_dim_assign!(pdfpageheight,engine);
     register_tok_assign!(pdfpageresources,engine);
     register_dim_assign!(pdfpagewidth,engine);
     register_int_assign!(pdfpkresolution,engine);
+    register_int_assign!(pdfprotrudechars,engine);
     register_whatsit!(pdfrefxform,engine,(e,cmd) =>pdfrefxform::<ET>(e,&cmd));
     register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,&cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(&c));
@@ -483,6 +532,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(&c));
     register_dim_assign!(pdfvorigin,engine);
     register_unexpandable!(pdfxform,engine,None,(e,cmd) =>pdfxform::<ET>(e,&cmd));
+    register_value_assign_int!(rpcode,engine);
     register_int_assign!(tracingstacklevels,engine);
 
 
@@ -490,9 +540,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,knaccode);
     cmtodo!(engine,knbccode);
     cmtodo!(engine,knbscode);
-    cmtodo!(engine,lpcode);
     cmtodo!(engine,pdfadjustinterwordglue);
-    cmtodo!(engine,pdfadjustspacing);
     cmtodo!(engine,pdfappendkern);
     cmtodo!(engine,pdfforcepagebox);
     cmtodo!(engine,pdfgamma);
@@ -508,14 +556,12 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfomitprocset);
     cmtodo!(engine,pdfpagebox);
     cmtodo!(engine,pdfprependkern);
-    cmtodo!(engine,pdfprotrudechars);
     cmtodo!(engine,pdfsuppressptexinfo);
     cmtodo!(engine,pdfsuppresswarningdupdest);
     cmtodo!(engine,pdfsuppresswarningdupmap);
     cmtodo!(engine,pdfsuppresswarningpagegroup);
     cmtodo!(engine,pdftracingfonts);
     cmtodo!(engine,pdfuniqueresname);
-    cmtodo!(engine,rpcode);
     cmtodo!(engine,shbscode);
     cmtodo!(engine,showstream);
     cmtodo!(engine,stbscode);
@@ -575,7 +621,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfendthread);
     cmtodo!(engine,pdffakespace);
     cmtodo!(engine,pdffontattr);
-    cmtodo!(engine,pdffontexpand);
     cmtodo!(engine,pdfinfo);
     cmtodo!(engine,pdfinterwordspaceoff);
     cmtodo!(engine,pdfinterwordspaceon);
