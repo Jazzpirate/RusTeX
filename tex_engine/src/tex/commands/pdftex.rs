@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit, register_value_assign_int};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
+use crate::engine::gullet::methods::get_keywords;
 use crate::engine::gullet::numeric_methods::expand_until_space;
 use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
@@ -26,19 +27,6 @@ pub const PDFTEX_REVISION: i64 = 25;
 
 // --------------------------------------------------------------------------------------------------
 
-#[derive(Debug,Clone,Copy)]
-pub enum PDFStackAction { Push, Pop, Set, Current}
-impl PDFStackAction {
-    pub fn parse(s:&str) -> Self {
-        match s {
-            "push" => PDFStackAction::Push,
-            "pop" => PDFStackAction::Pop,
-            "set" => PDFStackAction::Set,
-            "current" => PDFStackAction::Current,
-            _ => unreachable!()
-        }
-    }
-}
 const STACK_ACTION_KEYWORDS : [&'static str;4] = ["push","pop","set","current"];
 
 #[derive(Debug,Clone,Copy)]
@@ -97,6 +85,7 @@ pub struct PDFColorstack(pub Vec<PDFColor>); // TODO
 pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
     PDFLiteral{literal:String},
     PDFXForm{form:PDFXForm<ET>},
+    PDFOutline{attr:String,action:ActionSpec,content:String,count:Option<i64>},
 }
 
 impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -126,6 +115,133 @@ impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNod
     }
     fn width(&self) -> ET::Dim {
         ET::Dim::from_sp(0)
+    }
+}
+
+#[derive(Debug,Clone)]
+pub enum ActionSpec {
+    User(String),
+    Goto(GotoAction),
+    Thread{file:Option<String>,target:NumOrName}
+}
+
+#[derive(Debug,Clone)]
+pub enum GotoAction {
+    File{filename:String,struct_:Option<PDFStruct>,page:Option<i64>,target:String,newwindow:Option<bool>},
+    Current{struct_:Option<PDFStruct>,page:Option<i64>,target:NumOrName},
+}
+
+#[derive(Debug,Clone)]
+pub enum NumOrName { Num(i64),Name(String) }
+
+#[derive(Debug,Clone)]
+pub enum PDFStruct { Num(i64),Name(String),Other(String) }
+
+pub fn action_spec<ET:EngineType>(engine:&mut EngineRef<ET>) -> ActionSpec {
+    match engine.get_keywords(vec!("user","goto","thread")) {
+        Some("user") => {
+            let mut ret = String::new();
+            engine.get_braced_string(&mut ret);
+            ActionSpec::User(ret)
+        }
+        Some("goto") => {
+            let file = if engine.get_keyword("file") {
+                let mut file = String::new();
+                engine.get_braced_string(&mut file);
+                Some(file)
+            } else {None};
+            let struct_ = if engine.get_keyword("struct") {
+                match engine.get_keywords(vec!("num","name")) {
+                    None => {
+                        let mut ret = String::new();
+                        engine.get_braced_string(&mut ret);
+                        Some(PDFStruct::Other(ret))
+                    },
+                    Some("num") => Some(PDFStruct::Num(engine.get_int().to_i64())),
+                    Some("name") => {
+                        let mut ret = String::new();
+                        engine.get_braced_string(&mut ret);
+                        Some(PDFStruct::Name(ret))
+                    },
+                    _ => unreachable!()
+                }
+            } else {None};
+            match file {
+                None => {
+                    match engine.get_keywords(vec!("num","name")) {
+                        None => {
+                            let page = if engine.get_keyword("page") {
+                                Some(engine.get_int().to_i64())
+                            } else {None};
+                            let mut str = String::new();
+                            engine.get_braced_string(&mut str);
+                            ActionSpec::Goto(GotoAction::Current{
+                                struct_,page,target:NumOrName::Name(str)
+                            })
+                        }
+                        Some("num") => ActionSpec::Goto(GotoAction::Current{
+                                struct_,page:None,target:NumOrName::Num(engine.get_int().to_i64())
+                            }),
+                        Some("name") => {
+                            let mut str = String::new();
+                            engine.get_braced_string(&mut str);
+                            ActionSpec::Goto(GotoAction::Current{
+                                struct_,page:None,target:NumOrName::Name(str)
+                            })
+                        }
+                        _ => unreachable!()
+                    }
+                }
+                Some(filename) => {
+                    let (page,target) = if engine.get_keyword("name") {
+                        let mut str = String::new();
+                        engine.get_braced_string(&mut str);
+                        (None,str)
+                    } else {
+                        let page = if engine.get_keyword("page") {
+                            Some(engine.get_int().to_i64())
+                        } else {None};
+                        let mut str = String::new();
+                        engine.get_braced_string(&mut str);
+                        (page,str)
+                    };
+                    let newwindow = match engine.get_keywords(vec!("newwindow","nonewwindow")) {
+                        Some("newwindow") => Some(true),
+                        Some("nonewwindow") => Some(false),
+                        _ => None
+                    };
+                    ActionSpec::Goto(GotoAction::File{
+                        filename,struct_,page,target,newwindow
+                    })
+                }
+            }
+
+        }
+        Some("thread") => {
+            let file = if engine.get_keyword("file") {
+                let mut file = String::new();
+                engine.get_braced_string(&mut file);
+                Some(file)
+            } else {None};
+
+            match engine.get_keywords(vec!("num","name")) {
+                None => throw!("Expected one of 'num','name'"),
+                Some("num") => ActionSpec::Thread{
+                    file,target:NumOrName::Num(engine.get_int().to_i64())
+                },
+                Some("name") => {
+                    let mut str = String::new();
+                    engine.get_braced_string(&mut str);
+                    ActionSpec::Thread{
+                        file,target:NumOrName::Name(str)
+                    }
+                }
+                _ => unreachable!()
+            }
+
+        }
+        None => throw!("Expected one of 'user','goto','thread'"),
+        _ => unreachable!()
     }
 }
 
@@ -194,15 +310,11 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
     debug_log!(trace=>"pdfcolorstack");
     let index = engine.get_int().to_i64();
     if index < 0 {throw!("Invalid colorstack index: {}",index => cmd.cause)}
-    let action = match engine.get_keywords(STACK_ACTION_KEYWORDS.to_vec()) {
-        Some(s) => PDFStackAction::parse(s),
-        None => throw!("Expected one of 'push','pop','set','current'" => cmd.cause)
-    };
-    match &action {
-        PDFStackAction::Current =>
+    match engine.get_keywords(STACK_ACTION_KEYWORDS.to_vec()) {
+        Some("current") =>
             engine.state.set_current_colorstack(index as usize),
-        PDFStackAction::Pop => {engine.state.get_colorstack(index as usize).0.pop();}
-        PDFStackAction::Set => {
+        Some("pop") => {engine.state.get_colorstack(index as usize).0.pop();}
+        Some("set") => {
             let mut colorstr = engine.memory.get_string();
             //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
             engine.get_braced_string(&mut colorstr);
@@ -210,7 +322,7 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
             engine.memory.return_string(colorstr);
             *engine.state.get_colorstack(index as usize).0.last_mut().unwrap() = color;
         }
-        PDFStackAction::Push => {
+        Some("push") => {
             let mut colorstr = engine.memory.get_string();
             //catch_prim!(expand_until_space::<ET>(engine) => (PDFCOLORSTACK,cmd));
             engine.get_braced_string(&mut colorstr);
@@ -218,6 +330,7 @@ pub fn pdfcolorstack<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
             engine.memory.return_string(colorstr);
             engine.state.get_colorstack(index as usize).0.push(color);
         }
+        _ => throw!("Expected one of 'push','pop','set','current'" => cmd.cause)
     }
 }
 
@@ -240,6 +353,15 @@ pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSourc
     let r = engine.elapsed.elapsed().as_secs_f64() * 65536.0;
     let ret = if r > i32::MAX.into() {i32::MAX as i64} else {r.round() as i64};
     ET::Int::from_i64(ret)
+}
+
+pub fn pdfescapestring<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+    debug_log!(trace=>"pdfescapestring");
+    use crate::tex::commands::BaseCommand;
+    use crate::engine::mouth::Mouth;
+    let esc = engine.state.get_escapechar();
+    let cc = engine.state.get_catcode_scheme().clone();
+    crate::get_expanded_group!(engine,false,false,true,next => engine.token_to_others(&next,true,f)); // TODO:actual escaping
 }
 
 /// "pdffilesize"
@@ -333,6 +455,24 @@ pub fn pdfobj<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
         },
         _ => unreachable!()
     }
+}
+
+pub fn pdfoutline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::Node:From<PDFTeXNode<ET>>{
+    // TODO
+    // \pdfoutline [ ⟨attr spec⟩ ] ⟨action spec⟩ [ count ⟨integer⟩ ] ⟨general text⟩
+    debug_log!(trace=>"\\pdfoutline");
+    let mut attr = String::new();
+    if engine.get_keyword("attr") {
+        engine.get_braced_string(&mut attr)
+    }
+    let action = action_spec(engine);
+    let count = if engine.get_keyword("count") {
+        Some(engine.get_int().to_i64())
+    } else {None};
+    let mut content= String::new();
+    engine.get_braced_string(&mut content);
+    engine.stomach.push_node(PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
 }
 
 pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -504,6 +644,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int_assign!(pdfdecimaldigits,engine);
     register_int_assign!(pdfdraftmode,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
+    register_expandable!(pdfescapestring,engine,(e,cmd,f) =>pdfescapestring::<ET>(e,&cmd,f));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,&cmd,f));
     register_unexpandable!(pdffontexpand,engine,None,(e,cmd) =>pdffontexpand::<ET>(e,&cmd));
     register_int_assign!(pdfgentounicode,engine);
@@ -518,6 +659,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int_assign!(pdfminorversion,engine);
     register_unexpandable!(pdfobj,engine,None,(e,cmd) =>pdfobj::<ET>(e,&cmd));
     register_int_assign!(pdfobjcompresslevel,engine);
+    register_unexpandable!(pdfoutline,engine,None,(e,cmd) =>pdfoutline::<ET>(e,&cmd));
     register_int_assign!(pdfoutput,engine);
     register_dim_assign!(pdfpageheight,engine);
     register_tok_assign!(pdfpageresources,engine);
@@ -592,7 +734,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfcreationdate);
     cmtodo!(engine,pdfescapehex);
     cmtodo!(engine,pdfescapename);
-    cmtodo!(engine,pdfescapestring);
     cmtodo!(engine,pdffiledump);
     cmtodo!(engine,pdffilemoddate);
     cmtodo!(engine,pdffontname);
@@ -629,7 +770,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfnames);
     cmtodo!(engine,pdfnobuiltintounicode);
     cmtodo!(engine,pdfnoligatures);
-    cmtodo!(engine,pdfoutline);
     cmtodo!(engine,pdfprimitive);
     cmtodo!(engine,pdfrefobj);
     cmtodo!(engine,pdfrefximage);

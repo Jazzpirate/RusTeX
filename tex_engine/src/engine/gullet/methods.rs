@@ -647,7 +647,7 @@ impl<ET:EngineType> EngineRef<'_,ET> {
 macro_rules! expand_until_group {
     ($engine:ident,$tk:ident => $f:expr) => {
         match $engine.get_next_unexpandable_same_file() {
-            None => file_end!(),
+            None => crate::file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
                     crate::get_until_endgroup!($engine,$tk => $f);
@@ -664,7 +664,7 @@ macro_rules! get_expanded_group {
     ($engine:ident,$expand_protected:expr,$edef_like:expr,$err_on_unknowns:expr,$tk:ident => $f:expr) => {
         match $engine.get_next_token() {
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
-            _ => throw!("begin group expected")
+            _ => crate::throw!("begin group expected")
         }
         let mut ingroup = 0;
         let mut ok = false;
@@ -689,7 +689,7 @@ macro_rules! get_expanded_group {
                     BaseCommand::Expandable { name, .. } if name == crate::tex::commands::tex::NOEXPAND => {
                         match $engine.get_next_token() {
                             Some((t,_)) if t.catcode() == CategoryCode::EOF => (),
-                            None => file_end!(),
+                            None => crate::file_end!(),
                             Some(($tk, _)) => {$f}
                         }
                     },
@@ -734,6 +734,6 @@ macro_rules! get_expanded_group {
                 }
             } else { let $tk = next.0; $f}
         }
-        if (!ok) {file_end!()}
+        if (!ok) {crate::file_end!()}
     };
 }

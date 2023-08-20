@@ -414,8 +414,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 
 
 pub const SCANTOKENS: &str = "scantokens";
-/// `\detokenize`: convert a token list into a string
-/// (except for ` `, which gets code [`Space`](CategoryCode::Space)) and reparse/tokenize it.
+/// `\scantokens`: convert a token list into a string and reparse/tokenize it.
 pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
     use crate::utils::strings::AllCharsTrait;
     debug_log!(trace=>"scantokens");

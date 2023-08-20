@@ -102,12 +102,12 @@ macro_rules! get_until_endgroup {
                     depth -= 1;
                     if depth == 0 { ok = true; break }
                 },
-                CategoryCode::EOF => file_end!(),
+                CategoryCode::EOF => crate::file_end!(),
                 _ => ()
             }
             $f;
         }
-        if (!ok) {file_end!()}
+        if (!ok) {crate::file_end!()}
     }
 }
 
