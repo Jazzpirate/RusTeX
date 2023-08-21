@@ -945,25 +945,25 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
 pub const HFIL: &str = "hfil";
 pub fn hfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfil");
-    engine.stomach.push_node(SkipNode::HFil.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::HFil.as_node());
 }
 
 pub const HFILL: &str = "hfill";
 pub fn hfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfill");
-    engine.stomach.push_node(SkipNode::HFill.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::HFill.as_node());
 }
 
 pub const HFILNEG: &str = "hfilneg";
 pub fn hfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfilneg");
-    engine.stomach.push_node(SkipNode::HFilneg.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::HFilneg.as_node());
 }
 
 pub const HSS: &str = "hss";
 pub fn hss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hss");
-    engine.stomach.push_node(SkipNode::Hss.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::Hss.as_node());
 }
 
 pub const HT : &str = "ht";
@@ -1012,7 +1012,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
             }
         }
     }
-    engine.stomach.push_node(SimpleNode::Rule {
+    engine.stomach.push_node(engine.state,SimpleNode::Rule {
         width,height,depth,axis:HorV::Horizontal
     }.as_node());
 }
@@ -1297,7 +1297,7 @@ pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
 
 pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     let dim = engine.get_dim();
-    engine.stomach.push_node(TeXNode::Kern {dim,axis:match engine.state.mode() {
+    engine.stomach.push_node(engine.state,TeXNode::Kern {dim,axis:match engine.state.mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => HorV::Vertical,
         _ => HorV::Horizontal
     }});
@@ -1396,13 +1396,13 @@ pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    e.stomach.push_node(SimpleNode::Raise {by:-i,node:bx}.as_node());
+                    e.stomach.push_node(e.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
                     None
                 })})
             }
             BaseCommand::FinishedBox {get,..} => {
                 let bx = get(engine,c.source);
-                engine.stomach.push_node(SimpleNode::Raise {by:-i,node:bx}.as_node());
+                engine.stomach.push_node(engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
             }
             _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
         }
@@ -1962,7 +1962,7 @@ pub const PENALTY: &str = "penalty";
 pub fn penalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\penalty");
     let i = engine.get_int().to_i64() as i32;
-    engine.stomach.push_node(TeXNode::Penalty(i));
+    engine.stomach.push_node(engine.state,TeXNode::Penalty(i));
 }
 
 pub const PREVDEPTH : &str = "prevdepth";
@@ -1992,13 +1992,13 @@ pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    e.stomach.push_node(SimpleNode::Raise {by:i,node:bx}.as_node());
+                    e.stomach.push_node(e.state,SimpleNode::Raise {by:i,node:bx}.as_node());
                     None
                 })})
             }
             BaseCommand::FinishedBox {get,..} => {
                 let bx = get(engine,c.source);
-                engine.stomach.push_node(SimpleNode::Raise {by:i,node:bx}.as_node());
+                engine.stomach.push_node(engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
             }
             _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
         }
@@ -2234,6 +2234,17 @@ pub fn skipdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
     engine.set_command_for_tk(name,Some(ret),global);
 }
 
+pub fn spacefactor_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning space factor");
+    engine.skip_eq_char();
+    let v = engine.get_int().to_i64();
+    engine.stomach.shipout_data_mut().spacefactor = v as i32;
+}
+pub fn spacefactor_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
+    debug_log!(trace=>"Getting space factor");
+    ET::Int::from_i64(engine.stomach.shipout_data().spacefactor as i64)
+}
+
 pub const STRING: &str = "string";
 pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
     debug_log!(trace=>"string");
@@ -2366,9 +2377,10 @@ pub fn unhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match bx {
         HVBox::H(hb) => {
             for n in hb.children {
-                engine.stomach.push_node(n);
+                engine.stomach.push_node(engine.state,n);
             }
         }
+        HVBox::Void => (),
         _ => throw!("incompatible list can't be unboxed" => cmd.cause)
     }
 }
@@ -2376,15 +2388,16 @@ pub fn unhcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     debug_log!(trace => "\\unhcopy");
     let i = engine.get_int().to_i64();
     if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
-    let bx = match engine.state.get_box_register(i as usize) {
+    let bx = match engine.state.get_box_register(i as usize).cloned() {
         None => return (),
         Some(b) => {
-            match &b {
+            match b {
                 HVBox::H(hb) => {
-                    for n in &hb.children {
-                        engine.stomach.push_node(n.clone());
+                    for n in hb.children {
+                        engine.stomach.push_node(engine.state,n);
                     }
                 }
+                HVBox::Void => (),
                 _ => throw!("incompatible list can't be unboxed" => cmd.cause)
             }
 
@@ -2399,9 +2412,10 @@ pub fn unvbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match bx {
         HVBox::V(hb) => {
             for n in hb.children {
-                engine.stomach.push_node(n);
+                engine.stomach.push_node(engine.state,n);
             }
         }
+        HVBox::Void => (),
         _ => throw!("incompatible list can't be unboxed" => cmd.cause)
     }
 }
@@ -2409,15 +2423,16 @@ pub fn unvcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     debug_log!(trace => "\\unvcopy");
     let i = engine.get_int().to_i64();
     if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
-    let bx = match engine.state.get_box_register(i as usize) {
+    let bx = match engine.state.get_box_register(i as usize).cloned() {
         None => return (),
         Some(b) => {
-            match &b {
+            match b {
                 HVBox::V(hb) => {
-                    for n in &hb.children {
-                        engine.stomach.push_node(n.clone());
+                    for n in hb.children {
+                        engine.stomach.push_node(engine.state,n);
                     }
                 }
+                HVBox::Void => (),
                 _ => throw!("incompatible list can't be unboxed" => cmd.cause)
             }
 
@@ -2483,25 +2498,25 @@ pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
 pub const VFIL: &str = "vfil";
 pub fn vfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfil");
-    engine.stomach.push_node(SkipNode::VFil.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::VFil.as_node());
 }
 
 pub const VFILL: &str = "vfill";
 pub fn vfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfill");
-    engine.stomach.push_node(SkipNode::VFill.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::VFill.as_node());
 }
 
 pub const VFILNEG: &str = "vfilneg";
 pub fn vfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfilneg");
-    engine.stomach.push_node(SkipNode::VFilneg.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::VFilneg.as_node());
 }
 
 pub const VSS: &str = "vss";
 pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vss");
-    engine.stomach.push_node(SkipNode::Vss.as_node());
+    engine.stomach.push_node(engine.state,SkipNode::Vss.as_node());
 }
 
 
@@ -2525,7 +2540,7 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
             }
         }
     }
-    engine.stomach.push_node(SimpleNode::Rule {
+    engine.stomach.push_node(engine.state,SimpleNode::Rule {
         width,height,depth,axis:HorV::Vertical
     }.as_node());
 }
@@ -2801,6 +2816,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_int!(skewchar,engine);
     register_value_assign_skip!(skip,engine);
     register_assign!(skipdef,engine,(e,cmd,global) =>skipdef::<ET>(e,&cmd,global));
+    register_value_assign_int!(spacefactor,engine);
     register_skip_assign!(spaceskip,engine);
     register_dim_assign!(splitmaxdepth,engine);
     register_skip_assign!(splittopskip,engine);
@@ -2881,7 +2897,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,lastpenalty);
     cmtodo!(engine,parshape);
     cmtodo!(engine,badness);
-    cmtodo!(engine,spacefactor);
     cmtodo!(engine,prevgraf);
     cmtodo!(engine,deadcycles);
     cmtodo!(engine,insertpenalties);

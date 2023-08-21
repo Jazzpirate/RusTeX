@@ -2,9 +2,10 @@ pub mod methods;
 
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
+use crate::engine::state::State;
 use crate::tex::nodes::{OpenBox, HVBox, TeXNode, SimpleNode};
 use crate::tex::commands::StomachCommand;
-use crate::tex::numbers::Dim;
+use crate::tex::numbers::{Dim, Int};
 use crate::utils::errors::TeXError;
 
 
@@ -15,6 +16,7 @@ pub struct ShipoutData<ET:EngineType> {
     pub pagegoal:ET::Dim,
     pub pagetotal:ET::Dim,
     pub prevdepth: ET::Dim,
+    pub spacefactor: i32,
     pub to_ship:Option<ET::Node>
 }
 impl<ET:EngineType> ShipoutData<ET> {
@@ -25,6 +27,7 @@ impl<ET:EngineType> ShipoutData<ET> {
             pagegoal:ET::Dim::from_sp(i32::MAX as i64),
             pagetotal:ET::Dim::from_sp(0),
             prevdepth:ET::Dim::from_sp(-65536000),
+            spacefactor:1000,
             to_ship:None
         }
     }
@@ -41,6 +44,9 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data(&self) -> &ShipoutData<ET>;
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
     fn open_box(&mut self,bx:OpenBox<ET>) {
+        if !bx.is_vertical() {
+            self.shipout_data_mut().spacefactor = 1000;
+        }
         self.shipout_data_mut().box_stack.push(bx)
     }
 
@@ -48,8 +54,19 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         todo!("shipout")
     }
 
-    fn push_node(&mut self,node:TeXNode<ET>) {
+    fn push_node(&mut self,state:&ET::State,node:TeXNode<ET>) {
         let sd = self.shipout_data_mut();
+        match node {
+            TeXNode::Simple(SimpleNode::Char {char,..}) => {
+                let sf = state.get_sfcode(&char).to_i64();
+                if sf > 1000 && sd.spacefactor < 1000 {
+                    sd.spacefactor = 1000;
+                } else {
+                    sd.spacefactor = sf as i32;
+                }
+            }
+            _ => sd.spacefactor = 1000
+        }
         match sd.box_stack.last_mut() {
             Some(b) => {
                 if b.is_vertical() {

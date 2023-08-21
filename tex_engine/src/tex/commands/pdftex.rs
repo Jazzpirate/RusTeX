@@ -338,7 +338,7 @@ pub fn pdfcatalog<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
         Some(action_spec(engine))
     } else {None};
 
-    engine.stomach.push_node(PDFTeXNode::PDFCatalog {literal,action}.as_node());
+    engine.stomach.push_node(engine.state,PDFTeXNode::PDFCatalog {literal,action}.as_node());
 }
 
 /// "pdfcolorstack"
@@ -452,7 +452,7 @@ pub fn pdfdest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
         Some("fit") => PDFDestType::Fit,
         _ => throw!("Expected one of 'xyz','fitr','fitbh','fitbv','fitb','fith','fitv','fit'" => cmd.cause)
     };
-    engine.stomach.push_node(PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
+    engine.stomach.push_node(engine.state,PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
 }
 
 pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -530,7 +530,7 @@ pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"pdfliteral");
     let mut literal = String::new();
     engine.get_braced_string(&mut literal);
-    engine.stomach.push_node(PDFTeXNode::PDFLiteral {literal}.as_node());
+    engine.stomach.push_node(engine.state,PDFTeXNode::PDFLiteral {literal}.as_node());
 }
 
 /// "pdfobj"
@@ -578,7 +578,7 @@ pub fn pdfoutline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     } else {None};
     let mut content= String::new();
     engine.get_braced_string(&mut content);
-    engine.stomach.push_node(PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
+    engine.stomach.push_node(engine.state,PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
 }
 
 pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -586,7 +586,10 @@ pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     debug_log!(trace=>"\\pdfrefxform");
     let i = engine.get_int().to_i64();
     if i < 0 || engine.state.pdfxforms().len() as i64 <= i {throw!("Invalid xform number: {}",i => cmd.cause)}
-    Whatsit::new(Box::new(move |e| e.stomach.push_node(e.state.pdfxforms().remove(i as usize).as_node())))
+    Whatsit::new(Box::new(move |e| {
+        let f = e.state.pdfxforms().remove(i as usize).as_node();
+        e.stomach.push_node(e.state,f)
+    }))
 }
 
 pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {

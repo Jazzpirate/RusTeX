@@ -32,7 +32,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
-                engine.stomach.push_node(SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+                engine.stomach.push_node(engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
             }
             TeXMode::Math | TeXMode::Displaymath => throw!("TODO Char in math mode" => cmd.source.cause),
             _ => throw!("TODO Char in vertical mode" => cmd.source.cause)
@@ -68,11 +68,11 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         FinishedBox {name,get} => {
             let b = get(engine,cmd.source);
-            engine.stomach.push_node(b.as_node());
+            engine.stomach.push_node(engine.state,b.as_node());
         }
         Whatsit {name,apply} => {
             let wi = apply(engine,cmd.source);
-            engine.stomach.push_node(TeXNode::Whatsit(wi));
+            engine.stomach.push_node(engine.state,TeXNode::Whatsit(wi));
         },
         Relax => (),
         MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
@@ -99,7 +99,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 match engine.stomach.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(engine,list) {
-                            Some(b) => engine.stomach.push_node(b.as_node()),
+                            Some(b) => engine.stomach.push_node(engine.state,b.as_node()),
                             None => {}
                         }
                     }
