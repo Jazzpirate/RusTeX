@@ -165,6 +165,16 @@ pub fn begingroup<ET:EngineType>(state:&mut ET::State) {
     state.stack_push(GroupType::CS);
 }
 
+pub fn box_<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> HVBox<ET> {
+    debug_log!(trace=>"\\box");
+    let i = engine.get_int();
+    let i : usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Invalid box number: {}",i => cmd.cause)
+    };
+    engine.state.take_box_register(i)
+}
+
 pub const CATCODE: &str = "catcode";
 pub fn catcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning category code");
@@ -1390,6 +1400,10 @@ pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                     None
                 })})
             }
+            BaseCommand::FinishedBox {get,..} => {
+                let bx = get(engine,c.source);
+                engine.stomach.push_node(SimpleNode::Raise {by:-i,node:bx}.as_node());
+            }
             _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
         }
     }
@@ -1982,6 +1996,10 @@ pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                     None
                 })})
             }
+            BaseCommand::FinishedBox {get,..} => {
+                let bx = get(engine,c.source);
+                engine.stomach.push_node(SimpleNode::Raise {by:i,node:bx}.as_node());
+            }
             _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
         }
     }
@@ -2107,6 +2125,10 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
                     None
                 })})
             }
+            BaseCommand::FinishedBox {get,..} => {
+                let bx = get(engine,c.source);
+                engine.state.set_box_register(i as usize,bx,global);
+            }
             _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
         }
     }
@@ -2145,6 +2167,10 @@ pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                     e.stomach.shipout(bx);
                     None
                 })});
+            }
+            BaseCommand::FinishedBox {get,..} => {
+                let bx = get(engine,c.source);
+                engine.stomach.shipout(bx);
             }
             _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
         }
@@ -2330,6 +2356,73 @@ pub fn uccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let v = ET::Int::from_i64(engine.state.get_uccode(&c).to_usize() as i64);
     debug_log!(debug=>"\\uccode '{}' == {}",c.char_str(),v);
     v
+}
+
+pub fn unhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\unhbox");
+    let i = engine.get_int().to_i64();
+    if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
+    let bx = engine.state.take_box_register(i as usize);
+    match bx {
+        HVBox::H(hb) => {
+            for n in hb.children {
+                engine.stomach.push_node(n);
+            }
+        }
+        _ => throw!("incompatible list can't be unboxed" => cmd.cause)
+    }
+}
+pub fn unhcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\unhcopy");
+    let i = engine.get_int().to_i64();
+    if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
+    let bx = match engine.state.get_box_register(i as usize) {
+        None => return (),
+        Some(b) => {
+            match &b {
+                HVBox::H(hb) => {
+                    for n in &hb.children {
+                        engine.stomach.push_node(n.clone());
+                    }
+                }
+                _ => throw!("incompatible list can't be unboxed" => cmd.cause)
+            }
+
+        }
+    };
+}
+pub fn unvbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\unvbox");
+    let i = engine.get_int().to_i64();
+    if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
+    let bx = engine.state.take_box_register(i as usize);
+    match bx {
+        HVBox::V(hb) => {
+            for n in hb.children {
+                engine.stomach.push_node(n);
+            }
+        }
+        _ => throw!("incompatible list can't be unboxed" => cmd.cause)
+    }
+}
+pub fn unvcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\unvcopy");
+    let i = engine.get_int().to_i64();
+    if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
+    let bx = match engine.state.get_box_register(i as usize) {
+        None => return (),
+        Some(b) => {
+            match &b {
+                HVBox::V(hb) => {
+                    for n in &hb.children {
+                        engine.stomach.push_node(n.clone());
+                    }
+                }
+                _ => throw!("incompatible list can't be unboxed" => cmd.cause)
+            }
+
+        }
+    };
 }
 
 pub const UPPERCASE: &str = "uppercase";
@@ -2526,6 +2619,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(belowdisplayskip,engine);
     register_skip_assign!(belowdisplayshortskip,engine);
     register_int_assign!(binoppenalty,engine);
+    register_box!(box,engine,(e,cmd) =>box_::<ET>(e,&cmd));
     register_dim_assign!(boxmaxdepth,engine);
     register_int_assign!(brokenpenalty,engine);
     register_value_assign_int!(catcode,engine);
@@ -2729,6 +2823,10 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(tracingstats,engine);
     register_value_assign_int!(uccode,engine);
     register_int_assign!(uchyph,engine);
+    register_unexpandable!(unhbox,engine,Some(HorV::Horizontal),(e,cmd) =>unhbox::<ET>(e,&cmd));
+    register_unexpandable!(unhcopy,engine,Some(HorV::Horizontal),(e,cmd) =>unhcopy::<ET>(e,&cmd));
+    register_unexpandable!(unvbox,engine,Some(HorV::Vertical),(e,cmd) =>unvbox::<ET>(e,&cmd));
+    register_unexpandable!(unvcopy,engine,Some(HorV::Vertical),(e,cmd) =>unvcopy::<ET>(e,&cmd));
     register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,&cmd));
     register_int_assign!(vbadness,engine);
     register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
@@ -2802,7 +2900,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);
-    cmtodo!(engine,box);
     cmtodo!(engine,lastbox);
     cmtodo!(engine,vsplit);
     cmtodo!(engine,vtop);
@@ -2828,8 +2925,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,xleaders);
     cmtodo!(engine,moveleft);
     cmtodo!(engine,moveright);
-    cmtodo!(engine,unvbox);
-    cmtodo!(engine,unvcopy);
     cmtodo!(engine,halign);
     cmtodo!(engine,valign);
     cmtodo!(engine,indent);
@@ -2870,7 +2965,5 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,omit);
     cmtodo!(engine,smallskip);
     cmtodo!(engine,span);
-    cmtodo!(engine,unhbox);
-    cmtodo!(engine,unhcopy);
 }
 

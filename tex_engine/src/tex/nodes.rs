@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::BoxMode;
 use crate::tex::commands::CloseBoxFun;
+use crate::tex::fonts::Font;
 use crate::tex::numbers::Skip;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
@@ -118,6 +119,7 @@ pub enum HorV { Horizontal, Vertical }
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
+    Char {char:ET::Char, font:ET::Font},
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
@@ -131,23 +133,28 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 let d = node.depth() - *by;
                 if d > ET::Dim::from_sp(0) { d } else { ET::Dim::from_sp(0) }
             },
+            SimpleNode::Char {char,font} => font.char_dp(*char),
             _ => ET::Dim::from_sp(0)
         }
     }
     fn height(&self) -> ET::Dim {
         match self {
+            SimpleNode::Rule{height,axis:HorV::Horizontal,..} => height.unwrap_or_else(|| ET::Dim::from_sp(26214)),
             SimpleNode::Rule{height,..} => height.unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Raise{node,by} => {
                 let h = node.height() + *by;
                 if h > ET::Dim::from_sp(0) { h } else { ET::Dim::from_sp(0) }
             },
+            SimpleNode::Char {char,font} => font.char_ht(*char),
             _ => ET::Dim::from_sp(0)
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
+            SimpleNode::Rule{width,axis:HorV::Vertical,..} => width.unwrap_or_else(|| ET::Dim::from_sp(26214)),
             SimpleNode::Rule{width,..} => width.unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Raise{node,..} => node.width(),
+            SimpleNode::Char {char,font} => font.char_wd(*char),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -155,7 +162,8 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
         use SimpleNode::*;
         match self {
             Rule{..} => 3,
-            Raise{node,..} => node.nodetype()
+            Raise{node,..} => node.nodetype(),
+            Char{..} => 0
         }
     }
 }

@@ -5,7 +5,7 @@ use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::engine::mouth::Mouth;
 use crate::tex::commands::{BaseStomachCommand, StomachCommand};
-use crate::tex::nodes::{HorV, NodeTrait, TeXNode};
+use crate::tex::nodes::{HorV, NodeTrait, SimpleNode, TeXNode};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
@@ -21,7 +21,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                     match (currmode,mode) {
                         (TeXMode::InternalVertical | TeXMode::Vertical,HorV::Vertical) => (),
                         (TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::Math | TeXMode::Displaymath,HorV::Horizontal) => (),
-                        _ => todo!()
+                        _ => throw!("TODO: Switching modes" => cmd.source.cause)
                     }
                 }
             }
@@ -29,6 +29,13 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 ET::Stomach::maybe_shipout(engine,false)
             }
             apply(engine, cmd.source)
+        }
+        Char(char) => match engine.state.mode() {
+            TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
+                engine.stomach.push_node(SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+            }
+            TeXMode::Math | TeXMode::Displaymath => throw!("TODO Char in math mode" => cmd.source.cause),
+            _ => throw!("TODO Char in vertical mode" => cmd.source.cause)
         }
         Assignment {name,set} => {
             set(engine,cmd.source,false);
@@ -68,10 +75,6 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             engine.stomach.push_node(TeXNode::Whatsit(wi));
         },
         Relax => (),
-        Char{..} => catch!({
-            let mode = engine.state.mode();
-            todo!("Character in digest: {:?} at {}\n{}",mode,engine.current_position(),engine.preview(50))
-        } => cmd.source.cause),
         MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
         Superscript => catch!( todo!("Superscript in digest") => cmd.source.cause),
         Subscript => catch!( todo!("Subscript in digest") => cmd.source.cause),
