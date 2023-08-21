@@ -298,7 +298,15 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
             match next.command {
                 BaseCommand::Char{char,..} => {
                     let us = char.to_usize();
-                    if us < 256 && keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us as u8) {
+                    let us = if us < 256 { (us as u8).to_ascii_lowercase() } else if keywords.contains(&current.as_str()) {
+                        engine.mouth.requeue(next.source.cause);
+                        rs.reset(engine.memory);
+                        keywords = keywords.into_iter().filter(|s| s == &current).collect();
+                        return Some(keywords[0])
+                    } else {
+                        return None
+                    };
+                    if keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us) {
                         current.push(us as u8 as char);
                         keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
                         if keywords.is_empty() {

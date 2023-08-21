@@ -28,6 +28,7 @@ pub enum BaseToken<C:CharType> {
 impl<C:CharType> BaseToken<C> {
     pub fn to_str(& self,interner:&Interner<C>,escapechar:Option<C>) -> String {
         match self {
+            BaseToken::Char(_, CategoryCode::Space) => " ".to_string(),
             BaseToken::Char(c, _) => c.as_char().to_string(),
             BaseToken::CS(n) => match escapechar {
                 Some(c) => (c.as_char().to_string() + n.to_str(interner)).to_string(),
@@ -216,7 +217,7 @@ impl <'a,ET:EngineType> TokenList<'a,ET> {
         for t in self.0 {
             s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));
         }
-        s
+        s.replace("\r","\\r").replace("\n","\\n")
     }
 }
 impl<'a,ET:EngineType> Into<TokenList<'a,ET>> for &'a Vec<Token<ET>> {

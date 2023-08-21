@@ -87,6 +87,14 @@ pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
     PDFLiteral{literal:String},
     PDFXForm{form:PDFXForm<ET>},
     PDFOutline{attr:String,action:ActionSpec,content:String,count:Option<i64>},
+    PDFDest{structnum:Option<i64>,id:NumOrName,desttype:PDFDestType<ET>},
+}
+
+#[derive(Debug,Clone)]
+pub enum PDFDestType<ET:EngineType> {
+    XYZ { zoom:Option<i64>},
+    Fitr {width:Option<ET::Dim>, height:Option<ET::Dim>, depth:Option<ET::Dim>},
+    Fitbh, Fitbv, Fitb, Fith, Fitv, Fit
 }
 
 impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -378,6 +386,73 @@ pub fn pdfcolorstackinit<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandS
     let idx = engine.state.pdfcolorstacks().len();
     engine.state.pdfcolorstacks().push(PDFColorstack(vec!(color)));
     ET::Int::from_i64(idx as i64)
+}
+
+pub fn pdfdest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::Node:From<PDFTeXNode<ET>> {
+    debug_log!(trace=>"pdfdest");
+    engine.skip_whitespace();
+    let structnum = if engine.get_keyword("struct") {
+        engine.skip_whitespace();
+        Some(engine.get_int().to_i64())
+    } else {None};
+    engine.skip_whitespace();
+    let id = match engine.get_keywords(vec!("num","name")) {
+        Some("num") => {
+            engine.skip_whitespace();
+            NumOrName::Num(engine.get_int().to_i64())
+        },
+        Some("name") => {
+            let mut str = String::new();
+            engine.skip_whitespace();
+            engine.get_braced_string(&mut str);
+            NumOrName::Name(str)
+        }
+        _ => throw!("Expected one of 'num','name'" => cmd.cause),
+    };
+    engine.skip_whitespace();
+    let desttype = match engine.get_keywords(vec!("xyz","fitr","fitbh","fitbv","fitb","fith","fitv", "fit")) {
+        Some("xyz") => {
+            engine.skip_whitespace();
+            let zoom = if engine.get_keyword("zoom") {
+                engine.skip_whitespace();
+                Some(engine.get_int().to_i64())
+            } else {None};
+            PDFDestType::XYZ{zoom}
+        }
+        Some("fitr") => {
+            let mut width : Option<ET::Dim> = None;
+            let mut height : Option<ET::Dim> = None;
+            let mut depth : Option<ET::Dim> = None;
+            loop {
+                engine.skip_whitespace();
+                match engine.get_keywords(vec!("width","height","depth")) {
+                    Some("width") => {
+                        engine.skip_whitespace();
+                        width = Some(engine.get_dim());
+                    }
+                    Some("height") => {
+                        engine.skip_whitespace();
+                        height = Some(engine.get_dim());
+                    }
+                    Some("depth") => {
+                        engine.skip_whitespace();
+                        depth = Some(engine.get_dim());
+                    }
+                    _ => break
+                }
+            }
+            PDFDestType::Fitr{width,height,depth}
+        }
+        Some("fitbh") => PDFDestType::Fitbh,
+        Some("fitbv") => PDFDestType::Fitbv,
+        Some("fitb") => PDFDestType::Fitb,
+        Some("fith") => PDFDestType::Fith,
+        Some("fitv") => PDFDestType::Fitv,
+        Some("fit") => PDFDestType::Fit,
+        _ => throw!("Expected one of 'xyz','fitr','fitbh','fitbv','fitb','fith','fitv','fit'" => cmd.cause)
+    };
+    engine.stomach.push_node(PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
 }
 
 pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -697,6 +772,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int!(pdfcolorstackinit,engine,(e,c) => pdfcolorstackinit::<ET>(e,&c));
     register_int_assign!(pdfcompresslevel,engine);
     register_int_assign!(pdfdecimaldigits,engine);
+    register_unexpandable!(pdfdest,engine,None,(e,cmd) =>pdfdest::<ET>(e,&cmd));
     register_int_assign!(pdfdraftmode,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
     register_expandable!(pdfescapestring,engine,(e,cmd,f) =>pdfescapestring::<ET>(e,&cmd,f));
@@ -811,7 +887,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,partokenname);
     cmtodo!(engine,pdfannot);
     cmtodo!(engine,pdfcopyfont);
-    cmtodo!(engine,pdfdest);
     cmtodo!(engine,pdfendlink);
     cmtodo!(engine,pdfendthread);
     cmtodo!(engine,pdffakespace);

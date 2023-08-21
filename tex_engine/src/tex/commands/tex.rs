@@ -1350,7 +1350,7 @@ pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         BaseToken::Char(c,cc) =>
             Some(Command::new(BaseCommand::Char{char:c,catcode:cc},Some(&cmd))),
     };
-    debug_log!(debug=>"let: {} = {:?}",cs.to_str(engine.interner,Some(ET::Char::backslash())),cmd.as_ref().unwrap_or(&Command::new(BaseCommand::None,None)));
+    debug_log!(debug=>"let: {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),cmd.as_ref().map(|c|c.base.as_str(engine.interner)).unwrap_or("undefined".to_string()));
     engine.set_command_for_tk(cs,cmd,globally);
 }
 

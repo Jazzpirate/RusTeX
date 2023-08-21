@@ -284,9 +284,9 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                 TeXMouthSource::Token(ts) => ts.0.base.to_str(interner,Some(ET::Char::backslash())),
                 TeXMouthSource::String(ss) => ss.preview()
             });
-            if ret.len() > len { ret.truncate(len);return ret }
+            if ret.len() > len { ret.truncate(len);return ret.replace("\r","\\r").replace("\n","\\n") }
         }
-        ret
+        ret.replace("\r","\\r").replace("\n","\\n")
     }
 
     fn line_no(&self) -> usize {

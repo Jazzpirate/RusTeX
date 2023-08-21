@@ -424,7 +424,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         self.primitive_skipregisters.push_stack();
         self.primitive_muskipregisters.push_stack();
         self.primitive_tokregisters.push_stack();
-        unsafe{self.aftergroups.push(self.aftergroups.last().unwrap_unchecked().clone())};
+        self.aftergroups.push(vec!());
     }
     fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)> {
         let gt = match self.grouptype.pop() {

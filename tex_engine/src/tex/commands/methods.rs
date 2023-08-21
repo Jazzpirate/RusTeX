@@ -375,7 +375,7 @@ use crate::tex::token::TokenReference;
 /// error messages.
 #[inline(never)]
 pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>) { catch!({
-    debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.interner,Some(ET::Char::backslash())),d.as_str(engine.interner),engine.preview(250).replace("\n","\\n"));
+    debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.interner,Some(ET::Char::backslash())),d.as_str(engine.interner),engine.preview(250));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
