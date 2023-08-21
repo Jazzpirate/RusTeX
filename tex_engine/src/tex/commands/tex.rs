@@ -1017,6 +1017,12 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     }.as_node());
 }
 
+pub fn hskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\hskip");
+    let skip = engine.get_skip();
+    engine.stomach.push_node(engine.state,SkipNode::Skip{skip,axis:HorV::Horizontal}.as_node());
+}
+
 pub fn hyphenation<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\hyphenation");
     // TODO
@@ -1162,6 +1168,16 @@ pub fn ifhmode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     }
 }
 
+pub fn ifhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
+    debug_log!(trace=>"ifhbox");
+    let i = engine.get_int().to_i64();
+    if i < 0 { throw!("Invalid box register: {}",i => cmd.cause) }
+    match engine.state.get_box_register(i as usize) {
+        Some(HVBox::H(_)) => true,
+        _ => false
+    }
+}
+
 pub fn ifinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifhmode");
     match engine.state.mode() {
@@ -1203,11 +1219,30 @@ pub fn ifodd<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -
     num.to_i64() % 2 != 0
 }
 
+pub fn ifvbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
+    debug_log!(trace=>"ifvbox");
+    let i = engine.get_int().to_i64();
+    if i < 0 { throw!("Invalid box register: {}",i => cmd.cause) }
+    match engine.state.get_box_register(i as usize) {
+        Some(HVBox::V(_)) => true,
+        _ => false
+    }
+}
 
 pub fn ifvmode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifvmode");
     match engine.state.mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => true,
+        _ => false
+    }
+}
+
+pub fn ifvoid<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
+    debug_log!(trace=>"ifvoid");
+    let i = engine.get_int().to_i64();
+    if i < 0 { throw!("Invalid box register: {}",i => cmd.cause) }
+    match engine.state.get_box_register(i as usize) {
+        Some(HVBox::Void) | None => true,
         _ => false
     }
 }
@@ -1310,7 +1345,7 @@ pub fn lastskip<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>)
         Some(bx) => bx.ls()
     };
     for n in ls.iter().rev() { match n {
-        TeXNode::Skip(SkipNode::Skip {val,..}) => return val.clone(),
+        TeXNode::Skip(SkipNode::Skip { skip: val,..}) => return val.clone(),
         TeXNode::Penalty(_) => (),
         _ => return Skip::default()
     }}
@@ -2513,6 +2548,13 @@ pub fn vfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     engine.stomach.push_node(engine.state,SkipNode::VFilneg.as_node());
 }
 
+pub fn vskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\vskip");
+    let skip = engine.get_skip();
+    engine.stomach.push_node(engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
+}
+
+
 pub const VSS: &str = "vss";
 pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vss");
@@ -2715,6 +2757,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(holdinginserts,engine);
     register_unexpandable!(hrule,engine,Some(HorV::Vertical),(e,cmd) =>hrule::<ET>(e,&cmd));
     register_dim_assign!(hsize,engine);
+    register_unexpandable!(hskip,engine,Some(HorV::Horizontal),(e,cmd) =>hskip::<ET>(e,&cmd));
     register_value_assign_dim!(ht,engine);
     register_unexpandable!(hyphenation,engine,None,(e,cmd) =>hyphenation::<ET>(e,&cmd));
     register_value_assign_int!(hyphenchar,engine);
@@ -2725,16 +2768,16 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifdim,engine,(e,cmd) =>ifdim::<ET>(e,&cmd));
     register_conditional!(ifeof,engine,(e,cmd) =>ifeof::<ET>(e,&cmd));
     register_conditional!(iffalse,engine,(_,_) => false);
-    register_conditional!(ifhbox,engine,(e,cmd) => todo!("ifhbox"));
+    register_conditional!(ifhbox,engine,(e,cmd) => ifhbox::<ET>(e,&cmd));
     register_conditional!(ifhmode,engine,(e,cmd) =>ifhmode::<ET>(e,&cmd));
     register_conditional!(ifinner,engine,(e,cmd) =>ifinner::<ET>(e,&cmd));
     register_conditional!(ifmmode,engine,(e,cmd) =>ifmmode::<ET>(e,&cmd));
     register_conditional!(ifnum,engine,(e,cmd) =>ifnum::<ET>(e,&cmd));
     register_conditional!(ifodd,engine,(e,cmd) =>ifodd::<ET>(e,&cmd));
     register_conditional!(iftrue,engine,(_,_) => true);
-    register_conditional!(ifvbox,engine,(e,cmd) =>todo!("ifvbox"));
+    register_conditional!(ifvbox,engine,(e,cmd) =>ifvbox::<ET>(e,&cmd));
     register_conditional!(ifvmode,engine,(e,cmd) =>ifvmode::<ET>(e,&cmd));
-    register_conditional!(ifvoid,engine,(e,cmd) =>todo!("ifvoid"));
+    register_conditional!(ifvoid,engine,(e,cmd) =>ifvoid::<ET>(e,&cmd));
     register_conditional!(ifx,engine,(e,cmd) =>ifx::<ET>(e,&cmd));
     register_unexpandable!(immediate,engine,None,(e,cmd) =>immediate::<ET>(e,&cmd));
     register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,&cmd));
@@ -2849,6 +2892,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,&cmd));
     register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,&cmd));
     register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,&cmd));
+    register_unexpandable!(vskip,engine,Some(HorV::Vertical),(e,cmd) =>vskip::<ET>(e,&cmd));
     register_unexpandable!(vss,engine,Some(HorV::Vertical),(e,cmd) =>vss::<ET>(e,&cmd));
     register_dim_assign!(vfuzz,engine);
     register_dim_assign!(voffset,engine);
@@ -2934,7 +2978,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,splitbotmark);
     cmtodo!(engine,insert);
     cmtodo!(engine,vadjust);
-    cmtodo!(engine,vskip);
     cmtodo!(engine,leaders);
     cmtodo!(engine,cleaders);
     cmtodo!(engine,xleaders);
@@ -2972,7 +3015,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,cr);
     cmtodo!(engine,crcr);
     cmtodo!(engine,fontname);
-    cmtodo!(engine,hskip);
     cmtodo!(engine,italiccorr);
     cmtodo!(engine,medskip);
     cmtodo!(engine,mskip);

@@ -83,7 +83,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
 
 #[derive(Debug,Clone)]
 pub enum SkipNode<ET:EngineType> {
-    Skip{val:Skip<ET::SkipDim>,axis:HorV},
+    Skip{ skip:Skip<ET::SkipDim>,axis:HorV},
     VFil,VFill,VFilneg,HFil,HFill,HFilneg,Hss,Vss
 }
 
@@ -97,14 +97,14 @@ impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
     fn height(&self) -> ET::Dim {
         use SkipNode::*;
         match self {
-            Skip {val,axis:HorV::Vertical} => val.base,
+            Skip { skip: val,axis:HorV::Vertical} => val.base,
             _ => ET::Dim::from_sp(0)
         }
     }
     fn width(&self) -> ET::Dim {
         use SkipNode::*;
         match self {
-            Skip {val,axis:HorV::Horizontal} => val.base,
+            Skip { skip: val,axis:HorV::Horizontal} => val.base,
             _ => ET::Dim::from_sp(0)
         }
     }
