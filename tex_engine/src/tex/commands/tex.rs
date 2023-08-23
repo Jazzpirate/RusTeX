@@ -31,8 +31,8 @@ SPACE
 \-
  */
 
-pub fn SPACE<ET:EngineType>(_:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
-    todo!("\\ ")
+pub fn SPACE<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
+    engine.stomach.push_node(engine.state,SkipNode::Space.as_node());
 }
 
 pub const ADVANCE: &str = "advance";
@@ -2592,6 +2592,30 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     })
 }
 
+pub fn vadjust<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
+    debug_log!(trace=>"\\vadjust");
+    while let Some(next) = engine.get_next_unexpandable_same_file() {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Relax => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
+                engine.state.stack_push(GroupType::Box(BoxMode::V));
+                match engine.state.get_primitive_toks("everyvbox") {
+                    None => (),
+                    Some(v) if v.is_empty() => (),
+                    Some(v) => for t in v.iter().rev() {engine.mouth.requeue(t.clone())}
+                }
+                return Ptr::new(move |e,children| {
+                    e.stomach.push_node(e.state,TeXNode::VAdjust(children));
+                    None
+                })
+            }
+            _ => throw!("Expected begin group, found {:?}",next.source.cause => cmd.cause)
+        }
+    }
+    file_end_prim!("vadjust",cmd);
+}
+
 
 pub const VBOX: &str = "vbox";
 pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
@@ -2650,20 +2674,6 @@ pub fn vfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     engine.stomach.push_node(engine.state,SkipNode::VFilneg.as_node());
 }
 
-pub fn vskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    debug_log!(trace => "\\vskip");
-    let skip = engine.get_skip();
-    engine.stomach.push_node(engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
-}
-
-
-pub const VSS: &str = "vss";
-pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    debug_log!(trace => "\\vss");
-    engine.stomach.push_node(engine.state,SkipNode::Vss.as_node());
-}
-
-
 pub const VRULE: &str = "vrule";
 pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vrule");
@@ -2689,6 +2699,62 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     }.as_node());
 }
 
+
+pub fn vskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\vskip");
+    let skip = engine.get_skip();
+    engine.stomach.push_node(engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
+}
+
+pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> HVBox<ET> {
+    debug_log!(trace=>"\\vsplit");
+    let i = engine.get_int();
+    let i : usize = match i.clone().try_into() {
+        Ok(i) => i,
+        Err(_) => throw!("Invalid box number: {}",i => cmd.cause)
+    };
+    let v = engine.state.take_box_register(i);
+    if !engine.get_keyword("to") {
+        throw!("Expected 'to' after \\vsplit" => cmd.cause)
+    }
+    engine.skip_whitespace();
+    let target = engine.get_dim();
+    match v {
+        HVBox::V(vb) => {
+            let mut first = VBox {
+                children:vec!(),
+                to:Some(target),
+                spread:None,
+                assigned_depth:None,
+                assigned_height:None,
+                assigned_width:vb.assigned_width,
+                kind:"vbox",
+            };
+            let mut second = VBox {
+                children:vec!(),
+                to:None,
+                spread:None,
+                assigned_depth:None,
+                assigned_height:None,
+                assigned_width:vb.assigned_width,
+                kind:"vbox",
+            };
+            let (f,s) = ET::Stomach::split_vertical(engine.state,vb.children,target);
+            first.children = f;
+            second.children = s;
+            engine.state.set_box_register(i,HVBox::V(second),false);
+            HVBox::V(first)
+        }
+        _ => throw!("Incompatible box type: {}",i => cmd.cause)
+    }
+}
+
+
+pub const VSS: &str = "vss";
+pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\vss");
+    engine.stomach.push_node(engine.state,SkipNode::Vss.as_node());
+}
 
 pub const WD : &str = "wd";
 pub fn wd_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
@@ -2997,11 +3063,13 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(unpenalty,engine,None,(e,cmd) =>unpenalty::<ET>(e,&cmd));
     register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,&cmd));
     register_int_assign!(vbadness,engine);
+    register_open_box!(vadjust,engine,BoxMode::V,(e,cmd) =>vadjust::<ET>(e,&cmd));
     register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
     register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,&cmd));
     register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,&cmd));
     register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,&cmd));
     register_unexpandable!(vskip,engine,Some(HorV::Vertical),(e,cmd) =>vskip::<ET>(e,&cmd));
+    register_box!(vsplit,engine,(e,cmd) =>vsplit::<ET>(e,&cmd));
     register_unexpandable!(vss,engine,Some(HorV::Vertical),(e,cmd) =>vss::<ET>(e,&cmd));
     register_dim_assign!(vfuzz,engine);
     register_dim_assign!(voffset,engine);
@@ -3067,7 +3135,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);
-    cmtodo!(engine,vsplit);
     cmtodo!(engine,vtop);
     cmtodo!(engine,show);
     cmtodo!(engine,showbox);
@@ -3081,7 +3148,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,splitfirstmark);
     cmtodo!(engine,splitbotmark);
     cmtodo!(engine,insert);
-    cmtodo!(engine,vadjust);
     cmtodo!(engine,leaders);
     cmtodo!(engine,cleaders);
     cmtodo!(engine,xleaders);

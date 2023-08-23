@@ -45,6 +45,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
     fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
     fn split_paragraph(state:&ET::State, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>>;
+    fn split_vertical(state:&ET::State, nodes:Vec<TeXNode<ET>>, target:ET::Dim) -> (Vec<TeXNode<ET>>,Vec<TeXNode<ET>>);
 
     fn shipout(&mut self,bx:HVBox<ET>) {
         todo!("shipout")
@@ -144,6 +145,9 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
     fn split_paragraph(state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
         methods::split_paragraph_roughly(nodes,linespecs)
     }
+    fn split_vertical(state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+        methods::split_vertical_roughly(state,nodes,target)
+    }
 }
 
 #[derive(Clone,Copy,Debug)]
@@ -175,5 +179,8 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
     }
     fn split_paragraph(state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
         methods::split_paragraph_roughly(nodes,linespecs)
+    }
+    fn split_vertical(state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+        methods::split_vertical_roughly(state,nodes,target)
     }
 }

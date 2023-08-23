@@ -45,7 +45,9 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 engine.stomach.push_node(engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
             }
             TeXMode::Math | TeXMode::Displaymath => throw!("TODO Char in math mode" => cmd.source.cause),
-            _ => throw!("TODO Char in vertical mode" => cmd.source.cause)
+            _ => {
+                ET::Stomach::open_paragraph(engine,cmd);
+            }
         }
         Assignment {name,set} => {
             set(engine,cmd.source,false);
@@ -224,11 +226,11 @@ pub fn knuth_plass<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<Lin
 }
 
 pub fn split_paragraph_roughly<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
-
     let mut lines = vec!();
     let mut hgoal = ET::Dim::default();
     let mut hgoals = linespecs.into_iter();
     let mut iter = nodes.into_iter();
+    // TODO vadjust
     'A:loop {
         let mut goal = match hgoals.next() {
             Some(v) => {
@@ -250,4 +252,28 @@ pub fn split_paragraph_roughly<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linesp
         }
     }
     lines
+}
+
+pub fn split_vertical_roughly<ET:EngineType>(state: &ET::State, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+    let mut nodes = nodes.into_iter();
+    let mut result = vec!();
+    let mut rest = vec!();
+    while target > ET::Dim::default() {
+        match nodes.next() {
+            None => break,
+            Some(node) => { // TODO marks
+                target = target - node.height();
+                if target < ET::Dim::default() {
+                    rest.push(node);
+                    break
+                } else {
+                    result.push(node);
+                }
+            }
+        }
+    }
+    for n in nodes {
+        rest.push(n);
+    }
+    (result,rest)
 }

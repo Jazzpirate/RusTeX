@@ -32,6 +32,7 @@ pub enum TeXNode<ET:EngineType> {
     Mark(Vec<Token<ET>>),
     Custom(ET::Node),
     Simple(SimpleNode<ET>),
+    VAdjust(Vec<TeXNode<ET>>)
 }
 impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
     fn height(&self) -> ET::Dim {
@@ -76,7 +77,8 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Whatsit(_) => 9,
             Mark(_) => 5,
             Custom(n) => n.nodetype(),
-            Simple(n) => n.nodetype()
+            Simple(n) => n.nodetype(),
+            VAdjust(_) => 6
         }
     }
 }

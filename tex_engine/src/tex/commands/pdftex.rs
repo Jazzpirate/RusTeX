@@ -292,6 +292,11 @@ pub fn ifpdfabsnum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     }
 }
 
+pub fn ifincsname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
+    debug_log!(trace=>"ifincsname");
+    engine.state.current_csname().is_some()
+}
+
 /// "ifpdfabsdim"
 pub const IFPDFABSDIM : &str = "ifpdfabsdim";
 /// `\ifpdfabsdim`: Compare the absolute values of two dimensions.
@@ -766,8 +771,10 @@ pub fn rpcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<
 
 /// Initialize a TeX engine with default implementations for all pdfTeX primitives.
 pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) where ET::Node:From<PDFTeXNode<ET>>, ET::State:PDFState<ET> {
+    register_conditional!(ifincsname,engine,(e,cmd) =>ifincsname::<ET>(e,&cmd));
     register_conditional!(ifpdfabsdim,engine,(e,cmd) =>ifpdfabsdim::<ET>(e,&cmd));
     register_conditional!(ifpdfabsnum,engine,(e,cmd) =>ifpdfabsnum::<ET>(e,&cmd));
+    register_dim_assign!(leftmarginkern,engine);
     register_value_assign_int!(lpcode,engine);
     register_int_assign!(pdfadjustspacing,engine);
     register_unexpandable!(pdfcatalog,engine,None,(e,cmd) =>pdfcatalog::<ET>(e,&cmd));
@@ -809,6 +816,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(&c));
     register_dim_assign!(pdfvorigin,engine);
     register_unexpandable!(pdfxform,engine,None,(e,cmd) =>pdfxform::<ET>(e,&cmd));
+    register_dim_assign!(rightmarginkern,engine);
     register_value_assign_int!(rpcode,engine);
     register_int_assign!(tracingstacklevels,engine);
 
@@ -863,9 +871,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfpageattr);
     cmtodo!(engine,pdfpagesattr);
     cmtodo!(engine,pdfpkmode);
-    cmtodo!(engine,ifincsname);
     cmtodo!(engine,ifpdfprimitive);
-    cmtodo!(engine,leftmarginkern);
     cmtodo!(engine,pdfcreationdate);
     cmtodo!(engine,pdfescapehex);
     cmtodo!(engine,pdfescapename);
@@ -884,7 +890,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfuniformdeviate);
     cmtodo!(engine,pdfxformname);
     cmtodo!(engine,pdfximagebbox);
-    cmtodo!(engine,rightmarginkern);
 
     cmtodo!(engine,letterspacefont);
     cmtodo!(engine,partokenname);
