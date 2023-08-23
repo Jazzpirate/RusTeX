@@ -84,6 +84,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
 #[derive(Debug,Clone)]
 pub enum SkipNode<ET:EngineType> {
     Skip{ skip:Skip<ET::SkipDim>,axis:HorV},
+    Space,
     VFil,VFill,VFilneg,HFil,HFill,HFilneg,Hss,Vss
 }
 
@@ -119,7 +120,7 @@ pub enum HorV { Horizontal, Vertical }
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
-    Char {char:ET::Char, font:ET::Font},
+    Char {char:ET::Char, font:ET::Font}
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {

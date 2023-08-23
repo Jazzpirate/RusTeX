@@ -72,7 +72,7 @@ Div<Self,Output=Self>+Mul<Self,Output=Self> {
     fn from_i64(i:i64) -> Self;
     fn to_i64(&self) -> i64;
 }
-pub trait Dim:Numeric+Add<Self,Output=Self> + Debug + Ord + Sum {
+pub trait Dim:Numeric+Add<Self,Output=Self> + Debug + Ord + Sum +  Sub<Self,Output=Self> {
     fn units() -> Vec<&'static str>;
     fn from_float(dim:&str,float:f64) -> Self;
     fn from_sp(sp:i64) -> Self;

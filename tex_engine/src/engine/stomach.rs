@@ -5,7 +5,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::State;
 use crate::tex::nodes::{OpenBox, HVBox, TeXNode, SimpleNode};
 use crate::tex::commands::StomachCommand;
-use crate::tex::numbers::{Dim, Int};
+use crate::tex::numbers::{Dim, Int, Skip};
 use crate::utils::errors::TeXError;
 
 
@@ -43,6 +43,13 @@ use crate::tex::nodes::NodeTrait;
 pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data(&self) -> &ShipoutData<ET>;
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
+    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
+    fn split_paragraph(state:&ET::State, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>>;
+
+    fn shipout(&mut self,bx:HVBox<ET>) {
+        todo!("shipout")
+    }
+
     fn open_box(&mut self,bx:OpenBox<ET>) {
         if !bx.is_vertical() {
             self.shipout_data_mut().spacefactor = 1000;
@@ -50,8 +57,11 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         self.shipout_data_mut().box_stack.push(bx)
     }
 
-    fn shipout(&mut self,bx:HVBox<ET>) {
-        todo!("shipout")
+    fn open_paragraph(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
+        methods::open_paragraph(engine,cmd)
+    }
+    fn close_paragraph(engine: &mut EngineRef<ET>) {
+        methods::close_paragraph(engine)
     }
 
     fn push_node(&mut self,state:&ET::State,node:TeXNode<ET>) {
@@ -87,8 +97,6 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
             }
         }
     }
-
-    fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
 
     fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
         let sd = engine.stomach.shipout_data();
@@ -133,6 +141,16 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
     }
     fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> { &mut self.shipout_data }
+    fn split_paragraph(state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
+        methods::split_paragraph_roughly(nodes,linespecs)
+    }
+}
+
+#[derive(Clone,Copy,Debug)]
+pub struct LineSpec<ET:EngineType> {
+    left_skip:Skip<ET::SkipDim>,
+    right_skip:Skip<ET::SkipDim>,
+    target:ET::Dim,
 }
 
 
@@ -152,4 +170,10 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
     }
     fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> { &mut self.shipout_data }
+    fn close_paragraph(engine: &mut EngineRef<ET>) {
+        todo!()
+    }
+    fn split_paragraph(state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
+        methods::split_paragraph_roughly(nodes,linespecs)
+    }
 }

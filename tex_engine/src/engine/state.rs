@@ -29,9 +29,12 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
 
     fn set_afterassignment(&mut self,t:Token<ET>);
     fn take_afterassignment(&mut self) -> Option<Token<ET>>;
+    fn get_parshape(&self) -> Option<&Vec<(ET::Dim,ET::Dim)>>;
+    fn set_parshape(&mut self,v:Vec<(ET::Dim,ET::Dim)>,globally:bool);
 
     /// The current [`TeXMode`]
     fn mode(&self) -> TeXMode;
+    fn set_mode(&mut self, mode:TeXMode);
 
     fn file_openout(&mut self,i:usize,f:ET::File);
     fn file_closeout(&mut self, i: usize);
@@ -190,6 +193,7 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     current_colorstack:usize,
 
     current_font:SingleValueField<ET::Font>,
+    parshape:SingleValueField<Option<Vec<(ET::Dim,ET::Dim)>>>,
 
     mode: TeXMode,
     /* filesystem: FS,*/
@@ -232,6 +236,7 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
             current_font:SingleValueField::new(fontstore.null()),
             afterassignment:None,
             aftergroups:vec!(vec!()),
+            parshape:SingleValueField::new(None),
             mode: TeXMode::Vertical,
             pdfmatches:vec!(),
             pdfobjs:vec!(),
@@ -398,6 +403,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             _ => self.grouptype.push((g,None))
         }
         self.current_font.push_stack();
+        self.parshape.push_stack();
         self.endlinechar.push_stack();
         self.escapechar.push_stack();
         self.newlinechar.push_stack();
@@ -436,6 +442,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             Some((gt,_)) => gt
         };
         self.current_font.pop_stack();
+        self.parshape.pop_stack();
         self.endlinechar.pop_stack();
         self.escapechar.pop_stack();
         self.newlinechar.pop_stack();
@@ -466,8 +473,25 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         Some((self.aftergroups.pop().unwrap_or(vec!()),gt))
     }
 
+    fn set_mode(&mut self, mode: TeXMode) {
+        self.mode = mode
+    }
+
     // #[inline(always)]
     fn get_grouptype(&self) -> GroupType { *self.grouptype.last().map(|(t,_)| t).unwrap_or(&GroupType::Top) }
+
+    fn get_parshape(&self) -> Option<&Vec<(ET::Dim, ET::Dim)>> {
+        self.parshape.get().as_ref()
+    }
+    fn set_parshape(&mut self, v: Vec<(ET::Dim, ET::Dim)>, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.parshape.set_globally(if v.is_empty() {None} else {Some(v)})
+        } else {
+            self.parshape.set_locally(if v.is_empty() {None} else {Some(v)})
+        }
+    }
 
     // #[inline(always)]
     fn get_escapechar(&self) -> Option<ET::Char> { *self.escapechar.get() }

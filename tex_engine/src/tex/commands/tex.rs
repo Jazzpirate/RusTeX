@@ -1300,6 +1300,15 @@ pub fn immediate<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     }
 }
 
+pub fn indent<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"indent");
+    engine.stomach.push_node(engine.state,HBox {
+        kind:"indent",
+        children:vec!(SkipNode::Skip{skip:engine.state.get_primitive_skip("parindent"),axis:HorV::Horizontal}.as_node()),
+        ..Default::default()
+    }.as_node());
+}
+
 pub const INPUT: &str = "input";
 pub fn input<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"input");
@@ -1338,6 +1347,23 @@ pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     }});
 }
 
+pub fn lastbox<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> HVBox<ET> {
+    debug_log!(trace=>"\\lastbox");
+    if engine.state.mode() == TeXMode::Vertical {
+        throw!("\\lastbox not allowed in vertical mode" => cmd.cause)
+    }
+    let sd = engine.stomach.shipout_data_mut();
+    let ls = sd.box_stack.last_mut().map(|t| t.ls_mut()).unwrap_or(&mut sd.page);
+    match ls.last() {
+        Some(TeXNode::Box(_)) => {
+            match ls.pop() {
+                Some(TeXNode::Box(b)) => b,
+                _ => unreachable!()
+            }
+        }
+        _ => HVBox::Void
+    }
+}
 
 pub fn lastskip<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> Skip<ET::SkipDim> {
     let ls = match engine.stomach.shipout_data().box_stack.last() {
@@ -1907,6 +1933,22 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     }
 }
 
+pub fn noindent<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"noindent");
+    let sd = engine.stomach.shipout_data_mut();
+    match sd.box_stack.last_mut() {
+        Some(OpenBox::Paragraph {list,..}) => {
+            loop {
+                match list.last_mut() {
+                    Some(TeXNode::Box(HVBox::H(b))) if b.kind == "indent" => {b.children.pop();}
+                    _ => break
+                }
+            }
+        }
+        _ => ()
+    }
+}
+
 pub const NUMBER: &str = "number";
 pub fn number<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
     debug_log!(trace=>"\\number");
@@ -1980,8 +2022,28 @@ pub fn outer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, g
 pub const PAR: &str = "par";
 pub fn par<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
     debug_log!(trace=>"par");
-    if engine.state.mode().is_vertical() {return ()}
-    todo!("par in horizontal mode")
+}
+
+pub fn parshape_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning parshape");
+    let len = engine.get_int().to_i64();
+    if len < 0 {
+        throw!("Invalid parshape length: {}",len => cmd.cause)
+    }
+    let mut vals : Vec<(ET::Dim,ET::Dim)> = Vec::with_capacity(len as usize);
+    for i in 0..len {
+        let a = engine.get_dim();
+        let b = engine.get_dim();
+        vals.push((a,b));
+    }
+    engine.state.set_parshape(vals,false);
+}
+pub fn parshape_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
+    debug_log!(trace=>"Getting parshape");
+    match engine.state.get_parshape() {
+        None => ET::Int::from_i64(0),
+        Some(v) => ET::Int::from_i64(v.len() as i64)
+    }
 }
 
 pub const PATTERNS: &str = "patterns";
@@ -2475,6 +2537,46 @@ pub fn unvcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     };
 }
 
+pub fn unskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let mut sd = engine.stomach.shipout_data_mut();
+    let mut ls = match sd.box_stack.last_mut() {
+        Some(b) => b.ls_mut(),
+        None => &mut sd.page
+    };
+    loop {
+        match ls.last() {
+            Some(TeXNode::Skip(_)) => {ls.pop();}
+            _ => break
+        }
+    }
+}
+pub fn unkern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let mut sd = engine.stomach.shipout_data_mut();
+    let mut ls = match sd.box_stack.last_mut() {
+        Some(b) => b.ls_mut(),
+        None => &mut sd.page
+    };
+    loop {
+        match ls.last() {
+            Some(TeXNode::Kern{..}) => {ls.pop();}
+            _ => break
+        }
+    }
+}
+pub fn unpenalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let mut sd = engine.stomach.shipout_data_mut();
+    let mut ls = match sd.box_stack.last_mut() {
+        Some(b) => b.ls_mut(),
+        None => &mut sd.page
+    };
+    loop {
+        match ls.last() {
+            Some(TeXNode::Penalty(_)) => {ls.pop();}
+            _ => break
+        }
+    }
+}
+
 pub const UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\uppercase");
@@ -2780,6 +2882,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifvoid,engine,(e,cmd) =>ifvoid::<ET>(e,&cmd));
     register_conditional!(ifx,engine,(e,cmd) =>ifx::<ET>(e,&cmd));
     register_unexpandable!(immediate,engine,None,(e,cmd) =>immediate::<ET>(e,&cmd));
+    register_unexpandable!(indent,engine,Some(HorV::Horizontal),(e,cmd) =>indent::<ET>(e,&cmd));
     register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,&cmd));
     register_expandable!(input,engine,(e,cmd,f) =>input::<ET>(e,&cmd));
     register_int!(inputlineno,engine,(e,cmd) => inputlineno::<ET>(e,&cmd));
@@ -2787,6 +2890,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(jobname,engine,(e,_,f) =>jobname::<ET>(e,f));
     register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
     register_int_assign!(language,engine);
+    register_box!(lastbox,engine,(e,cmd) =>lastbox::<ET>(e,&cmd));
     register_skip!(lastskip,engine,(e,cmd) => lastskip::<ET>(e,&cmd));
     register_value_assign_int!(lccode,engine);
     register_int_assign!(lefthyphenmin,engine);
@@ -2813,6 +2917,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_assign!(muskipdef,engine,(e,cmd,global) =>muskipdef::<ET>(e,&cmd,global));
     register_value_assign_int!(newlinechar,engine);
     register_expandable!(noexpand,engine,(e,cmd,f) => noexpand::<ET>(e,&cmd,f));
+    register_unexpandable!(noindent,engine,Some(HorV::Horizontal),(e,cmd) =>noindent::<ET>(e,&cmd));
     register_dim_assign!(nulldelimiterspace,engine);
     engine.state.set_command(ET::Char::from_str("nullfont",engine.interner), Some(Command::new(
         BaseCommand::Font(engine.fontstore.null())
@@ -2833,6 +2938,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     },None)),true);
     register_skip_assign!(parfillskip,engine);
     register_dim_assign!(parindent,engine);
+    register_value_assign_int!(parshape,engine);
     register_skip_assign!(parskip,engine);
     register_unexpandable!(patterns,engine,None,(e,cmd) =>patterns::<ET>(e,&cmd));
     register_int_assign!(pausing,engine);
@@ -2886,6 +2992,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(unhcopy,engine,Some(HorV::Horizontal),(e,cmd) =>unhcopy::<ET>(e,&cmd));
     register_unexpandable!(unvbox,engine,Some(HorV::Vertical),(e,cmd) =>unvbox::<ET>(e,&cmd));
     register_unexpandable!(unvcopy,engine,Some(HorV::Vertical),(e,cmd) =>unvcopy::<ET>(e,&cmd));
+    register_unexpandable!(unskip,engine,None,(e,cmd) =>unskip::<ET>(e,&cmd));
+    register_unexpandable!(unkern,engine,None,(e,cmd) =>unkern::<ET>(e,&cmd));
+    register_unexpandable!(unpenalty,engine,None,(e,cmd) =>unpenalty::<ET>(e,&cmd));
     register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,&cmd));
     register_int_assign!(vbadness,engine);
     register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
@@ -2939,7 +3048,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
 
 
     cmtodo!(engine,lastpenalty);
-    cmtodo!(engine,parshape);
     cmtodo!(engine,badness);
     cmtodo!(engine,prevgraf);
     cmtodo!(engine,deadcycles);
@@ -2959,7 +3067,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);
-    cmtodo!(engine,lastbox);
     cmtodo!(engine,vsplit);
     cmtodo!(engine,vtop);
     cmtodo!(engine,show);
@@ -2967,9 +3074,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
     cmtodo!(engine,special);
-    cmtodo!(engine,unpenalty);
-    cmtodo!(engine,unkern);
-    cmtodo!(engine,unskip);
     cmtodo!(engine,mark);
     cmtodo!(engine,topmark);
     cmtodo!(engine,firstmark);
@@ -2985,8 +3089,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,moveright);
     cmtodo!(engine,halign);
     cmtodo!(engine,valign);
-    cmtodo!(engine,indent);
-    cmtodo!(engine,noindent);
     cmtodo!(engine,noboundary);
     cmtodo!(engine,accent);
     cmtodo!(engine,discretionary);
