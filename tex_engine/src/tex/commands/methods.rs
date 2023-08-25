@@ -384,7 +384,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
     }
     if d.arity == 0 {
         // No arguments, we just expand the replacement, but need to eat the delimiters in the signature
-        for elem in &d.signature {
+        for elem in &*d.signature {
             match elem {
                 ParamToken::Token(delim) => {
                     if let Some((n,_)) = engine.get_next_token() {
@@ -418,10 +418,9 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
 
 fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut ExpansionContainer<ET>) {
     let rf = ET::TokenReference::from_expansion(&cmd);
-    for r in &d.replacement {
+    for r in &*d.replacement {
         match r {
             ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
-            ExpToken::ParamToken(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
             _ => unreachable!()
         }
     }
@@ -556,7 +555,6 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut Engin
                     exp.push(t.clone().with_ref(&rf),engine.memory);
                 }
             }
-            ExpToken::ParamToken(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
             ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),engine.memory)
         }
     }

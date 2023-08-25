@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use lazy_static::lazy_static;
 use crate::debug_log;
-use crate::utils::map::HMap;
+use crate::utils::collections::HMap;
 
 /// A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
 /// `TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].

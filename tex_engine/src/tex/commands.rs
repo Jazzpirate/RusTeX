@@ -321,7 +321,7 @@ pub enum BaseCommand<ET:EngineType>{
 impl<ET:EngineType> PartialEq for BaseCommand<ET> {
     fn eq(&self, other: &Self) -> bool {
         match (self,other) {
-            (BaseCommand::Def(a), BaseCommand::Def(b)) => **a == **b,
+            (BaseCommand::Def(a), BaseCommand::Def(b)) => *a == *b,
             (BaseCommand::Conditional{name:a,..}, BaseCommand::Conditional{name:b,..}) => a == b,
             (BaseCommand::Expandable {name:a,..}, BaseCommand::Expandable {name:c,..}) => a == c,
             (BaseCommand::Unexpandable {name:a,..}, BaseCommand::Unexpandable {name:b,..}) => a == b,
@@ -506,16 +506,16 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
 
 /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
 #[derive(Clone)]
-pub struct DefI<ET:EngineType>{
+pub struct Def<ET:EngineType>{
     pub protected:bool,
     pub long:bool,
     pub outer:bool,
     pub endswithbrace:bool,
     pub arity:u8,
-    pub signature:Vec<ParamToken<ET>>,
-    pub replacement:Vec<ExpToken<ET>>
+    pub signature:Ptr<Vec<ParamToken<ET>>>,
+    pub replacement:Ptr<Vec<ExpToken<ET>>>
 }
-impl<ET:EngineType> PartialEq for DefI<ET> {
+impl<ET:EngineType> PartialEq for Def<ET> {
     fn eq(&self, other: &Self) -> bool {
         self.protected == other.protected && self.long == other.long && self.outer == other.outer &&
             self.endswithbrace == other.endswithbrace && self.arity == other.arity &&
@@ -523,23 +523,25 @@ impl<ET:EngineType> PartialEq for DefI<ET> {
     }
 }
 
-pub(crate) type Def<ET> = Ptr<DefI<ET>>;
-impl<ET:EngineType> DefI<ET>{
+impl<ET:EngineType> Def<ET>{
     pub fn simple(replacement:Vec<Token<ET>>) -> Def<ET> {
-        Ptr::new(Self {
-            protected:false,
-            long:false,
-            outer:false,
-            endswithbrace:false,
-            arity:0,
-            signature:Vec::new(),
-            replacement:replacement.into_iter().map(ExpToken::Token).collect()
-        })
+        Self::new(false,false,false,false,0,Vec::new(),replacement.into_iter().map(ExpToken::Token).collect())
+    }
+    pub fn new(protected:bool,long:bool,outer:bool,endswithbrace:bool,arity:u8,signature:Vec<ParamToken<ET>>,replacement:Vec<ExpToken<ET>>) -> Def<ET> {
+        Self {
+            protected,
+            long,
+            outer,
+            endswithbrace,
+            arity,
+            signature:Ptr::new(signature),
+            replacement:Ptr::new(replacement)
+        }
     }
     pub fn as_str(&self,interner:&Interner<ET::Char>) -> String {
         let mut s = String::new();
         let mut ind = 0;
-        for x in &self.signature {
+        for x in &*self.signature {
             match x {
                 ParamToken::Param => {
                     ind +=1;
@@ -553,16 +555,16 @@ impl<ET:EngineType> DefI<ET>{
             s.push('#');
         }
         s.push('{');
-        for r in &self.replacement {
+        for r in &*self.replacement {
             match r {
+                ExpToken::Token(t) if t.catcode() == CategoryCode::Parameter => {
+                    s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));
+                    s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));
+                }
                 ExpToken::Token(t) => s.push_str(&t.to_str(interner,Some(ET::Char::backslash()))),
                 ExpToken::Param(i,u) => {
                     s.push('#');
                     s.push_str(&(u+1).to_string());
-                }
-                ExpToken::ParamToken(t) => {
-                    s.push('#');
-                    s.push('#');
                 }
             }
         }
@@ -570,13 +572,13 @@ impl<ET:EngineType> DefI<ET>{
         s
     }
 }
-impl<ET:EngineType> Debug for DefI<ET> {
+impl<ET:EngineType> Debug for Def<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for x in &self.signature {
+        for x in &*self.signature {
             write!(f,"{:?}",x)?;
         }
         write!(f,"->")?;
-        for x in &self.replacement {
+        for x in &*self.replacement {
             write!(f,"{:?}",x)?;
         }
         Ok(())
@@ -610,15 +612,13 @@ impl<ET:EngineType> Debug for ParamToken<ET> {
 #[derive(Clone)]
 pub enum ExpToken<ET:EngineType> {
     Param(Token<ET>,u8),
-    Token(Token<ET>),
-    ParamToken(Token<ET>)
+    Token(Token<ET>)
 }
 impl<ET:EngineType> PartialEq for ExpToken<ET> {
     fn eq(&self, other: &Self) -> bool {
         match (self,other) {
             (Self::Param(t1,u1),Self::Param(t2,u2)) => t1 == t2 && u1 == u2,
             (Self::Token(t1),Self::Token(t2)) => t1 == t2,
-            (Self::ParamToken(t1),Self::ParamToken(t2)) => t1 == t2,
             _ => false
         }
     }
@@ -628,7 +628,6 @@ impl<ET:EngineType> Debug for ExpToken<ET> {
         match self {
             Self::Param(t,u8) => write!(f,"{:?}{}",t,u8+1),
             Self::Token(t) => write!(f,"{:?}",t),
-            Self::ParamToken(t) => write!(f,"{:?}{:?}",t,t)
         }
     }
 }

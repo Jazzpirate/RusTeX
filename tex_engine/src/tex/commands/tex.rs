@@ -10,7 +10,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, TokenCont, ValueCommand, CommandSource, DefI, ToksCommand};
+use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, TokenCont, ValueCommand, CommandSource, ToksCommand, Def};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, Skip, MuSkip, Dim};
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -349,7 +349,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         (None,BaseToken::Char(c,CategoryCode::Parameter)) =>
             partk = Some(t),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
-            replacement.push(ExpToken::ParamToken(t)),
+            replacement.push(ExpToken::Token(t)),
         (Some(t),BaseToken::Char(c,_)) => {
             let u = c.to_usize();
             if u < 49 || u - 48 > (arity as usize) {
@@ -361,9 +361,9 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
             throw!("Expected number after #, got {}",t.to_str(engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => replacement.push(ExpToken::Token(t))
     });
-    let def = DefI{protected,long,outer,endswithbrace,arity,signature,replacement};
+    let def = Def::new(protected,long,outer,endswithbrace,arity,signature,replacement);
     debug_log!(trace=>"def {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def.as_str(engine.interner));
-    let def = Command::new(BaseCommand::Def(Ptr::new(def)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(def),Some(&cmd));
     engine.set_command_for_tk(cs,Some(def),global);
 }
 
@@ -602,7 +602,7 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
     get_expanded_group!(engine,false,true,false,t => match (std::mem::take(&mut partk),&t.base) {
         (None,BaseToken::Char(c,CategoryCode::Parameter)) => partk = Some(t),
         (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
-            replacement.push(ExpToken::ParamToken(t)),
+            replacement.push(ExpToken::Token(t)),
         (Some(t),BaseToken::Char(c,_)) => {
             let u = c.to_usize();
             if u < 48 || u - 48 > (arity as usize) {
@@ -635,9 +635,9 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
  */
 
 
-    let def = DefI{protected,long,outer,endswithbrace,arity,signature,replacement};
+    let def = Def::new(protected,long,outer,endswithbrace,arity,signature,replacement);
     debug_log!(trace=>"edef {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def.as_str(engine.interner));
-    let def = Command::new(BaseCommand::Def(Ptr::new(def)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(def),Some(&cmd));
     engine.set_command_for_tk(cs,Some(def),global);
 }
 
@@ -1699,7 +1699,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     }
                     engine.string_to_tokens("macro:".as_bytes(),f);
                     let mut i = 0;
-                    for s in &d.signature {
+                    for s in &*d.signature {
                         match s {
                             ParamToken::Token(t) => {
                                 engine.token_to_others(t, true, f);
@@ -1713,13 +1713,13 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     if d.endswithbrace { f(engine,Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None)) }
                     f(engine,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None));
                     f(engine,Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None));
-                    for t in &d.replacement {
+                    for t in &*d.replacement {
                         match t {
-                            ExpToken::Token(t) => engine.token_to_others(t, true, f),
-                            ExpToken::ParamToken(t) => {
+                            ExpToken::Token(t) if t.catcode() == CategoryCode::Parameter => {
                                 engine.token_to_others(t, true, f);
                                 engine.token_to_others(t, true, f);
                             }
+                            ExpToken::Token(t) => engine.token_to_others(t, true, f),
                             ExpToken::Param(t, i) => {
                                 engine.token_to_others(t, true, f);
                                 engine.string_to_tokens((i+1).to_string().as_bytes(),f)
@@ -2133,7 +2133,7 @@ pub fn read<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
             Some(c) => ret.push(Token::new(BaseToken::Char(c,*engine.state.get_catcode_scheme().get(&c)),None))
         }
     }
-    let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);
 }
 

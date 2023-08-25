@@ -3,7 +3,7 @@ use crate::engine::mouth::Mouth;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, DefI, TokenCont};
+use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def, TokenCont};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
 use crate::tex::token::{BaseToken, TokenList};
 use crate::utils::strings::CharType;
@@ -432,7 +432,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     file.read::<ET,_>(engine.interner,&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t));
     debug_log!(trace=>"readline: {} = {}",newcmd.to_str(engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.interner));
 
-    let def = Command::new(BaseCommand::Def(DefI::simple(ret)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);
 }
 

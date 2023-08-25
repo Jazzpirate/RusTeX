@@ -22,7 +22,7 @@ use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, Token};
 use crate::throw;
 use crate::utils::errors::TeXError;
-use crate::utils::map::HMap;
+use crate::utils::collections::HMap;
 use crate::utils::{Mut, Ptr};
 use crate::utils::strings::CharType;
 

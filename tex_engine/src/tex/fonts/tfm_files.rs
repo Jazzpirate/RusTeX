@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
-use crate::utils::map::HMap;
+use crate::utils::collections::HMap;
 
 pub struct TfmFile {
     pub hyphenchar:u8,

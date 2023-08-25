@@ -12,7 +12,7 @@ use crate::engine::EngineType;
 use crate::engine::memory::Memory;
 use crate::tex::nodes::HVBox;
 use crate::tex::token::Token;
-use crate::utils::map::HMap;
+use crate::utils::collections::HMap;
 
 /** A field of the [`State`](crate::engine::state::State) needs to be able to push and pop a new stack frame.
   This is largely implemented as a [`Vec`] of [`HMap`]s tracking changes and reverting the local ones

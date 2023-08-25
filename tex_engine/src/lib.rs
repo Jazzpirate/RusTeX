@@ -182,7 +182,6 @@ mod tests {
                 std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace");
                 env_logger::init();
                 //trace();
-                Ok(())
             },forces_mode:None
         },None)),true);
 

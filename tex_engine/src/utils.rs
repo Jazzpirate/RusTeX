@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 pub mod strings;
 pub mod errors;
-pub mod map;
+pub mod collections;
 
 /// A pointer type for use in TeX - this is just an alias for `Rc`, but may by replaced by `Arc` in the future.
 pub type Ptr<A> = Rc<A>;
