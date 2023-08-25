@@ -160,6 +160,10 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
                 apply(engine, ret.source, &mut |_,_| Ok(()))?;
                 Ok(None)
             }*/
+            BaseCommand::ExpandableNoTokens {apply,..} => {
+                apply(engine,ret.source);
+                None
+            }
             BaseCommand::Expandable {apply,..} => {
                 engine.add_expansion(|engine,rs| {
                     apply(engine,ret.source,&mut |engine,t| rs.push(t,engine.memory));

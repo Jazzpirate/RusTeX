@@ -109,7 +109,7 @@ pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineRef<ET>, expand_prote
                 }
                 BaseCommand::Def(d) if d.protected && !expand_protected =>
                     f(engine, res.source.cause),
-                BaseCommand::Expandable { name, .. } if name == NOEXPAND => {
+                BaseCommand::ExpandableNoTokens { name, .. } if name == NOEXPAND => {
                     match engine.get_next_token() {
                         None => file_end!(),
                         Some((t, _)) => f(engine, t)
@@ -154,12 +154,12 @@ pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str
             BaseToken::Char(c,CategoryCode::Active) =>
                 match engine.state.get_ac_command(c).map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 => {
                         debug_log!(trace=>"...else branch.");
                         engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         return ()
                     }
-                    Some(BaseCommand::Expandable {name:"or",..}) if incond == 0 && condname == "ifcase" => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"or",..}) if incond == 0 && condname == "ifcase" => {
                         match engine.gullet.current_conditional() {
                             (Some(ConditionalBranch::Case(i, j)),_) => {
                                 engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
@@ -171,8 +171,8 @@ pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str
                             _ => unreachable!()
                         }
                     }
-                    Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::Expandable {name:"fi",..}) => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
                         engine.gullet.pop_conditional();
                         return ()
@@ -182,12 +182,12 @@ pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str
             BaseToken::CS(name) => {
                 match engine.state.get_command(name).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 => {
                         engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
                         debug_log!(trace=>"...else branch.");
                         return ()
                     }
-                    Some(BaseCommand::Expandable {name:"or",..}) if incond == 0 && condname == "ifcase" => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"or",..}) if incond == 0 && condname == "ifcase" => {
                         match engine.gullet.current_conditional() {
                             (Some(ConditionalBranch::Case(i, j)),_) => {
                                 engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
@@ -199,8 +199,8 @@ pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str
                             _ => unreachable!()
                         }
                     }
-                    Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::Expandable {name:"fi",..}) => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
                         engine.gullet.pop_conditional();
                         return ()
@@ -223,11 +223,11 @@ pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,
             BaseToken::Char(c,CategoryCode::Active) =>
                 match engine.state.get_ac_command(c).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 && !allowelse => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 && !allowelse => {
                         throw!("Unexpected \\else" => next)
                     }
-                    Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::Expandable {name:"fi",..}) => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
                         engine.gullet.pop_conditional();
                         return ()
@@ -237,11 +237,11 @@ pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,
             BaseToken::CS(name) => {
                 match engine.state.get_command(name).as_deref().map(|c| &c.base) {
                     Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::Expandable {name:"else",..}) if incond == 0 && !allowelse => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 && !allowelse => {
                         throw!("Unexpected \\else" => next)
                     }
-                    Some(BaseCommand::Expandable {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::Expandable {name:"fi",..}) => {
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
+                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
                         debug_log!(trace=>"...end of conditional.");
                         engine.gullet.pop_conditional();
                         return ()
@@ -465,7 +465,7 @@ pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineRef<ET>) -> Token<E
 fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:ResolvedToken<ET>)
                                        -> Option<Token<ET>> {
     match resolved.command {
-        BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } => {
+        BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } | BaseCommand::ExpandableNoTokens {..} => {
             engine.expand(resolved);
             None
         },
@@ -699,7 +699,7 @@ macro_rules! get_expanded_group {
                         let $tk = res.source.cause;
                         $f
                     }
-                    BaseCommand::Expandable { name, .. } if name == crate::tex::commands::tex::NOEXPAND => {
+                    BaseCommand::ExpandableNoTokens { name, .. } if name == crate::tex::commands::tex::NOEXPAND => {
                         match $engine.get_next_token() {
                             Some((t,_)) if t.catcode() == CategoryCode::EOF => (),
                             None => crate::file_end!(),

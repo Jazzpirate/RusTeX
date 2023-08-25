@@ -3,13 +3,14 @@ use std::rc::Rc;
 use std::thread;
 use lazy_static::lazy_static;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub mod strings;
 pub mod errors;
 pub mod collections;
 
 /// A pointer type for use in TeX - this is just an alias for `Rc`, but may by replaced by `Arc` in the future.
-pub type Ptr<A> = Rc<A>;
+pub type Ptr<A> = Arc<A>;
 pub type Mut<A> = RefCell<A>;
 
 lazy_static! {

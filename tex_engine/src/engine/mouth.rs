@@ -18,8 +18,10 @@ use crate::engine::state::State;
 use crate::{debug_log, file_end, get_until_endgroup, throw};
 use crate::engine::memory::{ExpansionContainer, Interner, Memory};
 use crate::tex::catcodes::CategoryCode;
+use crate::tex::commands::DefReplacement;
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::TeXError;
+use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
 /// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
@@ -332,164 +334,23 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
 }
 
 impl<ET:EngineType<Mouth=Self>> StandardMouth<ET> {
-    /*
-    fn pop_string(&mut self,state:&ET::State) -> Option<Token<ET>> {
-        let ss = unsafe{ match self.sources.pop() {
-            Some(TeXMouthSource::String(ss)) => ss,
-            _ => unreachable_unchecked()
-        }};
-        match ss.source {
-            Some(s) => (state.outputs().file_close)(&s),
-            None => ()
-        }
-        debug!("file end; inserting \\everyeof");
-        let mut v = state.get_primitive_toks("everyeof"); // TODO
-        if v.is_empty() {
-            Some(Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None))
-        } else {
-            let mut next = self.new_tokensource();
-            next.push(Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None));
-            for t in v { next.push(t);}
-            self.sources.push(TeXMouthSource::Token(next));
-            None
-        }
-    }
-
-     */
 }
-
 
 /*
-use std::alloc::{alloc,dealloc,Layout};
-use std::ptr;
-
-struct AllocationPool<A>{free:*mut LinkedNode<A>,layout:Layout}
-impl<A> AllocationPool<A> {
-    fn new() -> Self {
-        AllocationPool{free:ptr::null_mut(),layout:Layout::new::<LinkedNode<A>>()}
-    }
-}
-impl<A> Drop for AllocationPool<A> {
-    fn drop(&mut self) {
-        unsafe {
-            let mut next = self.free;
-            while !next.is_null() {
-                let current = next;
-                next = (*next).next;
-                dealloc(current as *mut u8,self.layout);
-            }
-        }
-    }
-}
-
-struct LinkedNode<A> {
-    value: A,
-    next: *mut LinkedNode<A>
-}
-struct LinkedArray<A> {
-    head:*mut LinkedNode<A>,
-    pools:Vec<AllocationPool<A>>
-}
-impl<A> LinkedArray<A> {
-    fn new() -> Self {
-        LinkedArray {head:ptr::null_mut(),pools:vec!(AllocationPool::new()) }
-    }
-    fn next(&mut self) -> Option<A> {
-        if self.head.is_null() {
-            None
-        } else { unsafe {
-            if self.pools.is_empty() { self.pools.push(AllocationPool::new()); }
-            let mut pool = unsafe{ self.pools.last_mut().unwrap_unchecked()};
-            let value = ptr::read(&(*self.head).value);
-            let next = (*self.head).next;
-            (*self.head).next = pool.free;
-            pool.free = self.head;
-            self.head = next;
-            Some(value)
-        } }
-    }
-}
-
-impl<A> Drop for LinkedArray<A> {
-    fn drop(&mut self) {
-        unsafe {
-            let mut next = self.head;
-            let layout = Layout::new::<LinkedNode<A>>();
-            while !next.is_null() {
-                let current = next;
-                next = (*next).next;
-                ptr::drop_in_place(&mut (*current).value);
-                dealloc(current as *mut u8,layout);
-            }
-        }
-    }
-}
-
-struct LinkedArrayPrepender<A> {
-    head:*mut LinkedNode<A>,
-    last:*mut LinkedNode<A>,
-    pool:AllocationPool<A>,
-}
-impl<A> LinkedArrayPrepender<A> {
-    fn new(pool:AllocationPool<A>) -> Self {
-        LinkedArrayPrepender {head:ptr::null_mut(),last:ptr::null_mut(),pool}
-    }
-    fn push(&mut self, a: A) {
-        let node = if self.pool.free.is_null() {
-            unsafe {alloc(self.pool.layout) as *mut LinkedNode<A>}
-        } else {
-            let n = self.pool.free;
-            self.pool.free = unsafe{ (*n).next };
-            n
-        };
-        unsafe {
-            if self.head.is_null() {
-                self.head = node;
-                self.last = node;
-            } else {
-                (*self.last).next = node;
-                self.last = node;
-            }
-            ptr::write(&mut (*node).value, a);
-            (*node).next = ptr::null_mut();
-        }
-    }
-    fn close(mut self,arr: &mut LinkedArray<A>) {
-        if self.head.is_null() {return ()}
-        unsafe {
-            (*self.last).next = arr.head;
-            arr.head = self.head;
-            self.head = ptr::null_mut();
-            self.last = ptr::null_mut();
-            arr.pools.push(self.pool)
-        }
-    }
-}
-
- */
-
-
-/// A [`TokenSource`] is essentially a pretokenized [`Token`] list
+/// Either a [`TokenSource`] or a [`StringSource`]
 #[derive(Clone)]
-pub struct TokenSource<ET:EngineType>(Vec<Option<Token<ET>>>,usize);
-impl<ET:EngineType> TokenSource<ET> {
-    pub fn new() -> Self { Self(Vec::with_capacity(2097152),0)}
-    fn new_with(v:Vec<Token<ET>>) -> Self { Self(v.into_iter().map(|t| Some(t)).collect(),0) }
-    fn is_empty(&self) -> bool { self.0.len() == self.1 }
-    fn get_next(&mut self) -> (Token<ET>,bool) {
-        let ret = unsafe { std::mem::take(&mut self.0[self.1]).unwrap_unchecked() };
-        self.1 += 1;
-        (ret,self.is_empty())
-    }
-    fn preview(&self,interner:&Interner<ET::Char>) -> String {
-        let tks : Vec<Token<ET>> = self.0[self.1..].iter().map(|t| unsafe{t.clone().unwrap_unchecked()}).collect();
-        TokenList(&tks).to_str(interner)
-    }
-    pub fn reset(&mut self) {
-        self.0.clear();
-        self.1 = 0;
-    }
-    pub fn push(&mut self,t:Token<ET>) {
-        self.0.push(Some(t))
-    }
+pub enum TeXMouthSource<ET:EngineType> {
+    Token((Token<ET>,bool)),
+    String(StringSource<ET::Char>)
 }
+*/
+
+pub enum TokenSource<ET:EngineType> {
+    String(StringSource<ET::Char>),
+    Simple(SimpleExpansion<ET>),
+    Single{token:Token<ET>,expand:bool},
+    Def(DefExpansion<ET>)
+}
+
+pub struct SimpleExpansion<ET:EngineType>(Ptr<Vec<Token<ET>>>,usize);
+pub struct DefExpansion<ET:EngineType>(DefReplacement<ET>,[Vec<Token<ET>>;9],usize);

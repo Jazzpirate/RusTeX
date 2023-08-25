@@ -1,7 +1,7 @@
 //! TeX primitive [`BaseCommand`]s
 
 use std::hint::unreachable_unchecked;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group, register_box, register_skip};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group, register_box, register_skip, register_expandable_notk};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
@@ -184,7 +184,7 @@ pub fn catcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSou
     if v < 0 || v > 15 {
         throw!("Invalid category code: {}",v => cmd.cause)
     }
-    let cc: CategoryCode = unsafe{(v as u8).try_into().unwrap_unchecked()};
+    let cc: CategoryCode = (v as u8).try_into().unwrap();
     debug_log!(debug=>"\\catcode '{}' = {}",c.char_str(),cc);
     engine.state.set_catcode(c,cc,global);
 }
@@ -313,7 +313,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     ret
 }
 
-pub fn csname<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn csname<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"csname");
     let str = get_csname::<ET>(engine,&cmd,"csname");
     debug_log!(trace=>"csname {}",str.to_str(engine.interner));
@@ -751,7 +751,7 @@ pub fn escapechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSour
 }
 
 pub const EXPANDAFTER : &str = "expandafter";
-pub fn expandafter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn expandafter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"expandafter");
     let first = match engine.get_next_token() {
         None => file_end_prim!(EXPANDAFTER,cmd),
@@ -1013,7 +1013,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                     "width" => width = Some(val),
                     "height" => height = Some(val),
                     "depth" => depth = Some(val),
-                    _ => unsafe{unreachable_unchecked()}
+                    _ => unreachable!()
                 }
             }
         }
@@ -1114,7 +1114,7 @@ pub fn get_if_token<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSourc
     while let Some((t,e)) = catch_prim!(engine.get_next_token() => (name,cmd)) {
         let r = resolve_token(engine.state,t);
         match r.command {
-            BaseCommand::Expandable {name,..} if e && (name == ELSE || name == FI) && (match engine.gullet.current_conditional() {
+            BaseCommand::ExpandableNoTokens {name,..} if e && (name == ELSE || name == FI) && (match engine.gullet.current_conditional() {
                 (Some(ConditionalBranch::None(_)),_) => true,
                 _ => false
             }) => {
@@ -1557,6 +1557,10 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }
                     return engine.string_to_tokens(name.as_bytes(),f)
                 }
+                BaseCommand::ExpandableNoTokens {name,..} => {
+                    if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }
+                    return engine.string_to_tokens(name.as_bytes(),f)
+                }
                 BaseCommand::Unexpandable {name,..} => {
                     if let Some(c) = esc { f(engine,Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }
                     return engine.string_to_tokens(name.as_bytes(),f)
@@ -1922,18 +1926,17 @@ pub fn newlinechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
 pub const NOEXPAND: &str = "noexpand";
 /// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
 /// in the first place
-pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\noexpand");
     match engine.get_next_token() {
         None => file_end_prim!(NOEXPAND,cmd),
         Some((t,_)) => {
             let res = resolve_token::<ET>(engine.state,t);
             match res.command {
-                BaseCommand::Def(_) => engine.mouth.push_noexpand(res.source.cause,engine.memory),
-                BaseCommand::Expandable {..} => engine.mouth.push_noexpand(res.source.cause,engine.memory),
-                BaseCommand::Conditional {..} => engine.mouth.push_noexpand(res.source.cause,engine.memory),
+                BaseCommand::Def(_) | BaseCommand::Expandable {..} | BaseCommand::ExpandableNoTokens {..} | BaseCommand::Conditional {..} =>
+                    engine.mouth.push_noexpand(res.source.cause,engine.memory),
                 BaseCommand::Char{catcode:CategoryCode::EOF,..} => (),
-                _ => f(engine,res.source.cause)
+                _ => engine.mouth.requeue(res.source.cause)
             }
         }
     }
@@ -2972,7 +2975,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_box!(copy,engine,(e,cmd) =>copy::<ET>(e,&cmd));
     register_value_assign_int!(count,engine);
     register_assign!(countdef,engine,(e,cmd,global) =>countdef::<ET>(e,&cmd,global));
-    register_expandable!(csname,engine,(e,cmd,f) =>csname::<ET>(e,&cmd,f));
+    register_expandable_notk!(csname,engine,(e,cmd) =>csname::<ET>(e,&cmd));
     register_int!(day,engine,(e,cmd) => day::<ET>(e,&cmd));
     register_assign!(def,engine,(e,cmd,global) =>def::<ET>(e,&cmd,global,false,false,false));
     register_int_assign!(defaulthyphenchar,engine);
@@ -2990,11 +2993,11 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_dim!(dp,engine);
     register_unexpandable!(dump,engine,None,(_,cmd) =>dump::<ET>());
     register_assign!(edef,engine,(e,cmd,global) =>edef::<ET>(e,&cmd,global,false,false,false));
-    register_expandable!(else,engine,(e,cmd,f) =>else_::<ET>(e,&cmd));
+    register_expandable_notk!(else,engine,(e,cmd) =>else_::<ET>(e,&cmd));
     register_dim_assign!(emergencystretch,engine);
     register_unexpandable!(end,engine,None,(_,cmd) =>end::<ET>());
     register_unexpandable!(endcsname,engine,None,(_,cmd) =>endcsname::<ET>(&cmd));
-    register_expandable!(endinput,engine,(e,cmd,f) => endinput::<ET>(e,&cmd));
+    register_expandable_notk!(endinput,engine,(e,cmd) => endinput::<ET>(e,&cmd));
     register_unexpandable!(endgroup,engine,None,(e,cmd) =>endgroup::<ET>(e,&cmd));
     register_value_assign_int!(endlinechar,engine);
     register_tok_assign!(errhelp,engine);
@@ -3011,7 +3014,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(errorstopmode,engine,None,(_,cmd) =>errorstopmode::<ET>());
     register_value_assign_int!(escapechar,engine);
     register_int_assign!(exhyphenpenalty,engine);
-    register_expandable!(expandafter,engine,(e,cmd,f) => expandafter::<ET>(e,&cmd,f));
+    register_expandable_notk!(expandafter,engine,(e,cmd) => expandafter::<ET>(e,&cmd));
     register_tok_assign!(everypar,engine);
     register_tok_assign!(everymath,engine);
     register_tok_assign!(everydisplay,engine);
@@ -3020,7 +3023,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_tok_assign!(everyjob,engine);
     register_tok_assign!(everycr,engine);
     register_int_assign!(fam,engine);
-    register_expandable!(fi,engine,(e,cmd,f) =>fi::<ET>(e,&cmd));
+    register_expandable_notk!(fi,engine,(e,cmd) =>fi::<ET>(e,&cmd));
     register_int_assign!(finalhyphendemerits,engine);
     register_int_assign!(floatingpenalty,engine);
     register_value_assign_font!(font,engine);
@@ -3067,7 +3070,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(immediate,engine,None,(e,cmd) =>immediate::<ET>(e,&cmd));
     register_unexpandable!(indent,engine,Some(HorV::Horizontal),(e,cmd) =>indent::<ET>(e,&cmd));
     register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,&cmd));
-    register_expandable!(input,engine,(e,cmd,f) =>input::<ET>(e,&cmd));
+    register_expandable_notk!(input,engine,(e,cmd) =>input::<ET>(e,&cmd));
     register_int!(inputlineno,engine,(e,cmd) => inputlineno::<ET>(e,&cmd));
     register_int_assign!(interlinepenalty,engine);
     register_expandable!(jobname,engine,(e,_,f) =>jobname::<ET>(e,f));
@@ -3099,7 +3102,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_muskip!(muskip,engine);
     register_assign!(muskipdef,engine,(e,cmd,global) =>muskipdef::<ET>(e,&cmd,global));
     register_value_assign_int!(newlinechar,engine);
-    register_expandable!(noexpand,engine,(e,cmd,f) => noexpand::<ET>(e,&cmd,f));
+    register_expandable_notk!(noexpand,engine,(e,cmd) => noexpand::<ET>(e,&cmd));
     register_unexpandable!(noindent,engine,Some(HorV::Horizontal),(e,cmd) =>noindent::<ET>(e,&cmd));
     register_dim_assign!(nulldelimiterspace,engine);
     engine.state.set_command(ET::Char::from_str("nullfont",engine.interner), Some(Command::new(
@@ -3108,7 +3111,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(number,engine,(e,cmd,f) => number::<ET>(e,&cmd,f));
     register_unexpandable!(openin,engine,None,(e,cmd) =>openin::<ET>(e,&cmd));
     register_whatsit!(openout,engine,(e,cmd) =>openout::<ET>(e,&cmd));
-    register_expandable!(or,engine,(e,cmd,f) => or::<ET>(e,&cmd));
+    register_expandable_notk!(or,engine,(e,cmd) => or::<ET>(e,&cmd));
     register_assign!(outer,engine,(e,cmd,g) =>outer::<ET>(e,&cmd,g,false,false,false));
     register_tok_assign!(output,engine);
     register_int_assign!(outputpenalty,engine);

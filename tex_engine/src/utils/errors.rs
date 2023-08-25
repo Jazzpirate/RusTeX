@@ -12,7 +12,7 @@ pub struct TeXError<ET:EngineType> {
     pub source:Option<Box<TeXError<ET>>>,
 }
 //impl<ET:EngineType> Any for TeXError<ET> {}
-unsafe impl<ET:EngineType> Send for TeXError<ET> {}
+//unsafe impl<ET:EngineType> Send for TeXError<ET> {}
 
 impl<ET:EngineType> TeXError<ET> {
     pub fn throw_string(self,interner:&Interner<ET::Char>) -> String {

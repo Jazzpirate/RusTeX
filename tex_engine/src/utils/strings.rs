@@ -21,7 +21,7 @@ Plain TeX parses source files as a sequence of [`u8`]s, but other engines might 
 This trait allows us to abstract over the character type, by providing the relevant data needed to treat them
 (essentially) like [`u8`]s.
  */
-pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default + Ord {
+pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default + Ord+Send + Sync {
     /// The type of the array/vec/whatever of all possible characters. For [`u8`], this is `[A;256]`.
     type Allchars<A:Default+Clone> : AllCharsTrait<Self,A>;
 

@@ -271,6 +271,16 @@ macro_rules! register_expandable {
 }
 
 #[macro_export]
+macro_rules! register_expandable_notk {
+    ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.interner),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::ExpandableNoTokens{
+            name:stringify!($name),
+            apply:|$e,$cmd| $f
+        },None)),true);
+    };
+}
+
+#[macro_export]
 macro_rules! register_conditional {
     ($name:ident,$engine:ident,($e:tt,$cmd:tt) => $f:expr) => {
         $engine.state.set_command(ET::Char::from_str(stringify!($name),$engine.interner),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::Conditional{
@@ -398,7 +408,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
                         file_end!(cmd.cause)
                     }
                 }
-                _=> unsafe{ unreachable_unchecked() } // since arity=0, there can only be tokens
+                _=> unreachable!() // since arity=0, there can only be tokens
             }
         }
         return expand_simple(d,&cmd,engine,exp)

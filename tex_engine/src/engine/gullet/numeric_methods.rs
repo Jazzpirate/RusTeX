@@ -31,7 +31,7 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         use crate::tex::commands::BaseCommand::*;
         match next.command {
-            Def(_) | Conditional{..} | Expandable{..} => unsafe{unreachable_unchecked()},
+            Def(_) | Conditional{..} | Expandable{..} | ExpandableNoTokens {..} => unreachable!(),
             Char{char,catcode} => {
                 let us = char.to_usize();
                 match us {

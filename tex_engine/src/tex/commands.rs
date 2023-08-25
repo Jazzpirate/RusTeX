@@ -81,7 +81,7 @@ impl<ET:EngineType> Command<ET> {
     }
 }
 
-pub trait CommandReference<ET:EngineType>:Clone+Debug + Copy {
+pub trait CommandReference<ET:EngineType>:Clone+Debug + Copy + Send + Sync {
     fn new(base:&BaseCommand<ET>, source:&CommandSource<ET>) -> Self;
 }
 
@@ -280,6 +280,9 @@ pub enum BaseCommand<ET:EngineType>{
     /// An expandable primitive to be processed in the [`Gullet`](crate::engine::gullet::Gullet), e.g.
     /// `\the`, `\number`, `\romannumeral`, `\string`, `\meaning`
     Expandable {name:&'static str,apply:ExpandableFun<ET>},
+    /// An expandable primitive to be processed in the [`Gullet`](crate::engine::gullet::Gullet) not producing
+    /// any tokens, e.g. `\csname`, `\endinput`, `\expandafter`
+    ExpandableNoTokens {name:&'static str,apply:fn(&mut EngineRef<ET>, CommandSource<ET>)},
     /// A primitive command to be processed in the [`Stomach`](crate::engine::stomach::Stomach)
     Unexpandable {name:&'static str,apply: UnexpandableFun<ET>, forces_mode:Option<HorV>},
     /// A primitive assignment command, e.g. `\chardef`, `\let`, etc. - importantly
@@ -352,6 +355,7 @@ impl<ET:EngineType> BaseCommand<ET> {
             BaseCommand::Def(d) => d.as_str(interner),
             BaseCommand::Conditional{name,..} => format!("\\{}", name),
             BaseCommand::Expandable {name,..} => format!("\\{}", name),
+            BaseCommand::ExpandableNoTokens {name,..} => format!("\\{}", name),
             BaseCommand::Unexpandable {name,..} => format!("\\{}", name),
             BaseCommand::Assignment {name,..} => format!("\\{}", name),
             BaseCommand::Whatsit {name,..} => format!("\\{}", name),
@@ -379,7 +383,8 @@ impl<ET:EngineType> Debug for BaseCommand<ET> {
         match self {
             BaseCommand::Def(def) => <Def<ET> as Debug>::fmt(def,f),
             BaseCommand::Conditional{name,..} => write!(f, "Conditional {}", name),
-            BaseCommand::Expandable {name,..} => write!(f, "Gullet Command {}", name),
+            BaseCommand::Expandable {name,..} => write!(f, "Expandable {}", name),
+            BaseCommand::ExpandableNoTokens {name,..} => write!(f, "Expandable {}", name),
             BaseCommand::Unexpandable {name,..} => write!(f, "Stomach Command {}", name),
             BaseCommand::Assignment {name,..} => write!(f, "Assignment {}", name),
             BaseCommand::Whatsit {name,..} => write!(f, "Whatsit {}", name),
@@ -448,10 +453,10 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
         use BaseCommand::*;
         use CategoryCode::*;
         match value {
-            Def(_) | Conditional{..} | Expandable{..} | Int(ValueCommand::Value {..}) | Dim(ValueCommand::Value {..})
-            | Skip(ValueCommand::Value {..})| MuSkip(ValueCommand::Value {..}) | Toks(ToksCommand::Value {..})
-            | FontCommand{set:std::option::Option::None,..} =>
-                todo!(),
+            Def(_) | Conditional{..} | Expandable{..} | ExpandableNoTokens {..} => unreachable!(),
+            Int(ValueCommand::Value {..}) | Dim(ValueCommand::Value {..}) | Skip(ValueCommand::Value {..})|
+            MuSkip(ValueCommand::Value {..}) | Toks(ToksCommand::Value {..}) | FontCommand{set:std::option::Option::None,..} =>
+                throw!("Not allowed in the stomach: {}",value.as_str(interner)),
             None => match &source.cause.base {
                 BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
                 BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(interner)),
@@ -503,6 +508,8 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
     }
 }
 
+pub type DefSignature<ET> = Ptr<Vec<ParamToken<ET>>>;
+pub type DefReplacement<ET> = Ptr<Vec<ExpToken<ET>>>;
 
 /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
 #[derive(Clone)]
@@ -512,8 +519,8 @@ pub struct Def<ET:EngineType>{
     pub outer:bool,
     pub endswithbrace:bool,
     pub arity:u8,
-    pub signature:Ptr<Vec<ParamToken<ET>>>,
-    pub replacement:Ptr<Vec<ExpToken<ET>>>
+    pub signature: DefSignature<ET>,
+    pub replacement: DefReplacement<ET>
 }
 impl<ET:EngineType> PartialEq for Def<ET> {
     fn eq(&self, other: &Self) -> bool {

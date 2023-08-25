@@ -1,6 +1,6 @@
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group, register_expandable_notk};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def, TokenCont};
@@ -36,7 +36,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -49,7 +49,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -57,7 +57,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -66,7 +66,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -77,7 +77,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -90,7 +90,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -101,7 +101,7 @@ fn expr_scale_loop<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
                     match stack.last_mut() {
                         Some((Some(f),Some(op))) => {
                             first = op(*f,first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -131,7 +131,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -152,7 +152,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -163,7 +163,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -176,7 +176,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -187,7 +187,7 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
                     match stack.last_mut() {
                         Some((Some(second), Some(op))) => {
                             first = op(second.clone(),first);
-                            *unsafe{stack.last_mut().unwrap_unchecked()} = (None,None);
+                            *stack.last_mut().unwrap() = (None,None);
                         }
                         _ => ()
                     }
@@ -439,7 +439,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 
 pub const SCANTOKENS: &str = "scantokens";
 /// `\scantokens`: convert a token list into a string and reparse/tokenize it.
-pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     use crate::utils::strings::AllCharsTrait;
     debug_log!(trace=>"scantokens");
     let esc = engine.state.get_escapechar();
@@ -525,7 +525,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,&c));
     register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,&cmd,global));
     register_int_assign!(savinghyphcodes,engine);
-    register_expandable!(scantokens,engine,(e,c,f) =>scantokens::<ET>(e,&c,f));
+    register_expandable_notk!(scantokens,engine,(e,c) =>scantokens::<ET>(e,&c));
     register_int_assign!(tracingassigns,engine);
     register_int_assign!(tracinggroups,engine);
     register_int_assign!(tracingifs,engine);
@@ -533,7 +533,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(tracingscantokens,engine);
     register_assign!(protected,engine,(eu,cmd,g) =>protected::<ET>(eu,&cmd,g,false,false,false));
     register_expandable!(unexpanded,engine,(e,c,f) => unexpanded::<ET>(e,&c,f));
-    register_expandable!(unless,engine,(eu,cmd,f) =>unless::<ET>(eu,&cmd));
+    register_expandable_notk!(unless,engine,(eu,cmd) =>unless::<ET>(eu,&cmd));
 
     cmtodo!(engine,beginL);
     cmtodo!(engine,beginR);

@@ -144,7 +144,7 @@ pub struct FileReference {
     pub end:(usize,usize)
 }
 
-pub trait TokenReference<ET:EngineType<TokenReference = Self>>:Clone + Debug {
+pub trait TokenReference<ET:EngineType<TokenReference = Self>>:Clone + Debug+Send {
     fn from_expansion(cmd:&CommandSource<ET>) -> Self;
     fn from_file(base:&BaseToken<ET::Char>,fr:FileReference) -> Self;
     fn with_ref(&self,base:&BaseToken<ET::Char>) -> Self { self.clone() }
