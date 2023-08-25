@@ -167,6 +167,15 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
     /// set the current font
     fn set_current_font(&mut self, f:ET::Font, globally:bool);
 
+    fn get_textfont(&self, i:usize) -> Option<&ET::Font>;
+    fn set_textfont(&mut self, i:usize, f:ET::Font, globally:bool);
+
+    fn get_scriptfont(&self, i:usize) -> Option<&ET::Font>;
+    fn set_scriptfont(&mut self, i:usize, f:ET::Font, globally:bool);
+
+    fn get_scriptscriptfont(&self, i:usize) -> Option<&ET::Font>;
+    fn set_scriptscriptfont(&mut self, i:usize, f:ET::Font, globally:bool);
+
     fn push_aftergroup(&mut self, t:Token<ET>);
 }
 
@@ -220,6 +229,10 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     toksregisters:TokField<ET>,
     boxregisters:BoxField<ET>,
 
+    textfonts:VecField<Option<ET::Font>>,
+    scriptfonts:VecField<Option<ET::Font>>,
+    scriptscriptfonts:VecField<Option<ET::Font>>,
+
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
     primitive_skipregisters: HashMapField<&'static str,Skip<ET::SkipDim>>,
@@ -262,6 +275,10 @@ impl<ET:EngineType<State=Self>> PDFTeXState<ET> {
             muskipregisters: VecField::new(),
             toksregisters: TokField::new(),
             boxregisters: BoxField::new(),
+
+            textfonts:VecField::new(),
+            scriptfonts:VecField::new(),
+            scriptscriptfonts:VecField::new(),
 
             primitive_intregisters: HashMapField::new(),
             primitive_dimregisters: HashMapField::new(),
@@ -395,7 +412,9 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             GroupType::Box(m) => {
                 self.grouptype.push((g,Some(self.mode)));
                 self.mode = match m {
-                    BoxMode::H | BoxMode::M | BoxMode::DM | BoxMode::LeftRight => TeXMode::RestrictedHorizontal,
+                    BoxMode::H | BoxMode::LeftRight => TeXMode::RestrictedHorizontal,
+                    BoxMode::M => TeXMode::Math,
+                    BoxMode::DM => TeXMode::Displaymath,
                     BoxMode::V => TeXMode::InternalVertical,
                     _ => self.mode
                 };
@@ -424,6 +443,10 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         self.muskipregisters.push_stack();
         self.toksregisters.push_stack();
         self.boxregisters.push_stack();
+
+        self.textfonts.push_stack();
+        self.scriptfonts.push_stack();
+        self.scriptscriptfonts.push_stack();
 
         self.primitive_intregisters.push_stack();
         self.primitive_dimregisters.push_stack();
@@ -463,6 +486,10 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         self.muskipregisters.pop_stack();
         self.toksregisters.pop_stack(memory);
         self.boxregisters.pop_stack();
+
+        self.textfonts.pop_stack();
+        self.scriptfonts.pop_stack();
+        self.scriptscriptfonts.pop_stack();
 
         self.primitive_intregisters.pop_stack();
         self.primitive_dimregisters.pop_stack();
@@ -788,6 +815,62 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             self.primitive_tokregisters.set_globally(name,v,memory)
         } else {
             self.primitive_tokregisters.set_locally(name,v,memory)
+        }
+    }
+
+    fn get_textfont(&self, i: usize) -> Option<&ET::Font> {
+        match self.textfonts.get(&i) {
+            None => None,
+            Some(o) => o.as_ref()
+        }
+    }
+    fn get_scriptfont(&self, i: usize) -> Option<&ET::Font> {
+        match self.scriptfonts.get(&i) {
+            None => None,
+            Some(o) => o.as_ref()
+        }
+    }
+    fn get_scriptscriptfont(&self, i: usize) -> Option<&ET::Font> {
+        match self.scriptscriptfonts.get(&i) {
+            None => None,
+            Some(o) => o.as_ref()
+        }
+    }
+    fn set_textfont(&mut self, i: usize, f: ET::Font, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {
+            globaldefs > 0
+        };
+        if globally {
+            self.textfonts.set_globally(i,Some(f))
+        } else {
+            self.textfonts.set_locally(i,Some(f))
+        }
+    }
+    fn set_scriptfont(&mut self, i: usize, f: ET::Font, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {
+            globally
+        } else {
+            globaldefs > 0
+        };
+        if globally {
+            self.scriptfonts.set_globally(i,Some(f))
+        } else {
+            self.scriptfonts.set_locally(i,Some(f))
+        }
+    }
+    fn set_scriptscriptfont(&mut self, i: usize, f: ET::Font, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {
+            globally
+        } else {
+            globaldefs > 0
+        };
+        if globally {
+            self.scriptscriptfonts.set_globally(i,Some(f))
+        } else {
+            self.scriptscriptfonts.set_locally(i,Some(f))
         }
     }
 }

@@ -197,6 +197,12 @@ pub fn catcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
     v.into()
 }
 
+pub fn char<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\char");
+    let char = engine.get_char();
+    engine.stomach.push_node(engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+}
+
 pub const CHARDEF: &str = "chardef";
 pub fn chardef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"chardef");
@@ -2202,6 +2208,51 @@ pub fn romannumeral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
     engine.string_to_tokens(&ret,f);
 }
 
+pub fn scriptfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\scriptfont");
+    let num = engine.get_int().to_i64();
+    if num < 0 || num > 15 {
+        throw!("Invalid font number: {}",num => cmd.cause)
+    }
+    let fnt = engine.get_font();
+    engine.state.set_scriptfont(num as usize,fnt,global);
+}
+pub fn scriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+                               -> ET::Font {
+    debug_log!(trace=>"Getting \\scriptfont");
+    let num = engine.get_int().to_i64();
+    if num < 0 || num > 15 {
+        throw!("Invalid font number: {}",num => cmd.cause)
+    }
+    match engine.state.get_scriptfont(num as usize) {
+        None => engine.fontstore.null(),
+        Some(f) => f.clone()
+    }
+}
+
+
+pub fn scriptscriptfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\scriptscriptfont");
+    let num = engine.get_int().to_i64();
+    if num < 0 || num > 15 {
+        throw!("Invalid font number: {}",num => cmd.cause)
+    }
+    let fnt = engine.get_font();
+    engine.state.set_scriptscriptfont(num as usize,fnt,global);
+}
+pub fn scriptscriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+                                     -> ET::Font {
+    debug_log!(trace=>"Getting \\sscriptcriptfont");
+    let num = engine.get_int().to_i64();
+    if num < 0 || num > 15 {
+        throw!("Invalid font number: {}",num => cmd.cause)
+    }
+    match engine.state.get_scriptscriptfont(num as usize) {
+        None => engine.fontstore.null(),
+        Some(f) => f.clone()
+    }
+}
+
 pub const SETBOX: &str = "setbox";
 pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"\\setbox");
@@ -2352,6 +2403,28 @@ pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
             let cat = engine.state.get_catcode_scheme().clone();
             engine.token_to_others(&t,  false, f)
         }
+    }
+}
+
+pub fn textfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\textfont");
+    let num = engine.get_int().to_i64();
+    if num < 0 || num > 15 {
+        throw!("Invalid font number: {}",num => cmd.cause)
+    }
+    let fnt = engine.get_font();
+    engine.state.set_textfont(num as usize,fnt,global);
+}
+pub fn textfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+                                     -> ET::Font {
+    debug_log!(trace=>"Getting \\textfont");
+    let num = engine.get_int().to_i64();
+    if num < 0 || num > 15 {
+        throw!("Invalid font number: {}",num => cmd.cause)
+    }
+    match engine.state.get_textfont(num as usize) {
+        None => engine.fontstore.null(),
+        Some(f) => f.clone()
     }
 }
 
@@ -2656,6 +2729,49 @@ pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
     file_end_prim!("vbox",cmd);
 }
 
+pub fn vcenter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
+    debug_log!(trace=>"\\vcenter");
+    match engine.state.mode() {
+        TeXMode::Displaymath | TeXMode::Math => (),
+        _ => throw!("\\vcenter can only be used in math mode" => cmd.cause)
+    }
+    let (to,spread) = match engine.get_keywords(vec!("spread","to")) {
+        None => (None,None),
+        Some(s) if s == "to" => {
+            let a = engine.get_dim();
+            (Some(a),None)
+        },
+        Some(s) if s == "spread" => {
+            let a = engine.get_dim();
+            (None,Some(a))
+        },
+        _ => unreachable!()
+    };
+    while let Some(next) = engine.get_next_unexpandable_same_file() {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Relax => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
+                engine.state.stack_push(GroupType::Box(BoxMode::V));
+                match engine.state.get_primitive_toks("everyvbox") {
+                    None => (),
+                    Some(v) if v.is_empty() => (),
+                    Some(v) => for t in v.iter().rev() {engine.mouth.requeue(t.clone())}
+                }
+                return Ptr::new(move |e,children| {
+                    Some(HVBox::V(VBox {
+                        kind:"vcenter",
+                        children, to, spread,
+                        ..Default::default()
+                    }))
+                })
+            }
+            _ => throw!("Expected begin group, found {:?}",next.source.cause => cmd.cause)
+        }
+    }
+    file_end_prim!("vcenter",cmd);
+}
+
 pub const VFIL: &str = "vfil";
 pub fn vfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfil");
@@ -2848,6 +2964,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(boxmaxdepth,engine);
     register_int_assign!(brokenpenalty,engine);
     register_value_assign_int!(catcode,engine);
+    register_unexpandable!(char,engine,Some(HorV::Horizontal),(e,cmd) =>char::<ET>(e,&cmd));
     register_assign!(chardef,engine,(e,cmd,global) =>chardef::<ET>(e,&cmd,global));
     register_unexpandable!(closein,engine,None,(e,cmd) =>closein::<ET>(e,&cmd));
     register_whatsit!(closeout,engine,(e,cmd) =>closeout::<ET>(e,&cmd));
@@ -3022,6 +3139,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(relpenalty,engine);
     register_skip_assign!(rightskip,engine);
     register_expandable!(romannumeral,engine,(e,cmd,f) => romannumeral::<ET>(e,&cmd,f));
+    register_value_assign_font!(scriptfont,engine);
+    register_value_assign_font!(scriptscriptfont,engine);
     register_dim_assign!(scriptspace,engine);
     register_assign!(setbox,engine,(e,cmd,global) =>setbox::<ET>(e,&cmd,global));
     register_value_assign_int!(sfcode,engine);
@@ -3037,6 +3156,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_skip_assign!(splittopskip,engine);
     register_expandable!(string,engine,(e,cmd,f) => string::<ET>(e,&cmd,f));
     register_skip_assign!(tabskip,engine);
+    register_value_assign_font!(textfont,engine);
     register_expandable!(the,engine,(e,cmd,f) => the::<ET>(e,&cmd,f));
     register_int!(time,engine,(e,cmd) => time::<ET>(e,&cmd));
     register_value_assign_toks!(toks,engine);
@@ -3065,6 +3185,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(vbadness,engine);
     register_open_box!(vadjust,engine,BoxMode::V,(e,cmd) =>vadjust::<ET>(e,&cmd));
     register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
+    register_open_box!(vcenter,engine,BoxMode::V,(e,cmd) =>vcenter::<ET>(e,&cmd));
     register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,&cmd));
     register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,&cmd));
     register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,&cmd));
@@ -3113,16 +3234,14 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,scriptscriptstyle);
     cmstodo!(engine,mathchar);
     cmstodo!(engine,mkern);
-
+    cmstodo!(engine,cr);
+    cmstodo!(engine,crcr);
 
     cmtodo!(engine,lastpenalty);
     cmtodo!(engine,badness);
     cmtodo!(engine,prevgraf);
     cmtodo!(engine,deadcycles);
     cmtodo!(engine,insertpenalties);
-    cmtodo!(engine,textfont);
-    cmtodo!(engine,scriptfont);
-    cmtodo!(engine,scriptscriptfont);
     cmtodo!(engine,lastkern);
     cmtodo!(engine,pagegoal);
     cmtodo!(engine,pagetotal);
@@ -3160,7 +3279,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,discretionary);
     cmtodo!(engine,setlanguage);
     cmtodo!(engine,nonscript);
-    cmtodo!(engine,vcenter);
     cmtodo!(engine,underline);
     cmtodo!(engine,overline);
     cmtodo!(engine,displaylimits);
@@ -3179,9 +3297,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,leqno);
     cmtodo!(engine,bigskip);
     cmtodo!(engine,bye);
-    cmtodo!(engine,char);
-    cmtodo!(engine,cr);
-    cmtodo!(engine,crcr);
     cmtodo!(engine,fontname);
     cmtodo!(engine,italiccorr);
     cmtodo!(engine,medskip);

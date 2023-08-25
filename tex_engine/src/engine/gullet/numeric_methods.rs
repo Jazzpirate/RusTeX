@@ -273,6 +273,11 @@ pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, 
             let val = if isnegative { -val } else { val };
             return read_unit::<ET>(engine, val)
         }
+        BaseCommand::MathChar(u) => {
+            let val = u as f64;
+            let val = if isnegative { -val } else { val };
+            return read_unit::<ET>(engine, val)
+        }
         o => todo!("Non-char in read_dim: {:?}\n{}\n at {}", o, engine.preview(50).replace("\n", "\\n"), engine.current_position())
     }
 }

@@ -677,19 +677,24 @@ macro_rules! get_expanded_group {
         let mut ingroup = 0;
         let mut ok = false;
         while let Some(next) = $engine.get_next_token() {
+            match next.0.catcode() {
+                CategoryCode::BeginGroup => {
+                    ingroup += 1;
+                    let $tk = next.0;
+                    $f;
+                    continue
+                }
+                CategoryCode::EndGroup => {
+                    if ingroup == 0 { ok = true; break } else { ingroup -= 1; }
+                    let $tk = next.0;
+                    $f;
+                    continue
+                }
+                _ => ()
+            }
             if next.1 {
                 let res = crate::engine::gullet::methods::resolve_token::<ET>($engine.state, next.0);
                 match res.command {
-                    BaseCommand::Char { catcode: CategoryCode::BeginGroup, .. } => {
-                        ingroup += 1;
-                        let $tk = res.source.cause;
-                        $f
-                    }
-                    BaseCommand::Char { catcode: CategoryCode::EndGroup, .. } => {
-                        if ingroup == 0 { ok = true; break } else { ingroup -= 1; }
-                        let $tk = res.source.cause;
-                        $f
-                    }
                     BaseCommand::Def(d) if d.protected && !$expand_protected => {
                         let $tk = res.source.cause;
                         $f

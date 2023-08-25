@@ -1,9 +1,10 @@
 use crate::{catch, debug_log, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::state::modes::{GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::{LineSpec, Stomach};
 use crate::engine::mouth::Mouth;
+use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseStomachCommand, StomachCommand};
 use crate::tex::nodes::{HBox, HorV, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode};
 use crate::tex::numbers::{Dim, Int, Skip};
@@ -49,6 +50,27 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 ET::Stomach::open_paragraph(engine,cmd);
             }
         }
+        Space if engine.state.mode().is_vertical() => (),
+        Space => engine.stomach.push_node(engine.state,SkipNode::Space.as_node()),
+        MathShift => match engine.state.mode() {
+            TeXMode::RestrictedHorizontal => do_math(engine),
+            TeXMode::Horizontal => {
+                match engine.get_next_token() {
+                    None => throw!("Unexpected end of input" => cmd.source.cause),
+                    Some((t,_)) if t.catcode() == CategoryCode::MathShift => {
+                        do_display_math(engine)
+                    }
+                    Some((o,_)) => {
+                        engine.mouth.requeue(o);
+                        do_math(engine)
+                    }
+                }
+            }
+            TeXMode::Math | TeXMode::Displaymath => todo!(),
+            _ => {
+                ET::Stomach::open_paragraph(engine,cmd);
+            }
+        }
         Assignment {name,set} => {
             set(engine,cmd.source,false);
             match engine.state.take_afterassignment() {
@@ -90,9 +112,6 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
         Superscript => catch!( todo!("Superscript in digest") => cmd.source.cause),
         Subscript => catch!( todo!("Subscript in digest") => cmd.source.cause),
-        Space if engine.state.mode().is_vertical() => (),
-        Space => engine.stomach.push_node(engine.state,SkipNode::Space.as_node()),
-        MathShift => catch!( todo!("MathShift in digest") => cmd.source.cause),
         BeginGroup => engine.state.stack_push(GroupType::Token),
         EndGroup => match engine.state.stack_pop(engine.memory) {
             Some((v,GroupType::Token)) => {
@@ -151,6 +170,31 @@ pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachComma
                 for t in v { f.push(t.clone(),e.memory) }
             })
         }
+    }
+}
+
+pub fn do_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
+    engine.state.stack_push(GroupType::Box(BoxMode::M));
+    engine.stomach.shipout_data_mut().box_stack.push(OpenBox::Math {list:vec!(),display:false});
+    match engine.state.get_primitive_toks("everymath").cloned() {
+        Some(v) if !v.is_empty() => {
+            engine.add_expansion(|e,rs| {
+                for t in v { rs.push(t,e.memory) }
+            })
+        }
+        _ => ()
+    }
+}
+pub fn do_display_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
+    engine.state.stack_push(GroupType::Box(BoxMode::DM));
+    engine.stomach.shipout_data_mut().box_stack.push(OpenBox::Math {list:vec!(),display:true});
+    match engine.state.get_primitive_toks("everydisplay").cloned() {
+        Some(v) if !v.is_empty() => {
+            engine.add_expansion(|e,rs| {
+                for t in v { rs.push(t,e.memory) }
+            })
+        }
+        _ => ()
     }
 }
 

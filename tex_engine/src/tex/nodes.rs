@@ -367,12 +367,14 @@ pub enum OpenBox<ET:EngineType> {
         list:Vec<TeXNode<ET>>,
         on_close: CloseBoxFun<ET>
     },
+    Math { list: Vec<TeXNode<ET>>, display:bool },
 }
 impl<ET:EngineType> Debug for OpenBox<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             OpenBox::Paragraph {..} => write!(f,"Paragraph"),
-            OpenBox::Box {mode,..} => write!(f,"{:?} box",mode)
+            OpenBox::Box {mode,..} => write!(f,"{:?} box",mode),
+            OpenBox::Math {display,..} => write!(f,"Math box (display={})",display)
         }
     }
 }
@@ -380,13 +382,15 @@ impl<ET:EngineType> OpenBox<ET> {
     pub fn ls_mut(&mut self) -> &mut Vec<TeXNode<ET>> {
         match self {
             Self::Paragraph { list } => list,
-            Self::Box { list, .. } => list
+            Self::Box { list, .. } => list,
+            Self::Math { list, .. } => list
         }
     }
     pub fn ls(&self) -> &Vec<TeXNode<ET>>{
         match self {
             Self::Paragraph { list } => list,
-            Self::Box { list, .. } => list
+            Self::Box { list, .. } => list,
+            Self::Math { list, .. } => list
         }
     }
     pub fn is_vertical(&self) -> bool {

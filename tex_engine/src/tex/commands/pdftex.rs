@@ -505,6 +505,12 @@ pub fn pdffontexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
     engine.get_keyword("autoexpand");
 }
 
+pub fn pdffontsize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+    let fnt = engine.get_font();
+    let d = ET::Dim::from_sp(fnt.get_at());
+    engine.string_to_tokens(format!("{}",d).as_bytes(),f)
+}
+
 /// "pdfglyphtounicode"
 pub const PDFGLYPHTOUNICODE : &str = "pdfglyphtounicode";
 /// `\pdfglyphtounicode`: Register the unicode codepoint of a glyph.
@@ -788,6 +794,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_expandable!(pdfescapestring,engine,(e,cmd,f) =>pdfescapestring::<ET>(e,&cmd,f));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,&cmd,f));
     register_unexpandable!(pdffontexpand,engine,None,(e,cmd) =>pdffontexpand::<ET>(e,&cmd));
+    register_expandable!(pdffontsize,engine,(e,cmd,f) =>pdffontsize::<ET>(e,&cmd,f));
     register_int_assign!(pdfgentounicode,engine);
     register_unexpandable!(pdfglyphtounicode,engine,None,(e,cmd) =>pdfglyphtounicode::<ET>(e,&cmd));
     register_dim_assign!(pdfhorigin,engine);
@@ -879,7 +886,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdffilemoddate);
     cmtodo!(engine,pdffontname);
     cmtodo!(engine,pdffontobjnum);
-    cmtodo!(engine,pdffontsize);
     cmtodo!(engine,pdfincludechars);
     cmtodo!(engine,pdfinsertht);
     cmtodo!(engine,pdflastmatch);
