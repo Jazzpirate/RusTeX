@@ -3,7 +3,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::{LineSpec, Stomach};
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::MouthTrait;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseStomachCommand, StomachCommand};
 use crate::tex::nodes::{HBox, HorV, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode};

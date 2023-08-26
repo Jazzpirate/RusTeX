@@ -7,7 +7,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ResolvedToken, ConditionalFun, TokenCont, CommandSource, StomachCommand};
 use crate::tex::numbers::{Int, MuSkip, Skip};
 use crate::tex::token::{BaseToken, Token};
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::MouthTrait;
 use crate::tex::commands::etex::UNEXPANDED;
 use crate::tex::commands::tex::{IFCASE, NOEXPAND, THE};
 use crate::tex::ConditionalBranch;
@@ -17,7 +17,7 @@ use crate::utils::strings::AllCharsTrait;
 
 
 /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-/// (or [`None`] if the [`Mouth`] is empty)
+/// (or [`None`] if the [`MouthTrait`] is empty)
 pub fn get_next_unexpandable<ET:EngineType>(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
     while let Some((next,e)) = engine.get_next_token() {
         if !e {return Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false})}
@@ -30,7 +30,7 @@ pub fn get_next_unexpandable<ET:EngineType>(engine:&mut EngineRef<ET>) -> Option
 }
 
 /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-/// (or [`None`] if the [`Mouth`] is empty). Throws an error if the file ends in the process
+/// (or [`None`] if the [`MouthTrait`] is empty). Throws an error if the file ends in the process
 pub fn get_next_unexpandable_same_file<ET:EngineType>(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
     while let Some(next) = engine.mouth.get_next_simple(engine.state,engine.interner) {
         match engine.expand(resolve_token(engine.state,next)) {
@@ -490,7 +490,7 @@ pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Font {
 impl<ET:EngineType> EngineRef<'_,ET> {
 
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-    /// (or [`None`] if the [`Mouth`] is empty)
+    /// (or [`None`] if the [`MouthTrait`] is empty)
     pub fn get_next_unexpandable(&mut self) -> Option<ResolvedToken<ET>> {
         ET::Gullet::get_next_unexpandable(self)
     }

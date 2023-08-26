@@ -9,7 +9,7 @@
  optimize the code for the specific types used, while still allowing for easy customization.
 
  A specific [`Engine`](engine::Engine) combines:
- - a [`Mouth`](engine::mouth::Mouth) that provides [`Token`](tex::token::Token)s to process
+ - a [`Mouth`](engine::mouth::MouthTrait) that provides [`Token`](tex::token::Token)s to process
  - a [`Gullet`](engine::gullet::Gullet) that expands macros and returns primitives
    ([`StomachCommand`](tex::commands::StomachCommand)s),
  - a [`State`](engine::state::State) that keeps track of the current state of the engine,
@@ -56,11 +56,11 @@ mod tests {
     use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
     use log::{error, warn, info, debug, trace};
     use crate::engine::gullet::{Gullet,TeXGullet};
-    use crate::engine::mouth::StandardMouth;
+    use crate::engine::mouth::Mouth;
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
     use crate::engine::state::{State, PDFTeXState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, ShipoutDefaultStomach, Stomach};
-    use crate::engine::mouth::Mouth;
+    use crate::engine::mouth::MouthTrait;
 
     use ansi_term::Colour::Green;
     use crate::engine::filesystem::kpathsea::Kpathsea;
@@ -164,7 +164,6 @@ mod tests {
             type CommandReference = ();
             type TokenReference = FileTokenReference<Self>;
             type State = PDFTeXState<Self>;
-            type Mouth = StandardMouth<Self>;
             type Gullet = TeXGullet<Self>;
             type Stomach = ShipoutDefaultStomach<Self>;
         }

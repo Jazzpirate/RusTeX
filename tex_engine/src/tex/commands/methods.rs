@@ -5,7 +5,7 @@ use crate::engine::memory::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
 use crate::tex::token::{BaseToken, Token, TokenList};
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;
 use crate::utils::errors::TeXError;
@@ -383,7 +383,6 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-#[inline(never)]
 pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>) { catch!({
     debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(engine.interner,Some(ET::Char::backslash())),d.as_str(engine.interner),engine.preview(250));
     // The simplest cases are covered first. Technically, the general case covers these as well,
@@ -478,7 +477,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     argnum += 1;
                     engine.skip_whitespace();
                     if d.long { engine.get_argument(arg) }
-                    else {ET::Mouth::get_argument_nopar(engine,arg)};
+                    else {Mouth::get_argument_nopar(engine,arg)};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut args[argnum];

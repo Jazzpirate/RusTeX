@@ -1,7 +1,7 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::MouthTrait;
 use crate::engine::gullet::methods::get_keywords;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;

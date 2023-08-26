@@ -7,7 +7,7 @@ use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::{Interner, Memory};
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
 use crate::tex;
@@ -25,11 +25,10 @@ pub mod stomach;
 pub mod filesystem;
 pub mod memory;
 
-/// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`Mouth`]) and [`Stomach`] to
+/// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`MouthTrait`]) and [`Stomach`] to
 /// form a complete TeX engine.
 pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Char:CharType;
-    type Mouth:Mouth<Self>;
     type File:File<Self::Char>;
     type FileSystem:FileSystem<Self::Char,F=Self::File>;
     type Font:Font<Char=Self::Char>;
@@ -49,7 +48,7 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
 
 pub struct EngineRef<'a,ET:EngineType> {
     pub state:&'a mut ET::State,
-    pub mouth:&'a mut ET::Mouth,
+    pub mouth:&'a mut Mouth<ET>,
     pub gullet:&'a mut ET::Gullet,
     pub stomach:&'a mut ET::Stomach,
     pub memory:&'a mut Memory<ET>,
@@ -134,7 +133,7 @@ pub fn new_tex_with_source_references<FS:FileSystem<u8>>(fs:FS,outputs:Outputs) 
 #[derive(Clone)]
 pub struct EngineStruct<ET:EngineType> {
     pub state:ET::State,
-    pub mouth:ET::Mouth,
+    pub mouth:Mouth<ET>,
     pub gullet: ET::Gullet,
     pub stomach:ET::Stomach,
     memory:Memory<ET>,
@@ -186,7 +185,7 @@ impl<ET:EngineType> EngineStruct<ET> {
         let mut memory = Memory::new();
         let mut interner = Interner::new();
         EngineStruct {
-            state, gullet, mouth:ET::Mouth::new(&mut memory),stomach,memory,outputs,filesystem,fontstore,
+            state, gullet, mouth:Mouth::new(&mut memory),stomach,memory,outputs,filesystem,fontstore,
             jobname:"".to_string(),start_time:Local::now(),elapsed_time_from:std::time::Instant::now(),interner
         }
     }

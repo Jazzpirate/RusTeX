@@ -170,7 +170,6 @@ impl<ET:EngineType> ExpansionContainer<ET> {
             memory.return_token_array(former);
         }
     }
-    #[inline]
     pub fn consume<F,R>(mut self,memory:&mut Memory<ET>,mut f:F) where F:FnMut(TokenArray<ET>) {
         let mut current = self.current;
         loop {

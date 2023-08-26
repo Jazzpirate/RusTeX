@@ -1,6 +1,6 @@
-//! Default implementations for [`Mouth`] methods
+//! Default implementations for [`MouthTrait`] methods
 
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::ExpansionContainer;
@@ -10,18 +10,17 @@ use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
 impl<ET:EngineType> EngineRef<'_,ET> {
-    /// get the next [`Token`] from the [`Mouth`]
-    #[inline(always)]
+    /// get the next [`Token`] from the [`MouthTrait`]
     pub fn get_next_token(&mut self) -> Option<(Token<ET>,bool)> {
         self.mouth.get_next(self.state,self.interner,self.outputs)
     }
 
-    /// Skip whitespace characters from the [`Mouth`]
+    /// Skip whitespace characters from the [`MouthTrait`]
     pub fn skip_whitespace(&mut self) {
         self.mouth.skip_whitespace(self.state,self.interner)
     }
 
-    /// read optional `=` characters from the [`Mouth`]
+    /// read optional `=` characters from the [`MouthTrait`]
     pub fn skip_eq_char(&mut self) {
         self.skip_whitespace();
         debug_log!(trace=>"skipping '='");
@@ -39,12 +38,12 @@ impl<ET:EngineType> EngineRef<'_,ET> {
         }
     }
 
-    /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
+    /// reads a macro argument from the [`MouthTrait`], i.e. a sequence of [`Token`]s enclosed in
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     pub fn get_argument(&mut self,vec: &mut Vec<Token<ET>>) {
-        ET::Mouth::get_argument(self,vec)
+        Mouth::get_argument(self,vec)
     }
 /*
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
@@ -72,14 +71,14 @@ impl<ET:EngineType> EngineRef<'_,ET> {
  */
 
     pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<Token<ET>>, f:F) -> R {
-        ET::Mouth::with_mouth(self,tks,f)
+        Mouth::with_mouth(self,tks,f)
     }
 
     pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
-        ET::Mouth::add_expansion(self,f)
+        Mouth::add_expansion(self,f)
     }
 
-    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
+    /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&mut self,len:usize) -> String {
         self.mouth.preview(len,self.interner)
