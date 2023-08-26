@@ -15,6 +15,13 @@ exclude = [".idea/*","build.rs","resources/*","target/*"]
 crate-type = ["lib"]
 path = "src/lib.rs"
 
+[profile.dev]
+opt-level = 3
+lto = true
+debug = 2
+split-debuginfo = "off"
+strip = "none"
+
 [profile.release]
 opt-level = 2
 lto = true
@@ -28,8 +35,10 @@ debug = 2
 
 [dev-dependencies]
 env_logger = "0.10.0"
+rand = "0.8.5"
 
 [dependencies]
+rand = "0.8.5"
 paste="1.0.13"
 lazy_static = "1.4.0"
 ansi_term = "0.12.1"

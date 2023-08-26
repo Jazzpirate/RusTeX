@@ -66,15 +66,39 @@ mod tests {
     use crate::engine::filesystem::kpathsea::Kpathsea;
     use crate::utils::errors::TeXError;
     use ansi_term::Colour::*;
+    use rand::Rng;
     use crate::engine::{Engine, EngineType, Outputs};
     use crate::engine::memory::{Interner, Memory};
+    use crate::tex::catcodes::CategoryCode;
     use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command};
     use crate::tex::commands::pdftex::PDFTeXNode;
     use crate::tex::fonts::{TfmFont, TfmFontStore};
     use crate::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
-    use crate::tex::token::FileTokenReference;
+    use crate::tex::token::{BaseToken, FileTokenReference, Token};
     use crate::utils::Ptr;
     use crate::utils::strings::{CharType, TeXStr};
+
+
+    #[derive(Clone,Copy,Debug)]
+    struct Default();
+    impl EngineType for Default {
+        type Char = u8;
+        type File = Ptr<VirtualFile<u8>>;
+        type FileSystem = KpseVirtualFileSystem<u8>;
+        type Font = TfmFont;
+        type FontStore = TfmFontStore;
+        type Node = PDFTeXNode<Self>;
+        type Int = i32;
+        type Dim = Dimi32;
+        type SkipDim = Fill;
+        type MuDim = Mui32;
+        type MuStretchShrinkDim = MuFill;
+        type CommandReference = ();
+        type TokenReference = FileTokenReference<Self>;
+        type State = PDFTeXState<Self>;
+        type Gullet = TeXGullet<Self>;
+        type Stomach = ShipoutDefaultStomach<Self>;
+    }
 
     macro_rules! measure {
         ($key:ident:$x:expr) => {{
@@ -147,26 +171,6 @@ mod tests {
             write_other:|s| { warn!("\n{}",Black.on(Green).paint(s)) },
         };
 
-        #[derive(Clone,Copy,Debug)]
-        struct Default();
-        impl EngineType for Default {
-            type Char = u8;
-            type File = Ptr<VirtualFile<u8>>;
-            type FileSystem = KpseVirtualFileSystem<u8>;
-            type Font = TfmFont;
-            type FontStore = TfmFontStore;
-            type Node = PDFTeXNode<Self>;
-            type Int = i32;
-            type Dim = Dimi32;
-            type SkipDim = Fill;
-            type MuDim = Mui32;
-            type MuStretchShrinkDim = MuFill;
-            type CommandReference = ();
-            type TokenReference = FileTokenReference<Self>;
-            type State = PDFTeXState<Self>;
-            type Gullet = TeXGullet<Self>;
-            type Stomach = ShipoutDefaultStomach<Self>;
-        }
         let mut interner = Interner::new();
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new(&mut interner);
@@ -197,4 +201,74 @@ mod tests {
             }
         }
     })/*);*/}
+
+    fn random_token(interner:&mut Interner<u8>) -> Token<Default> {
+        if rand::random() {
+            let mut s = String::new();
+            for _ in (0..rand::thread_rng().gen_range(1..=30)) {
+                s.push(rand::random())
+            }
+            Token::new(BaseToken::CS(TeXStr::from_string(&s,interner)),None)
+        } else {
+            Token::new(BaseToken::Char(rand::random(),CategoryCode::try_from(rand::thread_rng().gen_range(1..=13)).unwrap()),None)
+        }
+    }
+    /*
+
+    fn run_one(iterations:usize,length:usize) -> (std::time::Duration,std::time::Duration) {
+        let mut ls = TokenList::new();
+        let mut vec = TokenVec::new();
+        let mut ls_timer = std::time::Duration::new(0,0);
+        let mut vec_timer = std::time::Duration::new(0,0);
+        let mut dummy = 0;
+        for _ in (0..iterations) {
+            let mut interner: Interner<u8> = Interner::new();
+            let interner = &mut interner;
+            ls.clear();
+            vec.clear();
+            let len = rand::thread_rng().gen_range(1..=length);
+
+            let start = std::time::Instant::now();
+            for _ in (0..len) {
+                ls.push(random_token(interner));
+            }
+            while let Some(next) = ls.next() {
+                dummy += <CategoryCode as Into<u8>>::into(next.catcode()) as usize;
+            }
+            ls_timer += start.elapsed();
+
+
+            let start = std::time::Instant::now();
+            for _ in (0..len) {
+                vec.push(random_token(interner));
+            }
+            vec.rev();
+            while let Some(next) = vec.next() {
+                dummy += <CategoryCode as Into<u8>>::into(next.catcode()) as usize;
+            }
+            vec_timer += start.elapsed();
+            println!("dummy: {}",dummy);
+            dummy = 0;
+        }
+        (ls_timer,vec_timer)
+    }
+
+    #[test]
+    fn profile() {
+        info();
+        let (a,b) = run_one(30*500000,20);
+        info!(target:"profile","30*500000;20    TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
+        let (a,b) = run_one(1200000,200);
+        info!(target:"profile","1200000;200   TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
+        let (a,b) = run_one(300000,2000);
+        info!(target:"profile","300000;2000  TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
+        let (a,b) = run_one(30*500000,20);
+        info!(target:"profile","30*500000;20    TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
+        let (a,b) = run_one(1200000,200);
+        info!(target:"profile","1200000;200   TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
+        let (a,b) = run_one(300000,2000);
+        info!(target:"profile","300000;2000  TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
+    }
+
+     */
 }
