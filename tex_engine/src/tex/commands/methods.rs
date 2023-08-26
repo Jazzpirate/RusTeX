@@ -1,11 +1,10 @@
 use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, expand_until_group, file_end, file_end_prim, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::memory::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
 use crate::tex::token::{BaseToken, Token, TokenList};
-use crate::engine::mouth::{Mouth, MouthTrait};
+use crate::engine::mouth::{ExpansionContainer, Mouth, MouthTrait};
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;
 use crate::utils::errors::TeXError;
@@ -427,7 +426,7 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
 
 fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut ExpansionContainer<ET>) {
     let rf = ET::TokenReference::from_expansion(&cmd);
-    for r in &*d.replacement {
+    for r in d.replacement.iter().rev() {
         match r {
             ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),engine.memory),
             _ => unreachable!()
@@ -556,11 +555,11 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut Engin
             debug_log!(debug=>"  - {}",TokenList(&args[i as usize]).to_str(engine.interner));
         }
     }
-    let mut replacement = d.replacement.iter();
+    let mut replacement = d.replacement.iter().rev();
     while let Some(next) = replacement.next() {
         match next {
             ExpToken::Param(_,idx) => {
-                for t in args[*idx as usize].iter() {
+                for t in args[*idx as usize].iter().rev() {
                     exp.push(t.clone().with_ref(&rf),engine.memory);
                 }
             }

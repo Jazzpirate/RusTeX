@@ -8,6 +8,7 @@ pub mod numeric_methods;
 use std::marker::PhantomData;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::methods::{do_conditional};
+use crate::engine::mouth::Mouth;
 use crate::tex::ConditionalBranch;
 use crate::tex::numbers::{Skip, MuSkip};
 use crate::tex::commands::{ResolvedToken, StomachCommand, BaseCommand};
@@ -141,9 +142,10 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     }
 
     fn expand(engine:&mut EngineRef<ET>, ret: ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
+        use crate::engine::mouth::MouthTrait;
         match ret.command {
             BaseCommand::Def(d) => {
-                engine.add_expansion(|engine,rs| {
+                Mouth::add_expansion_rev(engine,|engine,rs| {
                     expand_def(&d,engine,ret.source,rs);//&mut exp)?;
                     None
                 })

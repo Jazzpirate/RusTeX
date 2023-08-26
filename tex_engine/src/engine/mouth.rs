@@ -16,7 +16,7 @@ use crate::engine::filesystem::File;
 use crate::engine::mouth::string_source::StringSource;
 use crate::engine::state::State;
 use crate::{debug_log, file_end, throw};
-use crate::engine::memory::{ExpansionContainer, Interner, Memory};
+use crate::engine::memory::{Interner, Memory, VEC_SIZE};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{DefReplacement, TokenCont};
 use crate::tex::token::{BaseToken, Token, TokenList};
@@ -39,6 +39,7 @@ pub trait MouthTrait<ET:EngineType>:Sized {
     fn push_expansion(engine:&mut EngineRef<ET>,expansion:ExpansionContainer<ET>);
     /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
     fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
+    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
     /// Insert a [`File`] into the [`MouthTrait`], to be processed next
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>);
     fn push_string(&mut self,str:Vec<u8>);
@@ -67,28 +68,6 @@ pub trait MouthTrait<ET:EngineType>:Sized {
 
     fn endinput(&mut self, state: &mut ET::State,interner:&Interner<ET::Char>,outputs:&mut Outputs);
 
-/*
-    /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
-    /// [`Token`] is encountered, and returns them as a [`Vec`], respecting nested groups.
-    fn get_until_endgroup(engine:&mut EngineRef<ET>, f:TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        let mut depth = 1;
-        while let Some((tk,_)) = engine.get_next_token()? {
-            match tk.catcode() {
-                CategoryCode::BeginGroup => depth += 1,
-                CategoryCode::EndGroup => {
-                    depth -= 1;
-                    if depth == 0 { return Ok(()) }
-                },
-                CategoryCode::EOF => file_end!(),
-                _ => ()
-            }
-            f(engine,tk)?;
-        }
-        file_end!()
-    }
-
- */
-
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
     fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<Token<ET>> {
         match self.get_next_simple(state,interner) {
@@ -111,43 +90,61 @@ pub trait MouthTrait<ET:EngineType>:Sized {
 /// Either a [`TokenSource`] or a [`StringSource`]
 #[derive(Clone)]
 pub enum TeXMouthSource<ET:EngineType> {
-    Token((Token<ET>,bool)),
+    Tkls(Vec<Token<ET>>),
+    Noexpand(Token<ET>),
     String(StringSource<ET::Char>)
 }
 
 #[derive(Clone)]
-pub struct Mouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>> }
+pub struct Mouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>>,buffer:Vec<Vec<Token<ET>>> }
 
 impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     fn new(memory:&mut Memory<ET>) -> Self {
-        Mouth { stack:Vec::with_capacity(2097152)}
+        Mouth { stack:Vec::with_capacity(2097152),buffer:vec!()}
     }
-    fn new_with(tks: Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self {
-        Mouth {stack:tks.into_iter().rev().map(|t| TeXMouthSource::Token((t, true))).collect()}
+    fn new_with(mut tks: Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self {
+        tks.reverse();
+        Mouth {stack:vec!(TeXMouthSource::Tkls(tks)),buffer:vec!()}
     }
 
     fn get_expansion(engine: &mut EngineRef<ET>) -> ExpansionContainer<ET> {
-        engine.memory.get_expansion_container()
+        ExpansionContainer{array:engine.mouth.get_vec()}
     }
     fn push_expansion(engine: &mut EngineRef<ET>, expansion: ExpansionContainer<ET>) {
-        expansion.consume::<_,()>(engine.memory,|s| {
-            engine.mouth.stack.push(TeXMouthSource::Token(s))
-        });
+        let mut v = expansion.destroy();
+        if v.is_empty() { engine.mouth.buffer.push(v) } else {
+            v.reverse();
+            engine.mouth.stack.push(TeXMouthSource::Tkls(v))
+        }
     }
     /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
     fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
-        let mut source = engine.memory.get_expansion_container();
+        let mut expansion = ExpansionContainer{array:engine.mouth.get_vec()};
         let ret = {
-            f(engine,&mut source)
+            f(engine,&mut expansion)
         };
-        source.consume::<_,()>(engine.memory,|s| {
-            engine.mouth.stack.push(TeXMouthSource::Token(s))
-        });
+        let mut v = expansion.destroy();
+        if v.is_empty() { engine.mouth.buffer.push(v) } else {
+            v.reverse();
+            engine.mouth.stack.push(TeXMouthSource::Tkls(v))
+        }
+        ret
+    }
+
+    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
+        let mut expansion = ExpansionContainer{array:engine.mouth.get_vec()};
+        let ret = {
+            f(engine,&mut expansion)
+        };
+        let mut v = expansion.destroy();
+        if v.is_empty() { engine.mouth.buffer.push(v) } else {
+            engine.mouth.stack.push(TeXMouthSource::Tkls(v))
+        }
         ret
     }
 
     fn push_noexpand(&mut self, tk: Token<ET>,memory:&mut Memory<ET>) {
-        self.stack.push(TeXMouthSource::Token((tk,false)))
+        self.stack.push(TeXMouthSource::Noexpand(tk))
     }
 
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>) {
@@ -165,15 +162,34 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     }
 
     fn requeue(&mut self, tk: Token<ET>) {
-        self.stack.push(TeXMouthSource::Token((tk,true)))
+        match self.stack.last_mut() {
+            Some(TeXMouthSource::Tkls(v)) => v.push(tk),
+            _ => {
+                let mut v = self.get_vec();
+                v.push(tk);
+                self.stack.push(TeXMouthSource::Tkls(v))
+            }
+        }
     }
 
     fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
         match self.stack.last_mut() {
-            Some(TeXMouthSource::Token(ref mut tks)) => match self.stack.pop() {
-                Some(TeXMouthSource::Token((t, b))) => Some(t),
+            Some(TeXMouthSource::Noexpand(tk)) => match self.stack.pop() {
+                Some(TeXMouthSource::Noexpand(t)) => Some(t),
                 _ => unreachable!()
             },
+            Some(TeXMouthSource::Tkls(ref mut v)) => {
+                let ret = v.pop().unwrap();
+                if v.is_empty() {
+                    match self.stack.pop() {
+                        Some(TeXMouthSource::Tkls(v)) => {
+                            self.buffer.push(v);
+                        }
+                        _ => unreachable!()
+                    }
+                }
+                Some(ret)
+            }
             Some(TeXMouthSource::String(ref mut s)) => {
                 match s.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()) {
                     Some(t) => Some(t),
@@ -187,10 +203,22 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
 
     fn get_next(&mut self, state: &ET::State,interner:&mut Interner<ET::Char>,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> {
         match self.stack.last_mut() {
-            Some(TeXMouthSource::Token(ref mut tks)) => match self.stack.pop() {
-                Some(TeXMouthSource::Token((t, b))) => Some((t, b)),
+            Some(TeXMouthSource::Noexpand(tk)) => match self.stack.pop() {
+                Some(TeXMouthSource::Noexpand(t)) => Some((t, false)),
                 _ => unreachable!()
             },
+            Some(TeXMouthSource::Tkls(v)) => {
+                let ret = (v.pop().unwrap(), true);
+                if v.is_empty() {
+                    match self.stack.pop() {
+                        Some(TeXMouthSource::Tkls(v)) => {
+                            self.buffer.push(v);
+                        }
+                        _ => unreachable!()
+                    }
+                }
+                Some(ret)
+            }
             Some(TeXMouthSource::String(ref mut s)) => {
                 match s.get_next(interner,state.get_catcode_scheme(), state.get_endlinechar()) {
                     Some(t) => return Some((t, true)),
@@ -201,13 +229,15 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
                         }
                         self.stack.pop();
                         debug_log!(debug => "file end; inserting \\everyeof");
-                        let eof = (Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None),true);
+                        let eof = Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None);
                         match state.get_primitive_toks("everyeof") {
-                            None => Some(eof),
-                            Some(v) if v.is_empty() => Some(eof),
+                            None => Some((eof,true)),
+                            Some(v) if v.is_empty() => Some((eof,true)),
                             Some(v) => {
-                                self.stack.push(TeXMouthSource::Token(eof));
-                                for t in v.iter().skip(1).rev() { self.stack.push(TeXMouthSource::Token((t.clone(),true))) };
+                                let mut nv = self.get_vec();
+                                nv.push(eof);
+                                for t in v.iter().skip(1).rev() { nv.push(t.clone()) };
+                                self.stack.push(TeXMouthSource::Tkls(nv));
                                 Some((v.first().unwrap().clone(),true))
                             }
                         }
@@ -222,7 +252,8 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         let mut ret = String::new();
         for s in self.stack.iter().rev() {
             ret.push_str(&match s {
-                TeXMouthSource::Token(ts) => ts.0.base.to_str(interner,Some(ET::Char::backslash())),
+                TeXMouthSource::Noexpand(ts) => ts.base.to_str(interner,Some(ET::Char::backslash())),
+                TeXMouthSource::Tkls(v) => v.iter().rev().map(|t| t.base.to_str(interner,Some(ET::Char::backslash()))).collect::<String>(),
                 TeXMouthSource::String(ss) => ss.preview()
             });
             if ret.len() > len { /*ret.truncate(len);*/return ret.replace("\r","\\r").replace("\n","\\n") }
@@ -276,10 +307,23 @@ macro_rules! get_while {
     ($mouth:expr,$state:expr,$interner:expr,$label:tt => $t:ident => $f:expr) => {
         $label:loop {
             match $mouth.stack.last_mut() {
-                Some(TeXMouthSource::Token(_)) => match $mouth.stack.pop() {
-                    Some(TeXMouthSource::Token(($t, _))) => $f,
+                Some(TeXMouthSource::Noexpand(_)) => match $mouth.stack.pop() {
+                    Some(TeXMouthSource::Noexpand($t)) => $f,
                     _ => unreachable!()
                 },
+                Some(TeXMouthSource::Tkls(ref mut v)) => loop {
+                    let $t = v.pop().unwrap();
+                    if v.is_empty() {
+                        match $mouth.stack.pop() {
+                            Some(TeXMouthSource::Tkls(v)) => {
+                                $mouth.buffer.push(v);
+                            }
+                            _ => unreachable!()
+                        }
+                        $f;break
+                    }
+                    $f;
+                }
                 Some(TeXMouthSource::String(ref mut s)) => {
                     let cc = $state.get_catcode_scheme();
                     let endline = $state.get_endlinechar();
@@ -295,9 +339,13 @@ macro_rules! get_while {
 }
 
 impl<ET:EngineType> Mouth<ET> {
+    fn get_vec(&mut self) -> Vec<Token<ET>> {
+        self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
+    }
+
 
     /// Skip whitespace characters from the [`MouthTrait`]
-    fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) {
+    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) {
         debug_log!(trace=>"skipping whitespace");
         get_while!(self,state,interner,'A => tk => {
             match tk.catcode() {
@@ -385,6 +433,21 @@ impl<ET:EngineType> Mouth<ET> {
     }
 
  */
+}
+
+pub struct ExpansionContainer<ET:EngineType>{array:Vec<Token<ET>>}
+impl<ET:EngineType> ExpansionContainer<ET> {
+    pub fn push(&mut self, t:Token<ET>,memory:&mut Memory<ET>) {
+        self.array.push(t);
+    }
+    pub fn reset(&mut self,memory:&mut Memory<ET>) {
+        self.array.clear();
+    }
+
+    pub fn destroy(self) -> Vec<Token<ET>> {
+        self.array
+    }
+
 }
 
 /*

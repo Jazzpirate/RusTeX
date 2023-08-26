@@ -1,9 +1,8 @@
 //! Default implementations for [`MouthTrait`] methods
 
-use crate::engine::mouth::{Mouth, MouthTrait};
+use crate::engine::mouth::{ExpansionContainer, Mouth, MouthTrait};
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::memory::ExpansionContainer;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::TeXError;

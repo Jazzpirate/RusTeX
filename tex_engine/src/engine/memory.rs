@@ -6,7 +6,7 @@ use crate::engine::EngineType;
 use crate::tex::token::Token;
 use crate::utils::strings::{CharType, TeXStr};
 
-const VEC_SIZE:usize = 32;
+pub const VEC_SIZE:usize = 32;
 
 #[derive(Clone)]
 pub struct Interner<Char:CharType> {
@@ -101,27 +101,9 @@ impl<ET:EngineType> Memory<ET> {
         a.reset();
         self.token_arrays.push(a);
     }*/
-    pub fn get_expansion_container(&mut self) -> ExpansionContainer<ET> {
-        let array = self.token_vecs.pop().unwrap_or(Vec::with_capacity(VEC_SIZE));
-        ExpansionContainer {array}
-    }
-}
-pub struct ExpansionContainer<ET:EngineType>{array:Vec<Token<ET>>}
-impl<ET:EngineType> ExpansionContainer<ET> {
-    pub fn push(&mut self, t:Token<ET>,memory:&mut Memory<ET>) {
-        self.array.push(t);
-    }
-    pub fn reset(&mut self,memory:&mut Memory<ET>) {
-        self.array.clear();
-    }
 
-    pub fn consume<F,R>(mut self,memory:&mut Memory<ET>,mut f:F) where F:FnMut((Token<ET>,bool)) {
-        for t in self.array.drain(..).rev() {
-            f((t,true));
-        }
-        memory.return_token_vec(self.array);
-    }
 }
+
 
 /*
 pub struct TokenArray<ET:EngineType>{array:[Option<(Token<ET>, bool)>;ARRAY_SIZE],index:usize,max:usize}
