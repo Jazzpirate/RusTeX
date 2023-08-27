@@ -27,17 +27,16 @@ use crate::utils::{Mut, Ptr};
 use crate::utils::strings::CharType;
 
 pub trait File<Char:CharType>:Clone {
-    type OptionRef<'a>: std::ops::Deref<Target=Option<Vec<u8>>> where Self:'a;
     fn path(&self) -> &PathBuf;
     fn exists(&self) -> bool;
-    fn content_string(&self) -> Self::OptionRef<'_>;
+    fn content_string(&self) -> Option<Ptr<[Box<[u8]>]>>;
     fn open_out(&self);
     fn open_in(&self,interner:&mut Interner<Char>);
     fn close_out(&self);
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>>;
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -46,8 +45,8 @@ pub trait FileSystem<Char:CharType>:Clone + 'static {
     fn get(&mut self,path:&str) -> Self::F;
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf;
 }
-
-pub struct PhysicalFile<Char:CharType> {path:PathBuf,contents:Option<Vec<u8>>,phantom:PhantomData<Char>}
+/*
+pub struct PhysicalFile<Char:CharType> {path:PathBuf,contents:Ptr<[Box<[u8]>]>,phantom:PhantomData<Char>}
 impl<Char:CharType> PhysicalFile<Char> {
     pub fn new(path:PathBuf) -> Self {
         PhysicalFile {
@@ -92,68 +91,86 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
         todo!("Physical file system not implemented yet")
     }
 }
+*/
 
-
-pub struct VirtualFile<Char:CharType> {path:PathBuf,contents:Mut<Option<Vec<u8>>>,open:Mut<Option<StringSource<Char>>>}
-impl<Char:CharType> File<Char> for Ptr<VirtualFile<Char>> {
-    type OptionRef<'a> = core::cell::Ref<'a,Option<Vec<u8>>>;
-    fn path(&self) -> &PathBuf { &self.path }
-    fn exists(&self) -> bool { self.contents.borrow().is_some() }
-    fn content_string(&self) -> Self::OptionRef<'_> {
-        self.contents.borrow()
+enum FileState<Char:CharType> {
+    OpenIn(StringSource<Char>),
+    OpenOut(Vec<Box<[u8]>>),
+    Closed(Option<Ptr<[Box<[u8]>]>>)
+}
+struct VirtualFileI<Char:CharType> {path:PathBuf,state:Mut<FileState<Char>>}
+#[derive(Clone)]
+pub struct VirtualFile<Char:CharType>(Ptr<VirtualFileI<Char>>);
+impl<Char:CharType> File<Char> for VirtualFile<Char> {
+    fn path(&self) -> &PathBuf { &self.0.path }
+    fn exists(&self) -> bool { match &*self.0.state.borrow() {
+        FileState::Closed(o) => o.is_some(),
+        _ => true
+    } }
+    fn content_string(&self) -> Option<Ptr<[Box<[u8]>]>> {
+        match &*self.0.state.borrow() {
+            FileState::Closed(v) => v.clone(),
+            _ => None
+        }
     }
-    fn close_out(&self) {}
+    fn close_out(&self) {
+        let s = &mut *self.0.state.borrow_mut();
+        match s {
+            FileState::OpenOut(v) => *s = FileState::Closed(Some((std::mem::take(v)).into())),
+            _ => unreachable!()
+        }
+    }
     fn open_out(&self) {
-        let mut w = self.contents.borrow_mut();
-        *w = Some(vec!());
+        (*self.0.state.borrow_mut()) = FileState::OpenOut(vec!());
     }
     fn open_in(&self,interner:&mut Interner<Char>) {
-        let w = &*self.contents.borrow();
-        let mut open = self.open.borrow_mut();
-        let (v,eof) = match w {
-            None => (vec!(),true),
-            Some(v) => (v.clone(),false)
-        };
-        let mut ss = StringSource::new(v,Some(interner.from_string(self.path.to_str().unwrap())));
-        ss.state.eof = eof;
-        *open = Some(ss);
+        let s = &mut *self.0.state.borrow_mut();
+        match s {
+            FileState::Closed(Some(v)) => {
+                let mut ss = StringSource::new(v.clone(),Some(interner.from_string(self.0.path.to_str().unwrap())));
+                *s = FileState::OpenIn(ss);
+            },
+            FileState::Closed(None) => (),
+            _ => unreachable!()
+        }
     }
     fn close_in(&self) {
-        let mut open = self.open.borrow_mut();
-        *open = None;
+        let s = &mut *self.0.state.borrow_mut();
+        match s {
+            FileState::OpenIn(ss) => *s = FileState::Closed(Some(ss.string.clone())),
+            FileState::Closed(_) => (),
+            _ => unreachable!()
+        }
     }
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
-        let open = &mut *self.open.borrow_mut();
-        let open = open.as_mut().unwrap();
-        open.eof::<ET>(state)//.peek().is_none()
-    }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) -> Result<(),TeXError<ET>> {
-        let open = &mut *self.open.borrow_mut();
-        match open {
-            None => throw!("File not open"),
-            Some(m) => {
-                let mut ingroups = 0;
-                loop {
-                    m.read(interner,cc,endlinechar,|tk| match &tk.base {
-                        BaseToken::Char(c,CategoryCode::BeginGroup) => {ingroups += 1; f(tk)},
-                        BaseToken::Char(c,CategoryCode::EndGroup) => {ingroups += 1; f(tk)},
-                        _ => f(tk)
-                    })?;
-                    if ingroups == 0 {return Ok(())}
-                }
-            }
+        match &mut *self.0.state.borrow_mut() {
+            FileState::OpenIn(ss) => ss.eof::<ET>(state),
+            FileState::Closed(_) => true,
+            _ => unreachable!()
         }
-
+    }
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) {
+        let s = &mut *self.0.state.borrow_mut();
+        match s {
+            FileState::OpenIn(ss) => ss.read(interner,cc,endlinechar,f),
+            FileState::Closed(_) => (),
+            _ => unreachable!()
+        }
     }
 
     fn write(&self, string: &str) {
-        let write = &mut *self.contents.borrow_mut();
-        let v = write.as_mut().unwrap();
-        v.extend(string.as_bytes());
-        v.push(b'\n');
+        let s = &mut *self.0.state.borrow_mut();
+        match s {
+            FileState::OpenOut(v) => {
+                for s in string.split('\n') {
+                    v.push(s.as_bytes().into())
+                }
+            },
+            _ => unreachable!()
+        }
     }
 }
-
+/*
 #[derive(Clone)]
 pub struct KpsePhysicalFileSystem<Char:CharType> {kpathsea:Kpathsea,phantom:PhantomData<Char>}
 impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
@@ -166,21 +183,24 @@ impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
         todo!("Physical file system not implemented yet")
     }
 }
-
-#[derive(Clone)]
-pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,Ptr<VirtualFile<Char>>>}
 impl<Char:CharType> KpsePhysicalFileSystem<Char> {
     pub fn kpsewhich(&self, path: &str) -> KpseResult {
         self.kpathsea.kpsewhich(path)
     }
 }
+
+ */
+
+#[derive(Clone)]
+pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,VirtualFile<Char>>}
+
 impl<Char:CharType> KpseVirtualFileSystem<Char> {
     pub fn kpsewhich(&self, path: &str) -> KpseResult {
         self.kpathsea.kpsewhich(path)
     }
 }
 impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
-    type F = Ptr<VirtualFile<Char>>;
+    type F = VirtualFile<Char>;
     fn new(pwd:PathBuf) -> Self { KpseVirtualFileSystem {
         pwd:pwd.clone(),
         kpathsea:Kpathsea::new(pwd),
@@ -196,11 +216,10 @@ impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
             Entry::Occupied(e) => e.get().clone(),
             Entry::Vacant(e) => {
                 let s: Option<Vec<u8>> = self.kpathsea.get(&self.pwd,e.key());
-                let ret = Ptr::new(VirtualFile{
+                let ret = VirtualFile(Ptr::new(VirtualFileI{
                     path:e.key().clone(),
-                    contents:Mut::new(s),
-                    open:Mut::new(None)
-                });
+                    state:Mut::new(FileState::Closed(s.map(|s|StringSource::<Char>::from_str(&s))))
+                }));
                 e.insert(ret.clone());
                 ret
             }

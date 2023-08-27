@@ -486,11 +486,10 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     // let filename = tokens_to_string(ret,state.get_escapechar(),state.get_catcode_scheme());
     let f = engine.filesystem.get(&filename);
     engine.memory.return_string(filename);
-    let x = f.content_string();
-    match &*x {
+    match f.content_string() {
         None => (),
         Some(v) =>{
-            engine.string_to_tokens(v.len().to_string().as_bytes(),fun)
+            engine.string_to_tokens(v.iter().map(|b| b.len()).sum::<usize>().to_string().as_bytes(),fun)
         }
     }
 }
@@ -707,9 +706,12 @@ pub fn pdfmdfivesum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
         engine.get_braced_string(&mut filename);
         let file = engine.filesystem.get(&filename);
         engine.memory.return_string(filename);
-        let x = match &*file.content_string() {
+        let x = match file.content_string() {
             None => md5::compute(""),
-            Some(v) => md5::compute(v)
+            Some(v) => {
+                let v : Vec<u8> = v.iter().flat_map(|b| b.iter().map(|u|*u)).collect();
+                md5::compute(v)
+            }
         };
         x
     } else {

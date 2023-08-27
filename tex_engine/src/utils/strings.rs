@@ -29,29 +29,13 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
     const MAX:Self;
 
     /// Parses a character from a byte iterator. For [`u8`], this is just `iter.next()`.
-    fn from_u8_iter(iter:&mut IntoIter<u8>) -> Option<Self>;
+    fn from_u8_iter<A>(iter:&mut A,counter:&mut usize) -> Option<Self> where A:Iterator<Item=u8> ;
 
     fn from_str(s:&'static str,interner:&mut Interner<Self>) -> TeXStr<Self> {
         TeXStr::from_static(s,interner)
     }
 
     fn tokenize(s:&str) -> Vec<Self>;
-
-    /** Whether the character is an end-of-line character.
-     *
-     * Should return:
-     * - `Some(true)`: is end of line (e.g. `\n`).
-     * - `Some(false)`: is not end of line.
-     * - `None`: might be, depending on the next character - e.g. `\r`, in which case the next
-     *    character should be checked to be `\n`.
-     */
-    fn is_eol(self) -> Option<bool>;
-
-    /** Should return:
-     * - `true`: if the pair (`self`,`next`) represents an end of line (e.g. `\r\n`).
-     * - `false`: if not; in which case `self` itself is considered to be an end of line (e.g. `\r`).
-     */
-    fn is_eol_pair(self,next:Self) -> bool;
 
     /// The starting category code scheme for this character type, see [`struct@STARTING_SCHEME_U8`].
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
@@ -79,28 +63,14 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
 impl CharType for u8 {
     type Allchars<A:Default+Clone> = [A;256];
     const MAX:Self=255;
-    fn from_u8_iter(iter: &mut IntoIter<u8>) -> Option<Self> { iter.next() }
+    fn from_u8_iter<A>(iter: &mut A,counter:&mut usize) -> Option<Self> where A:Iterator<Item=u8> { *counter +=1; iter.next() }
     fn newline() -> Self { b'\n' }
     fn carriage_return() -> Self {b'\r'}
     fn backslash() -> Self { b'\\' }
-    // #[inline(always)]
-    fn is_eol(self) -> Option<bool> {
-        match self {
-            b'\n' => Some(true),
-            b'\r' => None,
-            _ => Some(false)
-        }
-    }
     fn tokenize(s:&str) -> Vec<Self> {
         s.chars().map(|c| c as u8).collect()
     }
     fn as_char(&self) -> char { *self as char }
-    // #[inline(always)]
-    fn is_eol_pair(self, next: Self) -> bool {
-        // invariant: self == \r
-        next == b'\n'
-    }
-    // #[inline(always)]
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
         STARTING_SCHEME_U8.clone()
     }
@@ -108,8 +78,6 @@ impl CharType for u8 {
         OTHER_SCHEME_U8.clone()
     }
     fn as_bytes(&self) -> &[u8] { std::slice::from_ref(self) }
-
-    // #[inline(always)]
     fn char_str(&self) -> String {
         match *self {
             0 => "\\u0000".to_string(),
@@ -217,18 +185,8 @@ impl CharType for char {
     fn carriage_return() -> Self { '\r' }
     fn newline() -> Self { '\n' }
     fn char_str(&self) -> String { self.to_string() }
-    fn is_eol(self) -> Option<bool> {
-        match self {
-            '\n' => Some(true),
-            '\r' => None,
-            _ => Some(false)
-        }
-    }
     fn tokenize(s: &str) -> Vec<Self> {
         todo!()//&mut s.chars()//s.chars().collect::<Vec<char>>().as_slice()
-    }
-    fn is_eol_pair(self, next: Self) -> bool {
-        next == '\n' // self == '\r'
     }
     fn as_bytes(&self) -> &[u8] {
         todo!()//char::as_bytes(self)//self.as_bytes()
@@ -242,7 +200,7 @@ impl CharType for char {
         todo!()
     }
     fn other_catcode_scheme() -> CategoryCodeScheme<Self> { todo!() }
-    fn from_u8_iter(iter: &mut IntoIter<u8>) -> Option<Self> {
+    fn from_u8_iter<A>(iter: &mut A,counter:&mut usize) -> Option<Self> where A:Iterator<Item=u8> {
         todo!()
     }
     fn rep_field<A: Clone + Default>(a: A) -> Self::Allchars<A> {

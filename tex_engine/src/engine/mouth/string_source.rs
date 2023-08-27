@@ -10,6 +10,7 @@ use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::token::{BaseToken, FileReference, Token};
 use crate::utils::errors::TeXError;
+use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 
 /// A [`StringSource`] is in one of three states
@@ -22,43 +23,397 @@ pub enum MouthState {
     /// In the middle of a line
     M
 }
+
 #[derive(Clone)]
-pub struct StringSourceState<C:CharType> {
+struct Char<C:CharType>{char:C,start:(usize,usize),end:(usize,usize)}
+
+#[derive(Clone)]
+pub struct StringSource<C:CharType> {
     state : MouthState,
     line : usize,
     col : usize,
-    string:IntoIter<u8>,
-    charbuffer:Vec<(C, usize, usize)>,
+    pub string:Ptr<[Box<[u8]>]>,
     pub(crate) eof:bool,
+    pub source:Option<TeXStr<C>>,
     tempstr:String
 }
-impl<C:CharType> StringSourceState<C> {
-    pub fn new(string: Vec<u8>) -> StringSourceState<C> {
-        StringSourceState {
+
+macro_rules! get_char {
+    ($self:ident) => {{
+        let line = &$self.string[$self.line];
+        if $self.col >= line.len() {None} else {
+            C::from_u8_iter(&mut $self.string[$self.line][$self.col..].iter().map(|u:&u8| *u),&mut $self.col)
+        }
+    }}
+}
+impl<C:CharType> StringSource<C> {
+    pub fn new(string: Ptr<[Box<[u8]>]>,source:Option<TeXStr<C>>) -> StringSource<C> {
+        StringSource {
             state: MouthState::N,
-            line: 1,
+            line: 0,
             col: 0,
-            string: string.into_iter(),
-            charbuffer: Vec::new(),
+            string: string,
             eof: false,
-            tempstr:String::new()
+            tempstr:String::new(),
+            source
         }
     }
-
-    pub fn preview(&self) -> String {
-        let mut ret = String::new();
-        for (c,_,_) in self.charbuffer.iter().rev() {
-            for u in c.char_str().into_bytes() {
-                ret.push(u as char);
+    pub fn from_str(string:&Vec<u8>) -> Ptr<[Box<[u8]>]> {
+        if string.is_empty() {
+            return Ptr::new([]);
+        }
+        let mut ret = vec!();
+        let mut curr = vec!();
+        let mut iter = string.iter();
+        while let Some(next) = iter.next() {
+            match next {
+                b'\n' => {
+                    let mut next = vec!();
+                    std::mem::swap(&mut curr, &mut next);
+                    ret.push(next.into_boxed_slice())
+                }
+                b'\r' => {
+                    let mut next = vec!();
+                    std::mem::swap(&mut curr, &mut next);
+                    ret.push(next.into_boxed_slice());
+                    match iter.next() {
+                        Some(b'\n') => (),
+                        Some(b) => {
+                            curr.push(*b);
+                        }
+                        None => ()
+                    }
+                }
+                o => curr.push(*o)
             }
         }
-        let cp = self.string.clone();
-        for c in cp {
-            ret.push(c as char);
+        ret.into()
+    }
+
+
+    pub fn line(&self) -> usize { self.line+1 }
+    pub fn column(&self) -> usize { self.col+1 }
+
+    pub fn preview(&self,len:usize) -> String {
+        let mut ret = String::new();
+        if self.line >= self.string.len() {
+            return ret
+        }
+        if self.string[self.line].len() > self.col {
+            ret.push_str(std::str::from_utf8(&self.string[self.line][self.col..]).unwrap())
+        }
+        let mut line = self.line + 1;
+        while line < self.string.len() && ret.len() < len {
+            ret.push_str(std::str::from_utf8(&*self.string[line]).unwrap());
+            line += 1;
         }
         ret
     }
 
+    pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool {
+        self.line >= self.string.len() && self.eof
+        /*
+        match self.charbuffer.last() {
+            Some(_) => false,
+            None => match self.next_char(state.get_catcode_scheme(), state.get_endlinechar()) {
+                None => true,
+                Some((c, l, co,_)) => {
+                    self.charbuffer.push((c, l, co));
+                    false
+                }
+            }
+        }
+
+         */
+    }
+
+    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> {
+        use CategoryCode::*;
+        let ret = endline.map(|c| {
+            match cc.get(&c) {
+                Space | EOL if self.state == MouthState::S => None,
+                Space | EOL if self.state == MouthState::N => None,
+                Ignored => None,
+                EOL => Some(Token::new(BaseToken::Char(c,Space),self.source.map(|s|
+                    FileReference {
+                        filename:s.symbol(),start:(self.line+1,self.col+1),end:(self.line+1,self.col+1)
+                    }
+                ))),
+                o => Some(Token::new(BaseToken::Char(c,*o),self.source.map(|s|
+                    FileReference {
+                        filename:s.symbol(),start:(self.line+1,self.col+1),end:(self.line+1,self.col+1)
+                    }
+                )))
+            }
+        }).flatten();
+        self.line += 1;
+        self.col = 0;
+        self.state = MouthState::N;
+        ret
+        /*endline.map(|c| )*/
+    }
+
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
+        if self.line >= self.string.len() {
+            if self.eof {
+                return ()
+            } else {
+                self.eof = true;
+                if let Some(n) =self.return_endline(cc,endline) {
+                    f(n)
+                }
+                return ()
+            }
+        }
+        let mut ingroups = 0;
+        let mut line = self.line;
+        while self.line == line {
+            let start = (self.line+1,self.col+1);
+            match get_char!(self) {
+                None => {
+                    if let Some(n) =self.return_endline(cc,endline) {
+                        f(n)
+                    }
+                    return ()
+                }
+                Some(c) => match self.check_char(interner,cc,endline,start,c) {
+                    None if self.line == line => (),
+                    None if ingroups > 0 => {
+                        line = self.line;
+                        if self.line >= self.string.len() {
+                            if self.eof {
+                                return ()
+                            } else {
+                                self.eof = true;
+                                if let Some(n) =self.return_endline(cc,endline) {
+                                    f(n)
+                                }
+                                return ()
+                            }
+                        }
+                    },
+                    None => return (),
+                    Some(tk) => {
+                        if tk.catcode() == CategoryCode::BeginGroup {
+                            ingroups += 1
+                        } else if tk.catcode() == CategoryCode::EndGroup {
+                            ingroups -= 1
+                        }
+                        f(tk)
+                    }
+                }
+            }
+        }
+    }
+
+
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> { loop {
+        if self.line >= self.string.len() {
+            if self.eof {
+                return None
+            } else {
+                self.eof = true;
+                return self.return_endline(cc,endline)
+            }
+        }
+        let start = (self.line+1,self.col+1);
+        match get_char!(self) {
+            None => match self.return_endline(cc,endline) {
+                Some(e) => {
+                    return Some(e)
+                }
+                None => ()
+            }
+            Some(c) => match self.check_char(interner,cc,endline,start,c) {
+                Some(t) => return Some(t),
+                None => ()
+            }
+        };
+    }}
+
+    fn check_char<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,endline:Option<C>,start:(usize,usize),c:C) -> Option<Token<ET>> {
+        use CategoryCode::*;
+        match cc.get(&c) {
+            EOL if self.state == MouthState::N => {
+                self.line += 1;
+                self.col = 0;
+                Some(Token::new(BaseToken::CS(interner.par),self.source.map(|s|
+                    FileReference {
+                        filename:s.symbol(),start,end:(self.line+1,self.col+1)
+                    }
+                )))
+            }
+            EOL => self.return_endline(cc,endline),
+            Space if self.state == MouthState::S => None,
+            Space if self.state == MouthState::N => None,
+            Space => {
+                self.state = MouthState::S;
+                Some(Token::new(BaseToken::Char(c,Space),self.source.map(|s|
+                    FileReference {
+                        filename:s.symbol(),start,end:(self.line+1,self.col+1)
+                    }
+                )))
+            }
+            Ignored => None,
+            Comment => {
+                self.line +=1;
+                self.col = 0;
+                self.state = MouthState::N;
+                None
+            }
+            Invalid => throw!("Invalid character {}",c),
+            Escape => Some(self.get_escape(interner,cc,start)),
+            Superscript => match self.maybe_superscript(c) {
+                Some(c) => self.check_char(interner,cc,endline,start,c),
+                None => {
+                    self.state = MouthState::M;
+                    Some(Token::new(BaseToken::Char(c,Superscript),self.source.map(|s|
+                        FileReference {
+                            filename:s.symbol(),start,end:(self.line+1,self.col+1)
+                        }
+                    )))
+                }
+            }
+            cc => {
+                self.state = MouthState::M;
+                Some(Token::new(BaseToken::Char(c,*cc),self.source.map(|s|
+                    FileReference {
+                        filename:s.symbol(),start,end:(self.line+1,self.col+1)
+                    }
+                )))
+            }
+        }
+    }
+
+    fn maybe_superscript(&mut self, firstsup:C) -> Option<C> {
+        match get_char!(self) {
+            None => None,
+            Some(c) if c != firstsup => {
+                self.col -= c.as_bytes().len();
+                None
+            }
+            Some(secondsup) => {
+                match get_char!(self) {
+                    None => {
+                        self.col -= secondsup.as_bytes().len();
+                        None
+                    }
+                    Some(first) => match get_char!(self) {
+                        None => {
+                            let firstu = first.to_usize();
+                            if firstu < 128 {
+                                let u = firstu as u8;
+                                let ch: C = (if u < 64 { u + 64 } else { u - 64 }).into();
+                                Some(ch)
+                            } else {
+                                self.col -= first.as_bytes().len();
+                                self.col -= secondsup.as_bytes().len();
+                                None
+                            }
+                        }
+                        Some(second) => {
+                            let firstu = first.to_usize();
+                            let secondu = second.to_usize();
+                            fn cond(i: usize) -> bool { (48 <= i && i <= 57) || (97 <= i && i <= 102) }
+                            if cond(firstu) && cond(secondu) {
+                                let char = u8::from_str_radix(
+                                    std::str::from_utf8(&[firstu as u8, secondu as u8]).unwrap(),
+                                    16
+                                ).unwrap();
+                                Some(char.into())
+                            } else {
+                                self.col -= second.as_bytes().len();
+                                let firstu = first.to_usize();
+                                if firstu < 128 {
+                                    let u = firstu as u8;
+                                    let ch: C = (if u < 64 { u + 64 } else { u - 64 }).into();
+                                    Some(ch)
+                                } else {
+                                    self.col -= first.as_bytes().len();
+                                    self.col -= secondsup.as_bytes().len();
+                                    None
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn get_escape<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,start:(usize,usize)) -> Token<ET> {
+        let name = match get_char!(self) {
+            None => {
+                self.state = MouthState::N;
+                interner.empty_str
+            },
+            Some(next) => self.check_escape(interner,cc,next)
+        };
+        Token::new(BaseToken::CS(name),self.source.map(|s|
+            FileReference {
+                filename:s.symbol(),start,end:(self.line+1,self.col+1)
+            }
+        ))
+    }
+
+    fn check_escape(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,next:C) -> TeXStr<C> {
+        use CategoryCode::*;
+        match cc.get(&next) {
+            Superscript => {
+                match self.maybe_superscript(next) {
+                    Some(c) => self.check_escape(interner,cc,c),
+                    None => {
+                        self.state = MouthState::M;
+                        self.tempstr.clear();
+                        self.tempstr.push(next.as_char());
+                        TeXStr::from_string(&self.tempstr,interner)
+                    }
+                }
+            }
+            Letter => self.get_cs_name(interner,cc,next),
+            o => {
+                self.state = MouthState::M;
+                self.tempstr.clear();
+                self.tempstr.push(next.as_char());
+                TeXStr::from_string(&self.tempstr,interner)
+            }
+        }
+    }
+
+    fn get_cs_name(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,first:C) -> TeXStr<C> {
+        self.tempstr.clear();
+        self.tempstr.push(first.as_char());
+        self.state = MouthState::S;
+        loop {
+            match get_char!(self) {
+                None => {
+                    self.state = MouthState::N;
+                    break
+                }
+                Some(next) => match cc.get(&next) {
+                    CategoryCode::Letter => self.tempstr.push(next.as_char()),
+                    CategoryCode::Superscript => {
+                        let curr = self.col;
+                        match self.maybe_superscript(next) {
+                            Some(c) if *cc.get(&c) == CategoryCode::Letter => self.tempstr.push(c.as_char()),
+                            _ => {
+                                self.col = curr;
+                                self.col -= next.as_bytes().len();
+                                break
+                            }
+                        }
+                    }
+                    _ => {
+                        self.col -= next.as_bytes().len();
+                        break
+                    }
+                }
+            }
+        }
+        TeXStr::from_string(&self.tempstr,interner)
+    }
+
+/*
     /// Process an [`end-of-line`](crate::tex::catcodes::CategoryCode::EOL) character:
     /// If `\endline==None`, ignore it and obtain the next character. Otherwise, return the
     /// `\endlinechar` character.
@@ -469,25 +824,14 @@ impl<C:CharType> StringSourceState<C> {
         Ok(())
     }
 
-    pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool {
-        match self.charbuffer.last() {
-            Some(_) => false,
-            None => match self.next_char(state.get_catcode_scheme(), state.get_endlinechar()) {
-                None => true,
-                Some((c, l, co,_)) => {
-                    self.charbuffer.push((c, l, co));
-                    false
-                }
-            }
-        }
-    }
-}
 
+ */
+}
+/*
 /// A [`StringSource`] is the primary [`TokenSource`](crate::engine::mouth::TeXMouthSource) for TeX, which reads from a [`String`]
 #[derive(Clone)]
 pub struct StringSource<C:CharType> {
     pub(crate) state:StringSourceState<C>,
-    pub source:Option<TeXStr<C>>
 }
 impl<C:CharType> StringSource<C> {
     /// Create a new [`StringSource`] from a [`String`] and an optional source reference.
@@ -495,8 +839,7 @@ impl<C:CharType> StringSource<C> {
     /// The [`StringSource`] keeps track of the current line and column number.
     pub fn new(string:Vec<u8>,source:Option<TeXStr<C>>) -> StringSource<C> {
         StringSource {
-            state:StringSourceState::new(string),
-            source
+            state:StringSourceState::new(string,source),
         }
     }
 
@@ -507,7 +850,7 @@ impl<C:CharType> StringSource<C> {
     pub fn line(&self) -> usize { self.state.line }
     pub fn column(&self) -> usize { self.state.col }
 
-    pub fn preview(&self) -> String { self.state.preview() }
+    pub fn preview(&self,len:usize) -> String { self.state.preview(len) }
     pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
     pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> {
@@ -523,3 +866,5 @@ impl<C:CharType> StringSource<C> {
         }
     }
 }
+
+ */

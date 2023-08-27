@@ -42,7 +42,7 @@ pub trait MouthTrait<ET:EngineType>:Sized {
     fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
     /// Insert a [`File`] into the [`MouthTrait`], to be processed next
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>);
-    fn push_string(&mut self,str:Vec<u8>);
+    fn push_string(&mut self,str:&Vec<u8>);
 
     /// Insert a single [`Token`] into the [`MouthTrait`], not to be expanded when processed
     fn push_noexpand(&mut self,tk:Token<ET>,memory:&mut Memory<ET>);
@@ -150,14 +150,14 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>) {
         debug!("Pushing file {:?}", file.path());
         let source = TeXMouthSource::String(StringSource::new(
-            (*file.content_string()).clone().unwrap(),
+            file.content_string().unwrap().clone(),
             Some(interner.from_string(file.path().to_str().unwrap()))
         ));
         self.stack.push(source);
     }
 
-    fn push_string(&mut self, str: Vec<u8>) {
-        let source = TeXMouthSource::String(StringSource::new(str,None));
+    fn push_string(&mut self, str: &Vec<u8>) {
+        let source = TeXMouthSource::String(StringSource::new(StringSource::<ET::Char>::from_str(str),None));
         self.stack.push(source);
     }
 
@@ -254,7 +254,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
             ret.push_str(&match s {
                 TeXMouthSource::Noexpand(ts) => ts.base.to_str(interner,Some(ET::Char::backslash())),
                 TeXMouthSource::Tkls(v) => v.iter().rev().map(|t| t.base.to_str(interner,Some(ET::Char::backslash()))).collect::<String>(),
-                TeXMouthSource::String(ss) => ss.preview()
+                TeXMouthSource::String(ss) => ss.preview(len - ret.len())
             });
             if ret.len() > len { /*ret.truncate(len);*/return ret.replace("\r","\\r").replace("\n","\\n") }
         }

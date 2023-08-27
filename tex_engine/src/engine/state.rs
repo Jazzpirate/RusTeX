@@ -376,6 +376,9 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             todo!("Error closeout")
             //self.out_files.resize(i,None);
         }
+        if let Some(f) = &self.in_files[i] {
+            f.close_in();
+        }
         self.in_files[i] = None
     }
     fn file_openout(&mut self, i: usize, f: ET::File) {
@@ -389,6 +392,9 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         if i >= self.out_files.len() {
             todo!("Error closeout")
             //self.out_files.resize(i,None);
+        }
+        if let Some(f) = &self.out_files[i] {
+            f.close_out();
         }
         self.out_files[i] = None
     }

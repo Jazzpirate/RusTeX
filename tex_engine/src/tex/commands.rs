@@ -533,8 +533,8 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
     }
 }
 
-pub type DefSignature<ET> = Ptr<Vec<ParamToken<ET>>>;
-pub type DefReplacement<ET> = Ptr<Vec<ExpToken<ET>>>;
+pub type DefSignature<ET> = Ptr<[ParamToken<ET>]>;
+pub type DefReplacement<ET> = Ptr<[ExpToken<ET>]>;
 
 /// A macro defined via `\def`, `\edef`, `\xdef` or `\gdef`
 #[derive(Clone)]
@@ -556,18 +556,18 @@ impl<ET:EngineType> PartialEq for Def<ET> {
 }
 
 impl<ET:EngineType> Def<ET>{
-    pub fn simple(replacement:Vec<Token<ET>>) -> Def<ET> {
+    pub fn simple(mut replacement:Vec<Token<ET>>) -> Def<ET> {
         Self::new(false,false,false,false,0,Vec::new(),replacement.into_iter().map(ExpToken::Token).collect())
     }
-    pub fn new(protected:bool,long:bool,outer:bool,endswithbrace:bool,arity:u8,signature:Vec<ParamToken<ET>>,replacement:Vec<ExpToken<ET>>) -> Def<ET> {
+    pub fn new(protected:bool,long:bool,outer:bool,endswithbrace:bool,arity:u8,mut signature:Vec<ParamToken<ET>>,mut replacement:Vec<ExpToken<ET>>) -> Def<ET> {
         Self {
             protected,
             long,
             outer,
             endswithbrace,
             arity,
-            signature:Ptr::new(signature),
-            replacement:Ptr::new(replacement)
+            signature:signature.into(),
+            replacement:replacement.into()
         }
     }
     pub fn as_str(&self,interner:&Interner<ET::Char>) -> String {
