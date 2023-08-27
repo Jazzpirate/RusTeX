@@ -37,6 +37,7 @@ pub trait File<Char:CharType>:Clone {
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
     fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
+    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,f:F);
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -153,6 +154,15 @@ impl<Char:CharType> File<Char> for VirtualFile<Char> {
         let s = &mut *self.0.state.borrow_mut();
         match s {
             FileState::OpenIn(ss) => ss.read(interner,cc,endlinechar,f),
+            FileState::Closed(_) => (),
+            _ => unreachable!()
+        }
+    }
+
+    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,mut f:F) {
+        let s = &mut *self.0.state.borrow_mut();
+        match s {
+            FileState::OpenIn(ss) => ss.readline(interner,f),
             FileState::Closed(_) => (),
             _ => unreachable!()
         }

@@ -429,7 +429,7 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     }
     let newcmd = engine.get_control_sequence();
     let mut ret = vec!();
-    file.read::<ET,_>(engine.interner,&ET::Char::other_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t));
+    file.readline::<ET,_>(engine.interner,|t| ret.push(t));
     debug_log!(trace=>"readline: {} = {}",newcmd.to_str(engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.interner));
 
     let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));

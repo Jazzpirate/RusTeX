@@ -153,6 +153,20 @@ impl<C:CharType> StringSource<C> {
         /*endline.map(|c| )*/
     }
 
+    pub fn readline<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C>,mut f:F) {
+        if self.line >= self.string.len() {self.eof=true;return ()}
+        let mut iter = self.string[self.line].iter().map(|u:&u8| *u);
+        while let Some(next) = C::from_u8_iter(&mut iter,&mut self.col) {
+            let t = if next.as_bytes() == [32] {
+                Token::new(BaseToken::Char(next,CategoryCode::Space),None)
+            } else {
+                Token::new(BaseToken::Char(next,CategoryCode::Other),None)
+            };
+            f(t)
+        }
+        self.line += 1;
+    }
+
     pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
         if self.line >= self.string.len() {
             if self.eof {
