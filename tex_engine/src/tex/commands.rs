@@ -18,7 +18,32 @@ use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
-
+/*
+pub enum ResolvedToken<ET:EngineType> {
+    Cmd{command:BaseCommand<ET>,cause:Token<ET>,reference:Option<ET::CommandReference>},
+    Noexpand(Token<ET>),
+    Token(Token<ET>)
+}
+impl<ET:EngineType> PartialEq for ResolvedToken<ET> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self,other) {
+            (ResolvedToken::Cmd{command:a,..},ResolvedToken::Cmd{command:b,..}) => a == b,
+            (ResolvedToken::Noexpand(a),ResolvedToken::Noexpand(b)) => a == b,
+            (ResolvedToken::Token(a),ResolvedToken::Token(b)) => a == b,
+            _ => false
+        }
+    }
+}
+impl<ET:EngineType> ResolvedToken<ET> {
+    fn token(self) -> Token<ET> {
+        match self {
+            ResolvedToken::Cmd{cause,..} => cause,
+            ResolvedToken::Token(tk) => tk
+            ResolvedToken::Noexpand(tk) => tk
+        }
+    }
+}
+*/
 pub struct ResolvedToken<ET:EngineType> {
     pub command:BaseCommand<ET>,
     pub source: CommandSource<ET>,
