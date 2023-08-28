@@ -87,6 +87,9 @@ impl<C:CharType> StringSource<C> {
                 o => curr.push(*o)
             }
         }
+        if !curr.is_empty() {
+            ret.push(curr.into_boxed_slice());
+        }
         ret.into()
     }
 
@@ -127,12 +130,19 @@ impl<C:CharType> StringSource<C> {
          */
     }
 
-    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> {
+    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>,par:TeXStr<C>) -> Option<Token<ET>> {
         use CategoryCode::*;
         let ret = endline.map(|c| {
             match cc.get(&c) {
                 Space | EOL if self.state == MouthState::S => None,
-                Space | EOL if self.state == MouthState::N => None,
+                Space if self.state == MouthState::N => None,
+                EOL if self.state == MouthState::N => {
+                    Some(Token::new(BaseToken::CS(par),self.source.map(|s|
+                        FileReference {
+                            filename:s.symbol(),start:(self.line+1,self.col+1),end:(self.line+1,self.col+1)
+                        }
+                    )))
+                }
                 Ignored => None,
                 EOL => Some(Token::new(BaseToken::Char(c,Space),self.source.map(|s|
                     FileReference {
@@ -173,7 +183,7 @@ impl<C:CharType> StringSource<C> {
                 return ()
             } else {
                 self.eof = true;
-                if let Some(n) =self.return_endline(cc,endline) {
+                if let Some(n) =self.return_endline(cc,endline,interner.par) {
                     f(n)
                 }
                 return ()
@@ -185,7 +195,7 @@ impl<C:CharType> StringSource<C> {
             let start = (self.line+1,self.col+1);
             match get_char!(self) {
                 None => {
-                    if let Some(n) =self.return_endline(cc,endline) {
+                    if let Some(n) =self.return_endline(cc,endline,interner.par) {
                         f(n)
                     }
                     return ()
@@ -199,7 +209,7 @@ impl<C:CharType> StringSource<C> {
                                 return ()
                             } else {
                                 self.eof = true;
-                                if let Some(n) =self.return_endline(cc,endline) {
+                                if let Some(n) =self.return_endline(cc,endline,interner.par) {
                                     f(n)
                                 }
                                 return ()
@@ -227,19 +237,33 @@ impl<C:CharType> StringSource<C> {
                 return None
             } else {
                 self.eof = true;
-                return self.return_endline(cc,endline)
+                self.state = MouthState::M;
+                return match self.return_endline(cc,endline,interner.par) {
+                    Some(t) => {
+                        debug_log!(trace=>"Returning endline {:?}",t.base);
+                        Some(t)
+                    }
+                    None => {
+                        debug_log!(trace=>"(No endlinechar)");
+                        None
+                    }
+                }
             }
         }
         let start = (self.line+1,self.col+1);
         match get_char!(self) {
-            None => match self.return_endline(cc,endline) {
+            None => match self.return_endline(cc,endline,interner.par) {
                 Some(e) => {
+                    debug_log!(trace=>"Returning endline {:?}",e.base);
                     return Some(e)
                 }
                 None => ()
             }
             Some(c) => match self.check_char(interner,cc,endline,start,c) {
-                Some(t) => return Some(t),
+                Some(t) => {
+                    debug_log!(trace=>"Returning {:?}",t.base);
+                    return Some(t)
+                },
                 None => ()
             }
         };
@@ -257,7 +281,7 @@ impl<C:CharType> StringSource<C> {
                     }
                 )))
             }
-            EOL => self.return_endline(cc,endline),
+            EOL => self.return_endline(cc,endline,interner.par),
             Space if self.state == MouthState::S => None,
             Space if self.state == MouthState::N => None,
             Space => {
@@ -401,7 +425,6 @@ impl<C:CharType> StringSource<C> {
         loop {
             match get_char!(self) {
                 None => {
-                    self.state = MouthState::N;
                     break
                 }
                 Some(next) => match cc.get(&next) {

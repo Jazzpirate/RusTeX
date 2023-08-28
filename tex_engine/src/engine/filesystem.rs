@@ -110,7 +110,9 @@ impl<Char:CharType> File<Char> for VirtualFile<Char> {
     } }
     fn content_string(&self) -> Option<Ptr<[Box<[u8]>]>> {
         match &*self.0.state.borrow() {
+            FileState::Closed(v@None) => v.clone(),
             FileState::Closed(v) => v.clone(),
+            FileState::OpenIn(ss) => Some(ss.string.clone()),
             _ => None
         }
     }

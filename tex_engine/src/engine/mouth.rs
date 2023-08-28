@@ -230,7 +230,12 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
                         self.stack.pop();
                         debug_log!(debug => "file end; inserting \\everyeof");
                         let eof = Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None);
-                        match state.get_primitive_toks("everyeof") {
+                        let everyeof = state.get_primitive_toks("everyeof");
+                        debug_log!(debug => "everyeof: {:?}",match everyeof {
+                            None => "None".to_string(),
+                            Some(v) => TokenList(v).to_str(interner)
+                        });
+                        match everyeof {
                             None => Some((eof,true)),
                             Some(v) if v.is_empty() => Some((eof,true)),
                             Some(v) => {

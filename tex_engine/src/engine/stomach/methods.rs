@@ -32,7 +32,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                             engine.mouth.requeue(cmd.source.cause);
                             return ET::Stomach::close_paragraph(engine);
                         }
-                        _ => throw!("TODO: Switching modes" => cmd.source.cause)
+                        _ => throw!("TODO: Switching modes from {:?} to {:?}", currmode, mode => cmd.source.cause)
                     }
                 }
             }

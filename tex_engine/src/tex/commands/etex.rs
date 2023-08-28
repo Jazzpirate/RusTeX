@@ -464,6 +464,7 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
         }
     });
     engine.mouth.push_string(&ret.into_bytes());
+    debug_log!(trace => "scantokens: {}",engine.preview(250));
 }
 
 pub const UNEXPANDED: &str = "unexpanded";
