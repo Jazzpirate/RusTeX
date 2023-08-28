@@ -881,7 +881,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
     }
 }
 
-impl<ET:EngineType> EngineRef<'_,ET> {
+impl<ET:EngineType> EngineRef<ET> {
     pub fn set_command_for_tk(&mut self, tk:Token<ET>, cmd:Option<Command<ET>>, globally:bool) {
         match tk.base {
             BaseToken::CS(cs) => self.state.set_command(cs,cmd, globally),

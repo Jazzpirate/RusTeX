@@ -13,7 +13,7 @@ use crate::utils::strings::CharType;
 
 pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
-    debug_log!(trace=>"digesting command {:?} ({})",cmd.command,cmd.source.cause.to_str(engine.interner,Some(ET::Char::backslash())));
+    debug_log!(trace=>"digesting command {:?} ({})",cmd.command,cmd.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())));
     match cmd.command {
         Unexpandable {name,apply,ref forces_mode} => {
             match forces_mode {
@@ -24,7 +24,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                         (TeXMode::InternalVertical | TeXMode::Vertical,HorV::Vertical) => (),
                         (TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::Math | TeXMode::Displaymath,HorV::Horizontal) => (),
                         (TeXMode::RestrictedHorizontal,HorV::Vertical) =>
-                        throw!("Not allowed in restricted horizontal mode: {}",cmd.source.cause.to_str(engine.interner,Some(ET::Char::backslash())) => cmd.source.cause),
+                        throw!("Not allowed in restricted horizontal mode: {}",cmd.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.source.cause),
                         (TeXMode::Vertical|TeXMode::InternalVertical,HorV::Horizontal) => {
                             return ET::Stomach::open_paragraph(engine,cmd);
                         }
@@ -43,7 +43,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
-                engine.stomach.push_node(engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+                engine.stomach.push_node(&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
             }
             TeXMode::Math | TeXMode::Displaymath => throw!("TODO Char in math mode" => cmd.source.cause),
             _ => {
@@ -51,7 +51,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             }
         }
         Space if engine.state.mode().is_vertical() => (),
-        Space => engine.stomach.push_node(engine.state,SkipNode::Space.as_node()),
+        Space => engine.stomach.push_node(&engine.state,SkipNode::Space.as_node()),
         MathShift => match engine.state.mode() {
             TeXMode::RestrictedHorizontal => do_math(engine),
             TeXMode::Horizontal => {
@@ -102,29 +102,29 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         FinishedBox {name,get} => {
             let b = get(engine,cmd.source);
-            engine.stomach.push_node(engine.state,b.as_node());
+            engine.stomach.push_node(&engine.state,b.as_node());
         }
         Whatsit {name,apply} => {
             let wi = apply(engine,cmd.source);
-            engine.stomach.push_node(engine.state,TeXNode::Whatsit(wi));
+            engine.stomach.push_node(&engine.state,TeXNode::Whatsit(wi));
         },
         Relax => (),
         MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
         Superscript => catch!( todo!("Superscript in digest") => cmd.source.cause),
         Subscript => catch!( todo!("Subscript in digest") => cmd.source.cause),
         BeginGroup => engine.state.stack_push(GroupType::Token),
-        EndGroup => match engine.state.stack_pop(engine.memory) {
+        EndGroup => match engine.state.stack_pop(&mut engine.memory) {
             Some((v,GroupType::Token)) => {
                 if !v.is_empty() {
                     engine.add_expansion(|engine, rs| {
-                        for t in v { rs.push(t, engine.memory) }
+                        for t in v { rs.push(t, &mut engine.memory) }
                     })
                 }
             }
             Some((v,GroupType::Box(b))) => {
                 if !v.is_empty() {
                     engine.add_expansion(|engine, rs| {
-                        for t in v { rs.push(t, engine.memory) }
+                        for t in v { rs.push(t, &mut engine.memory) }
                     })
                 }
                 match engine.stomach.shipout_data().box_stack.last() {
@@ -134,7 +134,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 match engine.stomach.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(engine,list) {
-                            Some(b) => engine.stomach.push_node(engine.state,b.as_node()),
+                            Some(b) => engine.stomach.push_node(&engine.state,b.as_node()),
                             None => {}
                         }
                     }
@@ -167,7 +167,7 @@ pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachComma
         Some(v) => {
             let v = v.clone();
             engine.add_expansion(|e,f| {
-                for t in v { f.push(t.clone(),e.memory) }
+                for t in v { f.push(t.clone(),&mut e.memory) }
             })
         }
     }
@@ -179,7 +179,7 @@ pub fn do_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     match engine.state.get_primitive_toks("everymath").cloned() {
         Some(v) if !v.is_empty() => {
             engine.add_expansion(|e,rs| {
-                for t in v { rs.push(t,e.memory) }
+                for t in v { rs.push(t,&mut e.memory) }
             })
         }
         _ => ()
@@ -191,7 +191,7 @@ pub fn do_display_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     match engine.state.get_primitive_toks("everydisplay").cloned() {
         Some(v) if !v.is_empty() => {
             engine.add_expansion(|e,rs| {
-                for t in v { rs.push(t,e.memory) }
+                for t in v { rs.push(t,&mut e.memory) }
             })
         }
         _ => ()
@@ -231,7 +231,7 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
             let htargets = v.iter().map(|(_,l)| LineSpec{
                 target:*l - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
             }).collect();
-            let lines = ET::Stomach::split_paragraph(engine.state,par,htargets);
+            let lines = ET::Stomach::split_paragraph(&engine.state,par,htargets);
             todo!()
         }
         None if hangindent != ET::Dim::default() && hangafter != 0 => {
@@ -245,17 +245,17 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
                 r.push(LineSpec{target:hsize - (leftskip.base + rightskip.base + hangindent),left_skip:leftskip,right_skip:rightskip});
                 r
             };
-            let lines = ET::Stomach::split_paragraph(engine.state,par,htargets);
+            let lines = ET::Stomach::split_paragraph(&engine.state,par,htargets);
             todo!()
         }
         _ => {
-            let lines = ET::Stomach::split_paragraph(engine.state,par,vec!(LineSpec{
+            let lines = ET::Stomach::split_paragraph(&engine.state,par,vec!(LineSpec{
                 target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
             }));
             for mut line in lines {
                 line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
                 line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
-                engine.stomach.push_node(engine.state,HBox {
+                engine.stomach.push_node(&engine.state,HBox {
                     kind:"paragraphline",
                     children:line,
                     ..Default::default()

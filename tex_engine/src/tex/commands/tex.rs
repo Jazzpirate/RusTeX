@@ -32,7 +32,7 @@ SPACE
  */
 
 pub fn SPACE<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
-    engine.stomach.push_node(engine.state,SkipNode::Space.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::Space.as_node());
 }
 
 pub const ADVANCE: &str = "advance";
@@ -200,7 +200,7 @@ pub fn catcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
 pub fn char<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\char");
     let char = engine.get_char();
-    engine.stomach.push_node(engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+    engine.stomach.push_node(&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
 }
 
 pub const CHARDEF: &str = "chardef";
@@ -308,7 +308,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
             }
         }
     }
-    let ret = TeXStr::from_string(&csname, engine.interner);
+    let ret = TeXStr::from_string(&csname, &mut engine.interner);
     engine.memory.return_string(csname);
     ret
 }
@@ -316,7 +316,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
 pub fn csname<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"csname");
     let str = get_csname::<ET>(engine,&cmd,"csname");
-    debug_log!(trace=>"csname {}",str.to_str(engine.interner));
+    debug_log!(trace=>"csname {}",str.to_str(&engine.interner));
     match engine.state.get_command(&str) {
         None => engine.state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
@@ -358,11 +358,11 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
             replacement.push(ExpToken::Param(t,(u-49) as u8))
         }
         (Some(_),_) =>
-            throw!("Expected number after #, got {}",t.to_str(engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
+            throw!("Expected number after #, got {}",t.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => replacement.push(ExpToken::Token(t))
     });
     let def = Def::new(protected,long,outer,endswithbrace,arity,signature,replacement);
-    debug_log!(trace=>"def {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def.as_str(engine.interner));
+    debug_log!(trace=>"def {} = {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),def.as_str(&engine.interner));
     let def = Command::new(BaseCommand::Def(def),Some(&cmd));
     engine.set_command_for_tk(cs,Some(def),global);
 }
@@ -592,7 +592,7 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
         BaseToken::CS(_) => (),
         _ => throw!("Command expected after \\def" => cs)
     }
-    debug_log!(trace=>"edef: {}",cs.to_str(engine.interner,Some(ET::Char::backslash())));
+    debug_log!(trace=>"edef: {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())));
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,EDEF);
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
@@ -611,7 +611,7 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
             replacement.push(ExpToken::Param(t,(u-49) as u8))
         }
         (Some(_),_) =>
-            throw!("Expected number after #, got {}",t.to_str(engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
+            throw!("Expected number after #, got {}",t.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
         (_,_) => replacement.push(ExpToken::Token(t))
     });
 
@@ -636,7 +636,7 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
 
 
     let def = Def::new(protected,long,outer,endswithbrace,arity,signature,replacement);
-    debug_log!(trace=>"edef {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),def.as_str(engine.interner));
+    debug_log!(trace=>"edef {} = {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),def.as_str(&engine.interner));
     let def = Command::new(BaseCommand::Def(def),Some(&cmd));
     engine.set_command_for_tk(cs,Some(def),global);
 }
@@ -666,12 +666,12 @@ pub fn endcsname<ET:EngineType>(cmd:&CommandSource<ET>) {
 }
 
 pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    match engine.state.stack_pop(engine.memory) {
+    match engine.state.stack_pop(&mut engine.memory) {
         Some((mut v, GroupType::CS)) => {
             if !v.is_empty() {
                 engine.add_expansion(|engine, s| {
                     for t in v.drain(..) {
-                        s.push(t, engine.memory);
+                        s.push(t, &mut engine.memory);
                     }
                 })
             }
@@ -681,7 +681,7 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 }
 
 pub fn endinput<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    engine.mouth.endinput(engine.state,engine.interner,engine.outputs);
+    engine.mouth.endinput(&engine.interner,&mut engine.outputs);
 }
 
 pub fn endlinechar_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
@@ -762,7 +762,7 @@ pub fn expandafter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
         Some((t,_)) => t
     };
 
-    match engine.expand(resolve_token::<ET>(engine.state,next)) {
+    match engine.expand(resolve_token::<ET>(&engine.state,next)) {
         None => (),
         Some(next) => {
             engine.mouth.requeue(next.source.cause);
@@ -870,10 +870,10 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         BaseToken::Char(c,cc) =>
             Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd)))
     };
-    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.to_str(engine.interner,Some(ET::Char::backslash())),newcmd);
+    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),newcmd);
     engine.set_command_for_tk(cs,newcmd,global);
     engine.add_expansion(move |e,s| {
-        s.push(first,e.memory);s.push(second,e.memory);
+        s.push(first,&mut e.memory);s.push(second,&mut e.memory);
     })
 }
 
@@ -951,25 +951,25 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
 pub const HFIL: &str = "hfil";
 pub fn hfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfil");
-    engine.stomach.push_node(engine.state,SkipNode::HFil.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::HFil.as_node());
 }
 
 pub const HFILL: &str = "hfill";
 pub fn hfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfill");
-    engine.stomach.push_node(engine.state,SkipNode::HFill.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::HFill.as_node());
 }
 
 pub const HFILNEG: &str = "hfilneg";
 pub fn hfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfilneg");
-    engine.stomach.push_node(engine.state,SkipNode::HFilneg.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::HFilneg.as_node());
 }
 
 pub const HSS: &str = "hss";
 pub fn hss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hss");
-    engine.stomach.push_node(engine.state,SkipNode::Hss.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::Hss.as_node());
 }
 
 pub const HT : &str = "ht";
@@ -1018,7 +1018,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
             }
         }
     }
-    engine.stomach.push_node(engine.state,SimpleNode::Rule {
+    engine.stomach.push_node(&engine.state,SimpleNode::Rule {
         width,height,depth,axis:HorV::Horizontal
     }.as_node());
 }
@@ -1026,7 +1026,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
 pub fn hskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hskip");
     let skip = engine.get_skip();
-    engine.stomach.push_node(engine.state,SkipNode::Skip{skip,axis:HorV::Horizontal}.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::Skip{skip,axis:HorV::Horizontal}.as_node());
 }
 
 pub fn hyphenation<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
@@ -1057,8 +1057,8 @@ pub fn if_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> 
     let first = get_if_token::<ET>(engine,&cmd,"if");
     let second = get_if_token::<ET>(engine,&cmd,"if");
     debug_log!(trace=>"if: {:?} == {:?}",
-        first.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash()))),
-        second.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+        first.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash()))),
+        second.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
     );
     match (first,second) {
         (None,_) | (_,None) => false,
@@ -1082,8 +1082,8 @@ pub fn ifcat<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     let first = get_if_token::<ET>(engine,&cmd,IFCAT);
     let second = get_if_token::<ET>(engine,&cmd,IFCAT);
     debug_log!(trace=>"ifcat: {:?} == {:?}",
-        first.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash()))),
-        second.as_ref().map(|t| t.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+        first.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash()))),
+        second.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
     );
     let first = match first {
         None => return false,
@@ -1112,7 +1112,7 @@ pub fn get_if_token<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSourc
                                    -> Option<ResolvedToken<ET>> {
     // need to be careful not to expand \else and \fi before conditional is done.
     while let Some((t,e)) = catch_prim!(engine.get_next_token() => (name,cmd)) {
-        let r = resolve_token(engine.state,t);
+        let r = resolve_token(&engine.state,t);
         match r.command {
             BaseCommand::ExpandableNoTokens {name,..} if e && (name == ELSE || name == FI) && (match engine.gullet.current_conditional() {
                 (Some(ConditionalBranch::None(_)),_) => true,
@@ -1163,7 +1163,7 @@ pub fn ifeof<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -
         None => throw!("No in file open at index: {}",i => cmd.cause),
         Some(f) => f
     };
-    f.eof::<ET>(engine.state)
+    f.eof::<ET>(&engine.state)
 }
 
 pub fn ifhmode<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
@@ -1258,15 +1258,15 @@ pub fn ifx<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> 
     debug_log!(trace=>"ifx");
     let t1 = match engine.get_next_token() {
         None => file_end_prim!("ifx",cmd),
-        Some((t,e)) => resolve_token::<ET>(engine.state,t).with_expand(e)
+        Some((t,e)) => resolve_token::<ET>(&engine.state,t).with_expand(e)
     };
     let t2 = match engine.get_next_token() {
         None => file_end_prim!("ifx",cmd),
-        Some((t,e)) => resolve_token::<ET>(engine.state,t).with_expand(e)
+        Some((t,e)) => resolve_token::<ET>(&engine.state,t).with_expand(e)
     };
-    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause.to_str(engine.interner,Some(ET::Char::backslash())),t2.source.cause.to_str(engine.interner,Some(ET::Char::backslash())));
-    debug_log!(trace=>"First : {}",t1.command.as_str(engine.interner));
-    debug_log!(trace=>"Second: {}",t2.command.as_str(engine.interner));
+    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())),t2.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())));
+    debug_log!(trace=>"First : {}",t1.command.as_str(&engine.interner));
+    debug_log!(trace=>"Second: {}",t2.command.as_str(&engine.interner));
     if t1.expand && t2.expand { t1.command == t2.command }
     else if !t1.expand && !t2.expand { t1.source.cause == t2.source.cause }
     else { false }
@@ -1308,7 +1308,7 @@ pub fn immediate<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
 
 pub fn indent<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"indent");
-    engine.stomach.push_node(engine.state,HBox {
+    engine.stomach.push_node(&engine.state,HBox {
         kind:"indent",
         children:vec!(SkipNode::Skip{skip:engine.state.get_primitive_skip("parindent"),axis:HorV::Horizontal}.as_node()),
         ..Default::default()
@@ -1331,7 +1331,7 @@ pub fn input<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     } else {
         engine.memory.return_string(filename);
         (engine.outputs.file_open)(file.path().to_str().unwrap());
-        engine.mouth.push_file(&file,engine.interner);
+        engine.mouth.push_file(&file,&mut engine.interner);
     }
 }
 
@@ -1341,13 +1341,13 @@ pub fn inputlineno<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
 
 pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
     debug_log!(trace=>"jobname");
-    let jobname = engine.jobname;
+    let jobname = engine.jobname.clone();
     engine.string_to_tokens(jobname.as_bytes(),f)
 }
 
 pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     let dim = engine.get_dim();
-    engine.stomach.push_node(engine.state,TeXNode::Kern {dim,axis:match engine.state.mode() {
+    engine.stomach.push_node(&engine.state,TeXNode::Kern {dim,axis:match engine.state.mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => HorV::Vertical,
         _ => HorV::Horizontal
     }});
@@ -1427,7 +1427,7 @@ pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         BaseToken::Char(c,cc) =>
             Some(Command::new(BaseCommand::Char{char:c,catcode:cc},Some(&cmd))),
     };
-    debug_log!(debug=>"let: {} = {}",cs.to_str(engine.interner,Some(ET::Char::backslash())),cmd.as_ref().map(|c|c.base.as_str(engine.interner)).unwrap_or("undefined".to_string()));
+    debug_log!(debug=>"let: {} = {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),cmd.as_ref().map(|c|c.base.as_str(&engine.interner)).unwrap_or("undefined".to_string()));
     engine.set_command_for_tk(cs,cmd,globally);
 }
 
@@ -1463,15 +1463,15 @@ pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    e.stomach.push_node(e.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
+                    e.stomach.push_node(&e.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
                     None
                 })})
             }
             BaseCommand::FinishedBox {get,..} => {
                 let bx = get(engine,c.source);
-                engine.stomach.push_node(engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
+                engine.stomach.push_node(&engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
         }
     }
 }
@@ -1483,10 +1483,10 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         expand_until_group!(engine,next =>match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_lccode(c);
-                if nc.to_usize() == 0 { rs.push(next,engine.memory) }
-                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory) }
+                if nc.to_usize() == 0 { rs.push(next,&mut engine.memory) }
+                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),&mut engine.memory) }
             }
-            _ => rs.push(next,engine.memory)
+            _ => rs.push(next,&mut engine.memory)
         });
     })
 }
@@ -1541,7 +1541,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
             engine.string_to_tokens(RELAX.as_bytes(),f);
         }
         Some((t,_)) => {
-            let n:ResolvedToken<ET> = resolve_token::<ET>(engine.state,t);
+            let n:ResolvedToken<ET> = resolve_token::<ET>(&engine.state,t);
             let string = match n.command {
                 BaseCommand::Char{char,catcode:CategoryCode::BeginGroup} => format!("begin-group character {}",char.char_str()),
                 BaseCommand::Char{char,catcode:CategoryCode::EndGroup} => format!("end-group character {}",char.char_str()),
@@ -1931,10 +1931,10 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     match engine.get_next_token() {
         None => file_end_prim!(NOEXPAND,cmd),
         Some((t,_)) => {
-            let res = resolve_token::<ET>(engine.state,t);
+            let res = resolve_token::<ET>(&engine.state,t);
             match res.command {
                 BaseCommand::Def(_) | BaseCommand::Expandable {..} | BaseCommand::ExpandableNoTokens {..} | BaseCommand::Conditional {..} =>
-                    engine.mouth.push_noexpand(res.source.cause,engine.memory),
+                    engine.mouth.push_noexpand(res.source.cause,&mut engine.memory),
                 BaseCommand::Char{catcode:CategoryCode::EOF,..} => (),
                 _ => engine.mouth.requeue(res.source.cause)
             }
@@ -1978,7 +1978,7 @@ pub fn openin<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     engine.get_string(&mut filename);
     let f = engine.filesystem.get(&filename);
     engine.memory.return_string(filename);
-    engine.state.file_openin(i,f,engine.interner); // TODO error?
+    engine.state.file_openin(i,f,&mut engine.interner); // TODO error?
 }
 
 pub const OPENOUT: &str = "openout";
@@ -2068,7 +2068,7 @@ pub const PENALTY: &str = "penalty";
 pub fn penalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\penalty");
     let i = engine.get_int().to_i64() as i32;
-    engine.stomach.push_node(engine.state,TeXNode::Penalty(i));
+    engine.stomach.push_node(&engine.state,TeXNode::Penalty(i));
 }
 
 pub const PREVDEPTH : &str = "prevdepth";
@@ -2098,15 +2098,15 @@ pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    e.stomach.push_node(e.state,SimpleNode::Raise {by:i,node:bx}.as_node());
+                    e.stomach.push_node(&e.state,SimpleNode::Raise {by:i,node:bx}.as_node());
                     None
                 })})
             }
             BaseCommand::FinishedBox {get,..} => {
                 let bx = get(engine,c.source);
-                engine.stomach.push_node(engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
+                engine.stomach.push_node(&engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
         }
     }
 }
@@ -2128,8 +2128,8 @@ pub fn read<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
     }
     let newcmd = engine.get_control_sequence();
     let mut ret = vec!();
-    file.read::<ET,_>(engine.interner,engine.state.get_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t));
-    debug_log!(trace=>"read: {} = {}",newcmd.to_str(engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.interner));
+    file.read::<ET,_>(&mut engine.interner,engine.state.get_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t));
+    debug_log!(trace=>"read: {} = {}",newcmd.to_str(&engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(&engine.interner));
     if ret.is_empty() {
         match engine.state.get_endlinechar() {
             None => (),
@@ -2280,7 +2280,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
                 let bx = get(engine,c.source);
                 engine.state.set_box_register(i as usize,bx,global);
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
         }
     }
 }
@@ -2323,7 +2323,7 @@ pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                 let bx = get(engine,c.source);
                 engine.stomach.shipout(bx);
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
         }
     }
 }
@@ -2468,7 +2468,7 @@ pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:T
                 let fnt = get(engine,c.source);
                 f(engine,Token::new(BaseToken::CS(fnt.name()),None))
             }
-            _ => throw!("Expected a value after \\the; got: {}", c.source.cause.to_str(engine.interner,Some(ET::Char::backslash())) => c.source.cause)
+            _ => throw!("Expected a value after \\the; got: {}", c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())) => c.source.cause)
         }
         None => file_end_prim!(THE,cmd)
     }
@@ -2493,8 +2493,8 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     expand_until_group!(engine,t => v.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
 
-    debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(engine.interner));
-    engine.state.set_toks_register(i,v,global,engine.memory);
+    debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(&engine.interner));
+    engine.state.set_toks_register(i,v,global,&mut engine.memory);
 } => (TOKS,cmd))}
 pub fn toks_get<'a,ET:EngineType>(engine:&'a mut EngineRef<ET>, cmd:&CommandSource<ET>)
                                   -> Option<&'a Vec<Token<ET>>> {
@@ -2550,7 +2550,7 @@ pub fn unhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match bx {
         HVBox::H(hb) => {
             for n in hb.children {
-                engine.stomach.push_node(engine.state,n);
+                engine.stomach.push_node(&engine.state,n);
             }
         }
         HVBox::Void => (),
@@ -2567,7 +2567,7 @@ pub fn unhcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
             match b {
                 HVBox::H(hb) => {
                     for n in hb.children {
-                        engine.stomach.push_node(engine.state,n);
+                        engine.stomach.push_node(&engine.state,n);
                     }
                 }
                 HVBox::Void => (),
@@ -2585,7 +2585,7 @@ pub fn unvbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match bx {
         HVBox::V(hb) => {
             for n in hb.children {
-                engine.stomach.push_node(engine.state,n);
+                engine.stomach.push_node(&engine.state,n);
             }
         }
         HVBox::Void => (),
@@ -2602,7 +2602,7 @@ pub fn unvcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
             match b {
                 HVBox::V(hb) => {
                     for n in hb.children {
-                        engine.stomach.push_node(engine.state,n);
+                        engine.stomach.push_node(&engine.state,n);
                     }
                 }
                 HVBox::Void => (),
@@ -2660,10 +2660,10 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         expand_until_group!(engine,next => match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_uccode(c);
-                if nc.to_usize() == 0 { rs.push(next,engine.memory) }
-                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),engine.memory) }
+                if nc.to_usize() == 0 { rs.push(next,&mut engine.memory) }
+                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),&mut engine.memory) }
             }
-            _ => rs.push(next,engine.memory)
+            _ => rs.push(next,&mut engine.memory)
         });
     })
 }
@@ -2682,7 +2682,7 @@ pub fn vadjust<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                     Some(v) => for t in v.iter().rev() {engine.mouth.requeue(t.clone())}
                 }
                 return Ptr::new(move |e,children| {
-                    e.stomach.push_node(e.state,TeXNode::VAdjust(children));
+                    e.stomach.push_node(&e.state,TeXNode::VAdjust(children));
                     None
                 })
             }
@@ -2778,19 +2778,19 @@ pub fn vcenter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
 pub const VFIL: &str = "vfil";
 pub fn vfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfil");
-    engine.stomach.push_node(engine.state,SkipNode::VFil.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::VFil.as_node());
 }
 
 pub const VFILL: &str = "vfill";
 pub fn vfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfill");
-    engine.stomach.push_node(engine.state,SkipNode::VFill.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::VFill.as_node());
 }
 
 pub const VFILNEG: &str = "vfilneg";
 pub fn vfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfilneg");
-    engine.stomach.push_node(engine.state,SkipNode::VFilneg.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::VFilneg.as_node());
 }
 
 pub const VRULE: &str = "vrule";
@@ -2813,7 +2813,7 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
             }
         }
     }
-    engine.stomach.push_node(engine.state,SimpleNode::Rule {
+    engine.stomach.push_node(&engine.state,SimpleNode::Rule {
         width,height,depth,axis:HorV::Vertical
     }.as_node());
 }
@@ -2822,7 +2822,7 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
 pub fn vskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vskip");
     let skip = engine.get_skip();
-    engine.stomach.push_node(engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
 }
 
 pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> HVBox<ET> {
@@ -2858,7 +2858,7 @@ pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -
                 assigned_width:vb.assigned_width,
                 kind:"vbox",
             };
-            let (f,s) = ET::Stomach::split_vertical(engine.state,vb.children,target);
+            let (f,s) = ET::Stomach::split_vertical(&engine.state,vb.children,target);
             first.children = f;
             second.children = s;
             engine.state.set_box_register(i,HVBox::V(second),false);
@@ -2872,7 +2872,7 @@ pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -
 pub const VSS: &str = "vss";
 pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vss");
-    engine.stomach.push_node(engine.state,SkipNode::Vss.as_node());
+    engine.stomach.push_node(&engine.state,SkipNode::Vss.as_node());
 }
 
 pub const WD : &str = "wd";
@@ -2959,7 +2959,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(afterassignment,engine,None,(e,cmd) =>afterassignment::<ET>(e,&cmd));
     register_unexpandable!(aftergroup,engine,None,(e,cmd) =>aftergroup::<ET>(e,&cmd));
     register_skip_assign!(baselineskip,engine);
-    register_unexpandable!(begingroup,engine,None,(e,cmd) =>begingroup::<ET>(e.state));
+    register_unexpandable!(begingroup,engine,None,(e,cmd) =>begingroup::<ET>(&mut e.state));
     register_skip_assign!(belowdisplayskip,engine);
     register_skip_assign!(belowdisplayshortskip,engine);
     register_int_assign!(binoppenalty,engine);
@@ -3007,8 +3007,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
         apply:|e,cmd| errmessage::<ET>(e,&cmd),
         forces_mode:None
     },None));
-    engine.state.set_command(ET::Char::from_str(ERRMESSAGE,engine.interner),em.clone(),true);
-    engine.state.set_command(ET::Char::from_str("LaTeX3 error:",engine.interner),em,true);
+    engine.state.set_command(ET::Char::from_str(ERRMESSAGE,&mut engine.interner),em.clone(),true);
+    engine.state.set_command(ET::Char::from_str("LaTeX3 error:",&mut engine.interner),em,true);
 
     register_int_assign!(errorcontextlines,engine);
     register_unexpandable!(errorstopmode,engine,None,(_,cmd) =>errorstopmode::<ET>());
@@ -3105,7 +3105,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable_notk!(noexpand,engine,(e,cmd) => noexpand::<ET>(e,&cmd));
     register_unexpandable!(noindent,engine,Some(HorV::Horizontal),(e,cmd) =>noindent::<ET>(e,&cmd));
     register_dim_assign!(nulldelimiterspace,engine);
-    engine.state.set_command(ET::Char::from_str("nullfont",engine.interner), Some(Command::new(
+    engine.state.set_command(ET::Char::from_str("nullfont",&mut engine.interner), Some(Command::new(
         BaseCommand::Font(engine.fontstore.null())
         ,None)), true);
     register_expandable!(number,engine,(e,cmd,f) => number::<ET>(e,&cmd,f));
@@ -3117,7 +3117,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(outputpenalty,engine);
     register_dim_assign!(overfullrule,engine);
 
-    engine.state.set_command(ET::Char::from_str("par",engine.interner),Some(Command::new(BaseCommand::Unexpandable {
+    engine.state.set_command(ET::Char::from_str("par",&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
         name:"par",
         apply:|e,cmd| par::<ET>(e,&cmd),
         forces_mode:Some(HorV::Vertical)
@@ -3210,7 +3210,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_muskip_assign!(medmuskip,engine);
     register_muskip_assign!(thickmuskip,engine);
 
-    engine.state.set_command(ET::Char::from_str(" ",engine.interner),Some(
+    engine.state.set_command(ET::Char::from_str(" ",&mut engine.interner),Some(
         Command::new(BaseCommand::Unexpandable {
             name:" ",
             apply:|e,cmd| SPACE::<ET>(e,&cmd),

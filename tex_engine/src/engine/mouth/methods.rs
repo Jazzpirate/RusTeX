@@ -8,15 +8,15 @@ use crate::tex::token::{BaseToken, Token};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
-impl<ET:EngineType> EngineRef<'_,ET> {
+impl<ET:EngineType> EngineRef<ET> {
     /// get the next [`Token`] from the [`MouthTrait`]
     pub fn get_next_token(&mut self) -> Option<(Token<ET>,bool)> {
-        self.mouth.get_next(self.state,self.interner,self.outputs)
+        self.mouth.get_next(&self.state,&mut self.interner,&mut self.outputs)
     }
 
     /// Skip whitespace characters from the [`MouthTrait`]
     pub fn skip_whitespace(&mut self) {
-        self.mouth.skip_whitespace(self.state,self.interner)
+        self.mouth.skip_whitespace(&self.state,&mut self.interner)
     }
 
     /// read optional `=` characters from the [`MouthTrait`]
@@ -80,11 +80,11 @@ impl<ET:EngineType> EngineRef<'_,ET> {
     /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&mut self,len:usize) -> String {
-        self.mouth.preview(len,self.interner)
+        self.mouth.preview(len,&self.interner)
     }
 
     pub fn current_position(&mut self) -> String {
-        self.mouth.file_line(self.interner)
+        self.mouth.file_line(&self.interner)
     }
 }
 
@@ -93,7 +93,7 @@ macro_rules! get_until_endgroup {
     ($engine:ident,$tk:ident => $f:expr) => {
         let mut depth = 1;
         let mut ok = false;
-        while let Some($tk) = $engine.mouth.get_next_simple($engine.state,$engine.interner) {
+        while let Some($tk) = $engine.mouth.get_next_simple(&$engine.state,&mut $engine.interner) {
             match $tk.catcode() {
                 CategoryCode::BeginGroup => depth += 1,
                 CategoryCode::EndGroup => {

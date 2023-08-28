@@ -225,8 +225,8 @@ impl<ET:EngineType,A:Assignable<ET>> ValueCommand<ET,A> {
         match self {
             ValueCommand::Value{get,..} => get(engine, cmd),
             ValueCommand::Complex{get,..} => get(engine, cmd),
-            ValueCommand::Primitive(name) => A::get_primitive(engine.state,name),
-            ValueCommand::Register(index) => A::get_register(engine.state,*index)
+            ValueCommand::Primitive(name) => A::get_primitive(&engine.state,name),
+            ValueCommand::Register(index) => A::get_register(&engine.state,*index)
         }
     }
     pub fn set(&self, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, global:bool) {

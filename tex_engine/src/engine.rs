@@ -46,37 +46,34 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Stomach:Stomach<Self>;
 }
 
-pub struct EngineRef<'a,ET:EngineType> {
-    pub state:&'a mut ET::State,
-    pub mouth:&'a mut Mouth<ET>,
-    pub gullet:&'a mut ET::Gullet,
-    pub stomach:&'a mut ET::Stomach,
-    pub memory:&'a mut Memory<ET>,
-    pub outputs:&'a mut Outputs,
-    pub jobname:&'a str,
-    pub start_time:&'a mut DateTime<Local>,
-    pub elapsed:&'a mut Instant,
-    pub filesystem:&'a mut ET::FileSystem,
-    pub fontstore:&'a mut ET::FontStore,
-    pub interner:&'a mut Interner<ET::Char>
+pub struct EngineRef<ET:EngineType> {
+    pub state:ET::State,
+    pub mouth:Mouth<ET>,
+    pub gullet:ET::Gullet,
+    pub stomach:ET::Stomach,
+    pub memory:Memory<ET>,
+    pub outputs:Outputs,
+    pub jobname:String,
+    pub start_time:DateTime<Local>,
+    pub elapsed:Instant,
+    pub filesystem:ET::FileSystem,
+    pub fontstore:ET::FontStore,
+    pub interner:Interner<ET::Char>
 }
 
 pub trait Engine<ET:EngineType> {
 
-    fn components(&mut self) -> EngineRef<ET>;
+    fn components(&mut self) -> &mut EngineRef<ET>;
     fn initialize(&mut self) -> Result<(),TeXError<ET>>;
-    fn jobname(&mut self) -> &mut String;
-    fn start_time(&mut self) -> &mut DateTime<Local>;
-    fn state(&mut self) -> &mut ET::State;
 
     fn init_file(&mut self,s:&str) -> Result<(),TeXError<ET>> {match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||{
         debug!("Initializing with file {}",s);
-        let file = self.components().filesystem.get(s);
-        *self.jobname() = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
-        *self.start_time() =  Local::now();
         let mut comps = self.components();
+        let file = comps.filesystem.get(s);
+        comps.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        comps.start_time = Local::now();
         let old = comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
-        comps.mouth.push_file(&file,comps.interner);
+        comps.mouth.push_file(&file,&mut comps.interner);
         // should not produce any boxes, so loop until file end
         ET::Stomach::next_shipout_box(&mut comps);
         comps.filesystem.set_pwd(old);
@@ -90,20 +87,20 @@ pub trait Engine<ET:EngineType> {
     fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||{
         debug!("Running file {:?}",s);
         let mut ret = vec!();
-        *self.jobname() = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
-        *self.start_time() =  Local::now();
         let mut comps = self.components();
+        comps.jobname = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        comps.start_time = Local::now();
         comps.filesystem.set_pwd(s.parent().unwrap().to_path_buf());
         let file = comps.filesystem.get(s.to_str().unwrap());
-        comps.mouth.push_file(&file,comps.interner);
-        *comps.start_time = Local::now();
-        *comps.elapsed = std::time::Instant::now();
+        comps.mouth.push_file(&file,&mut comps.interner);
+        comps.start_time = Local::now();
+        comps.elapsed = std::time::Instant::now();
 
         match comps.state.get_primitive_toks("everyjob").cloned() {
             None => (),
             Some(v) if v.is_empty() => (),
             Some(v) =>
-                comps.add_expansion(|comps,rs| for t in v {rs.push(t,comps.memory)})
+                comps.add_expansion(|comps,rs| for t in v {rs.push(t,&mut comps.memory)})
         }
         while let Some(b) = ET::Stomach::next_shipout_box(&mut comps) {
             ret.push(b)
@@ -129,7 +126,7 @@ pub fn new_tex_with_source_references<FS:FileSystem<u8>>(fs:FS,outputs:Outputs) 
 }
 
  */
-
+/*
 pub struct EngineStruct<ET:EngineType> {
     pub state:ET::State,
     pub mouth:Mouth<ET>,
@@ -144,27 +141,14 @@ pub struct EngineStruct<ET:EngineType> {
     fontstore:ET::FontStore,
     pub interner:Interner<ET::Char>
 }
-
+*/
 
 use crate::tex::numbers::Int;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
-impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
-    fn components(&mut self) -> EngineRef<ET> { EngineRef {
-        mouth:&mut self.mouth,
-        state:&mut self.state,
-        gullet:&mut self.gullet,
-        stomach:&mut self.stomach,
-        memory:&mut self.memory,
-        outputs:&mut self.outputs,
-        jobname:&self.jobname,
-        start_time:&mut self.start_time,
-        elapsed:&mut self.elapsed_time_from,
-        filesystem:&mut self.filesystem,
-        fontstore:&mut self.fontstore,
-        interner:&mut self.interner
-    } }
+impl<ET:EngineType> Engine<ET> for EngineRef<ET> {
+    fn components(&mut self) -> &mut EngineRef<ET> { self }
     fn initialize(&mut self) -> Result<(),TeXError<ET>> {
         info!("Initializing TeX engine");
         tex::commands::tex::initialize_tex_primitives::<ET>(&mut self.components());
@@ -172,20 +156,15 @@ impl<ET:EngineType> Engine<ET> for EngineStruct<ET> {
         self.state.set_primitive_int("fam",ET::Int::from_i64(-1),true);
         Ok(())
     }
-    fn state(&mut self) -> &mut ET::State { &mut self.state }
-    fn jobname(&mut self) -> &mut String { &mut self.jobname }
-    fn start_time(&mut self) -> &mut DateTime<Local> {
-        &mut self.start_time
-    }
 
 }
-impl<ET:EngineType> EngineStruct<ET> {
+impl<ET:EngineType> EngineRef<ET> {
     pub fn new(filesystem:ET::FileSystem,fontstore:ET::FontStore,state:ET::State,gullet: ET::Gullet, stomach:ET::Stomach,outputs:Outputs) -> Self {
         let mut memory = Memory::new();
         let mut interner = Interner::new();
-        EngineStruct {
+        EngineRef {
             state, gullet, mouth:Mouth::new(&mut memory),stomach,memory,outputs,filesystem,fontstore,
-            jobname:"".to_string(),start_time:Local::now(),elapsed_time_from:std::time::Instant::now(),interner
+            jobname:"".to_string(),start_time:Local::now(),elapsed:std::time::Instant::now(),interner
         }
     }
     pub fn set_state(&mut self,state:ET::State) {
@@ -208,7 +187,7 @@ impl<ET:EngineType> EngineStruct<ET> {
         self.init_file("latex.ltx")
     }
 }
-impl<ET:EngineType> EngineStruct<ET> where ET::Node:From<PDFTeXNode<ET>>,ET::State:PDFState<ET> {
+impl<ET:EngineType> EngineRef<ET> where ET::Node:From<PDFTeXNode<ET>>,ET::State:PDFState<ET> {
     pub fn pdftex(&mut self) -> Result<(),TeXError<ET>> {
         tex::commands::pdftex::initialize_pdftex_primitives::<ET>(&mut self.components());
         //state.dimensions_prim.set_locally((crate::commands::registers::PDFPXDIMEN.index - 1) as usize,65536);

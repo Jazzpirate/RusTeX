@@ -316,7 +316,7 @@ pub fn ifdefined<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
             BaseToken::Char(c,CategoryCode::Active) =>
                 engine.state.get_ac_command(&c).is_some(),
             BaseToken::CS(name) => {
-                debug_log!(trace => "ifdefined: {}",name.to_str(engine.interner));
+                debug_log!(trace => "ifdefined: {}",name.to_str(&engine.interner));
                 engine.state.get_command(&name).is_some()
             }
             _ => throw!("Expected a control sequence, got: {:?}",t => cmd.cause)
@@ -429,8 +429,8 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     }
     let newcmd = engine.get_control_sequence();
     let mut ret = vec!();
-    file.readline::<ET,_>(engine.interner,|t| ret.push(t));
-    debug_log!(trace=>"readline: {} = {}",newcmd.to_str(engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(engine.interner));
+    file.readline::<ET,_>(&mut engine.interner,|t| ret.push(t));
+    debug_log!(trace=>"readline: {} = {}",newcmd.to_str(&engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(&engine.interner));
 
     let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);
@@ -454,7 +454,7 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
         }
         BaseToken::CS(name) => {
             if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
-            let str = name.to_str(engine.interner);
+            let str = name.to_str(&engine.interner);
             if str.len() == 1 && *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
                 ret.push_str(str);
             } else {

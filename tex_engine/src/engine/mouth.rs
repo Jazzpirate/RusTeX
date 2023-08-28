@@ -27,9 +27,9 @@ use crate::utils::strings::CharType;
 /// A [`MouthTrait`] is the source of [`Token`]s to be processed by a TeX engine.
 pub trait MouthTrait<ET:EngineType>:Sized {
     fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<Token<ET>>, mut f:F) -> R {
-        let old = std::mem::replace(engine.mouth, Self::new_with(tks,engine.memory));
+        let old = std::mem::replace(&mut engine.mouth, Self::new_with(tks,&mut engine.memory));
         let ret = f(engine);
-        *engine.mouth = old;
+        engine.mouth = old;
         ret
     }
     fn new(memory:&mut Memory<ET>) -> Self;
@@ -66,7 +66,7 @@ pub trait MouthTrait<ET:EngineType>:Sized {
 
     fn line_no(&self) -> usize;
 
-    fn endinput(&mut self, state: &mut ET::State,interner:&Interner<ET::Char>,outputs:&mut Outputs);
+    fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs);
 
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
     fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<Token<ET>> {
@@ -276,7 +276,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         0
     }
 
-    fn endinput(&mut self, state: &mut ET::State,interner:&Interner<ET::Char>,outputs:&mut Outputs) {
+    fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs) {
         for s in self.stack.iter().enumerate().rev() {
             match s.1 {
                 TeXMouthSource::String(ss) => {
@@ -364,12 +364,12 @@ impl<ET:EngineType> Mouth<ET> {
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
     pub fn get_argument_nopar(engine:&mut EngineRef<ET>, v:&mut Vec<Token<ET>>) {
-        match engine.mouth.get_next_simple(engine.state,engine.interner) {
+        match engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
             None => file_end!(),
             Some(t) if t.catcode() == CategoryCode::BeginGroup => {
                 let mut depth = 1;
                 let par = engine.interner.par;
-                get_while!(engine.mouth,engine.state,engine.interner,'A => tk => {
+                get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'A => tk => {
                     match tk.base {
                         BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
                         BaseToken::Char(_,CategoryCode::EndGroup) => {
@@ -394,11 +394,11 @@ impl<ET:EngineType> Mouth<ET> {
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<Token<ET>>) {
-        match engine.mouth.get_next_simple(engine.state,engine.interner) {
+        match engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
             None => file_end!(),
             Some(t) if t.catcode() == CategoryCode::BeginGroup => {
                 let mut ingroup = 1;
-                get_while!(engine.mouth,engine.state,engine.interner,'A => tk => {
+                get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'A => tk => {
                     match tk.base {
                         BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
                         BaseToken::Char(_,CategoryCode::EndGroup) => {

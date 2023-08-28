@@ -49,7 +49,7 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
                                 let c = match &tk.base {
                                     BaseToken::Char(c,_) => *c,
                                     BaseToken::CS(str) => {
-                                        let str = ET::Char::tokenize(str.to_str(engine.interner));
+                                        let str = ET::Char::tokenize(str.to_str(&engine.interner));
                                         if str.len() != 1 { throw!("Number expected" => next.source.cause) }
                                             str[0]
                                     }

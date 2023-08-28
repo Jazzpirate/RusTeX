@@ -37,7 +37,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// the input stream, after expanding macros as necessary.
     fn get_next_stomach_command(engine:&mut EngineRef<ET>) -> Option<StomachCommand<ET>> {
         match Self::get_next_unexpandable(engine) {
-            Some(rt) => Some(StomachCommand::from_resolved(rt,engine.interner)),
+            Some(rt) => Some(StomachCommand::from_resolved(rt,&engine.interner)),
             None => None
         }
     }
@@ -168,7 +168,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
             }
             BaseCommand::Expandable {apply,..} => {
                 engine.add_expansion(|engine,rs| {
-                    apply(engine,ret.source,&mut |engine,t| rs.push(t,engine.memory));
+                    apply(engine,ret.source,&mut |engine,t| rs.push(t,&mut engine.memory));
                     None
                 })
 
