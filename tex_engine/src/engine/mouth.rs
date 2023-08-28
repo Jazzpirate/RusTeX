@@ -35,11 +35,11 @@ pub trait MouthTrait<ET:EngineType>:Sized {
     fn new(memory:&mut Memory<ET>) -> Self;
     fn new_with(tks:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Mouth<ET>;
 
-    fn get_expansion(engine:&mut EngineRef<ET>) -> ExpansionContainer<ET>;
-    fn push_expansion(engine:&mut EngineRef<ET>,expansion:ExpansionContainer<ET>);
+    fn get_expansion(engine:&mut EngineRef<ET>) -> Vec<Token<ET>>;
+    fn push_expansion(engine:&mut EngineRef<ET>,expansion:Vec<Token<ET>>);
     /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
-    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
-    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R;
+    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R;
+    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R;
     /// Insert a [`File`] into the [`MouthTrait`], to be processed next
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>);
     fn push_string(&mut self,str:&Vec<u8>);
@@ -107,38 +107,35 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         Mouth {stack:vec!(TeXMouthSource::Tkls(tks)),buffer:vec!()}
     }
 
-    fn get_expansion(engine: &mut EngineRef<ET>) -> ExpansionContainer<ET> {
-        ExpansionContainer{array:engine.mouth.get_vec()}
+    fn get_expansion(engine: &mut EngineRef<ET>) -> Vec<Token<ET>> {
+        engine.mouth.get_vec()
     }
-    fn push_expansion(engine: &mut EngineRef<ET>, expansion: ExpansionContainer<ET>) {
-        let mut v = expansion.destroy();
-        if v.is_empty() { engine.mouth.buffer.push(v) } else {
-            v.reverse();
-            engine.mouth.stack.push(TeXMouthSource::Tkls(v))
+    fn push_expansion(engine: &mut EngineRef<ET>, mut expansion: Vec<Token<ET>>) {
+        if expansion.is_empty() { engine.mouth.buffer.push(expansion) } else {
+            expansion.reverse();
+            engine.mouth.stack.push(TeXMouthSource::Tkls(expansion))
         }
     }
     /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
-    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
-        let mut expansion = ExpansionContainer{array:engine.mouth.get_vec()};
+    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
+        let mut expansion = engine.mouth.get_vec();
         let ret = {
             f(engine,&mut expansion)
         };
-        let mut v = expansion.destroy();
-        if v.is_empty() { engine.mouth.buffer.push(v) } else {
-            v.reverse();
-            engine.mouth.stack.push(TeXMouthSource::Tkls(v))
+        if expansion.is_empty() { engine.mouth.buffer.push(expansion) } else {
+            expansion.reverse();
+            engine.mouth.stack.push(TeXMouthSource::Tkls(expansion))
         }
         ret
     }
 
-    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
-        let mut expansion = ExpansionContainer{array:engine.mouth.get_vec()};
+    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
+        let mut expansion = engine.mouth.get_vec();
         let ret = {
             f(engine,&mut expansion)
         };
-        let mut v = expansion.destroy();
-        if v.is_empty() { engine.mouth.buffer.push(v) } else {
-            engine.mouth.stack.push(TeXMouthSource::Tkls(v))
+        if expansion.is_empty() { engine.mouth.buffer.push(expansion) } else {
+            engine.mouth.stack.push(TeXMouthSource::Tkls(expansion))
         }
         ret
     }
@@ -241,7 +238,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
                             Some(v) => {
                                 let mut nv = self.get_vec();
                                 nv.push(eof);
-                                for t in v.iter().skip(1).rev() { nv.push(t.clone()) };
+                                nv.extend(v.iter().skip(1).rev().map(|t| t.clone()));
                                 self.stack.push(TeXMouthSource::Tkls(nv));
                                 Some((v.first().unwrap().clone(),true))
                             }
@@ -440,20 +437,6 @@ impl<ET:EngineType> Mouth<ET> {
  */
 }
 
-pub struct ExpansionContainer<ET:EngineType>{array:Vec<Token<ET>>}
-impl<ET:EngineType> ExpansionContainer<ET> {
-    pub fn push(&mut self, t:Token<ET>,memory:&mut Memory<ET>) {
-        self.array.push(t);
-    }
-    pub fn reset(&mut self,memory:&mut Memory<ET>) {
-        self.array.clear();
-    }
-
-    pub fn destroy(self) -> Vec<Token<ET>> {
-        self.array
-    }
-
-}
 
 /* ------------- with trait objects: --------------------------------------------------------------
 

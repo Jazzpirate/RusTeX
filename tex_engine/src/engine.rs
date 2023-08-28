@@ -100,7 +100,7 @@ pub trait Engine<ET:EngineType> {
             None => (),
             Some(v) if v.is_empty() => (),
             Some(v) =>
-                comps.add_expansion(|comps,rs| for t in v {rs.push(t,&mut comps.memory)})
+                comps.add_expansion(|comps,rs| rs.extend(v.into_iter()))
         }
         while let Some(b) = ET::Stomach::next_shipout_box(&mut comps) {
             ret.push(b)

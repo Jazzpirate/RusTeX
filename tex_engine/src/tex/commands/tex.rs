@@ -670,9 +670,7 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
         Some((mut v, GroupType::CS)) => {
             if !v.is_empty() {
                 engine.add_expansion(|engine, s| {
-                    for t in v.drain(..) {
-                        s.push(t, &mut engine.memory);
-                    }
+                    s.extend(v.into_iter());
                 })
             }
         }
@@ -872,9 +870,8 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),newcmd);
     engine.set_command_for_tk(cs,newcmd,global);
-    engine.add_expansion(move |e,s| {
-        s.push(first,&mut e.memory);s.push(second,&mut e.memory);
-    })
+    engine.mouth.requeue(second);
+    engine.mouth.requeue(first);
 }
 
 
@@ -1483,10 +1480,10 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         expand_until_group!(engine,next =>match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_lccode(c);
-                if nc.to_usize() == 0 { rs.push(next,&mut engine.memory) }
-                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),&mut engine.memory) }
+                if nc.to_usize() == 0 { rs.push(next) }
+                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
             }
-            _ => rs.push(next,&mut engine.memory)
+            _ => rs.push(next)
         });
     })
 }
@@ -2660,10 +2657,10 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         expand_until_group!(engine,next => match &next.base {
             BaseToken::Char(c,cc) => {
                 let nc = engine.state.get_uccode(c);
-                if nc.to_usize() == 0 { rs.push(next,&mut engine.memory) }
-                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None),&mut engine.memory) }
+                if nc.to_usize() == 0 { rs.push(next) }
+                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
             }
-            _ => rs.push(next,&mut engine.memory)
+            _ => rs.push(next)
         });
     })
 }

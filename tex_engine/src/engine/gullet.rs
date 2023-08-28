@@ -149,36 +149,16 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
                     expand_def(&d,engine,ret.source,rs);//&mut exp)?;
                     None
                 })
-
-                                    /*
-                let mut exp = ET::Mouth::get_expansion(engine);
-                expand_def(&d,engine,ret.source,&mut exp)?;
-                ET::Mouth::push_expansion(engine,exp);
-                Ok(None)
-                */
             }
-            // expandable commands that do not expand to new tokens
-            /*BaseCommand::Expandable { name, apply } if name == FI || name == ELSE || name == UNLESS => {
-                apply(engine, ret.source, &mut |_,_| Ok(()))?;
-                Ok(None)
-            }*/
             BaseCommand::ExpandableNoTokens {apply,..} => {
                 apply(engine,ret.source);
                 None
             }
             BaseCommand::Expandable {apply,..} => {
                 engine.add_expansion(|engine,rs| {
-                    apply(engine,ret.source,&mut |engine,t| rs.push(t,&mut engine.memory));
+                    apply(engine,ret.source,&mut |engine,t| rs.push(t));
                     None
                 })
-
-                /*
-                let mut exp = ET::Mouth::get_expansion(engine);
-                apply(engine,ret.source,&mut |engine,t| Ok(exp.push(t,engine.memory)))?;
-                ET::Mouth::push_expansion(engine,exp);
-                Ok(None)
-
-                 */
             },
             BaseCommand::Conditional {name,apply} => {
                 do_conditional(engine,ret.source, name,apply, false);

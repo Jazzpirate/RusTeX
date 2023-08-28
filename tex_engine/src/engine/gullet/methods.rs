@@ -259,14 +259,14 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> b
     let mut current = engine.memory.get_string();
     engine.add_expansion(|engine,rs|{
         while let Some(next) = engine.get_next_unexpandable_same_file() {
-            rs.push(next.source.cause,&mut engine.memory);
+            rs.push(next.source.cause);
             match next.command {
                 BaseCommand::Char {char,..} => {
                     let us = char.to_usize();
                     if us < 256 {
                         current.push(us as u8 as char);
                         if current == kw {
-                            rs.reset(&mut engine.memory);
+                            rs.clear();
                             engine.memory.return_string(current);
                             return true
                         }
@@ -294,13 +294,13 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
     let mut current = String::new();
     engine.add_expansion(|engine,rs| {
         while let Some(next) = engine.get_next_unexpandable_same_file() {
-            rs.push(next.source.cause.clone(),&mut engine.memory);
+            rs.push(next.source.cause.clone());
             match next.command {
                 BaseCommand::Char{char,..} => {
                     let us = char.to_usize();
                     let us = if us < 256 { (us as u8).to_ascii_lowercase() } else if keywords.contains(&current.as_str()) {
                         engine.mouth.requeue(next.source.cause);
-                        rs.reset(&mut engine.memory);
+                        rs.clear();
                         keywords = keywords.into_iter().filter(|s| s == &current).collect();
                         return Some(keywords[0])
                     } else {
@@ -313,12 +313,12 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                             return None
                         }
                         else if keywords.len() == 1 && keywords[0] == current {
-                            rs.reset(&mut engine.memory);
+                            rs.clear();
                             return Some(keywords[0])
                         }
                     } else if keywords.contains(&current.as_str()) {
                         engine.mouth.requeue(next.source.cause);
-                        rs.reset(&mut engine.memory);
+                        rs.clear();
                         keywords = keywords.into_iter().filter(|s| s == &current).collect();
                         return Some(keywords[0])
                     } else {
@@ -327,7 +327,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                 }
                 _ if keywords.contains(&current.as_str()) => {
                     engine.mouth.requeue(next.source.cause);
-                    rs.reset(&mut engine.memory);
+                    rs.clear();
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Some(keywords[0])
                 }

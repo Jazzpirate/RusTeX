@@ -117,14 +117,14 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             Some((v,GroupType::Token)) => {
                 if !v.is_empty() {
                     engine.add_expansion(|engine, rs| {
-                        for t in v { rs.push(t, &mut engine.memory) }
+                        rs.extend(v.into_iter())
                     })
                 }
             }
             Some((v,GroupType::Box(b))) => {
                 if !v.is_empty() {
                     engine.add_expansion(|engine, rs| {
-                        for t in v { rs.push(t, &mut engine.memory) }
+                        rs.extend(v.into_iter())
                     })
                 }
                 match engine.stomach.shipout_data().box_stack.last() {
@@ -167,7 +167,7 @@ pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachComma
         Some(v) => {
             let v = v.clone();
             engine.add_expansion(|e,f| {
-                for t in v { f.push(t.clone(),&mut e.memory) }
+                f.extend(v.into_iter())
             })
         }
     }
@@ -179,7 +179,7 @@ pub fn do_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     match engine.state.get_primitive_toks("everymath").cloned() {
         Some(v) if !v.is_empty() => {
             engine.add_expansion(|e,rs| {
-                for t in v { rs.push(t,&mut e.memory) }
+                rs.extend(v.into_iter())
             })
         }
         _ => ()
@@ -191,7 +191,7 @@ pub fn do_display_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     match engine.state.get_primitive_toks("everydisplay").cloned() {
         Some(v) if !v.is_empty() => {
             engine.add_expansion(|e,rs| {
-                for t in v { rs.push(t,&mut e.memory) }
+                rs.extend(v.into_iter())
             })
         }
         _ => ()

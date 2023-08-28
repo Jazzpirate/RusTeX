@@ -1,6 +1,6 @@
 //! Default implementations for [`MouthTrait`] methods
 
-use crate::engine::mouth::{ExpansionContainer, Mouth, MouthTrait};
+use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
@@ -73,7 +73,7 @@ impl<ET:EngineType> EngineRef<ET> {
         Mouth::with_mouth(self,tks,f)
     }
 
-    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
+    pub fn add_expansion<F,R>(&mut self,f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
         Mouth::add_expansion(self,f)
     }
 

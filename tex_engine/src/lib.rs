@@ -53,6 +53,7 @@ macro_rules! debug_log {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::LinkedList;
     use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
     use log::{error, warn, info, debug, trace};
     use crate::engine::gullet::{Gullet,TeXGullet};
@@ -83,7 +84,7 @@ mod tests {
     struct Default();
     impl EngineType for Default {
         type Char = u8;
-        type File = Ptr<VirtualFile<u8>>;
+        type File = VirtualFile<u8>;
         type FileSystem = KpseVirtualFileSystem<u8>;
         type Font = TfmFont;
         type FontStore = TfmFontStore;
@@ -177,7 +178,7 @@ mod tests {
         let state = PDFTeXState::new(&fonts);
         let gullet = TeXGullet::new();
         let stomach = ShipoutDefaultStomach::new();
-        let mut engine = crate::engine::EngineStruct::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
+        let mut engine = crate::engine::EngineRef::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
         engine.interner = interner;
 
         engine.state.set_command(TeXStr::from_static("rustexBREAK",&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
@@ -213,11 +214,10 @@ mod tests {
             Token::new(BaseToken::Char(rand::random(),CategoryCode::try_from(rand::thread_rng().gen_range(1..=13)).unwrap()),None)
         }
     }
-    /*
-
+/*
     fn run_one(iterations:usize,length:usize) -> (std::time::Duration,std::time::Duration) {
-        let mut ls = TokenList::new();
-        let mut vec = TokenVec::new();
+        let mut ls = LinkedList::new();
+        let mut vec = Vec::new();
         let mut ls_timer = std::time::Duration::new(0,0);
         let mut vec_timer = std::time::Duration::new(0,0);
         let mut dummy = 0;
@@ -230,9 +230,9 @@ mod tests {
 
             let start = std::time::Instant::now();
             for _ in (0..len) {
-                ls.push(random_token(interner));
+                ls.push_back(random_token(interner));
             }
-            while let Some(next) = ls.next() {
+            while let Some(next) = ls.pop_front() {
                 dummy += <CategoryCode as Into<u8>>::into(next.catcode()) as usize;
             }
             ls_timer += start.elapsed();
@@ -242,8 +242,8 @@ mod tests {
             for _ in (0..len) {
                 vec.push(random_token(interner));
             }
-            vec.rev();
-            while let Some(next) = vec.next() {
+            vec.reverse();
+            while let Some(next) = vec.pop() {
                 dummy += <CategoryCode as Into<u8>>::into(next.catcode()) as usize;
             }
             vec_timer += start.elapsed();
@@ -270,5 +270,5 @@ mod tests {
         info!(target:"profile","300000;2000  TokenList: {}, Vec: {}",a.as_secs_f64(),b.as_secs_f64());
     }
 
-     */
+ */
 }

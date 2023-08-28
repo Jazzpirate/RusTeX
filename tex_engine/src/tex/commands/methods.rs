@@ -4,7 +4,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
 use crate::tex::token::{BaseToken, Token, TokenList};
-use crate::engine::mouth::{ExpansionContainer, Mouth, MouthTrait};
+use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;
 use crate::utils::errors::TeXError;
@@ -382,7 +382,7 @@ use crate::tex::token::TokenReference;
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut ExpansionContainer<ET>) { catch!({
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut Vec<Token<ET>>) { catch!({
     debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(&engine.interner,Some(ET::Char::backslash())),d.as_str(&engine.interner),engine.preview(250));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
@@ -424,14 +424,15 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
     engine.memory.return_args(args);
 }; format!("Error expanding {}",cmd.cause.to_str(&engine.interner,engine.state.get_escapechar())) => cmd.cause.clone())}
 
-fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut ExpansionContainer<ET>) {
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut Vec<Token<ET>>) {
     let rf = ET::TokenReference::from_expansion(&cmd);
-    for r in d.replacement.iter().rev() {
+    exp.extend(d.replacement.iter().rev().map(|t| match t {ExpToken::Token(t) => t.clone().with_ref(&rf),_ => unreachable!()} ));
+    /*for r in d.replacement.iter().rev() {
         match r {
-            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),&mut engine.memory),
+            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf)),
             _ => unreachable!()
         }
-    }
+    }*/
 }
 
 
@@ -546,7 +547,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
     }
 }
 
-fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], exp:&mut ExpansionContainer<ET>) {
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], exp:&mut Vec<Token<ET>>) {
     let rf = ET::TokenReference::from_expansion(cmd);
     #[cfg(debug_assertions)]
     {
@@ -559,11 +560,9 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut Engin
     while let Some(next) = replacement.next() {
         match next {
             ExpToken::Param(_,idx) => {
-                for t in args[*idx as usize].iter().rev() {
-                    exp.push(t.clone().with_ref(&rf),&mut engine.memory);
-                }
+                exp.extend(args[*idx as usize].iter().map(|t| t.clone()).rev())
             }
-            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf),&mut engine.memory)
+            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf))
         }
     }
 }
