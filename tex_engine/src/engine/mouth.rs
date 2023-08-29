@@ -18,7 +18,7 @@ use crate::engine::state::State;
 use crate::{debug_log, file_end, throw};
 use crate::engine::memory::{Interner, Memory, VEC_SIZE};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{DefReplacement, TokenCont};
+use crate::tex::commands::{DefReplacement, ExpToken, TokenCont};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
@@ -26,12 +26,6 @@ use crate::utils::strings::CharType;
 
 /// A [`MouthTrait`] is the source of [`Token`]s to be processed by a TeX engine.
 pub trait MouthTrait<ET:EngineType>:Sized {
-    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<Token<ET>>, mut f:F) -> R {
-        let old = std::mem::replace(&mut engine.mouth, Self::new_with(tks,&mut engine.memory));
-        let ret = f(engine);
-        engine.mouth = old;
-        ret
-    }
     fn new(memory:&mut Memory<ET>) -> Self;
     fn new_with(tks:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Mouth<ET>;
 
@@ -341,10 +335,16 @@ macro_rules! get_while {
 }
 
 impl<ET:EngineType> Mouth<ET> {
+    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<Token<ET>>, mut f:F) -> R {
+        let old = std::mem::replace(&mut engine.mouth, Self::new_with(tks,&mut engine.memory));
+        let ret = f(engine);
+        engine.mouth = old;
+        ret
+    }
+
     fn get_vec(&mut self) -> Vec<Token<ET>> {
         self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
     }
-
 
     /// Skip whitespace characters from the [`MouthTrait`]
     pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) {
@@ -437,228 +437,174 @@ impl<ET:EngineType> Mouth<ET> {
  */
 }
 
-
-/* ------------- with trait objects: --------------------------------------------------------------
-
-pub struct Mouth<ET:EngineType>{ buffer:Vec<Vec<Token<ET>>>, stack:Vec<Box<dyn TokenSourceT<ET>>> }
-
-impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
-    fn new(memory:&mut Memory<ET>) -> Self {
-        Mouth { buffer:vec!(), stack:Vec::with_capacity(1024)}
+/*
+pub struct MouthII<ET:EngineType>(Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> MouthII<ET> {
+    pub fn new() -> Self {
+        MouthII(None)
     }
-    fn new_with(mut tks: Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self {
+    pub fn new_with(mut tks:Vec<Token<ET>>) -> Self {
         tks.reverse();
-        Mouth {buffer:vec!(), stack:vec!(Box::new(Pretokenized(tks)))}
+        MouthII(Some(Box::new(PreTokenizedSource(tks,None))))
     }
-
-    fn get_expansion(engine: &mut EngineRef<ET>) -> ExpansionContainer<ET> {
-        ExpansionContainer{array:engine.mouth.get_vec()}
+    pub fn get_expansion(engine:&mut EngineRef<ET>) -> Vec<Token<ET>> {
+        engine.memory.get_token_vec()
     }
-    fn push_expansion(engine: &mut EngineRef<ET>, expansion: ExpansionContainer<ET>) {
-        let mut v = expansion.destroy();
-        if v.is_empty() { engine.mouth.buffer.push(v) } else {
-            v.reverse();
-            engine.mouth.stack.push(Box::new(Pretokenized(v)))
+    pub fn push_expansion(engine:&mut EngineRef<ET>,mut expansion:Vec<Token<ET>>) {
+        if expansion.is_empty() { engine.memory.return_token_vec(expansion) } else {
+            expansion.reverse();
+            engine.mouth2.0 = Some(Box::new(PreTokenizedSource(expansion,engine.mouth2.0.take())))
         }
     }
-    /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
-    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
-        let mut expansion = ExpansionContainer{array:engine.mouth.get_vec()};
+    pub fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
+        let mut expansion = engine.memory.get_token_vec();
         let ret = {
             f(engine,&mut expansion)
         };
-        let mut v = expansion.destroy();
-        if v.is_empty() { engine.mouth.buffer.push(v) } else {
-            v.reverse();
-            engine.mouth.stack.push(Box::new(Pretokenized(v)))
+        if expansion.is_empty() { engine.memory.return_token_vec(expansion) } else {
+            expansion.reverse();
+            engine.mouth2.0 = Some(Box::new(PreTokenizedSource(expansion,engine.mouth2.0.take())))
         }
         ret
     }
-
-    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut ExpansionContainer<ET>) -> R {
-        let mut expansion = ExpansionContainer{array:engine.mouth.get_vec()};
+    pub fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
+        let mut expansion = engine.memory.get_token_vec();
         let ret = {
             f(engine,&mut expansion)
         };
-        let mut v = expansion.destroy();
-        if v.is_empty() { engine.mouth.buffer.push(v) } else {
-            engine.mouth.stack.push(Box::new(Pretokenized(v)))
+        if expansion.is_empty() { engine.memory.return_token_vec(expansion) } else {
+            engine.mouth2.0 = Some(Box::new(PreTokenizedSource(expansion,engine.mouth2.0.take())))
         }
         ret
     }
-
-    fn push_noexpand(&mut self, tk: Token<ET>,memory:&mut Memory<ET>) {
-        self.stack.push(Box::new(Requeued(Some((tk,false)))))
+    pub fn push_noexpand(&mut self, tk: Token<ET>,memory:&mut Memory<ET>) {
+        self.0 = Some(Box::new(NoexpandSource(Some(tk),self.0.take())))
     }
-
-    fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>) {
+    pub fn requeue(&mut self, tk: Token<ET>) {
+        self.0 = Some(Box::new(RequeuedSource(Some(tk),self.0.take())))
+    }
+    pub fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>) {
         debug!("Pushing file {:?}", file.path());
         let source = StringSource::new(
-            (*file.content_string()).clone().unwrap(),
+            file.content_string().unwrap().clone(),
             Some(interner.from_string(file.path().to_str().unwrap()))
         );
-        self.stack.push(Box::new(StringMouth(source,false)));
+        self.0 = Some(Box::new(FileStringSource(source,self.0.take())))
+    }
+    pub fn push_string(&mut self, str: &Vec<u8>) {
+        let source = StringSource::new(StringSource::<ET::Char>::from_str(str),None);
+        self.0 = Some(Box::new(FileStringSource(source,self.0.take())))
     }
 
-    fn push_string(&mut self, str: Vec<u8>) {
-        let source = StringSource::new(str,None);
-        self.stack.push(Box::new(StringMouth(source,false)));
-    }
-
-    fn requeue(&mut self, tk: Token<ET>) {
-        self.stack.push(Box::new(Requeued(Some((tk,true)))))
-    }
-
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
-        match self.stack.last_mut() {
-            Some(bx) => {
-                match bx.get_next_simple(state,interner) {
-                    Some(t) => {
-                        if bx.is_empty() {
-                            let r = self.stack.pop().unwrap();
-                            r.destroy_safe(self);
-                        }
-                        Some(t)
-                    }
-                    None => {
-                        let r = self.stack.pop().unwrap();
-                        r.destroy_safe(self);
-                        self.get_next_simple(state,interner)
-                    }
-                }
-            }
-            None => None
-        }
-    }
-
-    fn get_next(&mut self, state: &ET::State,interner:&mut Interner<ET::Char>,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> {
-        match self.stack.last_mut() {
-            Some(bx) => {
-                match bx.get_next(state,interner) {
-                    Some((t,expand)) => {
-                        if bx.is_empty() {
-                            let r = self.stack.pop().unwrap();
-                            r.destroy(state,interner,self,outputs);
-                        }
-                        Some((t,expand))
-                    }
-                    None => {
-                        let r = self.stack.pop().unwrap();
-                        r.destroy(state,interner,self,outputs);
-                        self.get_next(state,interner,outputs)
-                    }
-                }
-            }
-            None => None
-        }
-    }
-
-    fn preview(&self,len:usize,interner:&Interner<ET::Char>) -> String { // TODO memory
+    pub fn preview(&self,len:usize,interner:&Interner<ET::Char>) -> String {
         let mut ret = String::new();
-        for s in self.stack.iter().rev() {
-            ret.push_str(&s.preview(interner));
-            if ret.len() > len { ret = ret.chars().take(len).collect();return ret.replace("\r","\\r").replace("\n","\\n") }
+        match &self.0 {
+            None => (),
+            Some(s) => s.preview(len,interner,&mut ret)
         }
-        ret.replace("\r","\\r").replace("\n","\\n")
+        ret
     }
-
-    fn line_no(&self) -> usize {
-        for s in self.stack.iter().rev() {
-            match s.line_no() {
-                Some(l) => return l,
-                _ => ()
-            }
+    pub fn line_no(&self) -> usize {
+        match &self.0 {
+            None => 0,
+            Some(b) => b.line_no()
         }
-        0
     }
-
-    fn endinput(&mut self, state: &mut ET::State,interner:&Interner<ET::Char>,outputs:&mut Outputs) {
-        for s in self.stack.iter().enumerate().rev() {
-            if s.1.is_file() {
-                self.stack.remove(s.0);
-                return
-            }
-        }
+    pub fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs) {
+         match &mut self.0 {
+             None => (),
+             Some(b) => match b.endinput(interner,outputs) {
+                 Some(b) => self.0 = b,
+                 _ => ()
+             }
+         }
     }
 
     fn file_line(&self,interner:&Interner<ET::Char>) -> String {
-        for s in self.stack.iter().rev() {
-            match s.file_line(interner) {
-                Some(s) => return s,
-                _ => ()
-            }
+        match &self.0 {
+            None => "unknown source".to_string(),
+            Some(b) => b.file_line(interner)
         }
-        "unknown source".to_string()
     }
-}
-
-macro_rules! get_while {
-    ($mouth:expr,$state:expr,$interner:expr,$label:tt => $t:ident => $f:expr) => {
-        $label:loop {
-            match $mouth.stack.last_mut() {
-                Some(bx) => loop {
-                    match bx.get_next_simple($state,$interner) {
-                        Some($t) => {
-                            if bx.is_empty() {
-                                let r = $mouth.stack.pop().unwrap();
-                                break {
-                                    r.destroy_safe($mouth);
-                                    $f
-                                }
-                            }
-                            $f
-                        }
-                        None => {
-                            let r = $mouth.stack.pop().unwrap();
-                            r.destroy_safe($mouth);
-                            break
-                        }
-                    }
+    
+    pub fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>) -> Option<Token<ET>> {
+        match self.get_next_simple(state,interner,memory) {
+            Some(t) => {
+                match &t.base {
+                    BaseToken::CS(name) if *name == interner.par =>
+                        throw!("Paragraph ended while reading argument" => t),
+                    BaseToken::Char(_,CategoryCode::EOF) =>
+                        file_end!(),
+                    _ => Some(t)
                 }
-                None => panic!("File ended unexpectedly")
+            }
+            o => o
+        }
+    }
+    pub fn get_next(&mut self, state: &ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> { loop {
+        match &mut self.0 {
+            None => return None,
+            Some(s) => match s.get_next(state,interner) {
+                Some(r) => return Some(r),
+                _ => self.0 = self.0.take().unwrap().destroy(state,interner,memory,outputs)
+            }
+        }
+    }}
+    pub fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>,memory:&mut Memory<ET>) -> Option<Token<ET>> { loop {
+        match &mut self.0 {
+            None => return None,
+            Some(s) => match s.next_simple(state,interner) {
+                Some(r) => return Some(r),
+                _ => self.0 = self.0.take().unwrap().destroy_simple(memory)
+            }
+        }
+    }}
+    pub fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>,f:&mut dyn FnMut(Token<ET>) -> bool) {
+        loop {
+            match &mut self.0 {
+                None => file_end!(),
+                Some(next) => {
+                    if next.iter(state,interner,f) {
+                        self.0 = self.0.take().unwrap().destroy_simple(memory);
+                    } else {return ()}
+                }
             }
         }
     }
-}
 
-impl<ET:EngineType> Mouth<ET> {
-    fn get_vec(&mut self) -> Vec<Token<ET>> {
-        self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
-    }
-
-
-    /// Skip whitespace characters from the [`MouthTrait`]
-    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) {
-        debug_log!(trace=>"skipping whitespace");
-        get_while!(self,state,interner,'A => tk => {
-            match tk.catcode() {
-                CategoryCode::Space => (),
+    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>) {
+        let mut ret = None;
+        self.iter(state,interner,memory,&mut |t| {
+            match t.catcode() {
+                CategoryCode::Space => true,
                 _ => {
-                    self.requeue(tk);break 'A
+                    ret = Some(t);
+                    false
                 }
             }
         });
+        if let Some(t) = ret { self.requeue(t)}
     }
 
-    /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
     pub fn get_argument_nopar(engine:&mut EngineRef<ET>, v:&mut Vec<Token<ET>>) {
-        match engine.mouth.get_next_simple(engine.state,engine.interner) {
+        match engine.mouth2.get_next_simple(&engine.state,&mut engine.interner,&mut engine.memory) {
             None => file_end!(),
             Some(t) if t.catcode() == CategoryCode::BeginGroup => {
                 let mut depth = 1;
                 let par = engine.interner.par;
-                get_while!(engine.mouth,engine.state,engine.interner,'A => tk => {
+                engine.mouth2.iter(&engine.state,&mut engine.interner,&mut engine.memory,&mut |tk| {
                     match tk.base {
                         BaseToken::Char(_,CategoryCode::BeginGroup) => depth += 1,
                         BaseToken::Char(_,CategoryCode::EndGroup) => {
                             depth -= 1;
-                            if depth == 0 { break 'A }
+                            if depth == 0 { return false }
                         },
                         BaseToken::CS(n) if n == par =>
                             throw!("Paragraph ended while reading argument" => t),
                         _ => ()
                     }
                     v.push(tk);
+                    true
                 });
             }
             Some(o) => {
@@ -667,168 +613,391 @@ impl<ET:EngineType> Mouth<ET> {
         }
     }
 
-    /// reads a macro argument from the [`MouthTrait`], i.e. a sequence of [`Token`]s enclosed in
-    /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
-    /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
-    /// not enclosed.
     fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<Token<ET>>) {
-        match engine.mouth.get_next_simple(engine.state,engine.interner) {
+        match engine.mouth2.get_next_simple(&engine.state,&mut engine.interner,&mut engine.memory) {
             None => file_end!(),
             Some(t) if t.catcode() == CategoryCode::BeginGroup => {
                 let mut ingroup = 1;
-                get_while!(engine.mouth,engine.state,engine.interner,'A => tk => {
+                engine.mouth2.iter(&engine.state,&mut engine.interner,&mut engine.memory,&mut |tk| {
                     match tk.base {
                         BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
                         BaseToken::Char(_,CategoryCode::EndGroup) => {
                             ingroup -= 1;
-                            if ingroup == 0 { break 'A }
+                            if ingroup == 0 { return false }
                         },
                         _ => ()
                     }
                     vec.push(tk);
+                    true
                 })
-                //Self::get_until_endgroup(engine,&mut|_,t| Ok(vec.push(t)))
             }
             Some(o) => {
                 vec.push(o);
             }
         }
     }
-/*
-    fn expand_until_group(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
-        match engine.get_next_unexpandable_same_file() {
-            None => file_end!(),
-            Some(res) if res.source.cause.catcode() == CategoryCode::BeginGroup => (),
-            Some(res) => throw!("begin group expected; found:{}",res.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
-        }
-        let mut ingroup = 1;
-        get_while!(engine.mouth,engine.state,engine.interner,'A => tk => {
-            match tk.base {
-                BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
-                BaseToken::Char(_,CategoryCode::EndGroup) => {
-                    ingroup -= 1;
-                    if ingroup == 0 { break 'A }
-                },
-                _ => ()
-            }
-            f(engine,tk);
-        })
-    }
-
- */
-}
-
-pub struct ExpansionContainer<ET:EngineType>{array:Vec<Token<ET>>}
-impl<ET:EngineType> ExpansionContainer<ET> {
-    pub fn push(&mut self, t:Token<ET>,memory:&mut Memory<ET>) {
-        self.array.push(t);
-    }
-    pub fn reset(&mut self,memory:&mut Memory<ET>) {
-        self.array.clear();
-    }
-
-    pub fn destroy(self) -> Vec<Token<ET>> {
-        self.array
-    }
 
 }
 
-
-pub trait TokenSourceT<ET:EngineType> {
-   /* Tkls(Vec<Token<ET>>),
-    Noexpand(Token<ET>),
-    String(StringSource<ET::Char>)*/
-
-    fn get_next(&mut self, state: &ET::State,interner:&mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
-        match self.get_next_simple(state,interner) {
-            Some(t) => Some((t,true)),
-            _ => None
-        }
+pub trait TokenSource<ET:EngineType> {
+    fn next_simple(&mut self, state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<Token<ET>>;
+    fn get_next(&mut self, state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<(Token<ET>,bool)> {
+        self.next_simple(state,interner).map(|t| (t,true))
     }
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>>;
-    fn destroy(self:Box<Self>, state:&ET::State, interner: &mut Interner<ET::Char>, mouth: &mut Mouth<ET>, outputs:&mut Outputs) {
-        self.destroy_safe(mouth)
+    fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>>;
+    fn destroy(self:Box<Self>,state:&ET::State,interner:&Interner<ET::Char>,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Option<Box<dyn TokenSource<ET>>> {
+        self.destroy_simple(memory)
     }
-    fn destroy_safe(self:Box<Self>, mouth: &mut Mouth<ET>) {}
-    fn is_empty(&self) -> bool;
-    fn preview(&self,interner:&Interner<ET::Char>) -> String { todo!() }
-    fn line_no(&self) -> Option<usize> {None}
-    fn is_file(&self) -> bool {false}
-    fn file_line(&self,interner:&Interner<ET::Char>) -> Option<String> { None }
+    fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool;
+    fn preview(&self,len:usize,interner:&Interner<ET::Char>,string:&mut String);
+    fn line_no(&self) -> usize;
+    fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>>;
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String;
 }
 
-pub struct Requeued<ET:EngineType>(Option<(Token<ET>,bool)>);
-impl<ET:EngineType> TokenSourceT<ET> for Requeued<ET> {
+struct NoexpandSource<ET:EngineType>(Option<Token<ET>>,Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> TokenSource<ET> for NoexpandSource<ET> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+        self.0.take()
+    }
     fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
-        match std::mem::take(&mut self.0) {
-            Some(t) => Some(t),
-            _ => None
+        self.0.take().map(|t| (t,false))
+    }
+    fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
+        self.1
+    }
+    fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool {
+        if let Some(t) = self.0.take() { f(t) } else { true }
+    }
+    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+        if let Some(t) = &self.0 {
+            string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
+        }
+        if string.len() > len { return () }
+        if let Some(s) = &self.1 {
+            s.preview(len,interner,string);
         }
     }
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
-        std::mem::take(&mut self.0).map(|p| p.0)
+    fn line_no(&self) -> usize {
+        if let Some(s) = &self.1 {
+            s.line_no()
+        } else { 0 }
     }
-    fn is_empty(&self) -> bool { self.0.is_none() }
+    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+        match &mut self.1 {
+            None => (),
+            Some(s) => match s.endinput(interner,outputs) {
+                None => (),
+                Some(s) => self.1 = s
+            }
+        }
+        None
+    }
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+        if let Some(s) = &self.1 {
+            s.file_line(interner)
+        } else { "unknown source".to_string() }
+    }
+}
+struct RequeuedSource<ET:EngineType>(Option<Token<ET>>,Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> TokenSource<ET> for RequeuedSource<ET> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+        self.0.take()
+    }
+    fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
+        self.1
+    }
+    fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool {
+        if let Some(t) = self.0.take() { f(t) } else { true }
+    }
+    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+        if let Some(t) = &self.0 {
+            string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
+        }
+        if string.len() > len { return () }
+        if let Some(s) = &self.1 {
+            s.preview(len,interner,string);
+        }
+    }
+    fn line_no(&self) -> usize {
+        if let Some(s) = &self.1 {
+            s.line_no()
+        } else { 0 }
+    }
+    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+        match &mut self.1 {
+            None => (),
+            Some(s) => match s.endinput(interner,outputs) {
+                None => (),
+                Some(s) => self.1 = s
+            }
+        }
+        None
+    }
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+        if let Some(s) = &self.1 {
+            s.file_line(interner)
+        } else { "unknown source".to_string() }
+    }
 }
 
-pub struct Pretokenized<ET:EngineType>(pub Vec<Token<ET>>);
-impl<ET:EngineType> TokenSourceT<ET> for Pretokenized<ET> {
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+struct PreTokenizedSource<ET:EngineType>(Vec<Token<ET>>,Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> TokenSource<ET> for PreTokenizedSource<ET> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
         self.0.pop()
     }
-    fn is_empty(&self) -> bool { self.0.is_empty() }
-    fn destroy_safe(self: Box<Self>, mouth: &mut Mouth<ET>) {
-        mouth.buffer.push(self.0)
+    fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
+        self.0.pop().map(|t| (t,true))
+    }
+    fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
+        memory.return_token_vec(self.0);
+        self.1
+    }
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+        while let Some(t) = self.0.pop() {
+            if !f(t) { return false }
+        }
+        true
+    }
+    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+       for t in self.0.iter().rev() {
+          string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
+          if string.len() > len { return () }
+       }
+        if let Some(s) = &self.1 {
+          s.preview(len,interner,string);
+        }
+    }
+    fn line_no(&self) -> usize {
+        if let Some(s) = &self.1 {
+            s.line_no()
+        } else { 0 }
+    }
+    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+        match &mut self.1 {
+            None => (),
+            Some(s) => match s.endinput(interner,outputs) {
+                None => (),
+                Some(s) => self.1 = s
+            }
+        }
+        None
+    }
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+        if let Some(s) = &self.1 {
+            s.file_line(interner)
+        } else { "unknown source".to_string() }
     }
 }
-pub struct StringMouth<ET:EngineType>(StringSource<ET::Char>,bool);
-impl<ET:EngineType> TokenSourceT<ET> for StringMouth<ET> {
-    fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
-        match self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()) {
-            Some(t) => Some((t,true)),
-            None => {
-                self.1 = true;
-                None
+struct ImmutableSource<ET:EngineType>(Ptr<[Token<ET>]>,usize,Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> TokenSource<ET> for ImmutableSource<ET> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+        if self.1 >= self.0.len() { return None }
+        let next = self.0.get(self.1).map(|t| t.clone());
+        self.1 += 1;
+        next
+    }
+    fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
+        self.2
+    }
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+        for t in &self.0[self.1..] {
+            self.1 += 1;
+            if !f(t.clone()) { return false }
+        }
+        true
+    }
+    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+        if self.1 >= self.0.len() {
+            if let Some(s) = &self.2 {
+                s.preview(len,interner,string);
+            }
+            return ()
+        }
+        for t in &self.0[self.1..] {
+            string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
+            if string.len() > len { return () }
+        }
+        if let Some(s) = &self.2 {
+            s.preview(len,interner,string);
+        }
+    }
+    fn line_no(&self) -> usize {
+        if let Some(s) = &self.2 {
+            s.line_no()
+        } else { 0 }
+    }
+    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+        match &mut self.2 {
+            None => (),
+            Some(s) => match s.endinput(interner,outputs) {
+                None => (),
+                Some(s) => self.2 = s
+            }
+        }
+        None
+    }
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+        if let Some(s) = &self.2 {
+            s.file_line(interner)
+        } else { "unknown source".to_string() }
+    }
+}
+struct DefReplacementSource<ET:EngineType>(DefReplacement<ET>,usize,[Vec<Token<ET>>;9],Option<(u8,usize)>,Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+        match &mut self.3 {
+            Some((arg,idx)) if *idx < (self.2)[*arg as usize].len() => {
+                let r = self.2[*arg as usize][*idx].clone();
+                *idx += 1;
+                Some(r)
+            }
+            Some(_) => {
+                self.3 = None;
+                self.next_simple(state,interner)
+            }
+            None if self.1 < self.0.len() => {
+                match &self.0[self.1] {
+                    ExpToken::Token(t) => {
+                        self.1 += 1;
+                        Some(t.clone())
+                    }
+                    ExpToken::Param(_,i) => {
+                        self.3 = Some((*i,0));
+                        self.1 += 1;
+                        self.next_simple(state,interner)
+                    }
+                }
+            }
+            _ => None
+        }
+    }
+    fn destroy_simple(self: Box<Self>, memory: &mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
+        let self_ = *self;
+        for v in self_.2 {
+            memory.return_token_vec(v);
+        }
+        self_.4
+    }
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+        loop {
+            match &mut self.3 {
+                Some((arg,idx)) if *idx < (self.2)[*arg as usize].len() => {
+                    for t in &self.2[*arg as usize][*idx..] {
+                        *idx += 1;
+                        if !f(t.clone()) { return false }
+                    }
+                }
+                Some(..) => {
+                    self.3 = None;
+                    continue
+                }
+                None if self.1 < self.0.len() => {
+                    for t in &self.0[self.1..] {
+                        self.1 += 1;
+                        match t {
+                            ExpToken::Token(t) => {
+                                if !f(t.clone()) { return false }
+                            }
+                            ExpToken::Param(_,i) => {
+                                self.3 = Some((*i,0));
+                                self.1 += 1;
+                                continue
+                            }
+                        }
+                    }
+                }
+                _ => return true
             }
         }
     }
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
-        match self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()) {
-            Some(t) => Some(t),
-            None => panic!("File ended unexpectedly")
+    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+        todo!()
+    }
+    fn line_no(&self) -> usize {
+        if let Some(s) = &self.4 {
+            s.line_no()
+        } else { 0 }
+    }
+    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+        match &mut self.4 {
+            None => (),
+            Some(s) => match s.endinput(interner,outputs) {
+                None => (),
+                Some(s) => self.4 = s
+            }
         }
+        None
     }
-    fn is_empty(&self) -> bool { self.1 }
-    fn destroy_safe(self: Box<Self>, mouth: &mut Mouth<ET>) {
-        panic!("File ended unexpectedly")
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+        if let Some(s) = &self.4 {
+            s.file_line(interner)
+        } else { "unknown source".to_string() }
     }
-    fn destroy(self: Box<Self>, state: &ET::State, interner: &mut Interner<ET::Char>, mouth: &mut Mouth<ET>, outputs: &mut Outputs) {
-        debug_log!(debug => "file end; inserting \\everyeof");
-        match (&*self).0.source {
+}
+
+struct FileStringSource<ET:EngineType>(StringSource<ET::Char>,Option<Box<dyn TokenSource<ET>>>);
+impl<ET:EngineType> TokenSource<ET> for FileStringSource<ET> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+        self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar())
+    }
+    fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
+        self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()).map(|t| (t,true))
+    }
+    fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
+        throw!("File ended unexpectedly")
+    }
+    fn destroy(self: Box<Self>,state:&ET::State,interner:&Interner<ET::Char>, memory: &mut Memory<ET>, outputs: &mut Outputs) -> Option<Box<dyn TokenSource<ET>>> {
+        let self_:Self = *self;
+        match &self_.0.source {
             None => (),
             Some(s) => (outputs.file_close)(interner.resolve(s.symbol()))
         }
+        debug_log!(debug => "file end; inserting \\everyeof");
         let eof = Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None);
-        let mut nv = mouth.get_vec();
-        nv.push(eof);
-        match state.get_primitive_toks("everyeof") {
-            None => (),
-            Some(v) if v.is_empty() => (),
+        let everyeof = state.get_primitive_toks("everyeof");
+        debug_log!(debug => "everyeof: {:?}",match everyeof {
+            None => "None".to_string(),
+            Some(v) => TokenList(v).to_str(interner)
+        });
+        match everyeof {
+            None => Some(Box::new(RequeuedSource(Some(eof),self_.1))),
+            Some(v) if v.is_empty() => Some(Box::new(RequeuedSource(Some(eof),self_.1))),
             Some(v) => {
-                for t in v.iter().skip(1).rev() { nv.push(t.clone()) };
+                let mut nv = memory.get_token_vec();
+                nv.push(eof);
+                nv.extend(v.iter().rev().map(|t| t.clone()));
+                Some(Box::new(PreTokenizedSource(nv,self_.1)))
             }
         }
-        mouth.stack.push(Box::new(Pretokenized(nv)));
     }
-    fn line_no(&self) -> Option<usize> {
-        Some(self.0.line())
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+        while let Some(t) = self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()) {
+            if !f(t) { return false }
+        }
+        true
     }
-    fn is_file(&self) -> bool { true }
-    fn file_line(&self, interner: &Interner<ET::Char>) -> Option<String> {
-        match self.0.source {
-            None => None,
-            Some(s) => Some(format!("{}:({},{})", interner.resolve(s.symbol()), self.0.line(), self.0.column()))
+    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+        string.push_str(&self.0.preview(len-string.len()));
+        if string.len() > len { return () }
+        if let Some(s) = &self.1 {
+            s.preview(len,interner,string);
+        }
+    }
+    fn line_no(&self) -> usize {
+        self.0.line()
+    }
+    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+        Some(self.1.take())
+    }
+    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+        match &self.0.source {
+            Some(s) => format!("{}:({},{})",interner.resolve(s.symbol()),self.0.line(),self.0.column()),
+            None => match &self.1 {
+                Some(s) => s.file_line(interner),
+                None => "unknown source".to_string()
+            }
         }
     }
 }
- */
+*/

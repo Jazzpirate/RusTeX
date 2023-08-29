@@ -58,7 +58,7 @@ pub struct EngineRef<ET:EngineType> {
     pub elapsed:Instant,
     pub filesystem:ET::FileSystem,
     pub fontstore:ET::FontStore,
-    pub interner:Interner<ET::Char>
+    pub interner:Interner<ET::Char>,
 }
 
 pub trait Engine<ET:EngineType> {
