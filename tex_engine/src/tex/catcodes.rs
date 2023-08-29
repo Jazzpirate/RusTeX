@@ -26,40 +26,37 @@ assert_eq!(cat2,cat);
 #[derive(Copy,PartialEq,Clone)]
 pub enum CategoryCode {
     /// Escape character (0); usually `\`
-    Escape,
+    Escape = 0,
     /// Begin group character (1); usually `{`
-    BeginGroup,
+    BeginGroup = 1,
     /// End group character (2); usually `}`
-    EndGroup,
+    EndGroup = 2,
     /// Math shift character (3); usually `$`
-    MathShift,
+    MathShift = 3,
     /// Alignment tab character (4); usually `&`
-    AlignmentTab,
+    AlignmentTab = 4,
     /// End of line character (5); usually `\n`
-    EOL,
+    EOL = 5,
     /// Parameter character (6); usually `#`
-    Parameter,
+    Parameter = 6,
     /// Superscript character (7); usually `^`
-    Superscript,
+    Superscript = 7,
     /// Subscript character (8); usually `_`
-    Subscript,
+    Subscript = 8,
     /// Ignored character (9)
-    Ignored,
+    Ignored = 9,
     /// Space character (10); usually ` `
-    Space,
+    Space = 10,
     /// Letter character (11), usually a-z and A-Z
-    Letter,
+    Letter = 11,
     /// Other character (12), usually e.g. `@`, `!`, `?`, etc.
-    Other,
+    Other = 12,
     /// Active character (13); usually `~`
-    Active,
+    Active = 13,
     /// Comment character (14); usually `%`
-    Comment,
+    Comment = 14,
     /// Invalid character (15)
-    Invalid,
-    /// Not an "official" category code, but used to mark the end of a file for error messaging
-    /// ("file ended while scanning...").
-    EOF
+    Invalid = 15
 }
 impl Default for CategoryCode {
     fn default() -> Self { CategoryCode::Other }
@@ -89,8 +86,7 @@ impl std::fmt::Display for CategoryCode {
             Other => "Other",
             Active => "Active",
             Comment => "Comment",
-            Invalid => "Invalid",
-            EOF => "EOF"
+            Invalid => "Invalid"
         })
     }
 }
@@ -114,8 +110,7 @@ impl Into<u8> for CategoryCode {
             Other => 12,
             Active => 13,
             Comment => 14,
-            Invalid => 15,
-            EOF => 16
+            Invalid => 15
         }
     }
 }

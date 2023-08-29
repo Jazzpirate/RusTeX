@@ -97,7 +97,7 @@ macro_rules! get_until_endgroup {
                     depth -= 1;
                     if depth == 0 { ok = true; break }
                 },
-                CategoryCode::EOF => crate::file_end!(),
+                CategoryCode::EOL => crate::file_end!(),
                 _ => ()
             }
             $f;
@@ -122,7 +122,7 @@ macro_rules! get_group {
                 BaseToken::Char(_,CategoryCode::EndGroup) => {
                     if ingroup == 0 { ok = true;break } else { ingroup -= 1; }
                 }
-                BaseToken::Char(_,CategoryCode::EOF) =>
+                BaseToken::Char(_,CategoryCode::EOL) =>
                     crate::file_end!(),
                 _ => ()
             }

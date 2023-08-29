@@ -71,7 +71,7 @@ pub struct StomachCommand<ET:EngineType> {
 }
 
 impl <ET:EngineType> StomachCommand<ET> {
-    pub fn from_resolved(resolved:ResolvedToken<ET>,interner:&Interner<ET::Char>) -> Self {
+    pub fn from_resolved(resolved:ResolvedToken<ET>,interner:&Interner) -> Self {
         Self {
             command:BaseStomachCommand::from_base(resolved.command,&resolved.source,interner),
             source:resolved.source
@@ -376,7 +376,7 @@ impl<ET:EngineType> PartialEq for BaseCommand<ET> {
 }
 
 impl<ET:EngineType> BaseCommand<ET> {
-    fn as_str(&self,interner:&Interner<ET::Char>) -> String {
+    fn as_str(&self,interner:&Interner) -> String {
         match self {
             BaseCommand::Def(d) => d.as_str(interner),
             BaseCommand::Conditional{name,..} => format!("\\{}", name),
@@ -475,7 +475,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
 }
 
 impl<ET:EngineType> BaseStomachCommand<ET> {
-    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>,interner:&Interner<ET::Char>) -> Self {
+    fn from_base(value: BaseCommand<ET>,source:&CommandSource<ET>,interner:&Interner) -> Self {
         use BaseCommand::*;
         use CategoryCode::*;
         match value {
@@ -517,7 +517,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             Relax => BaseStomachCommand::Relax,
             MathChar(u) => BaseStomachCommand::MathChar(u),
             Char{char,catcode} => match catcode {
-                EOF => BaseStomachCommand::Relax,
+                EOL => BaseStomachCommand::Relax,
                 BeginGroup => BaseStomachCommand::BeginGroup,
                 EndGroup => BaseStomachCommand::EndGroup,
                 MathShift => BaseStomachCommand::MathShift,
@@ -527,7 +527,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                 Space => BaseStomachCommand::Space,
                 Letter | Other => BaseStomachCommand::Char(char),
                 Parameter => todo!(),
-                Ignored | Invalid | Comment | EOL | Escape | Active => unreachable!()
+                Ignored | Invalid | Comment | Escape | Active => unreachable!()
             }
             CharDef(char) => BaseStomachCommand::Char(char)
         }
@@ -571,7 +571,7 @@ impl<ET:EngineType> Def<ET>{
             replacement:replacement.into()
         }
     }
-    pub fn as_str(&self,interner:&Interner<ET::Char>) -> String {
+    pub fn as_str(&self,interner:&Interner) -> String {
         let mut s = String::new();
         let mut ind = 0;
         for x in &*self.signature {

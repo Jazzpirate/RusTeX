@@ -31,7 +31,7 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
     /// Parses a character from a byte iterator. For [`u8`], this is just `iter.next()`.
     fn from_u8_iter<A>(iter:&mut A,counter:&mut usize) -> Option<Self> where A:Iterator<Item=u8> ;
 
-    fn from_str(s:&'static str,interner:&mut Interner<Self>) -> TeXStr<Self> {
+    fn from_str(s:&'static str,interner:&mut Interner) -> TeXStr {
         TeXStr::from_static(s,interner)
     }
 
@@ -128,25 +128,25 @@ impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
 * abstracts away the character type, e.g. for control sequence names.
 */
 #[derive(Clone,Copy,PartialEq,Hash,Eq,PartialOrd,Ord,Debug)]
-pub struct TeXStr<C:CharType>(pub string_interner::DefaultSymbol,PhantomData<C>);
-impl<C:CharType> TeXStr<C> {
+pub struct TeXStr(pub string_interner::symbol::SymbolU16);
+impl TeXStr {
     //pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
     //pub fn len(&self) -> usize { self.0.len() }
     //pub fn as_vec(&self) -> &Vec<C> { &self.0 }
-    pub fn symbol(&self) -> string_interner::DefaultSymbol { self.0 }
+    pub fn symbol(&self) -> string_interner::symbol::SymbolU16 { self.0 }
 }
-impl<C:CharType> TeXStr<C> {
-    pub fn to_str<'a>(&'a self,interner:&'a Interner<C>) -> &'a str {
+impl TeXStr {
+    pub fn to_str<'a>(&'a self,interner:&'a Interner) -> &'a str {
         interner.resolve(self.0)
     }
-    pub fn from_static(s:&'static str,interner:&mut Interner<C>) -> Self {
+    pub fn from_static(s:&'static str,interner:&mut Interner) -> Self {
         interner.from_static(s)
     }
-    pub fn from_string(s:&String, interner:&mut Interner<C>) -> Self {
+    pub fn from_string(s:&String, interner:&mut Interner) -> Self {
         interner.from_string(s)
     }
-    pub fn from_primitive(s:string_interner::DefaultSymbol) -> Self {
-        Self(s,PhantomData)
+    pub fn from_primitive(s:string_interner::symbol::SymbolU16) -> Self {
+        Self(s)
     }
 }
 

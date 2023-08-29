@@ -293,7 +293,7 @@ pub fn countdef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET
 }
 
 pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
-                                 -> TeXStr<ET::Char> {
+                                 -> TeXStr {
     debug_log!(trace=>"get_csname: {}",engine.preview(200));
     let csidx = engine.state.push_csname();
     let mut csname = engine.memory.get_string();
@@ -1936,7 +1936,7 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
             match res.command {
                 BaseCommand::Def(_) | BaseCommand::Expandable {..} | BaseCommand::ExpandableNoTokens {..} | BaseCommand::Conditional {..} =>
                     engine.mouth.push_noexpand(res.source.cause,&mut engine.memory),
-                BaseCommand::Char{catcode:CategoryCode::EOF,..} => (),
+                BaseCommand::Char{catcode:CategoryCode::EOL,..} => (),
                 _ => engine.mouth.requeue(res.source.cause)
             }
         }

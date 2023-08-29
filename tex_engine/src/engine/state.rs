@@ -38,7 +38,7 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
 
     fn file_openout(&mut self,i:usize,f:ET::File);
     fn file_closeout(&mut self, i: usize);
-    fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner<ET::Char>);
+    fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner);
     fn file_closein(&mut self, i: usize);
     fn get_open_out_file(&self,i:usize) -> Option<ET::File>;
     fn get_open_in_file(&self,i:usize) -> Option<ET::File>;
@@ -69,11 +69,11 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
     fn set_newlinechar(&mut self, c: Option<ET::Char>, globally:bool);
 
     /// get the current [`BaseCommand`] with name `name:`[`TeXStr`]
-    fn get_command(&self, name:&TeXStr<ET::Char>) -> Option<&Command<ET>>;
+    fn get_command(&self, name:&TeXStr) -> Option<&Command<ET>>;
     /// get the current [`BaseCommand`] for the active character `c`
     fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>>;
     /// set the current [`BaseCommand`] with name `name:`[`TeXStr`]
-    fn set_command(&mut self, name:TeXStr<ET::Char>, cmd:Option<Command<ET>>, globally:bool);
+    fn set_command(&mut self, name:TeXStr, cmd:Option<Command<ET>>, globally:bool);
     /// set the current [`BaseCommand`] for the active character `c`
     fn set_ac_command(&mut self, c: ET::Char, cmd:Option<Command<ET>>, globally:bool);
 
@@ -364,7 +364,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
     fn pop_csname(&mut self) {
         self.csnames -= 1;
     }
-    fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner<ET::Char>) {
+    fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner) {
         if i >= self.in_files.len() {
             self.in_files.resize(i+1,None);
         }
@@ -608,14 +608,14 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
     }
 
     // #[inline(always)]
-    fn get_command(&self, name: &TeXStr<ET::Char>) -> Option<&Command<ET>> {
+    fn get_command(&self, name: &TeXStr) -> Option<&Command<ET>> {
         match self.commands.get(&name.0.to_usize()) {
             Some(r) => r.as_ref(),
             _ => None
         }//.as_ref().map(|c| *c)
     }
     // #[inline(always)]
-    fn set_command(&mut self, name: TeXStr<ET::Char>, cmd: Option<Command<ET>>, globally: bool) {
+    fn set_command(&mut self, name: TeXStr, cmd: Option<Command<ET>>, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {

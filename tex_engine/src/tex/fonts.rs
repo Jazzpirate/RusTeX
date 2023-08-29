@@ -19,7 +19,7 @@ pub trait FontStore:'static+Debug {
     type Char:CharType;
     type RefType:Copy+PartialEq+Debug;
     type Font:Font<Char=Self::Char>;
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font,FontRefType=Self::RefType>>(&mut self,s: &str,macroname:TeXStr<Self::Char>) -> Self::RefType;
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font,FontRefType=Self::RefType>>(&mut self,s: &str,macroname:TeXStr) -> Self::RefType;
     fn null(&self) -> Self::RefType;
     fn get(&self,id:Self::RefType) -> &Self::Font;
     fn get_mut(&mut self,id:Self::RefType) -> &mut Self::Font;
@@ -28,7 +28,7 @@ pub trait Font:Debug+Display {
     type Char:CharType;
     fn set_at(&mut self,at:i64);
     fn get_at(&self) -> i64;
-    fn name(&self) -> TeXStr<Self::Char>;
+    fn name(&self) -> TeXStr;
     fn exists(&self,char:Self::Char) -> bool;
     fn char_wd<D:Dim>(&self,char:Self::Char) -> D;
     fn char_ht<D:Dim>(&self,char:Self::Char) -> D;
@@ -64,7 +64,7 @@ impl FontStore for TfmFontStore {
     fn get_mut(&mut self, id: Self::RefType) -> &mut Self::Font {
         &mut self.fonts[id]
     }
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font,FontRefType=Self::RefType>>(&mut self, s: &str,macroname:TeXStr<Self::Char>) -> Self::RefType {
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font,FontRefType=Self::RefType>>(&mut self, s: &str,macroname:TeXStr) -> Self::RefType {
         let path = match KPATHSEA.get(s) {
             None => throw!("Font not found: {}",s),
             Some(res) => res.path
@@ -92,7 +92,7 @@ impl FontStore for TfmFontStore {
     fn null(&self) -> Self::RefType { 0 }
 }
 impl TfmFontStore {
-    pub fn new(interner:&mut Interner<u8>) -> Self {
+    pub fn new(interner:&mut Interner) -> Self {
         let null = TfmFile {
             hyphenchar:45,
             skewchar:255,
@@ -123,7 +123,7 @@ impl TfmFontStore {
 }
 // todo: replace by Arrays, maybe
 pub struct TfmFont {
-    name:TeXStr<u8>,
+    name:TeXStr,
     file:Ptr<TfmFile>,
     at:Option<i64>,
     dimens:HMap<usize,i64>,
@@ -168,7 +168,7 @@ impl Font for TfmFont {
             None => self.file.size
         }
     }
-    fn name(&self) -> TeXStr<Self::Char> { self.name }
+    fn name(&self) -> TeXStr { self.name }
     fn exists(&self, char: Self::Char) -> bool {
         self.file.heights[char as usize] > 0.0 ||
             self.file.widths[char as usize] > 0.0 ||

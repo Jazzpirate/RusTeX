@@ -2,6 +2,7 @@
     and converts it to [`Token`]s with the correct [`CategoryCode`](crate::tex::catcodes::CategoryCode)s.
 */
 
+use std::marker::PhantomData;
 use std::vec::IntoIter;
 use crate::{debug_log, throw};
 use crate::engine::EngineType;
@@ -34,8 +35,8 @@ pub struct StringSource<C:CharType> {
     col : usize,
     pub string:Ptr<[Box<[u8]>]>,
     pub(crate) eof:bool,
-    pub source:Option<TeXStr<C>>,
-    tempstr:String
+    pub source:Option<TeXStr>,
+    tempstr:String,phantom:PhantomData<C>
 }
 
 macro_rules! get_char {
@@ -47,7 +48,7 @@ macro_rules! get_char {
     }}
 }
 impl<C:CharType> StringSource<C> {
-    pub fn new(string: Ptr<[Box<[u8]>]>,source:Option<TeXStr<C>>) -> StringSource<C> {
+    pub fn new(string: Ptr<[Box<[u8]>]>,source:Option<TeXStr>) -> StringSource<C> {
         StringSource {
             state: MouthState::N,
             line: 0,
@@ -55,7 +56,7 @@ impl<C:CharType> StringSource<C> {
             string: string,
             eof: false,
             tempstr:String::new(),
-            source
+            source,phantom:PhantomData
         }
     }
     pub fn from_str(string:&Vec<u8>) -> Ptr<[Box<[u8]>]> {
@@ -130,7 +131,7 @@ impl<C:CharType> StringSource<C> {
          */
     }
 
-    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>,par:TeXStr<C>) -> Option<Token<ET>> {
+    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>,par:TeXStr) -> Option<Token<ET>> {
         use CategoryCode::*;
         let ret = endline.map(|c| {
             match cc.get(&c) {
@@ -163,7 +164,7 @@ impl<C:CharType> StringSource<C> {
         /*endline.map(|c| )*/
     }
 
-    pub fn readline<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C>,mut f:F) {
+    pub fn readline<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner,mut f:F) {
         if self.line >= self.string.len() {self.eof=true;return ()}
         let mut iter = self.string[self.line].iter().map(|u:&u8| *u);
         while let Some(next) = C::from_u8_iter(&mut iter,&mut self.col) {
@@ -177,7 +178,7 @@ impl<C:CharType> StringSource<C> {
         self.line += 1;
     }
 
-    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
         if self.line >= self.string.len() {
             if self.eof {
                 return ()
@@ -231,7 +232,7 @@ impl<C:CharType> StringSource<C> {
     }
 
 
-    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> { loop {
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> { loop {
         if self.line >= self.string.len() {
             if self.eof {
                 return None
@@ -269,7 +270,7 @@ impl<C:CharType> StringSource<C> {
         };
     }}
 
-    fn check_char<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,endline:Option<C>,start:(usize,usize),c:C) -> Option<Token<ET>> {
+    fn check_char<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,endline:Option<C>,start:(usize,usize),c:C) -> Option<Token<ET>> {
         use CategoryCode::*;
         match cc.get(&c) {
             EOL if self.state == MouthState::N => {
@@ -379,7 +380,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    fn get_escape<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,start:(usize,usize)) -> Token<ET> {
+    fn get_escape<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,start:(usize,usize)) -> Token<ET> {
         let name = match get_char!(self) {
             None => {
                 self.state = MouthState::N;
@@ -394,7 +395,7 @@ impl<C:CharType> StringSource<C> {
         ))
     }
 
-    fn check_escape(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,next:C) -> TeXStr<C> {
+    fn check_escape(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,next:C) -> TeXStr {
         use CategoryCode::*;
         match cc.get(&next) {
             Superscript => {
@@ -418,7 +419,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    fn get_cs_name(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,first:C) -> TeXStr<C> {
+    fn get_cs_name(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,first:C) -> TeXStr {
         self.tempstr.clear();
         self.tempstr.push(first.as_char());
         self.state = MouthState::S;
@@ -874,7 +875,7 @@ impl<C:CharType> StringSource<C> {
     /// Create a new [`StringSource`] from a [`String`] and an optional source reference.
     /// `source` is usually a filename, used to construct [`crate::tex::token::SourceReference`]s for [`Token`]s.
     /// The [`StringSource`] keeps track of the current line and column number.
-    pub fn new(string:Vec<u8>,source:Option<TeXStr<C>>) -> StringSource<C> {
+    pub fn new(string:Vec<u8>,source:Option<TeXStr>) -> StringSource<C> {
         StringSource {
             state:StringSourceState::new(string,source),
         }

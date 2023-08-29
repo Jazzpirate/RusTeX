@@ -711,7 +711,7 @@ macro_rules! get_expanded_group {
                     }
                     BaseCommand::ExpandableNoTokens { name, .. } if name == crate::tex::commands::tex::NOEXPAND => {
                         match $engine.get_next_token() {
-                            Some((t,_)) if t.catcode() == CategoryCode::EOF => (),
+                            Some((t,_)) if t.catcode() == CategoryCode::EOL => (),
                             None => crate::file_end!(),
                             Some(($tk, _)) => {$f}
                         }

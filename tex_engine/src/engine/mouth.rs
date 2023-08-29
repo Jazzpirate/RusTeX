@@ -30,7 +30,7 @@ pub trait MouthTrait<ET:EngineType>:Sized {
     fn new_with(tks:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Mouth<ET>;
 
     /// Insert a [`File`] into the [`MouthTrait`], to be processed next
-    fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>);
+    fn push_file(&mut self, file: &ET::File,interner:&mut Interner);
     fn push_string(&mut self,str:&Vec<u8>);
 
     /// Insert a single [`Token`] into the [`MouthTrait`], not to be expanded when processed
@@ -42,29 +42,29 @@ pub trait MouthTrait<ET:EngineType>:Sized {
 
     /// Return the next [`Token`] from the [`MouthTrait`], and whether to expand it (due to `\noexpand`)
     //#[inline(always)]
-    fn get_next(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,outputs:&mut Outputs) -> Option<(Token<ET>,bool)>;
+    fn get_next(&mut self,state:&ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<(Token<ET>,bool)>;
 
-    fn get_next_simple(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<Token<ET>>;
+    fn get_next_simple(&mut self,state:&ET::State,interner:&mut Interner) -> Option<Token<ET>>;
 
     /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
-    fn preview(&self,len:usize,interner:&Interner<ET::Char>) -> String;
+    fn preview(&self,len:usize,interner:&Interner) -> String;
 
     /// Return the current file and line number as presentable string
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String;
+    fn file_line(&self,interner:&Interner) -> String;
 
     fn line_no(&self) -> usize;
 
-    fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs);
+    fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs);
 
-    /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<Token<ET>> {
+    /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOL`](crate::tex::catcodes::CategoryCode::EOL))
+    fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner) -> Option<Token<ET>> {
         match self.get_next_simple(state,interner) {
             Some(t) => {
                 match &t.base {
                     BaseToken::CS(name) if *name == interner.par =>
                         throw!("Paragraph ended while reading argument" => t),
-                    BaseToken::Char(_,CategoryCode::EOF) =>
+                    BaseToken::Char(_,CategoryCode::EOL) =>
                         file_end!(),
                     _ => Some(t)
                 }
@@ -100,7 +100,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         self.stack.push(TeXMouthSource::Noexpand(tk))
     }
 
-    fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>) {
+    fn push_file(&mut self, file: &ET::File,interner:&mut Interner) {
         debug!("Pushing file {:?}", file.path());
         let source = TeXMouthSource::String(StringSource::new(
             file.content_string().unwrap().clone(),
@@ -125,7 +125,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         }
     }
 
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         match self.stack.last_mut() {
             Some(TeXMouthSource::Noexpand(tk)) => match self.stack.pop() {
                 Some(TeXMouthSource::Noexpand(t)) => Some(t),
@@ -154,7 +154,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     }
 
 
-    fn get_next(&mut self, state: &ET::State,interner:&mut Interner<ET::Char>,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> {
+    fn get_next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> {
         match self.stack.last_mut() {
             Some(TeXMouthSource::Noexpand(tk)) => match self.stack.pop() {
                 Some(TeXMouthSource::Noexpand(t)) => Some((t, false)),
@@ -182,7 +182,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
                         }
                         self.stack.pop();
                         debug_log!(debug => "file end; inserting \\everyeof");
-                        let eof = Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOF), None);
+                        let eof = Token::new(BaseToken::Char(ET::Char::from(b'\n'), CategoryCode::EOL), None);
                         let everyeof = state.get_primitive_toks("everyeof");
                         debug_log!(debug => "everyeof: {:?}",match everyeof {
                             None => "None".to_string(),
@@ -206,7 +206,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         }
     }
 
-    fn preview(&self,len:usize,interner:&Interner<ET::Char>) -> String { // TODO memory
+    fn preview(&self,len:usize,interner:&Interner) -> String { // TODO memory
         let mut ret = String::new();
         for s in self.stack.iter().rev() {
             ret.push_str(&match s {
@@ -229,7 +229,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         0
     }
 
-    fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs) {
+    fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs) {
         for s in self.stack.iter().enumerate().rev() {
             match s.1 {
                 TeXMouthSource::String(ss) => {
@@ -245,7 +245,7 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         }
     }
 
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         for s in self.stack.iter().rev() {
             match s {
                 TeXMouthSource::String(ss) => {
@@ -331,7 +331,7 @@ impl<ET:EngineType> Mouth<ET> {
     }
 
     /// Skip whitespace characters from the [`MouthTrait`]
-    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>) {
+    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner) {
         debug_log!(trace=>"skipping whitespace");
         get_while!(self,state,interner,'A => tk => {
             match tk.catcode() {
@@ -467,7 +467,7 @@ impl<ET:EngineType> MouthII<ET> {
     pub fn requeue(&mut self, tk: Token<ET>) {
         self.0 = Some(Box::new(RequeuedSource(Some(tk),self.0.take())))
     }
-    pub fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>) {
+    pub fn push_file(&mut self, file: &ET::File,interner:&mut Interner) {
         debug!("Pushing file {:?}", file.path());
         let source = StringSource::new(
             file.content_string().unwrap().clone(),
@@ -480,7 +480,7 @@ impl<ET:EngineType> MouthII<ET> {
         self.0 = Some(Box::new(FileStringSource(source,self.0.take())))
     }
 
-    pub fn preview(&self,len:usize,interner:&Interner<ET::Char>) -> String {
+    pub fn preview(&self,len:usize,interner:&Interner) -> String {
         let mut ret = String::new();
         match &self.0 {
             None => (),
@@ -494,7 +494,7 @@ impl<ET:EngineType> MouthII<ET> {
             Some(b) => b.line_no()
         }
     }
-    pub fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs) {
+    pub fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs) {
          match &mut self.0 {
              None => (),
              Some(b) => match b.endinput(interner,outputs) {
@@ -504,14 +504,14 @@ impl<ET:EngineType> MouthII<ET> {
          }
     }
 
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         match &self.0 {
             None => "unknown source".to_string(),
             Some(b) => b.file_line(interner)
         }
     }
     
-    pub fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>) -> Option<Token<ET>> {
+    pub fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner,memory:&mut Memory<ET>) -> Option<Token<ET>> {
         match self.get_next_simple(state,interner,memory) {
             Some(t) => {
                 match &t.base {
@@ -525,7 +525,7 @@ impl<ET:EngineType> MouthII<ET> {
             o => o
         }
     }
-    pub fn get_next(&mut self, state: &ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> { loop {
+    pub fn get_next(&mut self, state: &ET::State,interner:&mut Interner,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Option<(Token<ET>, bool)> { loop {
         match &mut self.0 {
             None => return None,
             Some(s) => match s.get_next(state,interner) {
@@ -534,7 +534,7 @@ impl<ET:EngineType> MouthII<ET> {
             }
         }
     }}
-    pub fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>,memory:&mut Memory<ET>) -> Option<Token<ET>> { loop {
+    pub fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner,memory:&mut Memory<ET>) -> Option<Token<ET>> { loop {
         match &mut self.0 {
             None => return None,
             Some(s) => match s.next_simple(state,interner) {
@@ -543,7 +543,7 @@ impl<ET:EngineType> MouthII<ET> {
             }
         }
     }}
-    pub fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>,f:&mut dyn FnMut(Token<ET>) -> bool) {
+    pub fn iter(&mut self,state:&ET::State,interner:&mut Interner,memory:&mut Memory<ET>,f:&mut dyn FnMut(Token<ET>) -> bool) {
         loop {
             match &mut self.0 {
                 None => file_end!(),
@@ -556,7 +556,7 @@ impl<ET:EngineType> MouthII<ET> {
         }
     }
 
-    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,memory:&mut Memory<ET>) {
+    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner,memory:&mut Memory<ET>) {
         let mut ret = None;
         self.iter(state,interner,memory,&mut |t| {
             match t.catcode() {
@@ -624,36 +624,36 @@ impl<ET:EngineType> MouthII<ET> {
 }
 
 pub trait TokenSource<ET:EngineType> {
-    fn next_simple(&mut self, state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<Token<ET>>;
-    fn get_next(&mut self, state:&ET::State,interner:&mut Interner<ET::Char>) -> Option<(Token<ET>,bool)> {
+    fn next_simple(&mut self, state:&ET::State,interner:&mut Interner) -> Option<Token<ET>>;
+    fn get_next(&mut self, state:&ET::State,interner:&mut Interner) -> Option<(Token<ET>,bool)> {
         self.next_simple(state,interner).map(|t| (t,true))
     }
     fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>>;
-    fn destroy(self:Box<Self>,state:&ET::State,interner:&Interner<ET::Char>,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Option<Box<dyn TokenSource<ET>>> {
+    fn destroy(self:Box<Self>,state:&ET::State,interner:&Interner,memory:&mut Memory<ET>,outputs:&mut Outputs) -> Option<Box<dyn TokenSource<ET>>> {
         self.destroy_simple(memory)
     }
-    fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool;
-    fn preview(&self,len:usize,interner:&Interner<ET::Char>,string:&mut String);
+    fn iter(&mut self,state:&ET::State,interner:&mut Interner,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool;
+    fn preview(&self,len:usize,interner:&Interner,string:&mut String);
     fn line_no(&self) -> usize;
-    fn endinput(&mut self, interner:&Interner<ET::Char>,outputs:&mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>>;
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String;
+    fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>>;
+    fn file_line(&self,interner:&Interner) -> String;
 }
 
 struct NoexpandSource<ET:EngineType>(Option<Token<ET>>,Option<Box<dyn TokenSource<ET>>>);
 impl<ET:EngineType> TokenSource<ET> for NoexpandSource<ET> {
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         self.0.take()
     }
-    fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
+    fn get_next(&mut self, state: &ET::State, interner: &mut Interner) -> Option<(Token<ET>, bool)> {
         self.0.take().map(|t| (t,false))
     }
     fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
         self.1
     }
-    fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool {
+    fn iter(&mut self,state:&ET::State,interner:&mut Interner,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool {
         if let Some(t) = self.0.take() { f(t) } else { true }
     }
-    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+    fn preview(&self, len: usize, interner: &Interner, string: &mut String) {
         if let Some(t) = &self.0 {
             string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
         }
@@ -667,7 +667,7 @@ impl<ET:EngineType> TokenSource<ET> for NoexpandSource<ET> {
             s.line_no()
         } else { 0 }
     }
-    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+    fn endinput(&mut self, interner: &Interner, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
         match &mut self.1 {
             None => (),
             Some(s) => match s.endinput(interner,outputs) {
@@ -677,7 +677,7 @@ impl<ET:EngineType> TokenSource<ET> for NoexpandSource<ET> {
         }
         None
     }
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         if let Some(s) = &self.1 {
             s.file_line(interner)
         } else { "unknown source".to_string() }
@@ -685,16 +685,16 @@ impl<ET:EngineType> TokenSource<ET> for NoexpandSource<ET> {
 }
 struct RequeuedSource<ET:EngineType>(Option<Token<ET>>,Option<Box<dyn TokenSource<ET>>>);
 impl<ET:EngineType> TokenSource<ET> for RequeuedSource<ET> {
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         self.0.take()
     }
     fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
         self.1
     }
-    fn iter(&mut self,state:&ET::State,interner:&mut Interner<ET::Char>,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool {
+    fn iter(&mut self,state:&ET::State,interner:&mut Interner,f:&mut dyn FnMut(Token<ET>) -> bool) -> bool {
         if let Some(t) = self.0.take() { f(t) } else { true }
     }
-    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+    fn preview(&self, len: usize, interner: &Interner, string: &mut String) {
         if let Some(t) = &self.0 {
             string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
         }
@@ -708,7 +708,7 @@ impl<ET:EngineType> TokenSource<ET> for RequeuedSource<ET> {
             s.line_no()
         } else { 0 }
     }
-    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+    fn endinput(&mut self, interner: &Interner, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
         match &mut self.1 {
             None => (),
             Some(s) => match s.endinput(interner,outputs) {
@@ -718,7 +718,7 @@ impl<ET:EngineType> TokenSource<ET> for RequeuedSource<ET> {
         }
         None
     }
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         if let Some(s) = &self.1 {
             s.file_line(interner)
         } else { "unknown source".to_string() }
@@ -727,23 +727,23 @@ impl<ET:EngineType> TokenSource<ET> for RequeuedSource<ET> {
 
 struct PreTokenizedSource<ET:EngineType>(Vec<Token<ET>>,Option<Box<dyn TokenSource<ET>>>);
 impl<ET:EngineType> TokenSource<ET> for PreTokenizedSource<ET> {
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         self.0.pop()
     }
-    fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
+    fn get_next(&mut self, state: &ET::State, interner: &mut Interner) -> Option<(Token<ET>, bool)> {
         self.0.pop().map(|t| (t,true))
     }
     fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
         memory.return_token_vec(self.0);
         self.1
     }
-    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
         while let Some(t) = self.0.pop() {
             if !f(t) { return false }
         }
         true
     }
-    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+    fn preview(&self, len: usize, interner: &Interner, string: &mut String) {
        for t in self.0.iter().rev() {
           string.push_str(&t.base.to_str(interner,Some(ET::Char::backslash())));
           if string.len() > len { return () }
@@ -757,7 +757,7 @@ impl<ET:EngineType> TokenSource<ET> for PreTokenizedSource<ET> {
             s.line_no()
         } else { 0 }
     }
-    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+    fn endinput(&mut self, interner: &Interner, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
         match &mut self.1 {
             None => (),
             Some(s) => match s.endinput(interner,outputs) {
@@ -767,7 +767,7 @@ impl<ET:EngineType> TokenSource<ET> for PreTokenizedSource<ET> {
         }
         None
     }
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         if let Some(s) = &self.1 {
             s.file_line(interner)
         } else { "unknown source".to_string() }
@@ -775,7 +775,7 @@ impl<ET:EngineType> TokenSource<ET> for PreTokenizedSource<ET> {
 }
 struct ImmutableSource<ET:EngineType>(Ptr<[Token<ET>]>,usize,Option<Box<dyn TokenSource<ET>>>);
 impl<ET:EngineType> TokenSource<ET> for ImmutableSource<ET> {
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         if self.1 >= self.0.len() { return None }
         let next = self.0.get(self.1).map(|t| t.clone());
         self.1 += 1;
@@ -784,14 +784,14 @@ impl<ET:EngineType> TokenSource<ET> for ImmutableSource<ET> {
     fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
         self.2
     }
-    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
         for t in &self.0[self.1..] {
             self.1 += 1;
             if !f(t.clone()) { return false }
         }
         true
     }
-    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+    fn preview(&self, len: usize, interner: &Interner, string: &mut String) {
         if self.1 >= self.0.len() {
             if let Some(s) = &self.2 {
                 s.preview(len,interner,string);
@@ -811,7 +811,7 @@ impl<ET:EngineType> TokenSource<ET> for ImmutableSource<ET> {
             s.line_no()
         } else { 0 }
     }
-    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+    fn endinput(&mut self, interner: &Interner, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
         match &mut self.2 {
             None => (),
             Some(s) => match s.endinput(interner,outputs) {
@@ -821,7 +821,7 @@ impl<ET:EngineType> TokenSource<ET> for ImmutableSource<ET> {
         }
         None
     }
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         if let Some(s) = &self.2 {
             s.file_line(interner)
         } else { "unknown source".to_string() }
@@ -829,7 +829,7 @@ impl<ET:EngineType> TokenSource<ET> for ImmutableSource<ET> {
 }
 struct DefReplacementSource<ET:EngineType>(DefReplacement<ET>,usize,[Vec<Token<ET>>;9],Option<(u8,usize)>,Option<Box<dyn TokenSource<ET>>>);
 impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         match &mut self.3 {
             Some((arg,idx)) if *idx < (self.2)[*arg as usize].len() => {
                 let r = self.2[*arg as usize][*idx].clone();
@@ -863,7 +863,7 @@ impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
         }
         self_.4
     }
-    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
         loop {
             match &mut self.3 {
                 Some((arg,idx)) if *idx < (self.2)[*arg as usize].len() => {
@@ -895,7 +895,7 @@ impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
             }
         }
     }
-    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+    fn preview(&self, len: usize, interner: &Interner, string: &mut String) {
         todo!()
     }
     fn line_no(&self) -> usize {
@@ -903,7 +903,7 @@ impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
             s.line_no()
         } else { 0 }
     }
-    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+    fn endinput(&mut self, interner: &Interner, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
         match &mut self.4 {
             None => (),
             Some(s) => match s.endinput(interner,outputs) {
@@ -913,7 +913,7 @@ impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
         }
         None
     }
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         if let Some(s) = &self.4 {
             s.file_line(interner)
         } else { "unknown source".to_string() }
@@ -922,16 +922,16 @@ impl<ET:EngineType> TokenSource<ET> for DefReplacementSource<ET> {
 
 struct FileStringSource<ET:EngineType>(StringSource<ET::Char>,Option<Box<dyn TokenSource<ET>>>);
 impl<ET:EngineType> TokenSource<ET> for FileStringSource<ET> {
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<Token<ET>> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<Token<ET>> {
         self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar())
     }
-    fn get_next(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>) -> Option<(Token<ET>, bool)> {
+    fn get_next(&mut self, state: &ET::State, interner: &mut Interner) -> Option<(Token<ET>, bool)> {
         self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()).map(|t| (t,true))
     }
     fn destroy_simple(self:Box<Self>,memory:&mut Memory<ET>) -> Option<Box<dyn TokenSource<ET>>> {
         throw!("File ended unexpectedly")
     }
-    fn destroy(self: Box<Self>,state:&ET::State,interner:&Interner<ET::Char>, memory: &mut Memory<ET>, outputs: &mut Outputs) -> Option<Box<dyn TokenSource<ET>>> {
+    fn destroy(self: Box<Self>,state:&ET::State,interner:&Interner, memory: &mut Memory<ET>, outputs: &mut Outputs) -> Option<Box<dyn TokenSource<ET>>> {
         let self_:Self = *self;
         match &self_.0.source {
             None => (),
@@ -955,13 +955,13 @@ impl<ET:EngineType> TokenSource<ET> for FileStringSource<ET> {
             }
         }
     }
-    fn iter(&mut self, state: &ET::State, interner: &mut Interner<ET::Char>, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
+    fn iter(&mut self, state: &ET::State, interner: &mut Interner, f: &mut dyn FnMut(Token<ET>) -> bool) -> bool {
         while let Some(t) = self.0.get_next(interner,state.get_catcode_scheme(),state.get_endlinechar()) {
             if !f(t) { return false }
         }
         true
     }
-    fn preview(&self, len: usize, interner: &Interner<ET::Char>, string: &mut String) {
+    fn preview(&self, len: usize, interner: &Interner, string: &mut String) {
         string.push_str(&self.0.preview(len-string.len()));
         if string.len() > len { return () }
         if let Some(s) = &self.1 {
@@ -971,10 +971,10 @@ impl<ET:EngineType> TokenSource<ET> for FileStringSource<ET> {
     fn line_no(&self) -> usize {
         self.0.line()
     }
-    fn endinput(&mut self, interner: &Interner<ET::Char>, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
+    fn endinput(&mut self, interner: &Interner, outputs: &mut Outputs) -> Option<Option<Box<dyn TokenSource<ET>>>> {
         Some(self.1.take())
     }
-    fn file_line(&self,interner:&Interner<ET::Char>) -> String {
+    fn file_line(&self,interner:&Interner) -> String {
         match &self.0.source {
             Some(s) => format!("{}:({},{})",interner.resolve(s.symbol()),self.0.line(),self.0.column()),
             None => match &self.1 {

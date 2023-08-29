@@ -1,7 +1,8 @@
 use array_init::array_init;
 use log::error;
 use string_interner::backend::{BufferBackend, StringBackend};
-use string_interner::{DefaultSymbol, StringInterner};
+use string_interner::{StringInterner};
+use string_interner::symbol::SymbolU16;
 use crate::engine::EngineType;
 use crate::tex::token::Token;
 use crate::utils::strings::{CharType, TeXStr};
@@ -9,15 +10,15 @@ use crate::utils::strings::{CharType, TeXStr};
 pub const VEC_SIZE:usize = 32;
 
 #[derive(Clone)]
-pub struct Interner<Char:CharType> {
-    interner:StringInterner<StringBackend,ahash::RandomState>,
-    pub relax:TeXStr<Char>,
-    pub par:TeXStr<Char>,
-    pub empty_str:TeXStr<Char>,
+pub struct Interner {
+    interner:StringInterner<StringBackend<SymbolU16>,ahash::RandomState>,
+    pub relax:TeXStr,
+    pub par:TeXStr,
+    pub empty_str:TeXStr,
 }
-impl<Char:CharType> Interner<Char> {
+impl Interner {
     pub fn new() -> Self {
-        let mut interner = StringInterner::<StringBackend,ahash::RandomState>::new();
+        let mut interner = StringInterner::<StringBackend<SymbolU16>,ahash::RandomState>::new();
         Interner {
             relax:TeXStr::from_primitive(interner.get_or_intern_static("relax")),
             par:TeXStr::from_primitive(interner.get_or_intern_static("par")),
@@ -25,13 +26,13 @@ impl<Char:CharType> Interner<Char> {
             interner
         }
     }
-    pub fn resolve(&self,symbol:DefaultSymbol) -> &str {
+    pub fn resolve(&self,symbol:SymbolU16) -> &str {
         self.interner.resolve(symbol).unwrap()
     }
-    pub fn from_static(&mut self,s:&'static str) -> TeXStr<Char> {
+    pub fn from_static(&mut self,s:&'static str) -> TeXStr {
         TeXStr::from_primitive(self.interner.get_or_intern_static(s))
     }
-    pub fn from_string(&mut self,s:&str) -> TeXStr<Char> {
+    pub fn from_string(&mut self,s:&str) -> TeXStr {
         TeXStr::from_primitive(self.interner.get_or_intern(s))
     }
 }

@@ -31,13 +31,13 @@ pub trait File<Char:CharType>:Clone {
     fn exists(&self) -> bool;
     fn content_string(&self) -> Option<Ptr<[Box<[u8]>]>>;
     fn open_out(&self);
-    fn open_in(&self,interner:&mut Interner<Char>);
+    fn open_in(&self,interner:&mut Interner);
     fn close_out(&self);
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
-    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,f:F);
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
+    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,f:F);
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -82,13 +82,13 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
         todo!("Physical file system not implemented yet")
     }
-    fn open_in(&self,interner:&mut Interner<Char>) {
+    fn open_in(&self,interner:&mut Interner) {
         todo!("Physical file system not implemented yet")
     }
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -126,7 +126,7 @@ impl<Char:CharType> File<Char> for VirtualFile<Char> {
     fn open_out(&self) {
         (*self.0.state.borrow_mut()) = FileState::OpenOut(vec!());
     }
-    fn open_in(&self,interner:&mut Interner<Char>) {
+    fn open_in(&self,interner:&mut Interner) {
         let s = &mut *self.0.state.borrow_mut();
         match s {
             FileState::Closed(Some(v)) => {
@@ -152,7 +152,7 @@ impl<Char:CharType> File<Char> for VirtualFile<Char> {
             _ => unreachable!()
         }
     }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) {
         let s = &mut *self.0.state.borrow_mut();
         match s {
             FileState::OpenIn(ss) => ss.read(interner,cc,endlinechar,f),
@@ -161,7 +161,7 @@ impl<Char:CharType> File<Char> for VirtualFile<Char> {
         }
     }
 
-    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner<Char>,mut f:F) {
+    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,mut f:F) {
         let s = &mut *self.0.state.borrow_mut();
         match s {
             FileState::OpenIn(ss) => ss.readline(interner,f),

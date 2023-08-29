@@ -21,12 +21,12 @@ use crate::utils::strings::{CharType, TeXStr};
 #[derive(Clone,Copy,Debug)]
 pub enum BaseToken<C:CharType> {
     /// A control sequence token with the provided name
-    CS(TeXStr<C>),
+    CS(TeXStr),
     /// An active character token with the provided character
     Char(C, CategoryCode)
 }
 impl<C:CharType> BaseToken<C> {
-    pub fn to_str(& self,interner:&Interner<C>,escapechar:Option<C>) -> String {
+    pub fn to_str(& self,interner:&Interner,escapechar:Option<C>) -> String {
         match self {
             BaseToken::Char(_, CategoryCode::Space) => " ".to_string(),
             BaseToken::Char(c, _) => c.as_char().to_string(),
@@ -90,7 +90,7 @@ pub struct Token<ET:EngineType> {
 
 
 impl<ET:EngineType> Token<ET> {
-    pub fn to_str(&self,interner:&Interner<ET::Char>,escapechar:Option<ET::Char>) -> String {
+    pub fn to_str(&self,interner:&Interner,escapechar:Option<ET::Char>) -> String {
         self.base.to_str(interner,escapechar)
     }
 }
@@ -139,7 +139,7 @@ pub trait Token:PartialEq+Clone+Display+Debug+'static{
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct FileReference {
-    pub filename:string_interner::DefaultSymbol,
+    pub filename:string_interner::symbol::SymbolU16,
     pub start:(usize,usize),
     pub end:(usize,usize)
 }
@@ -148,7 +148,7 @@ pub trait TokenReference<ET:EngineType<TokenReference = Self>>:Clone + Debug+Sen
     fn from_expansion(cmd:&CommandSource<ET>) -> Self;
     fn from_file(base:&BaseToken<ET::Char>,fr:FileReference) -> Self;
     fn with_ref(&self,base:&BaseToken<ET::Char>) -> Self { self.clone() }
-    fn trace(&self,interner:&Interner<ET::Char>) -> Option<String> { None }
+    fn trace(&self,interner:&Interner) -> Option<String> { None }
 }
 impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for () {
     fn from_expansion(_cmd: &CommandSource<ET>) -> Self { () }
@@ -175,7 +175,7 @@ pub enum FileTokenReferenceI<ET:EngineType<TokenReference = FileTokenReference<E
     Expansion{cmd:Option<ET::CommandReference>, token: Token<ET>}
 }
 impl<ET:EngineType<TokenReference = FileTokenReference<ET>>> FileTokenReferenceI<ET> {
-    pub fn trace(&self,interner:&Interner<ET::Char>) -> Option<String> {
+    pub fn trace(&self,interner:&Interner) -> Option<String> {
         use FileTokenReferenceI::*;
         match self {
             File (FileReference{filename, start,end}) => Some(format!("File {} at {}:{} - {}:{}",interner.resolve(*filename), start.0,start.1,end.0,end.1)),
@@ -203,7 +203,7 @@ impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileTokenRefer
         })
     }
     fn from_file(_: &BaseToken<ET::Char>, fr: FileReference) -> Self { Ptr::new(FileTokenReferenceI::File(fr)) }
-    fn trace(&self, interner: &Interner<ET::Char>) -> Option<String> {
+    fn trace(&self, interner: &Interner) -> Option<String> {
         FileTokenReferenceI::trace(self,interner)
     }
 }
@@ -212,7 +212,7 @@ impl<ET:EngineType<TokenReference = Self>> TokenReference<ET> for FileTokenRefer
 /// A list of [`Token`]s
 pub struct TokenList<'a,ET:EngineType>(pub &'a [Token<ET>]);
 impl <'a,ET:EngineType> TokenList<'a,ET> {
-    pub fn to_str(&self,interner:&Interner<ET::Char>) -> String {
+    pub fn to_str(&self,interner:&Interner) -> String {
         let mut s = String::new();
         for t in self.0 {
             s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));

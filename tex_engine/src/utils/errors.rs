@@ -15,7 +15,7 @@ pub struct TeXError<ET:EngineType> {
 //unsafe impl<ET:EngineType> Send for TeXError<ET> {}
 
 impl<ET:EngineType> TeXError<ET> {
-    pub fn throw_string(self,interner:&Interner<ET::Char>) -> String {
+    pub fn throw_string(self,interner:&Interner) -> String {
         let mut ret = self.msg;
         match self.cause {
             Some(tk) => match tk.sourceref.as_ref().map(|t| t.trace(interner)).flatten() {
