@@ -29,11 +29,6 @@ pub trait MouthTrait<ET:EngineType>:Sized {
     fn new(memory:&mut Memory<ET>) -> Self;
     fn new_with(tks:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Mouth<ET>;
 
-    fn get_expansion(engine:&mut EngineRef<ET>) -> Vec<Token<ET>>;
-    fn push_expansion(engine:&mut EngineRef<ET>,expansion:Vec<Token<ET>>);
-    /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
-    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R;
-    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R;
     /// Insert a [`File`] into the [`MouthTrait`], to be processed next
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner<ET::Char>);
     fn push_string(&mut self,str:&Vec<u8>);
@@ -99,39 +94,6 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     fn new_with(mut tks: Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self {
         tks.reverse();
         Mouth {stack:vec!(TeXMouthSource::Tkls(tks)),buffer:vec!()}
-    }
-
-    fn get_expansion(engine: &mut EngineRef<ET>) -> Vec<Token<ET>> {
-        engine.mouth.get_vec()
-    }
-    fn push_expansion(engine: &mut EngineRef<ET>, mut expansion: Vec<Token<ET>>) {
-        if expansion.is_empty() { engine.mouth.buffer.push(expansion) } else {
-            expansion.reverse();
-            engine.mouth.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-    }
-    /// Insert a [`Vec`] of [`Token`]s into the [`MouthTrait`], to be processed next
-    fn add_expansion<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
-        let mut expansion = engine.mouth.get_vec();
-        let ret = {
-            f(engine,&mut expansion)
-        };
-        if expansion.is_empty() { engine.mouth.buffer.push(expansion) } else {
-            expansion.reverse();
-            engine.mouth.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-        ret
-    }
-
-    fn add_expansion_rev<F,R>(engine:&mut EngineRef<ET>, f:F) -> R where F:FnOnce(&mut EngineRef<ET>,&mut Vec<Token<ET>>) -> R {
-        let mut expansion = engine.mouth.get_vec();
-        let ret = {
-            f(engine,&mut expansion)
-        };
-        if expansion.is_empty() { engine.mouth.buffer.push(expansion) } else {
-            engine.mouth.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-        ret
     }
 
     fn push_noexpand(&mut self, tk: Token<ET>,memory:&mut Memory<ET>) {
@@ -335,6 +297,23 @@ macro_rules! get_while {
 }
 
 impl<ET:EngineType> Mouth<ET> {
+
+    pub fn get_expansion(&mut self) -> Vec<Token<ET>> {
+        self.get_vec()
+    }
+    pub fn push_expansion(&mut self, mut expansion: Vec<Token<ET>>) {
+        if expansion.is_empty() { self.buffer.push(expansion) } else {
+            expansion.reverse();
+            self.stack.push(TeXMouthSource::Tkls(expansion))
+        }
+    }
+
+    pub fn push_expansion_norev(&mut self, mut expansion: Vec<Token<ET>>) {
+        if expansion.is_empty() { self.buffer.push(expansion) } else {
+            self.stack.push(TeXMouthSource::Tkls(expansion))
+        }
+    }
+
     fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<Token<ET>>, mut f:F) -> R {
         let old = std::mem::replace(&mut engine.mouth, Self::new_with(tks,&mut engine.memory));
         let ret = f(engine);
@@ -342,7 +321,7 @@ impl<ET:EngineType> Mouth<ET> {
         ret
     }
 
-    fn get_vec(&mut self) -> Vec<Token<ET>> {
+    pub fn get_vec(&mut self) -> Vec<Token<ET>> {
         self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
     }
 

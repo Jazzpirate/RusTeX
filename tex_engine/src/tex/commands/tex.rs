@@ -669,9 +669,9 @@ pub fn endgroup<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     match engine.state.stack_pop(&mut engine.memory) {
         Some((mut v, GroupType::CS)) => {
             if !v.is_empty() {
-                engine.add_expansion(|engine, s| {
-                    s.extend(v.into_iter());
-                })
+                let mut s = engine.mouth.get_expansion();
+                s.extend(v.into_iter());
+                engine.mouth.push_expansion(s);
             }
         }
         _ => throw!("No group to end" => cmd.cause)
@@ -1476,16 +1476,16 @@ pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
 pub const LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\lowercase");
-    engine.add_expansion(|engine,rs|{
-        expand_until_group!(engine,next =>match &next.base {
-            BaseToken::Char(c,cc) => {
-                let nc = engine.state.get_lccode(c);
-                if nc.to_usize() == 0 { rs.push(next) }
-                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
-            }
-            _ => rs.push(next)
-        });
-    })
+    let mut rs = engine.mouth.get_expansion();
+    expand_until_group!(engine,next =>match &next.base {
+        BaseToken::Char(c,cc) => {
+            let nc = engine.state.get_lccode(c);
+            if nc.to_usize() == 0 { rs.push(next) }
+            else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
+        }
+        _ => rs.push(next)
+    });
+    engine.mouth.push_expansion(rs);
 }
 
 pub const MATHCHARDEF : &str = "mathchardef";
@@ -2653,16 +2653,16 @@ pub fn unpenalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
 pub const UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\uppercase");
-    engine.add_expansion(|engine,rs| {
-        expand_until_group!(engine,next => match &next.base {
-            BaseToken::Char(c,cc) => {
-                let nc = engine.state.get_uccode(c);
-                if nc.to_usize() == 0 { rs.push(next) }
-                else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
-            }
-            _ => rs.push(next)
-        });
-    })
+    let mut rs = engine.mouth.get_expansion();
+    expand_until_group!(engine,next => match &next.base {
+        BaseToken::Char(c,cc) => {
+            let nc = engine.state.get_uccode(c);
+            if nc.to_usize() == 0 { rs.push(next) }
+            else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
+        }
+        _ => rs.push(next)
+    });
+    engine.mouth.push_expansion(rs);
 }
 
 pub fn vadjust<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {

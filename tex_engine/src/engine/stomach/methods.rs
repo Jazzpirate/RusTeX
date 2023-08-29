@@ -116,16 +116,16 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         EndGroup => match engine.state.stack_pop(&mut engine.memory) {
             Some((v,GroupType::Token)) => {
                 if !v.is_empty() {
-                    engine.add_expansion(|engine, rs| {
-                        rs.extend(v.into_iter())
-                    })
+                    let mut rs = engine.mouth.get_expansion();
+                    rs.extend(v.into_iter());
+                    engine.mouth.push_expansion(rs);
                 }
             }
             Some((v,GroupType::Box(b))) => {
                 if !v.is_empty() {
-                    engine.add_expansion(|engine, rs| {
-                        rs.extend(v.into_iter())
-                    })
+                    let mut rs = engine.mouth.get_expansion();
+                    rs.extend(v.into_iter());
+                    engine.mouth.push_expansion(rs);
                 }
                 match engine.stomach.shipout_data().box_stack.last() {
                     Some(crate::tex::nodes::OpenBox::Paragraph {..}) => ET::Stomach::close_paragraph(engine),
@@ -166,9 +166,9 @@ pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachComma
         None => (),
         Some(v) => {
             let v = v.clone();
-            engine.add_expansion(|e,f| {
-                f.extend(v.into_iter())
-            })
+            let mut f = engine.mouth.get_expansion();
+            f.extend(v.into_iter());
+            engine.mouth.push_expansion(f);
         }
     }
 }
@@ -178,9 +178,9 @@ pub fn do_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.stomach.shipout_data_mut().box_stack.push(OpenBox::Math {list:vec!(),display:false});
     match engine.state.get_primitive_toks("everymath").cloned() {
         Some(v) if !v.is_empty() => {
-            engine.add_expansion(|e,rs| {
-                rs.extend(v.into_iter())
-            })
+            let mut rs = engine.mouth.get_expansion();
+            rs.extend(v.into_iter());
+            engine.mouth.push_expansion(rs);
         }
         _ => ()
     }
@@ -190,9 +190,9 @@ pub fn do_display_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.stomach.shipout_data_mut().box_stack.push(OpenBox::Math {list:vec!(),display:true});
     match engine.state.get_primitive_toks("everydisplay").cloned() {
         Some(v) if !v.is_empty() => {
-            engine.add_expansion(|e,rs| {
-                rs.extend(v.into_iter())
-            })
+            let mut rs = engine.mouth.get_expansion();
+            rs.extend(v.into_iter());
+            engine.mouth.push_expansion(rs);
         }
         _ => ()
     }

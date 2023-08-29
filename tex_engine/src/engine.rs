@@ -99,8 +99,11 @@ pub trait Engine<ET:EngineType> {
         match comps.state.get_primitive_toks("everyjob").cloned() {
             None => (),
             Some(v) if v.is_empty() => (),
-            Some(v) =>
-                comps.add_expansion(|comps,rs| rs.extend(v.into_iter()))
+            Some(v) =>{
+                let mut rs = comps.mouth.get_expansion();
+                rs.extend(v.into_iter());
+                comps.mouth.push_expansion(rs);
+            }
         }
         while let Some(b) = ET::Stomach::next_shipout_box(&mut comps) {
             ret.push(b)

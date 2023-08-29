@@ -257,88 +257,97 @@ pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,
 pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> bool {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = engine.memory.get_string();
-    engine.add_expansion(|engine,rs|{
-        while let Some(next) = engine.get_next_unexpandable_same_file() {
-            rs.push(next.source.cause);
-            match next.command {
-                BaseCommand::Char {char,..} => {
-                    let us = char.to_usize();
-                    if us < 256 {
-                        current.push(us as u8 as char);
-                        if current == kw {
-                            rs.clear();
-                            engine.memory.return_string(current);
-                            return true
-                        }
-                        else if !kw.starts_with(&current) {
-                            engine.memory.return_string(current);
-                            return false
-                        }
-                    } else {
+    let mut rs = engine.mouth.get_expansion();
+    while let Some(next) = engine.get_next_unexpandable_same_file() {
+        rs.push(next.source.cause);
+        match next.command {
+            BaseCommand::Char {char,..} => {
+                let us = char.to_usize();
+                if us < 256 {
+                    current.push(us as u8 as char);
+                    if current == kw {
+                        rs.clear();
+                        engine.mouth.push_expansion(rs);
+                        engine.memory.return_string(current);
+                        return true
+                    }
+                    else if !kw.starts_with(&current) {
+                        engine.mouth.push_expansion(rs);
                         engine.memory.return_string(current);
                         return false
                     }
-                }
-                _ => {
+                } else {
+                    engine.mouth.push_expansion(rs);
                     engine.memory.return_string(current);
                     return false
                 }
             }
+            _ => {
+                engine.mouth.push_expansion(rs);
+                engine.memory.return_string(current);
+                return false
+            }
         }
-        file_end!()
-    })
+    }
+    file_end!()
 }
 
 pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Vec<&'a str>) -> Option<&'a str> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
-    engine.add_expansion(|engine,rs| {
-        while let Some(next) = engine.get_next_unexpandable_same_file() {
-            rs.push(next.source.cause.clone());
-            match next.command {
-                BaseCommand::Char{char,..} => {
-                    let us = char.to_usize();
-                    let us = if us < 256 { (us as u8).to_ascii_lowercase() } else if keywords.contains(&current.as_str()) {
-                        engine.mouth.requeue(next.source.cause);
-                        rs.clear();
-                        keywords = keywords.into_iter().filter(|s| s == &current).collect();
-                        return Some(keywords[0])
-                    } else {
-                        return None
-                    };
-                    if keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us) {
-                        current.push(us as u8 as char);
-                        keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
-                        if keywords.is_empty() {
-                            return None
-                        }
-                        else if keywords.len() == 1 && keywords[0] == current {
-                            rs.clear();
-                            return Some(keywords[0])
-                        }
-                    } else if keywords.contains(&current.as_str()) {
-                        engine.mouth.requeue(next.source.cause);
-                        rs.clear();
-                        keywords = keywords.into_iter().filter(|s| s == &current).collect();
-                        return Some(keywords[0])
-                    } else {
-                        return None
-                    }
-                }
-                _ if keywords.contains(&current.as_str()) => {
+    let mut rs = engine.mouth.get_expansion();
+    while let Some(next) = engine.get_next_unexpandable_same_file() {
+        rs.push(next.source.cause.clone());
+        match next.command {
+            BaseCommand::Char{char,..} => {
+                let us = char.to_usize();
+                let us = if us < 256 { (us as u8).to_ascii_lowercase() } else if keywords.contains(&current.as_str()) {
                     engine.mouth.requeue(next.source.cause);
                     rs.clear();
+                    engine.mouth.push_expansion(rs);
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Some(keywords[0])
-                }
-                _ => {
+                } else {
+                    engine.mouth.push_expansion(rs);
+                    return None
+                };
+                if keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us) {
+                    current.push(us as u8 as char);
+                    keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
+                    if keywords.is_empty() {
+                        engine.mouth.push_expansion(rs);
+                        return None
+                    }
+                    else if keywords.len() == 1 && keywords[0] == current {
+                        rs.clear();
+                        engine.mouth.push_expansion(rs);
+                        return Some(keywords[0])
+                    }
+                } else if keywords.contains(&current.as_str()) {
+                    engine.mouth.requeue(next.source.cause);
+                    rs.clear();
+                    engine.mouth.push_expansion(rs);
+                    keywords = keywords.into_iter().filter(|s| s == &current).collect();
+                    return Some(keywords[0])
+                } else {
+                    engine.mouth.push_expansion(rs);
                     return None
                 }
             }
-
+            _ if keywords.contains(&current.as_str()) => {
+                engine.mouth.requeue(next.source.cause);
+                rs.clear();
+                engine.mouth.push_expansion(rs);
+                keywords = keywords.into_iter().filter(|s| s == &current).collect();
+                return Some(keywords[0])
+            }
+            _ => {
+                engine.mouth.push_expansion(rs);
+                return None
+            }
         }
-        file_end!()
-    })
+    }
+    file_end!()
 }
 
 pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {

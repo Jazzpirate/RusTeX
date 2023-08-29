@@ -145,20 +145,20 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
         use crate::engine::mouth::MouthTrait;
         match ret.command {
             BaseCommand::Def(d) => {
-                Mouth::add_expansion_rev(engine,|engine,rs| {
-                    expand_def(&d,engine,ret.source,rs);//&mut exp)?;
-                    None
-                })
+                let mut rs = engine.mouth.get_expansion();
+                expand_def(&d,engine,ret.source,&mut rs);
+                engine.mouth.push_expansion_norev(rs);
+                None
             }
             BaseCommand::ExpandableNoTokens {apply,..} => {
                 apply(engine,ret.source);
                 None
             }
             BaseCommand::Expandable {apply,..} => {
-                engine.add_expansion(|engine,rs| {
-                    apply(engine,ret.source,&mut |engine,t| rs.push(t));
-                    None
-                })
+                let mut rs = engine.mouth.get_expansion();
+                apply(engine,ret.source,&mut |engine,t| rs.push(t));
+                engine.mouth.push_expansion(rs);
+                None
             },
             BaseCommand::Conditional {name,apply} => {
                 do_conditional(engine,ret.source, name,apply, false);
