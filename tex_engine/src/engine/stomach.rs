@@ -44,8 +44,8 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data(&self) -> &ShipoutData<ET>;
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
     fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
-    fn split_paragraph(state:&ET::State, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>>;
-    fn split_vertical(state:&ET::State, nodes:Vec<TeXNode<ET>>, target:ET::Dim) -> (Vec<TeXNode<ET>>,Vec<TeXNode<ET>>);
+    fn split_paragraph(fs:&ET::FontStore,state:&ET::State, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>>;
+    fn split_vertical(fs:&ET::FontStore,state:&ET::State, nodes:Vec<TeXNode<ET>>, target:ET::Dim) -> (Vec<TeXNode<ET>>,Vec<TeXNode<ET>>);
 
     fn shipout(&mut self,bx:HVBox<ET>) {
         todo!("shipout")
@@ -65,7 +65,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         methods::close_paragraph(engine)
     }
 
-    fn push_node(&mut self,state:&ET::State,node:TeXNode<ET>) {
+    fn push_node(&mut self,fs:&ET::FontStore,state:&ET::State,node:TeXNode<ET>) {
         let sd = self.shipout_data_mut();
         match node {
             TeXNode::Simple(SimpleNode::Char {char,..}) => {
@@ -83,16 +83,16 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                 if b.is_vertical() {
                     match &node {
                         TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
-                        o => sd.prevdepth = o.depth()
+                        o => sd.prevdepth = o.depth(fs)
                     }
                 }
                 b.ls_mut().push(node)
             },
             _ => {
-                sd.pagetotal = sd.pagetotal + node.height();
+                sd.pagetotal = sd.pagetotal + node.height(fs);
                 match &node {
                     TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
-                    o => sd.prevdepth = o.depth()
+                    o => sd.prevdepth = o.depth(fs)
                 }
                 sd.page.push(node)
             }
@@ -142,11 +142,11 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
     }
     fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> { &mut self.shipout_data }
-    fn split_paragraph(state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
-        methods::split_paragraph_roughly(nodes,linespecs)
+    fn split_paragraph(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
+        methods::split_paragraph_roughly(fs,nodes,linespecs)
     }
-    fn split_vertical(state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
-        methods::split_vertical_roughly(state,nodes,target)
+    fn split_vertical(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+        methods::split_vertical_roughly(fs,state,nodes,target)
     }
 }
 
@@ -177,10 +177,10 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
     fn close_paragraph(engine: &mut EngineRef<ET>) {
         todo!()
     }
-    fn split_paragraph(state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
-        methods::split_paragraph_roughly(nodes,linespecs)
+    fn split_paragraph(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
+        methods::split_paragraph_roughly(fs,nodes,linespecs)
     }
-    fn split_vertical(state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
-        methods::split_vertical_roughly(state,nodes,target)
+    fn split_vertical(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+        methods::split_vertical_roughly(fs,state,nodes,target)
     }
 }

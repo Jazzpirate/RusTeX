@@ -12,6 +12,7 @@ use crate::engine::state::modes::BoxMode;
 use crate::tex::nodes::{HorV, HVBox, TeXNode, Whatsit};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::methods::{set_primitive_int, set_dim_register, set_int_register, set_muskip_register, set_skip_register, set_toks_register, set_primitive_dim, set_primitive_skip, set_primitive_muskip, set_primitive_toks};
+use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Dimi32, MuSkip, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::throw;
@@ -125,7 +126,7 @@ pub type BoxFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> CloseBoxFun<E
 pub type WhatsitFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Whatsit<ET>;
 
 pub type ValueFun<ET,A> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> A;
-pub type FontFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> ET::Font;
+pub type FontFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> ET::FontRefType;
 
 pub trait Assignable<ET:EngineType> {
     fn get_register(state:&ET::State,index:usize) -> Self;
@@ -338,7 +339,7 @@ pub enum BaseCommand<ET:EngineType>{
     /// An (optionally) assignable token value, e.g. `\everypar` or the result of a `\toksdef`
     Toks(ToksCommand<ET>),
     /// A [`Font`](crate::tex::fonts::Font)
-    Font(ET::Font),
+    Font(ET::FontRefType),
     FontCommand { name:&'static str,get:FontFun<ET>,set:Option<AssignmentFun<ET>> },
     /// `\relax`
     Relax,
@@ -440,7 +441,7 @@ pub enum BaseStomachCommand<ET:EngineType> {
     FinishedBox{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> HVBox<ET>},
     Char(ET::Char),
     MathChar(u32),
-    Font(ET::Font),
+    Font(ET::FontRefType),
     Relax,
     Space,
     BeginGroup,
@@ -463,7 +464,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
             BaseStomachCommand::ValueAss(_) => write!(f, "Value Assignment"),
             BaseStomachCommand::Relax => write!(f, "Relax"),
             BaseStomachCommand::Space => write!(f, "Space"),
-            BaseStomachCommand::Font(fnt) => write!(f, "Font {}",fnt),
+            BaseStomachCommand::Font(fnt) => write!(f, "Font {:?}",fnt),
             BaseStomachCommand::BeginGroup => write!(f, "BeginGroup"),
             BaseStomachCommand::EndGroup => write!(f, "EndGroup"),
             BaseStomachCommand::MathShift => write!(f, "MathShift"),

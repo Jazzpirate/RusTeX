@@ -6,7 +6,7 @@ use crate::engine::gullet::methods::get_keywords;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ResolvedToken};
-use crate::tex::fonts::Font;
+use crate::tex::fonts::{Font, FontStore};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim};
 use crate::tex::token::BaseToken;
@@ -304,11 +304,11 @@ pub fn read_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> ET::Dim
                     units.push("em");units.push("ex");
                     match engine.get_keywords( units) {
                         Some("em") => {
-                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(6);
+                            let d = engine.fontstore.get(engine.state.get_current_font()).get_dim::<ET::Dim>(6);
                             d.tex_mult(float * mag)
                         }
                         Some("ex") => {
-                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(5);
+                            let d = engine.fontstore.get(engine.state.get_current_font()).get_dim::<ET::Dim>(5);
                             d.tex_mult(float * mag)
                         }
                         Some(dim) => ET::Dim::from_float(dim, float * mag),
@@ -319,11 +319,11 @@ pub fn read_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> ET::Dim
                     units.push("em");units.push("ex");
                     match engine.get_keywords( units) {
                         Some("em") => {
-                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(6);
+                            let d = engine.fontstore.get(engine.state.get_current_font()).get_dim::<ET::Dim>(6);
                             d.tex_mult(float)
                         }
                         Some("ex") => {
-                            let d = engine.state.get_current_font().get_dim::<ET::Dim>(5);
+                            let d = engine.fontstore.get(engine.state.get_current_font()).get_dim::<ET::Dim>(5);
                             d.tex_mult(float)
                         }
                         Some(dim) => ET::Dim::from_float(dim, float),

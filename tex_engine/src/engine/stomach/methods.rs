@@ -43,7 +43,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
-                engine.stomach.push_node(&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
             }
             TeXMode::Math | TeXMode::Displaymath => throw!("TODO Char in math mode" => cmd.source.cause),
             _ => {
@@ -51,7 +51,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             }
         }
         Space if engine.state.mode().is_vertical() => (),
-        Space => engine.stomach.push_node(&engine.state,SkipNode::Space.as_node()),
+        Space => engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Space.as_node()),
         MathShift => match engine.state.mode() {
             TeXMode::RestrictedHorizontal => do_math(engine),
             TeXMode::Horizontal => {
@@ -102,11 +102,11 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         FinishedBox {name,get} => {
             let b = get(engine,cmd.source);
-            engine.stomach.push_node(&engine.state,b.as_node());
+            engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node());
         }
         Whatsit {name,apply} => {
             let wi = apply(engine,cmd.source);
-            engine.stomach.push_node(&engine.state,TeXNode::Whatsit(wi));
+            engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Whatsit(wi));
         },
         Relax => (),
         MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
@@ -134,7 +134,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 match engine.stomach.shipout_data_mut().box_stack.pop() {
                     Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                         match on_close(engine,list) {
-                            Some(b) => engine.stomach.push_node(&engine.state,b.as_node()),
+                            Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
                             None => {}
                         }
                     }
@@ -231,7 +231,7 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
             let htargets = v.iter().map(|(_,l)| LineSpec{
                 target:*l - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
             }).collect();
-            let lines = ET::Stomach::split_paragraph(&engine.state,par,htargets);
+            let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,htargets);
             todo!()
         }
         None if hangindent != ET::Dim::default() && hangafter != 0 => {
@@ -245,17 +245,17 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
                 r.push(LineSpec{target:hsize - (leftskip.base + rightskip.base + hangindent),left_skip:leftskip,right_skip:rightskip});
                 r
             };
-            let lines = ET::Stomach::split_paragraph(&engine.state,par,htargets);
+            let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,htargets);
             todo!()
         }
         _ => {
-            let lines = ET::Stomach::split_paragraph(&engine.state,par,vec!(LineSpec{
+            let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,vec!(LineSpec{
                 target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
             }));
             for mut line in lines {
                 line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
                 line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
-                engine.stomach.push_node(&engine.state,HBox {
+                engine.stomach.push_node(&engine.fontstore,&engine.state,HBox {
                     kind:"paragraphline",
                     children:line,
                     ..Default::default()
@@ -269,7 +269,7 @@ pub fn knuth_plass<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<Lin
     todo!()
 }
 
-pub fn split_paragraph_roughly<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
+pub fn split_paragraph_roughly<ET:EngineType>(fs:&ET::FontStore,nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
     let mut lines = vec!();
     let mut hgoal = ET::Dim::default();
     let mut hgoals = linespecs.into_iter();
@@ -289,7 +289,7 @@ pub fn split_paragraph_roughly<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linesp
                 None => break 'A,
                 Some(node) => {
                     // TODO penalty etc
-                    goal = goal - node.width();
+                    goal = goal - node.width(fs);
                     lines.last_mut().unwrap().push(node);
                 }
             }
@@ -298,7 +298,7 @@ pub fn split_paragraph_roughly<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linesp
     lines
 }
 
-pub fn split_vertical_roughly<ET:EngineType>(state: &ET::State, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+pub fn split_vertical_roughly<ET:EngineType>(fs:&ET::FontStore,state: &ET::State, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
     let mut nodes = nodes.into_iter();
     let mut result = vec!();
     let mut rest = vec!();
@@ -306,7 +306,7 @@ pub fn split_vertical_roughly<ET:EngineType>(state: &ET::State, mut nodes: Vec<T
         match nodes.next() {
             None => break,
             Some(node) => { // TODO marks
-                target = target - node.height();
+                target = target - node.height(fs);
                 if target < ET::Dim::default() {
                     rest.push(node);
                     break

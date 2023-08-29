@@ -13,7 +13,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
 use crate::tex::commands::{CommandSource, TokenCont};
-use crate::tex::fonts::Font;
+use crate::tex::fonts::{Font, FontStore};
 use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode, Whatsit};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
@@ -101,13 +101,13 @@ impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXN
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Custom(ET::Node::from(self))
     }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
     fn nodetype(&self) -> u8 { 9 }
@@ -117,13 +117,13 @@ impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNod
     fn as_node(self) -> TeXNode<ET> {
         PDFTeXNode::PDFXForm{form:self}.as_node()
     }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
     fn nodetype(&self) -> u8 { 9 }
@@ -320,17 +320,17 @@ pub fn ifpdfabsdim<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
 pub const LPCODE: &str = "lpcode";
 pub fn lpcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning lpcode");
-    let mut fnt = engine.get_font();
+    let fnt = engine.get_font();
     let char = engine.get_char();
     engine.skip_eq_char();
     let val = engine.get_int();
-    fnt.set_lpcode(char,val);
+    engine.fontstore.get_mut(fnt).set_lpcode(char,val);
 }
 pub fn lpcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting lpcode");
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.get_lpcode(char)
+    engine.fontstore.get(fnt).get_lpcode(char)
 }
 
 
@@ -343,7 +343,7 @@ pub fn pdfcatalog<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
         Some(action_spec(engine))
     } else {None};
 
-    engine.stomach.push_node(&engine.state,PDFTeXNode::PDFCatalog {literal,action}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFCatalog {literal,action}.as_node());
 }
 
 /// "pdfcolorstack"
@@ -457,7 +457,7 @@ pub fn pdfdest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
         Some("fit") => PDFDestType::Fit,
         _ => throw!("Expected one of 'xyz','fitr','fitbh','fitbv','fitb','fith','fitv','fit'" => cmd.cause)
     };
-    engine.stomach.push_node(&engine.state,PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
 }
 
 pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -506,7 +506,7 @@ pub fn pdffontexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 
 pub fn pdffontsize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
     let fnt = engine.get_font();
-    let d = ET::Dim::from_sp(fnt.get_at());
+    let d = ET::Dim::from_sp(engine.fontstore.get(fnt).get_at());
     engine.string_to_tokens(format!("{}",d).as_bytes(),f)
 }
 
@@ -540,7 +540,7 @@ pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"pdfliteral");
     let mut literal = String::new();
     engine.get_braced_string(&mut literal);
-    engine.stomach.push_node(&engine.state,PDFTeXNode::PDFLiteral {literal}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFLiteral {literal}.as_node());
 }
 
 /// "pdfobj"
@@ -588,7 +588,7 @@ pub fn pdfoutline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     } else {None};
     let mut content= String::new();
     engine.get_braced_string(&mut content);
-    engine.stomach.push_node(&engine.state,PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
 }
 
 pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -596,9 +596,9 @@ pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     debug_log!(trace=>"\\pdfrefxform");
     let i = engine.get_int().to_i64();
     if i < 0 || engine.state.pdfxforms().len() as i64 <= i {throw!("Invalid xform number: {}",i => cmd.cause)}
-    Whatsit::new(Box::new(move |e| {
-        let f = e.state.pdfxforms().remove(i as usize).as_node();
-        e.stomach.push_node(&e.state,f)
+    Whatsit::new(Box::new(move |engine| {
+        let f = engine.state.pdfxforms().remove(i as usize).as_node();
+        engine.stomach.push_node(&engine.fontstore,&engine.state,f)
     }))
 }
 
@@ -763,17 +763,17 @@ pub fn pdfxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 pub const RPCODE: &str = "rpcode";
 pub fn rpcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning rpcode");
-    let mut fnt = engine.get_font();
+    let fnt = engine.get_font();
     let char = engine.get_char();
     engine.skip_eq_char();
     let val = engine.get_int();
-    fnt.set_rpcode(char,val);
+    engine.fontstore.get_mut(fnt).set_rpcode(char,val);
 }
 pub fn rpcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting rpcode");
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.get_rpcode(char)
+    engine.fontstore.get(fnt).get_rpcode(char)
 }
 
 

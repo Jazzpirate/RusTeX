@@ -163,18 +163,18 @@ pub trait State<ET:EngineType<State=Self>>:Clone+'static {
     fn set_primitive_toks(&mut self, name:&'static str, v:Vec<Token<ET>>, globally:bool,memory:&mut Memory<ET>);
 
     /// get the current font
-    fn get_current_font(&self) -> &ET::Font;
+    fn get_current_font(&self) -> ET::FontRefType;
     /// set the current font
-    fn set_current_font(&mut self, f:ET::Font, globally:bool);
+    fn set_current_font(&mut self, f:ET::FontRefType, globally:bool);
 
-    fn get_textfont(&self, i:usize) -> Option<&ET::Font>;
-    fn set_textfont(&mut self, i:usize, f:ET::Font, globally:bool);
+    fn get_textfont(&self, i:usize) -> Option<ET::FontRefType>;
+    fn set_textfont(&mut self, i:usize, f:ET::FontRefType, globally:bool);
 
-    fn get_scriptfont(&self, i:usize) -> Option<&ET::Font>;
-    fn set_scriptfont(&mut self, i:usize, f:ET::Font, globally:bool);
+    fn get_scriptfont(&self, i:usize) -> Option<ET::FontRefType>;
+    fn set_scriptfont(&mut self, i:usize, f:ET::FontRefType, globally:bool);
 
-    fn get_scriptscriptfont(&self, i:usize) -> Option<&ET::Font>;
-    fn set_scriptscriptfont(&mut self, i:usize, f:ET::Font, globally:bool);
+    fn get_scriptscriptfont(&self, i:usize) -> Option<ET::FontRefType>;
+    fn set_scriptscriptfont(&mut self, i:usize, f:ET::FontRefType, globally:bool);
 
     fn push_aftergroup(&mut self, t:Token<ET>);
 }
@@ -201,7 +201,7 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     pdfcolorstacks:Vec<PDFColorstack>,
     current_colorstack:usize,
 
-    current_font:SingleValueField<ET::Font>,
+    current_font:SingleValueField<ET::FontRefType>,
     parshape:SingleValueField<Option<Vec<(ET::Dim,ET::Dim)>>>,
 
     mode: TeXMode,
@@ -229,9 +229,9 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     toksregisters:TokField<ET>,
     boxregisters:BoxField<ET>,
 
-    textfonts:VecField<Option<ET::Font>>,
-    scriptfonts:VecField<Option<ET::Font>>,
-    scriptscriptfonts:VecField<Option<ET::Font>>,
+    textfonts:VecField<Option<ET::FontRefType>>,
+    scriptfonts:VecField<Option<ET::FontRefType>>,
+    scriptscriptfonts:VecField<Option<ET::FontRefType>>,
 
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
@@ -327,10 +327,10 @@ impl<ET:EngineType<State=Self>> PDFState<ET> for PDFTeXState<ET> {
 }
 
 impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
-    fn get_current_font(&self) -> &ET::Font {
-        self.current_font.get()
+    fn get_current_font(&self) -> ET::FontRefType {
+        *self.current_font.get()
     }
-    fn set_current_font(&mut self, f:ET::Font, globally: bool) {
+    fn set_current_font(&mut self, f:ET::FontRefType, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -824,25 +824,25 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
         }
     }
 
-    fn get_textfont(&self, i: usize) -> Option<&ET::Font> {
+    fn get_textfont(&self, i: usize) -> Option<ET::FontRefType> {
         match self.textfonts.get(&i) {
             None => None,
-            Some(o) => o.as_ref()
+            Some(o) => *o
         }
     }
-    fn get_scriptfont(&self, i: usize) -> Option<&ET::Font> {
+    fn get_scriptfont(&self, i: usize) -> Option<ET::FontRefType> {
         match self.scriptfonts.get(&i) {
             None => None,
-            Some(o) => o.as_ref()
+            Some(o) => *o
         }
     }
-    fn get_scriptscriptfont(&self, i: usize) -> Option<&ET::Font> {
+    fn get_scriptscriptfont(&self, i: usize) -> Option<ET::FontRefType> {
         match self.scriptscriptfonts.get(&i) {
             None => None,
-            Some(o) => o.as_ref()
+            Some(o) => *o
         }
     }
-    fn set_textfont(&mut self, i: usize, f: ET::Font, globally: bool) {
+    fn set_textfont(&mut self, i: usize, f: ET::FontRefType, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {
             globaldefs > 0
@@ -853,7 +853,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             self.textfonts.set_locally(i,Some(f))
         }
     }
-    fn set_scriptfont(&mut self, i: usize, f: ET::Font, globally: bool) {
+    fn set_scriptfont(&mut self, i: usize, f: ET::FontRefType, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {
             globally
@@ -866,7 +866,7 @@ impl<ET:EngineType<State=Self>> State<ET> for PDFTeXState<ET> {
             self.scriptfonts.set_locally(i,Some(f))
         }
     }
-    fn set_scriptscriptfont(&mut self, i: usize, f: ET::Font, globally: bool) {
+    fn set_scriptscriptfont(&mut self, i: usize, f: ET::FontRefType, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {
             globally

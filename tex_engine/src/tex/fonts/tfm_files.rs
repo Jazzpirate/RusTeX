@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use crate::utils::collections::HMap;
 
+#[derive(Debug)]
 pub struct TfmFile {
     pub hyphenchar:u8,
     pub skewchar:u8,

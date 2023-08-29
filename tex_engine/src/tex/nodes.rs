@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::BoxMode;
 use crate::tex::commands::CloseBoxFun;
-use crate::tex::fonts::Font;
+use crate::tex::fonts::{Font, FontStore};
 use crate::tex::numbers::Skip;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
@@ -14,9 +14,9 @@ use crate::tex::numbers::Dim;
 
 pub trait NodeTrait<ET:EngineType> {
     fn as_node(self) -> TeXNode<ET>;
-    fn height(&self) -> ET::Dim;
-    fn depth(&self) -> ET::Dim;
-    fn width(&self) -> ET::Dim;
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim;
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim;
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim;
     fn nodetype(&self) -> u8;
 }
 
@@ -35,34 +35,34 @@ pub enum TeXNode<ET:EngineType> {
     VAdjust(Vec<TeXNode<ET>>)
 }
 impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         use TeXNode::*;
         match self {
-            Skip (s) => s.height(),
+            Skip (s) => s.height(fs),
             Kern { dim: val,axis:HorV::Vertical} => *val,
-            Box(b) => b.height(),
-            Custom(c) => c.height(),
-            Simple(s) => s.height(),
+            Box(b) => b.height(fs),
+            Custom(c) => c.height(fs),
+            Simple(s) => s.height(fs),
             _ => ET::Dim::from_sp(0)
         }
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         use TeXNode::*;
         match self {
-            Skip(s) => s.width(),
+            Skip(s) => s.width(fs),
             Kern { dim: val,axis:HorV::Horizontal} => *val,
-            Box(b) => b.width(),
-            Custom(c) => c.width(),
-            Simple(s) => s.width(),
+            Box(b) => b.width(fs),
+            Custom(c) => c.width(fs),
+            Simple(s) => s.width(fs),
             _ => ET::Dim::from_sp(0)
         }
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         use TeXNode::*;
         match self {
-            Box(b) => b.depth(),
-            Custom(c) => c.depth(),
-            Simple(s) => s.depth(),
+            Box(b) => b.depth(fs),
+            Custom(c) => c.depth(fs),
+            Simple(s) => s.depth(fs),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -94,17 +94,17 @@ impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Skip(self)
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         ET::Dim::from_sp(0)
     }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         use SkipNode::*;
         match self {
             Skip { skip: val,axis:HorV::Vertical} => val.base,
             _ => ET::Dim::from_sp(0)
         }
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         use SkipNode::*;
         match self {
             Skip { skip: val,axis:HorV::Horizontal} => val.base,
@@ -122,42 +122,42 @@ pub enum HorV { Horizontal, Vertical }
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
-    Char {char:ET::Char, font:ET::Font}
+    Char {char:ET::Char, font:ET::FontRefType}
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Simple(self)
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         match self {
             SimpleNode::Rule{depth,..} => depth.unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Raise{node,by} => {
-                let d = node.depth() - *by;
+                let d = node.depth(fs) - *by;
                 if d > ET::Dim::from_sp(0) { d } else { ET::Dim::from_sp(0) }
             },
-            SimpleNode::Char {char,font} => font.char_dp(*char),
+            SimpleNode::Char {char,font} => fs.get(*font).char_dp(*char),
             _ => ET::Dim::from_sp(0)
         }
     }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         match self {
             SimpleNode::Rule{height,axis:HorV::Horizontal,..} => height.unwrap_or_else(|| ET::Dim::from_sp(26214)),
             SimpleNode::Rule{height,..} => height.unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Raise{node,by} => {
-                let h = node.height() + *by;
+                let h = node.height(fs) + *by;
                 if h > ET::Dim::from_sp(0) { h } else { ET::Dim::from_sp(0) }
             },
-            SimpleNode::Char {char,font} => font.char_ht(*char),
+            SimpleNode::Char {char,font} => fs.get(*font).char_ht(*char),
             _ => ET::Dim::from_sp(0)
         }
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         match self {
             SimpleNode::Rule{width,axis:HorV::Vertical,..} => width.unwrap_or_else(|| ET::Dim::from_sp(26214)),
             SimpleNode::Rule{width,..} => width.unwrap_or_else(|| ET::Dim::from_sp(0)),
-            SimpleNode::Raise{node,..} => node.width(),
-            SimpleNode::Char {char,font} => font.char_wd(*char),
+            SimpleNode::Raise{node,..} => node.width(fs),
+            SimpleNode::Char {char,font} => fs.get(*font).char_wd(*char),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -177,9 +177,9 @@ impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Custom(self)
     }
-    fn height(&self) -> ET::Dim { ET::Dim::from_sp(0) }
-    fn depth(&self) -> ET::Dim { ET::Dim::from_sp(0) }
-    fn width(&self) -> ET::Dim { ET::Dim::from_sp(0) }
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim { ET::Dim::from_sp(0) }
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim { ET::Dim::from_sp(0) }
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim { ET::Dim::from_sp(0) }
     fn nodetype(&self) -> u8 {9 }
 }
 impl<ET:EngineType<Node=()>> CustomNode<ET> for () {}
@@ -241,24 +241,24 @@ impl<ET:EngineType> HVBox<ET> {
 }
 impl<ET:EngineType> NodeTrait<ET> for HVBox<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(self) }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         match self {
-            HVBox::H(b) => b.height(),
-            HVBox::V(b) => b.height(),
+            HVBox::H(b) => b.height(fs),
+            HVBox::V(b) => b.height(fs),
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         match self {
-            HVBox::H(b) => b.depth(),
-            HVBox::V(b) => b.depth(),
+            HVBox::H(b) => b.depth(fs),
+            HVBox::V(b) => b.depth(fs),
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         match self {
-            HVBox::H(b) => b.width(),
-            HVBox::V(b) => b.width(),
+            HVBox::H(b) => b.width(fs),
+            HVBox::V(b) => b.width(fs),
             HVBox::Void => ET::Dim::from_sp(0)
         }
     }
@@ -283,19 +283,19 @@ pub struct HBox<ET:EngineType> {
 }
 impl<ET:EngineType> NodeTrait<ET> for HBox<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(HVBox::H(self)) }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         self.assigned_height.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.height()).max().unwrap_or_else(|| ET::Dim::from_sp(0))
+            self.children.iter().map(|c| c.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0))
         })
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         self.assigned_depth.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.depth()).max().unwrap_or_else(|| ET::Dim::from_sp(0))
+            self.children.iter().map(|c| c.depth(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0))
         })
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         self.assigned_width.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.width()).sum()
+            self.children.iter().map(|c| c.width(fs)).sum()
         })
     }
     fn nodetype(&self) -> u8 {1 }
@@ -327,20 +327,20 @@ pub struct VBox<ET:EngineType> {
 }
 impl<ET:EngineType> NodeTrait<ET> for VBox<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(HVBox::V(self)) }
-    fn height(&self) -> ET::Dim {
+    fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         self.assigned_height.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.height()).sum()
+            self.children.iter().map(|c| c.height(fs)).sum()
         })
     }
-    fn depth(&self) -> ET::Dim {
+    fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
         self.assigned_depth.unwrap_or_else(|| {
             // TODO not quite - filter penalties etc.
-            self.children.iter().rev().find(|c| c.depth() > ET::Dim::from_sp(0)).map(|c| c.depth()).unwrap_or_else(|| ET::Dim::from_sp(0))
+            self.children.iter().rev().find(|c| c.depth(fs) > ET::Dim::from_sp(0)).map(|c| c.depth(fs)).unwrap_or_else(|| ET::Dim::from_sp(0))
         })
     }
-    fn width(&self) -> ET::Dim {
+    fn width(&self,fs:&ET::FontStore) -> ET::Dim {
         self.assigned_width.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.width()).max().unwrap_or_else(|| ET::Dim::from_sp(0))
+            self.children.iter().map(|c| c.width(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0))
         })
     }
     fn nodetype(&self) -> u8 {2 }

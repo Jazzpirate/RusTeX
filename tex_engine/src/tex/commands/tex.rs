@@ -32,7 +32,7 @@ SPACE
  */
 
 pub fn SPACE<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
-    engine.stomach.push_node(&engine.state,SkipNode::Space.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Space.as_node());
 }
 
 pub const ADVANCE: &str = "advance";
@@ -200,7 +200,7 @@ pub fn catcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
 pub fn char<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\char");
     let char = engine.get_char();
-    engine.stomach.push_node(&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
 }
 
 pub const CHARDEF: &str = "chardef";
@@ -570,7 +570,7 @@ pub fn dp_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>)
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    let v = engine.state.get_box_register(i).map(|b|b.depth()).unwrap_or(ET::Dim::from_sp(0));
+    let v = engine.state.get_box_register(i).map(|b|b.depth(&engine.fontstore)).unwrap_or(ET::Dim::from_sp(0));
     debug_log!(debug=>"\\dp{} == {}",i,v);
     v
 }
@@ -797,27 +797,29 @@ pub fn font_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     if !fontname.ends_with(".tfm") {
         fontname = fontname + ".tfm"
     }
-    let mut font = engine.fontstore.get_new::<ET>(&fontname,cs);
+    let fontid = engine.fontstore.get_new::<ET>(&fontname,cs);
     engine.memory.return_string(fontname);
     match engine.get_keywords(vec!("at","scaled")) {
         Some(s) if s == "at" => {
             let dim = engine.get_dim();
+            let mut font = engine.fontstore.get_mut(fontid);
             font.set_at(dim.to_sp());
         }
         Some(s) if s == "scaled" => {
             let r = crate::engine::gullet::numeric_methods::read_float::<ET>(engine,b'0',false);
+            let mut font = engine.fontstore.get_mut(fontid);
             let new_at = ((font.get_at() as f64) * r).round() as i64;
             font.set_at(new_at);
         }
         _ => ()
     }
-    let fontcmd = Command::new(BaseCommand::Font(font),Some(&cmd));
+    let fontcmd = Command::new(BaseCommand::Font(fontid),Some(&cmd));
     engine.state.set_command(cs,Some(fontcmd),global);
 }
 pub fn font_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                               -> ET::Font {
+                               -> ET::FontRefType {
     debug_log!(trace=>"Getting \\font");
-    engine.state.get_current_font().clone()
+    engine.state.get_current_font()
 }
 
 pub fn fontdimen_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
@@ -827,10 +829,10 @@ pub fn fontdimen_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSo
         Ok(i) => i,
         Err(_) => throw!("Invalid font dimension index" => cmd.cause)
     };
-    let mut font = engine.get_font();
+    let fontid = engine.get_font();
     engine.skip_eq_char();
     let dim = engine.get_dim();
-    font.set_dim::<ET::Dim>(i,dim);
+    engine.fontstore.get_mut(fontid).set_dim::<ET::Dim>(i,dim);
 }
 
 pub fn fontdimen_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
@@ -840,8 +842,8 @@ pub fn fontdimen_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
         Ok(i) => i,
         Err(_) => throw!("Invalid font dimension index: {}",o => cmd.cause)
     };
-    let font = engine.get_font();
-    font.get_dim::<ET::Dim>(i)
+    let fontid = engine.get_font();
+    engine.fontstore.get(fontid).get_dim::<ET::Dim>(i)
 }
 
 pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
@@ -948,25 +950,25 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
 pub const HFIL: &str = "hfil";
 pub fn hfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfil");
-    engine.stomach.push_node(&engine.state,SkipNode::HFil.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::HFil.as_node());
 }
 
 pub const HFILL: &str = "hfill";
 pub fn hfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfill");
-    engine.stomach.push_node(&engine.state,SkipNode::HFill.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::HFill.as_node());
 }
 
 pub const HFILNEG: &str = "hfilneg";
 pub fn hfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hfilneg");
-    engine.stomach.push_node(&engine.state,SkipNode::HFilneg.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::HFilneg.as_node());
 }
 
 pub const HSS: &str = "hss";
 pub fn hss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hss");
-    engine.stomach.push_node(&engine.state,SkipNode::Hss.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Hss.as_node());
 }
 
 pub const HT : &str = "ht";
@@ -990,7 +992,7 @@ pub fn ht_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>)
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    let v = engine.state.get_box_register(i).map(|b| b.height()).unwrap_or(ET::Dim::from_sp(0));
+    let v = engine.state.get_box_register(i).map(|b| b.height(&engine.fontstore)).unwrap_or(ET::Dim::from_sp(0));
     debug_log!(debug=>"\\ht{} == {}",i,v);
     v
 }
@@ -1015,7 +1017,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
             }
         }
     }
-    engine.stomach.push_node(&engine.state,SimpleNode::Rule {
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Rule {
         width,height,depth,axis:HorV::Horizontal
     }.as_node());
 }
@@ -1023,7 +1025,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
 pub fn hskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hskip");
     let skip = engine.get_skip();
-    engine.stomach.push_node(&engine.state,SkipNode::Skip{skip,axis:HorV::Horizontal}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Skip{skip,axis:HorV::Horizontal}.as_node());
 }
 
 pub fn hyphenation<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
@@ -1036,17 +1038,19 @@ pub fn hyphenation<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
 
 pub fn hyphenchar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning \\hyphenchar");
-    let mut font = engine.get_font();
+    let fontid = engine.get_font();
     engine.skip_eq_char();
     let i = engine.get_int().to_i64();
+    let mut font = engine.fontstore.get_mut(fontid);
     debug_log!(debug=>"\\hyphenchar\\{:?} = {:?}",font,i);
     font.set_hyphenchar(i);
 }
 pub fn hyphenchar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting \\hyphenchar");
-    let font = engine.get_font();
-    debug_log!(debug=>"\\hyphenchar == {:?}",font.get_hyphenchar());
-    ET::Int::from_i64(font.get_hyphenchar())
+    let fontid = engine.get_font();
+    let hc = engine.fontstore.get(fontid).get_hyphenchar();
+    debug_log!(debug=>"\\hyphenchar == {:?}",hc);
+    ET::Int::from_i64(hc)
 }
 
 pub fn if_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
@@ -1305,7 +1309,7 @@ pub fn immediate<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
 
 pub fn indent<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"indent");
-    engine.stomach.push_node(&engine.state,HBox {
+    engine.stomach.push_node(&engine.fontstore,&engine.state,HBox {
         kind:"indent",
         children:vec!(SkipNode::Skip{skip:engine.state.get_primitive_skip("parindent"),axis:HorV::Horizontal}.as_node()),
         ..Default::default()
@@ -1344,7 +1348,7 @@ pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
 
 pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     let dim = engine.get_dim();
-    engine.stomach.push_node(&engine.state,TeXNode::Kern {dim,axis:match engine.state.mode() {
+    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Kern {dim,axis:match engine.state.mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => HorV::Vertical,
         _ => HorV::Horizontal
     }});
@@ -1455,18 +1459,18 @@ pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
                 let f = apply(engine,c.source);
-                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
-                    let bx = match f(e,v) {
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |engine,v| {
+                    let bx = match f(engine,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    e.stomach.push_node(&e.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
+                    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
                     None
                 })})
             }
             BaseCommand::FinishedBox {get,..} => {
                 let bx = get(engine,c.source);
-                engine.stomach.push_node(&engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
             }
             _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
         }
@@ -1679,7 +1683,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     format!("mathchar\"{:X}",c)
                 }
                 BaseCommand::Font(fnt) => {
-                    format!("select font {}",fnt)
+                    format!("select font {}",engine.fontstore.get(fnt))
                 }
                 BaseCommand::None => {
                     return engine.string_to_tokens("undefined".as_bytes(),f)
@@ -2065,7 +2069,7 @@ pub const PENALTY: &str = "penalty";
 pub fn penalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\penalty");
     let i = engine.get_int().to_i64() as i32;
-    engine.stomach.push_node(&engine.state,TeXNode::Penalty(i));
+    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Penalty(i));
 }
 
 pub const PREVDEPTH : &str = "prevdepth";
@@ -2090,18 +2094,18 @@ pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
                 let f = apply(engine,c.source);
-                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
-                    let bx = match f(e,v) {
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |engine,v| {
+                    let bx = match f(engine,v) {
                         Some(r) => {r}
                         None => {todo!("make void box")}
                     };
-                    e.stomach.push_node(&e.state,SimpleNode::Raise {by:i,node:bx}.as_node());
+                    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
                     None
                 })})
             }
             BaseCommand::FinishedBox {get,..} => {
                 let bx = get(engine,c.source);
-                engine.stomach.push_node(&engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
             }
             _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
         }
@@ -2218,7 +2222,7 @@ pub fn scriptfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandS
     engine.state.set_scriptfont(num as usize,fnt,global);
 }
 pub fn scriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                               -> ET::Font {
+                               -> ET::FontRefType {
     debug_log!(trace=>"Getting \\scriptfont");
     let num = engine.get_int().to_i64();
     if num < 0 || num > 15 {
@@ -2226,7 +2230,7 @@ pub fn scriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSour
     }
     match engine.state.get_scriptfont(num as usize) {
         None => engine.fontstore.null(),
-        Some(f) => f.clone()
+        Some(f) => f
     }
 }
 
@@ -2241,7 +2245,7 @@ pub fn scriptscriptfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&Co
     engine.state.set_scriptscriptfont(num as usize,fnt,global);
 }
 pub fn scriptscriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                                     -> ET::Font {
+                                     -> ET::FontRefType {
     debug_log!(trace=>"Getting \\sscriptcriptfont");
     let num = engine.get_int().to_i64();
     if num < 0 || num > 15 {
@@ -2328,17 +2332,19 @@ pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
 pub const SKEWCHAR: &str = "skewchar";
 pub fn skewchar_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning \\kewchar");
-    let mut font = engine.get_font();
+    let fontid = engine.get_font();
     engine.skip_eq_char();
     let i = engine.get_int().to_i64();
+    let mut font = engine.fontstore.get_mut(fontid);
     debug_log!(debug=>"\\skewchar\\{:?} = {:?}",font,i);
     font.set_skewchar(i);
 }
 pub fn skewchar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting \\skewchar");
-    let font = engine.get_font();
-    debug_log!(debug=>"\\skewchar == {:?}",font.get_skewchar());
-    ET::Int::from_i64(font.get_skewchar())
+    let fontid = engine.get_font();
+    let sk = engine.fontstore.get(fontid).get_skewchar();
+    debug_log!(debug=>"\\skewchar == {:?}",sk);
+    ET::Int::from_i64(sk)
 }
 
 pub const SKIP : &str = "skip";
@@ -2416,7 +2422,7 @@ pub fn textfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
     engine.state.set_textfont(num as usize,fnt,global);
 }
 pub fn textfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                                     -> ET::Font {
+                                     -> ET::FontRefType {
     debug_log!(trace=>"Getting \\textfont");
     let num = engine.get_int().to_i64();
     if num < 0 || num > 15 {
@@ -2424,7 +2430,7 @@ pub fn textfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
     }
     match engine.state.get_textfont(num as usize) {
         None => engine.fontstore.null(),
-        Some(f) => f.clone()
+        Some(f) => f
     }
 }
 
@@ -2459,11 +2465,11 @@ pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:T
             BaseCommand::MathChar(u) => engine.string_to_tokens(u.to_string().as_bytes(),f),
             BaseCommand::CharDef(c) => engine.string_to_tokens(c.to_usize().to_string().as_bytes(),f),
             BaseCommand::Font(fnt) => {
-                f(engine,Token::new(BaseToken::CS(fnt.name()),None))
+                f(engine,Token::new(BaseToken::CS(engine.fontstore.get(fnt).name()),None))
             },
             BaseCommand::FontCommand {get,..} => {
                 let fnt = get(engine,c.source);
-                f(engine,Token::new(BaseToken::CS(fnt.name()),None))
+                f(engine,Token::new(BaseToken::CS(engine.fontstore.get(fnt).name()),None))
             }
             _ => throw!("Expected a value after \\the; got: {}", c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())) => c.source.cause)
         }
@@ -2547,7 +2553,7 @@ pub fn unhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match bx {
         HVBox::H(hb) => {
             for n in hb.children {
-                engine.stomach.push_node(&engine.state,n);
+                engine.stomach.push_node(&engine.fontstore,&engine.state,n);
             }
         }
         HVBox::Void => (),
@@ -2564,7 +2570,7 @@ pub fn unhcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
             match b {
                 HVBox::H(hb) => {
                     for n in hb.children {
-                        engine.stomach.push_node(&engine.state,n);
+                        engine.stomach.push_node(&engine.fontstore,&engine.state,n);
                     }
                 }
                 HVBox::Void => (),
@@ -2582,7 +2588,7 @@ pub fn unvbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match bx {
         HVBox::V(hb) => {
             for n in hb.children {
-                engine.stomach.push_node(&engine.state,n);
+                engine.stomach.push_node(&engine.fontstore,&engine.state,n);
             }
         }
         HVBox::Void => (),
@@ -2599,7 +2605,7 @@ pub fn unvcopy<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
             match b {
                 HVBox::V(hb) => {
                     for n in hb.children {
-                        engine.stomach.push_node(&engine.state,n);
+                        engine.stomach.push_node(&engine.fontstore,&engine.state,n);
                     }
                 }
                 HVBox::Void => (),
@@ -2678,8 +2684,8 @@ pub fn vadjust<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                     Some(v) if v.is_empty() => (),
                     Some(v) => for t in v.iter().rev() {engine.mouth.requeue(t.clone())}
                 }
-                return Ptr::new(move |e,children| {
-                    e.stomach.push_node(&e.state,TeXNode::VAdjust(children));
+                return Ptr::new(move |engine,children| {
+                    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::VAdjust(children));
                     None
                 })
             }
@@ -2775,19 +2781,19 @@ pub fn vcenter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
 pub const VFIL: &str = "vfil";
 pub fn vfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfil");
-    engine.stomach.push_node(&engine.state,SkipNode::VFil.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::VFil.as_node());
 }
 
 pub const VFILL: &str = "vfill";
 pub fn vfill<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfill");
-    engine.stomach.push_node(&engine.state,SkipNode::VFill.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::VFill.as_node());
 }
 
 pub const VFILNEG: &str = "vfilneg";
 pub fn vfilneg<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfilneg");
-    engine.stomach.push_node(&engine.state,SkipNode::VFilneg.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::VFilneg.as_node());
 }
 
 pub const VRULE: &str = "vrule";
@@ -2810,7 +2816,7 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
             }
         }
     }
-    engine.stomach.push_node(&engine.state,SimpleNode::Rule {
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Rule {
         width,height,depth,axis:HorV::Vertical
     }.as_node());
 }
@@ -2819,7 +2825,7 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
 pub fn vskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vskip");
     let skip = engine.get_skip();
-    engine.stomach.push_node(&engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Skip{skip,axis:HorV::Vertical}.as_node());
 }
 
 pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> HVBox<ET> {
@@ -2855,7 +2861,7 @@ pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -
                 assigned_width:vb.assigned_width,
                 kind:"vbox",
             };
-            let (f,s) = ET::Stomach::split_vertical(&engine.state,vb.children,target);
+            let (f,s) = ET::Stomach::split_vertical(&engine.fontstore,&engine.state,vb.children,target);
             first.children = f;
             second.children = s;
             engine.state.set_box_register(i,HVBox::V(second),false);
@@ -2869,7 +2875,7 @@ pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -
 pub const VSS: &str = "vss";
 pub fn vss<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vss");
-    engine.stomach.push_node(&engine.state,SkipNode::Vss.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Vss.as_node());
 }
 
 pub const WD : &str = "wd";
@@ -2893,7 +2899,7 @@ pub fn wd_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>)
         Ok(i) => i,
         Err(_) => throw!("Not a valid register: {}",i => cmd.cause)
     };
-    let v = engine.state.get_box_register(i).map(|b| b.width()).unwrap_or(ET::Dim::from_sp(0));
+    let v = engine.state.get_box_register(i).map(|b| b.width(&engine.fontstore)).unwrap_or(ET::Dim::from_sp(0));
     debug_log!(debug=>"\\wd{} == {}",i,v);
     v
 }

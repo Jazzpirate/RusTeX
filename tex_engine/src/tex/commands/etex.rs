@@ -10,7 +10,7 @@ use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
 use crate::engine::stomach::Stomach;
-use crate::tex::fonts::Font;
+use crate::tex::fonts::{Font, FontStore};
 use crate::tex::nodes::NodeTrait;
 use crate::utils::errors::TeXError;
 use super::tex::{global,long,outer,def,edef,gdef,xdef,get_csname};
@@ -261,22 +261,22 @@ pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 pub fn fontchardp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.char_dp(char)
+    engine.fontstore.get(fnt).char_dp(char)
 }
 pub fn fontcharht<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.char_ht(char)
+    engine.fontstore.get(fnt).char_ht(char)
 }
 pub fn fontcharic<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.char_ic(char)
+    engine.fontstore.get(fnt).char_ic(char)
 }
 pub fn fontcharwd<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.char_wd(char)
+    engine.fontstore.get(fnt).char_wd(char)
 }
 
 pub const GLUEEXPR: &str = "glueexpr";
@@ -330,7 +330,7 @@ pub fn iffontchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"iffontchar");
     let fnt = engine.get_font();
     let char = engine.get_char();
-    fnt.exists(char)
+    engine.fontstore.get(fnt).exists(char)
 }
 
 pub fn lastnodetype<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {

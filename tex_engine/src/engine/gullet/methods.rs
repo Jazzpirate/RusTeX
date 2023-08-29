@@ -11,6 +11,7 @@ use crate::engine::mouth::MouthTrait;
 use crate::tex::commands::etex::UNEXPANDED;
 use crate::tex::commands::tex::{IFCASE, NOEXPAND, THE};
 use crate::tex::ConditionalBranch;
+use crate::tex::fonts::FontStore;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 use crate::utils::strings::AllCharsTrait;
@@ -482,7 +483,7 @@ fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:Resol
     }
 }
 
-pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Font {
+pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRefType {
     match engine.get_next_unexpandable_same_file() {
         None => file_end!(),
         Some(res) => match res.command {
@@ -572,7 +573,7 @@ impl<ET:EngineType> EngineRef<ET> {
         get_braced_string::<ET>(self,string)
     }
 
-    pub fn get_font(&mut self) -> ET::Font {
+    pub fn get_font(&mut self) -> ET::FontRefType {
         ET::Gullet::get_font(self)
     }
 

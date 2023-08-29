@@ -13,6 +13,7 @@ use crate::tex::ConditionalBranch;
 use crate::tex::numbers::{Skip, MuSkip};
 use crate::tex::commands::{ResolvedToken, StomachCommand, BaseCommand};
 use crate::tex::commands::methods::expand_def;
+use crate::tex::fonts::FontStore;
 use crate::utils::errors::TeXError;
 
 
@@ -81,7 +82,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         methods::get_string::<ET>(engine,string)
     }
 
-    fn get_font(engine:&mut EngineRef<ET>) -> ET::Font {
+    fn get_font(engine:&mut EngineRef<ET>) -> ET::FontRefType {
         methods::get_font::<ET>(engine)
     }
 
