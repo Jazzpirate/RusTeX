@@ -456,6 +456,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
             ParamToken::Param => match iter.peek() { // read an argument
                 None if d.endswithbrace => {// read until `{`
                     let arg = &mut args[argnum];
+                    arg.clear();
                     argnum += 1;
                     'L: loop {
                         match if d.long {engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
@@ -474,6 +475,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                 }
                 None | Some(ParamToken::Param) => { // undelimited argument
                     let arg = &mut args[argnum];
+                    arg.clear();
                     argnum += 1;
                     engine.skip_whitespace();
                     if d.long { engine.get_argument(arg) }
@@ -481,6 +483,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut args[argnum];
+                    arg.clear();
                     let mut delims = engine.memory.get_token_vec();
                     argnum += 1;
                     while let Some(ParamToken::Token(t)) = iter.peek() {

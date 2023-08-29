@@ -567,6 +567,7 @@ pub fn pdfobj<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                 // TODO
                 let mut ret = engine.memory.get_token_vec();
                 engine.get_argument(&mut ret);
+                engine.memory.return_token_vec(ret)
             }
         },
         _ => unreachable!()

@@ -89,7 +89,7 @@ pub struct Mouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>>,buffer:Vec<Ve
 
 impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     fn new(memory:&mut Memory<ET>) -> Self {
-        Mouth { stack:Vec::with_capacity(2097152),buffer:vec!()}
+        Mouth { stack:Vec::with_capacity(2097152),buffer:(0..32).map(|_|Vec::with_capacity(2940000)).collect()}
     }
     fn new_with(mut tks: Vec<Token<ET>>,memory:&mut Memory<ET>) -> Self {
         tks.reverse();
@@ -297,7 +297,12 @@ macro_rules! get_while {
 }
 
 impl<ET:EngineType> Mouth<ET> {
-
+    pub fn print_stats(&self) {
+        println!("\nBuffer: {}",self.buffer.len());
+        for b in &self.buffer {
+            println!(" -  {}",b.capacity());
+        }
+    }
     pub fn get_expansion(&mut self) -> Vec<Token<ET>> {
         self.get_vec()
     }

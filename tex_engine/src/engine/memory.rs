@@ -44,33 +44,33 @@ pub struct Memory<ET:EngineType> {
 
 impl<ET:EngineType> Memory<ET> {
     pub fn print_stats(&self) {
-        error!("args:");
+        println!("args:");
         for a in self.args.as_ref().unwrap().iter() {
-            error!(" -  {}",a.capacity());
+            println!(" -  {}",a.capacity());
         }
-        error!("token_vecs: {}",self.token_vecs.len());
+        println!("token_vecs: {}",self.token_vecs.len());
         for a in self.token_vecs.iter() {
-            error!(" -  {}",a.capacity());
+            println!(" -  {}",a.capacity());
         }
-        error!("strings: {}",self.strings.len());
+        println!("strings: {}",self.strings.len());
         for s in self.strings.iter() {
-            error!(" -  {}",s.capacity());
+            println!(" -  {}",s.capacity());
         }
     }
     pub fn new() -> Self {
         let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
         Memory{
-            args:Some(array_init(|_| Vec::with_capacity(VEC_SIZE))),strings:(0..8).map(|_|String::with_capacity(64)).collect(),token_vecs
+            args:Some(array_init(|_| Vec::with_capacity(2097152))),strings:(0..8).map(|_|String::with_capacity(4096)).collect(),token_vecs
         }
     }
     pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
-        std::mem::take(&mut self.args).unwrap()
+        self.args.take().unwrap()
     }
     pub fn return_args(&mut self, mut args:[Vec<Token<ET>>;9]) {
-        for a in args.iter_mut() {
+        /*for a in args.iter_mut() {
             a.clear();
             //a.shrink_to(VEC_SIZE)
-        }
+        }*/
         self.args = Some(args);
     }
     pub fn get_token_vec(&mut self) -> Vec<Token<ET>> {

@@ -88,6 +88,7 @@ mod tests {
         type FileSystem = KpseVirtualFileSystem<u8>;
         type Font = TfmFont;
         type FontStore = TfmFontStore;
+        type FontRefType = usize;
         type Node = PDFTeXNode<Self>;
         type Int = i32;
         type Dim = Dimi32;

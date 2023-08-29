@@ -73,6 +73,7 @@ impl<ET:EngineType> EngineRef<ET> {
         Mouth::with_mouth(self,tks,f)
     }
 
+
     /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&mut self,len:usize) -> String {
