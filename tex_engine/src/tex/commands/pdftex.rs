@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use std::marker::PhantomData;
-use crate::{cmtodo, debug_log, register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit, register_value_assign_int};
+use crate::{cmtodo, debug_log, file_end,register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit, register_value_assign_int, token_to_others, string_to_tokens};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::methods::get_keywords;
@@ -12,7 +12,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
 use crate::tex::token::{BaseToken, Token};
-use crate::tex::commands::{CommandSource, TokenCont};
+use crate::tex::commands::CommandSource;
 use crate::tex::fonts::{Font, FontStore};
 use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode, Whatsit};
 use crate::utils::errors::TeXError;
@@ -466,19 +466,20 @@ pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSourc
     ET::Int::from_i64(ret)
 }
 
-pub fn pdfescapestring<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn pdfescapestring<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     debug_log!(trace=>"pdfescapestring");
     use crate::tex::commands::BaseCommand;
     use crate::engine::mouth::MouthTrait;
+    use crate::utils::strings::AllCharsTrait;
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
-    crate::get_expanded_group!(engine,false,false,true,next => engine.token_to_others(&next,true,f)); // TODO:actual escaping
+    crate::get_expanded_group!(engine,false,false,true,next => token_to_others!(&engine.state,&engine.interner,next,true,t => exp.push(t))); // TODO:actual escaping
 }
 
 /// "pdffilesize"
 pub const PDFFILESIZE : &str = "pdffilesize";
 /// `\pdffilesize`: Get the size of a file (in bytes).
-pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, fun:TokenCont<ET>) {
+pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     debug_log!(trace=>"pdffilesize");
     let mut filename = engine.memory.get_string();
     engine.get_braced_string(&mut filename);
@@ -489,7 +490,7 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     match f.content_string() {
         None => (),
         Some(v) =>{
-            engine.string_to_tokens(v.iter().map(|b| b.len()).sum::<usize>().to_string().as_bytes(),fun)
+            string_to_tokens!(v.iter().map(|b| b.len()).sum::<usize>().to_string(),t => exp.push(t))
         }
     }
 }
@@ -504,10 +505,10 @@ pub fn pdffontexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
     engine.get_keyword("autoexpand");
 }
 
-pub fn pdffontsize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn pdffontsize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     let fnt = engine.get_font();
     let d = ET::Dim::from_sp(engine.fontstore.get(fnt).get_at());
-    engine.string_to_tokens(format!("{}",d).as_bytes(),f)
+    string_to_tokens!(format!("{}",d),t => exp.push(t))
 }
 
 /// "pdfglyphtounicode"
@@ -611,16 +612,16 @@ pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 /// "pdfstrcmp"
 pub const PDFSTRCMP : &str = "pdfstrcmp";
 /// `\pdfstrcmp`: Compare two strings; return -1, 0, or 1.
-pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     debug_log!(trace=>"pdfstrcmp");
     let mut str1 = engine.memory.get_string();
     let mut str2 = engine.memory.get_string();
     engine.get_braced_string(&mut str1);
     engine.get_braced_string(&mut str2);
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
-    if str1==str2 {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
-        else if str1 < str2 { engine.string_to_tokens("-1".as_bytes(),f)}
-        else {f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
+    if str1==str2 {exp.push(Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None))}
+        else if str1 < str2 { string_to_tokens!("-1",t => exp.push(t))}
+        else {exp.push(Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))}
     engine.memory.return_string(str1);
     engine.memory.return_string(str2);
 }
@@ -642,7 +643,7 @@ pub fn pdfmajorversion<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
 /// "pdfmatch"
 pub const PDFMATCH : &str = "pdfmatch";
 /// `\pdmatch`
-pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>)
+pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>)
     where ET::State:PDFState<ET>{
     debug_log!(trace=>"pdfmatch");
     let icase = engine.get_keyword("icase");
@@ -664,7 +665,7 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
                 None => {
                     engine.memory.return_string(pattern_string);
                     engine.memory.return_string(target_string);
-                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None));
+                    exp.push(Token::new(BaseToken::Char(ET::Char::from(b'0'),CategoryCode::Other),None));
                 }
                 Some(capture) => { // TODO this is not quite right yet, I think
                     let cap = capture.get(0).unwrap();
@@ -687,19 +688,19 @@ pub fn pdfmatch<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
                         engine.state.pdfmatches().push(retstr);
                     }
                     engine.memory.return_string(target_string);
-                    f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
+                    exp.push(Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
                 }
             }
 
         },
         Err(e) => {
-            f(engine,Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None));
-            f(engine,Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
+            exp.push(Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None));
+            exp.push(Token::new(BaseToken::Char(ET::Char::from(b'1'),CategoryCode::Other),None))
         }
     }
 }
 
-pub fn pdfmdfivesum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn pdfmdfivesum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     use crate::engine::filesystem::File;
     debug_log!(trace=>"pdfmdfivesum");
     let domd = if engine.get_keyword("file") {
@@ -722,7 +723,7 @@ pub fn pdfmdfivesum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
         engine.memory.return_string(ret);
         r
     };
-    engine.string_to_tokens(format!("{:X}",domd).as_bytes(),f)
+    string_to_tokens!(format!("{:X}",domd),t => exp.push(t))
 }
 
 /// "pdfshellescape"
@@ -735,8 +736,8 @@ pub fn pdfshellescape<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
 /// "pdftexrevision"
 pub const PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
-pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
-    engine.string_to_tokens(PDFTEX_REVISION.to_string().as_bytes(),f)
+pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<Token<ET>>) {
+    string_to_tokens!(PDFTEX_REVISION.to_string(),t => exp.push(t))
 }
 
 

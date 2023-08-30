@@ -157,7 +157,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
             }
             BaseCommand::Expandable {apply,..} => {
                 let mut rs = engine.mouth.get_expansion();
-                apply(engine,ret.source,&mut |engine,t| rs.push(t));
+                apply(engine,ret.source,&mut rs);
                 engine.mouth.push_expansion(rs);
                 None
             },

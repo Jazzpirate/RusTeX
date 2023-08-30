@@ -1,11 +1,11 @@
 use crate::engine::state::State;
 use crate::engine::mouth::MouthTrait;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group, register_expandable_notk};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group, register_expandable_notk, token_to_others, string_to_tokens};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def, TokenCont};
+use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
-use crate::tex::token::{BaseToken, TokenList};
+use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
@@ -203,17 +203,19 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
 pub const DETOKENIZE: &str = "detokenize";
 /// `\detokenize`: convert a token list into a string of [`CategoryCode`] [`Other`](CategoryCode::Other)
 /// (except for ` `, which gets code [`Space`](CategoryCode::Space)).
-pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+    use crate::tex::commands::Token;
+    use crate::utils::strings::AllCharsTrait;
     debug_log!(trace=>"detokenize");
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
 
-    expand_until_group!(engine,next => match &next.base {
+    expand_until_group!(engine,t => match &t.base {
         BaseToken::Char(c,CategoryCode::Parameter) => {
-            engine.token_to_others(&next,true,f);
-            engine.token_to_others(&next,true,f);
+            token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
+            token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
         }
-        _ => engine.token_to_others(&next,true,f)
+        _ => token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t))
     });
 }
 
@@ -238,8 +240,8 @@ pub const E_TEX_REVISION: &str = ".6";
 pub const E_TEX_VERSION: i64 = 2;
 
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
-pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
-    engine.string_to_tokens(E_TEX_REVISION.as_bytes(),f)
+pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<Token<ET>>) {
+    string_to_tokens!(E_TEX_REVISION,t => exp.push(t))
 }
 
 pub const ETEXVERSION: &str = "eTeXversion";
@@ -250,10 +252,10 @@ pub fn eTeXversion<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
 
 pub const EXPANDED: &str = "expanded";
 /// `\expanded`: expands its argument exhaustively.
-pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     debug_log!(trace=>"expanded");
 
-    get_expanded_group!(engine,false,false,false,t => f(engine,t));
+    get_expanded_group!(engine,false,false,false,t => exp.push(t));
     //catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
 }
 
@@ -445,7 +447,7 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
     let mut ret = String::new();
-    expand_until_group!(engine,t => match &t.base {
+    expand_until_group!(engine,t => match t.base {
         BaseToken::Char(_,CategoryCode::Space) => {
             ret.push(' ');
         }
@@ -469,9 +471,9 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
 
 pub const UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
-pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, f:TokenCont<ET>) {
+pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
     debug_log!(trace=>"unexpanded");
-    expand_until_group!(engine,tk => f(engine,tk));
+    expand_until_group!(engine,tk => exp.push(tk));
     //catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
 }
 

@@ -128,12 +128,12 @@ impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
 * abstracts away the character type, e.g. for control sequence names.
 */
 #[derive(Clone,Copy,PartialEq,Hash,Eq,PartialOrd,Ord,Debug)]
-pub struct TeXStr(pub string_interner::symbol::SymbolU16);
+pub struct TeXStr(pub string_interner::symbol::SymbolU32);
 impl TeXStr {
     //pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
     //pub fn len(&self) -> usize { self.0.len() }
     //pub fn as_vec(&self) -> &Vec<C> { &self.0 }
-    pub fn symbol(&self) -> string_interner::symbol::SymbolU16 { self.0 }
+    pub fn symbol(&self) -> string_interner::symbol::SymbolU32 { self.0 }
 }
 impl TeXStr {
     pub fn to_str<'a>(&'a self,interner:&'a Interner) -> &'a str {
@@ -145,7 +145,7 @@ impl TeXStr {
     pub fn from_string(s:&String, interner:&mut Interner) -> Self {
         interner.from_string(s)
     }
-    pub fn from_primitive(s:string_interner::symbol::SymbolU16) -> Self {
+    pub fn from_primitive(s:string_interner::symbol::SymbolU32) -> Self {
         Self(s)
     }
 }

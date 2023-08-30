@@ -139,7 +139,7 @@ pub trait Token:PartialEq+Clone+Display+Debug+'static{
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct FileReference {
-    pub filename:string_interner::symbol::SymbolU16,
+    pub filename:string_interner::symbol::SymbolU32,
     pub start:(usize,usize),
     pub end:(usize,usize)
 }

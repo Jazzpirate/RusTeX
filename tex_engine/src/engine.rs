@@ -96,16 +96,7 @@ pub trait Engine<ET:EngineType> {
         comps.mouth.push_file(&file,&mut comps.interner);
         comps.start_time = Local::now();
         comps.elapsed = std::time::Instant::now();
-
-        match comps.state.get_primitive_toks("everyjob").cloned() {
-            None => (),
-            Some(v) if v.is_empty() => (),
-            Some(v) =>{
-                let mut rs = comps.mouth.get_expansion();
-                rs.extend(v.into_iter());
-                comps.mouth.push_expansion(rs);
-            }
-        }
+        comps.mouth.insert_every(&comps.state,"everyjob");
         while let Some(b) = ET::Stomach::next_shipout_box(&mut comps) {
             ret.push(b)
         }

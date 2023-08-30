@@ -458,6 +458,17 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     let arg = &mut args[argnum];
                     arg.clear();
                     argnum += 1;
+                    /*crate::get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'L => t => {
+                        match t.base {
+                            BaseToken::Char(_,CategoryCode::BeginGroup) => {
+                                engine.mouth.requeue(t);
+                                break 'L;
+                            }
+                            BaseToken::Char(_,CategoryCode::EOL) if !d.long => throw!("Unexpected end of file" => cmd.cause.clone()),
+                            BaseToken::CS(p) if !d.long && p == engine.interner.par => throw!("Unexpected \\par" => cmd.cause.clone()),
+                            _ => arg.push(t)
+                        }
+                    })*/
                     'L: loop {
                         match if d.long {engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
                         else { engine.mouth.get_next_nopar(&engine.state,&mut engine.interner)} {
@@ -493,6 +504,47 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     let end_marker = delims.pop().unwrap();
                     let mut removebraces: Option<i32> = None;
                     let mut depth = 0;
+                    /*crate::get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'L => t => {match t.base {
+                        BaseToken::Char(_,CategoryCode::BeginGroup) => {
+                            depth += 1;
+                            if arg.len() == 0 {
+                                removebraces = Some(-1);
+                            }
+                            arg.push(t);
+                        }
+                        BaseToken::Char(_,CategoryCode::EndGroup) => {
+                            if depth == 0 {
+                                throw!("Unexpected end group token: {}",t.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone())
+                            } else {
+                                depth -= 1;
+                                if depth == 0 && t == end_marker  && arg.ends_with(delims.as_slice()) {
+                                    for _ in 0..delims.len() {
+                                        arg.pop();
+                                    }
+                                    arg.remove(0);
+                                    break 'L;
+                                }
+                                arg.push(t);
+                                if depth == 0 {
+                                    match removebraces {
+                                        Some(-1) => removebraces = Some(arg.len() as i32),
+                                        _ => ()
+                                    }
+                                }
+                            }
+                        }
+                        BaseToken::Char(_,CategoryCode::EOL) if !d.long => throw!("Unexpected end of file" => cmd.cause.clone()),
+                        BaseToken::CS(p) if !d.long && p == engine.interner.par => throw!("Unexpected \\par" => cmd.cause.clone()),
+                        _ => {
+                            if depth == 0 && t == end_marker && arg.ends_with(delims.as_slice()) {
+                                for _ in 0..delims.len() {
+                                    arg.pop();
+                                }
+                                break 'L;
+                            }
+                            arg.push(t);
+                        }
+                    }});*/
                     'L: loop {
                         match if d.long { engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
                         else { engine.mouth.get_next_nopar(&engine.state,&mut engine.interner) } {

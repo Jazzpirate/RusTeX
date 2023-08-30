@@ -1,17 +1,18 @@
 //! Default implementations for [`Gullet`] methods.
-use crate::{debug_log, file_end, throw};
+use crate::{debug_log, file_end, throw,string_to_tokens};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
+use crate::engine::memory::Interner;
 use crate::engine::state::State;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, ResolvedToken, ConditionalFun, TokenCont, CommandSource, StomachCommand};
+use crate::tex::commands::{BaseCommand, ResolvedToken, ConditionalFun, CommandSource, StomachCommand};
 use crate::tex::numbers::{Int, MuSkip, Skip};
 use crate::tex::token::{BaseToken, Token};
 use crate::engine::mouth::MouthTrait;
 use crate::tex::commands::etex::UNEXPANDED;
 use crate::tex::commands::tex::{IFCASE, NOEXPAND, THE};
 use crate::tex::ConditionalBranch;
-use crate::tex::fonts::FontStore;
+use crate::tex::fonts::{Font,FontStore};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 use crate::utils::strings::AllCharsTrait;
@@ -88,60 +89,6 @@ pub fn do_conditional<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSourc
             debug_log!(trace=>"True conditional");
         } else { false_loop::<ET>(engine,name,i) }
     }
-}
-
-pub fn get_expanded_group<ET:EngineType>(engine:&mut EngineRef<ET>, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
-    match engine.get_next_token() {
-        Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
-        _ => throw!("begin group expected")
-    }
-    let mut ingroup = 0;
-    while let Some(next) = engine.get_next_token() {
-        if next.1 {
-            let res = resolve_token::<ET>(&engine.state, next.0);
-            match res.command {
-                BaseCommand::Char { catcode: CategoryCode::BeginGroup, .. } => {
-                    ingroup += 1;
-                    f(engine, res.source.cause)
-                }
-                BaseCommand::Char { catcode: CategoryCode::EndGroup, .. } => {
-                    if ingroup == 0 { return Ok(()) } else { ingroup -= 1; }
-                    f(engine, res.source.cause)
-                }
-                BaseCommand::Def(d) if d.protected && !expand_protected =>
-                    f(engine, res.source.cause),
-                BaseCommand::ExpandableNoTokens { name, .. } if name == NOEXPAND => {
-                    match engine.get_next_token() {
-                        None => file_end!(),
-                        Some((t, _)) => f(engine, t)
-                    }
-                },
-                BaseCommand::Expandable { name, apply } if name == UNEXPANDED && edef_like => {
-                    apply(engine, res.source, &mut |s, t| {
-                        if t.catcode() == CategoryCode::Parameter { f(s, t.clone()) }
-                        f(s, t)
-                    })
-                }
-                BaseCommand::Expandable { name, apply } if name == UNEXPANDED => {
-                    apply(engine, res.source, f)
-                }
-                BaseCommand::Expandable { name, apply } if name == THE && edef_like =>
-                    apply(engine, res.source, &mut |s, t| {
-                        if t.catcode() == CategoryCode::Parameter { f(s, t.clone()) }
-                        f(s, t)
-                    }),
-                BaseCommand::None if err_on_unknowns => match res.source.cause.base {
-                    BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
-                    BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(&engine.interner)),
-                }
-                _ => match engine.expand(res) {
-                    Some(res) => f(engine, res.source.cause),
-                    _ => ()
-                }
-            }
-        } else { f(engine,next.0)}
-    }
-    file_end!()
 }
 
 pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,condidx:usize) {
@@ -390,27 +337,6 @@ pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut Stri
             }
         }
     });
-
-
-    /*
-    engine.get_expanded_group(false,false,true,&mut |engine,t| {
-        match &t.base {
-            BaseToken::Char(c,_) => {
-                ret.push(c.as_char());
-                Ok(())
-            }
-            BaseToken::CS(name) => {
-                if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
-                let str = name.to_str(engine.memory);
-                ret.push_str(str);
-                if str.len() > 1 || *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
-                    ret.push(' ')
-                }
-                Ok(())
-            }
-        }
-    })?;
-     */
 }
 
 pub fn tokens_to_string<ET:EngineType>(engine:&mut EngineRef<ET>, v:&Vec<Token<ET>>, string:&mut String) {
@@ -546,12 +472,6 @@ impl<ET:EngineType> EngineRef<ET> {
     pub fn get_muskip(&mut self) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
         ET::Gullet::get_muskip(self)
     }
-/*
-    pub fn get_expanded_group(&mut self, expand_protected:bool, edef_like:bool, err_on_unknowns:bool, f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        get_expanded_group::<ET>(self, expand_protected, edef_like, err_on_unknowns, f)
-    }
-
- */
 
     pub fn get_control_sequence(&mut self) -> Token<ET> {
         get_control_sequence::<ET>(self)
@@ -610,55 +530,55 @@ impl<ET:EngineType> EngineRef<ET> {
             }
         }
     }
-/*
-    pub fn expand_until_group(&mut self,f: TokenCont<ET>) -> Result<(),TeXError<ET>> {
-        match self.get_next_unexpandable()? {
-            None => file_end!(),
-            Some(res) => match res.command {
-                BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    //get_until_endgroup!(self,t => f(self,t)?);
-                    //Ok(())
-                    ET::Mouth::get_until_endgroup(self,f)
-                }
-                _ => throw!("begin group expected")
-            }
-        }
-    }
 
- */
-
-    pub fn string_to_tokens(&mut self,str:&[u8],f:TokenCont<ET>) {
-        for u in str {
-            let c = ET::Char::from(*u);
-            f(self,Token::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None));
-        }
-    }
-
-    pub fn token_to_others(&mut self,tk:&Token<ET>, insertspace:bool, f:TokenCont<ET>) {
-        match &tk.base {
-            BaseToken::Char(c,_) if c.to_usize() == 32 => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
-            BaseToken::Char(c,CategoryCode::Space) => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Space),None)),
-            BaseToken::Char(c,_) => f(self,Token::new(BaseToken::Char(*c,CategoryCode::Other),None)),
-            BaseToken::CS(str) => {
-                match self.state.get_escapechar() {
-                    None => (),
-                    Some(c) => f(self,Token::new(BaseToken::Char(c,CategoryCode::Other),None))
-                }
-                let str = ET::Char::tokenize(str.to_str(&self.interner)).to_vec();
-                for c in &str {
-                    f(self,Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }
-                    ),None))
-                }
-                if insertspace && !(str.len() == 1 && *self.state.get_catcode_scheme().get(&str[0]) != CategoryCode::Letter) {
-                    f(self,Token::new(BaseToken::Char(ET::Char::from(32),CategoryCode::Space),None))
-                }
-            }
-        }
-    }
 
     pub fn expand(&mut self,r:ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
         ET::Gullet::expand(self,r)
     }
+}
+
+#[macro_export]
+macro_rules! string_to_tokens {
+    ($s:expr,$t:ident => $f:expr) => {
+        for u in $s.as_bytes() {
+            let c = ET::Char::from(*u);
+            let $t = Token::<ET>::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None);
+            $f
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! token_to_others {
+    ($state:expr,$interner:expr,$tk:expr,$insertspace:expr,$nt:ident => $f:expr) => {
+        match &$tk.base {
+            BaseToken::Char(c,_) if c.to_usize() == 32 => {
+                let $nt = Token::new(BaseToken::Char(*c,CategoryCode::Space),None);$f
+            },
+            BaseToken::Char(c,CategoryCode::Space) => {
+                let $nt = Token::new(BaseToken::Char(*c,CategoryCode::Space),None); $f
+            }
+            BaseToken::Char(c,_) => {
+                let $nt = Token::new(BaseToken::Char(*c,CategoryCode::Other),None); $f
+            }
+            BaseToken::CS(str) => {
+                match $state.get_escapechar() {
+                    None => (),
+                    Some(c) => {
+                        let $nt = Token::new(BaseToken::Char(c,CategoryCode::Other),None);$f
+                    }
+                }
+                let str = ET::Char::tokenize(str.to_str($interner)).to_vec();
+                for c in &str {
+                    let $nt = Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }),None);
+                    $f
+                }
+                if $insertspace && !(str.len() == 1 && *$state.get_catcode_scheme().get(&str[0]) != CategoryCode::Letter) {
+                    let $nt = Token::new(BaseToken::Char(ET::Char::from(32),CategoryCode::Space),None); $f
+                }
+            }
+        }
+    };
 }
 
 #[macro_export]
@@ -680,13 +600,13 @@ macro_rules! expand_until_group {
 #[macro_export]
 macro_rules! get_expanded_group {
     ($engine:ident,$expand_protected:expr,$edef_like:expr,$err_on_unknowns:expr,$tk:ident => $f:expr) => {
-        match $engine.get_next_token() {
+        match $engine.mouth.get_next(&$engine.state,&mut $engine.interner,&mut $engine.outputs) {
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
             _ => crate::throw!("begin group expected")
         }
         let mut ingroup = 0;
         let mut ok = false;
-        while let Some(next) = $engine.get_next_token() {
+        while let Some(next) = $engine.mouth.get_next(&$engine.state,&mut $engine.interner,&mut $engine.outputs) {
             match next.0.catcode() {
                 CategoryCode::BeginGroup => {
                     ingroup += 1;
@@ -724,25 +644,23 @@ macro_rules! get_expanded_group {
                             }
                             $f;
                         });
-                        /*
-                        apply($engine, res.source, &mut |$engine, $tk| {
-                            if $tk.catcode() == CategoryCode::Parameter {
-                                let $tk = $tk.clone();
-                                $f
-                            }
-                            $f;Ok(())
-                        })?
-                         */
                     }
                     BaseCommand::Expandable { name, apply } if name == crate::tex::commands::etex::UNEXPANDED => {
                         crate::expand_until_group!($engine,$tk => $f);
                         //apply($engine, res.source, &mut |$engine,$tk| {$f;Ok(())})?
                     }
                     BaseCommand::Expandable { name, apply } if name == crate::tex::commands::tex::THE && $edef_like =>
-                        {apply($engine, res.source, &mut |$engine, $tk| {
+                        crate::do_the!($engine,$tk => {
+                            if $tk.catcode() == CategoryCode::Parameter {
+                                let $tk = $tk.clone();
+                                $f
+                            }
+                            $f;
+                        })
+                        /*{apply($engine, res.source, &mut |$engine, $tk| {
                             if $tk.catcode() == CategoryCode::Parameter { let $tk = $tk.clone(); $f }
                             $f
-                        });},
+                        });}*/,
                     BaseCommand::None if $err_on_unknowns => match res.source.cause.base {
                         BaseToken::Char(c, _) => throw!("Undefined active character {}",c),
                         BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(&$engine.interner)),

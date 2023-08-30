@@ -162,40 +162,18 @@ pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachComma
             engine.mouth.requeue(cmd.source.cause);
         }
     }
-    match engine.state.get_primitive_toks("everypar") {
-        None => (),
-        Some(v) => {
-            let v = v.clone();
-            let mut f = engine.mouth.get_expansion();
-            f.extend(v.into_iter());
-            engine.mouth.push_expansion(f);
-        }
-    }
+    engine.mouth.insert_every(&engine.state,"everypar");
 }
 
 pub fn do_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.state.stack_push(GroupType::Box(BoxMode::M));
     engine.stomach.shipout_data_mut().box_stack.push(OpenBox::Math {list:vec!(),display:false});
-    match engine.state.get_primitive_toks("everymath").cloned() {
-        Some(v) if !v.is_empty() => {
-            let mut rs = engine.mouth.get_expansion();
-            rs.extend(v.into_iter());
-            engine.mouth.push_expansion(rs);
-        }
-        _ => ()
-    }
+    engine.mouth.insert_every(&engine.state,"everymath");
 }
 pub fn do_display_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.state.stack_push(GroupType::Box(BoxMode::DM));
     engine.stomach.shipout_data_mut().box_stack.push(OpenBox::Math {list:vec!(),display:true});
-    match engine.state.get_primitive_toks("everydisplay").cloned() {
-        Some(v) if !v.is_empty() => {
-            let mut rs = engine.mouth.get_expansion();
-            rs.extend(v.into_iter());
-            engine.mouth.push_expansion(rs);
-        }
-        _ => ()
-    }
+    engine.mouth.insert_every(&engine.state,"everydisplay");
 }
 
 pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {

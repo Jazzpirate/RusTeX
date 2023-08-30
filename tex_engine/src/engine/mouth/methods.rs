@@ -88,21 +88,16 @@ impl<ET:EngineType> EngineRef<ET> {
 #[macro_export]
 macro_rules! get_until_endgroup {
     ($engine:ident,$tk:ident => $f:expr) => {
-        let mut depth = 1;
-        let mut ok = false;
-        while let Some($tk) = $engine.mouth.get_next_simple(&$engine.state,&mut $engine.interner) {
-            match $tk.catcode() {
-                CategoryCode::BeginGroup => depth += 1,
-                CategoryCode::EndGroup => {
-                    depth -= 1;
-                    if depth == 0 { ok = true; break }
-                },
-                CategoryCode::EOL => crate::file_end!(),
+        let mut ingroup = 0;
+        crate::get_while!(&mut $engine.mouth,&$engine.state,&mut $engine.interner,'A => $tk => {match $tk.base {
+                BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup +=1,
+                BaseToken::Char(_,CategoryCode::EndGroup) => {
+                    if ingroup == 0 { break 'A } else { ingroup -= 1 };
+                }
                 _ => ()
             }
-            $f;
-        }
-        if (!ok) {crate::file_end!()}
+            $f
+        });
     }
 }
 
@@ -113,21 +108,6 @@ macro_rules! get_group {
             Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
             _ => throw!("begin group expected")
         }
-        let mut ingroup = 0;
-        let mut ok = false;
-        while let Some(next) = $engine.get_next_token() {
-            let $tk = next.0;
-            match &$tk.base {
-                BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
-                BaseToken::Char(_,CategoryCode::EndGroup) => {
-                    if ingroup == 0 { ok = true;break } else { ingroup -= 1; }
-                }
-                BaseToken::Char(_,CategoryCode::EOL) =>
-                    crate::file_end!(),
-                _ => ()
-            }
-            $f
-        }
-        if !ok { file_end!() }
+        crate::get_until_endgroup!($engine,$tk => $f);
     }
 }

@@ -18,7 +18,7 @@ use crate::engine::state::State;
 use crate::{debug_log, file_end, throw};
 use crate::engine::memory::{Interner, Memory, VEC_SIZE};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{DefReplacement, ExpToken, TokenCont};
+use crate::tex::commands::{DefReplacement, ExpToken};
 use crate::tex::token::{BaseToken, Token, TokenList};
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
@@ -85,7 +85,7 @@ pub enum TeXMouthSource<ET:EngineType> {
 }
 
 #[derive(Clone)]
-pub struct Mouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>>,buffer:Vec<Vec<Token<ET>>> }
+pub struct Mouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>>,pub buffer:Vec<Vec<Token<ET>>> }
 
 impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
     fn new(memory:&mut Memory<ET>) -> Self {
@@ -260,20 +260,20 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         "unknown source".to_string()
     }
 }
-
+#[macro_export]
 macro_rules! get_while {
     ($mouth:expr,$state:expr,$interner:expr,$label:tt => $t:ident => $f:expr) => {
         $label:loop {
             match $mouth.stack.last_mut() {
-                Some(TeXMouthSource::Noexpand(_)) => match $mouth.stack.pop() {
-                    Some(TeXMouthSource::Noexpand($t)) => $f,
+                Some(crate::engine::mouth::TeXMouthSource::Noexpand::<ET>(_)) => match $mouth.stack.pop() {
+                    Some(crate::engine::mouth::TeXMouthSource::Noexpand::<ET>($t)) => $f,
                     _ => unreachable!()
                 },
-                Some(TeXMouthSource::Tkls(ref mut v)) => loop {
+                Some(crate::engine::mouth::TeXMouthSource::Tkls::<ET>(ref mut v)) => loop {
                     let $t = v.pop().unwrap();
                     if v.is_empty() {
                         match $mouth.stack.pop() {
-                            Some(TeXMouthSource::Tkls(v)) => {
+                            Some(crate::engine::mouth::TeXMouthSource::Tkls::<ET>(v)) => {
                                 $mouth.buffer.push(v);
                             }
                             _ => unreachable!()
@@ -282,10 +282,10 @@ macro_rules! get_while {
                     }
                     $f;
                 }
-                Some(TeXMouthSource::String(ref mut s)) => {
+                Some(crate::engine::mouth::TeXMouthSource::String::<ET>(ref mut s)) => {
                     let cc = $state.get_catcode_scheme();
                     let endline = $state.get_endlinechar();
-                    while let Some($t) = s.get_next($interner,cc,endline) {
+                    while let Some($t) = s.get_next::<ET>($interner,cc,endline) {
                         $f;
                     }
                     panic!("File ended unexpectedly")
@@ -316,6 +316,18 @@ impl<ET:EngineType> Mouth<ET> {
     pub fn push_expansion_norev(&mut self, mut expansion: Vec<Token<ET>>) {
         if expansion.is_empty() { self.buffer.push(expansion) } else {
             self.stack.push(TeXMouthSource::Tkls(expansion))
+        }
+    }
+
+    pub fn insert_every(&mut self,state:&ET::State,every:&'static str) {
+        match state.get_primitive_toks(every) {
+            None => (),
+            Some(v) if v.is_empty() => (),
+            Some(v) =>{
+                let mut rs = self.get_vec();
+                rs.extend(v.iter().rev().map(|t| t.clone()));
+                self.push_expansion_norev(rs);
+            }
         }
     }
 
@@ -390,35 +402,13 @@ impl<ET:EngineType> Mouth<ET> {
                     }
                     vec.push(tk);
                 })
-                //Self::get_until_endgroup(engine,&mut|_,t| Ok(vec.push(t)))
             }
             Some(o) => {
                 vec.push(o);
             }
         }
     }
-/*
-    fn expand_until_group(engine:&mut EngineRef<ET>, f:TokenCont<ET>) {
-        match engine.get_next_unexpandable_same_file() {
-            None => file_end!(),
-            Some(res) if res.source.cause.catcode() == CategoryCode::BeginGroup => (),
-            Some(res) => throw!("begin group expected; found:{}",res.source.cause.to_str(engine.interner,Some(ET::Char::backslash())))
-        }
-        let mut ingroup = 1;
-        get_while!(engine.mouth,engine.state,engine.interner,'A => tk => {
-            match tk.base {
-                BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup += 1,
-                BaseToken::Char(_,CategoryCode::EndGroup) => {
-                    ingroup -= 1;
-                    if ingroup == 0 { break 'A }
-                },
-                _ => ()
-            }
-            f(engine,tk);
-        })
-    }
 
- */
 }
 
 /*

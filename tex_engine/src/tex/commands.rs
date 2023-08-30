@@ -115,12 +115,11 @@ impl<ET:EngineType<CommandReference = Self>> CommandReference<ET> for () {
     fn new(base: &BaseCommand<ET>, source: &CommandSource<ET>) -> Self { () }
 }
 
-pub type TokenCont<'a,ET> = &'a mut dyn FnMut(&mut EngineRef<ET>,Token<ET>);
 pub type UnexpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>);
 pub type AssignmentFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, bool);
 pub type AssignmentFn<ET> = Box<dyn Fn(&mut EngineRef<ET>, CommandSource<ET>,bool)>;
 pub type ConditionalFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> bool;
-pub type ExpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, TokenCont<ET>);
+pub type ExpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, &mut Vec<Token<ET>>);
 pub type CloseBoxFun<ET> = Ptr<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
 pub type BoxFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> CloseBoxFun<ET>;
 pub type WhatsitFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Whatsit<ET>;
