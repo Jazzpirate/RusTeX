@@ -381,7 +381,7 @@ impl<ET:EngineType> TokMapField<ET> {
 
     pub(crate) fn set_locally(&mut self, k: &'static str, v: Vec<Token<ET>>, memory:&mut Memory<ET>) {
         if let Some(m) = self.1.last_mut() {
-            match m.entry(k.clone()) {
+            match m.entry(k) {
                 Entry::Vacant(e) => {
                     e.insert(Self::set_i(&mut self.0,k,v).unwrap_or(memory.get_token_vec()));
                 }

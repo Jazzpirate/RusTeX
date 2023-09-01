@@ -194,6 +194,7 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
     afterassignment:Option<Token<ET>>,
+    mode: TeXMode,
 
     pdfmatches:Vec<String>,
     pdfobjs:Vec<PDFObj>,
@@ -201,38 +202,31 @@ pub struct PDFTeXState<ET:EngineType<State=Self>> {
     pdfcolorstacks:Vec<PDFColorstack>,
     current_colorstack:usize,
 
-    current_font:SingleValueField<ET::FontRefType>,
-    parshape:SingleValueField<Option<Vec<(ET::Dim,ET::Dim)>>>,
-
-    mode: TeXMode,
-    /* filesystem: FS,*/
     grouptype: Vec<(GroupType,Option<TeXMode>)>,
     aftergroups:Vec<Vec<Token<ET>>>,
+
+    current_font:SingleValueField<ET::FontRefType>,
+    parshape:SingleValueField<Option<Vec<(ET::Dim,ET::Dim)>>>,
     endlinechar: SingleValueField<Option<ET::Char>>,
     escapechar: SingleValueField<Option<ET::Char>>,
     newlinechar: SingleValueField<Option<ET::Char>>,
-
     pub commands: VecField<Option<Command<ET>>>,
     ac_commands: CharField<ET::Char,Option<Command<ET>>>,
-
     catcodes: CharField<ET::Char,CategoryCode>,
     sfcodes: CharField<ET::Char,ET::Int>,
     ucchar: CharField<ET::Char, ET::Char>,
     lcchar: CharField<ET::Char, ET::Char>,
     mathcodes: CharField<ET::Char,ET::Int>,
     delcodes: CharField<ET::Char,ET::Int>,
-
     intregisters: VecField<ET::Int>,
     dimregisters: VecField<ET::Dim>,
     skipregisters: VecField<Skip<ET::SkipDim>>,
     muskipregisters: VecField<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
     toksregisters:TokField<ET>,
     boxregisters:BoxField<ET>,
-
     textfonts:VecField<Option<ET::FontRefType>>,
     scriptfonts:VecField<Option<ET::FontRefType>>,
     scriptscriptfonts:VecField<Option<ET::FontRefType>>,
-
     primitive_intregisters: HashMapField<&'static str,ET::Int>,
     primitive_dimregisters: HashMapField<&'static str,ET::Dim>,
     primitive_skipregisters: HashMapField<&'static str,Skip<ET::SkipDim>>,
