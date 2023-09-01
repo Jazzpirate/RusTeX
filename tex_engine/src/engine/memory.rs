@@ -1,24 +1,26 @@
 use array_init::array_init;
 use log::error;
-use string_interner::backend::{BufferBackend, StringBackend};
 use string_interner::{StringInterner};
-use string_interner::symbol::SymbolU32;
 use crate::engine::EngineType;
 use crate::tex::token::Token;
 use crate::utils::strings::{CharType, TeXStr};
+
+pub type Symbol = string_interner::symbol::SymbolU32;
+type Backend = string_interner::backend::StringBackend<Symbol>; // string_interner::backend::StringBackend<Symbol>;
+
 
 pub const VEC_SIZE:usize = 32;
 
 #[derive(Clone)]
 pub struct Interner {
-    interner:StringInterner<StringBackend<SymbolU32>,ahash::RandomState>,
+    interner:StringInterner<Backend,ahash::RandomState>,
     pub relax:TeXStr,
     pub par:TeXStr,
     pub empty_str:TeXStr,
 }
 impl Interner {
     pub fn new() -> Self {
-        let mut interner = StringInterner::<StringBackend<SymbolU32>,ahash::RandomState>::new();
+        let mut interner = StringInterner::<Backend,ahash::RandomState>::new();
         Interner {
             relax:TeXStr::from_primitive(interner.get_or_intern_static("relax")),
             par:TeXStr::from_primitive(interner.get_or_intern_static("par")),
@@ -26,7 +28,7 @@ impl Interner {
             interner
         }
     }
-    pub fn resolve(&self,symbol:SymbolU32) -> &str {
+    pub fn resolve(&self,symbol:Symbol) -> &str {
         self.interner.resolve(symbol).unwrap()
     }
     pub fn from_static(&mut self,s:&'static str) -> TeXStr {

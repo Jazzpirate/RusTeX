@@ -902,3 +902,103 @@ impl<ET:EngineType> EngineRef<ET> {
         Ok(())
     }
 }
+
+
+
+enum StateChange<ET:EngineType<State=PDFTeXState<ET>>> {
+    CurrentFont(ET::FontRefType),
+    ParShape(Option<Vec<(ET::Dim, ET::Dim)>>),
+    Endlinechar(Option<ET::Char>),
+    Escapechar(Option<ET::Char>),
+    Newlinechar(Option<ET::Char>),
+    Command(usize,Option<Command<ET>>),
+    AcCommand(ET::Char,Option<Command<ET>>),
+    Catcode(ET::Char,CategoryCode),
+    SfCode(ET::Char,ET::Int),
+    UcChar(ET::Char,ET::Char),
+    LcChar(ET::Char,ET::Char),
+    MathCode(ET::Char,ET::Int),
+    DelCode(ET::Char,ET::Int),
+    IntRegister(usize,ET::Int),
+    DimRegister(usize,ET::Dim),
+    SkipRegister(usize,Skip<ET::SkipDim>),
+    MuSkipRegister(usize,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>),
+    ToksRegister(usize,Vec<Token<ET>>),
+    BoxRegister(usize,HVBox<ET>),
+    TextFont(usize,Option<ET::FontRefType>),
+    ScriptFont(usize,Option<ET::FontRefType>),
+    ScriptScriptFont(usize,Option<ET::FontRefType>),
+    PrimitiveIntRegister(&'static str,ET::Int),
+    PrimitiveDimRegister(&'static str,ET::Dim),
+    PrimitiveSkipRegister(&'static str,Skip<ET::SkipDim>),
+    PrimitiveMuSkipRegister(&'static str,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>),
+    PrimitiveToksRegister(&'static str,Vec<Token<ET>>)
+}
+enum KeyType<ET:EngineType<State=PDFTeXState<ET>>> {
+    None,Usize(usize),Char(ET::Char),Str(&'static str)
+}
+impl<ET:EngineType<State=PDFTeXState<ET>>> StateChange<ET> {
+    fn equiv(&self,other:&Self) -> bool {
+        use StateChange::*;
+        match (self,other) {
+            (CurrentFont(_),CurrentFont(_)) => true,
+            (ParShape(_),ParShape(_)) => true,
+            (Endlinechar(_),Endlinechar(_)) => true,
+            (Escapechar(_),Escapechar(_)) => true,
+            (Newlinechar(_),Newlinechar(_)) => true,
+            (Command(i,_),Command(j,_)) => i == j,
+            (AcCommand(c,_),AcCommand(d,_)) => c == d,
+            (Catcode(c,_),Catcode(d,_)) => c == d,
+            (SfCode(c,_),SfCode(d,_)) => c == d,
+            (UcChar(c,_),UcChar(d,_)) => c == d,
+            (LcChar(c,_),LcChar(d,_)) => c == d,
+            (MathCode(c,_),MathCode(d,_)) => c == d,
+            (DelCode(c,_),DelCode(d,_)) => c == d,
+            (IntRegister(i,_),IntRegister(j,_)) => i == j,
+            (DimRegister(i,_),DimRegister(j,_)) => i == j,
+            (SkipRegister(i,_),SkipRegister(j,_)) => i == j,
+            (MuSkipRegister(i,_),MuSkipRegister(j,_)) => i == j,
+            (ToksRegister(i,_),ToksRegister(j,_)) => i == j,
+            (BoxRegister(i,_),BoxRegister(j,_)) => i == j,
+            (TextFont(i,_),TextFont(j,_)) => i == j,
+            (ScriptFont(i,_),ScriptFont(j,_)) => i == j,
+            (ScriptScriptFont(i,_),ScriptScriptFont(j,_)) => i == j,
+            (PrimitiveIntRegister(n,_),PrimitiveIntRegister(m,_)) => n == m,
+            (PrimitiveDimRegister(n,_),PrimitiveDimRegister(m,_)) => n == m,
+            (PrimitiveSkipRegister(n,_),PrimitiveSkipRegister(m,_)) => n == m,
+            (PrimitiveMuSkipRegister(n,_),PrimitiveMuSkipRegister(m,_)) => n == m,
+            (PrimitiveToksRegister(n,_),PrimitiveToksRegister(m,_)) => n == m,
+            _ => false
+        }
+    }
+}
+
+struct StackLevel<ET:EngineType<State=PDFTeXState<ET>>> {
+    group_type:GroupType,
+    mode_switch:Option<TeXMode>,
+    aftergroup:Vec<Token<ET>>,
+    start:usize,
+}
+impl<ET:EngineType<State=PDFTeXState<ET>>> StackLevel<ET> {
+    fn new(group_type:GroupType,old_mode:Option<TeXMode>,start:usize) -> Self {
+        Self {
+            group_type,
+            mode_switch:old_mode,
+            aftergroup:Vec::new(),
+            start
+        }
+    }
+    fn change(&mut self,change:StateChange<ET>,ls:&mut Vec<StateChange<ET>>) -> bool {
+        if self.start >= ls.len() {
+            ls.push(change);return true
+        }
+        let slice = &ls[self.start..];
+        if slice.iter().any(|c| change.equiv(c)) {
+            return false
+        }
+        ls.push(change);true
+    }
+    fn forget(change:StateChange<ET>,ls:&mut Vec<StateChange<ET>>) {
+        ls.retain(|c| !change.equiv(c));
+    }
+}

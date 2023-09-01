@@ -10,7 +10,7 @@
 
 use std::fmt::Debug;
 use crate::engine::EngineType;
-use crate::engine::memory::{Interner, Memory};
+use crate::engine::memory::{Interner, Memory, Symbol};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::CommandSource;
 use crate::utils::Ptr;
@@ -139,7 +139,7 @@ pub trait Token:PartialEq+Clone+Display+Debug+'static{
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub struct FileReference {
-    pub filename:string_interner::symbol::SymbolU32,
+    pub filename:Symbol,
     pub start:(usize,usize),
     pub end:(usize,usize)
 }

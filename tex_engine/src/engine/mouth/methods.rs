@@ -25,7 +25,7 @@ impl<ET:EngineType> EngineRef<ET> {
         debug_log!(trace=>"skipping '='");
         if let Some((tk,_)) = self.get_next_token() {
             match &tk.base {
-                BaseToken::Char(c,_) if c.to_usize() == 61 => {
+                BaseToken::Char(c,_) if c.as_bytes() == [b'='] => {
                     match self.get_next_token() {
                         Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
                         Some((tk,_)) => self.mouth.requeue(tk),

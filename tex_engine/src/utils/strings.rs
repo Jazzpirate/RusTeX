@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use std::vec::IntoIter;
 use array_init::array_init;
 use crate::engine::EngineType;
-use crate::engine::memory::{Interner, Memory};
+use crate::engine::memory::{Interner, Memory, Symbol};
 use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
 
 
@@ -121,12 +121,12 @@ impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
 * abstracts away the character type, e.g. for control sequence names.
 */
 #[derive(Clone,Copy,PartialEq,Hash,Eq,PartialOrd,Ord,Debug)]
-pub struct TeXStr(pub string_interner::symbol::SymbolU32);
+pub struct TeXStr(pub Symbol);
 impl TeXStr {
     //pub fn new(v:Vec<C>) -> Self { Self(Ptr::new(v))}
     //pub fn len(&self) -> usize { self.0.len() }
     //pub fn as_vec(&self) -> &Vec<C> { &self.0 }
-    pub fn symbol(&self) -> string_interner::symbol::SymbolU32 { self.0 }
+    pub fn symbol(&self) -> Symbol { self.0 }
 }
 impl TeXStr {
     pub fn to_str<'a>(&'a self,interner:&'a Interner) -> &'a str {
@@ -138,7 +138,7 @@ impl TeXStr {
     pub fn from_string(s:&String, interner:&mut Interner) -> Self {
         interner.from_string(s)
     }
-    pub fn from_primitive(s:string_interner::symbol::SymbolU32) -> Self {
+    pub fn from_primitive(s:Symbol) -> Self {
         Self(s)
     }
 }

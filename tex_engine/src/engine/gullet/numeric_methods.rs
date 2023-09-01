@@ -12,13 +12,13 @@ use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrin
 use crate::tex::token::BaseToken;
 use crate::utils::errors::TeXError;
 
-fn is_ascii_digit(u:usize) -> bool {
+fn is_ascii_digit(u:u8) -> bool {
     u >= 48 && u <= 57
 }
-fn is_ascii_oct_digit(u:usize) -> bool {
+fn is_ascii_oct_digit(u:u8) -> bool {
     u >= 48 && u <= 55
 }
-fn is_ascii_hex_digit(u:usize) -> bool {
+fn is_ascii_hex_digit(u:u8) -> bool {
     is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
 }
 
@@ -33,16 +33,15 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
         match next.command {
             Def(_) | Conditional{..} | Expandable{..} | ExpandableNoTokens {..} => unreachable!(),
             Char{char,catcode} => {
-                let us = char.to_usize();
-                match us {
-                    45 => { // -
+                match char.as_bytes() {
+                    [b'-'] => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(engine.skip_whitespace()=> next.source.cause),
-                    34 if !ishex && !isoct => ishex = true, // "
-                    39 if !ishex && !isoct => isoct = true, // '
-                    96 if !ishex && !isoct => { // `
+                    [b'+'] => /* + */ catch!(engine.skip_whitespace()=> next.source.cause),
+                    [b'\"'] if !ishex && !isoct => ishex = true, // "
+                    [b'\''] if !ishex && !isoct => isoct = true, // '
+                    [b'`'] if !ishex && !isoct => { // `
                         match catch!(engine.get_next_token()=> next.source.cause) {
                             std::option::Option::None => file_end!(next.source.cause),
                             Some((tk,_)) => {
@@ -61,15 +60,15 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
                             }
                         }
                     },
-                    _ if is_ascii_hex_digit(us) && ishex =>
+                    [b] if is_ascii_hex_digit(*b) && ishex =>
                     // TODO: texnically, this requires catcode 12 for 0-9 and catcode 11 or 12 for A-F
-                        return read_hex_number::<ET>(engine,us as u8,isnegative),
-                    _ if is_ascii_digit(us) && !isoct =>
+                        return read_hex_number::<ET>(engine,*b,isnegative),
+                    [b] if is_ascii_digit(*b) && !isoct =>
                     // TODO: texnically, this requires catcode 12
-                        return read_decimal_number::<ET>(engine,us as u8,isnegative),
-                    _ if is_ascii_oct_digit(us) => // isoct == true
+                        return read_decimal_number::<ET>(engine,*b,isnegative),
+                    [b] if is_ascii_oct_digit(*b) => // isoct == true
                     // TODO: texnically, this requires catcode 12
-                        return read_oct_number::<ET>(engine,us as u8,isnegative),
+                        return read_oct_number::<ET>(engine,*b,isnegative),
                     _ => {
                         let c = ET::Int::from_i64(char.to_usize() as i64);
                         debug_log!(trace=>"Returning {}",c);
@@ -132,10 +131,10 @@ pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len()==1 => {
+                let us = char.as_bytes()[0];
                 if is_ascii_digit(us) {
-                    rets.push(us as u8);
+                    rets.push(us);
                 } else {
                     engine.mouth.requeue(next.source.cause);
                     break
@@ -160,10 +159,10 @@ pub fn read_oct_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, i
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len()==1 => {
+                let us = char.as_bytes()[0];
                 if is_ascii_oct_digit(us) {
-                    rets.push(us as u8);
+                    rets.push(us);
                 } else {
                     engine.mouth.requeue(next.source.cause);
                     break
@@ -188,10 +187,10 @@ pub fn read_hex_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, i
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len()==1 => {
+                let us = char.as_bytes()[0];
                 if is_ascii_hex_digit(us) {
-                    rets.push(us as u8);
+                    rets.push(us);
                 } else {
                     engine.mouth.requeue(next.source.cause);
                     break
@@ -216,16 +215,16 @@ pub fn get_dim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Dim {
     let mut isnegative = false;
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
                 match us {
-                    45 => { // -
+                    b'-' => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace()
                             => next.source.cause
                         );
                     }
-                    43 => /* + */ catch!(engine.skip_whitespace()
+                    b'+' => /* + */ catch!(engine.skip_whitespace()
                         => next.source.cause
                     ),
                     _ => return get_dim_inner::<ET>(engine,isnegative,next)
@@ -241,15 +240,15 @@ pub fn get_dim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Dim {
 pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
                                     -> ET::Dim {
     match next.command {
-        BaseCommand::Char { char,.. } => {
-            let us = char.to_usize();
+        BaseCommand::Char { char,.. } if char.as_bytes().len() == 1 => {
+            let us = char.as_bytes()[0];
             match us {
-                46 | 44 => /* . / ,*/ {
-                    let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
+                b'.' | b',' => /* . / ,*/ {
+                    let f = catch!(read_float::<ET>(engine,us,isnegative) => next.source.cause);
                     return read_unit::<ET>(engine, f)
                 },
                 _ if is_ascii_digit(us) => {
-                    let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
+                    let f = catch!(read_float::<ET>(engine,us,isnegative) => next.source.cause);
                     return read_unit::<ET>(engine, f)
                 },
                 _ => todo!("Non-digit in read_dimension: {}/{}\nat: {}", char.as_char(), us, engine.current_position())
@@ -343,14 +342,14 @@ pub fn get_skip<ET:EngineType>(engine:&mut EngineRef<ET>) -> Skip<ET::SkipDim> {
     let mut isnegative = false;
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
                 match us {
-                    45 => { // -
+                    b'-' => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
+                    b'+' => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
                     _ => return get_skip_inner::<ET>(engine,isnegative,next)
                 }
             }
@@ -385,15 +384,15 @@ pub fn get_skipdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::SkipDim {
     let mut isnegative = false;
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
-            BaseCommand::Char {char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
                 match us {
-                    45 => { // -
+                    b'-' => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
-                    46 | 44 => /* . / ,*/ {
+                    b'+' => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
+                    b'.' | b',' => /* . / ,*/ {
                         let f = catch!(read_float::<ET>(engine,us as u8,isnegative) => next.source.cause);
                         return read_skip_unit::<ET>(engine,f)
                     },
@@ -452,14 +451,14 @@ pub fn get_muskip<ET:EngineType>(engine:&mut EngineRef<ET>)-> MuSkip<ET::MuDim,E
     let mut isnegative = false;
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
-            BaseCommand::Char {char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
                 match us {
-                    45 => { // -
+                    b'-' => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    43 => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
+                    b'+' => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
                     _ => return get_muskip_inner::<ET>(engine,isnegative,next)
                 }
             }
@@ -490,10 +489,10 @@ fn get_muskip_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, n
 pub fn get_mudim<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
                                 -> ET::MuDim {
     match next.command {
-        BaseCommand::Char {char,..} => {
-            let us = char.to_usize();
+        BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+            let us = char.as_bytes()[0];
             match us {
-                46 | 44 => /* . / ,*/ {
+                b'.' | b',' => /* . / ,*/ {
                     let f = catch!(read_float::<ET>(engine,us as u8,isnegative)
                             => next.source.cause
                         );
@@ -518,16 +517,16 @@ pub fn get_mustretchdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::MuStret
     let mut isnegative = false;
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
                 match us {
-                    45 => { // -
+                    b'-' => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace()=> next.source.cause);
                     }
-                    43 => /* + */ catch!(engine.skip_whitespace()=> next.source.cause
+                    b'+' => /* + */ catch!(engine.skip_whitespace()=> next.source.cause
                     ),
-                    46 | 44 => /* . / ,*/ {
+                    b'.' | b',' => /* . / ,*/ {
                         let f = catch!(read_float::<ET>(engine,us as u8,isnegative)
                             => next.source.cause
                         );
@@ -573,8 +572,8 @@ pub fn read_float<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnega
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => break, // eat one space
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
+            BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
                 if is_ascii_digit(us) {
                     rets.push(us as u8);
                 }

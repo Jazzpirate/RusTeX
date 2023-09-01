@@ -209,22 +209,16 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> b
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         rs.push(next.source.cause);
         match next.command {
-            BaseCommand::Char {char,..} => {
-                let us = char.to_usize();
-                if us < 256 {
-                    current.push(us as u8 as char);
-                    if current == kw {
-                        rs.clear();
-                        engine.mouth.push_expansion(rs);
-                        engine.memory.return_string(current);
-                        return true
-                    }
-                    else if !kw.starts_with(&current) {
-                        engine.mouth.push_expansion(rs);
-                        engine.memory.return_string(current);
-                        return false
-                    }
-                } else {
+            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
+                current.push(us as char);
+                if current == kw {
+                    rs.clear();
+                    engine.mouth.push_expansion(rs);
+                    engine.memory.return_string(current);
+                    return true
+                }
+                else if !kw.starts_with(&current) {
                     engine.mouth.push_expansion(rs);
                     engine.memory.return_string(current);
                     return false
@@ -247,20 +241,11 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
     while let Some(next) = engine.get_next_unexpandable_same_file() {
         rs.push(next.source.cause.clone());
         match next.command {
-            BaseCommand::Char{char,..} => {
-                let us = char.to_usize();
-                let us = if us < 256 { (us as u8).to_ascii_lowercase() } else if keywords.contains(&current.as_str()) {
-                    engine.mouth.requeue(next.source.cause);
-                    rs.clear();
-                    engine.mouth.push_expansion(rs);
-                    keywords = keywords.into_iter().filter(|s| s == &current).collect();
-                    return Some(keywords[0])
-                } else {
-                    engine.mouth.push_expansion(rs);
-                    return None
-                };
+            BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
+                let us = us.to_ascii_lowercase();
                 if keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us) {
-                    current.push(us as u8 as char);
+                    current.push(us as char);
                     keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
                     if keywords.is_empty() {
                         engine.mouth.push_expansion(rs);
@@ -306,7 +291,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} if quoted => ret.push(' '),
             BaseCommand::Char {catcode:CategoryCode::Space,..} => return (),
-            BaseCommand::Char {char,..} if char.to_usize() == 34 => { // "
+            BaseCommand::Char {char,..} if char.as_bytes() == [b'\"'] => {
                 quoted = !quoted;
             }
             BaseCommand::Char {char,..} => ret.push(char.as_char()), //(char.as_bytes())),//ret.push(char.to_char()),
@@ -501,8 +486,8 @@ impl<ET:EngineType> EngineRef<ET> {
         match self.get_next_unexpandable_same_file() {
             None => file_end!(),
             Some(res) => match res.command {
-                BaseCommand::Char {char,..} if (char.as_char() as u32) < 256 => {
-                    let c = char.as_char() as u8;
+                BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                    let c = char.as_bytes()[0];
                     if chars.contains(&c) {
                         Some(c)
                     } else {
