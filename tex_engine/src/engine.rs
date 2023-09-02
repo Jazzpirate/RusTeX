@@ -32,8 +32,8 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type File:File<Self::Char>;
     type FileSystem:FileSystem<Self::Char,F=Self::File>;
     type Font:Font<Char=Self::Char>;
-    type FontStore:FontStore<Char=Self::Char,Font=Self::Font,RefType=Self::FontRefType>;
-    type FontRefType:Copy+PartialEq+Debug;
+    type FontStore:FontStore<Char=Self::Char,Font=Self::Font,RefType=Self::FontRef>;
+    type FontRef:Copy+PartialEq+Debug+Default;
     type Node: CustomNode<Self>;
     type Int:Int+Assignable<Self>;
     type Dim:Dim+Assignable<Self>;

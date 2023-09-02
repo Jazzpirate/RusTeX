@@ -5,6 +5,7 @@ use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory};
 use crate::tex::token::{Token, TokenReference};
 use crate::utils::strings::CharType;
+
 #[derive(Clone,Debug)]
 pub struct TeXError<ET:EngineType> {
     pub msg:String,

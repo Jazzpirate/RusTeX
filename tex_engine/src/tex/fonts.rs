@@ -17,10 +17,9 @@ use crate::utils::strings::{CharType, TeXStr};
 
 pub trait FontStore:'static+Debug {
     type Char:CharType;
-    type RefType:Copy+PartialEq+Debug;
+    type RefType:Copy+PartialEq+Debug+Default;
     type Font:Font<Char=Self::Char>;
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font,FontRefType=Self::RefType>>(&mut self,s: &str,macroname:TeXStr) -> Self::RefType;
-    fn null(&self) -> Self::RefType;
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font, FontRef=Self::RefType>>(&mut self, s: &str, macroname:TeXStr) -> Self::RefType;
     fn get(&self,id:Self::RefType) -> &Self::Font;
     fn get_mut(&mut self,id:Self::RefType) -> &mut Self::Font;
 }
@@ -64,7 +63,7 @@ impl FontStore for TfmFontStore {
     fn get_mut(&mut self, id: Self::RefType) -> &mut Self::Font {
         &mut self.fonts[id]
     }
-    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font,FontRefType=Self::RefType>>(&mut self, s: &str,macroname:TeXStr) -> Self::RefType {
+    fn get_new<ET:EngineType<Char=Self::Char,FontStore=Self,Font=Self::Font, FontRef=Self::RefType>>(&mut self, s: &str, macroname:TeXStr) -> Self::RefType {
         let path = match KPATHSEA.get(s) {
             None => throw!("Font not found: {}",s),
             Some(res) => res.path
@@ -89,7 +88,6 @@ impl FontStore for TfmFontStore {
         });
         self.fonts.len()-1
     }
-    fn null(&self) -> Self::RefType { 0 }
 }
 impl TfmFontStore {
     pub fn new(interner:&mut Interner) -> Self {

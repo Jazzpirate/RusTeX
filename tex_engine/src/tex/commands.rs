@@ -125,7 +125,7 @@ pub type BoxFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> CloseBoxFun<E
 pub type WhatsitFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Whatsit<ET>;
 
 pub type ValueFun<ET,A> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> A;
-pub type FontFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> ET::FontRefType;
+pub type FontFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> ET::FontRef;
 
 pub trait Assignable<ET:EngineType> {
     fn get_register(state:&ET::State,index:usize) -> Self;
@@ -338,7 +338,7 @@ pub enum BaseCommand<ET:EngineType>{
     /// An (optionally) assignable token value, e.g. `\everypar` or the result of a `\toksdef`
     Toks(ToksCommand<ET>),
     /// A [`Font`](crate::tex::fonts::Font)
-    Font(ET::FontRefType),
+    Font(ET::FontRef),
     FontCommand { name:&'static str,get:FontFun<ET>,set:Option<AssignmentFun<ET>> },
     /// `\relax`
     Relax,
@@ -440,7 +440,7 @@ pub enum BaseStomachCommand<ET:EngineType> {
     FinishedBox{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> HVBox<ET>},
     Char(ET::Char),
     MathChar(u32),
-    Font(ET::FontRefType),
+    Font(ET::FontRef),
     Relax,
     Space,
     BeginGroup,

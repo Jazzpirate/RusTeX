@@ -817,7 +817,7 @@ pub fn font_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     engine.state.set_command(cs,Some(fontcmd),global);
 }
 pub fn font_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                               -> ET::FontRefType {
+                               -> ET::FontRef {
     debug_log!(trace=>"Getting \\font");
     engine.state.get_current_font()
 }
@@ -2219,16 +2219,13 @@ pub fn scriptfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandS
     engine.state.set_scriptfont(num as usize,fnt,global);
 }
 pub fn scriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                               -> ET::FontRefType {
+                               -> ET::FontRef {
     debug_log!(trace=>"Getting \\scriptfont");
     let num = engine.get_int().to_i64();
     if num < 0 || num > 15 {
         throw!("Invalid font number: {}",num => cmd.cause)
     }
-    match engine.state.get_scriptfont(num as usize) {
-        None => engine.fontstore.null(),
-        Some(f) => f
-    }
+    engine.state.get_scriptfont(num as usize)
 }
 
 
@@ -2242,16 +2239,13 @@ pub fn scriptscriptfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&Co
     engine.state.set_scriptscriptfont(num as usize,fnt,global);
 }
 pub fn scriptscriptfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                                     -> ET::FontRefType {
+                                     -> ET::FontRef {
     debug_log!(trace=>"Getting \\sscriptcriptfont");
     let num = engine.get_int().to_i64();
     if num < 0 || num > 15 {
         throw!("Invalid font number: {}",num => cmd.cause)
     }
-    match engine.state.get_scriptscriptfont(num as usize) {
-        None => engine.fontstore.null(),
-        Some(f) => f.clone()
-    }
+    engine.state.get_scriptscriptfont(num as usize)
 }
 
 pub const SETBOX: &str = "setbox";
@@ -2417,16 +2411,13 @@ pub fn textfont_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
     engine.state.set_textfont(num as usize,fnt,global);
 }
 pub fn textfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                                     -> ET::FontRefType {
+                                     -> ET::FontRef {
     debug_log!(trace=>"Getting \\textfont");
     let num = engine.get_int().to_i64();
     if num < 0 || num > 15 {
         throw!("Invalid font number: {}",num => cmd.cause)
     }
-    match engine.state.get_textfont(num as usize) {
-        None => engine.fontstore.null(),
-        Some(f) => f
-    }
+    engine.state.get_textfont(num as usize)
 }
 
 pub const THE : &str = "the";
@@ -3098,7 +3089,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(noindent,engine,Some(HorV::Horizontal),(e,cmd) =>noindent::<ET>(e,&cmd));
     register_dim_assign!(nulldelimiterspace,engine);
     engine.state.set_command(ET::Char::from_str("nullfont",&mut engine.interner), Some(Command::new(
-        BaseCommand::Font(engine.fontstore.null())
+        BaseCommand::Font(ET::FontRef::default())
         ,None)), true);
     register_expandable!(number,engine,(e,cmd,f) => number::<ET>(e,&cmd,f));
     register_unexpandable!(openin,engine,None,(e,cmd) =>openin::<ET>(e,&cmd));

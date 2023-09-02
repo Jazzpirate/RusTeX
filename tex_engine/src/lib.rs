@@ -54,12 +54,13 @@ macro_rules! debug_log {
 #[cfg(test)]
 mod tests {
     use std::collections::LinkedList;
+    use std::mem::size_of;
     use crate::engine::filesystem::{FileSystem, KpseVirtualFileSystem, VirtualFile};
     use log::{error, warn, info, debug, trace};
     use crate::engine::gullet::{Gullet,TeXGullet};
     use crate::engine::mouth::Mouth;
     //use crate::engine::{Engine, new_tex_with_source_references, Outputs};
-    use crate::engine::state::{State, PDFTeXState};
+    use crate::engine::state::{State, FieldBasedState};
     use crate::engine::stomach::{NoShipoutDefaultStomach, ShipoutDefaultStomach, Stomach};
     use crate::engine::mouth::MouthTrait;
 
@@ -68,11 +69,12 @@ mod tests {
     use crate::utils::errors::TeXError;
     use ansi_term::Colour::*;
     use rand::Rng;
-    use crate::engine::{Engine, EngineType, Outputs};
+    use crate::engine::{Engine, EngineRef, EngineType, Outputs};
     use crate::engine::memory::{Interner, Memory};
     use crate::tex::catcodes::CategoryCode;
-    use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command};
+    use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource};
     use crate::tex::commands::pdftex::PDFTeXNode;
+    use crate::tex::commands::tex::PAR;
     use crate::tex::fonts::{TfmFont, TfmFontStore};
     use crate::tex::numbers::{Dimi32, Fill, MuFill, Mui32};
     use crate::tex::token::{BaseToken, FileTokenReference, Token};
@@ -88,7 +90,7 @@ mod tests {
         type FileSystem = KpseVirtualFileSystem<u8>;
         type Font = TfmFont;
         type FontStore = TfmFontStore;
-        type FontRefType = usize;
+        type FontRef = usize;
         type Node = PDFTeXNode<Self>;
         type Int = i32;
         type Dim = Dimi32;
@@ -96,8 +98,8 @@ mod tests {
         type MuDim = Mui32;
         type MuStretchShrinkDim = MuFill;
         type CommandReference = ();
-        type TokenReference = FileTokenReference<Self>;
-        type State = PDFTeXState<Self>;
+        type TokenReference = ();//FileTokenReference<Self>;
+        type State = FieldBasedState<Self>;
         type Gullet = TeXGullet<Self>;
         type Stomach = ShipoutDefaultStomach<Self>;
     }
@@ -106,7 +108,7 @@ mod tests {
         ($key:ident:$x:expr) => {{
             let measure_start = std::time::Instant::now();
             let ret = $x;
-            info!(target:stringify!($key),"{}", Green.bold().paint(format!("Finished after {:?}",measure_start.elapsed())));
+            warn!(target:stringify!($key),"{}", Green.bold().paint(format!("Finished after {:?}",measure_start.elapsed())));
             ret
         }};
     }
@@ -138,6 +140,153 @@ mod tests {
     std::env::set_var("RUST_LOG","info,tex_engine::engine::mouth=trace");
     env_logger::init();
     */
+    #[test]
+    fn sizes () {
+        warn();
+        use std::mem::size_of;
+        type TR = Option<<Default as crate::engine::EngineType>::TokenReference>;
+        warn!("catcode: {}, TeXStr: {}, Pair: {}, Reference: {}, Unit: {}",size_of::<CategoryCode>(),size_of::<TeXStr>(),size_of::<(u8,CategoryCode)>(),size_of::<TR>(),size_of::<()>());
+        enum BaseTokenA {
+            CS(u16),
+            Char(u8,CategoryCode),
+        }
+        warn!("Base A: {} == {}",size_of::<BaseToken<u8>>(),size_of::<BaseTokenA>());
+        warn!("Pair: {} == {}",size_of::<(BaseToken<u8>,TR)>(),size_of::<(BaseTokenA,TR)>());
+        struct TokenA {
+            token:BaseTokenA,
+            reference:TR
+        }
+        warn!("A: {} == {}",size_of::<Token<Default>>(),size_of::<TokenA>());
+        enum TokenB {
+            CS(TeXStr,TR),
+            Char(u8,CategoryCode,TR),
+        }
+        warn!("B: {} == {}",size_of::<Token<Default>>(),size_of::<TokenB>());
+        enum TokenC {
+            CS{name:TeXStr,reference:TR},
+            Char{char:u8,catcode:CategoryCode,reference:TR},
+        }
+        warn!("C: {} == {}",size_of::<Token<Default>>(),size_of::<TokenC>());
+        enum TokenD {
+            CS{name:TeXStr,reference:TR},
+            BGroup{char:u8,reference:TR},
+            EGroup{char:u8,reference:TR},
+            MathShift{char:u8,reference:TR},
+            AlignmentTab{char:u8,reference:TR},
+            EOL{char:u8,reference:TR},
+            Parameter{char:u8,reference:TR},
+            Superscript{char:u8,reference:TR},
+            Subscript{char:u8,reference:TR},
+            Space{reference:TR},
+            Letter{char:u8,reference:TR},
+            Other{char:u8,reference:TR},
+            Active{char:u8,reference:TR},
+        }
+        warn!("D: {} == {}",size_of::<Token<Default>>(),size_of::<TokenD>());
+        enum TokenE {
+            CS{name:TeXStr,reference:TR,foo:()},
+            Char{char:u8,catcode:CategoryCode,reference:TR,bar:()},
+        }
+        warn!("E: {} == {}",size_of::<Token<Default>>(),size_of::<TokenE>());
+        struct Foo<A> {
+            a: A,
+        }
+        warn!("Test: {}, {}",size_of::<Foo<u8>>(),size_of::<Foo<()>>());
+
+        warn!("-------------------------------------------------------------------------");
+
+        warn!("Command: {}; BaseCommand: {}",size_of::<Command<Default>>(),size_of::<BaseCommand<Default>>());
+
+        struct FnTest<ET:EngineType> {
+            foo:fn(EngineRef<ET>,CommandSource<ET>,&mut Vec<Token<ET>>)
+        }
+
+        struct FnTest2<ET:EngineType> {
+            foo:&'static fn(EngineRef<ET>,CommandSource<ET>,&mut Vec<Token<ET>>)
+        }
+
+        warn!("Test: {}, {}, {}, {}", size_of::<&'static str>(), size_of::<FnTest<Default>>(), size_of::<FnTest<Default>>(), size_of::<FnTest2<Default>>());
+
+        #[derive(Clone)]
+        struct TestAA(u64);
+        #[derive(Clone)]
+        struct TestA(u32,u16);
+        #[derive(Clone)]
+        struct TestB(u32,u16,u16,u16);
+        #[derive(Clone)]
+        struct TestC(u64,u32);
+        #[derive(Clone)]
+        struct TestD(u8,u8,u8,u8,u8,u8,u8,u8,u8,u8,u8,u8,u8,u8,u8,u8);
+
+        warn!("-------------------------------------------------------------------------");
+
+        warn!("Test: {}, {}, {}, {}, {}", size_of::<TestAA>(), size_of::<TestA>(), size_of::<TestB>(),size_of::<TestC>(),size_of::<TestD>());
+
+        measure!(aa:{
+            let mut vec = Vec::new();
+            let a = TestAA(0);
+            for _ in (0..1000) {
+                for _ in (0..100000000) {
+                    vec.push(a.clone());
+                }
+                while let Some(x) = vec.pop() {
+                    let _ = x;
+                }
+            }
+        });
+
+        measure!(a:{
+            let mut vec = Vec::new();
+            let a = TestA(0,0);
+            for _ in (0..1000) {
+                for _ in (0..100000000) {
+                    vec.push(a.clone());
+                }
+                while let Some(x) = vec.pop() {
+                    let _ = x;
+                }
+            }
+        });
+
+        measure!(b:{
+            let mut vec = Vec::new();
+            let b = TestB(0,0,0,0);
+            for _ in (0..1000) {
+                for _ in (0..100000000) {
+                    vec.push(b.clone());
+                }
+                while let Some(x) = vec.pop() {
+                    let _ = x;
+                }
+            }
+        });
+
+        measure!(c:{
+            let mut vec = Vec::new();
+            let c = TestC(0,0);
+            for _ in (0..1000) {
+                for _ in (0..100000000) {
+                    vec.push(c.clone());
+                }
+                while let Some(x) = vec.pop() {
+                    let _ = x;
+                }
+            }
+        });
+
+        measure!(c:{
+            let mut vec = Vec::new();
+            let c = TestD(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0);
+            for _ in (0..1000) {
+                for _ in (0..100000000) {
+                    vec.push(c.clone());
+                }
+                while let Some(x) = vec.pop() {
+                    let _ = x;
+                }
+            }
+        });
+    }
 
     #[test]
     fn kpsewhich() { measure!(kpsewhich: {
@@ -176,7 +325,7 @@ mod tests {
         let mut interner = Interner::new();
         let fs = KpseVirtualFileSystem::new(std::env::current_dir().unwrap());
         let fonts = TfmFontStore::new(&mut interner);
-        let state = PDFTeXState::new(&fonts);
+        let state = FieldBasedState::new(&fonts);
         let gullet = TeXGullet::new();
         let stomach = ShipoutDefaultStomach::new();
         let mut engine = crate::engine::EngineRef::<Default>::new(fs,fonts,state,gullet,stomach,outputs);
@@ -204,7 +353,7 @@ mod tests {
         }
     })/*);*/}
 
-    fn random_token(interner:&mut Interner<u8>) -> Token<Default> {
+    fn random_token(interner:&mut Interner) -> Token<Default> {
         if rand::random() {
             let mut s = String::new();
             for _ in (0..rand::thread_rng().gen_range(1..=30)) {

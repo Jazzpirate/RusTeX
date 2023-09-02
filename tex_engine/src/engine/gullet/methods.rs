@@ -394,7 +394,7 @@ fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:Resol
     }
 }
 
-pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRefType {
+pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRef {
     match engine.get_next_unexpandable_same_file() {
         None => file_end!(),
         Some(res) => match res.command {
@@ -478,7 +478,7 @@ impl<ET:EngineType> EngineRef<ET> {
         get_braced_string::<ET>(self,string)
     }
 
-    pub fn get_font(&mut self) -> ET::FontRefType {
+    pub fn get_font(&mut self) -> ET::FontRef {
         ET::Gullet::get_font(self)
     }
 

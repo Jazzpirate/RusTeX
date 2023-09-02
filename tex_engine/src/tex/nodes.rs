@@ -122,7 +122,7 @@ pub enum HorV { Horizontal, Vertical }
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
-    Char {char:ET::Char, font:ET::FontRefType}
+    Char {char:ET::Char, font:ET::FontRef }
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {

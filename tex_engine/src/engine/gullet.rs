@@ -82,7 +82,7 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         methods::get_string::<ET>(engine,string)
     }
 
-    fn get_font(engine:&mut EngineRef<ET>) -> ET::FontRefType {
+    fn get_font(engine:&mut EngineRef<ET>) -> ET::FontRef {
         methods::get_font::<ET>(engine)
     }
 
