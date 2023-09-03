@@ -1,9 +1,8 @@
-use std::hint::unreachable_unchecked;
 use crate::{catch, catch_prim, debug_log, expand_until_group, file_end, file_end_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
-use crate::tex::token::{BaseToken, Token, TokenList};
+use crate::tex::token::{Token, PrintableTokenList};
 use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;
@@ -57,7 +56,7 @@ pub fn set_toks_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:
     let mut tks = engine.memory.get_token_vec();
     expand_until_group!(engine,t => tks.push(t));
     //catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
-    debug_log!(debug=>"\\{} = {:?}",u,TokenList(&tks).to_str(&engine.interner));
+    debug_log!(debug=>"\\{} = {}",u,PrintableTokenList::<ET>(&tks,&engine.interner));
     engine.state.set_toks_register(u,tks,global,&mut engine.memory);
 } => cmd.cause)}
 
@@ -97,11 +96,11 @@ pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandS
     let mut tks = engine.memory.get_token_vec();
     expand_until_group!(engine,t => tks.push(t));
     //catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
-    debug_log!(debug=>"\\{} = {:?}",name,TokenList(&tks).to_str(&engine.interner));
+    debug_log!(debug=>"\\{} = {}",name,PrintableTokenList::<ET>(&tks,&engine.interner));
     if name == "output" {
         if !tks.is_empty() {
-            tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
-            tks.insert(0,Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None))
+            tks.push(ET::Token::new_char_from_command(b'}'.into(),CategoryCode::EndGroup,&cmd));
+            tks.insert(0,ET::Token::new_char_from_command(b'{'.into(),CategoryCode::BeginGroup,&cmd))
         }
     }
     engine.state.set_primitive_toks(name,tks,global,&mut engine.memory);
@@ -376,14 +375,12 @@ macro_rules! register_value_assign_font {
     }};
 }
 
-use crate::tex::token::TokenReference;
-
 /// Expands the [`Def`] into a [`Vec`] of [`Token`]s. `cmd` and `cause` are the command and
 /// token that triggered the expansion, used for constructing the
 /// [`SourceReference`](crate::tex::token::SourceReference)s of the returned [`Token`]s and
 /// error messages.
-pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut Vec<Token<ET>>) { catch!({
-    debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.to_str(&engine.interner,Some(ET::Char::backslash())),d.as_str(&engine.interner),engine.preview(250));
+pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut Vec<ET::Token>) { catch!({
+    debug_log!(debug=>"Expanding {}:{}\n - {}",cmd.cause.printable(&engine.interner),d.as_str(&engine.interner),engine.preview(250));
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
@@ -398,9 +395,9 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
                     if let Some((n,_)) = engine.get_next_token() {
                         if n != *delim {
                             throw!("Usage of {} does not match its definition: {} expected, found {}",
-                                cmd.cause.to_str(&engine.interner,Some(ET::Char::backslash())),
-                                delim.to_str(&engine.interner,Some(ET::Char::backslash())),
-                                n.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause)
+                                cmd.cause.printable(&engine.interner),delim.printable(&engine.interner),
+                                n.printable(&engine.interner) => cmd.cause
+                            )
                         }
                     } else {
                         file_end!(cmd.cause)
@@ -422,21 +419,17 @@ pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:Com
     read_arguments(d, engine, &cmd, &mut args);
     replace(d, &cmd, engine, &mut args, exp);
     engine.memory.return_args(args);
-}; format!("Error expanding {}",cmd.cause.to_str(&engine.interner,engine.state.get_escapechar())) => cmd.cause.clone())}
+}; format!("Error expanding {}",cmd.cause.printable(&engine.interner)) => cmd.cause.clone())}
 
-fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut Vec<Token<ET>>) {
-    let rf = ET::TokenReference::from_expansion(&cmd);
-    exp.extend(d.replacement.iter().rev().map(|t| match t {ExpToken::Token(t) => t.clone().with_ref(&rf),_ => unreachable!()} ));
-    /*for r in d.replacement.iter().rev() {
-        match r {
-            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf)),
-            _ => unreachable!()
-        }
-    }*/
+fn expand_simple<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine:&mut EngineRef<ET>, exp:&mut Vec<ET::Token>) {
+    exp.extend(d.replacement.iter().rev().map(|t| match t {
+        ExpToken::Token(t) => t.clone_with(cmd),
+        _ => unreachable!()
+    } ));
 }
 
 
-fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, args:&mut [Vec<Token<ET>>;9]) {
+fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, args:&mut [Vec<ET::Token>;9]) {
     let mut argnum = 0;
     let mut iter = d.signature.iter().peekable();
     while let Some(next) = iter.next() {
@@ -445,9 +438,9 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                 if let Some(n) = engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
                     if n != *delim {
                         throw!("Usage of {} does not match its definition: {} expected, found {}",
-                            cmd.cause.to_str(&engine.interner,Some(ET::Char::backslash())),
-                            delim.to_str(&engine.interner,Some(ET::Char::backslash())),
-                            n.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause)
+                            cmd.cause.printable(&engine.interner),delim.printable(&engine.interner),
+                            n.printable(&engine.interner) => cmd.cause
+                        )
                     }
                 } else {
                     file_end!(cmd.cause.clone())
@@ -458,22 +451,11 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     let arg = &mut args[argnum];
                     arg.clear();
                     argnum += 1;
-                    /*crate::get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'L => t => {
-                        match t.base {
-                            BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                                engine.mouth.requeue(t);
-                                break 'L;
-                            }
-                            BaseToken::Char(_,CategoryCode::EOL) if !d.long => throw!("Unexpected end of file" => cmd.cause.clone()),
-                            BaseToken::CS(p) if !d.long && p == engine.interner.par => throw!("Unexpected \\par" => cmd.cause.clone()),
-                            _ => arg.push(t)
-                        }
-                    })*/
                     'L: loop {
                         match if d.long {engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
                         else { engine.mouth.get_next_nopar(&engine.state,&mut engine.interner)} {
                             Some(t) => {
-                                if t.catcode() == CategoryCode::BeginGroup {
+                                if t.is_begin_group() {
                                     engine.mouth.requeue(t);
                                     break 'L;
                                 } else {
@@ -548,16 +530,16 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     'L: loop {
                         match if d.long { engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
                         else { engine.mouth.get_next_nopar(&engine.state,&mut engine.interner) } {
-                            Some(t) if t.catcode() == CategoryCode::BeginGroup => {
+                            Some(t) if t.is_begin_group() => {
                                 depth += 1;
                                 if arg.len() == 0 {
                                     removebraces = Some(-1);
                                 }
                                 arg.push(t);
                             }
-                            Some(t) if t.catcode() == CategoryCode::EndGroup => {
+                            Some(t) if t.is_end_group() => {
                                 if depth == 0 {
-                                    throw!("Unexpected end group token: {}",t.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone())
+                                    throw!("Unexpected end group token: {}",t.printable(&engine.interner) => cmd.cause.clone())
                                 } else {
                                     depth -= 1;
                                     if depth == 0 && t == end_marker  && arg.ends_with(delims.as_slice()) {
@@ -602,13 +584,12 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
     }
 }
 
-fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<Token<ET>>;9], exp:&mut Vec<Token<ET>>) {
-    let rf = ET::TokenReference::from_expansion(cmd);
+fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut EngineRef<ET>, args:&[Vec<ET::Token>;9], exp:&mut Vec<ET::Token>) {
     #[cfg(debug_assertions)]
     {
         debug_log!(debug=>"Arguments:");
         for i in 0..d.arity {
-            debug_log!(debug=>"  - {}",TokenList(&args[i as usize]).to_str(&engine.interner));
+            debug_log!(debug=>"  - {}",PrintableTokenList::<ET>(&args[i as usize],&engine.interner));
         }
     }
     let mut replacement = d.replacement.iter().rev();
@@ -617,7 +598,7 @@ fn replace<ET:EngineType>(d:&Def<ET>, cmd:&CommandSource<ET>, engine: &mut Engin
             ExpToken::Param(_,idx) => {
                 exp.extend(args[*idx as usize].iter().map(|t| t.clone()).rev())
             }
-            ExpToken::Token(t) => exp.push(t.clone().with_ref(&rf))
+            ExpToken::Token(t) => exp.push(t.clone_with(cmd))
         }
     }
 }
@@ -627,37 +608,38 @@ pub fn parse_signature<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSo
     let mut arity : u8 = 0;
     let mut params : Vec<ParamToken<ET>> = vec!();
     while let Some((next,_)) = engine.get_next_token() {
-        match &next.base {
-            BaseToken::Char(_,CategoryCode::Parameter) => {
-                match engine.get_next_token() {
-                    None => file_end_prim!(name,cmd),
-                    Some((next,_)) => {
-                        match &next.base {
-                            BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                                engine.mouth.requeue(next);
-                                return (true, arity, params)
+        if next.is_parameter() {
+            match engine.get_next_token() {
+                None => file_end!(),
+                Some((next,_)) => {
+                    if next.is_begin_group() {
+                        engine.mouth.requeue(next);
+                        return (true, arity, params)
+                    }
+                    match next.get_char() {
+                        Some(c) if c.as_bytes().len() == 1 => {
+                            arity += 1;
+                            let u = c.as_bytes()[0];
+                            if u < 48 || u - 48 != arity {
+                                throw!("Expected parameter number {}, got {}",arity,next.printable(&engine.interner) => cmd.cause)
                             }
-                            BaseToken::Char(c,_) => {
-                                arity += 1;
-                                let u = c.to_usize();
-                                if u < 48 || u - 48 != (arity as usize) {
-                                    throw!("Expected parameter number {}, got {}",arity,next.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause)
-                                }
-                                params.push(ParamToken::Param);
-                            }
-                            _ =>
-                                throw!("Expected parameter number {}, got {}",arity,next.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause)
+                            params.push(ParamToken::Param);
                         }
+                        _ => throw!("Expected parameter number {}, got {}",arity,next.printable(&engine.interner) => cmd.cause)
                     }
                 }
             }
-            BaseToken::Char(_,CategoryCode::BeginGroup) => {
-                engine.mouth.requeue(next);
-                return (false,arity,params)
-            }
-            BaseToken::Char(_,CategoryCode::EndGroup) => throw!("Unexpected end of group" => cmd.cause),
-            _ => params.push(ParamToken::Token(next))
+        }
+        else if next.is_begin_group() {
+            engine.mouth.requeue(next);
+            return (false,arity,params)
+        }
+        else if next.is_end_group() {
+            throw!("Unexpected end group token" => cmd.cause)
+        }
+        else {
+            params.push(ParamToken::Token(next))
         }
     }
-    file_end_prim!(name,cmd.clone())
+    file_end!()
 }

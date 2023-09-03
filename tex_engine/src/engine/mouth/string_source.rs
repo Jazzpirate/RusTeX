@@ -9,7 +9,7 @@ use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory};
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::token::{BaseToken, FileReference, Token};
+use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
@@ -131,30 +131,18 @@ impl<C:CharType> StringSource<C> {
          */
     }
 
-    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>,par:TeXStr) -> Option<Token<ET>> {
+    fn return_endline<ET:EngineType<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>,par:TeXStr) -> Option<ET::Token> {
         use CategoryCode::*;
         let ret = endline.map(|c| {
-            match cc.get(&c) {
+            match cc.get(c) {
                 Space | EOL if self.state == MouthState::S => None,
                 Space if self.state == MouthState::N => None,
                 EOL if self.state == MouthState::N => {
-                    Some(Token::new(BaseToken::CS(par),self.source.map(|s|
-                        FileReference {
-                            filename:s.symbol(),start:(self.line+1,self.col+1),end:(self.line+1,self.col+1)
-                        }
-                    )))
+                    Some(ET::Token::new_cs_from_string(par,self.source,(self.line+1,self.col+1),(self.line+1,self.col+1)))
                 }
                 Ignored => None,
-                EOL => Some(Token::new(BaseToken::Char(c,Space),self.source.map(|s|
-                    FileReference {
-                        filename:s.symbol(),start:(self.line+1,self.col+1),end:(self.line+1,self.col+1)
-                    }
-                ))),
-                o => Some(Token::new(BaseToken::Char(c,*o),self.source.map(|s|
-                    FileReference {
-                        filename:s.symbol(),start:(self.line+1,self.col+1),end:(self.line+1,self.col+1)
-                    }
-                )))
+                EOL => Some(ET::Token::new_space_from_string(self.source,(self.line+1,self.col+1),(self.line+1,self.col+1))),
+                o => Some(ET::Token::new_char_from_string(c,*o,self.source,(self.line+1,self.col+1),(self.line+1,self.col+1)))
             }
         }).flatten();
         self.line += 1;
@@ -164,27 +152,27 @@ impl<C:CharType> StringSource<C> {
         /*endline.map(|c| )*/
     }
 
-    pub fn readline<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner,mut f:F) {
+    pub fn readline<ET:EngineType<Char=C>,F:FnMut(ET::Token)>(&mut self,interner:&mut Interner,mut f:F) {
         if self.line >= self.string.len() {self.eof=true;return ()}
         let mut iter = self.string[self.line].iter().map(|u:&u8| *u);
         while let Some(next) = C::from_u8_iter(&mut iter,&mut self.col) {
             let t = if next.as_bytes() == [32] {
-                Token::new(BaseToken::Char(next,CategoryCode::Space),None)
+                ET::Token::new_space_from_string(self.source,(self.line+1,self.col+1),(self.line+1,self.col+1))
             } else {
-                Token::new(BaseToken::Char(next,CategoryCode::Other),None)
+                ET::Token::new_char_from_string(next,CategoryCode::Other,self.source,(self.line+1,self.col+1),(self.line+1,self.col+1))
             };
             f(t)
         }
         self.line += 1;
     }
 
-    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(ET::Token)>(&mut self,interner:&mut Interner ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
         if self.line >= self.string.len() {
             if self.eof {
                 return ()
             } else {
                 self.eof = true;
-                if let Some(n) =self.return_endline(cc,endline,interner.par) {
+                if let Some(n) =self.return_endline::<ET>(cc,endline,interner.par) {
                     f(n)
                 }
                 return ()
@@ -196,12 +184,12 @@ impl<C:CharType> StringSource<C> {
             let start = (self.line+1,self.col+1);
             match get_char!(self) {
                 None => {
-                    if let Some(n) =self.return_endline(cc,endline,interner.par) {
+                    if let Some(n) =self.return_endline::<ET>(cc,endline,interner.par) {
                         f(n)
                     }
                     return ()
                 }
-                Some(c) => match self.check_char(interner,cc,endline,start,c) {
+                Some(c) => match self.check_char::<ET>(interner,cc,endline,start,c) {
                     None if self.line == line => (),
                     None if ingroups > 0 => {
                         line = self.line;
@@ -210,7 +198,7 @@ impl<C:CharType> StringSource<C> {
                                 return ()
                             } else {
                                 self.eof = true;
-                                if let Some(n) =self.return_endline(cc,endline,interner.par) {
+                                if let Some(n) =self.return_endline::<ET>(cc,endline,interner.par) {
                                     f(n)
                                 }
                                 return ()
@@ -219,9 +207,9 @@ impl<C:CharType> StringSource<C> {
                     },
                     None => return (),
                     Some(tk) => {
-                        if tk.catcode() == CategoryCode::BeginGroup {
+                        if tk.is_begin_group() {
                             ingroups += 1
-                        } else if tk.catcode() == CategoryCode::EndGroup {
+                        } else if tk.is_end_group() {
                             ingroups -= 1
                         }
                         f(tk)
@@ -232,16 +220,16 @@ impl<C:CharType> StringSource<C> {
     }
 
 
-    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> { loop {
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<ET::Token> { loop {
         if self.line >= self.string.len() {
             if self.eof {
                 return None
             } else {
                 self.eof = true;
                 self.state = MouthState::M;
-                return match self.return_endline(cc,endline,interner.par) {
+                return match self.return_endline::<ET>(cc,endline,interner.par) {
                     Some(t) => {
-                        debug_log!(trace=>"Returning endline {:?}",t.base);
+                        debug_log!(trace=>"Returning endline {}",t.printable(&interner));
                         Some(t)
                     }
                     None => {
@@ -253,16 +241,16 @@ impl<C:CharType> StringSource<C> {
         }
         let start = (self.line+1,self.col+1);
         match get_char!(self) {
-            None => match self.return_endline(cc,endline,interner.par) {
+            None => match self.return_endline::<ET>(cc,endline,interner.par) {
                 Some(e) => {
-                    debug_log!(trace=>"Returning endline {:?}",e.base);
+                    debug_log!(trace=>"Returning endline {}",e.printable(&interner));
                     return Some(e)
                 }
                 None => ()
             }
-            Some(c) => match self.check_char(interner,cc,endline,start,c) {
+            Some(c) => match self.check_char::<ET>(interner,cc,endline,start,c) {
                 Some(t) => {
-                    debug_log!(trace=>"Returning {:?}",t.base);
+                    debug_log!(trace=>"Returning {}",t.printable(&interner));
                     return Some(t)
                 },
                 None => ()
@@ -270,28 +258,20 @@ impl<C:CharType> StringSource<C> {
         };
     }}
 
-    fn check_char<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,endline:Option<C>,start:(usize,usize),c:C) -> Option<Token<ET>> {
+    fn check_char<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,endline:Option<C>,start:(usize,usize),c:C) -> Option<ET::Token> {
         use CategoryCode::*;
-        match cc.get(&c) {
+        match cc.get(c) {
             EOL if self.state == MouthState::N => {
                 self.line += 1;
                 self.col = 0;
-                Some(Token::new(BaseToken::CS(interner.par),self.source.map(|s|
-                    FileReference {
-                        filename:s.symbol(),start,end:(self.line+1,self.col+1)
-                    }
-                )))
+                Some(ET::Token::new_cs_from_string(interner.par,self.source,start,(self.line+1,self.col+1)))
             }
-            EOL => self.return_endline(cc,endline,interner.par),
+            EOL => self.return_endline::<ET>(cc,endline,interner.par),
             Space if self.state == MouthState::S => None,
             Space if self.state == MouthState::N => None,
             Space => {
                 self.state = MouthState::S;
-                Some(Token::new(BaseToken::Char(c,Space),self.source.map(|s|
-                    FileReference {
-                        filename:s.symbol(),start,end:(self.line+1,self.col+1)
-                    }
-                )))
+                Some(ET::Token::new_space_from_string(self.source,start,(self.line+1,self.col+1)))
             }
             Ignored => None,
             Comment => {
@@ -301,25 +281,17 @@ impl<C:CharType> StringSource<C> {
                 None
             }
             Invalid => throw!("Invalid character {}",c),
-            Escape => Some(self.get_escape(interner,cc,start)),
+            Escape => Some(self.get_escape::<ET>(interner,cc,start)),
             Superscript => match self.maybe_superscript(c) {
-                Some(c) => self.check_char(interner,cc,endline,start,c),
+                Some(c) => self.check_char::<ET>(interner,cc,endline,start,c),
                 None => {
                     self.state = MouthState::M;
-                    Some(Token::new(BaseToken::Char(c,Superscript),self.source.map(|s|
-                        FileReference {
-                            filename:s.symbol(),start,end:(self.line+1,self.col+1)
-                        }
-                    )))
+                    Some(ET::Token::new_char_from_string(c,Superscript,self.source,start,(self.line+1,self.col+1)))
                 }
             }
             cc => {
                 self.state = MouthState::M;
-                Some(Token::new(BaseToken::Char(c,*cc),self.source.map(|s|
-                    FileReference {
-                        filename:s.symbol(),start,end:(self.line+1,self.col+1)
-                    }
-                )))
+                Some(ET::Token::new_char_from_string(c,*cc,self.source,start,(self.line+1,self.col+1)))
             }
         }
     }
@@ -380,7 +352,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    fn get_escape<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,start:(usize,usize)) -> Token<ET> {
+    fn get_escape<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,start:(usize,usize)) -> ET::Token {
         let name = match get_char!(self) {
             None => {
                 self.state = MouthState::N;
@@ -388,16 +360,12 @@ impl<C:CharType> StringSource<C> {
             },
             Some(next) => self.check_escape(interner,cc,next)
         };
-        Token::new(BaseToken::CS(name),self.source.map(|s|
-            FileReference {
-                filename:s.symbol(),start,end:(self.line+1,self.col+1)
-            }
-        ))
+        ET::Token::new_cs_from_string(name,self.source,start,(self.line+1,self.col+1))
     }
 
     fn check_escape(&mut self,interner:&mut Interner,cc:&CategoryCodeScheme<C>,next:C) -> TeXStr {
         use CategoryCode::*;
-        match cc.get(&next) {
+        match cc.get(next) {
             Superscript => {
                 match self.maybe_superscript(next) {
                     Some(c) => self.check_escape(interner,cc,c),
@@ -428,12 +396,12 @@ impl<C:CharType> StringSource<C> {
                 None => {
                     break
                 }
-                Some(next) => match cc.get(&next) {
+                Some(next) => match cc.get(next) {
                     CategoryCode::Letter => self.tempstr.push(next.as_char()),
                     CategoryCode::Superscript => {
                         let curr = self.col;
                         match self.maybe_superscript(next) {
-                            Some(c) if *cc.get(&c) == CategoryCode::Letter => self.tempstr.push(c.as_char()),
+                            Some(c) if *cc.get(c) == CategoryCode::Letter => self.tempstr.push(c.as_char()),
                             _ => {
                                 self.col = curr;
                                 self.col -= next.as_bytes().len();
@@ -802,7 +770,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F)
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(ET::Token)>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F)
         -> Result<(),TeXError<ET>> {
         let mut done = false;
         use CategoryCode::*;
@@ -881,7 +849,7 @@ impl<C:CharType> StringSource<C> {
         }
     }
 
-    pub fn read<ET:EngineType<Char=C>,F:FnMut(Token<ET>)>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:F) -> Result<(),TeXError<ET>> {
+    pub fn read<ET:EngineType<Char=C>,F:FnMut(ET::Token)>(&mut self,interner:&mut Interner<C>,cc:&CategoryCodeScheme<C>,endline:Option<C>,f:F) -> Result<(),TeXError<ET>> {
         self.state.read(interner,cc,endline,f)
     }
 
@@ -891,7 +859,7 @@ impl<C:CharType> StringSource<C> {
     pub fn preview(&self,len:usize) -> String { self.state.preview(len) }
     pub fn eof<ET:EngineType<Char=C>>(&mut self,state:&ET::State) -> bool { self.state.eof::<ET>(state) }
 
-    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<Token<ET>> {
+    pub fn get_next<ET:EngineType<Char=C>>(&mut self,interner:&mut Interner<C> ,cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Option<ET::Token> {
         match self.state.get_next_valid::<ET>(interner,cc, endline) {
             None => None,
             Some((n,l,c)) =>

@@ -4,7 +4,7 @@ pub mod etex;
 pub mod pdftex;
 pub mod methods;
 
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory};
 use crate::engine::state::State;
@@ -14,16 +14,16 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::methods::{set_primitive_int, set_dim_register, set_int_register, set_muskip_register, set_skip_register, set_toks_register, set_primitive_dim, set_primitive_skip, set_primitive_muskip, set_primitive_toks};
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Dimi32, MuSkip, Skip};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{CSLike, StringConsumer, Token, TokenConsumer};
 use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 /*
 pub enum ResolvedToken<ET:EngineType> {
-    Cmd{command:BaseCommand<ET>,cause:Token<ET>,reference:Option<ET::CommandReference>},
-    Noexpand(Token<ET>),
-    Token(Token<ET>)
+    Cmd{command:BaseCommand<ET>,cause:ET::Token,reference:Option<ET::CommandReference>},
+    Noexpand(ET::Token),
+    Token(ET::Token)
 }
 impl<ET:EngineType> PartialEq for ResolvedToken<ET> {
     fn eq(&self, other: &Self) -> bool {
@@ -36,7 +36,7 @@ impl<ET:EngineType> PartialEq for ResolvedToken<ET> {
     }
 }
 impl<ET:EngineType> ResolvedToken<ET> {
-    fn token(self) -> Token<ET> {
+    fn token(self) -> ET::Token {
         match self {
             ResolvedToken::Cmd{cause,..} => cause,
             ResolvedToken::Token(tk) => tk
@@ -82,7 +82,7 @@ impl <ET:EngineType> StomachCommand<ET> {
 
 #[derive(Clone,Debug)]
 pub struct CommandSource<ET:EngineType> {
-    pub cause:Token<ET>,
+    pub cause:ET::Token,
     pub reference:Option<ET::CommandReference>
 }
 
@@ -119,7 +119,7 @@ pub type UnexpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>);
 pub type AssignmentFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, bool);
 pub type AssignmentFn<ET> = Box<dyn Fn(&mut EngineRef<ET>, CommandSource<ET>,bool)>;
 pub type ConditionalFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> bool;
-pub type ExpandableFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>, &mut Vec<Token<ET>>);
+pub type ExpandableFun<ET:EngineType> = fn(&mut EngineRef<ET>, CommandSource<ET>, &mut Vec<ET::Token>);
 pub type CloseBoxFun<ET> = Ptr<dyn Fn(&mut EngineRef<ET>,Vec<TeXNode<ET>>) -> Option<HVBox<ET>>>;
 pub type BoxFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> CloseBoxFun<ET>;
 pub type WhatsitFun<ET> = fn(&mut EngineRef<ET>, CommandSource<ET>) -> Whatsit<ET>;
@@ -245,15 +245,15 @@ pub enum ToksCommand<ET:EngineType> {
     Register(usize),
     Primitive(&'static str),
     Value{name:&'static str,
-        get: for <'a> fn(&'a mut EngineRef<ET>, CommandSource<ET>) -> Option<&'a Vec<Token<ET>>>
+        get: for <'a> fn(&'a mut EngineRef<ET>, CommandSource<ET>) -> Option<&'a Vec<ET::Token>>
     },
     Complex{name:&'static str,
-        get:for <'a> fn(&'a mut EngineRef<ET>, CommandSource<ET>) -> Option<&'a Vec<Token<ET>>>,
+        get:for <'a> fn(&'a mut EngineRef<ET>, CommandSource<ET>) -> Option<&'a Vec<ET::Token>>,
         set:AssignmentFun<ET>
     }
 }
 impl<ET:EngineType> ToksCommand<ET> {
-    pub fn get<'a>(&self, engine:&'a mut EngineRef<ET>, cmd:CommandSource<ET>) -> Option<&'a Vec<Token<ET>>> {
+    pub fn get<'a>(&self, engine:&'a mut EngineRef<ET>, cmd:CommandSource<ET>) -> Option<&'a Vec<ET::Token>> {
         match self {
             ToksCommand::Value{get,..} => get(engine, cmd),
             ToksCommand::Complex{get,..} => get(engine, cmd),
@@ -377,7 +377,7 @@ impl<ET:EngineType> PartialEq for BaseCommand<ET> {
 impl<ET:EngineType> BaseCommand<ET> {
     fn as_str(&self,interner:&Interner) -> String {
         match self {
-            BaseCommand::Def(d) => d.as_str(interner),
+            BaseCommand::Def(d) => d.as_str(interner).to_string(),
             BaseCommand::Conditional{name,..} => format!("\\{}", name),
             BaseCommand::Expandable {name,..} => format!("\\{}", name),
             BaseCommand::ExpandableNoTokens {name,..} => format!("\\{}", name),
@@ -482,9 +482,10 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             Int(ValueCommand::Value {..}) | Dim(ValueCommand::Value {..}) | Skip(ValueCommand::Value {..})|
             MuSkip(ValueCommand::Value {..}) | Toks(ToksCommand::Value {..}) | FontCommand{set:std::option::Option::None,..} =>
                 throw!("Not allowed in the stomach: {}",value.as_str(interner)),
-            None => match &source.cause.base {
-                BaseToken::Char(c,_) => throw!("Undefined active character {}",c),
-                BaseToken::CS(name) => throw!("Undefined control sequence {}",name.to_str(interner)),
+            None => match source.cause.as_command() {
+                Some(CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c),
+                Some(CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(interner)),
+                _ => unreachable!()
             }
             Unexpandable {name,apply,forces_mode} => BaseStomachCommand::Unexpandable {name,apply, forces_mode},
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
@@ -554,9 +555,16 @@ impl<ET:EngineType> PartialEq for Def<ET> {
         self.signature == other.signature && self.replacement == other.replacement
     }
 }
+pub struct DefPrintable<'a,ET:EngineType>(&'a Def<ET>,&'a Interner);
+impl<'a,ET:EngineType> std::fmt::Display for DefPrintable<'a,ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut consumer = StringConsumer::simple(self.1,f);
+        self.0.meaning(consumer);Ok(())
+    }
+}
 
 impl<ET:EngineType> Def<ET>{
-    pub fn simple(mut replacement:Vec<Token<ET>>) -> Def<ET> {
+    pub fn simple(mut replacement:Vec<ET::Token>) -> Def<ET> {
         Self::new(false,false,false,false,0,Vec::new(),replacement.into_iter().map(ExpToken::Token).collect())
     }
     pub fn new(protected:bool,long:bool,outer:bool,endswithbrace:bool,arity:u8,mut signature:Vec<ParamToken<ET>>,mut replacement:Vec<ExpToken<ET>>) -> Def<ET> {
@@ -570,6 +578,11 @@ impl<ET:EngineType> Def<ET>{
             replacement:replacement.into()
         }
     }
+    pub fn meaning<T:TokenConsumer<ET>>(&self,consumer:T) { todo!() }
+    pub fn as_str<'a>(&'a self,interner:&'a Interner) -> DefPrintable<'a,ET> {
+        DefPrintable(self,interner)
+    }
+    /*
     pub fn as_str(&self,interner:&Interner) -> String {
         let mut s = String::new();
         let mut ind = 0;
@@ -602,7 +615,7 @@ impl<ET:EngineType> Def<ET>{
         }
         s.push('}');
         s
-    }
+    }*/
 }
 impl<ET:EngineType> Debug for Def<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -620,7 +633,7 @@ impl<ET:EngineType> Debug for Def<ET> {
 #[derive(Clone)]
 pub enum ParamToken<ET:EngineType> {
     Param,
-    Token(Token<ET>)
+    Token(ET::Token)
 }
 impl<ET:EngineType> PartialEq for ParamToken<ET> {
     fn eq(&self, other: &Self) -> bool {
@@ -643,8 +656,8 @@ impl<ET:EngineType> Debug for ParamToken<ET> {
 
 #[derive(Clone)]
 pub enum ExpToken<ET:EngineType> {
-    Param(Token<ET>,u8),
-    Token(Token<ET>)
+    Param(ET::Token,u8),
+    Token(ET::Token)
 }
 impl<ET:EngineType> PartialEq for ExpToken<ET> {
     fn eq(&self, other: &Self) -> bool {

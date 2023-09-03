@@ -19,7 +19,7 @@ use crate::engine::filesystem::kpathsea::KpseResult;
 use crate::engine::memory::{Interner, Memory};
 use crate::engine::mouth::string_source::StringSource;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{Token};
 use crate::throw;
 use crate::utils::errors::TeXError;
 use crate::utils::collections::HMap;
@@ -36,8 +36,8 @@ pub trait File<Char:CharType>:Clone {
     fn close_in(&self);
     fn write(&self,string:&str);
     fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
-    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,f:F);
+    fn read<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
+    fn readline<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,f:F);
 }
 
 pub trait FileSystem<Char:CharType>:Clone + 'static {
@@ -88,7 +88,7 @@ impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
     fn write(&self,_:&str) {
         todo!("Physical file system not implemented yet")
     }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
         todo!("Physical file system not implemented yet")
     }
 }
@@ -152,19 +152,19 @@ impl<Char:CharType> File<Char> for VirtualFile<Char> {
             _ => unreachable!()
         }
     }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) {
+    fn read<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) {
         let s = &mut *self.0.state.borrow_mut();
         match s {
-            FileState::OpenIn(ss) => ss.read(interner,cc,endlinechar,f),
+            FileState::OpenIn(ss) => ss.read::<ET,_>(interner,cc,endlinechar,f),
             FileState::Closed(_) => (),
             _ => unreachable!()
         }
     }
 
-    fn readline<ET:EngineType<Char=Char>,F:FnMut(Token<ET>)>(&self,interner:&mut Interner,mut f:F) {
+    fn readline<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,mut f:F) {
         let s = &mut *self.0.state.borrow_mut();
         match s {
-            FileState::OpenIn(ss) => ss.readline(interner,f),
+            FileState::OpenIn(ss) => ss.readline::<ET,_>(interner,f),
             FileState::Closed(_) => (),
             _ => unreachable!()
         }

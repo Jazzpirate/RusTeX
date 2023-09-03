@@ -198,11 +198,11 @@ mod tests {
         warn!("Command: {}; BaseCommand: {}",size_of::<Command<Default>>(),size_of::<BaseCommand<Default>>());
 
         struct FnTest<ET:EngineType> {
-            foo:fn(EngineRef<ET>,CommandSource<ET>,&mut Vec<Token<ET>>)
+            foo:fn(EngineRef<ET>,CommandSource<ET>,&mut Vec<ET::Token>)
         }
 
         struct FnTest2<ET:EngineType> {
-            foo:&'static fn(EngineRef<ET>,CommandSource<ET>,&mut Vec<Token<ET>>)
+            foo:&'static fn(EngineRef<ET>,CommandSource<ET>,&mut Vec<ET::Token>)
         }
 
         warn!("Test: {}, {}, {}, {}", size_of::<&'static str>(), size_of::<FnTest<Default>>(), size_of::<FnTest<Default>>(), size_of::<FnTest2<Default>>());

@@ -3,39 +3,38 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory};
-use crate::tex::token::{Token, TokenReference};
+use crate::tex::token::Token;
 use crate::utils::strings::CharType;
 
 #[derive(Clone,Debug)]
 pub struct TeXError<ET:EngineType> {
     pub msg:String,
-    pub cause:Option<Token<ET>>,
+    pub cause:Option<ET::Token>,
     pub source:Option<Box<TeXError<ET>>>,
 }
 //impl<ET:EngineType> Any for TeXError<ET> {}
 //unsafe impl<ET:EngineType> Send for TeXError<ET> {}
 
+pub struct PrintableError<'a,ET:EngineType>(TeXError<ET>,&'a Interner);
+impl<'a,ET:EngineType> std::fmt::Display for PrintableError<'a,ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.throw_string(self.1,f)
+    }
+}
+
 impl<ET:EngineType> TeXError<ET> {
-    pub fn throw_string(self,interner:&Interner) -> String {
-        let mut ret = self.msg;
-        match self.cause {
-            Some(tk) => match tk.sourceref.as_ref().map(|t| t.trace(interner)).flatten() {
-                Some(trace) => {
-                    ret.push_str(format!(": {} - {}",tk.to_str(interner,Some(ET::Char::backslash())),trace).as_str());
-                }
-                None => {
-                    ret.push_str(format!(": {}",tk.to_str(interner,Some(ET::Char::backslash()))).as_str());
-                }
-            },
-            None => ()
-        }
-        match self.source {
+    pub fn printable<'a>(self,interner:&'a Interner) -> PrintableError<'a,ET> {
+        PrintableError(self,interner)
+    }
+    pub fn throw_string<W:std::fmt::Write>(&self,interner:&Interner,w:&mut W) -> std::fmt::Result {
+        if let Some(cause) = &self.cause { cause.trace(interner,w)? }
+        match &self.source {
             Some(src) => {
-                ret.push_str(format!("\n  caused by: {}",src.throw_string(interner)).as_str());
+                write!(w,"caused by: ");
+                src.throw_string(interner,w)
             }
-            None => {}
+            None => Ok(())
         }
-        ret
     }
 }
 impl<ET:EngineType> Display for TeXError<ET> {
@@ -98,7 +97,7 @@ macro_rules! file_end_prim {
     ($name:expr,$tk:expr) => (crate::throw!("File ended while scanning {}",$name => $tk.cause.clone()));
 }
 
-pub fn catch_test<F,R,ET:EngineType>(f:F,cause:Token<ET>) -> R where
+pub fn catch_test<F,R,ET:EngineType>(f:F,cause:ET::Token) -> R where
 F:FnOnce() -> R + std::panic::UnwindSafe {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe( || f())) {
         Ok(x) => x,

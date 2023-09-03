@@ -21,7 +21,7 @@ pub struct ChangeBasedState<ET:EngineType> {
     out_files:Vec<Option<ET::File>>,
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
-    afterassignment:Option<Token<ET>>,
+    afterassignment:Option<ET::Token>,
     mode: TeXMode,
 
     stack:Vec<StackLevel<ET>>,
@@ -44,7 +44,7 @@ pub struct ChangeBasedState<ET:EngineType> {
     dimregisters: Vec<ET::Dim>,
     skipregisters: Vec<Skip<ET::SkipDim>>,
     muskipregisters: Vec<MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
-    toksregisters:Vec<Vec<Token<ET>>>,
+    toksregisters:Vec<Vec<ET::Token>>,
     boxregisters:Vec<HVBox<ET>>,
     textfonts:Vec<ET::FontRef>,
     scriptfonts:Vec<ET::FontRef>,
@@ -53,7 +53,7 @@ pub struct ChangeBasedState<ET:EngineType> {
     primitive_dimregisters: HMap<&'static str,ET::Dim>,
     primitive_skipregisters: HMap<&'static str,Skip<ET::SkipDim>>,
     primitive_muskipregisters: HMap<&'static str,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>,
-    primitive_tokregisters: HMap<&'static str,Vec<Token<ET>>>,
+    primitive_tokregisters: HMap<&'static str,Vec<ET::Token>>,
 }
 
 impl<ET:EngineType> ChangeBasedState<ET> {
@@ -97,22 +97,22 @@ impl<ET:EngineType> ChangeBasedState<ET> {
             primitive_muskipregisters: HMap::default(),
             primitive_tokregisters: HMap::default(),
         };
-        for i in 97..123 {
-            state.uccodes.set(&(i as u8).into(), ((i-32) as u8).into());
-            state.lccodes.set(&((i-32) as u8).into(), (i as u8).into());
-            state.mathcodes.set(&ET::Char::from(i-32),
+        for i in 97u8..123u8 {
+            state.uccodes.set(i.into(), (i-32).into());
+            state.lccodes.set((i-32).into(), i.into());
+            state.mathcodes.set((i-32).into(),
                                 ET::Int::from_i64((i as i64-32) +
                                     (1 * 16 * 16) +
                                     (7 * 16 * 16 * 16))
             );
-            state.mathcodes.set(&ET::Char::from(i),
+            state.mathcodes.set(i.into(),
                                 ET::Int::from_i64((i as i64) +
                                     (1 * 16 * 16) +
                                     (7 * 16 * 16 * 16))
             );
         }
-        for i in 48..58 {
-            state.mathcodes.set(&ET::Char::from(i),
+        for i in 48u8..58u8 {
+            state.mathcodes.set(i.into(),
                                 ET::Int::from_i64((i as i64) +
                                     (0 * 16 * 16) +
                                     (7 * 16 * 16 * 16))
@@ -151,10 +151,10 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
         self.stack.len()
     }
 
-    fn set_afterassignment(&mut self, t: Token<ET>) {
+    fn set_afterassignment(&mut self, t: ET::Token) {
         self.afterassignment = Some(t)
     }
-    fn take_afterassignment(&mut self) -> Option<Token<ET>> {
+    fn take_afterassignment(&mut self) -> Option<ET::Token> {
         self.afterassignment.take()
     }
 
@@ -237,7 +237,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
             _ => self.stack.push(StackLevel::new(g,None,self.changes.len()))
         }
     }
-    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)> {
+    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)> {
         match self.stack.pop() {
             None => throw!("No group here to end"),
             Some(StackLevel{group_type,mode_switch,aftergroup,start}) => {
@@ -256,13 +256,13 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
                             Escapechar(v) => self.escapechar = v,
                             Newlinechar(v) => self.newlinechar = v,
                             Command(name,v) => self.commands[name] = v,
-                            AcCommand(c,v) => self.ac_commands.set(&c,v),
-                            Catcode(c,v) => self.catcodes.set(&c,v),
-                            SfCode(c,v) => self.sfcodes.set(&c,v),
-                            UCCode(c,v) => self.uccodes.set(&c,v),
-                            LCCode(c,v) => self.lccodes.set(&c,v),
-                            MathCode(c,v) => self.mathcodes.set(&c,v),
-                            DelCode(c,v) => self.delcodes.set(&c,v),
+                            AcCommand(c,v) => self.ac_commands.set(c,v),
+                            Catcode(c,v) => self.catcodes.set(c,v),
+                            SfCode(c,v) => self.sfcodes.set(c,v),
+                            UCCode(c,v) => self.uccodes.set(c,v),
+                            LCCode(c,v) => self.lccodes.set(c,v),
+                            MathCode(c,v) => self.mathcodes.set(c,v),
+                            DelCode(c,v) => self.delcodes.set(c,v),
                             IntRegister(i,v) => self.intregisters[i] = v,
                             DimRegister(i,v) => self.dimregisters[i] = v,
                             SkipRegister(i,v) => self.skipregisters[i] = v,
@@ -310,19 +310,19 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
     fn get_escapechar(&self) -> Option<ET::Char> { self.escapechar }
     fn get_endlinechar(&self) -> Option<ET::Char> { self.endlinechar }
     fn get_newlinechar(&self) -> Option<ET::Char> { self.newlinechar }
-    fn get_sfcode(&self, c: &ET::Char) -> ET::Int { *self.sfcodes.get(&c) }
-    fn get_mathcode(&self, c: ET::Char) -> ET::Int { *self.mathcodes.get(&c)}
-    fn get_delcode(&self, c: ET::Char) -> ET::Int { *self.delcodes.get(&c)}
-    fn get_command(&self, name: &TeXStr) -> Option<&Command<ET>> {
+    fn get_sfcode(&self, c: ET::Char) -> ET::Int { *self.sfcodes.get(c) }
+    fn get_mathcode(&self, c: ET::Char) -> ET::Int { *self.mathcodes.get(c)}
+    fn get_delcode(&self, c: ET::Char) -> ET::Int { *self.delcodes.get(c)}
+    fn get_command(&self, name: TeXStr) -> Option<&Command<ET>> {
         match self.commands.get(name.0.to_usize()) {
             Some(r) => r.as_ref(),
             _ => None
         }
     }
-    fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>> { self.ac_commands.get(c).as_ref()}
+    fn get_ac_command(&self, c: ET::Char) -> Option<&Command<ET>> { self.ac_commands.get(c).as_ref()}
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char> { &self.catcodes }
-    fn get_uccode(&self, c: &ET::Char) -> ET::Char { *self.uccodes.get(c) }
-    fn get_lccode(&self, c: &ET::Char) -> ET::Char { *self.lccodes.get(c) }
+    fn get_uccode(&self, c: ET::Char) -> ET::Char { *self.uccodes.get(c) }
+    fn get_lccode(&self, c: ET::Char) -> ET::Char { *self.lccodes.get(c) }
     fn get_int_register(&self, i: usize) -> ET::Int {
         *self.intregisters.get(i).unwrap_or(&ET::Int::default())
     }
@@ -338,7 +338,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
     fn get_primitive_int(&self, name: &'static str) -> ET::Int {
         *self.primitive_intregisters.get(&name).unwrap_or(&ET::Int::default())
     }
-    fn get_toks_register(&self, i: usize) -> Option<&Vec<Token<ET>>> { self.toksregisters.get(i) }
+    fn get_toks_register(&self, i: usize) -> Option<&Vec<ET::Token>> { self.toksregisters.get(i) }
     fn get_box_register(&mut self, i: usize) -> Option<&mut HVBox<ET>> {
         self.boxregisters.get_mut(i)
     }
@@ -351,7 +351,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
     fn get_primitive_muskip(&self, name: &'static str) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
         *self.primitive_muskipregisters.get(&name).unwrap_or(&MuSkip::default())
     }
-    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<Token<ET>>> { self.primitive_tokregisters.get(&name) }
+    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<ET::Token>> { self.primitive_tokregisters.get(&name) }
 
     fn get_textfont(&self, i: usize) -> ET::FontRef {
         *self.textfonts.get(i).unwrap_or(&ET::FontRef::default())
@@ -388,15 +388,15 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
         change!(self,globally,StateChange::Newlinechar(c));
     }
     fn set_sfcode(&mut self, c: ET::Char, v: ET::Int, globally: bool) {
-        let v = self.sfcodes.replace(&c,v);
+        let v = self.sfcodes.replace(c,v);
         change!(self,globally,StateChange::SfCode(c,v));
     }
     fn set_mathcode(&mut self, c: ET::Char, mc: ET::Int, globally: bool) {
-        let v = self.mathcodes.replace(&c,mc);
+        let v = self.mathcodes.replace(c,mc);
         change!(self,globally,StateChange::MathCode(c,v));
     }
     fn set_delcode(&mut self, c: ET::Char, lc: ET::Int, globally: bool) {
-        let v = self.delcodes.replace(&c,lc);
+        let v = self.delcodes.replace(c,lc);
         change!(self,globally,StateChange::DelCode(c,v));
     }
     fn set_command(&mut self, name: TeXStr, cmd: Option<Command<ET>>, globally: bool) {
@@ -408,19 +408,19 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
         change!(self,globally,StateChange::Command(index,old));
     }
     fn set_ac_command(&mut self, c: ET::Char, cmd: Option<Command<ET>>, globally: bool) {
-        let v = self.ac_commands.replace(&c,cmd);
+        let v = self.ac_commands.replace(c,cmd);
         change!(self,globally,StateChange::AcCommand(c,v));
     }
     fn set_catcode(&mut self, c: ET::Char, cc: CategoryCode, globally: bool) {
-        let v = self.catcodes.replace(&c,cc);
+        let v = self.catcodes.replace(c,cc);
         change!(self,globally,StateChange::Catcode(c,v));
     }
     fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally: bool) {
-        let v = self.uccodes.replace(&c, uc);
+        let v = self.uccodes.replace(c, uc);
         change!(self,globally,StateChange::UCCode(c,v));
     }
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally: bool) {
-        let v = self.lccodes.replace(&c, lc);
+        let v = self.lccodes.replace(c, lc);
         change!(self,globally,StateChange::LCCode(c,v));
     }
     fn set_int_register(&mut self, i: usize, v: ET::Int, globally: bool) {
@@ -496,7 +496,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
         change!(self,globally,StateChange::ScriptScriptFont(i,old));
     }
 
-    fn set_toks_register(&mut self, i: usize, v: Vec<Token<ET>>, globally: bool,memory:&mut Memory<ET>) {
+    fn set_toks_register(&mut self, i: usize, v: Vec<ET::Token>, globally: bool,memory:&mut Memory<ET>) {
         if self.toksregisters.len() <= i {
             self.toksregisters.resize(i+1,memory.get_token_vec());
         }
@@ -539,7 +539,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
             }
         }
     }
-    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<Token<ET>>, globally: bool,memory:&mut Memory<ET>) {
+    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<ET::Token>, globally: bool,memory:&mut Memory<ET>) {
         let old = self.primitive_tokregisters.insert(name,v);
         match self.stack.last() {
             None => if let Some(old) = old {memory.return_token_vec(old)},
@@ -580,7 +580,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
         }
     }
 
-    fn push_aftergroup(&mut self, t: Token<ET>) {
+    fn push_aftergroup(&mut self, t: ET::Token) {
         match self.stack.last_mut() {
             Some(StackLevel{aftergroup,..}) => {
                 aftergroup.push(t)
@@ -610,7 +610,7 @@ enum StateChange<ET:EngineType> {
     DimRegister(usize,ET::Dim),
     SkipRegister(usize,Skip<ET::SkipDim>),
     MuSkipRegister(usize,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>),
-    ToksRegister(usize,Vec<Token<ET>>),
+    ToksRegister(usize,Vec<ET::Token>),
     BoxRegister(usize,HVBox<ET>),
     TextFont(usize,ET::FontRef),
     ScriptFont(usize,ET::FontRef),
@@ -619,7 +619,7 @@ enum StateChange<ET:EngineType> {
     PrimitiveDimRegister(&'static str,ET::Dim),
     PrimitiveSkipRegister(&'static str,Skip<ET::SkipDim>),
     PrimitiveMuSkipRegister(&'static str,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>),
-    PrimitiveToksRegister(&'static str,Vec<Token<ET>>)
+    PrimitiveToksRegister(&'static str,Vec<ET::Token>)
 }
 
 impl<ET:EngineType> StateChange<ET> {
@@ -662,7 +662,7 @@ impl<ET:EngineType> StateChange<ET> {
 struct StackLevel<ET:EngineType> {
     group_type:GroupType,
     mode_switch:Option<TeXMode>,
-    aftergroup:Vec<Token<ET>>,
+    aftergroup:Vec<ET::Token>,
     start:usize,
 }
 impl<ET:EngineType> StackLevel<ET> {

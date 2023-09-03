@@ -91,31 +91,31 @@ impl<C:CharType,A:Clone+Default> StateField for CharField<C,A> {
     fn pop_stack(&mut self) {
         if let Some(m) = self.changes.pop() {
             for (k,v) in m {
-                self.charfield.set(&k,v)
+                self.charfield.set(k,v)
             }
         }
     }
 }
 impl<C:CharType,A:Clone+Default> KeyValueField<C,A> for CharField<C,A> {
     //#[inline(always)]
-    fn get(&self, c:&C) -> Option<&A> { Some(self.charfield.get(c)) }
+    fn get(&self, c:&C) -> Option<&A> { Some(self.charfield.get(*c)) }
     //#[inline(always)]
     fn set_locally(&mut self, k: C, v:A) {
         if let Some(m) = self.changes.last_mut() {
             match m.entry(k) {
                 Entry::Vacant(e) => {
-                    e.insert(self.charfield.replace(&k,v));
+                    e.insert(self.charfield.replace(k,v));
                 }
                 Entry::Occupied(_) => {
-                    self.charfield.set(&k,v);
+                    self.charfield.set(k,v);
                 }
             }
         } else {
-            self.charfield.set(&k,v);
+            self.charfield.set(k,v);
         }
     }
     fn set_globally(&mut self, k: C, v:A) {
-        self.charfield.set(&k,v);
+        self.charfield.set(k,v);
         for ov in self.changes.iter_mut() {
             ov.remove(&k);
         }
@@ -198,11 +198,11 @@ impl <ET:EngineType> BoxField<ET> {
 
 
 #[derive(Clone)]
-pub struct TokField<ET:EngineType>(Vec<Vec<Token<ET>>>,Vec<BTreeMap<usize,Vec<Token<ET>>>>);
+pub struct TokField<ET:EngineType>(Vec<Vec<ET::Token>>,Vec<BTreeMap<usize,Vec<ET::Token>>>);
 impl<ET:EngineType> TokField<ET>{
     /// initializes a new [`TokField`].
     pub fn new() -> Self { TokField(Vec::with_capacity(255), Vec::new()) }
-    pub(crate) fn get(&self, k: usize) -> Option<&Vec<Token<ET>>> {
+    pub(crate) fn get(&self, k: usize) -> Option<&Vec<ET::Token>> {
         if k < self.0.len() {
             Some(&self.0[k])
         } else {
@@ -210,7 +210,7 @@ impl<ET:EngineType> TokField<ET>{
         }
     }
 
-    pub(crate) fn set_locally(&mut self, k: usize, v: Vec<Token<ET>>,memory:&mut Memory<ET>) {
+    pub(crate) fn set_locally(&mut self, k: usize, v: Vec<ET::Token>,memory:&mut Memory<ET>) {
         if let Some(m) = self.1.last_mut() {
             match m.entry(k) {
                 Entry::Vacant(e) => {
@@ -235,7 +235,7 @@ impl<ET:EngineType> TokField<ET>{
     }
 
     // #[inline(always)]
-    pub(crate) fn set_globally(&mut self, k: usize, v: Vec<Token<ET>>,memory:&mut Memory<ET>) {
+    pub(crate) fn set_globally(&mut self, k: usize, v: Vec<ET::Token>,memory:&mut Memory<ET>) {
         Self::set_inner(&mut self.0,k,v,memory);
         for ov in self.1.iter_mut() {
             match ov.remove(&k) {
@@ -244,7 +244,7 @@ impl<ET:EngineType> TokField<ET>{
             }
         }
     }
-    fn set_inner(vec:&mut Vec<Vec<Token<ET>>>,k:usize,v:Vec<Token<ET>>,memory:&mut Memory<ET>) -> Option<Vec<Token<ET>>> {
+    fn set_inner(vec:&mut Vec<Vec<ET::Token>>,k:usize,v:Vec<ET::Token>,memory:&mut Memory<ET>) -> Option<Vec<ET::Token>> {
         if k < vec.len() {
             Some(std::mem::replace(&mut vec[k], v))
         } else {
@@ -361,10 +361,10 @@ impl<A> IsDefault for Vec<A> {
 }
 /// A HashMap of values of type V; e.g. [`Command`](crate::tex::commands::BaseCommand)s,
 #[derive(Clone)]
-pub struct TokMapField<ET:EngineType>(HMap<&'static str,Vec<Token<ET>>>,Vec<BTreeMap<&'static str,Vec<Token<ET>>>>);
+pub struct TokMapField<ET:EngineType>(HMap<&'static str,Vec<ET::Token>>,Vec<BTreeMap<&'static str,Vec<ET::Token>>>);
 impl<ET:EngineType> TokMapField<ET> {
     pub fn new() -> Self { Self(HMap::default(),Vec::new()) }
-    pub fn set_i(map:&mut HMap<&'static str,Vec<Token<ET>>>,k:&'static str,v:Vec<Token<ET>>) -> Option<Vec<Token<ET>>> {
+    pub fn set_i(map:&mut HMap<&'static str,Vec<ET::Token>>,k:&'static str,v:Vec<ET::Token>) -> Option<Vec<ET::Token>> {
         if v.is_empty() {
             map.remove(&k)
         } else {
@@ -384,11 +384,11 @@ impl<ET:EngineType> TokMapField<ET> {
             }
         }
     }
-    pub(crate) fn get(&self, k: &'static str) -> Option<&Vec<Token<ET>>> {
+    pub(crate) fn get(&self, k: &'static str) -> Option<&Vec<ET::Token>> {
         self.0.get(k)
     }
 
-    pub(crate) fn set_locally(&mut self, k: &'static str, v: Vec<Token<ET>>, memory:&mut Memory<ET>) {
+    pub(crate) fn set_locally(&mut self, k: &'static str, v: Vec<ET::Token>, memory:&mut Memory<ET>) {
         if let Some(m) = self.1.last_mut() {
             match m.entry(k) {
                 Entry::Vacant(e) => {
@@ -410,7 +410,7 @@ impl<ET:EngineType> TokMapField<ET> {
     }
 
     // #[inline(always)]
-    pub(crate) fn set_globally(&mut self, k: &'static str, v: Vec<Token<ET>>, memory:&mut Memory<ET>) {
+    pub(crate) fn set_globally(&mut self, k: &'static str, v: Vec<ET::Token>, memory:&mut Memory<ET>) {
         for ov in self.1.iter_mut() {
             match ov.remove(&k) {
                 None => (),
@@ -489,11 +489,11 @@ pub struct FieldBasedState<ET:EngineType> {
     out_files:Vec<Option<ET::File>>,
     in_files:Vec<Option<ET::File>>,
     csnames:usize,
-    afterassignment:Option<Token<ET>>,
+    afterassignment:Option<ET::Token>,
     mode: TeXMode,
 
     grouptype: Vec<(GroupType,Option<TeXMode>)>,
-    aftergroups:Vec<Vec<Token<ET>>>,
+    aftergroups:Vec<Vec<ET::Token>>,
 
     current_font:SingleValueField<ET::FontRef>,
     parshape:SingleValueField<Option<Vec<(ET::Dim,ET::Dim)>>>,
@@ -607,10 +607,10 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         self.grouptype.len()
     }
 
-    fn set_afterassignment(&mut self, t: Token<ET>) {
+    fn set_afterassignment(&mut self, t: ET::Token) {
         self.afterassignment = Some(t)
     }
-    fn take_afterassignment(&mut self) -> Option<Token<ET>> {
+    fn take_afterassignment(&mut self) -> Option<ET::Token> {
         self.afterassignment.take()
     }
 
@@ -725,7 +725,7 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         self.primitive_tokregisters.push_stack();
         self.aftergroups.push(vec!());
     }
-    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)> {
+    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)> {
         let gt = match self.grouptype.pop() {
             None => return None,
             Some((gt,Some(m))) => {
@@ -802,7 +802,7 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
             self.escapechar.set_locally(c)
         }
     }
-    fn push_aftergroup(&mut self, t: Token<ET>) {
+    fn push_aftergroup(&mut self, t: ET::Token) {
         self.aftergroups.last_mut().unwrap().push(t)
     }
 
@@ -832,8 +832,8 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         }
     }
 
-    fn get_sfcode(&self, c: &ET::Char) -> ET::Int {
-        *self.sfcodes.get(c).unwrap_or(&ET::Int::default())
+    fn get_sfcode(&self, c: ET::Char) -> ET::Int {
+        *self.sfcodes.get(&c).unwrap_or(&ET::Int::default())
     }
     fn set_sfcode(&mut self, c: ET::Char, v: ET::Int, globally: bool) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
@@ -872,7 +872,7 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
     }
 
     // #[inline(always)]
-    fn get_command(&self, name: &TeXStr) -> Option<&Command<ET>> {
+    fn get_command(&self, name: TeXStr) -> Option<&Command<ET>> {
         match self.commands.get(&name.0.to_usize()) {
             Some(r) => r.as_ref(),
             _ => None
@@ -888,7 +888,7 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
             self.commands.set_locally(name.0.to_usize(),cmd)
         }
     }
-    fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>> {
+    fn get_ac_command(&self, c: ET::Char) -> Option<&Command<ET>> {
         match self.ac_commands.get(&c) {
             Some(r) => r.as_ref(),
             _ => None
@@ -921,8 +921,8 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
     }
 
     // #[inline(always)]
-    fn get_uccode(&self, c: &ET::Char) -> ET::Char {
-        *self.ucchar.get(c).unwrap_or(&ET::Char::default())
+    fn get_uccode(&self, c: ET::Char) -> ET::Char {
+        *self.ucchar.get(&c).unwrap_or(&ET::Char::default())
     }
     // #[inline(always)]
     fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally: bool) {
@@ -936,8 +936,8 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
     }
 
     // #[inline(always)]
-    fn get_lccode(&self, c: &ET::Char) -> ET::Char {
-        *self.lcchar.get(c).unwrap_or(&ET::Char::default())
+    fn get_lccode(&self, c: ET::Char) -> ET::Char {
+        *self.lcchar.get(&c).unwrap_or(&ET::Char::default())
     }
     // #[inline(always)]
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally: bool) {
@@ -998,8 +998,8 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         }
     }
 
-    fn get_toks_register(&self, i: usize) -> Option<&Vec<Token<ET>>> { self.toksregisters.get(i) }
-    fn set_toks_register(&mut self, i: usize, v: Vec<Token<ET>>, globally: bool,memory:&mut Memory<ET>) {
+    fn get_toks_register(&self, i: usize) -> Option<&Vec<ET::Token>> { self.toksregisters.get(i) }
+    fn set_toks_register(&mut self, i: usize, v: Vec<ET::Token>, globally: bool,memory:&mut Memory<ET>) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {
@@ -1077,8 +1077,8 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         }
     }
 
-    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<Token<ET>>> { self.primitive_tokregisters.get(&name) }
-    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<Token<ET>>, globally: bool,memory:&mut Memory<ET>) {
+    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<ET::Token>> { self.primitive_tokregisters.get(&name) }
+    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<ET::Token>, globally: bool,memory:&mut Memory<ET>) {
         let globaldefs = self.get_primitive_int("globaldefs").to_i64();
         let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
         if globally {

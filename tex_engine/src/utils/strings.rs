@@ -8,13 +8,12 @@ abstracts over the string type.
 use std::fmt::{Display, Debug};
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::vec::IntoIter;
 use array_init::array_init;
 use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory, Symbol};
 use crate::tex::catcodes::{CategoryCodeScheme, OTHER_SCHEME_U8, STARTING_SCHEME_U8};
-
-
 
 /**
 Plain TeX parses source files as a sequence of [`u8`]s, but other engines might use bigger types, e.g. XeTeX.
@@ -24,6 +23,9 @@ This trait allows us to abstract over the character type, by providing the relev
 pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default + Ord+Send + Sync {
     /// The type of the array/vec/whatever of all possible characters. For [`u8`], this is `[A;256]`.
     type Allchars<A:Default+Clone> : AllCharsTrait<Self,A>;
+    type Tokenized<'a>:Iterator<Item=Self>;
+
+    fn single_char(string:&str) -> Option<Self>;
 
     /// The maximum value of the character type. For [`u8`], this is `255`.
     const MAX:Self;
@@ -35,7 +37,7 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
         TeXStr::from_static(s,interner)
     }
 
-    fn tokenize(s:&str) -> Vec<Self>;
+    fn tokenize<'a>(s:&'a str) -> Self::Tokenized<'a>;
 
     /// The starting category code scheme for this character type, see [`struct@STARTING_SCHEME_U8`].
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
@@ -45,10 +47,12 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
     fn backslash() -> Self;
     fn zeros() -> Self::Allchars<Self>;
     fn ident() -> Self::Allchars<Self>;
+    fn space() -> Self;
     fn rep_field<A:Clone+Default>(a:A) -> Self::Allchars<A>;
 
     fn char_str(&self) -> String;
     fn as_bytes(&self) -> &[u8];
+    fn as_byte(&self) -> u8;
     fn as_char(&self) -> char;
 
     fn from_i64(i:i64) -> Option<Self>;
@@ -58,19 +62,28 @@ pub trait CharType:Copy+PartialEq+Eq+Hash+Display+Debug+'static+From<u8>+Default
 
 impl CharType for u8 {
     type Allchars<A:Default+Clone> = [A;256];
+    type Tokenized<'a> = std::iter::Map<std::slice::Iter<'a,u8>,fn(&u8) -> u8>;
     const MAX:Self=255;
     fn from_u8_iter<A>(iter: &mut A,counter:&mut usize) -> Option<Self> where A:Iterator<Item=u8> { *counter +=1; iter.next() }
     fn newline() -> Self { b'\n' }
     fn carriage_return() -> Self {b'\r'}
     fn backslash() -> Self { b'\\' }
-    fn tokenize(s:&str) -> Vec<Self> {
-        s.chars().map(|c| c as u8).collect()
+    fn space() -> Self {b' '}
+    fn tokenize<'a>(s:&'a str) -> Self::Tokenized<'a> {
+        s.as_bytes().iter().map(|c| *c)
     }
     fn as_char(&self) -> char { *self as char }
+    fn single_char(string: &str) -> Option<Self> {
+        if string.len() == 1 { Some(string.as_bytes()[0]) } else {
+            let chars = string.chars().collect::<Vec<char>>();
+            if chars.len() == 1 { Some(chars[0] as u8) } else { None }
+        }
+    }
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self> {
         STARTING_SCHEME_U8.clone()
     }
     fn as_bytes(&self) -> &[u8] { std::slice::from_ref(self) }
+    fn as_byte(&self) -> u8 { *self }
     fn char_str(&self) -> String {
         match *self {
             0 => "\\u0000".to_string(),
@@ -100,20 +113,20 @@ impl CharType for u8 {
 */
 pub trait AllCharsTrait<C:CharType,A>:Clone {
     /// Returns the value for character `u`.
-    fn get(&self, u: &C) -> &A;
+    fn get(&self, u: C) -> &A;
     /// Sets the value for character `u` to `v`.
-    fn set(&mut self, u: &C, v:A);
+    fn set(&mut self, u: C, v:A);
     /// Replaces the value for character `u` with `v`, returning the old value.
-    fn replace(&mut self, u: &C, v:A) -> A;
+    fn replace(&mut self, u: C, v:A) -> A;
 }
 impl<A:Clone> AllCharsTrait<u8,A> for [A;256] {
     //#[inline(always)]
-    fn get(&self, u:&u8) -> &A { &self[*u as usize] }
+    fn get(&self, u:u8) -> &A { &self[u as usize] }
    // #[inline(always)]
-    fn set(&mut self, u:&u8,v:A) { self[*u as usize] = v }
+    fn set(&mut self, u:u8,v:A) { self[u as usize] = v }
     // #[inline(always)]
-    fn replace(&mut self, u: &u8, v: A) -> A {
-        std::mem::replace(&mut self[*u as usize], v)
+    fn replace(&mut self, u: u8, v: A) -> A {
+        std::mem::replace(&mut self[u as usize], v)
     }
 }
 
@@ -171,18 +184,27 @@ impl<C:CharType> From<Vec<C>> for TeXStr<C> {
 
 impl CharType for char {
     const MAX: Self = 255 as char;
+    type Tokenized<'a> = std::str::Chars<'a>;
     type Allchars<A: Default+Clone> = AllUnicodeChars<A>; // TODO
     fn from_i64(i: i64) -> Option<Self> { if i > 0 && i < 0x110000 { Some(char::from_u32(i as u32).unwrap()) } else { None } }
     fn to_usize(self) -> usize { self as usize }
     fn backslash() -> Self { '\\' }
     fn carriage_return() -> Self { '\r' }
     fn newline() -> Self { '\n' }
+    fn space() -> Self { ' ' }
     fn char_str(&self) -> String { self.to_string() }
-    fn tokenize(s: &str) -> Vec<Self> {
-        todo!()//&mut s.chars()//s.chars().collect::<Vec<char>>().as_slice()
+    fn tokenize<'a>(s: &'a str) -> Self::Tokenized<'a> {
+        s.chars() //&mut s.chars()//s.chars().collect::<Vec<char>>().as_slice()
+    }
+    fn single_char(string: &str) -> Option<Self> {
+        let v = string.chars().collect::<Vec<char>>();
+        if v.len() == 1 { Some(v[0]) } else { None }
     }
     fn as_bytes(&self) -> &[u8] {
         todo!()//char::as_bytes(self)//self.as_bytes()
+    }
+    fn as_byte(&self) -> u8 {
+        *self.as_bytes().first().unwrap()
     }
     fn as_char(&self) -> char { *self }
 
@@ -206,15 +228,15 @@ impl CharType for char {
 #[derive(Clone)]
 pub struct AllUnicodeChars<A:Default>(PhantomData<A>);
 impl<A:Default+Clone> AllCharsTrait<char,A> for AllUnicodeChars<A> {
-    fn get(&self, u: &char) -> &A {
+    fn get(&self, u: char) -> &A {
         todo!()
     }
 
-    fn set(&mut self, u: &char, v: A) {
+    fn set(&mut self, u: char, v: A) {
         todo!()
     }
 
-    fn replace(&mut self, u: &char, v: A) -> A {
+    fn replace(&mut self, u: char, v: A) -> A {
         todo!()
     }
 }

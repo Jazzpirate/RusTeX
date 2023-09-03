@@ -69,7 +69,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         let sd = self.shipout_data_mut();
         match node {
             TeXNode::Simple(SimpleNode::Char {char,..}) => {
-                let sf = state.get_sfcode(&char).to_i64();
+                let sf = state.get_sfcode(char).to_i64();
                 if sf > 1000 && sd.spacefactor < 1000 {
                     sd.spacefactor = 1000;
                 } else {

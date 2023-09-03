@@ -10,10 +10,11 @@ use crate::tex::nodes::{HBox, HorV, NodeTrait, OpenBox, SimpleNode, SkipNode, Te
 use crate::tex::numbers::{Dim, Int, Skip};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
+use crate::tex::token::Token;
 
 pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
-    debug_log!(trace=>"digesting command {:?} ({})",cmd.command,cmd.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())));
+    debug_log!(trace=>"digesting command {:?} ({})",cmd.command,cmd.source.cause.printable(&engine.interner));
     match cmd.command {
         Unexpandable {name,apply,ref forces_mode} => {
             match forces_mode {
@@ -24,7 +25,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                         (TeXMode::InternalVertical | TeXMode::Vertical,HorV::Vertical) => (),
                         (TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::Math | TeXMode::Displaymath,HorV::Horizontal) => (),
                         (TeXMode::RestrictedHorizontal,HorV::Vertical) =>
-                        throw!("Not allowed in restricted horizontal mode: {}",cmd.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.source.cause),
+                        throw!("Not allowed in restricted horizontal mode: {}",cmd.source.cause.printable(&engine.interner) => cmd.source.cause),
                         (TeXMode::Vertical|TeXMode::InternalVertical,HorV::Horizontal) => {
                             return ET::Stomach::open_paragraph(engine,cmd);
                         }
@@ -57,7 +58,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             TeXMode::Horizontal => {
                 match engine.get_next_token() {
                     None => throw!("Unexpected end of input" => cmd.source.cause),
-                    Some((t,_)) if t.catcode() == CategoryCode::MathShift => {
+                    Some((t,_)) if t.is_mathshift() => {
                         do_display_math(engine)
                     }
                     Some((o,_)) => {

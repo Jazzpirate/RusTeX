@@ -40,8 +40,8 @@ impl Interner {
 }
 #[derive(Clone)]
 pub struct Memory<ET:EngineType> {
-    args:Option<[Vec<Token<ET>>;9]>,
-    token_vecs:Vec<Vec<Token<ET>>>,
+    args:Option<[Vec<ET::Token>;9]>,
+    token_vecs:Vec<Vec<ET::Token>>,
     strings:Vec<String>,
 }
 
@@ -66,17 +66,17 @@ impl<ET:EngineType> Memory<ET> {
             args:Some(array_init(|_| Vec::with_capacity(2097152))),strings:(0..8).map(|_|String::with_capacity(4096)).collect(),token_vecs
         }
     }
-    pub fn get_args(&mut self) -> [Vec<Token<ET>>;9] {
+    pub fn get_args(&mut self) -> [Vec<ET::Token>;9] {
         self.args.take().unwrap()
     }
-    pub fn return_args(&mut self, mut args:[Vec<Token<ET>>;9]) {
+    pub fn return_args(&mut self, mut args:[Vec<ET::Token>;9]) {
         /*for a in args.iter_mut() {
             a.clear();
             //a.shrink_to(VEC_SIZE)
         }*/
         self.args = Some(args);
     }
-    pub fn get_token_vec(&mut self) -> Vec<Token<ET>> {
+    pub fn get_token_vec(&mut self) -> Vec<ET::Token> {
         self.token_vecs.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
         //Vec::with_capacity(VEC_SIZE)
     }
@@ -88,7 +88,7 @@ impl<ET:EngineType> Memory<ET> {
         //s.shrink_to(VEC_SIZE);
         self.strings.push(s);
     }
-    pub fn return_token_vec(&mut self, mut v: Vec<Token<ET>>) {
+    pub fn return_token_vec(&mut self, mut v: Vec<ET::Token>) {
         v.clear();
         //v.shrink_to(VEC_SIZE);
         self.token_vecs.push(v);
@@ -109,7 +109,7 @@ impl<ET:EngineType> Memory<ET> {
 
 
 /*
-pub struct TokenArray<ET:EngineType>{array:[Option<(Token<ET>, bool)>;ARRAY_SIZE],index:usize,max:usize}
+pub struct TokenArray<ET:EngineType>{array:[Option<(ET::Token, bool)>;ARRAY_SIZE],index:usize,max:usize}
 impl<ET:EngineType> Clone for TokenArray<ET> {
     fn clone(&self) -> Self { Self::new()}
 }
@@ -117,14 +117,14 @@ impl<ET:EngineType> TokenArray<ET> {
     pub fn new() -> Self { TokenArray {array:array_init(|_| None),index:OFFSET,max:OFFSET} }
     pub fn reset(&mut self) { self.index = OFFSET; self.max= OFFSET; } // so we have some room for requeueing
     pub fn has_next(&self) -> bool { self.index < self.max }
-    pub fn get_next(&mut self) -> Option<(Token<ET>,bool)> {
+    pub fn get_next(&mut self) -> Option<(ET::Token,bool)> {
         if self.index < self.max {
             let t = std::mem::take(&mut self.array[self.index]);
             self.index += 1;
             t
         } else { None }
     }
-    pub fn push(&mut self,t:Token<ET>,expand:bool) -> Result<(),Token<ET>> {
+    pub fn push(&mut self,t:ET::Token,expand:bool) -> Result<(),ET::Token> {
         if self.index == 0 {
             Err(t)
         } else {
@@ -142,7 +142,7 @@ impl<ET:EngineType> TokenArray<ET> {
 }
 pub struct ExpansionContainer<ET:EngineType>{current: TokenArray<ET>,former:Vec<TokenArray<ET>>}
 impl<ET:EngineType> ExpansionContainer<ET> {
-    pub fn push(&mut self, t:Token<ET>,memory:&mut Memory<ET>) {
+    pub fn push(&mut self, t:ET::Token,memory:&mut Memory<ET>) {
         if self.current.max == ARRAY_SIZE {
             self.former.push(std::mem::replace(&mut self.current,memory.get_token_array()));
         }

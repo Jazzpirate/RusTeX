@@ -13,7 +13,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, ValueCommand, CommandSource, ToksCommand, Def};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, Skip, MuSkip, Dim};
-use crate::tex::token::{BaseToken, Token, TokenList};
+use crate::tex::token::{CSLike, Token, PrintableTokenList};
 use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
@@ -191,7 +191,7 @@ pub fn catcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSou
 pub fn catcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting category code");
     let c = engine.get_char();
-    let cc = *engine.state.get_catcode_scheme().get(&c);
+    let cc = *engine.state.get_catcode_scheme().get(c);
     let v : u8 = cc.into();
     debug_log!(debug=>"\\catcode '{}' == {}",c.char_str(),cc);
     v.into()
@@ -281,7 +281,7 @@ pub const COUNTDEF : &str = "countdef";
 pub fn countdef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"countdef");
     let name = engine.get_control_sequence();
-    engine.set_relax(&name,&cmd,global);
+    engine.set_relax(name,&cmd,global);
     engine.skip_eq_char();
     let num = engine.get_int();
     if num.to_i64() < 0 {
@@ -317,11 +317,11 @@ pub fn csname<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>)
     debug_log!(trace=>"csname");
     let str = get_csname::<ET>(engine,&cmd,"csname");
     debug_log!(trace=>"csname {}",str.to_str(&engine.interner));
-    match engine.state.get_command(&str) {
-        None => engine.state.set_command(str.clone(), Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
+    match engine.state.get_command(str) {
+        None => engine.state.set_command(str, Some(Command::new(BaseCommand::Relax,Some(&cmd))), false),
         _ => ()
     }
-    engine.mouth.requeue(Token::new(BaseToken::CS(str),None));
+    engine.mouth.requeue(ET::Token::new_cs_from_command(str, cmd));
 }
 
 pub fn day<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -336,35 +336,35 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         None => file_end_prim!(DEF,cmd),
         Some((t,_)) => t
     };
-    match &cs.base {
-        BaseToken::Char(_,CategoryCode::Active) => (),
-        BaseToken::CS(_) => (),
-        _ => throw!("Command expected after \\def" => cs)
-    }
+    let cm = match cs.as_command() {
+        None => throw!("Command expected after \\def" => cs),
+        Some(cm) => cm
+    };
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,DEF);
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
 
-    get_group!(engine,t => match (partk.take(),&t.base) {
-        (None,BaseToken::Char(c,CategoryCode::Parameter)) =>
+    get_group!(engine,t => match partk.take() {
+        None if t.is_parameter() =>
             partk = Some(t),
-        (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
-            replacement.push(ExpToken::Token(t)),
-        (Some(t),BaseToken::Char(c,_)) => {
-            let u = c.to_usize();
-            if u < 49 || u - 48 > (arity as usize) {
-                throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
+        Some(t2) if t.is_parameter() =>
+            replacement.push(ExpToken::Token(t2)),
+        Some(t2) => match t.get_char() {
+            Some(c) if c.as_bytes().len() == 1 => {
+                let u = c.as_bytes()[0];
+                if u < 49 || u - 48 > arity {
+                    throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
+                }
+                replacement.push(ExpToken::Param(t2,(u-49)))
             }
-            replacement.push(ExpToken::Param(t,(u-49) as u8))
+            _ => throw!("Expected number after #, got {}",t.printable(&engine.interner) => cmd.cause.clone()),
         }
-        (Some(_),_) =>
-            throw!("Expected number after #, got {}",t.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
-        (_,_) => replacement.push(ExpToken::Token(t))
+        _ => replacement.push(ExpToken::Token(t))
     });
     let def = Def::new(protected,long,outer,endswithbrace,arity,signature,replacement);
-    debug_log!(trace=>"def {} = {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),def.as_str(&engine.interner));
+    debug_log!(trace=>"def {} = {}",cs.printable(&engine.interner),def.as_str(&engine.interner));
     let def = Command::new(BaseCommand::Def(def),Some(&cmd));
-    engine.set_command_for_tk(cs,Some(def),global);
+    engine.set_command_for_tk(cm,Some(def),global);
 }
 
 pub fn delcode_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
@@ -423,7 +423,7 @@ pub const DIMENDEF : &str = "dimendef";
 pub fn dimendef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"dimendef");
     let name = engine.get_control_sequence();
-    engine.set_relax(&name,&cmd,global);
+    engine.set_relax(name,&cmd,global);
     engine.skip_eq_char();
     let num = catch_prim!(engine.get_int() => (DIMENDEF,cmd));
     if num.to_i64() < 0 {
@@ -587,58 +587,37 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
         None => file_end_prim!(DEF,cmd),
         Some((t,_)) => t
     };
-    match &cs.base {
-        BaseToken::Char(_,CategoryCode::Active) => (),
-        BaseToken::CS(_) => (),
-        _ => throw!("Command expected after \\def" => cs)
-    }
-    debug_log!(trace=>"edef: {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())));
+    let cm = match cs.as_command() {
+        None => throw!("Command expected after \\def" => cs),
+        Some(cm) => cm
+    };
+    debug_log!(trace=>"edef: {}",cs.printable(&engine.interner));
     let (endswithbrace,arity,signature) = parse_signature::<ET>(engine,&cmd,EDEF);
     let mut replacement: Vec<ExpToken<ET>> = vec!();
-    let mut partk = None;
+    let mut partk: Option<ET::Token> = None;
 
     use super::etex::UNEXPANDED;
 
-    get_expanded_group!(engine,false,true,false,t => match (partk.take(),&t.base) {
-        (None,BaseToken::Char(c,CategoryCode::Parameter)) => partk = Some(t),
-        (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
-            replacement.push(ExpToken::Token(t)),
-        (Some(t),BaseToken::Char(c,_)) => {
-            let u = c.to_usize();
-            if u < 48 || u - 48 > (arity as usize) {
-                throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
+    get_expanded_group!(engine,false,true,false,t => match partk.take() {
+        None if t.is_parameter() => partk = Some(t),
+        Some(t2) if t.is_parameter() => replacement.push(ExpToken::Token(t2)),
+        Some(t2) => match t.get_char() {
+            Some(c) if c.as_bytes().len() == 1 => {
+                let u = c.as_bytes()[0];
+                if u < 49 || u - 48 > arity {
+                    throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
+                }
+                replacement.push(ExpToken::Param(t2,(u-49)))
             }
-            replacement.push(ExpToken::Param(t,(u-49) as u8))
+            _ => throw!("Expected number after #, got {}",t.printable(&engine.interner) => cmd.cause.clone())
         }
-        (Some(_),_) =>
-            throw!("Expected number after #, got {}",t.to_str(&engine.interner,Some(ET::Char::backslash())) => cmd.cause.clone()),
-        (_,_) => replacement.push(ExpToken::Token(t))
+        _ => replacement.push(ExpToken::Token(t))
     });
 
-/*
-    catch_prim!(engine.get_expanded_group(false,true,false,&mut |engine,t| match (std::mem::take(&mut partk),&t.base) {
-        (None,BaseToken::Char(c,CategoryCode::Parameter)) => Ok(partk = Some(t)),
-        (Some(t),BaseToken::Char(_,CategoryCode::Parameter)) =>
-            Ok(replacement.push(ExpToken::ParamToken(t))),
-        (Some(t),BaseToken::Char(c,_)) => {
-            let u = c.to_usize();
-            if u < 48 || u - 48 > (arity as usize) {
-                throw!("Illegal parameter number {}",(u-48) => cmd.cause.clone())
-            }
-            Ok(replacement.push(ExpToken::Param(t,(u-49) as u8)))
-        }
-        (Some(_),_) =>
-            throw!("Expected number after #, got {}",t.to_str(engine.memory,Some(ET::Char::backslash())) => cmd.cause.clone()),
-        (_,_) => Ok(replacement.push(ExpToken::Token(t)))
-    }) => (DEF,cmd));
-
- */
-
-
     let def = Def::new(protected,long,outer,endswithbrace,arity,signature,replacement);
-    debug_log!(trace=>"edef {} = {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),def.as_str(&engine.interner));
+    debug_log!(trace=>"edef {} = {}",cs.printable(&engine.interner),def.as_str(&engine.interner));
     let def = Command::new(BaseCommand::Def(def),Some(&cmd));
-    engine.set_command_for_tk(cs,Some(def),global);
+    engine.set_command_for_tk(cm,Some(def),global);
 }
 
 pub const ELSE: &str = "else";
@@ -650,8 +629,9 @@ pub fn else_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         (Some(ConditionalBranch::Case(_,_)),i) =>
             crate::engine::gullet::methods::else_loop::<ET>(engine,IFCASE,i,false),
         _ => {
-            engine.mouth.requeue(cmd.cause.clone());
-            engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
+            todo!()
+            //engine.mouth.requeue(cmd.cause.clone());
+            //engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
         }
         //o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
     }
@@ -777,8 +757,9 @@ pub fn fi<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         Some(ConditionalBranch::True(_) | ConditionalBranch::Case(_,_) | ConditionalBranch::Else(_)) =>
             engine.gullet.pop_conditional(),
         _ => {
-            engine.mouth.requeue(cmd.cause.clone());
-            engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
+            todo!()
+            //engine.mouth.requeue(cmd.cause.clone());
+            //engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
         }
     }
 }
@@ -787,34 +768,35 @@ pub const FONT :&str = "font";
 pub fn font_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning \\font");
     let cs = engine.get_control_sequence();
-    let cs = match cs.base {
-        BaseToken::CS(name) => name,
-        _ => throw!("Expected control sequence after \\font" => cmd.cause)
-    };
-    engine.skip_eq_char();
-    let mut fontname = engine.memory.get_string();
-    engine.get_string(&mut fontname);
-    if !fontname.ends_with(".tfm") {
-        fontname = fontname + ".tfm"
-    }
-    let fontid = engine.fontstore.get_new::<ET>(&fontname,cs);
-    engine.memory.return_string(fontname);
-    match engine.get_keywords(vec!("at","scaled")) {
-        Some(s) if s == "at" => {
-            let dim = engine.get_dim();
-            let mut font = engine.fontstore.get_mut(fontid);
-            font.set_at(dim.to_sp());
+    match cs {
+        CSLike::ActiveChar(_) => throw!("Expected control sequence after \\font" => cmd.cause),
+        CSLike::CS(cs) => {
+            engine.skip_eq_char();
+            let mut fontname = engine.memory.get_string();
+            engine.get_string(&mut fontname);
+            if !fontname.ends_with(".tfm") {
+                fontname = fontname + ".tfm"
+            }
+            let fontid = engine.fontstore.get_new::<ET>(&fontname,cs);
+            engine.memory.return_string(fontname);
+            match engine.get_keywords(vec!("at","scaled")) {
+                Some(s) if s == "at" => {
+                    let dim = engine.get_dim();
+                    let mut font = engine.fontstore.get_mut(fontid);
+                    font.set_at(dim.to_sp());
+                }
+                Some(s) if s == "scaled" => {
+                    let r = crate::engine::gullet::numeric_methods::read_float::<ET>(engine,b'0',false);
+                    let mut font = engine.fontstore.get_mut(fontid);
+                    let new_at = ((font.get_at() as f64) * r).round() as i64;
+                    font.set_at(new_at);
+                }
+                _ => ()
+            }
+            let fontcmd = Command::new(BaseCommand::Font(fontid),Some(&cmd));
+            engine.state.set_command(cs,Some(fontcmd),global);
         }
-        Some(s) if s == "scaled" => {
-            let r = crate::engine::gullet::numeric_methods::read_float::<ET>(engine,b'0',false);
-            let mut font = engine.fontstore.get_mut(fontid);
-            let new_at = ((font.get_at() as f64) * r).round() as i64;
-            font.set_at(new_at);
-        }
-        _ => ()
     }
-    let fontcmd = Command::new(BaseCommand::Font(fontid),Some(&cmd));
-    engine.state.set_command(cs,Some(fontcmd),global);
 }
 pub fn font_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                                -> ET::FontRef {
@@ -848,13 +830,13 @@ pub fn fontdimen_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 
 pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"\\futurelet");
-    let cs = match engine.get_next_token() {
-        None => file_end_prim!("futurelet",cmd),
-        Some((t,_)) => match &t.base {
-            BaseToken::Char(_,CategoryCode::Active) => t,
-            BaseToken::CS(_) => t,
-            _ => throw!("Expected control sequence after \\futurelet" => cmd.cause)
-        }
+    let cs =match engine.get_next_token() {
+        None => file_end!(),
+        Some((cs,_)) => cs
+    };
+    let cm = match cs.as_command() {
+        None => throw!("Expected control sequence after \\futurelet" => cmd.cause),
+        Some(cm) => cm
     };
     let first = match engine.get_next_token() {
         None => file_end_prim!("futurelet",cmd),
@@ -864,14 +846,13 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         None => file_end_prim!("futurelet",cmd),
         Some((t,_)) => t
     };
-    let newcmd = match &second.base {
-        BaseToken::Char(c,CategoryCode::Active) => engine.state.get_ac_command(c).cloned(),
-        BaseToken::CS(name) => engine.state.get_command(name).cloned(),
-        BaseToken::Char(c,cc) =>
-            Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd)))
+    let newcmd = match second.as_command() {
+        Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c).cloned(),
+        Some(CSLike::CS(name)) => engine.state.get_command(name).cloned(),
+        None => todo!()//Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd)))
     };
-    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),newcmd);
-    engine.set_command_for_tk(cs,newcmd,global);
+    debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.printable(&engine.interner),newcmd);
+    engine.set_command_for_tk(cm,newcmd,global);
     engine.mouth.requeue(second);
     engine.mouth.requeue(first);
 }
@@ -1050,14 +1031,14 @@ pub fn if_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> 
     let first = get_if_token::<ET>(engine,&cmd,"if");
     let second = get_if_token::<ET>(engine,&cmd,"if");
     debug_log!(trace=>"if: {:?} == {:?}",
-        first.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash()))),
-        second.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
+        first.as_ref().map(|t| t.source.cause.printable(&engine.interner).to_string()),
+        second.as_ref().map(|t| t.source.cause.printable(&engine.interner).to_string())
     );
     match (first,second) {
         (None,_) | (_,None) => false,
-        (Some(f),Some(s)) => match (f.source.cause.base,s.source.cause.base) {
-            (BaseToken::Char(f,_),BaseToken::Char(s,_)) => f == s,
-            (BaseToken::CS(_),BaseToken::CS(_)) => true,
+        (Some(f),Some(s)) => match (f.source.cause.get_char(),s.source.cause.get_char()) {
+            (Some(f),Some(s)) => f == s,
+            (None,None) => true,
             _ => false
         }
     }
@@ -1075,28 +1056,16 @@ pub fn ifcat<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     let first = get_if_token::<ET>(engine,&cmd,IFCAT);
     let second = get_if_token::<ET>(engine,&cmd,IFCAT);
     debug_log!(trace=>"ifcat: {:?} == {:?}",
-        first.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash()))),
-        second.as_ref().map(|t| t.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
+        first.as_ref().map(|t| t.source.cause.printable(&engine.interner).to_string()),
+        second.as_ref().map(|t| t.source.cause.printable(&engine.interner).to_string())
     );
     let first = match first {
         None => return false,
-        Some(first) => match first.source.cause.base {
-            BaseToken::Char(_,cc) => cc,
-            BaseToken::CS(name) => match first.command {
-                BaseCommand::Char{catcode,..} => catcode,
-                _ => CategoryCode::Escape
-            }
-        }
+        Some(first) => first.source.cause.get_catcode()
     };
     let second = match second {
         None => return false,
-        Some(second) => match second.source.cause.base {
-            BaseToken::Char(_,cc) => cc,
-            BaseToken::CS(name) => match second.command {
-                BaseCommand::Char{catcode,..} => catcode,
-                _ => CategoryCode::Escape
-            }
-        }
+        Some(second) => second.source.cause.get_catcode()
     };
     first == second
 }
@@ -1257,7 +1226,7 @@ pub fn ifx<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> 
         None => file_end_prim!("ifx",cmd),
         Some((t,e)) => resolve_token::<ET>(&engine.state,t).with_expand(e)
     };
-    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())),t2.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())));
+    debug_log!(trace=>"ifx: {} == {}?",t1.source.cause.printable(&engine.interner),t2.source.cause.printable(&engine.interner));
     debug_log!(trace=>"First : {}",t1.command.as_str(&engine.interner));
     debug_log!(trace=>"Second: {}",t2.command.as_str(&engine.interner));
     if t1.expand && t2.expand { t1.command == t2.command }
@@ -1332,7 +1301,7 @@ pub fn inputlineno<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     ET::Int::from_i64(engine.mouth.line_no() as i64)
 }
 
-pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"jobname");
     let jobname = engine.jobname.clone();
     string_to_tokens!(jobname,t => exp.push(t));
@@ -1390,7 +1359,7 @@ pub fn lccode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 pub fn lccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting lower case character");
     let c = engine.get_char();
-    let v = ET::Int::from_i64(engine.state.get_lccode(&c).to_usize() as i64);
+    let v = ET::Int::from_i64(engine.state.get_lccode(c).to_usize() as i64);
     debug_log!(debug=>"\\lccode '{}' == {}",c.char_str(),v);
     v
 }
@@ -1400,28 +1369,26 @@ use string_interner::Symbol;
 pub const LET : &str = "let";
 pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
     debug_log!(trace=>"let");
-    let csO = engine.get_next_token();
-    let cs = match csO {
+    let cs = match engine.get_next_token() {
         None => file_end_prim!(LET,cmd),
         Some((t,_)) => t
     };
-    match &cs.base {
-        BaseToken::Char(_,CategoryCode::Active) | BaseToken::CS(_) => (),
-        _ => throw!("Expected a control sequence" => cs)
-    }
+    let cm = match cs.as_command() {
+        Some(cm) => cm,
+        None => throw!("Expected a control sequence" => cs)
+    };
     catch_prim!(engine.skip_eq_char() => (LET,cmd));
-    let cm = match catch_prim!(engine.get_next_token() => (LET,cmd)) {
+    let target = match engine.get_next_token() {
         Some((t,_)) => t,
         None =>file_end_prim!(LET,cmd)
     };
-    let cmd = match cm.base {
-        BaseToken::Char(c,CategoryCode::Active) => engine.state.get_ac_command(&c).map(|c|c.clone().copy_with(&cmd)),
-        BaseToken::CS(name) => engine.state.get_command(&name).map(|c|c.clone().copy_with(&cmd)),
-        BaseToken::Char(c,cc) =>
-            Some(Command::new(BaseCommand::Char{char:c,catcode:cc},Some(&cmd))),
+    let cmd = match target.as_command() {
+        Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c).map(|c|c.clone().copy_with(&cmd)),
+        Some(CSLike::CS(name)) => engine.state.get_command(name).map(|c|c.clone().copy_with(&cmd)),
+        None => todo!()
     };
-    debug_log!(debug=>"let: {} = {}",cs.to_str(&engine.interner,Some(ET::Char::backslash())),cmd.as_ref().map(|c|c.base.as_str(&engine.interner)).unwrap_or("undefined".to_string()));
-    engine.set_command_for_tk(cs,cmd,globally);
+    debug_log!(debug=>"let: {} = {}",cs.printable(&engine.interner),cmd.as_ref().map(|c|c.base.as_str(&engine.interner)).unwrap_or("undefined".to_string()));
+    engine.set_command_for_tk(cm,cmd,globally);
 }
 
 pub fn long<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global_:bool, protected_:bool, long_:bool, outer_:bool) {
@@ -1464,7 +1431,7 @@ pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                 let bx = get(engine,c.source);
                 engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Raise {by:-i,node:bx}.as_node());
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
         }
     }
 }
@@ -1473,11 +1440,11 @@ pub const LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\lowercase");
     let mut rs = engine.mouth.get_expansion();
-    expand_until_group!(engine,next =>match &next.base {
-        BaseToken::Char(c,cc) => {
+    expand_until_group!(engine,next => match next.split_char_and_catcode() {
+        Some((c,cc)) => {
             let nc = engine.state.get_lccode(c);
             if nc.to_usize() == 0 { rs.push(next) }
-            else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
+            else { rs.push(ET::Token::new_char_from_command(nc, cc, cmd)) }
         }
         _ => rs.push(next)
     });
@@ -1487,22 +1454,19 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
 pub const MATHCHARDEF : &str = "mathchardef";
 pub fn mathchardef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
     debug_log!(trace=>"mathchardef");
-    let csO = engine.get_next_token();
-    let cs = match csO {
-        None => file_end_prim!(MATHCHARDEF,cmd),
-        Some((t,_)) => t
+    let cm = match engine.get_next_token() {
+        None => file_end!(),
+        Some((t,_)) => match t.as_command() {
+            Some(cm) => cm,
+            None => throw!("Command expected after \\mathchardef" => t)
+        }
     };
-    match &cs.base {
-        BaseToken::Char(_,CategoryCode::Active) => (),
-        BaseToken::CS(_) => (),
-        _ => throw!("Command expected after \\mathchardef" => cs)
-    }
     engine.skip_eq_char();
     let i = engine.get_int().to_i64();
     if i < 0 {
         throw!("Invalid math char: {}",i => cmd.cause)
     }
-    engine.set_command_for_tk(cs,Some(Command::new(BaseCommand::MathChar(i as u32),Some(&cmd))),globally);
+    engine.set_command_for_tk(cm,Some(Command::new(BaseCommand::MathChar(i as u32),Some(&cmd))),globally);
 }
 
 pub const MATHCODE : &str = "mathcode";
@@ -1524,16 +1488,16 @@ pub fn mathcode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
 }
 
 pub const MEANING : &str = "meaning";
-pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"meaning");
     let esc = engine.state.get_escapechar();
     macro_rules! do_esc {
-        () => {if let Some(c) = esc { exp.push(Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }}
+        () => {if let Some(c) = esc { exp.push(ET::Token::new_char_from_command(c,CategoryCode::Other,cmd)) }}
     }
     match engine.get_next_token() {
         None => file_end_prim!(MEANING,cmd),
         Some((_,false)) => {
-            if let Some(c) = esc { exp.push(Token::new(BaseToken::Char(c,CategoryCode::Other),None)) }
+            do_esc!();
             string_to_tokens!(RELAX,t => exp.push(t));
         }
         Some((t,_)) => {
@@ -1710,12 +1674,12 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                             }
                         }
                     }
-                    if d.endswithbrace { exp.push(Token::new(BaseToken::Char(ET::Char::from(b'#'),CategoryCode::Other),None)) }
-                    exp.push(Token::new(BaseToken::Char(ET::Char::from(b'-'),CategoryCode::Other),None));
-                    exp.push(Token::new(BaseToken::Char(ET::Char::from(b'>'),CategoryCode::Other),None));
+                    if d.endswithbrace { exp.push(ET::Token::new_char_from_command(b'#'.into(),CategoryCode::Other,cmd)) }
+                    exp.push(ET::Token::new_char_from_command(b'-'.into(),CategoryCode::Other,cmd));
+                    exp.push(ET::Token::new_char_from_command(b'>'.into(),CategoryCode::Other,cmd));
                     for t in &*d.replacement {
                         match t {
-                            ExpToken::Token(t) if t.catcode() == CategoryCode::Parameter => {
+                            ExpToken::Token(t) if t.is_parameter() => {
                                 token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
                                 token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
                             }
@@ -1883,7 +1847,7 @@ pub const MUSKIPDEF : &str = "muskipdef";
 pub fn muskipdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"muskipdef");
     let name = engine.get_control_sequence();
-    engine.set_relax(&name,&cmd,global);
+    engine.set_relax(name,&cmd,global);
     engine.skip_eq_char();
     let num = engine.get_int();
     if num.to_i64() < 0 {
@@ -1956,7 +1920,7 @@ pub fn noindent<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 }
 
 pub const NUMBER: &str = "number";
-pub fn number<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn number<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"\\number");
     let num = engine.get_int();
     string_to_tokens!(num.to_i64().to_string(),t => exp.push(t));
@@ -2103,7 +2067,7 @@ pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
                 let bx = get(engine,c.source);
                 engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Raise {by:i,node:bx}.as_node());
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
         }
     }
 }
@@ -2126,24 +2090,24 @@ pub fn read<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
     let newcmd = engine.get_control_sequence();
     let mut ret = vec!();
     file.read::<ET,_>(&mut engine.interner,engine.state.get_catcode_scheme(),engine.state.get_endlinechar(),|t| ret.push(t));
-    debug_log!(trace=>"read: {} = {}",newcmd.to_str(&engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(&engine.interner));
+    debug_log!(trace=>"read: {} = {}",newcmd.printable(&engine.interner),PrintableTokenList::<ET>(&ret,&engine.interner));
     if ret.is_empty() {
         match engine.state.get_endlinechar() {
             None => (),
-            Some(c) => ret.push(Token::new(BaseToken::Char(c,*engine.state.get_catcode_scheme().get(&c)),None))
+            Some(c) => ret.push(ET::Token::new_char_from_command(c,*engine.state.get_catcode_scheme().get(c),cmd))
         }
     }
-    let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(Def::<ET>::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);
 }
 
 pub const RELAX: &str = "relax";
 
 pub const ROMANNUMERAL: &str = "romannumeral";
-pub fn romannumeral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn romannumeral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"romannumeral");
     macro_rules! push {
-        ($c:expr) => {exp.push(Token::new(BaseToken::Char(ET::Char::from($c),CategoryCode::Other),None))}
+        ($c:expr) => {exp.push(ET::Token::new_char_from_command($c.into(),CategoryCode::Other,cmd))}
     }
     let mut num = engine.get_int().to_i64();
     if num <= 0 {
@@ -2272,7 +2236,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
                 let bx = get(engine,c.source);
                 engine.state.set_box_register(i as usize,bx,global);
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
         }
     }
 }
@@ -2289,7 +2253,7 @@ pub fn sfcode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 pub fn sfcode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting space factor code");
     let c = engine.get_char();
-    let v = engine.state.get_sfcode(&c);
+    let v = engine.state.get_sfcode(c);
     debug_log!(debug=>"\\sfcode '{}' == {}",c.char_str(),v);
     v
 }
@@ -2315,7 +2279,7 @@ pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                 let bx = get(engine,c.source);
                 engine.stomach.shipout(bx);
             }
-            _ => throw!("Box expected: {}",c.source.cause.to_str(&engine.interner,Some(ET::Char::backslash())))
+            _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
         }
     }
 }
@@ -2368,7 +2332,7 @@ pub const SKIPDEF : &str = "skipdef";
 pub fn skipdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"skipdef");
     let name = engine.get_control_sequence();
-    engine.set_relax(&name,&cmd,global);
+    engine.set_relax(name,&cmd,global);
     engine.skip_eq_char();
     let num = engine.get_int();
     if num.to_i64() < 0 {
@@ -2391,7 +2355,7 @@ pub fn spacefactor_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSo
 }
 
 pub const STRING: &str = "string";
-pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"string");
     match engine.get_next_token() {
         None => file_end_prim!("string",cmd),
@@ -2424,6 +2388,8 @@ pub const THE : &str = "the";
 #[macro_export]
 macro_rules! do_the {
     ($engine:expr,$t:ident => $f:expr) => {
+        todo!()
+        /*
         match $engine.get_next_unexpandable_same_file() {
             Some(c) => match c.command {
                 BaseCommand::Int(ass) => {
@@ -2452,19 +2418,20 @@ macro_rules! do_the {
                 BaseCommand::MathChar(u) => string_to_tokens!(u.to_string(),$t => $f),
                 BaseCommand::CharDef(c) => string_to_tokens!(c.to_usize().to_string(),$t => $f),
                 BaseCommand::Font(fnt) => {
-                    let $t = Token::<ET>::new(BaseToken::CS($engine.fontstore.get(fnt).name()),None); $f
+                    let $t = ET::Token::new_cs_from_command($engine.fontstore.get(fnt).name(),c.reference); $f
                 },
                 BaseCommand::FontCommand {get,..} => {
                     let fnt = get($engine,c.source);
-                    let $t = Token::<ET>::new(BaseToken::CS($engine.fontstore.get(fnt).name()),None); $f
+                    let $t = ET::Token::new_cs_from_command($engine.fontstore.get(fnt).name(),c.reference); $f
                 }
-                _ => throw!("Expected a value after \\the; got: {}", c.source.cause.to_str(&$engine.interner,Some(ET::Char::backslash())) => c.source.cause)
+                _ => throw!("Expected a value after \\the; got: {}", c.source.cause.printable(&$engine.interner) => c.source.cause)
             }
             None => file_end!()
         }
+         */
     }
 }
-pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace => "\\the");
     do_the!(engine,t => exp.push(t));
 }
@@ -2488,11 +2455,11 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     expand_until_group!(engine,t => v.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
 
-    debug_log!(debug=>"\\toks{} = {}",i,TokenList(&v).to_str(&engine.interner));
+    debug_log!(debug=>"\\toks{} = {}",i,PrintableTokenList::<ET>(&v,&engine.interner));
     engine.state.set_toks_register(i,v,global,&mut engine.memory);
 } => (TOKS,cmd))}
 pub fn toks_get<'a,ET:EngineType>(engine:&'a mut EngineRef<ET>, cmd:&CommandSource<ET>)
-                                  -> Option<&'a Vec<Token<ET>>> {
+                                  -> Option<&'a Vec<ET::Token>> {
     let i = catch_prim!({
         let i = engine.get_int();
         let i:usize = match i.clone().try_into() {
@@ -2508,7 +2475,7 @@ pub const TOKSDEF : &str = "toksdef";
 pub fn toksdef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"toksdef");
     let name = engine.get_control_sequence();
-    engine.set_relax(&name,&cmd,global);
+    engine.set_relax(name,&cmd,global);
     engine.skip_eq_char();
     let num = engine.get_int().to_i64();
     if num < 0 {
@@ -2532,7 +2499,7 @@ pub fn uccode_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 pub fn uccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"Getting upper case character");
     let c = engine.get_char();
-    let v = ET::Int::from_i64(engine.state.get_uccode(&c).to_usize() as i64);
+    let v = ET::Int::from_i64(engine.state.get_uccode(c).to_usize() as i64);
     debug_log!(debug=>"\\uccode '{}' == {}",c.char_str(),v);
     v
 }
@@ -2652,11 +2619,11 @@ pub const UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\uppercase");
     let mut rs = engine.mouth.get_expansion();
-    expand_until_group!(engine,next => match &next.base {
-        BaseToken::Char(c,cc) => {
+    expand_until_group!(engine,next => match next.split_char_and_catcode() {
+        Some((c,cc)) => {
             let nc = engine.state.get_uccode(c);
             if nc.to_usize() == 0 { rs.push(next) }
-            else { rs.push(Token::new(BaseToken::Char(nc, *cc), None)) }
+            else { rs.push(ET::Token::new_char_from_command(nc, cc, cmd)) }
         }
         _ => rs.push(next)
     });
@@ -2894,10 +2861,11 @@ pub fn write<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
 
     get_group!(engine,t => tks.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(tks.push(t))) => (WRITE,cmd));
+    let ncmd = cmd.clone();
 
     let apply = Box::new(move |engine:&mut EngineRef<ET>| {
-        tks.push(Token::new(BaseToken::Char(ET::Char::from(b'}'),CategoryCode::EndGroup),None));
-        tks.insert(0,Token::new(BaseToken::Char(ET::Char::from(b'{'),CategoryCode::BeginGroup),None));
+        tks.push(ET::Token::new_char_from_command(b'}'.into(),CategoryCode::EndGroup,&ncmd));
+        tks.insert(0,ET::Token::new_char_from_command(b'{'.into(),CategoryCode::BeginGroup,&ncmd));
         engine.with_mouth(tks,|engine| {
             let mut string = engine.memory.get_string();
             engine.get_braced_string(&mut string);

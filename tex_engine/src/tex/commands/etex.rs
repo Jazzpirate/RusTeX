@@ -5,7 +5,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
-use crate::tex::token::{BaseToken, Token, TokenList};
+use crate::tex::token::{Token, PrintableTokenList, CSLike};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
@@ -203,19 +203,18 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
 pub const DETOKENIZE: &str = "detokenize";
 /// `\detokenize`: convert a token list into a string of [`CategoryCode`] [`Other`](CategoryCode::Other)
 /// (except for ` `, which gets code [`Space`](CategoryCode::Space)).
-pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     use crate::tex::commands::Token;
     use crate::utils::strings::AllCharsTrait;
     debug_log!(trace=>"detokenize");
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
 
-    expand_until_group!(engine,t => match &t.base {
-        BaseToken::Char(c,CategoryCode::Parameter) => {
-            token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
+    expand_until_group!(engine,t => {
+        if t.is_parameter() {
             token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
         }
-        _ => token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t))
+        token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
     });
 }
 
@@ -224,15 +223,7 @@ pub const DIMEXPR: &str = "dimexpr";
 pub fn dimexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
     debug_log!(trace=>"dimexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,ET::Dim>(engine, &cmd, DIMEXPR, |e| e.get_dim());
-    if let Some((next,_)) = engine.get_next_token() {
-        match &next.base {
-            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
-                Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
-            }
-            _ => engine.mouth.requeue(next)
-        }
-    }
+    engine.eat_relax();
     ret
 }
 
@@ -240,7 +231,7 @@ pub const E_TEX_REVISION: &str = ".6";
 pub const E_TEX_VERSION: i64 = 2;
 
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
-pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<ET::Token>) {
     string_to_tokens!(E_TEX_REVISION,t => exp.push(t))
 }
 
@@ -252,7 +243,7 @@ pub fn eTeXversion<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
 
 pub const EXPANDED: &str = "expanded";
 /// `\expanded`: expands its argument exhaustively.
-pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"expanded");
 
     get_expanded_group!(engine,false,false,false,t => exp.push(t));
@@ -286,15 +277,7 @@ pub const GLUEEXPR: &str = "glueexpr";
 pub fn glueexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> Skip<ET::SkipDim> {
     debug_log!(trace=>"glueexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,Skip<ET::SkipDim>>(engine, &cmd, GLUEEXPR, |e| e.get_skip());
-    if let Some((next,_)) = engine.get_next_token() {
-        match &next.base {
-            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
-                Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
-            }
-            _ => engine.mouth.requeue(next)
-        }
-    }
+    engine.eat_relax();
     ret
 }
 
@@ -305,7 +288,7 @@ pub fn glueexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 pub fn ifcsname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifcsname");
     let name = get_csname::<ET>(engine,&cmd,"ifcsname");
-    engine.state.get_command(&name).is_some()
+    engine.state.get_command(name).is_some()
 }
 
 pub const IFDEFINED: &str = "ifdefined";
@@ -313,15 +296,15 @@ pub const IFDEFINED: &str = "ifdefined";
 pub fn ifdefined<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
     debug_log!(trace=>"ifdefined");
     match engine.get_next_token() {
-        None => file_end_prim!("ifdefined",cmd),
-        Some((t,_)) => match t.base {
-            BaseToken::Char(c,CategoryCode::Active) =>
-                engine.state.get_ac_command(&c).is_some(),
-            BaseToken::CS(name) => {
+        None => file_end!(),
+        Some((t,_)) => match t.as_command() {
+            None => throw!("Expected a control sequence, got: {:?}",t => cmd.cause),
+            Some(CSLike::CS(name)) => {
                 debug_log!(trace => "ifdefined: {}",name.to_str(&engine.interner));
-                engine.state.get_command(&name).is_some()
+                engine.state.get_command(name).is_some()
             }
-            _ => throw!("Expected a control sequence, got: {:?}",t => cmd.cause)
+            Some(CSLike::ActiveChar(c)) =>
+                engine.state.get_ac_command(c).is_some()
         }
     }
 }
@@ -363,15 +346,7 @@ pub fn muexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
                              -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
     debug_log!(trace=>"muexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,MuSkip<ET::MuDim,ET::MuStretchShrinkDim>>(engine, &cmd, MUEXPR, |e| e.get_muskip());
-    if let Some((next,_)) = engine.get_next_token() {
-        match &next.base {
-            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
-                Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
-            }
-            _ => engine.mouth.requeue(next)
-        }
-    }
+    engine.eat_relax();
     ret
 }
 
@@ -380,15 +355,7 @@ pub const NUMEXPR: &str = "numexpr";
 pub fn numexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Int {
     debug_log!(trace=>"numexpr: {}",engine.preview(100));
     let ret = expr_loop::<ET,ET::Int>(engine, &cmd, NUMEXPR, |e| e.get_int());
-    if let Some((next,_)) = engine.get_next_token() {
-        match &next.base {
-            BaseToken::CS(name) => match engine.state.get_command(name).map(|c| &c.base) {
-                Some(BaseCommand::Relax) => (),
-                _ => engine.mouth.requeue(next)
-            }
-            _ => engine.mouth.requeue(next)
-        }
-    }
+    engine.eat_relax();
     ret
 }
 
@@ -432,9 +399,9 @@ pub fn readline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     let newcmd = engine.get_control_sequence();
     let mut ret = vec!();
     file.readline::<ET,_>(&mut engine.interner,|t| ret.push(t));
-    debug_log!(trace=>"readline: {} = {}",newcmd.to_str(&engine.interner,Some(ET::Char::backslash())),TokenList(&ret).to_str(&engine.interner));
+    debug_log!(trace=>"readline: {} = {}",newcmd.printable(&engine.interner),PrintableTokenList::<ET>(&ret,&engine.interner));
 
-    let def = Command::new(BaseCommand::Def(Def::simple(ret)),Some(&cmd));
+    let def = Command::new(BaseCommand::Def(Def::<ET>::simple(ret)),Some(&cmd));
     engine.set_command_for_tk(newcmd,Some(def),globally);
 }
 
@@ -445,33 +412,15 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     use crate::utils::strings::AllCharsTrait;
     debug_log!(trace=>"scantokens");
     let esc = engine.state.get_escapechar();
-    let cc = engine.state.get_catcode_scheme().clone();
     let mut ret = String::new();
-    expand_until_group!(engine,t => match t.base {
-        BaseToken::Char(_,CategoryCode::Space) => {
-            ret.push(' ');
-        }
-        BaseToken::Char(c,_) => {
-            ret.push(c.as_char())
-        }
-        BaseToken::CS(name) => {
-            if let Some(c) = engine.state.get_escapechar() { ret.push(c.as_char()) }
-            let str = name.to_str(&engine.interner);
-            if str.len() == 1 && *engine.state.get_catcode_scheme().get(&ET::Char::tokenize(str)[0]) != CategoryCode::Letter {
-                ret.push_str(str);
-            } else {
-                ret.push_str(str);
-                ret.push(' ')
-            }
-        }
-    });
+    expand_until_group!(engine,t => t.to_str(&engine.interner,esc,Some(engine.state.get_catcode_scheme()),&mut ret).unwrap());
     engine.mouth.push_string(&ret.into_bytes());
     debug_log!(trace => "scantokens: {}",engine.preview(250));
 }
 
 pub const UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
-pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<Token<ET>>) {
+pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"unexpanded");
     expand_until_group!(engine,tk => exp.push(tk));
     //catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
@@ -486,14 +435,14 @@ pub fn unless<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match engine.get_next_token() {
         None => file_end_prim!(UNLESS,cmd),
         Some((next,true)) => {
-            let ncmd = match &next.base {
-                BaseToken::CS(name) => engine.state.get_command(name),
-                BaseToken::Char(c,CategoryCode::Active) => engine.state.get_ac_command(c),
-                _ => throw!("Expected a conditional after \\unless" => cmd.cause)
+            let ncmd = match next.as_command() {
+                None => throw!("Expected a conditional after \\unless" => cmd.cause),
+                Some(CSLike::CS(name)) => engine.state.get_command(name),
+                Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c)
             };
             let ncmd = match ncmd {
                 None => throw!("Expected a conditional after \\unless" => cmd.cause),
-                Some(c) => c.clone()
+                Some(c) => c
             };
             match ncmd.base {
                 BaseCommand::Conditional {name,apply} => {

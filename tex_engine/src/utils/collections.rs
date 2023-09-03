@@ -5,7 +5,7 @@ use crate::utils::Ptr;
 pub type HMap<A,B> = ahash::HashMap<A,B>;
 pub type HSet<A> = ahash::HashSet<A>;
 
-//struct TokenList<ET>(Ptr<[Token<ET>]>,usize);
+//struct TokenList<ET>(Ptr<[ET::Token]>,usize);
 
 
 /*

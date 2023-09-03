@@ -6,7 +6,7 @@ use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField, TokField, TokMapField};
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::tex::commands::{BaseCommand, Command, CommandSource};
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::{CSLike, Token};
 use crate::utils::strings::TeXStr;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory};
@@ -29,8 +29,8 @@ pub trait State<ET:EngineType>:Clone+'static {
     fn current_csname(&self) -> Option<usize>;
     fn pop_csname(&mut self);
 
-    fn set_afterassignment(&mut self,t:Token<ET>);
-    fn take_afterassignment(&mut self) -> Option<Token<ET>>;
+    fn set_afterassignment(&mut self,t:ET::Token);
+    fn take_afterassignment(&mut self) -> Option<ET::Token>;
     fn get_parshape(&self) -> Option<&Vec<(ET::Dim,ET::Dim)>>;
     fn set_parshape(&mut self,v:Vec<(ET::Dim,ET::Dim)>,globally:bool);
 
@@ -48,7 +48,7 @@ pub trait State<ET:EngineType>:Clone+'static {
     /// push a new group onto the stack
     fn stack_push(&mut self, g: GroupType);
 
-    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<Token<ET>>,GroupType)>;
+    fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)>;
     fn grouplevel(&self) -> usize;
 
     /// get the current group type
@@ -71,9 +71,9 @@ pub trait State<ET:EngineType>:Clone+'static {
     fn set_newlinechar(&mut self, c: Option<ET::Char>, globally:bool);
 
     /// get the current [`BaseCommand`] with name `name:`[`TeXStr`]
-    fn get_command(&self, name:&TeXStr) -> Option<&Command<ET>>;
+    fn get_command(&self, name:TeXStr) -> Option<&Command<ET>>;
     /// get the current [`BaseCommand`] for the active character `c`
-    fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>>;
+    fn get_ac_command(&self, c: ET::Char) -> Option<&Command<ET>>;
     /// set the current [`BaseCommand`] with name `name:`[`TeXStr`]
     fn set_command(&mut self, name:TeXStr, cmd:Option<Command<ET>>, globally:bool);
     /// set the current [`BaseCommand`] for the active character `c`
@@ -86,17 +86,17 @@ pub trait State<ET:EngineType>:Clone+'static {
 
 
     /// get the current space factor code for the character
-    fn get_sfcode(&self,c:&ET::Char) -> ET::Int;
+    fn get_sfcode(&self,c:ET::Char) -> ET::Int;
     /// set the current space factor code for a character
     fn set_sfcode(&mut self, c: ET::Char, v:ET::Int, globally:bool);
 
     /// get the uppercase character for a character
-    fn get_uccode(&self, c: &ET::Char) -> ET::Char;
+    fn get_uccode(&self, c: ET::Char) -> ET::Char;
     /// set the uppercase character for a character
     fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally:bool);
 
     /// get the lowercase character for a character
-    fn get_lccode(&self, c: &ET::Char) -> ET::Char;
+    fn get_lccode(&self, c: ET::Char) -> ET::Char;
     /// set the lowercase character for a character
     fn set_lccode(&mut self, c: ET::Char, lc: ET::Char, globally:bool);
 
@@ -131,9 +131,9 @@ pub trait State<ET:EngineType>:Clone+'static {
     fn set_muskip_register(&mut self,i:usize,v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>,globally:bool);
 
     /// get the value of a skip register
-    fn get_toks_register(&self,i:usize) -> Option<&Vec<Token<ET>>>;
+    fn get_toks_register(&self,i:usize) -> Option<&Vec<ET::Token>>;
     /// set the value of a skip register
-    fn set_toks_register(&mut self,i:usize,v:Vec<Token<ET>>,globally:bool,memory:&mut Memory<ET>);
+    fn set_toks_register(&mut self,i:usize,v:Vec<ET::Token>,globally:bool,memory:&mut Memory<ET>);
 
     fn get_box_register(&mut self,i:usize) -> Option<&mut HVBox<ET>>;
     fn set_box_register(&mut self,i:usize,v:HVBox<ET>,globally:bool);
@@ -160,9 +160,9 @@ pub trait State<ET:EngineType>:Clone+'static {
     fn set_primitive_muskip(&mut self, name:&'static str, v:MuSkip<ET::MuDim,ET::MuStretchShrinkDim>, globally:bool);
 
     /// get a primitive token register
-    fn get_primitive_toks(&self, name:&'static str) -> Option<&Vec<Token<ET>>>;
+    fn get_primitive_toks(&self, name:&'static str) -> Option<&Vec<ET::Token>>;
     /// set a primitive token register
-    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<Token<ET>>, globally:bool,memory:&mut Memory<ET>);
+    fn set_primitive_toks(&mut self, name:&'static str, v:Vec<ET::Token>, globally:bool,memory:&mut Memory<ET>);
 
     /// get the current font
     fn get_current_font(&self) -> ET::FontRef;
@@ -178,28 +178,26 @@ pub trait State<ET:EngineType>:Clone+'static {
     fn get_scriptscriptfont(&self, i:usize) -> ET::FontRef;
     fn set_scriptscriptfont(&mut self, i:usize, f:ET::FontRef, globally:bool);
 
-    fn push_aftergroup(&mut self, t:Token<ET>);
+    fn push_aftergroup(&mut self, t:ET::Token);
 }
 
 impl<ET:EngineType> EngineRef<ET> {
-    pub fn set_command_for_tk(&mut self, tk:Token<ET>, cmd:Option<Command<ET>>, globally:bool) {
-        match tk.base {
-            BaseToken::CS(cs) => self.state.set_command(cs,cmd, globally),
-            BaseToken::Char(c,_) => self.state.set_ac_command(c,cmd, globally),
+    pub fn set_command_for_tk(&mut self, cs:CSLike<ET::Char>, cmd:Option<Command<ET>>, globally:bool) {
+        match cs {
+            CSLike::CS(cs) => self.state.set_command(cs,cmd, globally),
+            CSLike::ActiveChar(c) => self.state.set_ac_command(c,cmd, globally),
         }
     }
 
-    pub fn set_relax(&mut self,tk:&Token<ET>,source:&CommandSource<ET>,globally:bool) -> Result<(),TeXError<ET>> {
-        match &tk.base {
-            BaseToken::Char(c,CategoryCode::Active) => {
-                self.state.set_ac_command(*c, Some(Command::new(BaseCommand::Relax,Some(source))), globally)
+    pub fn set_relax(&mut self,cs:CSLike<ET::Char>,source:&CommandSource<ET>,globally:bool) {
+        match cs {
+            CSLike::ActiveChar(c) => {
+                self.state.set_ac_command(c, Some(Command::new(BaseCommand::Relax,Some(source))), globally)
             }
-            BaseToken::CS(name) => {
+            CSLike::CS(name) => {
                 self.state.set_command(name.clone(), Some(Command::new(BaseCommand::Relax,Some(source))), globally)
             }
-            _ => throw!("Command name expected, got {:?}",tk => source.cause)
         }
-        Ok(())
     }
 }
 
@@ -258,15 +256,15 @@ impl<ET:EngineType,S:State<ET>> State<ET> for PDFStateWrapper<ET,S> {
     fn get_open_out_file(&self, i: usize) -> Option<ET::File> { self.state.get_open_out_file(i) }
     fn get_box_register(&mut self, i: usize) -> Option<&mut HVBox<ET>> { self.state.get_box_register(i) }
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char> { self.state.get_catcode_scheme() }
-    fn get_command(&self, name: &TeXStr) -> Option<&Command<ET>> { self.state.get_command(name) }
-    fn get_ac_command(&self, c: &ET::Char) -> Option<&Command<ET>> { self.state.get_ac_command(c) }
+    fn get_command(&self, name: TeXStr) -> Option<&Command<ET>> { self.state.get_command(name) }
+    fn get_ac_command(&self, c: ET::Char) -> Option<&Command<ET>> { self.state.get_ac_command(c) }
     fn get_current_font(&self) -> ET::FontRef { self.state.get_current_font() }
     fn get_dim_register(&self, i: usize) -> ET::Dim { self.state.get_dim_register(i) }
     fn get_escapechar(&self) -> Option<ET::Char> { self.state.get_escapechar() }
     fn get_endlinechar(&self) -> Option<ET::Char> { self.state.get_endlinechar() }
     fn get_grouptype(&self) -> GroupType { self.state.get_grouptype() }
     fn get_int_register(&self, i: usize) -> ET::Int { self.state.get_int_register(i) }
-    fn get_lccode(&self, c: &ET::Char) -> ET::Char { self.state.get_lccode(c) }
+    fn get_lccode(&self, c: ET::Char) -> ET::Char { self.state.get_lccode(c) }
     fn get_mathcode(&self, c: ET::Char) -> ET::Int { self.state.get_mathcode(c) }
     fn get_muskip_register(&self, i: usize) -> MuSkip<ET::MuDim, ET::MuStretchShrinkDim> { self.state.get_muskip_register(i) }
     fn get_newlinechar(&self) -> Option<ET::Char> { self.state.get_newlinechar() }
@@ -275,23 +273,23 @@ impl<ET:EngineType,S:State<ET>> State<ET> for PDFStateWrapper<ET,S> {
     fn get_primitive_int(&self, name: &'static str) -> ET::Int { self.state.get_primitive_int(name) }
     fn get_primitive_muskip(&self, name: &'static str) -> MuSkip<ET::MuDim, ET::MuStretchShrinkDim> { self.state.get_primitive_muskip(name) }
     fn get_primitive_skip(&self, name: &'static str) -> Skip<ET::SkipDim> { self.state.get_primitive_skip(name) }
-    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<Token<ET>>> { self.state.get_primitive_toks(name) }
+    fn get_primitive_toks(&self, name: &'static str) -> Option<&Vec<ET::Token>> { self.state.get_primitive_toks(name) }
     fn get_scriptfont(&self, i: usize) -> ET::FontRef { self.state.get_scriptfont(i) }
     fn get_scriptscriptfont(&self, i: usize) -> ET::FontRef { self.state.get_scriptscriptfont(i) }
     fn get_skip_register(&self, i: usize) -> Skip<ET::SkipDim> { self.state.get_skip_register(i) }
-    fn get_sfcode(&self, c: &ET::Char) -> ET::Int { self.state.get_sfcode(c) }
+    fn get_sfcode(&self, c: ET::Char) -> ET::Int { self.state.get_sfcode(c) }
     fn get_textfont(&self, i: usize) -> ET::FontRef { self.state.get_textfont(i) }
-    fn get_toks_register(&self, i: usize) -> Option<&Vec<Token<ET>>> { self.state.get_toks_register(i) }
-    fn get_uccode(&self, c: &ET::Char) -> ET::Char { self.state.get_uccode(c) }
+    fn get_toks_register(&self, i: usize) -> Option<&Vec<ET::Token>> { self.state.get_toks_register(i) }
+    fn get_uccode(&self, c: ET::Char) -> ET::Char { self.state.get_uccode(c) }
     fn get_delcode(&self, c: ET::Char) -> ET::Int { self.state.get_delcode(c) }
     fn set_delcode(&mut self, c: ET::Char, lc: ET::Int, globally: bool) { self.state.set_delcode(c,lc,globally) }
     fn grouplevel(&self) -> usize { self.state.grouplevel() }
     fn mode(&self) -> TeXMode { self.state.mode() }
     fn pop_csname(&mut self) { self.state.pop_csname() }
-    fn push_aftergroup(&mut self, t: Token<ET>) { self.state.push_aftergroup(t) }
+    fn push_aftergroup(&mut self, t: ET::Token) { self.state.push_aftergroup(t) }
     fn push_csname(&mut self) -> usize { self.state.push_csname() }
     fn set_ac_command(&mut self, c: ET::Char, cmd: Option<Command<ET>>, globally: bool) { self.state.set_ac_command(c,cmd,globally) }
-    fn set_afterassignment(&mut self, t: Token<ET>) { self.state.set_afterassignment(t) }
+    fn set_afterassignment(&mut self, t: ET::Token) { self.state.set_afterassignment(t) }
     fn set_box_register(&mut self, i: usize, v: HVBox<ET>, globally: bool) { self.state.set_box_register(i,v,globally) }
     fn set_catcode(&mut self, c: ET::Char, cc: CategoryCode, globally: bool) { self.state.set_catcode(c,cc,globally) }
     fn set_command(&mut self, name: TeXStr, cmd: Option<Command<ET>>, globally: bool) { self.state.set_command(name,cmd,globally) }
@@ -310,16 +308,16 @@ impl<ET:EngineType,S:State<ET>> State<ET> for PDFStateWrapper<ET,S> {
     fn set_primitive_int(&mut self, name: &'static str, v: ET::Int, globally: bool) { self.state.set_primitive_int(name,v,globally) }
     fn set_primitive_muskip(&mut self, name: &'static str, v: MuSkip<ET::MuDim, ET::MuStretchShrinkDim>, globally: bool) { self.state.set_primitive_muskip(name,v,globally) }
     fn set_primitive_skip(&mut self, name: &'static str, v: Skip<ET::SkipDim>, globally: bool) { self.state.set_primitive_skip(name,v,globally) }
-    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<Token<ET>>, globally: bool, memory: &mut Memory<ET>) { self.state.set_primitive_toks(name,v,globally,memory) }
+    fn set_primitive_toks(&mut self, name: &'static str, v: Vec<ET::Token>, globally: bool, memory: &mut Memory<ET>) { self.state.set_primitive_toks(name,v,globally,memory) }
     fn set_scriptfont(&mut self, i: usize, f: ET::FontRef, globally: bool) { self.state.set_scriptfont(i,f,globally) }
     fn set_scriptscriptfont(&mut self, i: usize, f: ET::FontRef, globally: bool) { self.state.set_scriptscriptfont(i,f,globally) }
     fn set_skip_register(&mut self, i: usize, v: Skip<ET::SkipDim>, globally: bool) { self.state.set_skip_register(i,v,globally) }
     fn set_sfcode(&mut self, c: ET::Char, v: ET::Int, globally: bool) { self.state.set_sfcode(c,v,globally) }
     fn set_textfont(&mut self, i: usize, f: ET::FontRef, globally: bool) { self.state.set_textfont(i,f,globally) }
-    fn set_toks_register(&mut self, i: usize, v: Vec<Token<ET>>, globally: bool, memory: &mut Memory<ET>) { self.state.set_toks_register(i,v,globally,memory) }
+    fn set_toks_register(&mut self, i: usize, v: Vec<ET::Token>, globally: bool, memory: &mut Memory<ET>) { self.state.set_toks_register(i,v,globally,memory) }
     fn set_uccode(&mut self, c: ET::Char, uc: ET::Char, globally: bool) { self.state.set_uccode(c,uc,globally) }
-    fn stack_pop(&mut self, memory: &mut Memory<ET>) -> Option<(Vec<Token<ET>>, GroupType)> { self.state.stack_pop(memory) }
+    fn stack_pop(&mut self, memory: &mut Memory<ET>) -> Option<(Vec<ET::Token>, GroupType)> { self.state.stack_pop(memory) }
     fn stack_push(&mut self, g: GroupType) { self.state.stack_push(g) }
-    fn take_afterassignment(&mut self) -> Option<Token<ET>> { self.state.take_afterassignment() }
+    fn take_afterassignment(&mut self) -> Option<ET::Token> { self.state.take_afterassignment() }
     fn take_box_register(&mut self, i: usize) -> HVBox<ET> { self.state.take_box_register(i) }
 }

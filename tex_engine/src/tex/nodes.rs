@@ -29,7 +29,7 @@ pub enum TeXNode<ET:EngineType> {
     Kern{ dim:ET::Dim,axis:HorV},
     Box(HVBox<ET>),
     Whatsit(Whatsit<ET>),
-    Mark(Vec<Token<ET>>),
+    Mark(Vec<ET::Token>),
     Custom(ET::Node),
     Simple(SimpleNode<ET>),
     VAdjust(Vec<TeXNode<ET>>)

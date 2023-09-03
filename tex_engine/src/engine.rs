@@ -16,7 +16,7 @@ use crate::tex::commands::{Assignable, CommandReference};
 use crate::tex::commands::pdftex::PDFTeXNode;
 use crate::tex::fonts::{Font, FontStore};
 use crate::tex::numbers::{Dim, MuDim, MuStretchShrinkDim, SkipDim};
-use crate::tex::token::TokenReference;
+use crate::tex::token::Token;
 
 pub mod state;
 pub mod mouth;
@@ -41,10 +41,10 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type MuDim:MuDim;
     type MuStretchShrinkDim:MuStretchShrinkDim;
     type CommandReference:CommandReference<Self>;
-    type TokenReference:TokenReference<Self>;
     type State:State<Self>;
     type Gullet:Gullet<Self>;
     type Stomach:Stomach<Self>;
+    type Token:Token<Char=Self::Char>;
 }
 
 pub struct EngineRef<ET:EngineType> {

@@ -4,13 +4,13 @@ use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::token::{BaseToken, Token};
+use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 
 impl<ET:EngineType> EngineRef<ET> {
     /// get the next [`Token`] from the [`MouthTrait`]
-    pub fn get_next_token(&mut self) -> Option<(Token<ET>,bool)> {
+    pub fn get_next_token(&mut self) -> Option<(ET::Token,bool)> {
         self.mouth.get_next(&self.state,&mut self.interner,&mut self.outputs)
     }
 
@@ -24,10 +24,10 @@ impl<ET:EngineType> EngineRef<ET> {
         self.skip_whitespace();
         debug_log!(trace=>"skipping '='");
         if let Some((tk,_)) = self.get_next_token() {
-            match &tk.base {
-                BaseToken::Char(c,_) if c.as_bytes() == [b'='] => {
+            match tk.get_char() {
+                Some(c) if c.as_byte() == b'=' => {
                     match self.get_next_token() {
-                        Some((tk,_)) if tk.catcode() == CategoryCode::Space => (),
+                        Some((tk,_)) if tk.is_space() => (),
                         Some((tk,_)) => self.mouth.requeue(tk),
                         _ => ()
                     }
@@ -41,7 +41,7 @@ impl<ET:EngineType> EngineRef<ET> {
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
-    pub fn get_argument(&mut self,vec: &mut Vec<Token<ET>>) {
+    pub fn get_argument(&mut self,vec: &mut Vec<ET::Token>) {
         Mouth::get_argument(self,vec)
     }
 /*
@@ -69,18 +69,18 @@ impl<ET:EngineType> EngineRef<ET> {
 
  */
 
-    pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<Token<ET>>, f:F) -> R {
+    pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<ET::Token>, f:F) -> R {
         Mouth::with_mouth(self,tks,f)
     }
 
 
     /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
-    pub fn preview(&mut self,len:usize) -> String {
+    pub fn preview(&self,len:usize) -> String {
         self.mouth.preview(len,&self.interner)
     }
 
-    pub fn current_position(&mut self) -> String {
+    pub fn current_position(&self) -> String {
         self.mouth.file_line(&self.interner)
     }
 }
@@ -89,12 +89,10 @@ impl<ET:EngineType> EngineRef<ET> {
 macro_rules! get_until_endgroup {
     ($engine:ident,$tk:ident => $f:expr) => {
         let mut ingroup = 0;
-        crate::get_while!(&mut $engine.mouth,&$engine.state,&mut $engine.interner,'A => $tk => {match $tk.base {
-                BaseToken::Char(_,CategoryCode::BeginGroup) => ingroup +=1,
-                BaseToken::Char(_,CategoryCode::EndGroup) => {
-                    if ingroup == 0 { break 'A } else { ingroup -= 1 };
-                }
-                _ => ()
+        crate::get_while!(&mut $engine.mouth,&$engine.state,&mut $engine.interner,'A => $tk => {
+            if $tk.is_begin_group() { ingroup += 1 }
+            else if $tk.is_end_group() {
+                if ingroup == 0 { break 'A } else { ingroup -= 1 }
             }
             $f
         });
@@ -105,7 +103,7 @@ macro_rules! get_until_endgroup {
 macro_rules! get_group {
     ($engine:ident,$tk:ident => $f:expr) => {
         match $engine.get_next_token() {
-            Some((t,_)) if t.catcode() == CategoryCode::BeginGroup => (),
+            Some((t,_)) if t.is_begin_group() => (),
             _ => throw!("begin group expected")
         }
         crate::get_until_endgroup!($engine,$tk => $f);

@@ -9,8 +9,8 @@ use crate::tex::commands::{BaseCommand, ResolvedToken};
 use crate::tex::fonts::{Font, FontStore};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::{MuSkip, Skip, Int, Dim, SkipDim, MuDim, MuStretchShrinkDim};
-use crate::tex::token::BaseToken;
 use crate::utils::errors::TeXError;
+use crate::tex::token::Token;
 
 fn is_ascii_digit(u:u8) -> bool {
     u >= 48 && u <= 57
@@ -33,24 +33,23 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
         match next.command {
             Def(_) | Conditional{..} | Expandable{..} | ExpandableNoTokens {..} => unreachable!(),
             Char{char,catcode} => {
-                match char.as_bytes() {
-                    [b'-'] => { // -
+                match char.as_byte() {
+                    b'-' => { // -
                         isnegative = !isnegative;
                         catch!(engine.skip_whitespace() => next.source.cause);
                     }
-                    [b'+'] => /* + */ catch!(engine.skip_whitespace()=> next.source.cause),
-                    [b'\"'] if !ishex && !isoct => ishex = true, // "
-                    [b'\''] if !ishex && !isoct => isoct = true, // '
-                    [b'`'] if !ishex && !isoct => { // `
-                        match catch!(engine.get_next_token()=> next.source.cause) {
+                    b'+' => /* + */ catch!(engine.skip_whitespace()=> next.source.cause),
+                    b'\"' if !ishex && !isoct => ishex = true, // "
+                    b'\'' if !ishex && !isoct => isoct = true, // '
+                    b'`' if !ishex && !isoct => { // `
+                        match catch!(engine.get_next_token() => next.source.cause) {
                             std::option::Option::None => file_end!(next.source.cause),
                             Some((tk,_)) => {
-                                let c = match &tk.base {
-                                    BaseToken::Char(c,_) => *c,
-                                    BaseToken::CS(str) => {
-                                        let str = ET::Char::tokenize(str.to_str(&engine.interner));
-                                        if str.len() != 1 { throw!("Number expected" => next.source.cause) }
-                                            str[0]
+                                let c = match tk.name_or_char() {
+                                    Err(c) => c,
+                                    Ok(name) => match ET::Char::single_char(name.to_str(&engine.interner)) {
+                                        Some(c) => c,
+                                        std::option::Option::None => throw!("Number expected" => next.source.cause)
                                     }
                                 };
                                 catch!(expand_until_space::<ET>(engine) => tk);
@@ -60,15 +59,15 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
                             }
                         }
                     },
-                    [b] if is_ascii_hex_digit(*b) && ishex =>
+                    b if is_ascii_hex_digit(b) && ishex =>
                     // TODO: texnically, this requires catcode 12 for 0-9 and catcode 11 or 12 for A-F
-                        return read_hex_number::<ET>(engine,*b,isnegative),
-                    [b] if is_ascii_digit(*b) && !isoct =>
+                        return read_hex_number::<ET>(engine,b,isnegative),
+                    b if is_ascii_digit(b) && !isoct =>
                     // TODO: texnically, this requires catcode 12
-                        return read_decimal_number::<ET>(engine,*b,isnegative),
-                    [b] if is_ascii_oct_digit(*b) => // isoct == true
+                        return read_decimal_number::<ET>(engine,b,isnegative),
+                    b if is_ascii_oct_digit(b) => // isoct == true
                     // TODO: texnically, this requires catcode 12
-                        return read_oct_number::<ET>(engine,*b,isnegative),
+                        return read_oct_number::<ET>(engine,b,isnegative),
                     _ => {
                         let c = ET::Int::from_i64(char.to_usize() as i64);
                         debug_log!(trace=>"Returning {}",c);
