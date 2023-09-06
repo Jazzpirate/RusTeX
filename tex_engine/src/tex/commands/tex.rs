@@ -1,7 +1,7 @@
 //! TeX primitive [`BaseCommand`]s
 
 use std::hint::unreachable_unchecked;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, get_group, get_expanded_group, expand_until_group, register_box, register_skip, register_expandable_notk, token_to_others, string_to_tokens};
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, register_box, register_skip, register_expandable_notk };
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
@@ -13,7 +13,7 @@ use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, ValueCommand, CommandSource, ToksCommand, Def};
 use crate::tex::commands::methods::parse_signature;
 use crate::tex::numbers::{Int, Skip, MuSkip, Dim};
-use crate::tex::token::{CSLike, Token, PrintableTokenList};
+use crate::tex::token::{CSLike, Token, PrintableTokenList, DeTokenizer};
 use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
@@ -336,7 +336,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         None => file_end_prim!(DEF,cmd),
         Some((t,_)) => t
     };
-    let cm = match cs.as_command() {
+    let cm = match cs.as_cs_like() {
         None => throw!("Command expected after \\def" => cs),
         Some(cm) => cm
     };
@@ -344,7 +344,7 @@ pub fn def<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
     let mut replacement: Vec<ExpToken<ET>> = vec!();
     let mut partk = None;
 
-    get_group!(engine,t => match partk.take() {
+    engine.get_group(|engine,t| match partk.take() {
         None if t.is_parameter() =>
             partk = Some(t),
         Some(t2) if t.is_parameter() =>
@@ -582,12 +582,12 @@ pub fn dump<ET:EngineType>() {
 pub const EDEF: &str = "edef";
 pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool, protected:bool, long:bool, outer:bool) {
     debug_log!(trace=>"edef");
-    let csO = catch_prim!(engine.get_next_token() => (EDEF,cmd));
+    let csO = engine.get_next_token();
     let cs = match csO {
         None => file_end_prim!(DEF,cmd),
         Some((t,_)) => t
     };
-    let cm = match cs.as_command() {
+    let cm = match cs.as_cs_like() {
         None => throw!("Command expected after \\def" => cs),
         Some(cm) => cm
     };
@@ -598,7 +598,7 @@ pub fn edef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, g
 
     use super::etex::UNEXPANDED;
 
-    get_expanded_group!(engine,false,true,false,t => match partk.take() {
+    engine.get_expanded_group(false,true,false,|engine,t| match partk.take() {
         None if t.is_parameter() => partk = Some(t),
         Some(t2) if t.is_parameter() => replacement.push(ExpToken::Token(t2)),
         Some(t2) => match t.get_char() {
@@ -834,7 +834,7 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         None => file_end!(),
         Some((cs,_)) => cs
     };
-    let cm = match cs.as_command() {
+    let cm = match cs.as_cs_like() {
         None => throw!("Expected control sequence after \\futurelet" => cmd.cause),
         Some(cm) => cm
     };
@@ -846,10 +846,10 @@ pub fn futurelet<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
         None => file_end_prim!("futurelet",cmd),
         Some((t,_)) => t
     };
-    let newcmd = match second.as_command() {
+    let newcmd = match second.as_cs_like() {
         Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c).cloned(),
         Some(CSLike::CS(name)) => engine.state.get_command(name).cloned(),
-        None => todo!()//Some(Command::new(BaseCommand::Char{char:*c,catcode:*cc},Some(&cmd)))
+        None => Some(Command::new(second.to_command(),Some(&cmd)))
     };
     debug_log!(debug=>"\\futurelet: setting {} to {:?}",cs.printable(&engine.interner),newcmd);
     engine.set_command_for_tk(cm,newcmd,global);
@@ -1301,10 +1301,10 @@ pub fn inputlineno<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     ET::Int::from_i64(engine.mouth.line_no() as i64)
 }
 
-pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<ET::Token>) {
+pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"jobname");
     let jobname = engine.jobname.clone();
-    string_to_tokens!(jobname,t => exp.push(t));
+    crate::tex::token::tokenize_string(&jobname, cmd, |t| exp.push(t))
 }
 
 pub fn kern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
@@ -1373,7 +1373,7 @@ pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         None => file_end_prim!(LET,cmd),
         Some((t,_)) => t
     };
-    let cm = match cs.as_command() {
+    let cm = match cs.as_cs_like() {
         Some(cm) => cm,
         None => throw!("Expected a control sequence" => cs)
     };
@@ -1382,10 +1382,10 @@ pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, gl
         Some((t,_)) => t,
         None =>file_end_prim!(LET,cmd)
     };
-    let cmd = match target.as_command() {
+    let cmd = match target.as_cs_like() {
         Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c).map(|c|c.clone().copy_with(&cmd)),
         Some(CSLike::CS(name)) => engine.state.get_command(name).map(|c|c.clone().copy_with(&cmd)),
-        None => todo!()
+        None => Some(Command::new(target.to_command(),Some(cmd)))
     };
     debug_log!(debug=>"let: {} = {}",cs.printable(&engine.interner),cmd.as_ref().map(|c|c.base.as_str(&engine.interner)).unwrap_or("undefined".to_string()));
     engine.set_command_for_tk(cm,cmd,globally);
@@ -1440,7 +1440,7 @@ pub const LOWERCASE : &str = "lowercase";
 pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\lowercase");
     let mut rs = engine.mouth.get_expansion();
-    expand_until_group!(engine,next => match next.split_char_and_catcode() {
+    engine.expand_until_group(|engine,next| match next.split_char_and_catcode() {
         Some((c,cc)) => {
             let nc = engine.state.get_lccode(c);
             if nc.to_usize() == 0 { rs.push(next) }
@@ -1456,7 +1456,7 @@ pub fn mathchardef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     debug_log!(trace=>"mathchardef");
     let cm = match engine.get_next_token() {
         None => file_end!(),
-        Some((t,_)) => match t.as_command() {
+        Some((t,_)) => match t.as_cs_like() {
             Some(cm) => cm,
             None => throw!("Command expected after \\mathchardef" => t)
         }
@@ -1498,7 +1498,7 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
         None => file_end_prim!(MEANING,cmd),
         Some((_,false)) => {
             do_esc!();
-            string_to_tokens!(RELAX,t => exp.push(t));
+            crate::tex::token::tokenize_string(RELAX, cmd, |t| exp.push(t))
         }
         Some((t,_)) => {
             let n:ResolvedToken<ET> = resolve_token::<ET>(&engine.state,t);
@@ -1515,103 +1515,103 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                 BaseCommand::Char{char,..} => format!("the character {}",char.char_str()),
                 BaseCommand::Expandable {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::ExpandableNoTokens {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Unexpandable {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::OpenBox {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::FinishedBox {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Whatsit {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Assignment {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Relax => {
                     do_esc!();
-                    return string_to_tokens!(RELAX,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(RELAX, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Conditional {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::FontCommand {name,..} => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Int(ValueCommand::Value {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Int(ValueCommand::Complex {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Int(ValueCommand::Primitive(name)) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Dim(ValueCommand::Value {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Dim(ValueCommand::Complex {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Dim(ValueCommand::Primitive(name)) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Skip(ValueCommand::Value {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Skip(ValueCommand::Complex {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Skip(ValueCommand::Primitive(name)) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::MuSkip(ValueCommand::Value {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::MuSkip(ValueCommand::Complex {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::MuSkip(ValueCommand::Primitive(name)) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Toks(ToksCommand::Value {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Toks(ToksCommand::Complex {name,..}) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Toks(ToksCommand::Primitive(name)) => {
                     do_esc!();
-                    return string_to_tokens!(name,t => exp.push(t))
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::Int(ValueCommand::Register(u)) => {
                     do_esc!();
@@ -1645,32 +1645,32 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     format!("select font {}",engine.fontstore.get(fnt))
                 }
                 BaseCommand::None => {
-                    return string_to_tokens!("undefined",t => exp.push(t))
+                    return crate::tex::token::tokenize_string("undefined", cmd, |t| exp.push(t))
                 }
                 BaseCommand::Def(d) => {
                     let cc = engine.state.get_catcode_scheme().clone();
                     if d.protected {
                         do_esc!();
-                        string_to_tokens!("protected ",t => exp.push(t))
+                        crate::tex::token::tokenize_string("protected ", cmd, |t| exp.push(t))
                     }
                     if d.long {
                         do_esc!();
-                        string_to_tokens!("long ",t => exp.push(t))
+                        crate::tex::token::tokenize_string("long ", cmd, |t| exp.push(t))
                     }
                     if d.outer {
                         do_esc!();
-                        string_to_tokens!("outer ",t => exp.push(t))
+                        crate::tex::token::tokenize_string("outer ", cmd, |t| exp.push(t))
                     }
-                    string_to_tokens!("macro:",t => exp.push(t));
+                    crate::tex::token::tokenize_string("macro:", cmd, |t| exp.push(t));
                     let mut i = 0;
                     for s in &*d.signature {
                         match s {
                             ParamToken::Token(t) => {
-                                token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
+                                crate::tex::token::detokenize(true,&engine.state,&engine.interner,t, cmd, |t| exp.push(t));
                             }
                             ParamToken::Param => {
                                 i += 1;
-                                string_to_tokens!(format!("#{}", i),t => exp.push(t));
+                                crate::tex::token::tokenize_string(&format!("#{}", i), cmd, |t| exp.push(t));
                             }
                         }
                     }
@@ -1680,21 +1680,21 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     for t in &*d.replacement {
                         match t {
                             ExpToken::Token(t) if t.is_parameter() => {
-                                token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
-                                token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
+                                crate::tex::token::detokenize(true,&engine.state,&engine.interner,t, cmd, |t| exp.push(t));
+                                crate::tex::token::detokenize(true,&engine.state,&engine.interner,t, cmd, |t| exp.push(t));
                             }
                             ExpToken::Token(t) =>
-                                token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t)),
+                                crate::tex::token::detokenize(true,&engine.state,&engine.interner,t, cmd, |t| exp.push(t)),
                             ExpToken::Param(t, i) => {
-                                token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
-                                string_to_tokens!((i+1).to_string(),t => exp.push(t))
+                                crate::tex::token::detokenize(true,&engine.state,&engine.interner,t, cmd, |t| exp.push(t));
+                                crate::tex::token::tokenize_string(&(i+1).to_string(), cmd, |t| exp.push(t));
                             }
                         }
                     }
                     return ()
                 }
             };
-            string_to_tokens!(string,t => exp.push(t));
+            crate::tex::token::tokenize_string(&string, cmd, |t| exp.push(t));
         }
     }
 }
@@ -1923,7 +1923,7 @@ pub const NUMBER: &str = "number";
 pub fn number<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"\\number");
     let num = engine.get_int();
-    string_to_tokens!(num.to_i64().to_string(),t => exp.push(t));
+    crate::tex::token::tokenize_string(&num.to_i64().to_string(), cmd, |t| exp.push(t));
 }
 
 pub const OPENIN: &str = "openin";
@@ -2360,7 +2360,7 @@ pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
     match engine.get_next_token() {
         None => file_end_prim!("string",cmd),
         Some((t,_)) => {
-            token_to_others!(&engine.state,&engine.interner,t, false, t => exp.push(t));
+            crate::tex::token::detokenize(false,&engine.state,&engine.interner,&t, cmd, |t| exp.push(t));
         }
     }
 }
@@ -2385,55 +2385,53 @@ pub fn textfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
 }
 
 pub const THE : &str = "the";
-#[macro_export]
-macro_rules! do_the {
-    ($engine:expr,$t:ident => $f:expr) => {
-        todo!()
-        /*
-        match $engine.get_next_unexpandable_same_file() {
-            Some(c) => match c.command {
-                BaseCommand::Int(ass) => {
-                    let val = ass.get($engine,c.source);
-                    string_to_tokens!(format!("{}",val),$t => $f)
-                }
-                BaseCommand::Dim(ass) => {
-                    let val = ass.get($engine,c.source);
-                    string_to_tokens!(format!("{}",val),$t => $f)
-                }
-                BaseCommand::Skip(ass) => {
-                    let val = ass.get($engine,c.source);
-                    string_to_tokens!(format!("{}",val),$t => $f)
-                }
-                BaseCommand::MuSkip(ass) => {
-                    let val = ass.get($engine,c.source);
-                    string_to_tokens!(format!("{}",val),$t => $f)
-                }
-                BaseCommand::Toks(ass) => {
-                    let v = ass.get($engine, c.source).cloned();
-                    match v {
-                        Some(v) if !v.is_empty() => for $t in v { $f }
-                        _ => ()
-                    }
-                }
-                BaseCommand::MathChar(u) => string_to_tokens!(u.to_string(),$t => $f),
-                BaseCommand::CharDef(c) => string_to_tokens!(c.to_usize().to_string(),$t => $f),
-                BaseCommand::Font(fnt) => {
-                    let $t = ET::Token::new_cs_from_command($engine.fontstore.get(fnt).name(),c.reference); $f
-                },
-                BaseCommand::FontCommand {get,..} => {
-                    let fnt = get($engine,c.source);
-                    let $t = ET::Token::new_cs_from_command($engine.fontstore.get(fnt).name(),c.reference); $f
-                }
-                _ => throw!("Expected a value after \\the; got: {}", c.source.cause.printable(&$engine.interner) => c.source.cause)
+
+pub fn do_the<ET:EngineType,F: FnMut(&mut EngineRef<ET>, ET::Token)>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>,mut f:F) {
+    match engine.get_next_unexpandable_same_file() {
+        Some(c) => match c.command {
+            BaseCommand::Int(ass) => {
+                let val = ass.get(engine,c.source);
+                crate::tex::token::tokenize_string(&format!("{}", val), cmd, |t| f(engine, t))
             }
-            None => file_end!()
+            BaseCommand::Dim(ass) => {
+                let val = ass.get(engine,c.source);
+                crate::tex::token::tokenize_string(&format!("{}", val), cmd, |t| f(engine, t))
+            }
+            BaseCommand::Skip(ass) => {
+                let val = ass.get(engine,c.source);
+                crate::tex::token::tokenize_string(&format!("{}", val), cmd, |t| f(engine, t))
+            }
+            BaseCommand::MuSkip(ass) => {
+                let val = ass.get(engine,c.source);
+                crate::tex::token::tokenize_string(&format!("{}", val), cmd, |t| f(engine, t))
+            }
+            BaseCommand::Toks(ass) => {
+                let v = ass.get(engine, c.source).cloned();
+                match v {
+                    Some(v) if !v.is_empty() => for t in v { f(engine,t) }
+                        _ => ()
+                }
+            }
+            BaseCommand::MathChar(u) =>
+                crate::tex::token::tokenize_string(&u.to_string(), cmd, |t| f(engine, t)),
+            BaseCommand::CharDef(c) =>
+                crate::tex::token::tokenize_string(&c.to_usize().to_string(), cmd, |t| f(engine, t)),
+            BaseCommand::Font(fnt) => {
+                let t = ET::Token::new_cs_from_command(engine.fontstore.get(fnt).name(),&c.source); f(engine,t)
+            },
+            BaseCommand::FontCommand {get,..} => {
+                let fnt = get(engine,c.source.clone());
+                let t = ET::Token::new_cs_from_command(engine.fontstore.get(fnt).name(),&c.source); f(engine,t)
+            }
+            _ => throw!("Expected a value after \\the; got: {}", c.source.cause.printable(&engine.interner) => c.source.cause)
         }
-         */
+        None => file_end!()
     }
 }
+
 pub fn the<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace => "\\the");
-    do_the!(engine,t => exp.push(t));
+    do_the(engine,cmd,|_,t| exp.push(t));
 }
 
 pub fn time<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -2452,7 +2450,7 @@ pub fn toks_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     engine.skip_eq_char();
     let mut v = engine.memory.get_token_vec();
 
-    expand_until_group!(engine,t => v.push(t));
+    engine.expand_until_group(|_,t| v.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(v.push(t))) => (TOKS,cmd));
 
     debug_log!(debug=>"\\toks{} = {}",i,PrintableTokenList::<ET>(&v,&engine.interner));
@@ -2619,7 +2617,7 @@ pub const UPPERCASE: &str = "uppercase";
 pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\uppercase");
     let mut rs = engine.mouth.get_expansion();
-    expand_until_group!(engine,next => match next.split_char_and_catcode() {
+    engine.expand_until_group(|engine,next| match next.split_char_and_catcode() {
         Some((c,cc)) => {
             let nc = engine.state.get_uccode(c);
             if nc.to_usize() == 0 { rs.push(next) }
@@ -2859,7 +2857,7 @@ pub fn write<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     let i = i.to_i64();
     let mut tks = vec!();
 
-    get_group!(engine,t => tks.push(t));
+    engine.get_group(|_,t| tks.push(t));
     //catch_prim!(engine.get_group(&mut |_,t| Ok(tks.push(t))) => (WRITE,cmd));
     let ncmd = cmd.clone();
 
@@ -3024,7 +3022,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable_notk!(input,engine,(e,cmd) =>input::<ET>(e,&cmd));
     register_int!(inputlineno,engine,(e,cmd) => inputlineno::<ET>(e,&cmd));
     register_int_assign!(interlinepenalty,engine);
-    register_expandable!(jobname,engine,(e,_,f) =>jobname::<ET>(e,f));
+    register_expandable!(jobname,engine,(e,c,f) =>jobname::<ET>(e,&c,f));
     register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
     register_int_assign!(language,engine);
     register_box!(lastbox,engine,(e,cmd) =>lastbox::<ET>(e,&cmd));

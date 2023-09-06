@@ -1,16 +1,21 @@
 use std::any::Any;
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, Write};
 use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory};
 use crate::tex::token::Token;
 use crate::utils::strings::CharType;
 
-#[derive(Clone,Debug)]
+#[derive(Clone)]
 pub struct TeXError<ET:EngineType> {
     pub msg:String,
     pub cause:Option<ET::Token>,
     pub source:Option<Box<TeXError<ET>>>,
+}
+impl<ET:EngineType> std::fmt::Debug for TeXError<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.msg)
+    }
 }
 //impl<ET:EngineType> Any for TeXError<ET> {}
 //unsafe impl<ET:EngineType> Send for TeXError<ET> {}
@@ -27,6 +32,8 @@ impl<ET:EngineType> TeXError<ET> {
         PrintableError(self,interner)
     }
     pub fn throw_string<W:std::fmt::Write>(&self,interner:&Interner,w:&mut W) -> std::fmt::Result {
+        w.write_str(&self.msg);
+        w.write_char('\n');
         if let Some(cause) = &self.cause { cause.trace(interner,w)? }
         match &self.source {
             Some(src) => {

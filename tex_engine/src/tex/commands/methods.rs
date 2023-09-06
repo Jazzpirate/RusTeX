@@ -1,4 +1,4 @@
-use crate::{catch, catch_prim, debug_log, expand_until_group, file_end, file_end_prim, throw};
+use crate::{catch, catch_prim, debug_log, file_end, file_end_prim, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
@@ -54,7 +54,7 @@ pub fn set_toks_register<ET:EngineType>(engine:&mut EngineRef<ET>, u:usize, cmd:
     debug_log!(trace=>"Setting \\toks{}",u);
     engine.skip_eq_char();
     let mut tks = engine.memory.get_token_vec();
-    expand_until_group!(engine,t => tks.push(t));
+    engine.expand_until_group(|_,t| tks.push(t));
     //catch!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) =>cmd.cause);
     debug_log!(debug=>"\\{} = {}",u,PrintableTokenList::<ET>(&tks,&engine.interner));
     engine.state.set_toks_register(u,tks,global,&mut engine.memory);
@@ -94,7 +94,7 @@ pub fn set_primitive_toks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandS
     debug_log!(trace=>"Setting {}",name);
     engine.skip_eq_char();
     let mut tks = engine.memory.get_token_vec();
-    expand_until_group!(engine,t => tks.push(t));
+    engine.expand_until_group(|_,t| tks.push(t));
     //catch_prim!(engine.expand_until_group(&mut |_,t| Ok(tks.push(t))) => (name,cmd));
     debug_log!(debug=>"\\{} = {}",name,PrintableTokenList::<ET>(&tks,&engine.interner));
     if name == "output" {

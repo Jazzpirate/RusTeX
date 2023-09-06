@@ -1,12 +1,13 @@
 //! Default implementations for [`MouthTrait`] methods
 
 use crate::engine::mouth::{Mouth, MouthTrait};
-use crate::debug_log;
+use crate::{debug_log, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
+use crate::engine::state::State;
 
 impl<ET:EngineType> EngineRef<ET> {
     /// get the next [`Token`] from the [`MouthTrait`]
@@ -83,29 +84,23 @@ impl<ET:EngineType> EngineRef<ET> {
     pub fn current_position(&self) -> String {
         self.mouth.file_line(&self.interner)
     }
-}
 
-#[macro_export]
-macro_rules! get_until_endgroup {
-    ($engine:ident,$tk:ident => $f:expr) => {
+    pub fn get_until_endgroup<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self,mut f:F) {
         let mut ingroup = 0;
-        crate::get_while!(&mut $engine.mouth,&$engine.state,&mut $engine.interner,'A => $tk => {
-            if $tk.is_begin_group() { ingroup += 1 }
-            else if $tk.is_end_group() {
-                if ingroup == 0 { break 'A } else { ingroup -= 1 }
+        while let Some((tk,_)) = self.get_next_token() {
+            if tk.is_begin_group() { ingroup += 1 }
+            else if tk.is_end_group() {
+                if ingroup == 0 { break } else { ingroup -= 1 }
             }
-            $f
-        });
+            f(self,tk)
+        }
     }
-}
 
-#[macro_export]
-macro_rules! get_group {
-    ($engine:ident,$tk:ident => $f:expr) => {
-        match $engine.get_next_token() {
+    pub fn get_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self,mut f:F) {
+        match self.get_next_token() {
             Some((t,_)) if t.is_begin_group() => (),
             _ => throw!("begin group expected")
         }
-        crate::get_until_endgroup!($engine,$tk => $f);
+        self.get_until_endgroup(f);
     }
 }

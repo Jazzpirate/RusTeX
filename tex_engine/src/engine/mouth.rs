@@ -357,7 +357,7 @@ impl<ET:EngineType> Mouth<ET> {
             Some(t) if t.is_begin_group() => {
                 let mut depth = 1;
                 let par = engine.interner.par;
-                get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'A => tk => {
+                get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'A => t => {
                     if t.is_begin_group() { depth += 1}
                     else if t.is_end_group() {
                         depth -= 1;
@@ -368,7 +368,7 @@ impl<ET:EngineType> Mouth<ET> {
                             _ => ()
                         }
                     }
-                    v.push(tk);
+                    v.push(t);
                 });
             }
             Some(o) => {
@@ -386,13 +386,13 @@ impl<ET:EngineType> Mouth<ET> {
             None => file_end!(),
             Some(t) if t.is_begin_group() => {
                 let mut ingroup = 1;
-                get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'A => tk => {
+                get_while!(&mut engine.mouth,&engine.state,&mut engine.interner,'A => t => {
                     if t.is_begin_group() {ingroup += 1}
                     else if t.is_end_group() {
                         ingroup -= 1;
                         if ingroup == 0 { break 'A }
                     }
-                    vec.push(tk);
+                    vec.push(t);
                 })
             }
             Some(o) => {

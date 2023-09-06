@@ -2,7 +2,7 @@
 //! Use [`initialize_pdftex_primitives`] to register all of these.
 
 use std::marker::PhantomData;
-use crate::{cmtodo, debug_log, file_end,register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit, register_value_assign_int, token_to_others, string_to_tokens};
+use crate::{cmtodo, debug_log, file_end,register_conditional, register_dim_assign, register_int, register_int_assign, register_unexpandable, register_expandable, catch_prim, throw, register_tok_assign, cmstodo, register_whatsit, register_value_assign_int};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::methods::get_keywords;
@@ -11,7 +11,7 @@ use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::numbers::{Int,Dim};
-use crate::tex::token::Token;
+use crate::tex::token::{DeTokenizer, Token};
 use crate::tex::commands::CommandSource;
 use crate::tex::fonts::{Font, FontStore};
 use crate::tex::nodes::{CustomNode, HVBox, NodeTrait, TeXNode, Whatsit};
@@ -473,7 +473,9 @@ pub fn pdfescapestring<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
     use crate::utils::strings::AllCharsTrait;
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
-    crate::get_expanded_group!(engine,false,false,true,next => token_to_others!(&engine.state,&engine.interner,next,true,t => exp.push(t))); // TODO:actual escaping
+    engine.get_expanded_group(false,false,true,|engine,t|
+        crate::tex::token::detokenize(true,&engine.state,&engine.interner,&t, cmd, |t| exp.push(t))
+    ); // TODO:actual escaping
 }
 
 /// "pdffilesize"
@@ -490,7 +492,7 @@ pub fn pdffilesize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     match f.content_string() {
         None => (),
         Some(v) =>{
-            string_to_tokens!(v.iter().map(|b| b.len()).sum::<usize>().to_string(),t => exp.push(t))
+            crate::tex::token::tokenize_string(&v.iter().map(|b| b.len()).sum::<usize>().to_string(), cmd, |t| exp.push(t))
         }
     }
 }
@@ -508,7 +510,7 @@ pub fn pdffontexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
 pub fn pdffontsize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     let fnt = engine.get_font();
     let d = ET::Dim::from_sp(engine.fontstore.get(fnt).get_at());
-    string_to_tokens!(format!("{}",d),t => exp.push(t))
+    crate::tex::token::tokenize_string(&format!("{}", d), cmd, |t| exp.push(t))
 }
 
 /// "pdfglyphtounicode"
@@ -620,7 +622,10 @@ pub fn pdfstrcmp<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     engine.get_braced_string(&mut str2);
     debug_log!(trace=>"pdfstrcmp: {}=={}?",str1,str2);
     if str1==str2 {exp.push(ET::Token::new_char_from_command(b'0'.into(),CategoryCode::Other,cmd))}
-        else if str1 < str2 { string_to_tokens!("-1",t => exp.push(t))}
+        else if str1 < str2 {
+            exp.push(ET::Token::new_char_from_command(b'-'.into(),CategoryCode::Other,cmd));
+            exp.push(ET::Token::new_char_from_command(b'1'.into(),CategoryCode::Other,cmd));
+        }
         else {exp.push(ET::Token::new_char_from_command(b'1'.into(),CategoryCode::Other,cmd))}
     engine.memory.return_string(str1);
     engine.memory.return_string(str2);
@@ -723,7 +728,7 @@ pub fn pdfmdfivesum<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
         engine.memory.return_string(ret);
         r
     };
-    string_to_tokens!(format!("{:X}",domd),t => exp.push(t))
+    crate::tex::token::tokenize_string(&format!("{:X}", domd), cmd, |t| exp.push(t))
 }
 
 /// "pdfshellescape"
@@ -736,8 +741,8 @@ pub fn pdfshellescape<ET:EngineType>(cmd:&CommandSource<ET>) -> ET::Int {
 /// "pdftexrevision"
 pub const PDFTEXREVISION : &str = "pdftexrevision";
 /// `\pdftexrevision`: expands to the [`PDFTEX_REVISION`] (`25`).
-pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<ET::Token>) {
-    string_to_tokens!(PDFTEX_REVISION.to_string(),t => exp.push(t))
+pub fn pdftexrevision<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
+    crate::tex::token::tokenize_string(&PDFTEX_REVISION.to_string(), cmd, |t| exp.push(t))
 }
 
 
@@ -823,7 +828,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,&cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(&c));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,&cmd,f));
-    register_expandable!(pdftexrevision,engine,(e,_,f) =>pdftexrevision::<ET>(e,f));
+    register_expandable!(pdftexrevision,engine,(e,c,f) =>pdftexrevision::<ET>(e,&c,f));
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(&c));
     register_dim_assign!(pdfvorigin,engine);
     register_unexpandable!(pdfxform,engine,None,(e,cmd) =>pdfxform::<ET>(e,&cmd));

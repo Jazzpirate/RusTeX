@@ -482,7 +482,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             Int(ValueCommand::Value {..}) | Dim(ValueCommand::Value {..}) | Skip(ValueCommand::Value {..})|
             MuSkip(ValueCommand::Value {..}) | Toks(ToksCommand::Value {..}) | FontCommand{set:std::option::Option::None,..} =>
                 throw!("Not allowed in the stomach: {}",value.as_str(interner)),
-            None => match source.cause.as_command() {
+            None => match source.cause.as_cs_like() {
                 Some(CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c),
                 Some(CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(interner)),
                 _ => unreachable!()
@@ -558,8 +558,8 @@ impl<ET:EngineType> PartialEq for Def<ET> {
 pub struct DefPrintable<'a,ET:EngineType>(&'a Def<ET>,&'a Interner);
 impl<'a,ET:EngineType> std::fmt::Display for DefPrintable<'a,ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut consumer = StringConsumer::simple(self.1,f);
-        self.0.meaning(consumer);Ok(())
+        let mut consumer = StringConsumer::simple(f);
+        self.0.meaning(consumer,self.1);Ok(())
     }
 }
 
@@ -578,11 +578,11 @@ impl<ET:EngineType> Def<ET>{
             replacement:replacement.into()
         }
     }
-    pub fn meaning<T:TokenConsumer<ET>>(&self,consumer:T) { todo!() }
-    pub fn as_str<'a>(&'a self,interner:&'a Interner) -> DefPrintable<'a,ET> {
+    pub fn meaning<T:TokenConsumer<ET>>(&self,consumer:T,int:&Interner) { todo!() }
+    /*pub fn as_str<'a>(&'a self,interner:&'a Interner) -> DefPrintable<'a,ET> {
         DefPrintable(self,interner)
-    }
-    /*
+    }*/
+
     pub fn as_str(&self,interner:&Interner) -> String {
         let mut s = String::new();
         let mut ind = 0;
@@ -593,7 +593,7 @@ impl<ET:EngineType> Def<ET>{
                     s.push('#');
                     s.push_str(&ind.to_string());
                 },
-                ParamToken::Token(t) => s.push_str(&t.to_str(interner,Some(ET::Char::backslash())))
+                ParamToken::Token(t) => s.push_str(&t.printable(interner).to_string())
             }
         }
         if self.endswithbrace {
@@ -602,11 +602,11 @@ impl<ET:EngineType> Def<ET>{
         s.push('{');
         for r in &*self.replacement {
             match r {
-                ExpToken::Token(t) if t.catcode() == CategoryCode::Parameter => {
-                    s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));
-                    s.push_str(&t.to_str(interner,Some(ET::Char::backslash())));
+                ExpToken::Token(t) if t.is_parameter() => {
+                    s.push_str(&t.printable(interner).to_string());
+                    s.push_str(&t.printable(interner).to_string());
                 }
-                ExpToken::Token(t) => s.push_str(&t.to_str(interner,Some(ET::Char::backslash()))),
+                ExpToken::Token(t) => s.push_str(&t.printable(interner).to_string()),
                 ExpToken::Param(i,u) => {
                     s.push('#');
                     s.push_str(&(u+1).to_string());
@@ -615,7 +615,7 @@ impl<ET:EngineType> Def<ET>{
         }
         s.push('}');
         s
-    }*/
+    }
 }
 impl<ET:EngineType> Debug for Def<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

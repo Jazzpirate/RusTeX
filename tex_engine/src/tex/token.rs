@@ -1,11 +1,12 @@
 use std::fmt::{Debug, Display};
-use crate::engine::EngineType;
+use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory, Symbol};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::commands::CommandSource;
+use crate::tex::commands::{BaseCommand, CommandSource};
 use crate::utils::Ptr;
 use crate::utils::strings::{CharType, TeXStr};
 use std::fmt::Write;
+use crate::engine::state::State;
 use crate::utils::strings::AllCharsTrait;
 
 /// Tokens are the basic building blocks of TeX. They are either control sequences or characters.
@@ -41,7 +42,7 @@ pub trait Token:Clone+Debug+Send+PartialEq {
         }
     }
     /// Should be true iff this is a control sequence or an active character
-    fn as_command(&self) -> Option<CSLike<Self::Char>>;
+    fn as_cs_like(&self) -> Option<CSLike<Self::Char>>;
     fn is_parameter(&self) -> bool;
     fn is_begin_group(&self) -> bool;
     fn is_end_group(&self) -> bool;
@@ -52,6 +53,7 @@ pub trait Token:Clone+Debug+Send+PartialEq {
     fn get_catcode(&self) -> CategoryCode;
     fn split_char_and_catcode(&self) -> Option<(Self::Char,CategoryCode)>;
     fn get_cs_name(&self) -> Option<TeXStr>;
+    fn to_command<ET: EngineType<Token=Self,Char=Self::Char>>(&self) -> BaseCommand<ET>;
     /// if `self.catcode == CategoryCode::Space`, should return `Err(Self::Char::space())`
     fn name_or_char(&self) -> Result<TeXStr,Self::Char>;
     fn printable<'a>(&'a self,interner:&'a Interner) -> PrintToken<'a,Self> { PrintToken(self, interner) }
@@ -65,17 +67,27 @@ pub trait Token:Clone+Debug+Send+PartialEq {
     },*/
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Copy,Clone,Debug)]
 pub enum PlainToken<C:CharType> {
     CS(TeXStr),
     Character(C, CategoryCode)
+}
+impl<C:CharType> PartialEq for PlainToken<C> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self,other) {
+            (PlainToken::CS(a),PlainToken::CS(b)) => a == b,
+            (PlainToken::Character(_,CategoryCode::Space),PlainToken::Character(_,CategoryCode::Space)) => true,
+            (PlainToken::Character(a,ca),PlainToken::Character(b,cb)) => a == b && ca == cb,
+            _ => false
+        }
+    }
 }
 impl<C:CharType> Token for PlainToken<C> {
     type Char = C;
     fn trace<W: Write>(&self, interner: &Interner, w: &mut W) -> std::fmt::Result {
         Ok(())
     }
-    fn as_command(&self) -> Option<CSLike<Self::Char>> {
+    fn as_cs_like(&self) -> Option<CSLike<Self::Char>> {
         match self {
             PlainToken::CS(name) => Some(CSLike::CS(*name)),
             PlainToken::Character(c, CategoryCode::Active) => Some(CSLike::ActiveChar(*c)),
@@ -170,76 +182,95 @@ impl<C:CharType> Token for PlainToken<C> {
             _ => None
         }
     }
+    fn to_command<ET: EngineType<Token=Self,Char=Self::Char>>(&self) -> BaseCommand<ET> {
+        match self {
+            PlainToken::CS(name) => BaseCommand::None,
+            PlainToken::Character(c,cc) => BaseCommand::Char{char:*c,catcode:*cc}
+        }
+    }
 }
 
 pub trait TokenConsumer<ET:EngineType> {
-    fn consume_tk(&mut self,token:&ET::Token);
-    fn consume_str(&mut self,string:&str);
+    fn consume_tk(&mut self,token:&ET::Token,int:&Interner);
+    fn consume_str(&mut self,string:&str,int:&Interner);
 }
-pub struct StringConsumer<'a,W:Write,ET:EngineType>{int:&'a Interner,write:W,esc:Option<ET::Char>,cc:Option<&'a CategoryCodeScheme<ET::Char>>}
+pub struct StringConsumer<'a,W:Write,ET:EngineType>{write:W,esc:Option<ET::Char>,cc:Option<&'a CategoryCodeScheme<ET::Char>>}
 impl<'a,W:Write,ET:EngineType> StringConsumer<'a,W,ET> {
-    pub fn simple(interner:&'a Interner,w:W) -> StringConsumer<'a,W,ET> {
-        StringConsumer{int:interner,write:w,esc:Some(ET::Char::backslash()),cc:None}
+    pub fn simple(w:W) -> StringConsumer<'a,W,ET> {
+        StringConsumer{write:w,esc:Some(ET::Char::backslash()),cc:None}
     }
 }
 impl<'a,W:Write,ET:EngineType> TokenConsumer<ET> for StringConsumer<'a,W,ET> {
-    fn consume_str(&mut self, string: &str) {
+    fn consume_str(&mut self, string: &str,_:&Interner) {
         self.write.write_str(string).unwrap();
     }
-    fn consume_tk(&mut self, token: &ET::Token) {
-        token.to_str(self.int,self.esc,self.cc,&mut self.write).unwrap();
+    fn consume_tk(&mut self, token: &ET::Token,int:&Interner) {
+        token.to_str(int,self.esc,self.cc,&mut self.write).unwrap();
     }
 }
 pub struct DeTokenizer<'a,ET:EngineType,F :FnMut(ET::Token)> {
     f:F,
-    int:&'a Interner,
     esc:Option<ET::Char>,
     cc:&'a CategoryCodeScheme<ET::Char>,
     src:&'a CommandSource<ET>
 }
+pub fn tokenize_string<ET:EngineType,F:FnMut(ET::Token)>(string: &str, src:&CommandSource<ET>, mut f:F) {
+    let mut iter = string.as_bytes().iter().map(|c| *c);
+    while let Some(c) = ET::Char::from_u8_iter(&mut iter,&mut 0) {
+        match c {
+            s if s == ET::Char::space() => f(ET::Token::new_space_from_command::<ET>(src)),
+            _ => f(ET::Token::new_char_from_command::<ET>(c,CategoryCode::Other,src))
+        }
+    }
+}
+pub fn detokenize<ET:EngineType,F:FnMut(ET::Token)>(insert_space:bool,state:&ET::State,int:&Interner,token:&ET::Token,src:&CommandSource<ET>,mut f:F) {
+    detokenizeI(insert_space,token,int,state.get_escapechar(),state.get_catcode_scheme(),src,f)
+}
+fn detokenizeI<ET:EngineType,F:FnMut(ET::Token)>(insert_space:bool,token:&ET::Token,int:&Interner,esc:Option<ET::Char>,cc:&CategoryCodeScheme<ET::Char>,src:&CommandSource<ET>, mut f:F) {
+    match token.name_or_char() {
+        Ok(name) => {
+            match esc {
+                Some(c) => f(ET::Token::new_char_from_command(c,CategoryCode::Other,src)),
+                None => ()
+            }
+            let name = name.to_str(int);
+            let mut iter = name.as_bytes().iter().map(|c| *c);
+            let mut len = 0;
+            let mut first = None;
+            while let Some(c) = ET::Char::from_u8_iter(&mut iter,&mut 0) {
+                len += 1;
+                match first {
+                    None => first = Some(c),
+                    _ => ()
+                }
+                f(ET::Token::new_char_from_command(c,CategoryCode::Other,src));
+            }
+            if insert_space {
+                if len == 1 {
+                    let first = first.unwrap();
+                    if *cc.get(first) == CategoryCode::Letter {
+                        f(ET::Token::new_space_from_command(src));
+                    }
+                } else {
+                    f(ET::Token::new_space_from_command(src));
+                }
+            }
+        }
+        Err(c) => f(ET::Token::new_char_from_command(c,CategoryCode::Other,src))
+    }
+}
+
 impl<'a,ET:EngineType,F:FnMut(ET::Token)> DeTokenizer<'a,ET,F> {
-    fn new(f:F,escapechar:Option<ET::Char>,interner:&'a Interner,cc:&'a CategoryCodeScheme<ET::Char>,src:&'a CommandSource<ET>) -> Self {
-        Self{f,int:interner,esc:escapechar,cc,src}
+    fn new(f:F,escapechar:Option<ET::Char>,cc:&'a CategoryCodeScheme<ET::Char>,src:&'a CommandSource<ET>) -> Self {
+        Self{f,esc:escapechar,cc,src}
     }
 }
 impl<'a,ET:EngineType,F:FnMut(ET::Token)> TokenConsumer<ET> for DeTokenizer<'a,ET,F> {
-    fn consume_tk(&mut self, token: &ET::Token) {
-        match token.name_or_char() {
-            Ok(name) => {
-                match self.esc {
-                    Some(c) => (self.f)(ET::Token::new_char_from_command(c,CategoryCode::Other,self.src)),
-                    None => ()
-                }
-                let name = name.to_str(self.int);
-                let mut iter = name.as_bytes().iter().map(|c| *c);
-                let mut len = 0;
-                let mut first = None;
-                while let Some(c) = ET::Char::from_u8_iter(&mut iter,&mut 0) {
-                    len += 1;
-                    match first {
-                        None => first = Some(c),
-                        _ => ()
-                    }
-                    (self.f)(ET::Token::new_char_from_command(c,CategoryCode::Other,self.src));
-                }
-                if len == 1 {
-                    let first = first.unwrap();
-                    if *self.cc.get(first) != CategoryCode::Letter {
-                        (self.f)(ET::Token::new_space_from_command(self.src));
-                    }
-                }
-            }
-            Err(c) => (self.f)(ET::Token::new_char_from_command(c,CategoryCode::Other,self.src))
-        }
+    fn consume_tk(&mut self, token: &ET::Token,int:&Interner) {
+        detokenizeI(true,token,int,self.esc,self.cc,self.src,&mut self.f)
     }
-    fn consume_str(&mut self, string: &str) {
-        let mut iter = string.as_bytes().iter().map(|c| *c);
-        while let Some(c) = ET::Char::from_u8_iter(&mut iter,&mut 0) {
-            match c {
-                s if s == ET::Char::space() => (self.f)(ET::Token::new_space_from_command(self.src)),
-                _ => (self.f)(ET::Token::new_char_from_command(c,CategoryCode::Other,self.src))
-            }
-        }
+    fn consume_str(&mut self, string: &str,int:&Interner) {
+        tokenize_string(string, self.src, &mut self.f)
     }
 }
 

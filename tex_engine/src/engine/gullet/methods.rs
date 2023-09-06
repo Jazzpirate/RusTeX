@@ -1,5 +1,5 @@
 //! Default implementations for [`Gullet`] methods.
-use crate::{debug_log, file_end, throw,string_to_tokens};
+use crate::{debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::Interner;
@@ -46,12 +46,27 @@ pub fn get_next_unexpandable_same_file<ET:EngineType>(engine:&mut EngineRef<ET>)
 
 /// Resolves the given [`Token`]
 pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:ET::Token) -> ResolvedToken<ET> {
-    let cmd = match tk.as_command() {
-        None => todo!(),
+    let cmd = match tk.as_cs_like() {
+        None => return ResolvedToken {
+            command: tk.to_command(),
+            source: CommandSource { cause: tk, reference: None },
+            expand: true
+        },
         Some(CSLike::CS(name)) => state.get_command(name),
         Some(CSLike::ActiveChar(c)) => state.get_ac_command(c)
     };
-    todo!()
+    match cmd {
+        Some(c) => ResolvedToken {
+            command: c.base.clone(),
+            source: CommandSource { cause: tk, reference: c.reference.clone() },
+            expand: true
+        },
+        None => ResolvedToken {
+            command: BaseCommand::None,
+            source: CommandSource { cause: tk, reference: None },
+            expand: true
+        }
+    }
     /*
     match match &tk.base {
         BaseToken::Char(c, CategoryCode::Active) => state.get_ac_command(c),
@@ -106,71 +121,37 @@ pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str
     for i in 0..incond {
         engine.gullet.pop_conditional();
     }
-    while let Some((next,exp)) = engine.get_next_token() {
-        todo!()
-        /*
-        match &next.base {
-            BaseToken::Char(c,CategoryCode::Active) =>
-                match engine.state.get_ac_command(c).map(|c| &c.base) {
-                    Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 => {
-                        debug_log!(trace=>"...else branch.");
-                        engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
-                        return ()
-                    }
-                    Some(BaseCommand::ExpandableNoTokens {name:"or",..}) if incond == 0 && condname == "ifcase" => {
-                        match engine.gullet.current_conditional() {
-                            (Some(ConditionalBranch::Case(i, j)),_) => {
-                                engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
-                                if i == ((j+1) as i64) {
-                                    debug_log!(trace=>"...or branch.");
-                                    return ()
-                                }
-                            }
-                            _ => unreachable!()
-                        }
-                    }
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
-                        debug_log!(trace=>"...end of conditional.");
-                        engine.gullet.pop_conditional();
-                        return ()
-                    }
-                    _ => ()
+    while let Some((next,_)) = engine.get_next_token() {
+        match next.as_cs_like() {
+            Some(_) => match resolve_token::<ET>(&engine.state,next).command {
+                BaseCommand::Conditional {..} => incond += 1,
+                BaseCommand::ExpandableNoTokens {name:"else",..} if incond == 0 => {
+                    engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
+                    debug_log!(trace=>"...else branch.");
+                    return ()
                 }
-            BaseToken::CS(name) => {
-                match engine.state.get_command(name).as_deref().map(|c| &c.base) {
-                    Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 => {
-                        engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
-                        debug_log!(trace=>"...else branch.");
-                        return ()
-                    }
-                    Some(BaseCommand::ExpandableNoTokens {name:"or",..}) if incond == 0 && condname == "ifcase" => {
-                        match engine.gullet.current_conditional() {
-                            (Some(ConditionalBranch::Case(i, j)),_) => {
-                                engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
-                                if i == ((j+1) as i64) {
-                                    debug_log!(trace=>"...or branch.");
-                                    return ()
-                                }
+                BaseCommand::ExpandableNoTokens {name:"or",..} if incond == 0 && condname == "ifcase" => {
+                    match engine.gullet.current_conditional() {
+                        (Some(ConditionalBranch::Case(i, j)),_) => {
+                            engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
+                            if i == ((j+1) as i64) {
+                                debug_log!(trace=>"...or branch.");
+                                return ()
                             }
-                            _ => unreachable!()
                         }
+                        _ => unreachable!()
                     }
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
-                        debug_log!(trace=>"...end of conditional.");
-                        engine.gullet.pop_conditional();
-                        return ()
-                    }
-                    _ => ()
                 }
+                BaseCommand::ExpandableNoTokens {name:"fi",..} if incond > 0 => incond -= 1,
+                BaseCommand::ExpandableNoTokens {name:"fi",..} => {
+                    debug_log!(trace=>"...end of conditional.");
+                    engine.gullet.pop_conditional();
+                    return ()
+                }
+                _ => ()
             }
             _ => ()
         }
-
-         */
     }
     file_end!()
 }
@@ -180,50 +161,28 @@ pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,
     engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
     let mut incond:usize = engine.gullet.current_conditional().1 - condidx;
     while let Some((next,exp)) = engine.get_next_token() {
-        todo!()
-        /*
-        match &next.base {
-            BaseToken::Char(c,CategoryCode::Active) =>
-                match engine.state.get_ac_command(c).as_deref().map(|c| &c.base) {
-                    Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 && !allowelse => {
-                        throw!("Unexpected \\else" => next)
-                    }
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
-                        debug_log!(trace=>"...end of conditional.");
-                        engine.gullet.pop_conditional();
-                        return ()
-                    }
-                    _ => ()
+        match next.as_cs_like() {
+            Some(_) => match resolve_token::<ET>(&engine.state,next).command {
+                BaseCommand::Conditional {..} => incond += 1,
+                BaseCommand::ExpandableNoTokens {name:"else",..} if incond == 0 && !allowelse => {
+                    throw!("Unexpected \\else")
                 }
-            BaseToken::CS(name) => {
-                match engine.state.get_command(name).as_deref().map(|c| &c.base) {
-                    Some(BaseCommand::Conditional {..}) => incond += 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"else",..}) if incond == 0 && !allowelse => {
-                        throw!("Unexpected \\else" => next)
-                    }
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) if incond > 0 => incond -= 1,
-                    Some(BaseCommand::ExpandableNoTokens {name:"fi",..}) => {
-                        debug_log!(trace=>"...end of conditional.");
-                        engine.gullet.pop_conditional();
-                        return ()
-                    }
-                    _ => ()
+                BaseCommand::ExpandableNoTokens {name:"fi",..} if incond > 0 => incond -= 1,
+                BaseCommand::ExpandableNoTokens {name:"fi",..} => {
+                    debug_log!(trace=>"...end of conditional.");
+                    engine.gullet.pop_conditional();
+                    return ()
                 }
+                _ => ()
             }
             _ => ()
         }
-
-         */
     }
     file_end!()
 }
 
 pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> bool {
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
-    todo!()
-    /*
     let mut current = engine.memory.get_string();
     let mut rs = engine.mouth.get_expansion();
     while let Some(next) = engine.get_next_unexpandable_same_file() {
@@ -252,14 +211,10 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> b
         }
     }
     file_end!()
-
-     */
 }
 
 pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Vec<&'a str>) -> Option<&'a str> {
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
-    todo!()
-    /*
     let mut current = String::new();
     let mut rs = engine.mouth.get_expansion();
     while let Some(next) = engine.get_next_unexpandable_same_file() {
@@ -305,8 +260,6 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
         }
     }
     file_end!()
-
-     */
 }
 
 pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
@@ -330,16 +283,14 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
 }
 
 pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
-    let mut s = StringConsumer::<&mut String,ET>::simple(&engine.interner,ret);
-    crate::get_expanded_group!(engine,false,false,true,t => s.consume_tk(&t));
+    let mut s = StringConsumer::<&mut String,ET>::simple(ret);
+    engine.get_expanded_group(false,false,true,|engine,t| s.consume_tk(&t,&engine.interner));
 }
 
 pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineRef<ET>) -> CSLike<ET::Char> {
     engine.skip_whitespace();
     while let Some((next,e)) = engine.get_next_token() {
         let resolved = resolve_token::<ET>(&engine.state,next);
-        todo!()
-        /*
         match resolved.command {
             BaseCommand::Char{char,catcode:CategoryCode::Active} =>
                 match get_cs_check_command::<ET>(engine, resolved) {
@@ -347,7 +298,7 @@ pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineRef<ET>) -> CSLike<
                     Some(t) => return t,
                 }
             BaseCommand::Char{..} => {
-                todo!()
+                throw!("Control sequence expected")
                 // error
             }
             _ => match get_cs_check_command::<ET>(engine, resolved) {
@@ -355,19 +306,18 @@ pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineRef<ET>) -> CSLike<
                 Some(t) => return t,
             }
         }
-         */
     }
     file_end!()
 }
 
 fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:ResolvedToken<ET>)
-                                       -> Option<ET::Token> {
+                                       -> Option<CSLike<ET::Char>> {
     match resolved.command {
         BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } | BaseCommand::ExpandableNoTokens {..} => {
             engine.expand(resolved);
             None
         },
-        _ => Some(resolved.source.cause)
+        _ => Some(resolved.source.cause.as_cs_like().unwrap())
     }
 }
 
@@ -386,9 +336,22 @@ pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRef {
 
 
 impl<ET:EngineType> EngineRef<ET> {
-
+    #[inline(never)]
     pub fn eat_relax(&mut self) {
-        todo!()
+        match self.get_next_token() {
+            Some((t,_)) => match t.as_cs_like() {
+                Some(CSLike::CS(n)) => match self.state.get_command(n) {
+                    Some(c) if c.base == BaseCommand::Relax => (),
+                    _ => self.mouth.requeue(t)
+                }
+                Some(CSLike::ActiveChar(c)) => match self.state.get_ac_command(c) {
+                    Some(c) if c.base == BaseCommand::Relax => (),
+                    _ => self.mouth.requeue(t)
+                }
+                _ => self.mouth.requeue(t)
+            }
+            _ => ()
+        }
     }
 
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
@@ -409,13 +372,13 @@ impl<ET:EngineType> EngineRef<ET> {
     }
 
     /// read a single keyword from the input stream; returns `true` if the keyword is found.
-    pub fn get_keyword<'a>(&mut self, keyword:&'a str) -> bool {
+    pub fn get_keyword<'a>(&mut self, keyword: &'a str) -> bool {
         ET::Gullet::get_keyword(self, keyword)
     }
 
     /// reads one of several optional keywords from the input stream;
     /// returns `None` if none of the keywords are found.
-    pub fn get_keywords<'a>(&mut self, keywords:Vec<&'a str>) -> Option<&'a str> {
+    pub fn get_keywords<'a>(&mut self, keywords: Vec<&'a str>) -> Option<&'a str> {
         ET::Gullet::get_keywords(self, keywords)
     }
 
@@ -435,7 +398,7 @@ impl<ET:EngineType> EngineRef<ET> {
     }
 
     /// Reads a muskip from the input stream.
-    pub fn get_muskip(&mut self) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
+    pub fn get_muskip(&mut self) -> MuSkip<ET::MuDim, ET::MuStretchShrinkDim> {
         ET::Gullet::get_muskip(self)
     }
 
@@ -451,23 +414,23 @@ impl<ET:EngineType> EngineRef<ET> {
         }
     }
 
-    pub fn get_string(&mut self,string:&mut String) {
-        ET::Gullet::get_string(self,string)
+    pub fn get_string(&mut self, string: &mut String) {
+        ET::Gullet::get_string(self, string)
     }
 
-    pub fn get_braced_string(&mut self,string:&mut String) {
-        get_braced_string::<ET>(self,string)
+    pub fn get_braced_string(&mut self, string: &mut String) {
+        get_braced_string::<ET>(self, string)
     }
 
     pub fn get_font(&mut self) -> ET::FontRef {
         ET::Gullet::get_font(self)
     }
 
-    pub fn is_next_char_one_of(&mut self,chars:&'static [u8]) -> Option<u8> {
+    pub fn is_next_char_one_of(&mut self, chars: &'static [u8]) -> Option<u8> {
         match self.get_next_unexpandable_same_file() {
             None => file_end!(),
             Some(res) => match res.command {
-                BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                BaseCommand::Char { char, .. } if char.as_bytes().len() == 1 => {
                     let c = char.as_bytes()[0];
                     if chars.contains(&c) {
                         Some(c)
@@ -484,11 +447,11 @@ impl<ET:EngineType> EngineRef<ET> {
         }
     }
 
-    pub fn is_next_char(&mut self,char:u8) -> bool {
+    pub fn is_next_char(&mut self, char: u8) -> bool {
         match self.get_next_unexpandable_same_file() {
             None => file_end!(),
             Some(res) => match res.command {
-                BaseCommand::Char { char:c, .. } if c.as_bytes() == [char] => true,
+                BaseCommand::Char { char: c, .. } if c.as_bytes() == [char] => true,
                 _ => {
                     self.mouth.requeue(res.source.cause);
                     false
@@ -497,148 +460,89 @@ impl<ET:EngineType> EngineRef<ET> {
         }
     }
 
-
-    pub fn expand(&mut self,r:ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
-        ET::Gullet::expand(self,r)
+    pub fn expand(&mut self, r: ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
+        ET::Gullet::expand(self, r)
     }
-}
 
-#[macro_export]
-macro_rules! string_to_tokens {
-    ($s:expr,$t:ident => $f:expr) => {
-        for u in $s.as_bytes() {
-            let c = ET::Char::from(*u);
-            todo!()
-            //let $t = Token::<ET>::new(BaseToken::Char(c,if *u == 32 {CategoryCode::Space} else {CategoryCode::Other}),None);
-            //$f
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! token_to_others {
-    ($state:expr,$interner:expr,$tk:expr,$insertspace:expr,$nt:ident => $f:expr) => {
-        todo!()
-        /*
-        match &$tk.base {
-            BaseToken::Char(c,_) if c.to_usize() == 32 => {
-                let $nt = Token::new(BaseToken::Char(*c,CategoryCode::Space),None);$f
-            },
-            BaseToken::Char(c,CategoryCode::Space) => {
-                let $nt = Token::new(BaseToken::Char(*c,CategoryCode::Space),None); $f
-            }
-            BaseToken::Char(c,_) => {
-                let $nt = Token::new(BaseToken::Char(*c,CategoryCode::Other),None); $f
-            }
-            BaseToken::CS(str) => {
-                match $state.get_escapechar() {
-                    None => (),
-                    Some(c) => {
-                        let $nt = Token::new(BaseToken::Char(c,CategoryCode::Other),None);$f
-                    }
-                }
-                let str = ET::Char::tokenize(str.to_str($interner)).to_vec();
-                for c in &str {
-                    let $nt = Token::new(BaseToken::Char(*c, if c.to_usize() == 32 { CategoryCode::Space } else { CategoryCode::Other }),None);
-                    $f
-                }
-                if $insertspace && !(str.len() == 1 && *$state.get_catcode_scheme().get(&str[0]) != CategoryCode::Letter) {
-                    let $nt = Token::new(BaseToken::Char(ET::Char::from(32),CategoryCode::Space),None); $f
-                }
-            }
-        }
-         */
-    };
-}
-
-#[macro_export]
-macro_rules! expand_until_group {
-    ($engine:ident,$tk:ident => $f:expr) => {
-        match $engine.get_next_unexpandable_same_file() {
-            None => crate::file_end!(),
-            Some(res) => match res.command {
-                BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    crate::get_until_endgroup!($engine,$tk => $f);
-                    //ET::Mouth::get_until_endgroup(self,f)
-                }
-                _ => throw!("begin group expected; found: {}",res.source.cause.printable(&$engine.interner))
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! get_expanded_group {
-    ($engine:ident,$expand_protected:expr,$edef_like:expr,$err_on_unknowns:expr,$tk:ident => $f:expr) => {
-        todo!()
-        /*
-        match $engine.mouth.get_next(&$engine.state,&mut $engine.interner,&mut $engine.outputs) {
-            Some((t,_)) if t.is_begin_group() => (),
-            _ => crate::throw!("begin group expected")
+    pub fn get_expanded_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self, expand_protected: bool, edef_like: bool, err_on_unknowns: bool, mut f: F) {
+        match self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
+            Some((t, _)) if t.is_begin_group() => (),
+            _ => throw!("begin group expected")
         }
         let mut ingroup = 0;
         let mut ok = false;
-        while let Some(($tk,e)) = $engine.mouth.get_next(&$engine.state,&mut $engine.interner,&mut $engine.outputs) {
-            if $tk.is_begin_group() {
+        while let Some((tk, e)) = self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
+            if tk.is_begin_group() {
                 ingroup += 1;
-                $f;
+                f(self, tk);
                 continue
             }
-            if $tk.is_end_group() {
-                if ingroup == 0 { ok = true; break } else { ingroup -= 1; }
-                $f;
+            if tk.is_end_group() {
+                if ingroup == 0 {
+                    ok = true;
+                    break
+                } else { ingroup -= 1; }
+                f(self, tk);
                 continue
             }
             if e {
-                let res = crate::engine::gullet::methods::resolve_token::<ET>(&$engine.state, $tk);
+                let res = crate::engine::gullet::methods::resolve_token::<ET>(&self.state, tk);
                 match res.command {
-                    BaseCommand::Def(d) if d.protected && !$expand_protected => {
-                        let $tk = res.source.cause;
-                        $f
+                    BaseCommand::Def(d) if d.protected && !expand_protected => {
+                        f(self, res.source.cause)
                     }
                     BaseCommand::ExpandableNoTokens { name, .. } if name == crate::tex::commands::tex::NOEXPAND => {
-                        match $engine.get_next_token() {
-                            Some((t,_)) if t.is_eof() => (),
-                            None => crate::file_end!(),
-                            Some(($tk, _)) => {$f}
+                        match self.get_next_token() {
+                            Some((t, _)) if t.is_eof() => (),
+                            None => file_end!(),
+                            Some((tk, _)) => { f(self, tk) }
                         }
                     },
-                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::etex::UNEXPANDED && $edef_like => {
-                        crate::expand_until_group!($engine,$tk => {
-                            if $tk.is_parameter() {
-                                let $tk = $tk.clone();
-                                $f
+                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::etex::UNEXPANDED && edef_like => {
+                        self.expand_until_group(|engine,tk| {
+                            if tk.is_parameter() {
+                                f(engine,tk.clone())
                             }
-                            $f;
+                            f(engine,tk);
                         });
                     }
                     BaseCommand::Expandable { name, apply } if name == crate::tex::commands::etex::UNEXPANDED => {
-                        crate::expand_until_group!($engine,$tk => $f);
+                        self.expand_until_group(&mut f);
                     }
-                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::tex::THE && $edef_like =>
-                        crate::do_the!($engine,$tk => {
-                            if $tk.is_parameter() {
-                                let $tk = $tk.clone();
-                                $f
+                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::tex::THE && edef_like =>
+                        crate::tex::commands::tex::do_the::<ET,_>(self,&res.source,|engine,tk| {
+                            if tk.is_parameter() {
+                                f(engine,tk.clone())
                             }
-                            $f;
+                            f(engine,tk)
                         }),
-                    BaseCommand::None if $err_on_unknowns => match res.source.cause.as_command() {
+                    BaseCommand::None if err_on_unknowns => match res.source.cause.as_cs_like() {
                         Some(crate::tex::token::CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c),
-                        Some(crate::tex::token::CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(&$engine.interner)),
+                        Some(crate::tex::token::CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(&self.interner)),
                         _ => unreachable!()
                     }
-                    _ => match $engine.expand(res) {
+                    _ => match self.expand(res) {
                         Some(res) => {
-                            let $tk = res.source.cause;
-                            $f
+                            f(self, res.source.cause)
                         },
                         _ => ()
                     }
                 }
-            } else { $f }
+            } else { f(self, tk) }
         }
-        if (!ok) {crate::file_end!()}
-         */
-    };
+        if (!ok) { file_end!() }
+    }
+
+    pub fn expand_until_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self,f:F) {
+        match self.get_next_unexpandable_same_file() {
+            None => file_end!(),
+            Some(res) => match res.command {
+                BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
+                    self.get_until_endgroup(f)
+                //ET::Mouth::get_until_endgroup(self,f)
+                }
+                _ => throw!("begin group expected; found: {}",res.source.cause.printable(&self.interner))
+            }
+        }
+    }
 }

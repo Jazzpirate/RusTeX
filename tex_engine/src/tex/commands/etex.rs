@@ -1,11 +1,11 @@
 use crate::engine::state::State;
 use crate::engine::mouth::MouthTrait;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, expand_until_group, get_expanded_group, register_expandable_notk, token_to_others, string_to_tokens};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, register_expandable_notk};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def};
 use crate::tex::numbers::{Frac, MuSkip, Numeric, Skip};
-use crate::tex::token::{Token, PrintableTokenList, CSLike};
+use crate::tex::token::{Token, PrintableTokenList, CSLike, DeTokenizer};
 use crate::utils::strings::CharType;
 use crate::tex::numbers::Int;
 use crate::engine::filesystem::File;
@@ -210,11 +210,11 @@ pub fn detokenize<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();
 
-    expand_until_group!(engine,t => {
+    engine.expand_until_group(|engine,t| {
         if t.is_parameter() {
-            token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
+            crate::tex::token::detokenize(true,&engine.state,&engine.interner,&t, cmd, |t| exp.push(t));
         }
-        token_to_others!(&engine.state,&engine.interner,t, true, t => exp.push(t));
+        crate::tex::token::detokenize(true,&engine.state,&engine.interner,&t, cmd, |t| exp.push(t));
     });
 }
 
@@ -231,8 +231,8 @@ pub const E_TEX_REVISION: &str = ".6";
 pub const E_TEX_VERSION: i64 = 2;
 
 /// `\etexrevision`: expands to the eTeX revision number (`.6`).
-pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>, exp:&mut Vec<ET::Token>) {
-    string_to_tokens!(E_TEX_REVISION,t => exp.push(t))
+pub fn eTeXrevision<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
+    crate::tex::token::tokenize_string(&E_TEX_REVISION, cmd, |t| exp.push(t))
 }
 
 pub const ETEXVERSION: &str = "eTeXversion";
@@ -246,7 +246,7 @@ pub const EXPANDED: &str = "expanded";
 pub fn expanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"expanded");
 
-    get_expanded_group!(engine,false,false,false,t => exp.push(t));
+    engine.get_expanded_group(false,false,false,|_,t| exp.push(t));
     //catch_prim!(engine.get_expanded_group(false,false,false,f) => (EXPANDED,cmd));
 }
 
@@ -297,7 +297,7 @@ pub fn ifdefined<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     debug_log!(trace=>"ifdefined");
     match engine.get_next_token() {
         None => file_end!(),
-        Some((t,_)) => match t.as_command() {
+        Some((t,_)) => match t.as_cs_like() {
             None => throw!("Expected a control sequence, got: {:?}",t => cmd.cause),
             Some(CSLike::CS(name)) => {
                 debug_log!(trace => "ifdefined: {}",name.to_str(&engine.interner));
@@ -413,7 +413,7 @@ pub fn scantokens<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"scantokens");
     let esc = engine.state.get_escapechar();
     let mut ret = String::new();
-    expand_until_group!(engine,t => t.to_str(&engine.interner,esc,Some(engine.state.get_catcode_scheme()),&mut ret).unwrap());
+    engine.expand_until_group(|engine,t| t.to_str(&engine.interner,esc,Some(engine.state.get_catcode_scheme()),&mut ret).unwrap());
     engine.mouth.push_string(&ret.into_bytes());
     debug_log!(trace => "scantokens: {}",engine.preview(250));
 }
@@ -422,7 +422,7 @@ pub const UNEXPANDED: &str = "unexpanded";
 /// `\unexpanded`: read a token list from the input stream, but do not expand it (e.g. in [`\edef`](super::tex::edef)).
 pub fn unexpanded<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"unexpanded");
-    expand_until_group!(engine,tk => exp.push(tk));
+    engine.expand_until_group(|_,tk| exp.push(tk));
     //catch_prim!(engine.expand_until_group(f) => (UNEXPANDED,cmd));
 }
 
@@ -435,7 +435,7 @@ pub fn unless<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     match engine.get_next_token() {
         None => file_end_prim!(UNLESS,cmd),
         Some((next,true)) => {
-            let ncmd = match next.as_command() {
+            let ncmd = match next.as_cs_like() {
                 None => throw!("Expected a conditional after \\unless" => cmd.cause),
                 Some(CSLike::CS(name)) => engine.state.get_command(name),
                 Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c)
@@ -460,7 +460,7 @@ pub fn unless<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
 pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(detokenize,engine,(e,c,f) =>detokenize::<ET>(e,&c,f));
     register_dim!(dimexpr,engine,(e,c) => dimexpr::<ET>(e,&c));
-    register_expandable!(eTeXrevision,engine,(e,_,f) => eTeXrevision::<ET>(e,f));
+    register_expandable!(eTeXrevision,engine,(e,c,f) => eTeXrevision::<ET>(e,&c,f));
     register_int!(eTeXversion,engine,(e,c) => eTeXversion::<ET>(&c));
     register_tok_assign!(everyeof,engine);
     register_expandable!(expanded,engine,(e,c,f) => expanded::<ET>(e,&c,f));
