@@ -1,6 +1,5 @@
-//! Default implementations for [`MouthTrait`] methods
+//! Default implementations for [`Mouth`] methods
 
-use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::{debug_log, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
@@ -8,19 +7,20 @@ use crate::tex::token::Token;
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 use crate::engine::state::State;
+use crate::engine::mouth::Mouth;
 
 impl<ET:EngineType> EngineRef<ET> {
-    /// get the next [`Token`] from the [`MouthTrait`]
+    /// get the next [`Token`] from the [`Mouth`]
     pub fn get_next_token(&mut self) -> Option<(ET::Token,bool)> {
         self.mouth.get_next(&self.state,&mut self.interner,&mut self.outputs)
     }
 
-    /// Skip whitespace characters from the [`MouthTrait`]
+    /// Skip whitespace characters from the [`Mouth`]
     pub fn skip_whitespace(&mut self) {
         self.mouth.skip_whitespace(&self.state,&mut self.interner)
     }
 
-    /// read optional `=` characters from the [`MouthTrait`]
+    /// read optional `=` characters from the [`Mouth`]
     pub fn skip_eq_char(&mut self) {
         self.skip_whitespace();
         debug_log!(trace=>"skipping '='");
@@ -38,12 +38,15 @@ impl<ET:EngineType> EngineRef<ET> {
         }
     }
 
-    /// reads a macro argument from the [`MouthTrait`], i.e. a sequence of [`Token`]s enclosed in
+    /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
     /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
     /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
     /// not enclosed.
     pub fn get_argument(&mut self,vec: &mut Vec<ET::Token>) {
-        Mouth::get_argument(self,vec)
+        ET::Mouth::get_argument(self,vec)
+    }
+    pub fn get_argument_no_par(&mut self,vec: &mut Vec<ET::Token>) {
+        ET::Mouth::get_argument_no_par(self,vec)
     }
 /*
     /// reads [`Token`]s from the [`Mouth`] until the next suitable [`EndGroup`](CategoryCode::EndGroup)
@@ -71,11 +74,11 @@ impl<ET:EngineType> EngineRef<ET> {
  */
 
     pub fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(&mut self, tks:Vec<ET::Token>, f:F) -> R {
-        Mouth::with_mouth(self,tks,f)
+        ET::Mouth::with_mouth(self,tks,f)
     }
 
 
-    /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
+    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     pub fn preview(&self,len:usize) -> String {
         self.mouth.preview(len,&self.interner)

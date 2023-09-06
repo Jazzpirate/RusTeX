@@ -1,4 +1,4 @@
-/*! A [`MouthTrait`] is the source of [`Token`]s to be processed by a TeX engine.
+/*! A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
 
  The default implementations ([`NoTracingMouth`] and [`Mouth`]) are
  just wrappers around a [`Vec`]`<`[`TeXMouthSource`]`>`,
@@ -24,29 +24,29 @@ use crate::utils::errors::TeXError;
 use crate::utils::Ptr;
 use crate::utils::strings::CharType;
 
-/// A [`MouthTrait`] is the source of [`Token`]s to be processed by a TeX engine.
-pub trait MouthTrait<ET:EngineType>:Sized {
+/// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
+pub trait Mouth<ET:EngineType>:Sized {
     fn new(memory:&mut Memory<ET>) -> Self;
-    fn new_with(tks:Vec<ET::Token>,memory:&mut Memory<ET>) -> Mouth<ET>;
+    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<ET::Token>, f:F) -> R;
 
-    /// Insert a [`File`] into the [`MouthTrait`], to be processed next
+    /// Insert a [`File`] into the [`Mouth`], to be processed next
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner);
     fn push_string(&mut self,str:&Vec<u8>);
 
-    /// Insert a single [`Token`] into the [`MouthTrait`], not to be expanded when processed
+    /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
     fn push_noexpand(&mut self,tk:ET::Token,memory:&mut Memory<ET>);
 
-    /// Insert a single [`Token`] into the [`MouthTrait`], to be processed next
+    /// Insert a single [`Token`] into the [`Mouth`], to be processed next
     /// (for implementations with a peek buffer)
     fn requeue(&mut self,tk:ET::Token);
 
-    /// Return the next [`Token`] from the [`MouthTrait`], and whether to expand it (due to `\noexpand`)
+    /// Return the next [`Token`] from the [`Mouth`], and whether to expand it (due to `\noexpand`)
     //#[inline(always)]
     fn get_next(&mut self,state:&ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<(ET::Token,bool)>;
 
     fn get_next_simple(&mut self,state:&ET::State,interner:&mut Interner) -> Option<ET::Token>;
 
-    /// Return the next n characters from the [`MouthTrait`] as a [`String`], without consuming them
+    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
     /// (for error messages, debugging purposes, etc.)
     fn preview(&self,len:usize,interner:&Interner) -> String;
 
@@ -56,9 +56,13 @@ pub trait MouthTrait<ET:EngineType>:Sized {
     fn line_no(&self) -> usize;
 
     fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs);
+    fn get_expansion(&mut self) -> Vec<ET::Token>;
+    fn push_expansion(&mut self, expansion: Vec<ET::Token>);
+    fn push_expansion_norev(&mut self, expansion: Vec<ET::Token>);
+    fn insert_every(&mut self,state:&ET::State,every:&'static str);
 
     /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOL`](crate::tex::catcodes::CategoryCode::EOL))
-    fn get_next_nopar(&mut self,state:&ET::State,interner:&mut Interner) -> Option<ET::Token> {
+    fn get_next_no_par(&mut self, state:&ET::State, interner:&mut Interner) -> Option<ET::Token> {
         match self.get_next_simple(state,interner) {
             Some(t) => {
                 match t.get_cs_name() {
@@ -71,6 +75,15 @@ pub trait MouthTrait<ET:EngineType>:Sized {
         }
     }
 
+    /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
+    /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
+    /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
+    /// not enclosed.
+    fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<ET::Token>);
+    fn get_argument_no_par(engine:&mut EngineRef<ET>, v:&mut Vec<ET::Token>);
+
+    /// Skip whitespace characters from the [`Mouth`]
+    fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner);
 }
 
 
@@ -83,15 +96,53 @@ pub enum TeXMouthSource<ET:EngineType> {
 }
 
 #[derive(Clone)]
-pub struct Mouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>>,pub buffer:Vec<Vec<ET::Token>> }
+pub struct StandardMouth<ET:EngineType>{ pub stack:Vec<TeXMouthSource<ET>>,pub buffer:Vec<Vec<ET::Token>> }
 
-impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
-    fn new(memory:&mut Memory<ET>) -> Self {
-        Mouth { stack:Vec::with_capacity(2097152),buffer:(0..32).map(|_|Vec::with_capacity(2940000)).collect()}
+macro_rules! get_while {
+    ($mouth:expr,$state:expr,$interner:expr,$label:tt => $t:ident => $f:expr) => {
+        $label:loop {
+            match $mouth.stack.last_mut() {
+                Some(crate::engine::mouth::TeXMouthSource::Noexpand::<ET>(_)) => match $mouth.stack.pop() {
+                    Some(crate::engine::mouth::TeXMouthSource::Noexpand::<ET>($t)) => $f,
+                    _ => unreachable!()
+                },
+                Some(crate::engine::mouth::TeXMouthSource::Tkls::<ET>(ref mut v)) => loop {
+                    let $t = v.pop().unwrap();
+                    if v.is_empty() {
+                        match $mouth.stack.pop() {
+                            Some(crate::engine::mouth::TeXMouthSource::Tkls::<ET>(v)) => {
+                                $mouth.buffer.push(v);
+                            }
+                            _ => unreachable!()
+                        }
+                        $f;break
+                    }
+                    $f;
+                }
+                Some(crate::engine::mouth::TeXMouthSource::String::<ET>(ref mut s)) => {
+                    let cc = $state.get_catcode_scheme();
+                    let endline = $state.get_endlinechar();
+                    while let Some($t) = s.get_next::<ET>($interner,cc,endline) {
+                        $f;
+                    }
+                    panic!("File ended unexpectedly")
+                }
+                None => panic!("File ended unexpectedly")
+            }
+        }
     }
-    fn new_with(mut tks: Vec<ET::Token>,memory:&mut Memory<ET>) -> Self {
-        tks.reverse();
-        Mouth {stack:vec!(TeXMouthSource::Tkls(tks)),buffer:vec!()}
+}
+
+impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
+    fn new(memory:&mut Memory<ET>) -> Self {
+        StandardMouth { stack:Vec::with_capacity(2097152),buffer:(0..32).map(|_|Vec::with_capacity(2940000)).collect()}
+    }
+
+    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<ET::Token>, mut f:F) -> R {
+        let old = std::mem::replace(&mut engine.mouth, Self::new_with(tks,&mut engine.memory));
+        let ret = f(engine);
+        engine.mouth = old;
+        ret
     }
 
     fn push_noexpand(&mut self, tk: ET::Token,memory:&mut Memory<ET>) {
@@ -257,101 +308,13 @@ impl<ET:EngineType> MouthTrait<ET> for Mouth<ET> {
         }
         "unknown source".to_string()
     }
-}
-#[macro_export]
-macro_rules! get_while {
-    ($mouth:expr,$state:expr,$interner:expr,$label:tt => $t:ident => $f:expr) => {
-        $label:loop {
-            match $mouth.stack.last_mut() {
-                Some(crate::engine::mouth::TeXMouthSource::Noexpand::<ET>(_)) => match $mouth.stack.pop() {
-                    Some(crate::engine::mouth::TeXMouthSource::Noexpand::<ET>($t)) => $f,
-                    _ => unreachable!()
-                },
-                Some(crate::engine::mouth::TeXMouthSource::Tkls::<ET>(ref mut v)) => loop {
-                    let $t = v.pop().unwrap();
-                    if v.is_empty() {
-                        match $mouth.stack.pop() {
-                            Some(crate::engine::mouth::TeXMouthSource::Tkls::<ET>(v)) => {
-                                $mouth.buffer.push(v);
-                            }
-                            _ => unreachable!()
-                        }
-                        $f;break
-                    }
-                    $f;
-                }
-                Some(crate::engine::mouth::TeXMouthSource::String::<ET>(ref mut s)) => {
-                    let cc = $state.get_catcode_scheme();
-                    let endline = $state.get_endlinechar();
-                    while let Some($t) = s.get_next::<ET>($interner,cc,endline) {
-                        $f;
-                    }
-                    panic!("File ended unexpectedly")
-                }
-                None => panic!("File ended unexpectedly")
-            }
-        }
-    }
-}
 
-impl<ET:EngineType> Mouth<ET> {
-    pub fn print_stats(&self) {
-        println!("\nBuffer: {}",self.buffer.len());
-        for b in &self.buffer {
-            println!(" -  {}",b.capacity());
-        }
-    }
-    pub fn get_expansion(&mut self) -> Vec<ET::Token> {
+    fn get_expansion(&mut self) -> Vec<ET::Token> {
         self.get_vec()
-    }
-    pub fn push_expansion(&mut self, mut expansion: Vec<ET::Token>) {
-        if expansion.is_empty() { self.buffer.push(expansion) } else {
-            expansion.reverse();
-            self.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-    }
-
-    pub fn push_expansion_norev(&mut self, mut expansion: Vec<ET::Token>) {
-        if expansion.is_empty() { self.buffer.push(expansion) } else {
-            self.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-    }
-
-    pub fn insert_every(&mut self,state:&ET::State,every:&'static str) {
-        match state.get_primitive_toks(every) {
-            None => (),
-            Some(v) if v.is_empty() => (),
-            Some(v) =>{
-                let mut rs = self.get_vec();
-                rs.extend(v.iter().rev().map(|t| t.clone()));
-                self.push_expansion_norev(rs);
-            }
-        }
-    }
-
-    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<ET::Token>, mut f:F) -> R {
-        let old = std::mem::replace(&mut engine.mouth, Self::new_with(tks,&mut engine.memory));
-        let ret = f(engine);
-        engine.mouth = old;
-        ret
-    }
-
-    pub fn get_vec(&mut self) -> Vec<ET::Token> {
-        self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
-    }
-
-    /// Skip whitespace characters from the [`MouthTrait`]
-    pub fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner) {
-        debug_log!(trace=>"skipping whitespace");
-        get_while!(self,state,interner,'A => tk => {
-            if !tk.is_space() {
-                self.requeue(tk);break 'A
-            }
-        });
     }
 
     /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    pub fn get_argument_nopar(engine:&mut EngineRef<ET>, v:&mut Vec<ET::Token>) {
+    fn get_argument_no_par(engine:&mut EngineRef<ET>, v:&mut Vec<ET::Token>) {
         match engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
             None => file_end!(),
             Some(t) if t.is_begin_group() => {
@@ -377,10 +340,35 @@ impl<ET:EngineType> Mouth<ET> {
         }
     }
 
-    /// reads a macro argument from the [`MouthTrait`], i.e. a sequence of [`Token`]s enclosed in
-    /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
-    /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
-    /// not enclosed.
+    fn push_expansion(&mut self, mut expansion: Vec<ET::Token>) {
+        if expansion.is_empty() { self.buffer.push(expansion) } else {
+            expansion.reverse();
+            self.stack.push(TeXMouthSource::Tkls(expansion))
+        }
+    }
+
+    fn insert_every(&mut self,state:&ET::State,every:&'static str) {
+        match state.get_primitive_toks(every) {
+            None => (),
+            Some(v) if v.is_empty() => (),
+            Some(v) =>{
+                let mut rs = self.get_vec();
+                rs.extend(v.iter().rev().map(|t| t.clone()));
+                self.push_expansion_norev(rs);
+            }
+        }
+    }
+
+    /// Skip whitespace characters from the [`Mouth`]
+    fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner) {
+        debug_log!(trace=>"skipping whitespace");
+        get_while!(self,state,interner,'A => tk => {
+            if !tk.is_space() {
+                self.requeue(tk);break 'A
+            }
+        });
+    }
+
     fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<ET::Token>) {
         match engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
             None => file_end!(),
@@ -399,6 +387,29 @@ impl<ET:EngineType> Mouth<ET> {
                 vec.push(o);
             }
         }
+    }
+
+    fn push_expansion_norev(&mut self, mut expansion: Vec<ET::Token>) {
+        if expansion.is_empty() { self.buffer.push(expansion) } else {
+            self.stack.push(TeXMouthSource::Tkls(expansion))
+        }
+    }
+}
+
+impl<ET:EngineType> StandardMouth<ET> {
+    pub fn print_stats(&self) {
+        println!("\nBuffer: {}",self.buffer.len());
+        for b in &self.buffer {
+            println!(" -  {}",b.capacity());
+        }
+    }
+    fn new_with(mut tks: Vec<ET::Token>,memory:&mut Memory<ET>) -> Self {
+        tks.reverse();
+        Self {stack:vec!(TeXMouthSource::Tkls(tks)),buffer:vec!()}
+    }
+
+    pub fn get_vec(&mut self) -> Vec<ET::Token> {
+        self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
     }
 
 }

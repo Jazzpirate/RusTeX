@@ -143,7 +143,7 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     }
 
     fn expand(engine:&mut EngineRef<ET>, ret: ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
-        use crate::engine::mouth::MouthTrait;
+        use crate::engine::mouth::Mouth;
         match ret.command {
             BaseCommand::Def(d) => {
                 let mut rs = engine.mouth.get_expansion();

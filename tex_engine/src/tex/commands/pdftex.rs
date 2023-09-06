@@ -469,7 +469,7 @@ pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSourc
 pub fn pdfescapestring<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"pdfescapestring");
     use crate::tex::commands::BaseCommand;
-    use crate::engine::mouth::MouthTrait;
+    use crate::engine::mouth::Mouth;
     use crate::utils::strings::AllCharsTrait;
     let esc = engine.state.get_escapechar();
     let cc = engine.state.get_catcode_scheme().clone();

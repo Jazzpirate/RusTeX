@@ -6,7 +6,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
 use crate::engine::state::State;
-use crate::engine::mouth::MouthTrait;
+use crate::engine::mouth::Mouth;
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;

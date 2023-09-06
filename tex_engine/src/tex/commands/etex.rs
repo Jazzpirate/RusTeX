@@ -1,5 +1,5 @@
 use crate::engine::state::State;
-use crate::engine::mouth::MouthTrait;
+use crate::engine::mouth::Mouth;
 use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, register_expandable_notk};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;

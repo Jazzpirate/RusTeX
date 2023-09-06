@@ -3,10 +3,10 @@ use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::State;
 use crate::tex::commands::{BaseCommand, Def, ExpToken, ParamToken,  CommandSource};
 use crate::tex::token::{Token, PrintableTokenList};
-use crate::engine::mouth::{Mouth, MouthTrait};
 use crate::tex::catcodes::CategoryCode;
 use crate::utils::strings::CharType;
 use crate::utils::errors::TeXError;
+use crate::engine::mouth::Mouth;
 
 #[macro_export]
 macro_rules! cmtodo {
@@ -453,7 +453,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     argnum += 1;
                     'L: loop {
                         match if d.long {engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
-                        else { engine.mouth.get_next_nopar(&engine.state,&mut engine.interner)} {
+                        else { engine.mouth.get_next_no_par(&engine.state, &mut engine.interner)} {
                             Some(t) => {
                                 if t.is_begin_group() {
                                     engine.mouth.requeue(t);
@@ -472,7 +472,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     argnum += 1;
                     engine.skip_whitespace();
                     if d.long { engine.get_argument(arg) }
-                    else {Mouth::get_argument_nopar(engine,arg)};
+                    else {engine.get_argument_no_par(arg)};
                 },
                 Some(ParamToken::Token(_)) => { // delimited argument
                     let arg = &mut args[argnum];
@@ -529,7 +529,7 @@ fn read_arguments<'a,ET:EngineType>(d:&Def<ET>, engine:&mut EngineRef<ET>, cmd:&
                     }});*/
                     'L: loop {
                         match if d.long { engine.mouth.get_next_simple(&engine.state,&mut engine.interner) }
-                        else { engine.mouth.get_next_nopar(&engine.state,&mut engine.interner) } {
+                        else { engine.mouth.get_next_no_par(&engine.state, &mut engine.interner) } {
                             Some(t) if t.is_begin_group() => {
                                 depth += 1;
                                 if arg.len() == 0 {

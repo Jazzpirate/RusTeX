@@ -7,7 +7,7 @@ use log::{debug, info};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::memory::{Interner, Memory};
-use crate::engine::mouth::{Mouth, MouthTrait};
+use crate::engine::mouth::Mouth;
 use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
 use crate::tex;
@@ -25,7 +25,7 @@ pub mod stomach;
 pub mod filesystem;
 pub mod memory;
 
-/// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`MouthTrait`]) and [`Stomach`] to
+/// An [`Engine`] combines a [`FileSystem`], [`State`], [`Gullet`] (including [`Mouth`]) and [`Stomach`] to
 /// form a complete TeX engine.
 pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type Char:CharType;
@@ -41,6 +41,7 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
     type MuDim:MuDim;
     type MuStretchShrinkDim:MuStretchShrinkDim;
     type CommandReference:CommandReference<Self>;
+    type Mouth:Mouth<Self>;
     type State:State<Self>;
     type Gullet:Gullet<Self>;
     type Stomach:Stomach<Self>;
@@ -49,7 +50,7 @@ pub trait EngineType:Sized+'static + Copy + Clone + Debug {
 
 pub struct EngineRef<ET:EngineType> {
     pub state:ET::State,
-    pub mouth:Mouth<ET>,
+    pub mouth:ET::Mouth,
     pub gullet:ET::Gullet,
     pub stomach:ET::Stomach,
     pub memory:Memory<ET>,
