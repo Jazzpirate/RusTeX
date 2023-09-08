@@ -61,7 +61,7 @@ impl<ET:EngineType> Memory<ET> {
         }
     }
     pub fn new() -> Self {
-        let token_vecs = (0..32).map(|_| Vec::with_capacity(VEC_SIZE)).collect();
+        let token_vecs = (0..32).map(|_| Vec::with_capacity(2048)).collect();
         Memory{
             args:Some(array_init(|_| Vec::with_capacity(2097152))),strings:(0..8).map(|_|String::with_capacity(4096)).collect(),token_vecs
         }
