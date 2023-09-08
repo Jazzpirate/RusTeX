@@ -382,10 +382,6 @@ macro_rules! register_value_assign_font {
 pub fn expand_def<ET:EngineType>(d: &Def<ET>, engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, exp:&mut Vec<ET::Token>) { catch!({
     debug_log!(debug=>"Expanding {}{}\n - {}",cmd.cause.printable(&engine.interner),d.as_str(&engine.interner),engine.preview(250));
 
-    if cmd.cause.printable(&engine.interner).to_string() == "\\MT@prot@addgroup " {
-        println!("HERE!")
-    }
-
     // The simplest cases are covered first. Technically, the general case covers these as well,
     // but it might be more efficient to do them separately (TODO: check whether that makes a difference)
     if d.signature.is_empty() { // => arity=0
