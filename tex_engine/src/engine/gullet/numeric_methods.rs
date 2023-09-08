@@ -28,7 +28,7 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
     let mut isnegative = false;
     let mut ishex = false;
     let mut isoct = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         use crate::tex::commands::BaseCommand::*;
         match next.command {
             Def(_) | Conditional{..} | Expandable{..} | ExpandableNoTokens {..} => unreachable!(),
@@ -112,7 +112,7 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
 }
 
 pub fn expand_until_space<ET:EngineType>(engine:&mut EngineRef<ET>) {
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         Some(cmd) => match cmd.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => (), // eat one space
             _ => {
@@ -127,7 +127,7 @@ pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u
     debug_log!(trace=>"Reading decimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
 
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} if char.as_bytes().len()==1 => {
@@ -155,7 +155,7 @@ pub fn read_decimal_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u
 pub fn read_oct_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> ET::Int {
     debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} if char.as_bytes().len()==1 => {
@@ -183,7 +183,7 @@ pub fn read_oct_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, i
 pub fn read_hex_number<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnegative:bool) -> ET::Int {
     debug_log!(trace=>"Reading hexadecimal number {}...",(firstchar as char));
     let mut rets = vec!(firstchar);
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} if char.as_bytes().len()==1 => {
@@ -212,7 +212,7 @@ pub fn get_dim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Dim {
     debug_log!(trace=>"Reading dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace();
     let mut isnegative = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
                 let us = char.as_bytes()[0];
@@ -282,7 +282,7 @@ pub fn get_dim_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, 
 
 pub fn read_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> ET::Dim {
     debug_log!(trace=>"Reading unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         Some(cmd) => match cmd.command {
             BaseCommand::Dim(ass) => {
                 let val = ass.get(engine,cmd.source);
@@ -339,7 +339,7 @@ pub fn get_skip<ET:EngineType>(engine:&mut EngineRef<ET>) -> Skip<ET::SkipDim> {
     debug_log!(trace=>"Reading skip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace();
     let mut isnegative = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
                 let us = char.as_bytes()[0];
@@ -381,7 +381,7 @@ pub fn get_skipdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::SkipDim {
     debug_log!(trace=>"Reading dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace();
     let mut isnegative = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
                 let us = char.as_bytes()[0];
@@ -415,7 +415,7 @@ pub fn get_skipdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::SkipDim {
 
 pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> ET::SkipDim {
     debug_log!(trace=>"Reading skip unit {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end!(),
         Some(next) => match next.command {
             BaseCommand::Char {char,..} => {
@@ -448,7 +448,7 @@ pub fn get_muskip<ET:EngineType>(engine:&mut EngineRef<ET>)-> MuSkip<ET::MuDim,E
     debug_log!(trace=>"Reading muskip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace();
     let mut isnegative = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
                 let us = char.as_bytes()[0];
@@ -514,7 +514,7 @@ pub fn get_mustretchdim<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::MuStret
     debug_log!(trace=>"Reading mu stretch/shrink dimension {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace();
     let mut isnegative = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
                 let us = char.as_bytes()[0];
@@ -568,7 +568,7 @@ pub fn read_float<ET:EngineType>(engine:&mut EngineRef<ET>, firstchar:u8, isnega
     debug_log!(trace=>"Reading float {}...",(firstchar as char));
     let mut in_float = firstchar == b'.' || firstchar == b',';
     let mut rets = if in_float {vec!(b'0',b'.')} else {vec!(firstchar)};
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => break, // eat one space
             BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {

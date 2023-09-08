@@ -185,7 +185,7 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> b
     debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = engine.memory.get_string();
     let mut rs = engine.mouth.get_expansion();
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         rs.push(next.source.cause);
         match next.command {
             BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
@@ -217,7 +217,7 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
     debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
     let mut current = String::new();
     let mut rs = engine.mouth.get_expansion();
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         rs.push(next.source.cause.clone());
         match next.command {
             BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
@@ -266,7 +266,7 @@ pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
     debug_log!(trace=>"Reading string {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
     engine.skip_whitespace();
     let mut quoted = false;
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char {catcode:CategoryCode::Space,..} if quoted => ret.push(' '),
             BaseCommand::Char {catcode:CategoryCode::Space,..} => return (),
@@ -322,7 +322,7 @@ fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:Resol
 }
 
 pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRef {
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end!(),
         Some(res) => match res.command {
             BaseCommand::Font(f) => f,
@@ -358,10 +358,6 @@ impl<ET:EngineType> EngineRef<ET> {
     /// (or [`None`] if the [`Mouth`] is empty)
     pub fn get_next_unexpandable(&mut self) -> Option<ResolvedToken<ET>> {
         ET::Gullet::get_next_unexpandable(self)
-    }
-
-    pub fn get_next_unexpandable_same_file(&mut self) -> Option<ResolvedToken<ET>> {
-        ET::Gullet::get_next_unexpandable_same_file(self)
     }
 
 
@@ -427,7 +423,7 @@ impl<ET:EngineType> EngineRef<ET> {
     }
 
     pub fn is_next_char_one_of(&mut self, chars: &'static [u8]) -> Option<u8> {
-        match self.get_next_unexpandable_same_file() {
+        match self.get_next_unexpandable() {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { char, .. } if char.as_bytes().len() == 1 => {
@@ -448,7 +444,7 @@ impl<ET:EngineType> EngineRef<ET> {
     }
 
     pub fn is_next_char(&mut self, char: u8) -> bool {
-        match self.get_next_unexpandable_same_file() {
+        match self.get_next_unexpandable() {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { char: c, .. } if c.as_bytes() == [char] => true,
@@ -534,7 +530,7 @@ impl<ET:EngineType> EngineRef<ET> {
     }
 
     pub fn expand_until_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self,f:F) {
-        match self.get_next_unexpandable_same_file() {
+        match self.get_next_unexpandable() {
             None => file_end!(),
             Some(res) => match res.command {
                 BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {

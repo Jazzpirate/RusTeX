@@ -39,7 +39,7 @@ pub const ADVANCE: &str = "advance";
 pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"\\advance");
     engine.skip_whitespace();
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(ADVANCE,cmd),
         Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
@@ -298,7 +298,7 @@ pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let csidx = engine.state.push_csname();
     let mut csname = engine.memory.get_string();
     while engine.state.current_csname() == Some(csidx) {
-        match engine.get_next_unexpandable_same_file() {
+        match engine.get_next_unexpandable() {
             None => file_end!(cmd.cause),
             Some(sc) => match sc.command {
                 BaseCommand::Unexpandable {name:"endcsname",..} => engine.state.pop_csname(),
@@ -437,7 +437,7 @@ pub const DIVIDE : &str = "divide";
 pub fn divide<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"\\divide");
     engine.skip_whitespace();
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(DIVIDE,cmd),
         Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
@@ -899,7 +899,7 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
         },
         _ => unreachable!()
     };
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
             BaseCommand::Relax => {},
@@ -1413,7 +1413,7 @@ pub const LOWER: &str = "lower";
 pub fn lower<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\lower");
     let i = engine.get_dim();
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(RAISE,cmd),
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
@@ -1717,7 +1717,7 @@ pub const MULTIPLY:&str = "multiply";
 pub fn multiply<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"\\multiply");
     engine.skip_whitespace();
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(MULTIPLY,cmd),
         Some(ncmd) => match ncmd.command {
             BaseCommand::Int(a) => {
@@ -2049,7 +2049,7 @@ pub const RAISE: &str = "raise";
 pub fn raise<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\raise");
     let i = engine.get_dim();
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(RAISE,cmd),
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
@@ -2218,7 +2218,7 @@ pub fn setbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
     let i = engine.get_int().to_i64();
     if i < 0  { throw!("Invalid box number: {}",i => cmd.cause) }
     engine.skip_eq_char();
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(SETBOX,cmd),
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
@@ -2261,7 +2261,7 @@ pub fn sfcode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
 pub const SHIPOUT: &str = "shipout";
 pub fn shipout<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\shipout");
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         None => file_end_prim!(SHIPOUT,cmd),
         Some(c) => match c.command {
             BaseCommand::OpenBox {name,mode,apply} => {
@@ -2387,7 +2387,7 @@ pub fn textfont_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
 pub const THE : &str = "the";
 
 pub fn do_the<ET:EngineType,F: FnMut(&mut EngineRef<ET>, ET::Token)>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>,mut f:F) {
-    match engine.get_next_unexpandable_same_file() {
+    match engine.get_next_unexpandable() {
         Some(c) => match c.command {
             BaseCommand::Int(ass) => {
                 let val = ass.get(engine,c.source);
@@ -2630,7 +2630,7 @@ pub fn uppercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
 
 pub fn vadjust<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
     debug_log!(trace=>"\\vadjust");
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
             BaseCommand::Relax => {},
@@ -2664,7 +2664,7 @@ pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
         },
         _ => unreachable!()
     };
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
             BaseCommand::Relax => {},
@@ -2702,7 +2702,7 @@ pub fn vcenter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
         },
         _ => unreachable!()
     };
-    while let Some(next) = engine.get_next_unexpandable_same_file() {
+    while let Some(next) = engine.get_next_unexpandable() {
         match next.command {
             BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
             BaseCommand::Relax => {},

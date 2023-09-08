@@ -7,13 +7,15 @@ pub mod numeric_methods;
 
 use std::marker::PhantomData;
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::methods::{do_conditional};
+use crate::engine::gullet::methods::{do_conditional, resolve_token};
 use crate::engine::mouth::Mouth;
+use crate::engine::state::State;
 use crate::tex::ConditionalBranch;
 use crate::tex::numbers::{Skip, MuSkip};
-use crate::tex::commands::{ResolvedToken, StomachCommand, BaseCommand};
+use crate::tex::commands::{ResolvedToken, StomachCommand, BaseCommand, CommandSource};
 use crate::tex::commands::methods::expand_def;
 use crate::tex::fonts::FontStore;
+use crate::tex::token::{CSLike, Token};
 use crate::utils::errors::TeXError;
 
 
@@ -25,20 +27,22 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
     /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
     /// (or [`None`] if the [`Mouth`] is empty)
     fn get_next_unexpandable(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
-        methods::get_next_unexpandable(engine)
-    }
-
-    /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-    /// (or [`None`] if the [`Mouth`] is empty)
-    fn get_next_unexpandable_same_file(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
-        methods::get_next_unexpandable_same_file(engine)
+        while let Some((next,e)) = engine.get_next_token() {
+            if !e {return Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false})}
+            match engine.expand(resolve_token(&engine.state,next)) {
+                Some(r) => return Some(r),
+                _ => ()
+            }
+        }
+        None
     }
 
     /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
     /// the input stream, after expanding macros as necessary.
     fn get_next_stomach_command(engine:&mut EngineRef<ET>) -> Option<StomachCommand<ET>> {
         match Self::get_next_unexpandable(engine) {
-            Some(rt) => Some(StomachCommand::from_resolved(rt,&engine.interner)),
+            Some(rt) =>
+                Some(StomachCommand::from_resolved(rt,&engine.interner)),
             None => None
         }
     }
@@ -140,6 +144,49 @@ impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
     }
     fn current_conditional(&self) -> (Option<ConditionalBranch>,usize) {
         (self.in_conditionals.last().copied(),self.in_conditionals.len() - 1)
+    }
+
+    fn get_next_unexpandable(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
+        while let Some((next,e)) = engine.get_next_token() {
+            if !e {return Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false})}
+            let cmd = match next.as_cs_like() {
+                None => return Some(resolve_token(&engine.state,next)),
+                Some(CSLike::CS(name)) => engine.state.get_command(name),
+                Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c)
+            };
+            match cmd {
+                None => return Some(resolve_token(&engine.state,next)),
+                Some(cmd) => match &cmd.base {
+                    BaseCommand::Def(d) => {
+                        let source = CommandSource{cause: next,reference:cmd.reference};
+                        let mut rs = engine.mouth.get_expansion();
+                        let d = d.clone();
+                        expand_def(&d,engine,source,&mut rs);
+                        engine.mouth.push_expansion_norev(rs);
+                    }
+                    BaseCommand::ExpandableNoTokens {apply,..} => {
+                        let source = CommandSource{cause: next,reference:cmd.reference};
+                        apply(engine,source);
+                    }
+                    BaseCommand::Expandable {apply,..} => {
+                        let source = CommandSource{cause: next,reference:cmd.reference};
+                        let mut rs = engine.mouth.get_expansion();
+                        apply(engine,source,&mut rs);
+                        engine.mouth.push_expansion(rs);
+                    },
+                    BaseCommand::Conditional {name,apply} => {
+                        let source = CommandSource{cause: next,reference:cmd.reference};
+                        do_conditional(engine,source, name,*apply, false);
+                    }
+                    _ => return Some(ResolvedToken {
+                        command: cmd.base.clone(),
+                        source: CommandSource { cause: next, reference: cmd.reference },
+                        expand: true
+                    })
+                }
+            }
+        }
+        None
     }
 
     fn expand(engine:&mut EngineRef<ET>, ret: ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
