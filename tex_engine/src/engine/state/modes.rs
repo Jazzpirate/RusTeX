@@ -47,7 +47,7 @@ impl Display for TeXMode {
 }
 
 /// The types of TeX groups that exist
-#[derive(Copy,Clone,PartialEq)]
+#[derive(Copy,Clone,PartialEq,Debug)]
 pub enum GroupType {
     /// The initial "group" containing the entire document.
     Top,

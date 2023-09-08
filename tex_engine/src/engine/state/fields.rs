@@ -17,7 +17,7 @@ use crate::tex::commands::Command;
 use crate::tex::nodes::HVBox;
 use crate::tex::numbers::{MuSkip, Skip};
 use crate::tex::token::Token;
-use crate::throw;
+use crate::{debug_log, throw};
 use crate::utils::collections::HMap;
 use crate::tex::numbers::*;
 use crate::engine::filesystem::*;
@@ -678,6 +678,7 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
     }
     // #[inline(always)]
     fn stack_push(&mut self, g: GroupType) {
+        debug_log!(trace => "PUSH {:?}",g);
         match g {
             GroupType::Box(m) => {
                 self.grouptype.push((g,Some(self.mode)));
@@ -726,6 +727,7 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         self.aftergroups.push(vec!());
     }
     fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)> {
+        debug_log!(trace => "POP");
         let gt = match self.grouptype.pop() {
             None => return None,
             Some((gt,Some(m))) => {

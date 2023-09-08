@@ -393,6 +393,15 @@ pub fn pdfcolorstackinit<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandS
     ET::Int::from_i64(idx as i64)
 }
 
+pub fn pdfcreationdate<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
+    use chrono::{Datelike,Timelike};
+    let dt = engine.start_time;
+    let str = format!("D:{}{:02}{:02}{:02}{:02}{:02}{}'",
+                      dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
+                      dt.offset().to_string().replace(":","'"));
+    crate::tex::token::tokenize_string(&str, cmd, |t| exp.push(t))
+}
+
 pub fn pdfdest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     where ET::Node:From<PDFTeXNode<ET>> {
     debug_log!(trace=>"pdfdest");
@@ -796,6 +805,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_unexpandable!(pdfcolorstack,engine,None,(e,cmd) =>pdfcolorstack::<ET>(e,&cmd));
     register_int!(pdfcolorstackinit,engine,(e,c) => pdfcolorstackinit::<ET>(e,&c));
     register_int_assign!(pdfcompresslevel,engine);
+    register_expandable!(pdfcreationdate,engine,(e,cmd,f) =>pdfcreationdate::<ET>(e,&cmd,f));
     register_int_assign!(pdfdecimaldigits,engine);
     register_unexpandable!(pdfdest,engine,None,(e,cmd) =>pdfdest::<ET>(e,&cmd));
     register_int_assign!(pdfdraftmode,engine);
@@ -888,7 +898,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfpagesattr);
     cmtodo!(engine,pdfpkmode);
     cmtodo!(engine,ifpdfprimitive);
-    cmtodo!(engine,pdfcreationdate);
     cmtodo!(engine,pdfescapehex);
     cmtodo!(engine,pdfescapename);
     cmtodo!(engine,pdffiledump);

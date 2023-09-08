@@ -629,9 +629,8 @@ pub fn else_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         (Some(ConditionalBranch::Case(_,_)),i) =>
             crate::engine::gullet::methods::else_loop::<ET>(engine,IFCASE,i,false),
         _ => {
-            todo!()
-            //engine.mouth.requeue(cmd.cause.clone());
-            //engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
+            engine.mouth.requeue(cmd.cause.clone());
+            engine.mouth.requeue(ET::Token::new_cs_from_command(engine.interner.relax,&cmd));
         }
         //o => unreachable!("{:?}\nat:{}\n{}\n",o,engine.current_position(),engine.preview(200))
     }
@@ -757,9 +756,8 @@ pub fn fi<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
         Some(ConditionalBranch::True(_) | ConditionalBranch::Case(_,_) | ConditionalBranch::Else(_)) =>
             engine.gullet.pop_conditional(),
         _ => {
-            todo!()
-            //engine.mouth.requeue(cmd.cause.clone());
-            //engine.mouth.requeue(Token::new(BaseToken::CS(engine.interner.relax),None));
+            engine.mouth.requeue(cmd.cause.clone());
+            engine.mouth.requeue(ET::Token::new_cs_from_command(engine.interner.relax,&cmd));
         }
     }
 }
@@ -1061,11 +1059,17 @@ pub fn ifcat<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     );
     let first = match first {
         None => return false,
-        Some(first) => first.source.cause.get_catcode()
+        Some(first) => match first.command {
+            BaseCommand::Char{catcode,..} => catcode,
+            _ => CategoryCode::Escape
+        }
     };
     let second = match second {
         None => return false,
-        Some(second) => second.source.cause.get_catcode()
+        Some(first) => match first.command {
+            BaseCommand::Char{catcode,..} => catcode,
+            _ => CategoryCode::Escape
+        }
     };
     first == second
 }

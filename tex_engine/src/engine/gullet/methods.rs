@@ -513,7 +513,7 @@ impl<ET:EngineType> EngineRef<ET> {
                             f(engine,tk)
                         }),
                     BaseCommand::None if err_on_unknowns => match res.source.cause.as_cs_like() {
-                        Some(crate::tex::token::CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c),
+                        Some(crate::tex::token::CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c.as_char()),
                         Some(crate::tex::token::CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(&self.interner)),
                         _ => unreachable!()
                     }

@@ -243,7 +243,11 @@ fn detokenizeI<ET:EngineType,F:FnMut(ET::Token)>(insert_space:bool,token:&ET::To
                     None => first = Some(c),
                     _ => ()
                 }
-                f(ET::Token::new_char_from_command(c,CategoryCode::Other,src));
+                if c == ET::Char::space() {
+                    f(ET::Token::new_space_from_command(src));
+                } else {
+                    f(ET::Token::new_char_from_command(c, CategoryCode::Other, src));
+                }
             }
             if insert_space {
                 if len == 1 {
@@ -256,6 +260,7 @@ fn detokenizeI<ET:EngineType,F:FnMut(ET::Token)>(insert_space:bool,token:&ET::To
                 }
             }
         }
+        Err(c) if c == ET::Char::space() => f(ET::Token::new_space_from_command(src)),
         Err(c) => f(ET::Token::new_char_from_command(c,CategoryCode::Other,src))
     }
 }

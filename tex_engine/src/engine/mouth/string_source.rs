@@ -104,7 +104,7 @@ impl<C:CharType> StringSource<C> {
             return ret
         }
         if self.string[self.line].len() > self.col {
-            ret.push_str(std::str::from_utf8(&self.string[self.line][self.col..]).unwrap())
+            for c in &self.string[self.line][self.col..] { ret.push(*c as char)}
         }
         let mut line = self.line + 1;
         while line < self.string.len() && ret.len() < len {

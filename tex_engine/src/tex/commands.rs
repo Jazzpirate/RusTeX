@@ -483,7 +483,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
             MuSkip(ValueCommand::Value {..}) | Toks(ToksCommand::Value {..}) | FontCommand{set:std::option::Option::None,..} =>
                 throw!("Not allowed in the stomach: {}",value.as_str(interner)),
             None => match source.cause.as_cs_like() {
-                Some(CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c),
+                Some(CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c.as_char()),
                 Some(CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(interner)),
                 _ => unreachable!()
             }

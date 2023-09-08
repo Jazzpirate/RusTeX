@@ -223,6 +223,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
 
     // #[inline(always)]
     fn stack_push(&mut self, g: GroupType) {
+        debug_log!(trace => "PUSH {:?}",g);
         match g {
             GroupType::Box(m) => {
                 self.stack.push(StackLevel::new(g,Some(self.mode),self.changes.len()));
@@ -238,6 +239,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
         }
     }
     fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)> {
+        debug_log!(trace => "POP");
         match self.stack.pop() {
             None => throw!("No group here to end"),
             Some(StackLevel{group_type,mode_switch,aftergroup,start}) => {
@@ -648,11 +650,11 @@ impl<ET:EngineType> StateChange<ET> {
             (TextFont(i,_),TextFont(j,_)) => i == j,
             (ScriptFont(i,_),ScriptFont(j,_)) => i == j,
             (ScriptScriptFont(i,_),ScriptScriptFont(j,_)) => i == j,
-            (PrimitiveIntRegister(n,_),PrimitiveIntRegister(m,_)) => n == m,
-            (PrimitiveDimRegister(n,_),PrimitiveDimRegister(m,_)) => n == m,
-            (PrimitiveSkipRegister(n,_),PrimitiveSkipRegister(m,_)) => n == m,
-            (PrimitiveMuSkipRegister(n,_),PrimitiveMuSkipRegister(m,_)) => n == m,
-            (PrimitiveToksRegister(n,_),PrimitiveToksRegister(m,_)) => n == m,
+            (PrimitiveIntRegister(n,_),PrimitiveIntRegister(m,_)) => *n == *m,
+            (PrimitiveDimRegister(n,_),PrimitiveDimRegister(m,_)) => *n == *m,
+            (PrimitiveSkipRegister(n,_),PrimitiveSkipRegister(m,_)) => *n == *m,
+            (PrimitiveMuSkipRegister(n,_),PrimitiveMuSkipRegister(m,_)) => *n == *m,
+            (PrimitiveToksRegister(n,_),PrimitiveToksRegister(m,_)) => *n == *m,
             _ => false
         }
     }
@@ -684,6 +686,7 @@ impl<ET:EngineType> StackLevel<ET> {
         }
         ls.push(change);None
     }
+    #[inline(never)]
     fn forget(change:StateChange<ET>,ls:&mut Vec<StateChange<ET>>,stack:&mut Vec<Self>) {
         let mut i = 0;
         let mut j = 0;
