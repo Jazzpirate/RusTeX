@@ -2,6 +2,7 @@ use array_init::array_init;
 use log::error;
 use string_interner::{StringInterner};
 use crate::engine::EngineType;
+use crate::tex::commands::tex::NOEXPAND_INTERNAL;
 use crate::tex::token::Token;
 use crate::utils::strings::{CharType, TeXStr};
 
@@ -17,6 +18,7 @@ pub struct Interner {
     pub relax:TeXStr,
     pub par:TeXStr,
     pub empty_str:TeXStr,
+    pub noexpand_tk:TeXStr
 }
 impl Interner {
     pub fn new() -> Self {
@@ -25,6 +27,7 @@ impl Interner {
             relax:TeXStr::from_primitive(interner.get_or_intern_static("relax")),
             par:TeXStr::from_primitive(interner.get_or_intern_static("par")),
             empty_str:TeXStr::from_primitive(interner.get_or_intern_static("")),
+            noexpand_tk:TeXStr::from_primitive(interner.get_or_intern_static(NOEXPAND_INTERNAL)),
             interner
         }
     }

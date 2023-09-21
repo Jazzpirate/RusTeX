@@ -6,7 +6,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
 use crate::engine::state::State;
-use crate::engine::mouth::Mouth;
+use crate::engine::mouth::{AlignSpec, Mouth};
 use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
@@ -197,6 +197,7 @@ pub fn catcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
     v.into()
 }
 
+pub const CHAR: &str = "char";
 pub fn char<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\char");
     let char = engine.get_char();
@@ -290,6 +291,16 @@ pub fn countdef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET
     let num = num.to_i64() as usize;
     let cmd = Command::new(BaseCommand::Int(ValueCommand::Register(num)),Some(&cmd));
     engine.set_command_for_tk(name,Some(cmd),global);
+}
+
+pub const CR: &str = "cr";
+pub fn cr<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    todo!()
+}
+
+pub const CRCR: &str = "crcr";
+pub fn crcr<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    todo!()
 }
 
 pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
@@ -882,6 +893,104 @@ pub fn global<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
     }
 }
 
+pub fn do_align<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, colmode:BoxMode, betweenmode:BoxMode, to:Option<ET::Dim>) {
+    while let Some(next) = engine.get_next_unexpandable() {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
+                engine.state.stack_push(GroupType::Box(betweenmode));
+
+                let mut tabskip = engine.state.get_primitive_skip("tabskip");
+                let mut in_v = false;
+                let mut columns = vec!((vec!(),vec!(),tabskip));//vec!((engine.memory.get_token_vec(), engine.memory.get_token_vec(), tabskip));
+                let mut recindex: Option<usize> = None;
+
+                while let Some((next, e)) = engine.get_next_token() {
+                    if next.is_align_tab() && !in_v && columns.last().unwrap().0.is_empty() {
+                        recindex = Some(columns.len() - 1);
+                        engine.skip_whitespace()
+                    } else if next.is_align_tab() {
+                        columns.push((engine.memory.get_token_vec(), engine.memory.get_token_vec(), tabskip));
+                        in_v = false;
+                    } else if next.is_parameter() && !in_v { in_v = true } else if next.is_parameter() { throw!("Misplaced # in alignment preamble") } else if !e {
+                        if in_v { columns.last_mut().unwrap().1.push(next) } else { columns.last_mut().unwrap().0.push(next) }
+                    } else {
+                        let res = resolve_token::<ET>(&engine.state, next);
+                        match res.command {
+                            BaseCommand::Skip(ValueCommand::Primitive("tabskip")) => {
+                                tabskip = engine.get_skip();
+                                columns.last_mut().unwrap().2 = tabskip;
+                            }
+                            BaseCommand::Unexpandable { name, .. } if name == CR || name == CRCR => {
+                                engine.mouth.insert_every(&engine.state, "everycr");
+                                break
+                            }
+                            BaseCommand::Unexpandable { name, .. } if name == SPAN => {
+                                if let Some((next, b)) = engine.get_next_token() {
+                                    let res = resolve_token(&engine.state, next);
+                                    match engine.expand(res) {
+                                        Some(r) => throw!("Expected expandable command after \\span: {}",r.source.cause.printable(&engine.interner)),
+                                        _ => ()
+                                    }
+                                } else { file_end!() }
+                            }
+                            _ =>
+                                if in_v { columns.last_mut().unwrap().1.push(res.source.cause) } else { columns.last_mut().unwrap().0.push(res.source.cause) }
+                        }
+                    }
+                }
+
+                engine.mouth.add_align_spec(&mut engine.interner,columns.into_iter().map(|(left,right,skip)| {
+                    AlignSpec{left,right,skip}
+                }).collect(),recindex);
+
+                engine.stomach.open_box(OpenBox::Box {
+                    mode: colmode,
+                    list: vec!(),
+                    on_close: Ptr::new(move |e,children| {
+                        match colmode {
+                            BoxMode::V =>
+                                Some(HVBox::H(HBox {
+                                    kind:"VAlign", children, to, ..Default::default()
+                                })),
+                            BoxMode::H =>
+                                Some(HVBox::V(VBox {
+                                    kind:"HAlign", children, to, ..Default::default()
+                                })),
+                            _ => unreachable!()
+                        }
+                    })
+                });
+
+                todo!();
+                return ()
+            }
+            _ => throw!("Expected begin group, found {}",next.source.cause.printable(&engine.interner) => cmd.cause)
+        }
+    }
+    file_end!()
+}
+
+pub const HALIGN: &str = "halign";
+pub fn halign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let wd = if engine.get_keyword("to") {
+        Some(engine.get_dim())
+    } else {
+        None
+    };
+    do_align(engine,cmd,BoxMode::H,BoxMode::V,wd)
+}
+
+pub const CR_END: &str = "!!!§%^°`/{\"CR$END$TOKEN\"}\\`°^%§!!!";
+pub fn cr_end<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    todo!()
+}
+
+pub const ALIGN_END: &str = "!!!§%^°`/{\"ALIGN$END$TOKEN\"}\\`°^%§!!!";
+pub fn align_end<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    todo!()
+}
+
 pub const HBOX: &str = "hbox";
 pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
     debug_log!(trace=>"\\hbox");
@@ -916,7 +1025,6 @@ pub fn hbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) ->
     }
     file_end_prim!("hbox",cmd);
 }
-
 
 pub const HFIL: &str = "hfil";
 pub fn hfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
@@ -1889,6 +1997,7 @@ pub fn newlinechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
 }
 
 pub const NOEXPAND: &str = "noexpand";
+pub const NOEXPAND_INTERNAL: &str = "!!!§%^°`/{\"NO$EXPAND\"}\\`°^%§!!!";
 /// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
 /// in the first place
 pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
@@ -2358,6 +2467,11 @@ pub fn spacefactor_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSo
     ET::Int::from_i64(engine.stomach.shipout_data().spacefactor as i64)
 }
 
+pub const SPAN: &str = "span";
+pub fn span<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    todo!()
+}
+
 pub const STRING: &str = "string";
 pub fn string<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"string");
@@ -2652,6 +2766,15 @@ pub fn vadjust<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     file_end_prim!("vadjust",cmd);
 }
 
+pub const VALIGN: &str = "valign";
+pub fn valign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let ht = if engine.get_keyword("to") {
+        Some(engine.get_dim())
+    } else {
+        None
+    };
+    do_align(engine,cmd,BoxMode::V,BoxMode::H,ht)
+}
 
 pub const VBOX: &str = "vbox";
 pub fn vbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
@@ -2905,6 +3028,17 @@ pub fn year<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> 
 
 
 pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
+    engine.state.set_command(ET::Char::from_str(CR_END,&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
+        name:CR_END,
+        apply:|e,cmd| cr_end::<ET>(e,&cmd),
+        forces_mode:None
+    },None)),true);
+    engine.state.set_command(ET::Char::from_str(ALIGN_END,&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
+        name:ALIGN_END,
+        apply:|e,cmd| align_end::<ET>(e,&cmd),
+        forces_mode:None
+    },None)),true);
+
     register_skip_assign!(abovedisplayshortskip,engine);
     register_skip_assign!(abovedisplayskip,engine);
     register_int_assign!(adjdemerits,engine);
@@ -2928,6 +3062,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_box!(copy,engine,(e,cmd) =>copy::<ET>(e,&cmd));
     register_value_assign_int!(count,engine);
     register_assign!(countdef,engine,(e,cmd,global) =>countdef::<ET>(e,&cmd,global));
+    register_unexpandable!(cr,engine,None,(e,cmd) => cr::<ET>(e,&cmd));
+    register_unexpandable!(crcr,engine,None,(e,cmd) => crcr::<ET>(e,&cmd));
     register_expandable_notk!(csname,engine,(e,cmd) =>csname::<ET>(e,&cmd));
     register_int!(day,engine,(e,cmd) => day::<ET>(e,&cmd));
     register_assign!(def,engine,(e,cmd,global) =>def::<ET>(e,&cmd,global,false,false,false));
@@ -2985,6 +3121,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_assign!(gdef,engine,(e,cmd,global) =>gdef::<ET>(e,&cmd,global,false,false,false));
     register_assign!(global,engine,(e,cmd,g) =>global::<ET>(e,&cmd,g,false,false,false));
     register_int_assign!(globaldefs,engine);
+    register_unexpandable!(halign,engine,Some(HorV::Vertical),(e,cmd) =>halign::<ET>(e,&cmd));
     register_int_assign!(hangafter,engine);
     register_dim_assign!(hangindent,engine);
     register_int_assign!(hbadness,engine);
@@ -3108,6 +3245,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_assign!(skipdef,engine,(e,cmd,global) =>skipdef::<ET>(e,&cmd,global));
     register_value_assign_int!(spacefactor,engine);
     register_skip_assign!(spaceskip,engine);
+    register_unexpandable!(span,engine,None,(e,cmd) => span::<ET>(e,&cmd));
     register_dim_assign!(splitmaxdepth,engine);
     register_skip_assign!(splittopskip,engine);
     register_expandable!(string,engine,(e,cmd,f) => string::<ET>(e,&cmd,f));
@@ -3140,6 +3278,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,&cmd));
     register_int_assign!(vbadness,engine);
     register_open_box!(vadjust,engine,BoxMode::V,(e,cmd) =>vadjust::<ET>(e,&cmd));
+    register_unexpandable!(valign,engine,Some(HorV::Vertical),(e,cmd) =>valign::<ET>(e,&cmd));
     register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
     register_open_box!(vcenter,engine,BoxMode::V,(e,cmd) =>vcenter::<ET>(e,&cmd));
     register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,&cmd));
@@ -3190,8 +3329,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,scriptscriptstyle);
     cmstodo!(engine,mathchar);
     cmstodo!(engine,mkern);
-    cmstodo!(engine,cr);
-    cmstodo!(engine,crcr);
 
     cmtodo!(engine,lastpenalty);
     cmtodo!(engine,badness);
@@ -3228,8 +3365,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,xleaders);
     cmtodo!(engine,moveleft);
     cmtodo!(engine,moveright);
-    cmtodo!(engine,halign);
-    cmtodo!(engine,valign);
     cmtodo!(engine,noboundary);
     cmtodo!(engine,accent);
     cmtodo!(engine,discretionary);
@@ -3260,6 +3395,5 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,noalign);
     cmtodo!(engine,omit);
     cmtodo!(engine,smallskip);
-    cmtodo!(engine,span);
 }
 

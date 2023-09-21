@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory, Symbol};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
@@ -49,6 +49,7 @@ pub trait Token:Clone+Debug+Send+PartialEq {
     fn is_eof(&self) -> bool;
     fn is_space(&self) -> bool;
     fn is_mathshift(&self) -> bool;
+    fn is_align_tab(&self) -> bool;
     fn get_char(&self) -> Option<Self::Char>;
     fn get_catcode(&self) -> CategoryCode;
     fn split_char_and_catcode(&self) -> Option<(Self::Char,CategoryCode)>;
@@ -110,6 +111,12 @@ impl<C:CharType> Token for PlainToken<C> {
         match self {
             PlainToken::Character(_, CategoryCode::Parameter) => true,
             _ => false,
+        }
+    }
+    fn is_align_tab(&self) -> bool {
+        match self {
+            PlainToken::Character(_,CategoryCode::AlignmentTab) => true,
+            _ => false
         }
     }
     fn is_mathshift(&self) -> bool {
@@ -186,6 +193,145 @@ impl<C:CharType> Token for PlainToken<C> {
         match self {
             PlainToken::CS(name) => BaseCommand::None,
             PlainToken::Character(c,cc) => BaseCommand::Char{char:*c,catcode:*cc}
+        }
+    }
+}
+
+#[derive(Copy,Clone,Debug)]
+pub struct CompactToken(u32);
+impl CompactToken {
+    fn is_string(&self) -> bool { self.0 < 0x8000_0000 }
+    fn as_string(&self) -> Option<TeXStr> {
+        use string_interner::Symbol as OSymbol;
+        if self.is_string() {
+            Some(TeXStr::from_primitive(OSymbol::try_from_usize(self.0 as usize).unwrap()))
+        } else {
+            None
+        }
+    }
+    fn catcode(&self) -> CategoryCode {
+        //assert!(self.0 >= 0x8000_0000);
+        CategoryCode::try_from(((self.0 & 0x0000_FF00) >> 8) as u8).unwrap()
+    }
+    fn u8(&self) -> u8 {
+        //assert!(self.0 >= 0x8000_0000);
+        (self.0 & 0x0000_00FF) as u8
+    }
+    fn from_char_cat(c:u8,cat:CategoryCode) -> Self {
+        let c = u32::from(c);
+        let cat = u32::from(Into::<u8>::into(cat));
+        let r = 0x8000_0000 | (cat << 8) |c;
+        //assert!(r >= 0x8000_0000);
+        Self(r)
+    }
+}
+impl PartialEq for CompactToken {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 || {
+            if self.is_string() || other.is_string() { return false}
+            let cc1 = self.catcode();
+            let cc2 = other.catcode();
+            if cc1 == CategoryCode::Space && cc2 == CategoryCode::Space {return true}
+            if cc1 != cc2 {return false}
+            let c1 = self.u8();
+            let c2 = other.u8();
+            c1 == c2
+        }
+    }
+}
+
+impl Token for CompactToken {
+    type Char = u8;
+    fn trace<W: Write>(&self, interner: &Interner, w: &mut W) -> std::fmt::Result {
+        Ok(())
+    }
+
+    fn get_catcode(&self) -> CategoryCode {
+        if self.is_string() {
+            CategoryCode::Escape
+        } else {
+            self.catcode()
+        }
+    }
+
+    fn as_cs_like(&self) -> Option<CSLike<Self::Char>> {
+        match self.as_string() {
+            Some(s) => Some(CSLike::CS(s)),
+            _ => {
+                let cc = self.catcode();
+                match cc {
+                    CategoryCode::Active => Some(CSLike::ActiveChar(self.u8())),
+                    _ => None
+                }
+            }
+        }
+    }
+    fn name_or_char(&self) -> Result<TeXStr, Self::Char> {
+        match self.as_string() {
+            Some(s) => Ok(s),
+            _ => Err(self.u8())
+        }
+    }
+    fn is_space(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::Space
+    }
+    fn is_parameter(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::Parameter
+    }
+    fn is_align_tab(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::AlignmentTab
+    }
+    fn is_mathshift(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::MathShift
+    }
+    fn is_eof(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::EOL
+    }
+    fn is_begin_group(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::BeginGroup
+    }
+    fn is_end_group(&self) -> bool {
+        !self.is_string() && self.catcode() == CategoryCode::EndGroup
+    }
+    fn get_cs_name(&self) -> Option<TeXStr> {
+        self.as_string()
+    }
+    fn eof() -> Self {
+        Self::from_char_cat(b'\n',CategoryCode::EOL)
+    }
+    fn get_char(&self) -> Option<Self::Char> {
+        if self.is_string() { None } else { Some(self.u8()) }
+    }
+    fn clone_with<ET: EngineType<Token=Self>>(&self, rf: &CommandSource<ET>) -> Self { *self }
+    fn new_char_from_command<ET: EngineType<Token=Self>>(c: Self::Char, cat: CategoryCode, rf: &CommandSource<ET>) -> Self {
+        Self::from_char_cat(c,cat)
+    }
+    fn new_space_from_command<ET: EngineType<Token=Self>>(rf: &CommandSource<ET>) -> Self {
+        Self::from_char_cat(b' ',CategoryCode::Space)
+    }
+    fn new_cs_from_command<ET: EngineType<Token=Self>>(name: TeXStr, rf: &CommandSource<ET>) -> Self {
+        //assert!(name.0.to_usize() < 0x8000_0000);
+        use string_interner::Symbol as OSymbol;
+        Self(name.0.to_usize() as u32)
+    }
+    fn new_char_from_string(c: Self::Char, cat: CategoryCode, file: Option<TeXStr>, start: (usize, usize), end: (usize, usize)) -> Self {
+        Self::from_char_cat(c,cat)
+    }
+    fn new_space_from_string(file: Option<TeXStr>, start: (usize, usize), end: (usize, usize)) -> Self {
+        Self::from_char_cat(b' ',CategoryCode::Space)
+    }
+    fn new_cs_from_string(name: TeXStr, file: Option<TeXStr>, start: (usize, usize), end: (usize, usize)) -> Self {
+        //assert!(name.0.to_usize() < 0x8000_0000);
+        use string_interner::Symbol as OSymbol;
+        Self(name.0.to_usize() as u32)
+    }
+    fn split_char_and_catcode(&self) -> Option<(Self::Char, CategoryCode)> {
+        if self.is_string() { None } else { Some((self.u8(),self.catcode())) }
+    }
+    fn to_command<ET: EngineType<Token=Self,Char=Self::Char>>(&self) -> BaseCommand<ET> {
+        match self.as_string() {
+            Some(name) => BaseCommand::None,
+            _ => BaseCommand::Char{char:self.u8(),catcode:self.catcode()}
         }
     }
 }

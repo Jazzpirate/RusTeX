@@ -64,28 +64,28 @@ impl<ET:EngineType> Error for TeXError<ET> {
 #[macro_export]
 macro_rules! throw {
     ($arg:expr) => {
-        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(crate::utils::errors::TeXError{
             msg:$arg.to_string(),
             cause:std::option::Option::None,
             source:std::option::Option::None
         })
     };
     ($first:expr,$($arg:expr),*) => {
-        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(crate::utils::errors::TeXError{
             msg:format!($first,$($arg),*),
             cause:std::option::Option::None,
             source:std::option::Option::None
         })
     };
     ($arg:expr => $cause:expr) => {
-        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(crate::utils::errors::TeXError{
             msg:$arg.to_string(),
             cause:Some($cause.clone()),
             source:std::option::Option::None
         })
     };
     ($first:expr,$($arg:expr),* => $cause:expr) => {
-        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(TeXError{
+        std::panic::panic_any::<crate::utils::errors::TeXError<ET>>(crate::utils::errors::TeXError{
             msg:format!($first,$($arg),*),
             cause:Some($cause.clone()),
             source:std::option::Option::None

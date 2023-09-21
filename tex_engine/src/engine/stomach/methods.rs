@@ -22,7 +22,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                 Some(mode) => {
                     let currmode = engine.state.mode();
                     match (currmode,mode) {
-                        (TeXMode::InternalVertical | TeXMode::Vertical,HorV::Vertical) => (),
+                        (TeXMode::InternalVertical | TeXMode::Vertical | TeXMode::Displaymath,HorV::Vertical) => (),
                         (TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::Math | TeXMode::Displaymath,HorV::Horizontal) => (),
                         (TeXMode::RestrictedHorizontal,HorV::Vertical) =>
                         throw!("Not allowed in restricted horizontal mode: {}",cmd.source.cause.printable(&engine.interner) => cmd.source.cause),
