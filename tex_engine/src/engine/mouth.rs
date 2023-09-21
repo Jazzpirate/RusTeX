@@ -37,7 +37,7 @@ pub trait Mouth<ET:EngineType>:Sized {
     fn push_string(&mut self,str:&Vec<u8>);
 
     /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
-    fn push_noexpand(&mut self,tk:ET::Token,memory:&mut Memory<ET>);
+    fn push_noexpand(&mut self,tk:ET::Token,interner:&Interner);
 
     fn add_align_spec(&mut self,interner:&mut Interner, spec: Vec<AlignSpec<ET>>, rec_index: Option<usize>);
 
@@ -47,7 +47,7 @@ pub trait Mouth<ET:EngineType>:Sized {
 
     /// Return the next [`Token`] from the [`Mouth`], and whether to expand it (due to `\noexpand`)
     //#[inline(always)]
-    fn get_next(&mut self,state:&ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<(ET::Token,bool)>;
+    fn get_next(&mut self,state:&ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<ET::Token>;
 
     fn get_next_simple(&mut self,state:&ET::State,interner:&mut Interner) -> Option<ET::Token>;
 
@@ -96,7 +96,7 @@ pub trait Mouth<ET:EngineType>:Sized {
 #[derive(Clone)]
 pub enum TeXMouthSource<ET:EngineType> {
     Tkls(Vec<ET::Token>),
-    Noexpand(ET::Token),
+    //Noexpand(ET::Token),
     String(StringSource<ET::Char>)
 }
 
@@ -203,23 +203,23 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         }
     }
 
-    fn get_next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<(ET::Token, bool)> {
+    fn get_next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<ET::Token> {
         if self.alignspecs.is_empty() {
             self.next(state, interner, outputs)
         } else {
             let tk = self.next(state, interner, outputs);
             let spec = self.alignspecs.last_mut().unwrap();
             match tk {
-                Some((t,e)) if t.is_begin_group() => {
+                Some(t) if t.is_begin_group() => {
                     spec.ingroups += 1;
-                    Some((t,e))
+                    Some(t)
                 }
-                Some((t,e)) if t.is_end_group() => {
+                Some(t) if t.is_end_group() => {
                     if spec.ingroups == 0 { throw!("Unexpected end group token" => t)}
                     spec.ingroups -= 1;
-                    Some((t,e))
+                    Some(t)
                 }
-                Some((t,e)) if t.is_align_tab() && spec.ingroups == 0 => {
+                Some(t) if t.is_align_tab() && spec.ingroups == 0 => {
                     if spec.in_right {throw!("Unexpected alignment tab character" => t)}
                     spec.in_right = true;
                     let v = &spec.specs[spec.current];
@@ -229,7 +229,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                     self.push_expansion(r);
                     return self.next(state,interner,outputs);
                 }
-                Some((t,e)) if !spec.in_right && spec.ingroups == 0 => {
+                Some(t) if !spec.in_right && spec.ingroups == 0 => {
                     match t.as_cs_like() {
                         Some(csl) => {
                             let cm = match csl {
@@ -248,16 +248,16 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
                                             self.push_expansion(r);
                                             return self.next(state,interner,outputs);
                                         }
-                                        _ => Some((t,e))
+                                        _ => Some(t)
                                     }
                                 }
-                                None => Some((t,e))
+                                None => Some(t)
                             }
                         }
-                        None => Some((t,e))
+                        None => Some(t)
                     }
                 }
-                Some((t,e)) => Some((t,e)),
+                Some(t) => Some(t),
                 _ => file_end!()
             }
         }
@@ -276,8 +276,19 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         ret
     }
 
-    fn push_noexpand(&mut self, tk: ET::Token,memory:&mut Memory<ET>) {
-        self.stack.push(TeXMouthSource::Noexpand(tk))
+    fn push_noexpand(&mut self, tk: ET::Token,interner:&Interner) {
+        match self.stack.last_mut() {
+            Some(TeXMouthSource::Tkls(v)) => {
+                v.push(tk);
+                v.push(ET::Token::new_cs_from_string(interner.noexpand_tk,None,(0,0),(0,0)));
+            },
+            _ => {
+                let mut v = self.get_vec();
+                v.push(tk);
+                v.push(ET::Token::new_cs_from_string(interner.noexpand_tk,None,(0,0),(0,0)));
+                self.stack.push(TeXMouthSource::Tkls(v))
+            }
+        }
     }
 
     fn push_file(&mut self, file: &ET::File,interner:&mut Interner) {
@@ -309,7 +320,7 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
         let mut ret = String::new();
         for s in self.stack.iter().rev() {
             ret.push_str(&match s {
-                TeXMouthSource::Noexpand(ts) => ts.printable(interner).to_string(),
+                //TeXMouthSource::Noexpand(ts) => ts.printable(interner).to_string(),
                 TeXMouthSource::Tkls(v) => v.iter().rev().map(|t| t.printable(interner).to_string()).collect::<String>(),
                 TeXMouthSource::String(ss) => ss.preview(len - ret.len())
             });
@@ -464,14 +475,17 @@ impl<ET:EngineType> StandardMouth<ET> {
 
     }*/
 
-    pub fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<ET::Token> {
+    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<ET::Token> {
         match self.stack.last_mut() {
-            Some(TeXMouthSource::Noexpand(tk)) => match self.stack.pop() {
+            /*Some(TeXMouthSource::Noexpand(tk)) => todo!() match self.stack.pop() {
                 Some(TeXMouthSource::Noexpand(t)) => Some(t),
                 _ => unreachable!()
-            },
+            },*/
             Some(TeXMouthSource::Tkls(ref mut v)) => {
-                let ret = v.pop().unwrap();
+                let mut ret = v.pop().unwrap();
+                if ret.is_noexpand_marker(&*interner) {
+                    ret = v.pop().unwrap();
+                }
                 if v.is_empty() {
                     match self.stack.pop() {
                         Some(TeXMouthSource::Tkls(v)) => {
@@ -493,14 +507,14 @@ impl<ET:EngineType> StandardMouth<ET> {
     }
 
 
-    fn next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<(ET::Token, bool)> {
+    fn next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<ET::Token> {
         match self.stack.last_mut() {
-            Some(TeXMouthSource::Noexpand(tk)) => match self.stack.pop() {
+            /*Some(TeXMouthSource::Noexpand(tk)) => todo!(),match self.stack.pop() {
                 Some(TeXMouthSource::Noexpand(t)) => Some((t, false)),
                 _ => unreachable!()
-            },
+            },*/
             Some(TeXMouthSource::Tkls(v)) => {
-                let ret = (v.pop().unwrap(), true);
+                let ret = v.pop().unwrap();
                 if v.is_empty() {
                     match self.stack.pop() {
                         Some(TeXMouthSource::Tkls(v)) => {
@@ -513,7 +527,7 @@ impl<ET:EngineType> StandardMouth<ET> {
             }
             Some(TeXMouthSource::String(ref mut s)) => {
                 match s.get_next::<ET>(interner,state.get_catcode_scheme(), state.get_endlinechar()) {
-                    Some(t) => return Some((t, true)),
+                    Some(t) => return Some(t),
                     None => {
                         match &s.source {
                             None => (),
@@ -528,14 +542,14 @@ impl<ET:EngineType> StandardMouth<ET> {
                             Some(v) => PrintableTokenList::<ET>(v,interner).to_string()
                         });
                         match everyeof {
-                            None => Some((eof,true)),
-                            Some(v) if v.is_empty() => Some((eof,true)),
+                            None => Some(eof),
+                            Some(v) if v.is_empty() => Some(eof),
                             Some(v) => {
                                 let mut nv = self.get_vec();
                                 nv.push(eof);
                                 nv.extend(v.iter().skip(1).rev().map(|t| t.clone()));
                                 self.stack.push(TeXMouthSource::Tkls(nv));
-                                Some((v.first().unwrap().clone(),true))
+                                Some(v.first().unwrap().clone())
                             }
                         }
                     }

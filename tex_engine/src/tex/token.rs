@@ -44,6 +44,7 @@ pub trait Token:Clone+Debug+Send+PartialEq {
     /// Should be true iff this is a control sequence or an active character
     fn as_cs_like(&self) -> Option<CSLike<Self::Char>>;
     fn is_parameter(&self) -> bool;
+    fn is_noexpand_marker(&self,interner:&Interner) -> bool;
     fn is_begin_group(&self) -> bool;
     fn is_end_group(&self) -> bool;
     fn is_eof(&self) -> bool;
@@ -99,6 +100,12 @@ impl<C:CharType> Token for PlainToken<C> {
         match self {
             PlainToken::CS(name) => Ok(*name),
             PlainToken::Character(c, _) => Err(*c)
+        }
+    }
+    fn is_noexpand_marker(&self, interner: &Interner) -> bool {
+        match self {
+            PlainToken::CS(name) => name == &interner.noexpand_tk,
+            _ => false
         }
     }
     fn is_space(&self) -> bool {
@@ -252,6 +259,11 @@ impl Token for CompactToken {
         } else {
             self.catcode()
         }
+    }
+
+    fn is_noexpand_marker(&self, interner: &Interner) -> bool {
+        use string_interner::Symbol as OSymbol;
+        self.0 == (interner.noexpand_tk.0.to_usize() as u32)
     }
 
     fn as_cs_like(&self) -> Option<CSLike<Self::Char>> {

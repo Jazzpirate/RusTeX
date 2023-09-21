@@ -12,7 +12,11 @@ use crate::engine::mouth::Mouth;
 impl<ET:EngineType> EngineRef<ET> {
     /// get the next [`Token`] from the [`Mouth`]
     pub fn get_next_token(&mut self) -> Option<(ET::Token,bool)> {
-        self.mouth.get_next(&self.state,&mut self.interner,&mut self.outputs)
+        match self.mouth.get_next(&self.state,&mut self.interner,&mut self.outputs) {
+            Some(t) if t.is_noexpand_marker(&self.interner) =>
+                self.mouth.get_next(&self.state,&mut self.interner,&mut self.outputs).map(|t| (t,false)),
+            o => o.map(|t| (t,true))
+        }
     }
 
     /// Skip whitespace characters from the [`Mouth`]

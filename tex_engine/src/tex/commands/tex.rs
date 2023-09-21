@@ -2008,7 +2008,7 @@ pub fn noexpand<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
             let res = resolve_token::<ET>(&engine.state,t);
             match res.command {
                 BaseCommand::Def(_) | BaseCommand::Expandable {..} | BaseCommand::ExpandableNoTokens {..} | BaseCommand::Conditional {..} =>
-                    engine.mouth.push_noexpand(res.source.cause,&mut engine.memory),
+                    engine.mouth.push_noexpand(res.source.cause,&engine.interner),
                 BaseCommand::Char{catcode:CategoryCode::EOL,..} => (),
                 _ => engine.mouth.requeue(res.source.cause)
             }

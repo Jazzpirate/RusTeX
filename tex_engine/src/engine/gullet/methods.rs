@@ -462,25 +462,31 @@ impl<ET:EngineType> EngineRef<ET> {
 
     pub fn get_expanded_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self, expand_protected: bool, edef_like: bool, err_on_unknowns: bool, mut f: F) {
         match self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
-            Some((t, _)) if t.is_begin_group() => (),
+            Some(t) if t.is_begin_group() => (),
             _ => throw!("begin group expected")
         }
         let mut ingroup = 0;
         let mut ok = false;
-        while let Some((tk, e)) = self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
-            if tk.is_begin_group() {
-                ingroup += 1;
-                f(self, tk);
-                continue
-            }
-            if tk.is_end_group() {
-                if ingroup == 0 {
-                    ok = true;
-                    break
-                } else { ingroup -= 1; }
-                f(self, tk);
-                continue
-            }
+        while let Some(mut tk) = self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
+            let e = if tk.is_noexpand_marker(&self.interner) {
+                tk = self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs).unwrap();
+                false
+            } else {
+                if tk.is_begin_group() {
+                    ingroup += 1;
+                    f(self, tk);
+                    continue
+                }
+                if tk.is_end_group() {
+                    if ingroup == 0 {
+                        ok = true;
+                        break
+                    } else { ingroup -= 1; }
+                    f(self, tk);
+                    continue
+                }
+                true
+            };
             if e {
                 let res = crate::engine::gullet::methods::resolve_token::<ET>(&self.state, tk);
                 match res.command {
