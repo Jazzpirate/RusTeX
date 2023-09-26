@@ -67,7 +67,49 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
                     }
                 }
             }
-            TeXMode::Math | TeXMode::Displaymath => todo!(),
+            TeXMode::Math => {
+                match engine.state.stack_pop(&mut engine.memory) {
+                    Some((v,GroupType::Box(BoxMode::M))) => {
+                        if !v.is_empty() {
+                            let mut rs = engine.mouth.get_expansion();
+                            rs.extend(v.into_iter());
+                            engine.mouth.push_expansion(rs);
+                        }
+                        match engine.stomach.shipout_data_mut().box_stack.pop() {
+                            Some(crate::tex::nodes::OpenBox::Math {list,..}) => {
+                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math(list))
+                            }
+                            _ =>throw!("Unexpected box on stack" => cmd.source.cause)
+                        }
+                    }
+                    _ => throw!("Unexpected end of math mode" => cmd.source.cause)
+                }
+            }
+            TeXMode::Displaymath => {
+                match engine.get_next_token() {
+                    None => throw!("Unexpected end of input" => cmd.source.cause),
+                    Some((t,_)) if t.is_mathshift() => (),
+                    Some((o,_)) => {
+                        throw!("Unexpected token in displaymath: {}",o.printable(&engine.interner) => cmd.source.cause)
+                    }
+                }
+                match engine.state.stack_pop(&mut engine.memory) {
+                    Some((v,GroupType::Box(BoxMode::M))) => {
+                        if !v.is_empty() {
+                            let mut rs = engine.mouth.get_expansion();
+                            rs.extend(v.into_iter());
+                            engine.mouth.push_expansion(rs);
+                        }
+                        match engine.stomach.shipout_data_mut().box_stack.pop() {
+                            Some(crate::tex::nodes::OpenBox::Math {list,..}) => {
+                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math(list))
+                            }
+                            _ =>throw!("Unexpected box on stack" => cmd.source.cause)
+                        }
+                    }
+                    _ => throw!("Unexpected end of math mode" => cmd.source.cause)
+                }
+            }
             _ => {
                 ET::Stomach::open_paragraph(engine,cmd);
             }
@@ -114,38 +156,45 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         Superscript => catch!( todo!("Superscript in digest") => cmd.source.cause),
         Subscript => catch!( todo!("Subscript in digest") => cmd.source.cause),
         BeginGroup => engine.state.stack_push(GroupType::Token),
-        EndGroup => match engine.state.stack_pop(&mut engine.memory) {
-            Some((v,GroupType::Token)) => {
-                if !v.is_empty() {
-                    let mut rs = engine.mouth.get_expansion();
-                    rs.extend(v.into_iter());
-                    engine.mouth.push_expansion(rs);
-                }
-            }
-            Some((v,GroupType::Box(b))) => {
-                if !v.is_empty() {
-                    let mut rs = engine.mouth.get_expansion();
-                    rs.extend(v.into_iter());
-                    engine.mouth.push_expansion(rs);
-                }
-                match engine.stomach.shipout_data().box_stack.last() {
-                    Some(crate::tex::nodes::OpenBox::Paragraph {..}) => ET::Stomach::close_paragraph(engine),
-                    _ => ()
-                }
-                match engine.stomach.shipout_data_mut().box_stack.pop() {
-                    Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
-                        match on_close(engine,list) {
-                            Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
-                            None => {}
-                        }
+        EndGroup => {
+            match (engine.state.get_grouptype(),engine.state.mode()) {
+                (GroupType::Box(_),TeXMode::Horizontal) => {
+                    match engine.stomach.shipout_data().box_stack.last() {
+                        Some(crate::tex::nodes::OpenBox::Paragraph {..}) => ET::Stomach::close_paragraph(engine),
+                        _ => throw!("There should be a paragraph to close here!")
                     }
-                    _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                 }
-                if engine.stomach.shipout_data().box_stack.is_empty() {
-                    ET::Stomach::maybe_shipout(engine,false)
-                }
+                _ => ()
             }
-            _ => throw!("Unexpected end group" => cmd.source.cause)
+            match engine.state.stack_pop(&mut engine.memory) {
+                Some((v,GroupType::Token)) => {
+                    if !v.is_empty() {
+                        let mut rs = engine.mouth.get_expansion();
+                        rs.extend(v.into_iter());
+                        engine.mouth.push_expansion(rs);
+                    }
+                }
+                Some((v,GroupType::Box(b))) => {
+                    if !v.is_empty() {
+                        let mut rs = engine.mouth.get_expansion();
+                        rs.extend(v.into_iter());
+                        engine.mouth.push_expansion(rs);
+                    }
+                    match engine.stomach.shipout_data_mut().box_stack.pop() {
+                        Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
+                            match on_close(engine,list) {
+                                Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
+                                None => {}
+                            }
+                        }
+                        _ =>throw!("Unexpected box on stack" => cmd.source.cause)
+                    }
+                    if engine.stomach.shipout_data().box_stack.is_empty() {
+                        ET::Stomach::maybe_shipout(engine,false)
+                    }
+                }
+                _ => throw!("Unexpected end group" => cmd.source.cause)
+            }
         }
     }
 }

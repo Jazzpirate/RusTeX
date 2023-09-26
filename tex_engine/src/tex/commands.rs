@@ -521,12 +521,12 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                 BeginGroup => BaseStomachCommand::BeginGroup,
                 EndGroup => BaseStomachCommand::EndGroup,
                 MathShift => BaseStomachCommand::MathShift,
-                AlignmentTab => todo!(),
+                AlignmentTab => throw!("Unexpected alignment tab token"),
                 Superscript => BaseStomachCommand::Superscript,
                 Subscript => BaseStomachCommand::Subscript,
                 Space => BaseStomachCommand::Space,
                 Letter | Other => BaseStomachCommand::Char(char),
-                Parameter => todo!(),
+                Parameter => throw!("Unexpected parameter token"),
                 Ignored | Invalid | Comment | Escape | Active => unreachable!()
             }
             CharDef(char) => BaseStomachCommand::Char(char)

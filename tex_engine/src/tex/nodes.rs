@@ -28,6 +28,7 @@ pub enum TeXNode<ET:EngineType> {
     Penalty(i32),
     Kern{ dim:ET::Dim,axis:HorV},
     Box(HVBox<ET>),
+    Math(Vec<TeXNode<ET>>),
     Whatsit(Whatsit<ET>),
     Mark(Vec<ET::Token>),
     Custom(ET::Node),
@@ -42,6 +43,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Kern { dim: val,axis:HorV::Vertical} => *val,
             Box(b) => b.height(fs),
             Custom(c) => c.height(fs),
+            Math(ls) => ls.iter().map(|n| n.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
             Simple(s) => s.height(fs),
             _ => ET::Dim::from_sp(0)
         }
@@ -53,6 +55,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Kern { dim: val,axis:HorV::Horizontal} => *val,
             Box(b) => b.width(fs),
             Custom(c) => c.width(fs),
+            Math(ls) => ls.iter().map(|n| n.width(fs)).sum(),
             Simple(s) => s.width(fs),
             _ => ET::Dim::from_sp(0)
         }
@@ -75,6 +78,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Kern{ ..} => 12,
             Box(b) =>b.nodetype(),
             Whatsit(_) => 9,
+            Math(_) => 10,
             Mark(_) => 5,
             Custom(n) => n.nodetype(),
             Simple(n) => n.nodetype(),

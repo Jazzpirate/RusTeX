@@ -686,7 +686,7 @@ impl<ET:EngineType> StackLevel<ET> {
         }
         ls.push(change);None
     }
-    #[inline(never)]
+
     fn forget(change:StateChange<ET>,ls:&mut Vec<StateChange<ET>>,stack:&mut Vec<Self>) {
         let mut i = 0;
         let mut j = 0;

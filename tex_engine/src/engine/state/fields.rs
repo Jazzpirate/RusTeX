@@ -678,12 +678,12 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
     }
     // #[inline(always)]
     fn stack_push(&mut self, g: GroupType) {
-        debug_log!(trace => "PUSH {:?}",g);
+        debug_log!(trace => "PUSH {:?} => {:?}",self.mode,g);
         match g {
             GroupType::Box(m) => {
                 self.grouptype.push((g,Some(self.mode)));
                 self.mode = match m {
-                    BoxMode::H | BoxMode::LeftRight => TeXMode::RestrictedHorizontal,
+                    BoxMode::H => TeXMode::RestrictedHorizontal,
                     BoxMode::M => TeXMode::Math,
                     BoxMode::DM => TeXMode::Displaymath,
                     BoxMode::V => TeXMode::InternalVertical,
@@ -727,10 +727,10 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
         self.aftergroups.push(vec!());
     }
     fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)> {
-        debug_log!(trace => "POP");
         let gt = match self.grouptype.pop() {
             None => return None,
             Some((gt,Some(m))) => {
+                debug_log!(trace => "POP {:?} => {:?}",gt,m);
                 self.mode = m;
                 gt
             }

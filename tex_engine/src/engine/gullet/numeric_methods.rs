@@ -42,22 +42,11 @@ pub fn get_int<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::Int {
                     b'\"' if !ishex && !isoct => ishex = true, // "
                     b'\'' if !ishex && !isoct => isoct = true, // '
                     b'`' if !ishex && !isoct => { // `
-                        match catch!(engine.get_next_token() => next.source.cause) {
-                            std::option::Option::None => file_end!(next.source.cause),
-                            Some((tk,_)) => {
-                                let c = match tk.name_or_char() {
-                                    Err(c) => c,
-                                    Ok(name) => match ET::Char::single_char(name.to_str(&engine.interner)) {
-                                        Some(c) => c,
-                                        std::option::Option::None => throw!("Number expected" => next.source.cause)
-                                    }
-                                };
-                                catch!(expand_until_space::<ET>(engine) => tk);
-                                let us =  c.to_usize() as i64;
-                                let us = if isnegative { -us } else { us };
-                                return catch!(ET::Int::from_i64(us) => tk)
-                            }
-                        }
+                        let c = catch!(engine.mouth.get_literal(&engine.state,&mut engine.interner) => next.source.cause);
+                        catch!(expand_until_space::<ET>(engine) => next.source.cause);
+                        let us =  c.to_usize() as i64;
+                        let us = if isnegative { -us } else { us };
+                        return catch!(ET::Int::from_i64(us) => next.source.cause)
                     },
                     b if is_ascii_hex_digit(b) && ishex =>
                     // TODO: texnically, this requires catcode 12 for 0-9 and catcode 11 or 12 for A-F

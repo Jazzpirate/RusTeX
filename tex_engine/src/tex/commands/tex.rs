@@ -18,6 +18,7 @@ use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
 use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
+use log::debug;
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
 use crate::tex::ConditionalBranch;
@@ -295,13 +296,11 @@ pub fn countdef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET
 
 pub const CR: &str = "cr";
 pub fn cr<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    todo!()
+    todo!("cr")
 }
 
 pub const CRCR: &str = "crcr";
-pub fn crcr<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    todo!()
-}
+pub fn crcr<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {}
 
 pub fn get_csname<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, name:&'static str)
                                  -> TeXStr {
@@ -906,13 +905,54 @@ pub fn do_align<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
                 let mut recindex: Option<usize> = None;
 
                 while let Some((next, e)) = engine.get_next_token() {
+                    let next = resolve_token::<ET>(&engine.state,next);
+                    match next.command {
+                        BaseCommand::Char {catcode:CategoryCode::AlignmentTab,..} if !in_v && columns.last().unwrap().0.is_empty() => {
+                            recindex = Some(columns.len() - 1);
+                            engine.skip_whitespace()
+                        }
+                        BaseCommand::Char {catcode:CategoryCode::AlignmentTab,..} => {
+                            columns.push((engine.memory.get_token_vec(), engine.memory.get_token_vec(), tabskip));
+                            in_v = false;
+                        }
+                        BaseCommand::Char {catcode:CategoryCode::Parameter,..} if !in_v => {
+                            in_v = true
+                        }
+                        BaseCommand::Char {catcode:CategoryCode::Parameter,..} => throw!("Misplaced # in alignment preamble"),
+                        _ if !e =>
+                            if in_v { columns.last_mut().unwrap().1.push(next.source.cause) } else { columns.last_mut().unwrap().0.push(next.source.cause) }
+                        BaseCommand::Skip(ValueCommand::Primitive("tabskip")) => {
+                            tabskip = engine.get_skip();
+                            columns.last_mut().unwrap().2 = tabskip;
+                        }
+                        BaseCommand::Unexpandable { name, .. } if name == CR || name == CRCR => {
+                            engine.mouth.insert_every(&engine.state, "everycr");
+                            break
+                        }
+                        BaseCommand::Unexpandable { name, .. } if name == SPAN => {
+                            if let Some((next, b)) = engine.get_next_token() {
+                                let res = resolve_token(&engine.state, next);
+                                match engine.expand(res) {
+                                    Some(r) => throw!("Expected expandable command after \\span: {}",r.source.cause.printable(&engine.interner)),
+                                    _ => ()
+                                }
+                            } else { file_end!() }
+                        }
+                        _ =>
+                            if in_v { columns.last_mut().unwrap().1.push(next.source.cause) } else { columns.last_mut().unwrap().0.push(next.source.cause) }
+                    }
+                    /*
                     if next.is_align_tab() && !in_v && columns.last().unwrap().0.is_empty() {
                         recindex = Some(columns.len() - 1);
                         engine.skip_whitespace()
                     } else if next.is_align_tab() {
                         columns.push((engine.memory.get_token_vec(), engine.memory.get_token_vec(), tabskip));
                         in_v = false;
-                    } else if next.is_parameter() && !in_v { in_v = true } else if next.is_parameter() { throw!("Misplaced # in alignment preamble") } else if !e {
+                    } else if next.is_parameter() && !in_v {
+                        in_v = true
+                    } else if next.is_parameter() {
+                        throw!("Misplaced # in alignment preamble")
+                    } else if !e {
                         if in_v { columns.last_mut().unwrap().1.push(next) } else { columns.last_mut().unwrap().0.push(next) }
                     } else {
                         let res = resolve_token::<ET>(&engine.state, next);
@@ -938,14 +978,25 @@ pub fn do_align<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
                                 if in_v { columns.last_mut().unwrap().1.push(res.source.cause) } else { columns.last_mut().unwrap().0.push(res.source.cause) }
                         }
                     }
+
+                     */
                 }
+
+/*
+                std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace,,tex_engine::engine::state=trace");
+                env_logger::try_init();
+                debug!("columns:");
+                for (l,r,_) in &columns {
+                    debug!("Left: {}\nRight: {}\n",PrintableTokenList::<ET>(l,&engine.interner),PrintableTokenList::<ET>(r,&engine.interner));
+                }
+*/
 
                 engine.mouth.add_align_spec(&mut engine.interner,columns.into_iter().map(|(left,right,skip)| {
                     AlignSpec{left,right,skip}
-                }).collect(),recindex);
+                }).collect(),recindex,colmode);
 
                 engine.stomach.open_box(OpenBox::Box {
-                    mode: colmode,
+                    mode: betweenmode,
                     list: vec!(),
                     on_close: Ptr::new(move |e,children| {
                         match colmode {
@@ -962,13 +1013,116 @@ pub fn do_align<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
                     })
                 });
 
-                todo!();
+                start_row(engine,cmd,colmode);
                 return ()
             }
             _ => throw!("Expected begin group, found {}",next.source.cause.printable(&engine.interner) => cmd.cause)
         }
     }
     file_end!()
+}
+
+fn start_row<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, colmode:BoxMode) {
+    engine.mouth.get_align_spec().expect("Not in \\halign or \\valign").current = 0;
+    loop {
+        match engine.get_next_unexpandable() {
+            Some(res) => {
+                match res.command {
+                    BaseCommand::Char {catcode:CategoryCode::EndGroup,..} => {
+                        engine.mouth.requeue(res.source.cause);
+                        return ()
+                    },
+                    BaseCommand::Char {catcode:CategoryCode::Space,..} => (),
+                    BaseCommand::Unexpandable {name,..} if name == CRCR => (),
+                    BaseCommand::Unexpandable {name,..} if name == NOALIGN => todo!(),
+                    _ => {
+                        engine.mouth.requeue(res.source.cause);
+                        break
+                    }
+                }
+            }
+            None => file_end!()
+        }
+    }
+
+    //engine.state.stack_push(GroupType::Box(colmode));
+    engine.stomach.open_box(OpenBox::Box {
+        mode: colmode,
+        list: vec!(),
+        on_close: Ptr::new(move |e,children| {
+            match colmode {
+                BoxMode::V =>
+                    Some(HVBox::V(VBox {
+                        kind:"VAlignColumn", children, ..Default::default()
+                    })),
+                BoxMode::H =>
+                    Some(HVBox::H(HBox {
+                        kind:"HAlignRow", children, ..Default::default()
+                    })),
+                _ => unreachable!()
+            }
+        })
+    });
+    start_cell(engine,cmd,colmode)
+}
+
+fn start_cell<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, colmode:BoxMode) {
+    loop {
+        match engine.get_next_unexpandable() {
+            Some(res) => {
+                match res.command {
+                    BaseCommand::Char {catcode:CategoryCode::EndGroup,..} => return (),
+                    BaseCommand::Char {catcode:CategoryCode::Space,..} => (),
+                    BaseCommand::Unexpandable {name,..} if name == CRCR => (),
+                    BaseCommand::Unexpandable {name,..} if name == OMIT => todo!(),
+                    _ => {
+                        engine.mouth.requeue(res.source.cause);
+                        break
+                    }
+                }
+            }
+            None => file_end!()
+        }
+    }
+    let omit = {
+        let spec = engine.mouth.get_align_spec().expect("Not in \\halign or \\valign");
+        if spec.specs.len() <= spec.current {
+            match spec.recindex {
+                Some(i) => spec.current = i,
+                _ => throw!("Unexpected alignment tab")
+            }
+        }
+        spec.in_right = false;
+        spec.omit
+    };
+    if !omit {
+        let mut r = engine.mouth.get_expansion();
+        {
+            let spec = engine.mouth.get_align_spec().unwrap();
+            let v = &spec.specs[spec.current];
+            for t in v.left.iter().rev() { r.push(t.clone()) }
+        }
+        engine.mouth.push_expansion_norev(r);
+    }
+
+    engine.state.stack_push(GroupType::Box(colmode));
+    engine.stomach.open_box(OpenBox::Box {
+        mode: colmode,
+        list: vec!(),
+        on_close: Ptr::new(move |e,children| {
+            match colmode {
+                BoxMode::V =>
+                    Some(HVBox::V(VBox {
+                        kind:"cell", children, ..Default::default()
+                    })),
+                BoxMode::H =>
+                    Some(HVBox::H(HBox {
+                        kind:"cell", children, ..Default::default()
+                    })),
+                _ => unreachable!()
+            }
+        })
+    });
 }
 
 pub const HALIGN: &str = "halign";
@@ -983,12 +1137,98 @@ pub fn halign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
 
 pub const CR_END: &str = "!!!§%^°`/{\"CR$END$TOKEN\"}\\`°^%§!!!";
 pub fn cr_end<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    todo!()
+    let colmode = {
+        let spec = engine.mouth.get_align_spec().unwrap();
+        spec.omit = false;
+        spec.colmode
+    };
+    match engine.state.stack_pop(&mut engine.memory) {
+        Some((v,GroupType::Box(b))) => {
+            if !v.is_empty() {
+                let mut rs = engine.mouth.get_expansion();
+                rs.extend(v.into_iter());
+                engine.mouth.push_expansion(rs);
+            }
+            match engine.stomach.shipout_data_mut().box_stack.pop() {
+                Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
+                    match on_close(engine,list) {
+                        Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
+                        None => {}
+                    }
+                }
+                _ =>throw!("Unexpected box on stack" => cmd.cause)
+            }
+        }
+        o =>
+            throw!("No group to end: {:?}",o => cmd.cause)
+    }
+/*
+    match engine.state.stack_pop(&mut engine.memory) {
+        Some((v,GroupType::Box(b))) => {
+            if !v.is_empty() {
+                let mut rs = engine.mouth.get_expansion();
+                rs.extend(v.into_iter());
+                engine.mouth.push_expansion(rs);
+            }
+            match engine.stomach.shipout_data_mut().box_stack.pop() {
+                Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
+                    match on_close(engine,list) {
+                        Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
+                        None => {}
+                    }
+                }
+                _ =>throw!("Unexpected box on stack" => cmd.cause)
+            }
+        }
+        o =>
+            throw!("No group to end: {:?}",o => cmd.cause)
+    }
+ */
+
+    match engine.stomach.shipout_data_mut().box_stack.pop() {
+        Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) => {
+            match on_close(engine,list) {
+                Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
+                None => {}
+            }
+        }
+        _ =>throw!("Unexpected box on stack" => cmd.cause)
+    }
+
+    start_row(engine,cmd,colmode)
 }
 
 pub const ALIGN_END: &str = "!!!§%^°`/{\"ALIGN$END$TOKEN\"}\\`°^%§!!!";
 pub fn align_end<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
-    todo!()
+    let (span,colmode) = {
+        let spec = engine.mouth.get_align_spec().unwrap();
+        spec.current += 1;
+        spec.omit = false;
+        (spec.span,spec.colmode)
+    };
+    if !span {
+        match engine.state.stack_pop(&mut engine.memory) {
+            Some((v,GroupType::Box(b))) => {
+                if !v.is_empty() {
+                    let mut rs = engine.mouth.get_expansion();
+                    rs.extend(v.into_iter());
+                    engine.mouth.push_expansion(rs);
+                }
+                match engine.stomach.shipout_data_mut().box_stack.pop() {
+                    Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
+                        match on_close(engine,list) {
+                            Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
+                            None => {}
+                        }
+                    }
+                    _ =>throw!("Unexpected box on stack" => cmd.cause)
+                }
+            }
+            o =>
+                throw!("No group to end: {:?}",o => cmd.cause)
+        }
+    }
+    start_cell(engine,cmd,colmode)
 }
 
 pub const HBOX: &str = "hbox";
@@ -1996,6 +2236,11 @@ pub fn newlinechar_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
     ET::Int::from_i64(c)
 }
 
+pub const NOALIGN: &str = "noalign";
+pub fn noalign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    throw!("Unexpected \\noalign")
+}
+
 pub const NOEXPAND: &str = "noexpand";
 pub const NOEXPAND_INTERNAL: &str = "!!!§%^°`/{\"NO$EXPAND\"}\\`°^%§!!!";
 /// invariant: adds token as nonexpanded to the gullet iff the original token was expandable
@@ -2037,6 +2282,11 @@ pub fn number<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, 
     debug_log!(trace=>"\\number");
     let num = engine.get_int();
     crate::tex::token::tokenize_string(&num.to_i64().to_string(), cmd, |t| exp.push(t));
+}
+
+pub const OMIT: &str = "omit";
+pub fn omit<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    throw!("Unexpected \\omit")
 }
 
 pub const OPENIN: &str = "openin";
@@ -3192,6 +3442,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_muskip!(muskip,engine);
     register_assign!(muskipdef,engine,(e,cmd,global) =>muskipdef::<ET>(e,&cmd,global));
     register_value_assign_int!(newlinechar,engine);
+    register_unexpandable!(noalign,engine,None,(e,cmd) =>noalign::<ET>(e,&cmd));
     register_expandable_notk!(noexpand,engine,(e,cmd) => noexpand::<ET>(e,&cmd));
     register_unexpandable!(noindent,engine,Some(HorV::Horizontal),(e,cmd) =>noindent::<ET>(e,&cmd));
     register_dim_assign!(nulldelimiterspace,engine);
@@ -3199,6 +3450,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
         BaseCommand::Font(ET::FontRef::default())
         ,None)), true);
     register_expandable!(number,engine,(e,cmd,f) => number::<ET>(e,&cmd,f));
+    register_unexpandable!(omit,engine,None,(e,cmd) =>omit::<ET>(e,&cmd));
     register_unexpandable!(openin,engine,None,(e,cmd) =>openin::<ET>(e,&cmd));
     register_whatsit!(openout,engine,(e,cmd) =>openout::<ET>(e,&cmd));
     register_expandable_notk!(or,engine,(e,cmd) => or::<ET>(e,&cmd));
@@ -3392,8 +3644,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,italiccorr);
     cmtodo!(engine,medskip);
     cmtodo!(engine,mskip);
-    cmtodo!(engine,noalign);
-    cmtodo!(engine,omit);
     cmtodo!(engine,smallskip);
 }
 

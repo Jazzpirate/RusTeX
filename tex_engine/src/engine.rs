@@ -75,6 +75,7 @@ pub trait Engine<ET:EngineType> {
         comps.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.start_time = Local::now();
         let old = comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
+        (comps.outputs.file_open)(file.path().to_str().unwrap());
         comps.mouth.push_file(&file,&mut comps.interner);
         // should not produce any boxes, so loop until file end
         ET::Stomach::next_shipout_box(&mut comps);
@@ -90,6 +91,7 @@ pub trait Engine<ET:EngineType> {
         debug!("Running file {:?}",s);
         let mut ret = vec!();
         let mut comps = self.components();
+        (comps.outputs.file_open)(s.to_str().unwrap());
         comps.jobname = s.with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.start_time = Local::now();
         comps.filesystem.set_pwd(s.parent().unwrap().to_path_buf());
