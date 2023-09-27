@@ -7,7 +7,7 @@ use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
 use crate::engine::state::State;
 use crate::engine::mouth::{AlignSpec, Mouth};
-use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, ValueCommand, CommandSource, ToksCommand, Def};
@@ -400,6 +400,21 @@ pub fn delcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
     let v = engine.state.get_delcode(c);
     debug_log!(debug=>"\\delcode '{}' == {}",c.char_str(),v);
     v
+}
+
+pub fn delimiter<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        _ => throw!("\\delimiter allowed only in math mode" => cmd.cause)
+    }
+    let num = engine.get_int().to_i64();
+    if num < 0 { throw!("Invalid delimiter code: {}",num => cmd.cause) }
+    let num = num as u32;
+    let large = num & 0xFFF;
+    let small = num >> 12;
+    let (small_char,small_font) = do_mathchar::<ET>(&engine.state,small,None);
+    let (large_char,large_font) = do_mathchar::<ET>(&engine.state,large,None);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Delimiter {small_char,small_font,large_char,large_font}.as_node());
 }
 
 pub const DIMEN : &str = "dimen";
@@ -1717,6 +1732,7 @@ pub fn lccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
 }
 
 use string_interner::Symbol;
+use crate::engine::stomach::methods::do_mathchar;
 
 pub const LET : &str = "let";
 pub fn let_<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
@@ -2063,6 +2079,23 @@ pub fn message<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
 
 pub fn month<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
     ET::Int::from_i64(engine.start_time.month() as i64)
+}
+
+pub fn mskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\mskip");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        _ => throw!("\\mskip is only allowed in math mode" => cmd.cause)
+    }
+    let skip = engine.get_muskip();
+    let font = match engine.state.get_fontstyle() {
+        FontStyle::Text => engine.state.get_textfont(2),
+        FontStyle::Script => engine.state.get_scriptfont(2),
+        FontStyle::Scriptscript => engine.state.get_scriptscriptfont(2),
+    };
+    let dim = engine.fontstore.get(font).get_dim::<ET::Dim>(6);
+    let skip = skip.to_skip::<ET::Dim,ET::SkipDim>(dim);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Skip{skip,axis:HorV::Horizontal}.as_node());
 }
 
 pub const MULTIPLY:&str = "multiply";
@@ -3317,6 +3350,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable_notk!(csname,engine,(e,cmd) =>csname::<ET>(e,&cmd));
     register_int!(day,engine,(e,cmd) => day::<ET>(e,&cmd));
     register_assign!(def,engine,(e,cmd,global) =>def::<ET>(e,&cmd,global,false,false,false));
+    register_unexpandable!(delimiter,engine,None,(e,cmd) =>delimiter::<ET>(e,&cmd));
     register_int_assign!(defaulthyphenchar,engine);
     register_int_assign!(defaultskewchar,engine);
     register_int_assign!(delimiterfactor,engine);
@@ -3438,6 +3472,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(meaning,engine,(e,cmd,f) => meaning::<ET>(e,&cmd,f));
     register_unexpandable!(message,engine,None,(e,cmd) =>message::<ET>(e,&cmd));
     register_int!(month,engine,(e,cmd) => month::<ET>(e,&cmd));
+    register_unexpandable!(mskip,engine,None,(e,cmd) =>mskip::<ET>(e,&cmd));
     register_assign!(multiply,engine,(e,cmd,global) =>multiply::<ET>(e,&cmd,global));
     register_value_assign_muskip!(muskip,engine);
     register_assign!(muskipdef,engine,(e,cmd,global) =>muskipdef::<ET>(e,&cmd,global));
@@ -3574,7 +3609,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,mathinner);
     cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
-    cmstodo!(engine,delimiter);
     cmstodo!(engine,displaystyle);
     cmstodo!(engine,textstyle);
     cmstodo!(engine,scriptstyle);
@@ -3643,7 +3677,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,fontname);
     cmtodo!(engine,italiccorr);
     cmtodo!(engine,medskip);
-    cmtodo!(engine,mskip);
     cmtodo!(engine,smallskip);
 }
 

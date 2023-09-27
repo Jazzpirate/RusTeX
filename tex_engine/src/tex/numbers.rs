@@ -92,6 +92,7 @@ pub trait MuDim:Numeric {
     fn from_float(dim:&str,float:f64) -> Self;
     fn tex_mult(&self,other:f64) -> Self;
     fn tex_div(&self,other:i64) -> Self;
+    fn to_dim<D:Dim>(&self,em:D) -> D;
 }
 pub trait MuStretchShrinkDim:Display+Copy + Clone {
     fn units() -> Vec<&'static str>;
@@ -333,6 +334,13 @@ impl<MD:MuDim,SD:MuStretchShrinkDim> MuSkip<MD,SD> {
     pub fn tex_mult(&self, other: f64) -> Self {
         Self{base:self.base.tex_mult(other),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
+    pub fn to_skip<D:Dim,SkD:SkipDim<Dim=D>>(&self,em:D) -> Skip<SkD> {
+        Skip {
+            base: self.base.to_dim(em),
+            stretch: None, // TODO
+            shrink: None // TODO
+        }
+    }
 }
 impl<MD:MuDim,SD:MuStretchShrinkDim> Default for MuSkip<MD,SD> {
     fn default() -> Self {
@@ -426,6 +434,9 @@ impl MuDim for Mui32 {
         "mu" => Self((float*65536.0).round() as i32),
         _ => unreachable!("Invalid dimension unit")
     } }
+    fn to_dim<D:Dim>(&self,em:D) -> D {
+        em.tex_mult((self.0 as f64) / (18.0 * 65536.0))
+    }
     fn tex_mult(&self, other: f64) -> Self { Mui32(Dimi32(self.0).tex_mult(other).0) }
     fn tex_div(&self, other: i64) -> Self { Self((self.0 as i64 / other) as i32) }
 }

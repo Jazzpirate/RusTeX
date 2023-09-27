@@ -48,42 +48,15 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             }
             TeXMode::Math | TeXMode::Displaymath => {
                 let mc = engine.state.get_mathcode(char);
-                if mc.to_i64() == 32768 {
+                let num = mc.to_i64() as u32;
+                if num == 32768 {
                     todo!("32768 in math char")
                     /*
                         self.requeue(Token::new(next.char,CategoryCode::Active,None,None,true))
                     */
                 }
-                let num = mc.to_i64() as i32;
-                let (mut cls,mut fam,pos) = {
-                    if num == 0 {
-                        (0,0,char.as_byte())
-                    } else {
-                        let char = (num & 0xFF) as u8;           // num % (16 * 16)
-                        let fam = ((num >> 8) & 0xF) as u8;      // (rest % 16)
-                        let rest_fam_shifted = (num >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
-                        (rest_fam_shifted as u8, fam, char)
-                    }
-                };
-                if cls == 7 {
-                    let i = engine.state.get_primitive_int("fam").to_i64();
-                    match i {//.registers_prim.get(&(crate::commands::registers::FAM.index - 1)) {
-                        i if i < 0 || i > 15 => {
-                            cls = 0;
-                        }
-                        i => {
-                            cls = 0;
-                            fam = i as u8;
-                        }
-                    }
-                }
-                let mode = engine.state.get_fontstyle();
-                let font = match mode {
-                    FontStyle::Text => engine.state.get_textfont(fam as usize),
-                    FontStyle::Script => engine.state.get_scriptfont(fam as usize),
-                    FontStyle::Scriptscript => engine.state.get_scriptscriptfont(fam as usize),
-                };
-                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char:ET::Char::from(pos), font}.as_node());
+                let (char,font) = do_mathchar::<ET>(&engine.state,num,Some(char));
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font}.as_node());
             }
             _ => {
                 ET::Stomach::open_paragraph(engine,cmd);
@@ -190,7 +163,13 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Whatsit(wi));
         },
         Relax => (),
-        MathChar(_) => catch!( todo!("Mathchar in digest") => cmd.source.cause),
+        MathChar(num) => match engine.state.mode() {
+            TeXMode::Math | TeXMode::Displaymath => {
+                let (char,font) = do_mathchar::<ET>(&engine.state,num,None);
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font}.as_node());
+            }
+            _ => throw!("Mathchar outside math mode" => cmd.source.cause)
+        }
         Superscript => catch!( todo!("Superscript in digest") => cmd.source.cause),
         Subscript => catch!( todo!("Subscript in digest") => cmd.source.cause),
         BeginGroup => engine.state.stack_push(GroupType::Token),
@@ -235,6 +214,41 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             }
         }
     }
+}
+
+pub fn do_mathchar<ET:EngineType>(state:&ET::State,mathcode:u32,char:Option<ET::Char>) -> (ET::Char,ET::FontRef) {
+    let (mut cls,mut fam,pos) = {
+        if mathcode == 0 {
+            (0,0,match char {
+                Some(c) => c.as_byte(),
+                _ => 0
+            })
+        } else {
+            let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
+            let fam = ((mathcode >> 8) & 0xF) as usize;      // (rest % 16)
+            let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
+            (rest_fam_shifted as u8, fam, char)
+        }
+    };
+    if cls == 7 {
+        let i = state.get_primitive_int("fam").to_i64();
+        match i {//.registers_prim.get(&(crate::commands::registers::FAM.index - 1)) {
+            i if i < 0 || i > 15 => {
+                cls = 0;
+            }
+            i => {
+                cls = 0;
+                fam = i as usize;
+            }
+        }
+    }
+    let mode = state.get_fontstyle();
+    let font = match mode {
+        FontStyle::Text => state.get_textfont(fam),
+        FontStyle::Script => state.get_scriptfont(fam),
+        FontStyle::Scriptscript => state.get_scriptscriptfont(fam),
+    };
+    (ET::Char::from(pos),font)
 }
 
 pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {

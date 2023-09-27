@@ -20,8 +20,6 @@ pub trait NodeTrait<ET:EngineType> {
     fn nodetype(&self) -> u8;
 }
 
-
-
 #[derive(Debug,Clone)]
 pub enum TeXNode<ET:EngineType> {
     Skip(SkipNode<ET>),
@@ -126,7 +124,8 @@ pub enum HorV { Horizontal, Vertical }
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
-    Char {char:ET::Char, font:ET::FontRef }
+    Char {char:ET::Char, font:ET::FontRef },
+    Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef},
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
@@ -141,6 +140,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 if d > ET::Dim::from_sp(0) { d } else { ET::Dim::from_sp(0) }
             },
             SimpleNode::Char {char,font} => fs.get(*font).char_dp(*char),
+            SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_dp(*large_char),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -153,6 +153,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 if h > ET::Dim::from_sp(0) { h } else { ET::Dim::from_sp(0) }
             },
             SimpleNode::Char {char,font} => fs.get(*font).char_ht(*char),
+            SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_ht(*large_char),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -162,6 +163,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Rule{width,..} => width.unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Raise{node,..} => node.width(fs),
             SimpleNode::Char {char,font} => fs.get(*font).char_wd(*char),
+            SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_wd(*large_char),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -170,6 +172,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
         match self {
             Rule{..} => 3,
             Raise{node,..} => node.nodetype(),
+            Delimiter {..} => 15,
             Char{..} => 0
         }
     }
