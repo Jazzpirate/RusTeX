@@ -1,6 +1,6 @@
 use crate::{catch, debug_log, throw};
 use crate::engine::{EngineRef, EngineType};
-use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::{LineSpec, Stomach};
 use crate::engine::mouth::Mouth;
@@ -46,7 +46,45 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
                 engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
             }
-            TeXMode::Math | TeXMode::Displaymath => throw!("TODO Char in math mode" => cmd.source.cause),
+            TeXMode::Math | TeXMode::Displaymath => {
+                let mc = engine.state.get_mathcode(char);
+                if mc.to_i64() == 32768 {
+                    todo!("32768 in math char")
+                    /*
+                        self.requeue(Token::new(next.char,CategoryCode::Active,None,None,true))
+                    */
+                }
+                let num = mc.to_i64() as i32;
+                let (mut cls,mut fam,pos) = {
+                    if num == 0 {
+                        (0,0,char.as_byte())
+                    } else {
+                        let char = (num & 0xFF) as u8;           // num % (16 * 16)
+                        let fam = ((num >> 8) & 0xF) as u8;      // (rest % 16)
+                        let rest_fam_shifted = (num >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
+                        (rest_fam_shifted as u8, fam, char)
+                    }
+                };
+                if cls == 7 {
+                    let i = engine.state.get_primitive_int("fam").to_i64();
+                    match i {//.registers_prim.get(&(crate::commands::registers::FAM.index - 1)) {
+                        i if i < 0 || i > 15 => {
+                            cls = 0;
+                        }
+                        i => {
+                            cls = 0;
+                            fam = i as u8;
+                        }
+                    }
+                }
+                let mode = engine.state.get_fontstyle();
+                let font = match mode {
+                    FontStyle::Text => engine.state.get_textfont(fam as usize),
+                    FontStyle::Script => engine.state.get_scriptfont(fam as usize),
+                    FontStyle::Scriptscript => engine.state.get_scriptscriptfont(fam as usize),
+                };
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char:ET::Char::from(pos), font}.as_node());
+            }
             _ => {
                 ET::Stomach::open_paragraph(engine,cmd);
             }
@@ -254,16 +292,16 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.state.set_primitive_dim("hangindent",ET::Dim::from_sp(0),false);
     engine.state.set_parshape(vec!(),false);
 
-    match &parshape {
+    let specs: Vec<LineSpec<ET>> = match &parshape {
         Some(v) => {
-            let htargets = v.iter().map(|(_,l)| LineSpec{
+            v.iter().map(|(_,l)| LineSpec{
                 target:*l - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
-            }).collect();
-            let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,htargets);
-            todo!()
+            }).collect()
+            //let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,htargets);
+            //todo!()
         }
         None if hangindent != ET::Dim::default() && hangafter != 0 => {
-            let htargets = if hangafter < 0 {
+            if hangafter < 0 {
                 let mut r: Vec<LineSpec<ET>> = (0..-hangafter).map(|x| LineSpec{target:hsize - (leftskip.base + rightskip.base + hangindent),left_skip:leftskip,right_skip:rightskip}).collect();
                 r.push(LineSpec{target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip});
                 r
@@ -272,24 +310,23 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
                     (0..hangafter).map(|x| LineSpec{target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip}).collect();
                 r.push(LineSpec{target:hsize - (leftskip.base + rightskip.base + hangindent),left_skip:leftskip,right_skip:rightskip});
                 r
-            };
-            let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,htargets);
-            todo!()
-        }
-        _ => {
-            let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,vec!(LineSpec{
-                target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
-            }));
-            for mut line in lines {
-                line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
-                line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
-                engine.stomach.push_node(&engine.fontstore,&engine.state,HBox {
-                    kind:"paragraphline",
-                    children:line,
-                    ..Default::default()
-                }.as_node())
             }
+            //let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,htargets);
+            //todo!()
         }
+        _ => vec!(LineSpec{
+                target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
+            })
+    };
+    let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,specs);
+    for mut line in lines {
+        line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
+        line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
+        engine.stomach.push_node(&engine.fontstore,&engine.state,HBox {
+            kind:"paragraphline",
+            children:line,
+            ..Default::default()
+        }.as_node())
     }
 }
 

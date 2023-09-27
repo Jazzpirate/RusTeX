@@ -4,7 +4,7 @@ use string_interner::Symbol;
 use crate::engine::filesystem::File;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::engine::state::fields::{CharField, SingleValueField, VecField, KeyValueField, StateField, HashMapField, BoxField, TokField, TokMapField};
-use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::tex::commands::{BaseCommand, Command, CommandSource};
 use crate::tex::token::{CSLike, Token};
 use crate::utils::strings::TeXStr;
@@ -54,6 +54,8 @@ pub trait State<ET:EngineType>:Clone+'static {
     /// get the current group type
     fn get_grouptype(&self) -> GroupType;
 
+    fn get_fontstyle(&self) -> FontStyle;
+    fn set_fontstyle(&mut self,fs:FontStyle,globally:bool);
 
     /// get the current escape character (`\escapechar`)
     fn get_escapechar(&self) -> Option<ET::Char>;
@@ -247,6 +249,8 @@ impl<ET:EngineType,S:State<ET>> PDFState<ET> for PDFStateWrapper<ET,S> {
     }
 }
 impl<ET:EngineType,S:State<ET>> State<ET> for PDFStateWrapper<ET,S> {
+    fn get_fontstyle(&self) -> FontStyle { self.state.get_fontstyle() }
+    fn set_fontstyle(&mut self, fs: FontStyle,globally:bool) { self.state.set_fontstyle(fs,globally) }
     fn current_csname(&self) -> Option<usize> { self.state.current_csname() }
     fn file_closein(&mut self, i: usize) { self.state.file_closein(i) }
     fn file_closeout(&mut self, i: usize) { self.state.file_closeout(i) }

@@ -78,3 +78,21 @@ pub enum BoxMode {
     /// A box with no content
     Void
 }
+
+
+#[derive(Copy,Clone,PartialEq)]
+pub enum FontStyle {
+    Text,Script,Scriptscript
+}
+impl Default for FontStyle {
+    fn default() -> Self { FontStyle::Text }
+}
+impl FontStyle {
+    pub fn inc(&self) -> FontStyle {
+        use FontStyle::*;
+        match self {
+            Text => Script,
+            _ => Scriptscript
+        }
+    }
+}

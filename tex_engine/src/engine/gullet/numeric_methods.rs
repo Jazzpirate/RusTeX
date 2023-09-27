@@ -418,9 +418,19 @@ pub fn read_skip_unit<ET:EngineType>(engine:&mut EngineRef<ET>, float:f64) -> ET
                         _ => throw!("Skip unit expected")
                     }
                 } else {
-                    match engine.get_keywords(ET::SkipDim::units()) {
-                        Some(dim) => ET::SkipDim::from_float(dim,float),
-                        _ => todo!("Non-unit in read_skip_unit: {}",engine.preview(50).replace("\n","\\n"))
+                    let mut units =ET::SkipDim::units();
+                    units.push("em");units.push("ex");
+                    match engine.get_keywords( units) {
+                        Some("em") => {
+                            let d = engine.fontstore.get(engine.state.get_current_font()).get_dim::<ET::Dim>(6);
+                            ET::SkipDim::from_dim(d.tex_mult(float))
+                        }
+                        Some("ex") => {
+                            let d = engine.fontstore.get(engine.state.get_current_font()).get_dim::<ET::Dim>(5);
+                            ET::SkipDim::from_dim(d.tex_mult(float))
+                        }
+                        Some(dim) =>ET::SkipDim::from_float(dim,float),
+                        _ => todo!("Non-unit in read_unit: {}\n at {}", engine.preview(50).replace("\n", "\\n"), engine.current_position())
                     }
                 }
             }

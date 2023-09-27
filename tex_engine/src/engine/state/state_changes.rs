@@ -1,7 +1,7 @@
 use crate::{debug_log, throw};
 use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory};
-use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::Command;
@@ -27,6 +27,7 @@ pub struct ChangeBasedState<ET:EngineType> {
     stack:Vec<StackLevel<ET>>,
     changes:Vec<StateChange<ET>>,
 
+    font_style:FontStyle,
     current_font:ET::FontRef,
     parshape:Option<Vec<(ET::Dim,ET::Dim)>>,
     endlinechar: Option<ET::Char>,
@@ -63,6 +64,7 @@ impl<ET:EngineType> ChangeBasedState<ET> {
             in_files:vec!(),
             csnames:0,
             current_font:ET::FontRef::default(),
+            font_style:FontStyle::default(),
             afterassignment:None,
             mode: TeXMode::Vertical,
 
@@ -140,6 +142,11 @@ macro_rules! change {
 }
 
 impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
+    fn get_fontstyle(&self) -> FontStyle { self.font_style }
+    fn set_fontstyle(&mut self, fs: FontStyle, globally: bool) {
+        let old = std::mem::replace(&mut self.font_style,fs);
+        change!(self,globally,StateChange::FontStyle(old))
+    }
     fn get_current_font(&self) -> ET::FontRef {
         self.current_font
     }
@@ -252,6 +259,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
                     for change in changes {
                         use StateChange::*;
                         match change {
+                            FontStyle(s) => self.font_style = s,
                             CurrentFont(v) => self.current_font = v,
                             ParShape(v) => self.parshape = v,
                             Endlinechar(v) => self.endlinechar = v,
@@ -596,6 +604,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
 #[derive(Clone)]
 enum StateChange<ET:EngineType> {
     CurrentFont(ET::FontRef),
+    FontStyle(FontStyle),
     ParShape(Option<Vec<(ET::Dim, ET::Dim)>>),
     Endlinechar(Option<ET::Char>),
     Escapechar(Option<ET::Char>),
@@ -628,6 +637,7 @@ impl<ET:EngineType> StateChange<ET> {
     fn equiv(&self,other:&Self) -> bool {
         use StateChange::*;
         match (self,other) {
+            (FontStyle(_),FontStyle(_)) => true,
             (CurrentFont(_),CurrentFont(_)) => true,
             (ParShape(_),ParShape(_)) => true,
             (Endlinechar(_),Endlinechar(_)) => true,

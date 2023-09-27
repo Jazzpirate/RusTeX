@@ -10,7 +10,7 @@ use std::collections::btree_map::Entry;
 use std::hash::Hash;
 use crate::engine::EngineType;
 use crate::engine::memory::{Interner, Memory};
-use crate::engine::state::modes::{BoxMode, GroupType, TeXMode};
+use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::tex::commands::Command;
@@ -495,6 +495,7 @@ pub struct FieldBasedState<ET:EngineType> {
     grouptype: Vec<(GroupType,Option<TeXMode>)>,
     aftergroups:Vec<Vec<ET::Token>>,
 
+    font_style:SingleValueField<FontStyle>,
     current_font:SingleValueField<ET::FontRef>,
     parshape:SingleValueField<Option<Vec<(ET::Dim,ET::Dim)>>>,
     endlinechar: SingleValueField<Option<ET::Char>>,
@@ -527,6 +528,7 @@ pub struct FieldBasedState<ET:EngineType> {
 impl<ET:EngineType> FieldBasedState<ET> {
     pub fn new(fontstore:&ET::FontStore) -> Self {
         let mut state = Self {
+            font_style:SingleValueField::new(FontStyle::default()),
             out_files:vec!(),
             in_files:vec!(),
             csnames:0,
@@ -591,6 +593,16 @@ impl<ET:EngineType> FieldBasedState<ET> {
 }
 
 impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
+    fn get_fontstyle(&self) -> FontStyle { *self.font_style.get() }
+    fn set_fontstyle(&mut self, fs: FontStyle, globally:bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.font_style.set_globally(fs)
+        } else {
+            self.font_style.set_locally(fs)
+        }
+    }
     fn get_current_font(&self) -> ET::FontRef {
         *self.current_font.get()
     }
