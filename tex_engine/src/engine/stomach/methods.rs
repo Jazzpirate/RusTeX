@@ -179,10 +179,8 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
             let mc = engine.state.get_mathcode(char);
             let num = mc.to_i64() as u32;
             if num == 32768 {
-                todo!("32768 in math char")
-                /*
-                    self.requeue(Token::new(next.char,CategoryCode::Active,None,None,true))
-                */
+                engine.mouth.requeue(ET::Token::new_char_from_command(char,CategoryCode::Active,&cmd.source));
+                return ()
             }
             let (char,font) = do_mathchar::<ET>(&engine.state,num,Some(char));
             engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font}.as_node());

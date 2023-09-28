@@ -1668,6 +1668,35 @@ pub fn inputlineno<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     ET::Int::from_i64(engine.mouth.line_no() as i64)
 }
 
+pub fn insert<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let n = engine.get_int().to_i64();
+    if n < 0 {
+        throw!("Invalid insert number: {}",n => cmd.cause)
+    }
+    while let Some(next) = engine.get_next_unexpandable() {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Relax => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
+                engine.state.stack_push(GroupType::Box(BoxMode::V));
+                engine.stomach.open_box(OpenBox::Box {
+                    mode: BoxMode::V,
+                    list: vec![],
+                    on_close: Ptr::new(move |engine,children| {
+                        engine.stomach.push_node(&engine.fontstore,&engine.state,
+                            TeXNode::Insert(n as usize,children)
+                        );
+                        None
+                    }),
+                });
+                return ()
+            }
+            _ => throw!("Expected begin group, found {}",next.source.cause.printable(&engine.interner) => cmd.cause)
+        }
+    }
+    file_end!()
+}
+
 pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"jobname");
     let jobname = engine.jobname.clone();
@@ -3441,11 +3470,12 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifvmode,engine,(e,cmd) =>ifvmode::<ET>(e,&cmd));
     register_conditional!(ifvoid,engine,(e,cmd) =>ifvoid::<ET>(e,&cmd));
     register_conditional!(ifx,engine,(e,cmd) =>ifx::<ET>(e,&cmd));
+    register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,&cmd));
     register_unexpandable!(immediate,engine,None,(e,cmd) =>immediate::<ET>(e,&cmd));
     register_unexpandable!(indent,engine,Some(HorV::Horizontal),(e,cmd) =>indent::<ET>(e,&cmd));
-    register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,&cmd));
     register_expandable_notk!(input,engine,(e,cmd) =>input::<ET>(e,&cmd));
     register_int!(inputlineno,engine,(e,cmd) => inputlineno::<ET>(e,&cmd));
+    register_unexpandable!(insert,engine,None,(e,cmd) =>insert::<ET>(e,&cmd));
     register_int_assign!(interlinepenalty,engine);
     register_expandable!(jobname,engine,(e,c,f) =>jobname::<ET>(e,&c,f));
     register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
@@ -3645,7 +3675,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,botmark);
     cmtodo!(engine,splitfirstmark);
     cmtodo!(engine,splitbotmark);
-    cmtodo!(engine,insert);
     cmtodo!(engine,leaders);
     cmtodo!(engine,cleaders);
     cmtodo!(engine,xleaders);

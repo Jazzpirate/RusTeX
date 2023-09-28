@@ -30,6 +30,7 @@ pub enum TeXNode<ET:EngineType> {
     OpenKernel(OpenKernel<ET>),
     Whatsit(Whatsit<ET>),
     Mark(Vec<ET::Token>),
+    Insert(usize,Vec<TeXNode<ET>>),
     Custom(ET::Node),
     Simple(SimpleNode<ET>),
     VAdjust(Vec<TeXNode<ET>>)
@@ -110,6 +111,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Whatsit(_) => 9,
             Math{..} => 10,
             Mark(_) => 5,
+            Insert(_,_) => 4,
             Custom(n) => n.nodetype(),
             Simple(n) => n.nodetype(),
             VAdjust(_) => 6,

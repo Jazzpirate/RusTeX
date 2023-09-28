@@ -49,6 +49,21 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn split_vertical(fs:&ET::FontStore,state:&ET::State, nodes:Vec<TeXNode<ET>>, target:ET::Dim) -> (Vec<TeXNode<ET>>,Vec<TeXNode<ET>>);
 
     fn shipout(&mut self,bx:HVBox<ET>) {
+        /* INSERTS:
+        1. read vbox => \box n = b
+
+        g = \pagegoal
+        t = \pagetotal
+        q = \insertpenalties (accumulated for the current page)
+        d = \pagedepth (<= \maxdepth)
+        z = \pageshrink
+        x = b.height() + b.depth()
+        f = \count n / 1000
+
+        if (\box n is empty) {
+            g -= h*f + w
+        } else {}
+    */
         todo!("shipout")
     }
 
