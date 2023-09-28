@@ -29,7 +29,7 @@ pub enum TeXNode<ET:EngineType> {
     Math{ls:Vec<TeXNode<ET>>,display:bool},
     OpenKernel(OpenKernel<ET>),
     Whatsit(Whatsit<ET>),
-    Mark(Vec<ET::Token>),
+    Mark(usize,Vec<ET::Token>),
     Insert(usize,Vec<TeXNode<ET>>),
     Custom(ET::Node),
     Simple(SimpleNode<ET>),

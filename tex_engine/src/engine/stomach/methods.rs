@@ -106,20 +106,16 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
             TeXMode::Horizontal => {
                 match engine.get_next_token() {
                     None => throw!("Unexpected end of input" => cmd.source.cause),
-                    Some((t,_)) if t.is_mathshift() => {
-                        do_display_math(engine)
-                    }
+                    Some((t,_)) if t.is_mathshift() => do_display_math(engine),
                     Some((o,_)) => {
                         engine.mouth.requeue(o);
                         do_math(engine)
                     }
                 }
             }
-            _ => {
-                ET::Stomach::open_paragraph(engine,cmd);
-            }
+            _ => ET::Stomach::open_paragraph(engine,cmd)
         }
-        MathChar(num) => throw!("Mathchar only allowed in math mode" => cmd.source.cause),
+        MathChar(num) => throw!("Math character only allowed in math mode" => cmd.source.cause),
         BeginGroup => engine.state.stack_push(GroupType::Token),
         EndGroup => {
             match (engine.state.get_grouptype(),engine.state.mode()) {
@@ -249,7 +245,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     ))))
                 }
                 Some(n) => {
-                    let old = std::mem::replace(n, TeXNode::Mark(vec!()));
+                    let old = std::mem::replace(n, TeXNode::Mark(0,vec!()));
                     *n = TeXNode::OpenKernel(OpenKernel::Superscript(Box::new(old)))
                 }
             }
@@ -267,7 +263,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     ))))
                 }
                 Some(n) => {
-                    let old = std::mem::replace(n, TeXNode::Mark(vec!()));
+                    let old = std::mem::replace(n, TeXNode::Mark(0,vec!()));
                     *n = TeXNode::OpenKernel(OpenKernel::Subscript(Box::new(old)))
                 }
             }

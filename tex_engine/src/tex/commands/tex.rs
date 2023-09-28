@@ -1848,6 +1848,21 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     engine.mouth.push_expansion(rs);
 }
 
+
+pub fn mathchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"mathchar");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        o => throw!("mathchar not allowed in mode: {}",o => cmd.cause)
+    }
+    let num =engine.get_int().to_i64();
+    if num < 0 {
+        throw!("Invalid math char: {}",num => cmd.cause)
+    }
+    let (char,font) = do_mathchar::<ET>(&engine.state,num as u32,None);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Simple(SimpleNode::Char {char,font}))
+}
+
 pub const MATHCHARDEF : &str = "mathchardef";
 pub fn mathchardef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
     debug_log!(trace=>"mathchardef");
@@ -3496,6 +3511,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(mag,engine);
     register_int_assign!(maxdeadcycles,engine);
     register_dim_assign!(maxdepth,engine);
+    register_unexpandable!(mathchar,engine,None,(e,cmd) =>mathchar::<ET>(e,&cmd));
     register_assign!(mathchardef,engine,(e,cmd,global) =>mathchardef::<ET>(e,&cmd,global));
     register_value_assign_int!(mathcode,engine);
     register_dim_assign!(mathsurround,engine);
@@ -3643,7 +3659,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,textstyle);
     cmstodo!(engine,scriptstyle);
     cmstodo!(engine,scriptscriptstyle);
-    cmstodo!(engine,mathchar);
     cmstodo!(engine,mkern);
 
     cmtodo!(engine,lastpenalty);
