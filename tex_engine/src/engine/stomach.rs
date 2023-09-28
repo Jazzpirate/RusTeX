@@ -5,6 +5,7 @@ use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::State;
 use crate::tex::nodes::{OpenBox, HVBox, TeXNode, SimpleNode};
 use crate::tex::commands::StomachCommand;
+use crate::tex::fonts::{Font, FontStore};
 use crate::tex::numbers::{Dim, Int, Skip};
 use crate::utils::errors::TeXError;
 
@@ -85,8 +86,28 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                         TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
                         o => sd.prevdepth = o.depth(fs)
                     }
+                } else {
+                    match (b.ls_mut().last_mut(),&node) {
+                        (Some(TeXNode::Simple(SimpleNode::Char {char,font})),
+                            TeXNode::Simple(SimpleNode::Char {char:char2,font:font2})) if *font == *font2 => {
+                            if let Some(r) = fs.get(*font).ligature(*char,*char2) {
+                                *char = r
+                            } else {
+                                b.ls_mut().push(node)
+                            }
+                        } // TODO no OpenKernel when group closes!
+                        (Some(TeXNode::OpenKernel(k)),_) => {
+                            match b.ls_mut().pop() {
+                                Some(TeXNode::OpenKernel(k)) =>
+                                    // TODO limits
+                                    b.ls_mut().push(k.merge(node,false)),
+                                _ => unreachable!()
+                            };
+
+                        }
+                        _ => b.ls_mut().push(node)
+                    }
                 }
-                b.ls_mut().push(node)
             },
             _ => {
                 sd.pagetotal = sd.pagetotal + node.height(fs);

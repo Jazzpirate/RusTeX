@@ -33,6 +33,8 @@ pub trait Font:Debug+Display {
     fn char_ht<D:Dim>(&self,char:Self::Char) -> D;
     fn char_dp<D:Dim>(&self,char:Self::Char) -> D;
     fn char_ic<D:Dim>(&self,char:Self::Char) -> D;
+    
+    fn ligature(&self,char1:Self::Char,char2:Self::Char) -> Option<Self::Char>;
 
     fn set_hyphenchar(&mut self,hyphenchar:i64);
     fn get_hyphenchar(&self) -> i64;
@@ -230,5 +232,11 @@ impl Font for TfmFont {
                 0
             }
         ))
+    }
+    fn ligature(&self, char1: Self::Char, char2: Self::Char) -> Option<Self::Char> {
+        match self.file.ligs.get(&(char1,char2)) {
+            Some(c) => Some(*c),
+            _ => None
+        }
     }
 }

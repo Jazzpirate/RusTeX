@@ -26,13 +26,45 @@ pub enum TeXNode<ET:EngineType> {
     Penalty(i32),
     Kern{ dim:ET::Dim,axis:HorV},
     Box(HVBox<ET>),
-    Math(Vec<TeXNode<ET>>),
+    Math{ls:Vec<TeXNode<ET>>,display:bool},
+    OpenKernel(OpenKernel<ET>),
     Whatsit(Whatsit<ET>),
     Mark(Vec<ET::Token>),
     Custom(ET::Node),
     Simple(SimpleNode<ET>),
     VAdjust(Vec<TeXNode<ET>>)
 }
+
+#[derive(Debug,Clone)]
+pub enum OpenKernel<ET:EngineType> {
+    Superscript(Box<TeXNode<ET>>),Subscript(Box<TeXNode<ET>>)
+}
+impl<ET:EngineType> OpenKernel<ET> {
+    pub fn base(&self) -> &TeXNode<ET> {
+        match self {
+            OpenKernel::Superscript(b) => &**b,
+            OpenKernel::Subscript(b) => &**b
+        }
+    }
+    pub fn merge(self, next: TeXNode<ET>,limits:bool) -> TeXNode<ET> {
+        match self {
+            OpenKernel::Superscript(b) => match *b {
+                TeXNode::Simple(SimpleNode::WithScripts {kernel,subscript,..}) =>
+                    SimpleNode::WithScripts {kernel,subscript,superscript:Some(Box::new(next)),limits}.as_node(),
+                _ =>
+                    SimpleNode::WithScripts {kernel:b,subscript:None,superscript:Some(Box::new(next)),limits}.as_node()
+            }
+            OpenKernel::Subscript(b) => match *b {
+                TeXNode::Simple(SimpleNode::WithScripts {kernel,superscript,..}) =>
+                    SimpleNode::WithScripts {kernel,subscript:Some(Box::new(next)),superscript,limits}.as_node(),
+                _ =>
+                    SimpleNode::WithScripts {kernel:b,subscript:Some(Box::new(next)),superscript:None,limits}.as_node(),
+            }
+        }
+    }
+}
+
+
 impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
     fn height(&self,fs:&ET::FontStore) -> ET::Dim {
         use TeXNode::*;
@@ -41,7 +73,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Kern { dim: val,axis:HorV::Vertical} => *val,
             Box(b) => b.height(fs),
             Custom(c) => c.height(fs),
-            Math(ls) => ls.iter().map(|n| n.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
+            Math{ls,..} => ls.iter().map(|n| n.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
             Simple(s) => s.height(fs),
             _ => ET::Dim::from_sp(0)
         }
@@ -53,7 +85,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Kern { dim: val,axis:HorV::Horizontal} => *val,
             Box(b) => b.width(fs),
             Custom(c) => c.width(fs),
-            Math(ls) => ls.iter().map(|n| n.width(fs)).sum(),
+            Math{ls,..} => ls.iter().map(|n| n.width(fs)).sum(),
             Simple(s) => s.width(fs),
             _ => ET::Dim::from_sp(0)
         }
@@ -76,11 +108,12 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Kern{ ..} => 12,
             Box(b) =>b.nodetype(),
             Whatsit(_) => 9,
-            Math(_) => 10,
+            Math{..} => 10,
             Mark(_) => 5,
             Custom(n) => n.nodetype(),
             Simple(n) => n.nodetype(),
-            VAdjust(_) => 6
+            VAdjust(_) => 6,
+            OpenKernel(k) => k.base().nodetype()
         }
     }
 }
@@ -126,6 +159,7 @@ pub enum SimpleNode<ET:EngineType> {
     Raise{by:ET::Dim, node:HVBox<ET>},
     Char {char:ET::Char, font:ET::FontRef },
     Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef},
+    WithScripts {kernel:Box<TeXNode<ET>>,superscript:Option<Box<TeXNode<ET>>>,subscript:Option<Box<TeXNode<ET>>>,limits:bool}
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
@@ -141,6 +175,12 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             },
             SimpleNode::Char {char,font} => fs.get(*font).char_dp(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_dp(*large_char),
+            SimpleNode::WithScripts {kernel,subscript,..} => {
+                match subscript {
+                    Some(s) => kernel.depth(fs) + s.depth(fs) + s.height(fs), // TODO
+                    _ => kernel.depth(fs)
+                }
+            }
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -154,6 +194,12 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             },
             SimpleNode::Char {char,font} => fs.get(*font).char_ht(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_ht(*large_char),
+            SimpleNode::WithScripts {kernel,superscript,..} => {
+                match superscript {
+                    Some(s) => kernel.height(fs) + s.depth(fs) + s.height(fs), // TODO
+                    _ => kernel.height(fs)
+                }
+            }
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -164,6 +210,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Raise{node,..} => node.width(fs),
             SimpleNode::Char {char,font} => fs.get(*font).char_wd(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_wd(*large_char),
+            SimpleNode::WithScripts {kernel,..} => kernel.width(fs), // TODO
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -172,7 +219,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
         match self {
             Rule{..} => 3,
             Raise{node,..} => node.nodetype(),
-            Delimiter {..} => 15,
+            Delimiter {..} | WithScripts {..} => 15,
             Char{..} => 0
         }
     }

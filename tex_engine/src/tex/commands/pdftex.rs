@@ -88,6 +88,10 @@ pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
     PDFXForm{form:PDFXForm<ET>},
     PDFOutline{attr:String,action:ActionSpec,content:String,count:Option<i64>},
     PDFDest{structnum:Option<i64>,id:NumOrName,desttype:PDFDestType<ET>},
+    PDFStartLink{
+        width:Option<ET::Dim>, height:Option<ET::Dim>, depth:Option<ET::Dim>,
+        attr:Option<String>,action:ActionSpec
+    },PDFEndLink
 }
 
 #[derive(Debug,Clone)]
@@ -475,6 +479,13 @@ pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSourc
     ET::Int::from_i64(ret)
 }
 
+pub fn pdfendlink<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::Node:From<PDFTeXNode<ET>> {
+    debug_log!(trace=>"pdfendlink");
+    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFEndLink.as_node());
+
+}
+
 pub fn pdfescapestring<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
     debug_log!(trace=>"pdfescapestring");
     use crate::tex::commands::BaseCommand;
@@ -618,6 +629,43 @@ pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
 pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\pdfresettimer");
     engine.elapsed = std::time::Instant::now();
+}
+
+pub fn pdfstartlink<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::Node:From<PDFTeXNode<ET>> {
+    debug_log!(trace=>"\\pdfstartlink");
+    let mut width : Option<ET::Dim> = None;
+    let mut height : Option<ET::Dim> = None;
+    let mut depth : Option<ET::Dim> = None;
+    loop {
+        engine.skip_whitespace();
+        match engine.get_keywords(vec!("width","height","depth")) {
+            Some("width") => {
+                engine.skip_whitespace();
+                width = Some(engine.get_dim());
+            }
+            Some("height") => {
+                engine.skip_whitespace();
+                height = Some(engine.get_dim());
+            }
+            Some("depth") => {
+                engine.skip_whitespace();
+                depth = Some(engine.get_dim());
+            }
+            _ => break
+        }
+    }
+
+    let attr = if engine.get_keyword("attr") {
+        let mut s = String::new();
+        engine.get_braced_string(&mut s);
+        Some(s)
+    } else { None };
+
+    let action = action_spec(engine);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,
+                             PDFTeXNode::PDFStartLink{width,height,depth,attr,action}.as_node()
+    );
 }
 
 /// "pdfstrcmp"
@@ -810,6 +858,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_unexpandable!(pdfdest,engine,None,(e,cmd) =>pdfdest::<ET>(e,&cmd));
     register_int_assign!(pdfdraftmode,engine);
     register_int!(pdfelapsedtime,engine,(e,c) => pdfelapsedtime::<ET>(e,&c));
+    register_unexpandable!(pdfendlink,engine,None,(e,cmd) =>pdfendlink::<ET>(e,&cmd));
     register_expandable!(pdfescapestring,engine,(e,cmd,f) =>pdfescapestring::<ET>(e,&cmd,f));
     register_expandable!(pdffilesize,engine,(e,cmd,f) =>pdffilesize::<ET>(e,&cmd,f));
     register_unexpandable!(pdffontexpand,engine,None,(e,cmd) =>pdffontexpand::<ET>(e,&cmd));
@@ -837,6 +886,7 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_whatsit!(pdfrefxform,engine,(e,cmd) =>pdfrefxform::<ET>(e,&cmd));
     register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,&cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(&c));
+    register_unexpandable!(pdfstartlink,engine,None,(e,cmd) =>pdfstartlink::<ET>(e,&cmd));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,&cmd,f));
     register_expandable!(pdftexrevision,engine,(e,c,f) =>pdftexrevision::<ET>(e,&c,f));
     register_int!(pdftexversion,engine,(_,c) => pdftexversion::<ET>(&c));
@@ -919,7 +969,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,partokenname);
     cmtodo!(engine,pdfannot);
     cmtodo!(engine,pdfcopyfont);
-    cmtodo!(engine,pdfendlink);
     cmtodo!(engine,pdfendthread);
     cmtodo!(engine,pdffakespace);
     cmtodo!(engine,pdffontattr);
@@ -942,7 +991,6 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfsetmatrix);
     cmtodo!(engine,pdfsetrandomseed);
     cmtodo!(engine,pdfspacefont);
-    cmtodo!(engine,pdfstartlink);
     cmtodo!(engine,pdfthread);
     cmtodo!(engine,pdftrailer);
     cmtodo!(engine,pdftrailerid);
