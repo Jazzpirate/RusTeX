@@ -1,6 +1,6 @@
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
-use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, register_expandable_notk};
+use crate::{cmtodo, debug_log, register_assign, register_conditional, register_dim, register_int, register_int_assign, register_muskip, register_skip, register_tok_assign, register_expandable, catch_prim, file_end_prim, throw, file_end, register_expandable_notk, register_unexpandable};
 use crate::engine::{EngineRef, EngineType};
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, BaseStomachCommand, Command, CommandSource, Def};
@@ -340,6 +340,14 @@ pub fn lastnodetype<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
      */
 }
 
+pub fn marks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    let i = engine.get_int().to_i64();
+    if i < 0 {
+        throw!("Invalid mark number: {}",i => cmd.cause)
+    }
+    super::tex::do_mark(engine,cmd,i as usize)
+}
+
 pub const MUEXPR: &str = "muexpr";
 /// `\muexpr`: evaluate a mu expression; returns a [`MuSkip`].
 pub fn muexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -473,6 +481,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(ifdefined,engine,(eu,cmd) =>ifdefined::<ET>(eu,&cmd));
     register_conditional!(iffontchar,engine,(e,cmd) =>iffontchar::<ET>(e,&cmd));
     register_int!(lastnodetype,engine,(e,c) => lastnodetype::<ET>(e,&c));
+    register_unexpandable!(marks,engine,None,(e,cmd) =>marks::<ET>(e,&cmd));
     register_muskip!(muexpr,engine,(e,c) => muexpr::<ET>(e,&c));
     register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,&c));
     register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,&cmd,global));
@@ -508,7 +517,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,interactionmode);
     cmtodo!(engine,interlinepenalties);
     cmtodo!(engine,lastlinefit);
-    cmtodo!(engine,marks);
     cmtodo!(engine,middle);
     cmtodo!(engine,mutoglue);
     cmtodo!(engine,pagediscards);

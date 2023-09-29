@@ -1848,6 +1848,16 @@ pub fn lowercase<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
     engine.mouth.push_expansion(rs);
 }
 
+pub fn mark<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    do_mark(engine,cmd,0)
+}
+pub fn do_mark<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,idx:usize) {
+    let mut v = Vec::new();
+    engine.get_group(|_,t| v.push(t));
+    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Mark(
+        idx,v
+    ).as_node());
+}
 
 pub fn mathchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"mathchar");
@@ -3509,6 +3519,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(lower,engine,Some(HorV::Horizontal),(e,cmd) =>lower::<ET>(e,&cmd));
     register_unexpandable!(lowercase,engine,None,(e,cmd) =>lowercase::<ET>(e,&cmd));
     register_int_assign!(mag,engine);
+    register_unexpandable!(mark,engine,None,(e,cmd) =>mark::<ET>(e,&cmd));
     register_int_assign!(maxdeadcycles,engine);
     register_dim_assign!(maxdepth,engine);
     register_unexpandable!(mathchar,engine,None,(e,cmd) =>mathchar::<ET>(e,&cmd));
@@ -3645,6 +3656,12 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
 
     // TODOS ---------------------------------------------------------------------
 
+    cmtodo!(engine,topmark);
+    cmtodo!(engine,firstmark);
+    cmtodo!(engine,botmark);
+    cmtodo!(engine,splitfirstmark);
+    cmtodo!(engine,splitbotmark);
+
     cmstodo!(engine,mathord);
     cmstodo!(engine,mathop);
     cmstodo!(engine,mathbin);
@@ -3684,12 +3701,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
     cmtodo!(engine,special);
-    cmtodo!(engine,mark);
-    cmtodo!(engine,topmark);
-    cmtodo!(engine,firstmark);
-    cmtodo!(engine,botmark);
-    cmtodo!(engine,splitfirstmark);
-    cmtodo!(engine,splitbotmark);
     cmtodo!(engine,leaders);
     cmtodo!(engine,cleaders);
     cmtodo!(engine,xleaders);

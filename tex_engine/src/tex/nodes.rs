@@ -110,7 +110,7 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             Box(b) =>b.nodetype(),
             Whatsit(_) => 9,
             Math{..} => 10,
-            Mark(_) => 5,
+            Mark(_,_) => 5,
             Insert(_,_) => 4,
             Custom(n) => n.nodetype(),
             Simple(n) => n.nodetype(),
