@@ -155,13 +155,17 @@ impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
 #[derive(Debug,Clone)]
 pub enum HorV { Horizontal, Vertical }
 
+#[derive(Debug,Clone,Copy)]
+pub enum LeadersType { Normal, C, X}
+
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
     Char {char:ET::Char, font:ET::FontRef },
     Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef},
-    WithScripts {kernel:Box<TeXNode<ET>>,superscript:Option<Box<TeXNode<ET>>>,subscript:Option<Box<TeXNode<ET>>>,limits:bool}
+    WithScripts {kernel:Box<TeXNode<ET>>,superscript:Option<Box<TeXNode<ET>>>,subscript:Option<Box<TeXNode<ET>>>,limits:bool},
+    Leaders {bx:HVBox<ET>,skip:SkipNode<ET>,tp:LeadersType}
 }
 
 impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
@@ -183,6 +187,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                     _ => kernel.depth(fs)
                 }
             }
+            SimpleNode::Leaders {skip,..} => skip.depth(fs),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -202,6 +207,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                     _ => kernel.height(fs)
                 }
             }
+            SimpleNode::Leaders {skip,..} => skip.height(fs),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -213,6 +219,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Char {char,font} => fs.get(*font).char_wd(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_wd(*large_char),
             SimpleNode::WithScripts {kernel,..} => kernel.width(fs), // TODO
+            SimpleNode::Leaders {skip,..} => skip.width(fs),
             _ => ET::Dim::from_sp(0)
         }
     }
@@ -222,7 +229,8 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Rule{..} => 3,
             Raise{node,..} => node.nodetype(),
             Delimiter {..} | WithScripts {..} => 15,
-            Char{..} => 0
+            Char{..} => 0,
+            Leaders{skip,..} => skip.nodetype()
         }
     }
 }

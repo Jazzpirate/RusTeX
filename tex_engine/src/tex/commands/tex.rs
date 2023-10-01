@@ -20,7 +20,7 @@ use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use log::debug;
 use crate::engine::{EngineRef, EngineType};
-use crate::tex::nodes::{HBox, HorV, HVBox, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
+use crate::tex::nodes::{HBox, HorV, HVBox, LeadersType, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
 //use super::etex::protected;
@@ -1356,6 +1356,7 @@ pub fn hrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     }.as_node());
 }
 
+pub const HSKIP: &str = "hskip";
 pub fn hskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\hskip");
     let skip = engine.get_skip();
@@ -1758,6 +1759,72 @@ pub fn lccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     let v = ET::Int::from_i64(engine.state.get_lccode(c).to_usize() as i64);
     debug_log!(debug=>"\\lccode '{}' == {}",c.char_str(),v);
     v
+}
+
+pub fn do_leaders<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,tp:LeadersType) {
+    debug_log!(trace=>"leaders");
+    match engine.get_keywords(vec!("width","height","depth")) {
+        Some(_) => todo!("Dimensions"),
+        _ => {
+            let c = match engine.get_next_unexpandable() {
+                None => file_end!(),
+                Some(c) => c
+            };
+            match c.command {
+                BaseCommand::OpenBox {name,mode,apply} => {
+                    let f = apply(engine,c.source);
+                    engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |e,v| {
+                        let bx = match f(e,v) {
+                            Some(r) => {r}
+                            None => {todo!("make void box")}
+                        };
+                        let skip = leaders_skip(e);
+                        e.stomach.push_node(&e.fontstore,&e.state,SimpleNode::Leaders {bx,skip,tp}.as_node());
+                        None
+                    })})
+                }
+                BaseCommand::FinishedBox {get,..} => {
+                    let bx = get(engine,c.source);
+                    let skip = leaders_skip(engine);
+                    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Leaders {bx,skip,tp}.as_node());
+                }
+                BaseCommand::Unexpandable {name:HRULE,..} => todo!(),
+                BaseCommand::Unexpandable {name:VRULE,..} => todo!(),
+                _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
+            }
+        }
+    }
+}
+
+pub fn leaders_skip<ET:EngineType>(engine:&mut EngineRef<ET>) -> SkipNode<ET> {
+    match engine.get_next_unexpandable() {
+        None => file_end!(),
+        Some(c) => match (c.command,engine.state.mode()) {
+            (BaseCommand::Unexpandable{name:VSKIP,..},TeXMode::Vertical|TeXMode::InternalVertical) =>
+                SkipNode::Skip{skip:engine.get_skip(),axis:HorV::Vertical},
+            (BaseCommand::Unexpandable{name:VFIL,..},TeXMode::Vertical|TeXMode::InternalVertical) =>
+                SkipNode::VFil,
+            (BaseCommand::Unexpandable{name:VFILL,..},TeXMode::Vertical|TeXMode::InternalVertical) =>
+                SkipNode::VFill,
+            (BaseCommand::Unexpandable{name:HSKIP,..},TeXMode::Horizontal|TeXMode::RestrictedHorizontal|TeXMode::Math|TeXMode::Displaymath) =>
+                SkipNode::Skip{skip:engine.get_skip(),axis:HorV::Vertical},
+            (BaseCommand::Unexpandable{name:HFIL,..},TeXMode::Horizontal|TeXMode::RestrictedHorizontal|TeXMode::Math|TeXMode::Displaymath) =>
+                SkipNode::HFil,
+            (BaseCommand::Unexpandable{name:HFILL,..},TeXMode::Horizontal|TeXMode::RestrictedHorizontal|TeXMode::Math|TeXMode::Displaymath) =>
+                SkipNode::HFill,
+            _ => throw!("Expected one of \\vskip, \\vfil, \\vfill, \\hskip, \\hfil, \\hfill after \\leaders" => c.source.cause)
+        }
+    }
+}
+
+pub fn leaders<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    do_leaders(engine,cmd,LeadersType::Normal)
+}
+pub fn cleaders<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    do_leaders(engine,cmd,LeadersType::C)
+}
+pub fn xleaders<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    do_leaders(engine,cmd,LeadersType::X)
 }
 
 use string_interner::Symbol;
@@ -3231,6 +3298,7 @@ pub fn vrule<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
 }
 
 
+pub const VSKIP: &str = "vskip";
 pub fn vskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vskip");
     let skip = engine.get_skip();
@@ -3508,6 +3576,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_box!(lastbox,engine,(e,cmd) =>lastbox::<ET>(e,&cmd));
     register_skip!(lastskip,engine,(e,cmd) => lastskip::<ET>(e,&cmd));
     register_value_assign_int!(lccode,engine);
+    register_unexpandable!(leaders,engine,None,(e,cmd) =>leaders::<ET>(e,&cmd));
+    register_unexpandable!(cleaders,engine,None,(e,cmd) =>cleaders::<ET>(e,&cmd));
+    register_unexpandable!(xleaders,engine,None,(e,cmd) =>xleaders::<ET>(e,&cmd));
     register_int_assign!(lefthyphenmin,engine);
     register_skip_assign!(leftskip,engine);
     register_assign!(let,engine,(e,cmd,global) =>let_::<ET>(e,&cmd,global));
@@ -3701,9 +3772,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
     cmtodo!(engine,special);
-    cmtodo!(engine,leaders);
-    cmtodo!(engine,cleaders);
-    cmtodo!(engine,xleaders);
     cmtodo!(engine,moveleft);
     cmtodo!(engine,moveright);
     cmtodo!(engine,noboundary);

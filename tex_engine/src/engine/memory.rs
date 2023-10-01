@@ -1,9 +1,11 @@
+
 use array_init::array_init;
 use log::error;
 use string_interner::{StringInterner};
 use crate::engine::EngineType;
 use crate::tex::commands::tex::NOEXPAND_INTERNAL;
 use crate::tex::token::Token;
+use crate::utils::collections::HMap;
 use crate::utils::strings::{CharType, TeXStr};
 
 pub type Symbol = string_interner::symbol::SymbolU32;
@@ -11,6 +13,33 @@ type Backend = string_interner::backend::StringBackend<Symbol>; // string_intern
 
 
 pub const VEC_SIZE:usize = 32;
+/*
+pub struct MyInterner<Char:CharType> {
+    ends:Vec<usize>,
+    buffer:Vec<Char>,
+    hasher:ahash::AHasher,
+    map:HMap<u32,()>
+}
+impl<Char:CharType> MyInterner<Char> {
+    pub fn new() -> Self {
+        MyInterner {
+            ends:Vec::with_capacity(4096),
+            buffer:Vec::with_capacity(16*4096),
+            hasher:ahash::AHasher::default(),
+            map:HMap::default()
+        }
+    }
+    pub fn get_or_intern(&mut self,v:&Vec<Char>) -> u32 {
+        let hash = make_hash(self.hasher, string.as_ref());
+        let entry = self.map.raw_entry_mut().from_hash(hash, |symbol| {
+            // SAFETY: This is safe because we only operate on symbols that
+            //         we receive from our backend making them valid.
+            string == unsafe { backend.resolve_unchecked(*symbol) }
+        });
+    }
+}
+
+ */
 
 #[derive(Clone)]
 pub struct Interner {
