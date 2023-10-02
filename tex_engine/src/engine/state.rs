@@ -51,6 +51,9 @@ pub trait State<ET:EngineType>:Clone+'static {
     fn stack_pop(&mut self,memory:&mut Memory<ET>) -> Option<(Vec<ET::Token>,GroupType)>;
     fn grouplevel(&self) -> usize;
 
+    fn get_displaymode(&self) -> bool;
+    fn set_displaymode(&mut self,value:bool,globally:bool);
+
     /// get the current group type
     fn get_grouptype(&self) -> GroupType;
 
@@ -256,6 +259,8 @@ impl<ET:EngineType,S:State<ET>> State<ET> for PDFStateWrapper<ET,S> {
     fn file_closeout(&mut self, i: usize) { self.state.file_closeout(i) }
     fn file_openin(&mut self, i: usize, f: ET::File,interner:&mut Interner) { self.state.file_openin(i,f,interner) }
     fn file_openout(&mut self, i: usize, f: ET::File) { self.state.file_openout(i,f) }
+    fn get_displaymode(&self) -> bool { self.state.get_displaymode() }
+    fn set_displaymode(&mut self, value: bool, globally: bool) { self.state.set_displaymode(value,globally) }
     fn get_open_in_file(&self, i: usize) -> Option<ET::File> { self.state.get_open_in_file(i) }
     fn get_open_out_file(&self, i: usize) -> Option<ET::File> { self.state.get_open_out_file(i) }
     fn get_box_register(&mut self, i: usize) -> Option<&mut HVBox<ET>> { self.state.get_box_register(i) }

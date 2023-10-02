@@ -470,9 +470,36 @@ pub fn get_muskip<ET:EngineType>(engine:&mut EngineRef<ET>)-> MuSkip<ET::MuDim,E
     file_end!()
 }
 
+pub fn get_mudim<ET:EngineType>(engine:&mut EngineRef<ET>)-> ET::MuDim {
+    debug_log!(trace=>"Reading muskip {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
+    engine.skip_whitespace();
+    let mut isnegative = false;
+    while let Some(next) = engine.get_next_unexpandable() {
+        match next.command {
+            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
+                let us = char.as_bytes()[0];
+                match us {
+                    b'-' => { // -
+                        isnegative = !isnegative;
+                        catch!(engine.skip_whitespace() => next.source.cause);
+                    }
+                    b'+' => /* + */ catch!(engine.skip_whitespace() => next.source.cause),
+                    _ => return get_mudim_inner::<ET>(engine,isnegative,next)
+                }
+            }
+            BaseCommand::MuSkip(ass) => {
+                let val = ass.get(engine,next.source);
+                return if isnegative { -val.base } else { val.base }
+            }
+            _ => return get_mudim_inner::<ET>(engine,isnegative,next)
+        }
+    }
+    file_end!()
+}
+
 fn get_muskip_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
                                    -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
-    let base = get_mudim::<ET>(engine, isnegative, next);
+    let base = get_mudim_inner::<ET>(engine, isnegative, next);
     engine.skip_whitespace();
     let stretch = if engine.get_keyword("plus") {
         Some(get_mustretchdim::<ET>(engine))
@@ -484,8 +511,8 @@ fn get_muskip_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, n
     MuSkip{base,stretch,shrink}
 }
 
-pub fn get_mudim<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
-                                -> ET::MuDim {
+pub fn get_mudim_inner<ET:EngineType>(engine:&mut EngineRef<ET>, isnegative:bool, next:ResolvedToken<ET>)
+                                      -> ET::MuDim {
     match next.command {
         BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
             let us = char.as_bytes()[0];

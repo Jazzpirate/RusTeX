@@ -491,6 +491,7 @@ pub struct FieldBasedState<ET:EngineType> {
     csnames:usize,
     afterassignment:Option<ET::Token>,
     mode: TeXMode,
+    displaymode:SingleValueField<bool>,
 
     grouptype: Vec<(GroupType,Option<TeXMode>)>,
     aftergroups:Vec<Vec<ET::Token>>,
@@ -531,6 +532,7 @@ impl<ET:EngineType> FieldBasedState<ET> {
             font_style:SingleValueField::new(FontStyle::default()),
             out_files:vec!(),
             in_files:vec!(),
+            displaymode:SingleValueField::new(false),
             csnames:0,
             current_font:SingleValueField::new(ET::FontRef::default()),
             afterassignment:None,
@@ -816,6 +818,19 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
             self.escapechar.set_locally(c)
         }
     }
+
+    fn get_displaymode(&self) -> bool { *self.displaymode.get() }
+    fn set_displaymode(&mut self, value: bool, globally: bool) {
+        let globaldefs = self.get_primitive_int("globaldefs").to_i64();
+        let globally = if globaldefs == 0 {globally} else {globaldefs > 0};
+        if globally {
+            self.displaymode.set_globally(value)
+        } else {
+            self.displaymode.set_locally(value)
+        }
+    }
+
+
     fn push_aftergroup(&mut self, t: ET::Token) {
         self.aftergroups.last_mut().unwrap().push(t)
     }

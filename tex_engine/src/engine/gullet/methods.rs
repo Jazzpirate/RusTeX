@@ -398,6 +398,10 @@ impl<ET:EngineType> EngineRef<ET> {
         ET::Gullet::get_muskip(self)
     }
 
+    pub fn get_mudim(&mut self) -> ET::MuDim {
+        ET::Gullet::get_mudim(self)
+    }
+
     pub fn get_control_sequence(&mut self) -> CSLike<ET::Char> {
         get_control_sequence::<ET>(self)
     }

@@ -12,7 +12,7 @@ use crate::engine::stomach::Stomach;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseCommand, ExpToken, ParamToken, Command, ResolvedToken, BaseStomachCommand, CloseBoxFun, ValueCommand, CommandSource, ToksCommand, Def};
 use crate::tex::commands::methods::parse_signature;
-use crate::tex::numbers::{Int, Skip, MuSkip, Dim};
+use crate::tex::numbers::{Int, Skip, MuSkip, Dim, MuDim};
 use crate::tex::token::{CSLike, Token, PrintableTokenList, DeTokenizer};
 use crate::utils::errors::{TeXError};
 use crate::utils::Ptr;
@@ -20,7 +20,7 @@ use crate::utils::strings::{AllCharsTrait, CharType, TeXStr};
 use chrono::{Datelike, Timelike};
 use log::debug;
 use crate::engine::{EngineRef, EngineType};
-use crate::tex::nodes::{HBox, HorV, HVBox, LeadersType, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
+use crate::tex::nodes::{HBox, HorV, HVBox, LeadersType, MathClass, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode, VBox, Whatsit};
 use crate::tex::ConditionalBranch;
 use crate::tex::fonts::{FontStore,Font};
 //use super::etex::protected;
@@ -202,7 +202,7 @@ pub const CHAR: &str = "char";
 pub fn char<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\char");
     let char = engine.get_char();
-    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone(),cls:None}.as_node());
 }
 
 pub const CHARDEF: &str = "chardef";
@@ -412,9 +412,11 @@ pub fn delimiter<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<E
     let num = num as u32;
     let large = num & 0xFFF;
     let small = num >> 12;
-    let (small_char,small_font) = do_mathchar::<ET>(&engine.state,small,None);
-    let (large_char,large_font) = do_mathchar::<ET>(&engine.state,large,None);
-    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Delimiter {small_char,small_font,large_char,large_font}.as_node());
+    let (small_char,small_font,small_cls) = do_mathchar::<ET>(&engine.state,small,None);
+    let (large_char,large_font,large_cls) = do_mathchar::<ET>(&engine.state,large,None);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Delimiter {
+        small_char,small_font,large_char,large_font,small_cls,large_cls
+    }.as_node());
 }
 
 pub const DIMEN : &str = "dimen";
@@ -458,6 +460,21 @@ pub fn dimendef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET
     let ret = Command::new(BaseCommand::Dim(ValueCommand::Register(num)),Some(&cmd));
     engine.set_command_for_tk(name,Some(ret),global);
 }
+
+pub fn displaylimits<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\displaylimits");
+    let last_ls = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut();
+    match last_ls.last_mut() {
+        Some(TeXNode::Simple(SimpleNode::Char {cls:Some(MathClass::Op),..})) => {
+            if let Some(char) = last_ls.pop() {
+                last_ls.push(TeXNode::Math {ls:vec!(char),display:engine.state.get_displaymode()})
+            } else { unreachable!()}
+        }
+        Some(TeXNode::Math{display,..}) => *display = engine.state.get_displaymode(),
+        _ => throw!("\\displaylimits only allowed after math operator" => cmd.cause),
+    }
+}
+
 pub const DIVIDE : &str = "divide";
 pub fn divide<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"\\divide");
@@ -1936,8 +1953,8 @@ pub fn mathchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     if num < 0 {
         throw!("Invalid math char: {}",num => cmd.cause)
     }
-    let (char,font) = do_mathchar::<ET>(&engine.state,num as u32,None);
-    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Simple(SimpleNode::Char {char,font}))
+    let (char,font,cls) = do_mathchar::<ET>(&engine.state,num as u32,None);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Simple(SimpleNode::Char {char,font,cls:Some(cls)}))
 }
 
 pub const MATHCHARDEF : &str = "mathchardef";
@@ -2196,6 +2213,23 @@ pub fn message<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     let msg = engine.get_braced_string(&mut string);
     (engine.outputs.message)(string.as_str());
     engine.memory.return_string(string);
+}
+
+pub fn mkern<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace => "\\mkern");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        _ => throw!("\\mkern is only allowed in math mode" => cmd.cause)
+    }
+    let mudim = engine.get_mudim();
+    let font = match engine.state.get_fontstyle() {
+        FontStyle::Text => engine.state.get_textfont(2),
+        FontStyle::Script => engine.state.get_scriptfont(2),
+        FontStyle::Scriptscript => engine.state.get_scriptscriptfont(2),
+    };
+    let dim = engine.fontstore.get(font).get_dim::<ET::Dim>(6);
+    let dim = mudim.to_dim::<ET::Dim>(dim);
+    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Kern{dim,axis:HorV::Horizontal});
 }
 
 pub fn month<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -3481,6 +3515,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_dim!(dimen,engine);
     register_assign!(dimendef,engine,(e,cmd,global) =>dimendef::<ET>(e,&cmd,global));
     register_dim_assign!(displayindent,engine);
+    register_unexpandable!(displaylimits,engine,None,(e,cmd) =>displaylimits::<ET>(e,&cmd));
     register_int_assign!(displaywidowpenalty,engine);
     register_dim_assign!(displaywidth,engine);
     register_assign!(divide,engine,(e,cmd,global) =>divide::<ET>(e,&cmd,global));
@@ -3599,6 +3634,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_dim_assign!(mathsurround,engine);
     register_expandable!(meaning,engine,(e,cmd,f) => meaning::<ET>(e,&cmd,f));
     register_unexpandable!(message,engine,None,(e,cmd) =>message::<ET>(e,&cmd));
+    register_unexpandable!(mkern,engine,None,(e,cmd) =>mkern::<ET>(e,&cmd));
     register_int!(month,engine,(e,cmd) => month::<ET>(e,&cmd));
     register_unexpandable!(mskip,engine,None,(e,cmd) =>mskip::<ET>(e,&cmd));
     register_assign!(multiply,engine,(e,cmd,global) =>multiply::<ET>(e,&cmd,global));
@@ -3747,7 +3783,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,textstyle);
     cmstodo!(engine,scriptstyle);
     cmstodo!(engine,scriptscriptstyle);
-    cmstodo!(engine,mkern);
 
     cmtodo!(engine,lastpenalty);
     cmtodo!(engine,badness);
@@ -3781,7 +3816,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,nonscript);
     cmtodo!(engine,underline);
     cmtodo!(engine,overline);
-    cmtodo!(engine,displaylimits);
     cmtodo!(engine,limits);
     cmtodo!(engine,nolimits);
     cmtodo!(engine,mathchoice);

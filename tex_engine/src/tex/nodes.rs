@@ -158,12 +158,29 @@ pub enum HorV { Horizontal, Vertical }
 #[derive(Debug,Clone,Copy)]
 pub enum LeadersType { Normal, C, X}
 
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+pub enum MathClass { Ord = 0, Op = 1, Bin = 2, Rel = 3, Open = 4, Close = 5, Punct = 6 }
+impl From<u8> for MathClass {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => MathClass::Ord,
+            1 => MathClass::Op,
+            2 => MathClass::Bin,
+            3 => MathClass::Rel,
+            4 => MathClass::Open,
+            5 => MathClass::Close,
+            6 => MathClass::Punct,
+            _ => panic!("Invalid math class {}",v)
+        }
+    }
+}
+
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
-    Char {char:ET::Char, font:ET::FontRef },
-    Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef},
+    Char {char:ET::Char, font:ET::FontRef,cls:Option<MathClass> },
+    Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef,small_cls:MathClass,large_cls:MathClass},
     WithScripts {kernel:Box<TeXNode<ET>>,superscript:Option<Box<TeXNode<ET>>>,subscript:Option<Box<TeXNode<ET>>>,limits:bool},
     Leaders {bx:HVBox<ET>,skip:SkipNode<ET>,tp:LeadersType}
 }
@@ -179,7 +196,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 let d = node.depth(fs) - *by;
                 if d > ET::Dim::from_sp(0) { d } else { ET::Dim::from_sp(0) }
             },
-            SimpleNode::Char {char,font} => fs.get(*font).char_dp(*char),
+            SimpleNode::Char {char,font,..} => fs.get(*font).char_dp(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_dp(*large_char),
             SimpleNode::WithScripts {kernel,subscript,..} => {
                 match subscript {
@@ -199,7 +216,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 let h = node.height(fs) + *by;
                 if h > ET::Dim::from_sp(0) { h } else { ET::Dim::from_sp(0) }
             },
-            SimpleNode::Char {char,font} => fs.get(*font).char_ht(*char),
+            SimpleNode::Char {char,font,..} => fs.get(*font).char_ht(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_ht(*large_char),
             SimpleNode::WithScripts {kernel,superscript,..} => {
                 match superscript {
@@ -216,7 +233,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Rule{width,axis:HorV::Vertical,..} => width.unwrap_or_else(|| ET::Dim::from_sp(26214)),
             SimpleNode::Rule{width,..} => width.unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Raise{node,..} => node.width(fs),
-            SimpleNode::Char {char,font} => fs.get(*font).char_wd(*char),
+            SimpleNode::Char {char,font,..} => fs.get(*font).char_wd(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_wd(*large_char),
             SimpleNode::WithScripts {kernel,..} => kernel.width(fs), // TODO
             SimpleNode::Leaders {skip,..} => skip.width(fs),

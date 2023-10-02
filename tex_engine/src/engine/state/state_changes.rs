@@ -27,6 +27,7 @@ pub struct ChangeBasedState<ET:EngineType> {
     stack:Vec<StackLevel<ET>>,
     changes:Vec<StateChange<ET>>,
 
+    displaymode:bool,
     font_style:FontStyle,
     current_font:ET::FontRef,
     parshape:Option<Vec<(ET::Dim,ET::Dim)>>,
@@ -71,6 +72,7 @@ impl<ET:EngineType> ChangeBasedState<ET> {
             stack: vec![],
             changes: vec![],
 
+            displaymode:false,
             parshape:None,
             endlinechar: Some(ET::Char::carriage_return()),
             escapechar: Some(ET::Char::backslash()),
@@ -153,6 +155,12 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
     fn set_current_font(&mut self, f:ET::FontRef, globally: bool) {
         let old = std::mem::replace(&mut self.current_font,f);
         change!(self,globally,StateChange::CurrentFont(old));
+    }
+    fn get_displaymode(&self) -> bool { self.displaymode }
+    fn set_displaymode(&mut self, value: bool, globally: bool) {
+        let old = self.displaymode;
+        self.displaymode = value;
+        change!(self,globally,StateChange::DisplayMode(old));
     }
     fn grouplevel(&self) -> usize {
         self.stack.len()
@@ -265,6 +273,7 @@ impl<ET:EngineType> State<ET> for ChangeBasedState<ET> {
                             Endlinechar(v) => self.endlinechar = v,
                             Escapechar(v) => self.escapechar = v,
                             Newlinechar(v) => self.newlinechar = v,
+                            DisplayMode(v) => self.displaymode = v,
                             Command(name,v) => self.commands[name] = v,
                             AcCommand(c,v) => self.ac_commands.set(c,v),
                             Catcode(c,v) => self.catcodes.set(c,v),
@@ -607,6 +616,7 @@ enum StateChange<ET:EngineType> {
     FontStyle(FontStyle),
     ParShape(Option<Vec<(ET::Dim, ET::Dim)>>),
     Endlinechar(Option<ET::Char>),
+    DisplayMode(bool),
     Escapechar(Option<ET::Char>),
     Newlinechar(Option<ET::Char>),
     Command(usize,Option<Command<ET>>),
@@ -643,6 +653,7 @@ impl<ET:EngineType> StateChange<ET> {
             (Endlinechar(_),Endlinechar(_)) => true,
             (Escapechar(_),Escapechar(_)) => true,
             (Newlinechar(_),Newlinechar(_)) => true,
+            (DisplayMode(_),DisplayMode(_)) => true,
             (Command(i,_),Command(j,_)) => i == j,
             (AcCommand(c,_),AcCommand(d,_)) => c == d,
             (Catcode(c,_),Catcode(d,_)) => c == d,

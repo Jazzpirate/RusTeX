@@ -71,6 +71,10 @@ pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
         numeric_methods::get_muskip::<ET>(engine)
     }
 
+    fn get_mudim(engine:&mut EngineRef<ET>) -> ET::MuDim {
+        numeric_methods::get_mudim::<ET>(engine)
+    }
+
     /// read a single keyword from the input stream; returns `true` if the keyword is found.
     fn get_keyword<'a>(engine:&mut EngineRef<ET>, keyword:&'a str) -> bool {
         methods::get_keyword::<ET>(engine, keyword)

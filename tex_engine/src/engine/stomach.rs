@@ -103,8 +103,8 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                     }
                 } else {
                     match (b.ls_mut().last_mut(),&node) {
-                        (Some(TeXNode::Simple(SimpleNode::Char {char,font})),
-                            TeXNode::Simple(SimpleNode::Char {char:char2,font:font2})) if *font == *font2 => {
+                        (Some(TeXNode::Simple(SimpleNode::Char {char,font,cls:None})),
+                            TeXNode::Simple(SimpleNode::Char {char:char2,font:font2,cls:None})) if *font == *font2 => {
                             if let Some(r) = fs.get(*font).ligature(*char,*char2) {
                                 *char = r
                             } else {

@@ -6,7 +6,7 @@ use crate::engine::stomach::{LineSpec, Stomach};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseStomachCommand, StomachCommand};
-use crate::tex::nodes::{HBox, HorV, NodeTrait, OpenBox, OpenKernel, SimpleNode, SkipNode, TeXNode};
+use crate::tex::nodes::{HBox, HorV, MathClass, NodeTrait, OpenBox, OpenKernel, SimpleNode, SkipNode, TeXNode};
 use crate::tex::numbers::{Dim, Int, Skip};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
@@ -91,7 +91,7 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
-                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone()}.as_node());
+                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone(),cls:None}.as_node());
             }
             _ => {
                 ET::Stomach::open_paragraph(engine,cmd);
@@ -178,8 +178,8 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 engine.mouth.requeue(ET::Token::new_char_from_command(char,CategoryCode::Active,&cmd.source));
                 return ()
             }
-            let (char,font) = do_mathchar::<ET>(&engine.state,num,Some(char));
-            engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font}.as_node());
+            let (char,font,cls) = do_mathchar::<ET>(&engine.state,num,Some(char));
+            engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font,cls:Some(cls)}.as_node());
         }
         Space => (),
         MathShift => match engine.state.mode() {
@@ -229,8 +229,8 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
             _ => unreachable!()
         }
         MathChar(num) => {
-            let (char,font) = do_mathchar::<ET>(&engine.state,num,None);
-            engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font}.as_node());
+            let (char,font,cls) = do_mathchar::<ET>(&engine.state,num,None);
+            engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font, cls:Some(cls)}.as_node());
         }
         Superscript => {
             let last = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut().last_mut();
@@ -299,7 +299,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
     }
 }
 
-pub fn do_mathchar<ET:EngineType>(state:&ET::State,mathcode:u32,char:Option<ET::Char>) -> (ET::Char,ET::FontRef) {
+pub fn do_mathchar<ET:EngineType>(state:&ET::State,mathcode:u32,char:Option<ET::Char>) -> (ET::Char,ET::FontRef,MathClass) {
     let (mut cls,mut fam,pos) = {
         if mathcode == 0 {
             (0,0,match char {
@@ -331,7 +331,7 @@ pub fn do_mathchar<ET:EngineType>(state:&ET::State,mathcode:u32,char:Option<ET::
         FontStyle::Script => state.get_scriptfont(fam),
         FontStyle::Scriptscript => state.get_scriptscriptfont(fam),
     };
-    (ET::Char::from(pos),font)
+    (ET::Char::from(pos),font,MathClass::from(cls))
 }
 
 pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
