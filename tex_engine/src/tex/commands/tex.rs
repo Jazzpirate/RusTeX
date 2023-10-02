@@ -467,7 +467,7 @@ pub fn displaylimits<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSour
     match last_ls.last_mut() {
         Some(TeXNode::Simple(SimpleNode::Char {cls:Some(MathClass::Op),..})) => {
             if let Some(char) = last_ls.pop() {
-                last_ls.push(TeXNode::Math {ls:vec!(char),display:engine.state.get_displaymode()})
+                last_ls.push(TeXNode::Math {ls:vec!(char),display:engine.state.get_displaymode(),cls:None})
             } else { unreachable!()}
         }
         Some(TeXNode::Math{display,..}) => *display = engine.state.get_displaymode(),
@@ -1957,6 +1957,37 @@ pub fn mathchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
     engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Simple(SimpleNode::Char {char,font,cls:Some(cls)}))
 }
 
+pub fn mathclass_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,cls:MathClass) {
+    use crate::engine::stomach::Stomach;
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        o => throw!("\\math[] not allowed in mode: {}",o => cmd.cause)
+    }
+    match engine.get_next_unexpandable() {
+        None => file_end!(),
+        Some(c) => match c.command {
+            BaseCommand::Char {char,catcode:CategoryCode::BeginGroup} => {
+                engine.state.stack_push(GroupType::Box(if engine.state.get_displaymode() {BoxMode::DM} else {BoxMode::M}));
+                engine.stomach.open_box(crate::tex::nodes::OpenBox::Math {list:vec!(),display:engine.state.get_displaymode(),cls:Some(cls)});
+            }
+            BaseCommand::Char {char,..} => {
+                let (char,font,_) = do_mathchar::<ET>(&engine.state,engine.state.get_mathcode(char).to_i64() as u32,Some(char));
+                engine.stomach.push_node(&engine.fontstore, &engine.state, TeXNode::Simple(SimpleNode::Char {char,font,cls:Some(cls)}))
+            },
+            _ => throw!("Expected character or group after \\math[ord|op|bin|...]" => c.source.cause)
+        }
+    }
+}
+
+pub fn mathord<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Ord) }
+pub fn mathop<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Op) }
+pub fn mathbin<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Bin) }
+pub fn mathrel<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Rel) }
+pub fn mathopen<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Open) }
+pub fn mathclose<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Close) }
+pub fn mathpunct<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Punct) }
+pub fn mathinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Ord) } // TODO?
+
 pub const MATHCHARDEF : &str = "mathchardef";
 pub fn mathchardef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
     debug_log!(trace=>"mathchardef");
@@ -2036,6 +2067,10 @@ pub fn meaning<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,
                     return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
                 BaseCommand::FinishedBox {name,..} => {
+                    do_esc!();
+                    return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
+                }
+                BaseCommand::ProvidesNode {name,..} => {
                     do_esc!();
                     return crate::tex::token::tokenize_string(name, cmd, |t| exp.push(t))
                 }
@@ -3629,6 +3664,14 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(maxdeadcycles,engine);
     register_dim_assign!(maxdepth,engine);
     register_unexpandable!(mathchar,engine,None,(e,cmd) =>mathchar::<ET>(e,&cmd));
+    register_unexpandable!(mathord,engine,None,(e,cmd) =>mathord::<ET>(e,&cmd));
+    register_unexpandable!(mathop,engine,None,(e,cmd) =>mathop::<ET>(e,&cmd));
+    register_unexpandable!(mathbin,engine,None,(e,cmd) =>mathbin::<ET>(e,&cmd));
+    register_unexpandable!(mathrel,engine,None,(e,cmd) =>mathrel::<ET>(e,&cmd));
+    register_unexpandable!(mathopen,engine,None,(e,cmd) =>mathopen::<ET>(e,&cmd));
+    register_unexpandable!(mathclose,engine,None,(e,cmd) =>mathclose::<ET>(e,&cmd));
+    register_unexpandable!(mathpunct,engine,None,(e,cmd) =>mathpunct::<ET>(e,&cmd));
+    register_unexpandable!(mathinner,engine,None,(e,cmd) =>mathinner::<ET>(e,&cmd));
     register_assign!(mathchardef,engine,(e,cmd,global) =>mathchardef::<ET>(e,&cmd,global));
     register_value_assign_int!(mathcode,engine);
     register_dim_assign!(mathsurround,engine);
@@ -3769,14 +3812,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,splitfirstmark);
     cmtodo!(engine,splitbotmark);
 
-    cmstodo!(engine,mathord);
-    cmstodo!(engine,mathop);
-    cmstodo!(engine,mathbin);
-    cmstodo!(engine,mathrel);
-    cmstodo!(engine,mathopen);
-    cmstodo!(engine,mathclose);
-    cmstodo!(engine,mathpunct);
-    cmstodo!(engine,mathinner);
     cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
     cmstodo!(engine,displaystyle);

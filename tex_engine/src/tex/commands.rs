@@ -320,6 +320,8 @@ pub enum BaseCommand<ET:EngineType>{
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
     /// A command yielding a finished [`TeXBox`](crate::tex::nodes::CustomBox), e.g. `\box`, `\copy`
     FinishedBox{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> HVBox<ET>},
+
+    ProvidesNode{name:&'static str, get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> TeXNode<ET>, forces_mode:Option<HorV>},
     /// A character; i.e. the result of `\let\foo=a`
     Char{char:ET::Char,catcode:CategoryCode},
     /// The result of a `\chardef`, e.g. `\chardef\foo=97`
@@ -386,6 +388,7 @@ impl<ET:EngineType> BaseCommand<ET> {
             BaseCommand::Whatsit {name,..} => format!("\\{}", name),
             BaseCommand::OpenBox {name,..} => format!("\\{}", name),
             BaseCommand::FinishedBox {name,..} => format!("\\{}", name),
+            BaseCommand::ProvidesNode {name,..} => format!("\\{}", name),
             BaseCommand::Char{char,catcode} => format!("Character '{}' (catcode {})", (char as &ET::Char).char_str(), catcode),
             BaseCommand::CharDef(char) => format!("Character Definition '{}'", (char as &ET::Char).char_str()),
             BaseCommand::MathChar(n) => format!("Math Character {:X}", n),
@@ -415,6 +418,7 @@ impl<ET:EngineType> Debug for BaseCommand<ET> {
             BaseCommand::Whatsit {name,..} => write!(f, "Whatsit {}", name),
             BaseCommand::OpenBox {name,..} => write!(f, "Open Box {}", name),
             BaseCommand::FinishedBox {name,..} => write!(f, "Open Box {}", name),
+            BaseCommand::ProvidesNode {name,..} => write!(f, "Open Box {}", name),
             BaseCommand::Char{char,catcode} => write!(f, "Character '{}' (catcode {})", (char as &ET::Char).char_str(), catcode),
             BaseCommand::CharDef(char) => write!(f, "Character Definition '{}'", (char as &ET::Char).char_str()),
             BaseCommand::MathChar(n) => write!(f, "Math Character {:X}", n),
@@ -438,6 +442,7 @@ pub enum BaseStomachCommand<ET:EngineType> {
     ValueAss(AssignmentFn<ET>),
     OpenBox{name:&'static str,mode:BoxMode, apply:BoxFun<ET>},
     FinishedBox{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> HVBox<ET>},
+    ProvidesNode{name:&'static str,get:fn(&mut EngineRef<ET>,cmd:CommandSource<ET>) -> TeXNode<ET>, forces_mode:Option<HorV>},
     Char(ET::Char),
     MathChar(u32),
     Font(ET::FontRef),
@@ -458,6 +463,7 @@ impl<ET:EngineType> Debug for BaseStomachCommand<ET> {
             BaseStomachCommand::Whatsit{name,..} => write!(f, "Whatsit {}", name),
             BaseStomachCommand::OpenBox{name,..} => write!(f, "Open Box {}", name),
             BaseStomachCommand::FinishedBox{name,..} => write!(f, "Box {}", name),
+            BaseStomachCommand::ProvidesNode{name,..} => write!(f, "Node {}", name),
             BaseStomachCommand::Char(ch) => write!(f, "Character {}", ch.char_str()),
             BaseStomachCommand::MathChar(n) => write!(f, "Math Character {:X}", n),
             BaseStomachCommand::ValueAss(_) => write!(f, "Value Assignment"),
@@ -488,6 +494,7 @@ impl<ET:EngineType> BaseStomachCommand<ET> {
                 _ => unreachable!()
             }
             Unexpandable {name,apply,forces_mode} => BaseStomachCommand::Unexpandable {name,apply, forces_mode},
+            ProvidesNode {name,get,forces_mode} => BaseStomachCommand::ProvidesNode {name,get,forces_mode},
             Assignment {apply,name,..} => BaseStomachCommand::Assignment {name:Some(name),set:apply},
             Whatsit {name,apply} => BaseStomachCommand::Whatsit {name,apply:apply},
             OpenBox {name,mode,apply} => BaseStomachCommand::OpenBox {name,mode,apply},

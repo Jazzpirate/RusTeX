@@ -26,7 +26,7 @@ pub enum TeXNode<ET:EngineType> {
     Penalty(i32),
     Kern{ dim:ET::Dim,axis:HorV},
     Box(HVBox<ET>),
-    Math{ls:Vec<TeXNode<ET>>,display:bool},
+    Math{ls:Vec<TeXNode<ET>>,display:bool,cls:Option<MathClass>},
     OpenKernel(OpenKernel<ET>),
     Whatsit(Whatsit<ET>),
     Mark(usize,Vec<ET::Token>),
@@ -448,7 +448,7 @@ pub enum OpenBox<ET:EngineType> {
         list:Vec<TeXNode<ET>>,
         on_close: CloseBoxFun<ET>
     },
-    Math { list: Vec<TeXNode<ET>>, display:bool },
+    Math { list: Vec<TeXNode<ET>>, display:bool,cls:Option<MathClass> },
 }
 impl<ET:EngineType> Debug for OpenBox<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

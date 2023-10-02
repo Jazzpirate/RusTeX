@@ -63,7 +63,7 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
 fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
     match cmd.command {
-        Unexpandable {name,apply,ref forces_mode} => {
+        ProvidesNode {name,get,ref forces_mode} => {
             match forces_mode {
                 None => (),
                 Some(mode) => {
@@ -87,7 +87,37 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
             if engine.state.mode() == TeXMode::Vertical {
                 ET::Stomach::maybe_shipout(engine,false)
             }
-            apply(engine, cmd.source)
+            let node = get(engine, cmd.source);
+            engine.stomach.push_node(&engine.fontstore,&engine.state,node);
+            if engine.state.mode() == TeXMode::Vertical {
+                ET::Stomach::maybe_shipout(engine,false)
+            }
+        }
+        Unexpandable {name,apply,ref forces_mode} => {
+            match forces_mode {
+                None => (),
+                Some(mode) => {
+                    let currmode = engine.state.mode();
+                    match (currmode,mode) {
+                        (TeXMode::InternalVertical | TeXMode::Vertical ,HorV::Vertical) => (),
+                        (TeXMode::Horizontal | TeXMode::RestrictedHorizontal,HorV::Horizontal) => (),
+                        (TeXMode::RestrictedHorizontal,HorV::Vertical) =>
+                            throw!("Not allowed in restricted horizontal mode: {}",cmd.source.cause.printable(&engine.interner) => cmd.source.cause),
+                        (TeXMode::Vertical|TeXMode::InternalVertical,HorV::Horizontal) => {
+                            return ET::Stomach::open_paragraph(engine,cmd);
+                        }
+                        (TeXMode::Horizontal,HorV::Vertical) => {
+                            engine.mouth.requeue(cmd.source.cause);
+                            return ET::Stomach::close_paragraph(engine);
+                        }
+                        _ => throw!("TODO: Switching modes from {:?} to {:?}", currmode, mode => cmd.source.cause)
+                    }
+                }
+            }
+            apply(engine, cmd.source);
+            if engine.state.mode() == TeXMode::Vertical {
+                ET::Stomach::maybe_shipout(engine,false)
+            }
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
@@ -164,6 +194,14 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
     use BaseStomachCommand::*;
     debug_log!(debug => "Here: {}",engine.preview(500));
     match cmd.command {
+        ProvidesNode {name,get,ref forces_mode} => {
+            match forces_mode {
+                None | Some(HorV::Horizontal) => (),
+                Some(HorV::Vertical) => throw!("Not allowed in math mode" => cmd.source.cause)
+            }
+            let node = get(engine, cmd.source);
+            engine.stomach.push_node(&engine.fontstore,&engine.state,node);
+        }
         Unexpandable {name,apply,ref forces_mode} => {
             match forces_mode {
                 None | Some(HorV::Horizontal) => (),
@@ -192,8 +230,8 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                             engine.mouth.push_expansion(rs);
                         }
                         match engine.stomach.shipout_data_mut().box_stack.pop() {
-                            Some(crate::tex::nodes::OpenBox::Math {list:ls,display}) => {
-                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display})
+                            Some(crate::tex::nodes::OpenBox::Math {list:ls,display,..}) => {
+                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display,cls:None})
                             }
                             _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                         }
@@ -217,8 +255,8 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                             engine.mouth.push_expansion(rs);
                         }
                         match engine.stomach.shipout_data_mut().box_stack.pop() {
-                            Some(crate::tex::nodes::OpenBox::Math {list:ls,display}) => {
-                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display})
+                            Some(crate::tex::nodes::OpenBox::Math {list:ls,display,..}) => {
+                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display,cls:None})
                             }
                             _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                         }
@@ -241,7 +279,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     throw!("Double superscript"),
                 None => {
                     engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::OpenKernel(OpenKernel::Superscript(Box::new(
-                        TeXNode::Math {ls:vec!(),display:false} // TODO display
+                        TeXNode::Math {ls:vec!(),display:false,cls:None} // TODO display
                     ))))
                 }
                 Some(n) => {
@@ -259,7 +297,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     throw!("Double subscript"),
                 None => {
                     engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::OpenKernel(OpenKernel::Subscript(Box::new(
-                        TeXNode::Math {ls:vec!(),display:false} // TODO display
+                        TeXNode::Math {ls:vec!(),display:false,cls:None} // TODO display
                     ))))
                 }
                 Some(n) => {
@@ -275,7 +313,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 _ => unreachable!()
             };
             engine.state.stack_push(GroupType::Box(mode));
-            engine.stomach.open_box(crate::tex::nodes::OpenBox::Math {list:vec!(),display:mode == BoxMode::DM});
+            engine.stomach.open_box(crate::tex::nodes::OpenBox::Math {list:vec!(),display:engine.state.get_displaymode(),cls:None});
         }
         EndGroup => {
             match engine.state.stack_pop(&mut engine.memory) {
@@ -286,8 +324,8 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                         engine.mouth.push_expansion(rs);
                     }
                     match engine.stomach.shipout_data_mut().box_stack.pop() {
-                        Some(crate::tex::nodes::OpenBox::Math {list:ls,display}) => {
-                            engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display})
+                        Some(crate::tex::nodes::OpenBox::Math {list:ls,display,cls}) => {
+                            engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display,cls})
                         }
                         o =>throw!("Unexpected box on stack: {:?}",o => cmd.source.cause)
                     }
@@ -352,12 +390,14 @@ pub fn open_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachComma
 
 pub fn do_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.state.stack_push(GroupType::Box(BoxMode::M));
-    engine.stomach.open_box(OpenBox::Math {list:vec!(),display:false});
+    engine.stomach.open_box(OpenBox::Math {list:vec!(),display:false,cls:None});
+    engine.state.set_displaymode(false,false);
     engine.mouth.insert_every(&engine.state,"everymath");
 }
 pub fn do_display_math<ET:EngineType>(engine:&mut EngineRef<ET>) {
     engine.state.stack_push(GroupType::Box(BoxMode::DM));
-    engine.stomach.open_box(OpenBox::Math {list:vec!(),display:true});
+    engine.stomach.open_box(OpenBox::Math {list:vec!(),display:true,cls:None});
+    engine.state.set_displaymode(true,false);
     engine.mouth.insert_every(&engine.state,"everydisplay");
 }
 

@@ -246,6 +246,17 @@ macro_rules! register_box {
     };
 }
 
+#[macro_export]
+macro_rules! register_node {
+    ($name:ident,$engine:ident,$is_h:expr,($e:tt,$cmd:tt) => $f:expr) => {
+        $engine.state.set_command(ET::Char::from_str(stringify!($name),&mut $engine.interner),Some(crate::tex::commands::Command::new(crate::tex::commands::BaseCommand::ProvidesNode{
+            name:stringify!($name),
+            get:|$e,$cmd| crate::catch_prim!($f => (stringify!($name),$cmd)),
+            forces_mode:$is_h
+        },None)),true);
+    };
+}
+
 
 #[macro_export]
 macro_rules! register_unexpandable {
