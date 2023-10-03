@@ -41,33 +41,34 @@ pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>
     debug_log!(trace=>"\\advance");
     engine.skip_whitespace();
     match engine.get_next_unexpandable() {
-        None => file_end_prim!(ADVANCE,cmd),
-        Some(ncmd) => match ncmd.command {
-            BaseCommand::Int(a) => {
-                macro_rules! finish {
+        None => file_end!(),
+        Some(ncmd) => {
+            engine.skip_whitespace();engine.get_keyword("by");
+            match ncmd.command {
+                BaseCommand::Int(a) => {
+                    macro_rules! finish {
                     ($old:expr,$nv:ident => $set:expr) => {{
-                        catch_prim!(engine.get_keyword("by") => (ADVANCE,cmd));
                         let i = catch_prim!(engine.get_int() => (ADVANCE,cmd));
                         let $nv = $old + i;
                         $set;
                     }}
                 }
-                match a {
-                    ValueCommand::Register(u) => finish!(engine.state.get_int_register(u),nv => engine.state.set_int_register(u,nv,global)),
-                    ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_int(name),nv => engine.state.set_primitive_int(name,nv,global)),
-                    ValueCommand::Complex {name,..} if name == COUNT => {
-                        let int = catch_prim!(engine.get_int() => (ADVANCE,cmd));
-                        let u = match int.try_into() {
-                            Ok(u) => u,
-                            _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        };
-                        finish!(engine.state.get_int_register(u),nv => engine.state.set_int_register(u,nv,global))
+                    match a {
+                        ValueCommand::Register(u) => finish!(engine.state.get_int_register(u),nv => engine.state.set_int_register(u,nv,global)),
+                        ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_int(name),nv => engine.state.set_primitive_int(name,nv,global)),
+                        ValueCommand::Complex {name,..} if name == COUNT => {
+                            let int = catch_prim!(engine.get_int() => (ADVANCE,cmd));
+                            let u = match int.try_into() {
+                                Ok(u) => u,
+                                _ => throw!("Not a valid register: {}",int => cmd.cause)
+                            };
+                            finish!(engine.state.get_int_register(u),nv => engine.state.set_int_register(u,nv,global))
+                        }
+                        _ => throw!("Unexpected token after \\advance" => cmd.cause)
                     }
-                    _ => throw!("Unexpected token after \\advance" => cmd.cause)
                 }
-            }
-            BaseCommand::Dim(a) => {
-                macro_rules! finish {
+                BaseCommand::Dim(a) => {
+                    macro_rules! finish {
                     ($old:expr,$nv:ident => $set:expr) => {{
                         catch_prim!(engine.get_keyword("by") => (ADVANCE,cmd));
                         let i = catch_prim!(engine.get_dim() => (ADVANCE,cmd));
@@ -75,22 +76,22 @@ pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>
                         $set;
                     }}
                 }
-                match a {
-                    ValueCommand::Register(u) => finish!(engine.state.get_dim_register(u),nv => engine.state.set_dim_register(u,nv,global)),
-                    ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_dim(name),nv => engine.state.set_primitive_dim(name,nv,global)),
-                    ValueCommand::Complex {name,..} if name == DIMEN => {
-                        let int = engine.get_int();
-                        let u = match int.try_into() {
-                            Ok(u) => u,
-                            _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        };
-                        finish!(engine.state.get_dim_register(u),nv => engine.state.set_dim_register(u,nv,global))
+                    match a {
+                        ValueCommand::Register(u) => finish!(engine.state.get_dim_register(u),nv => engine.state.set_dim_register(u,nv,global)),
+                        ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_dim(name),nv => engine.state.set_primitive_dim(name,nv,global)),
+                        ValueCommand::Complex {name,..} if name == DIMEN => {
+                            let int = engine.get_int();
+                            let u = match int.try_into() {
+                                Ok(u) => u,
+                                _ => throw!("Not a valid register: {}",int => cmd.cause)
+                            };
+                            finish!(engine.state.get_dim_register(u),nv => engine.state.set_dim_register(u,nv,global))
+                        }
+                        _ => throw!("Unexpected token after \\advance" => cmd.cause)
                     }
-                    _ => throw!("Unexpected token after \\advance" => cmd.cause)
                 }
-            }
-            BaseCommand::Skip(a) => {
-                macro_rules! finish {
+                BaseCommand::Skip(a) => {
+                    macro_rules! finish {
                     ($old:expr,$nv:ident => $set:expr) => {{
                         catch_prim!(engine.get_keyword("by") => (ADVANCE,cmd));
                         let i = catch_prim!(engine.get_skip() => (ADVANCE,cmd));
@@ -98,22 +99,22 @@ pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>
                         $set;
                     }}
                 }
-                match a {
-                    ValueCommand::Register(u) => finish!(engine.state.get_skip_register(u),nv => engine.state.set_skip_register(u,nv,global)),
-                    ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_skip(name),nv => engine.state.set_primitive_skip(name,nv,global)),
-                    ValueCommand::Complex {name,..} if name == SKIP => {
-                        let int = engine.get_int();
-                        let u = match int.try_into() {
-                            Ok(u) => u,
-                            _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        };
-                        finish!(engine.state.get_skip_register(u),nv => engine.state.set_skip_register(u,nv,global))
+                    match a {
+                        ValueCommand::Register(u) => finish!(engine.state.get_skip_register(u),nv => engine.state.set_skip_register(u,nv,global)),
+                        ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_skip(name),nv => engine.state.set_primitive_skip(name,nv,global)),
+                        ValueCommand::Complex {name,..} if name == SKIP => {
+                            let int = engine.get_int();
+                            let u = match int.try_into() {
+                                Ok(u) => u,
+                                _ => throw!("Not a valid register: {}",int => cmd.cause)
+                            };
+                            finish!(engine.state.get_skip_register(u),nv => engine.state.set_skip_register(u,nv,global))
+                        }
+                        _ => throw!("Unexpected token after \\advance" => cmd.cause)
                     }
-                    _ => throw!("Unexpected token after \\advance" => cmd.cause)
                 }
-            }
-            BaseCommand::MuSkip(a) => {
-                macro_rules! finish {
+                BaseCommand::MuSkip(a) => {
+                    macro_rules! finish {
                     ($old:expr,$nv:ident => $set:expr) => {{
                         catch_prim!(engine.get_keyword("by") => (ADVANCE,cmd));
                         let i = catch_prim!(engine.get_muskip() => (ADVANCE,cmd));
@@ -121,21 +122,22 @@ pub fn advance<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>
                         $set;
                     }}
                 }
-                match a {
-                    ValueCommand::Register(u) => finish!(engine.state.get_muskip_register(u),nv => engine.state.set_muskip_register(u,nv,global)),
-                    ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_muskip(name),nv => engine.state.set_primitive_muskip(name,nv,global)),
-                    ValueCommand::Complex {name,..} if name == MUSKIP => {
-                        let int = engine.get_int();
-                        let u = match int.try_into() {
-                            Ok(u) => u,
-                            _ => throw!("Not a valid register: {}",int => cmd.cause)
-                        };
-                        finish!(engine.state.get_muskip_register(u),nv => engine.state.set_muskip_register(u,nv,global))
+                    match a {
+                        ValueCommand::Register(u) => finish!(engine.state.get_muskip_register(u),nv => engine.state.set_muskip_register(u,nv,global)),
+                        ValueCommand::Primitive(name) => finish!(engine.state.get_primitive_muskip(name),nv => engine.state.set_primitive_muskip(name,nv,global)),
+                        ValueCommand::Complex {name,..} if name == MUSKIP => {
+                            let int = engine.get_int();
+                            let u = match int.try_into() {
+                                Ok(u) => u,
+                                _ => throw!("Not a valid register: {}",int => cmd.cause)
+                            };
+                            finish!(engine.state.get_muskip_register(u),nv => engine.state.set_muskip_register(u,nv,global))
+                        }
+                        _ => throw!("Unexpected token after \\advance" => cmd.cause)
                     }
-                    _ => throw!("Unexpected token after \\advance" => cmd.cause)
                 }
+                o => throw!("expected register after \\advance;got:{:?}",o => cmd.cause)
             }
-            o => throw!("expected register after \\advance;got:{:?}",o => cmd.cause)
         }
     }
 }
@@ -1062,6 +1064,7 @@ fn start_row<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, c
                 match res.command {
                     BaseCommand::Char {catcode:CategoryCode::EndGroup,..} => {
                         engine.mouth.requeue(res.source.cause);
+                        engine.mouth.pop_align_spec();
                         return ()
                     },
                     BaseCommand::Char {catcode:CategoryCode::Space,..} => (),
@@ -2067,6 +2070,50 @@ pub fn mathopen<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 pub fn mathclose<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Close) }
 pub fn mathpunct<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Punct) }
 pub fn mathinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Ord) } // TODO?
+
+fn mathchoice_get_one<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,display:bool,style:FontStyle) -> Vec<TeXNode<ET>> {
+    match engine.get_next_stomach_command() {
+        None => file_end!(),
+        Some(sc) => match sc.command {
+            BaseStomachCommand::BeginGroup => ET::Stomach::digest(engine,sc),
+            _ => throw!("Expected begin group after \\mathchoice" => sc.source.cause)
+        }
+    }
+    engine.state.set_displaymode(display,false);
+    engine.state.set_fontstyle(style,false);
+    let grouplevel = engine.state.grouplevel();
+    loop {
+        match engine.get_next_stomach_command() {
+            Some(cmd) => {
+                match cmd.command {
+                    BaseStomachCommand::EndGroup if grouplevel == engine.state.grouplevel() => {
+                        ET::Stomach::digest(engine,cmd);
+                        let sd = engine.stomach.shipout_data_mut();
+                        let ls = if sd.box_stack.is_empty() {&mut sd.page} else {sd.box_stack.last_mut().unwrap().ls_mut()};
+                        match ls.pop() {
+                            Some(TeXNode::Math {ls,..}) => return ls,
+                            o => unreachable!("{:?}",o)
+                        }
+                    }
+                    _ => ET::Stomach::digest(engine,cmd)
+                }
+            }
+            None => file_end!()
+        }
+    }
+}
+
+pub fn mathchoice<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        o => throw!("\\mathchoice not allowed in mode: {}",o => cmd.cause)
+    }
+    let display = mathchoice_get_one(engine,cmd,true,FontStyle::Text);
+    let text = mathchoice_get_one(engine,cmd,false,FontStyle::Text);
+    let script = mathchoice_get_one(engine,cmd,false,FontStyle::Script);
+    let scriptscript = mathchoice_get_one(engine,cmd,false,FontStyle::Scriptscript);
+    ET::Stomach::push_node(engine,TeXNode::Simple(SimpleNode::MathChoice {display,text,script,scriptscript}));
+}
 
 pub const MATHCHARDEF : &str = "mathchardef";
 pub fn mathchardef<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, globally:bool) {
@@ -3833,6 +3880,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(mathclose,engine,None,(e,cmd) =>mathclose::<ET>(e,&cmd));
     register_unexpandable!(mathpunct,engine,None,(e,cmd) =>mathpunct::<ET>(e,&cmd));
     register_unexpandable!(mathinner,engine,None,(e,cmd) =>mathinner::<ET>(e,&cmd));
+    register_unexpandable!(mathchoice,engine,None,(e,cmd) =>mathchoice::<ET>(e,&cmd));
     register_assign!(mathchardef,engine,(e,cmd,global) =>mathchardef::<ET>(e,&cmd,global));
     register_value_assign_int!(mathcode,engine);
     register_dim_assign!(mathsurround,engine);
@@ -4008,7 +4056,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,overline);
     cmtodo!(engine,limits);
     cmtodo!(engine,nolimits);
-    cmtodo!(engine,mathchoice);
     cmtodo!(engine,left);
     cmtodo!(engine,right);
     cmtodo!(engine,over);

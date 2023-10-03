@@ -748,7 +748,10 @@ impl<ET:EngineType> State<ET> for FieldBasedState<ET> {
                 self.mode = m;
                 gt
             }
-            Some((gt,_)) => gt
+            Some((gt,_)) => {
+                debug_log!(trace => "POP {:?}",gt);
+                gt
+            }
         };
         self.current_font.pop_stack();
         self.parshape.pop_stack();

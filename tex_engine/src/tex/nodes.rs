@@ -277,6 +277,7 @@ impl From<u8> for MathClass {
 pub enum SimpleNode<ET:EngineType> {
     Rule{width:Option<ET::Dim>,height:Option<ET::Dim>,depth:Option<ET::Dim>, axis:HorV},
     Raise{by:ET::Dim, node:HVBox<ET>},
+    MathChoice{display:Vec<TeXNode<ET>>,text:Vec<TeXNode<ET>>,script:Vec<TeXNode<ET>>,scriptscript:Vec<TeXNode<ET>>},
     MoveRight{by:ET::Dim, node:HVBox<ET>},
     Char {char:ET::Char, font:ET::FontRef,cls:Option<MathClass> },
     Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef,small_cls:MathClass,large_cls:MathClass},
@@ -304,6 +305,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                     _ => kernel.depth(fs)
                 }
             }
+            SimpleNode::MathChoice {text,..} => text.iter().map(|n| n.depth(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::Leaders {skip,..} => skip.depth(fs),
             _ => ET::Dim::from_sp(0)
         }
@@ -319,6 +321,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::MoveRight {node,..} => node.height(fs),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_ht(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_ht(*large_char),
+            SimpleNode::MathChoice {text,..} => text.iter().map(|n| n.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::WithScripts {kernel,superscript,..} => {
                 match superscript {
                     Some(s) => kernel.height(fs) + s.depth(fs) + s.height(fs), // TODO
@@ -337,6 +340,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::MoveRight {node,..} => node.width(fs),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_wd(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_wd(*large_char),
+            SimpleNode::MathChoice {text,..} => text.iter().map(|n| n.width(fs)).sum(),
             SimpleNode::WithScripts {kernel,..} => kernel.width(fs), // TODO
             SimpleNode::Leaders {skip,..} => skip.width(fs),
             _ => ET::Dim::from_sp(0)
@@ -350,6 +354,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             MoveRight{node,..} => node.nodetype(),
             Delimiter {..} | WithScripts {..} => 15,
             Char{..} => 0,
+            MathChoice{..} => 10,
             Leaders{skip,..} => skip.nodetype()
         }
     }
@@ -359,6 +364,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Raise{node,..} => node.iterate(),
             MoveRight{node,..} => node.iterate(),
             WithScripts {kernel,..} => None,
+            MathChoice {text,..} => Some(text),
             _ => None
         }
     }

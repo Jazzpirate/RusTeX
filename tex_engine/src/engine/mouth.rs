@@ -42,6 +42,7 @@ pub trait Mouth<ET:EngineType>:Sized {
 
     fn add_align_spec(&mut self,interner:&mut Interner, spec: Vec<AlignSpec<ET>>, rec_index: Option<usize>,colmode:BoxMode);
     fn get_align_spec(&mut self) -> Option<&mut AlignData<ET>>;
+    fn pop_align_spec(&mut self);
 
     /// Insert a single [`Token`] into the [`Mouth`], to be processed next
     /// (for implementations with a peek buffer)
@@ -217,6 +218,9 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     fn get_align_spec(&mut self) -> Option<&mut AlignData<ET>> {
         self.alignspecs.last_mut()
     }
+    fn pop_align_spec(&mut self) {
+        self.alignspecs.pop().unwrap_or_else(|| throw!("Unexpected end group token"));
+    }
     fn get_literal(&mut self, state: &ET::State, interner: &mut Interner) -> ET::Char {
         match self.next_simple(state,interner) {
             None => file_end!(),
@@ -361,8 +365,10 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, mut tks:Vec<ET::Token>, mut f:F) -> R {
         tks.reverse();
         let old = std::mem::replace(&mut engine.mouth.stack,vec!(TeXMouthSource::Tkls(tks)));
+        let specs = std::mem::replace(&mut engine.mouth.alignspecs,vec!());
         let ret = f(engine);
         engine.mouth.stack = old;
+        engine.mouth.alignspecs = specs;
         ret
     }
 

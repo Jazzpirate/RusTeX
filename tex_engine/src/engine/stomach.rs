@@ -157,6 +157,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                 g -= h*f + w
             } else {}
         */
+            debug_log!(debug=>"SHIPOUT");
             let page = engine.stomach.shipout_data_mut().get_page();
             let pagegoal = engine.stomach.shipout_data().pagegoal;
             let (first,rest) = ET::Stomach::split_vertical(engine,page,pagegoal);
