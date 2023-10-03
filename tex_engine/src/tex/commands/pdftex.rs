@@ -115,6 +115,7 @@ impl<ET:EngineType> NodeTrait<ET> for PDFTeXNode<ET> where ET::Node:From<PDFTeXN
         ET::Dim::from_sp(0)
     }
     fn nodetype(&self) -> u8 { 9 }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> { None }
 }
 impl<ET:EngineType<Node=Self>> CustomNode<ET> for PDFTeXNode<ET> {}
 impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNode<ET>> {
@@ -131,6 +132,7 @@ impl<ET:EngineType> NodeTrait<ET> for PDFXForm<ET> where ET::Node:From<PDFTeXNod
         ET::Dim::from_sp(0)
     }
     fn nodetype(&self) -> u8 { 9 }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> { None }
 }
 
 #[derive(Debug,Clone)]
@@ -347,7 +349,7 @@ pub fn pdfcatalog<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
         Some(action_spec(engine))
     } else {None};
 
-    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFCatalog {literal,action}.as_node());
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFCatalog {literal,action}.as_node());
 }
 
 /// "pdfcolorstack"
@@ -470,7 +472,7 @@ pub fn pdfdest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
         Some("fit") => PDFDestType::Fit,
         _ => throw!("Expected one of 'xyz','fitr','fitbh','fitbv','fitb','fith','fitv','fit'" => cmd.cause)
     };
-    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFDest{structnum,id,desttype}.as_node());
 }
 
 pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
@@ -482,7 +484,7 @@ pub fn pdfelapsedtime<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSourc
 pub fn pdfendlink<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     where ET::Node:From<PDFTeXNode<ET>> {
     debug_log!(trace=>"pdfendlink");
-    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFEndLink.as_node());
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFEndLink.as_node());
 
 }
 
@@ -563,7 +565,7 @@ pub fn pdfliteral<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     debug_log!(trace=>"pdfliteral");
     let mut literal = String::new();
     engine.get_braced_string(&mut literal);
-    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFLiteral {literal}.as_node());
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFLiteral {literal}.as_node());
 }
 
 /// "pdfobj"
@@ -612,7 +614,7 @@ pub fn pdfoutline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     } else {None};
     let mut content= String::new();
     engine.get_braced_string(&mut content);
-    engine.stomach.push_node(&engine.fontstore,&engine.state,PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFOutline{attr,action,content,count}.as_node());
 }
 
 pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -622,7 +624,7 @@ pub fn pdfrefxform<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<
     if i < 0 || engine.state.pdfxforms().len() as i64 <= i {throw!("Invalid xform number: {}",i => cmd.cause)}
     Whatsit::new(Box::new(move |engine| {
         let f = engine.state.pdfxforms().remove(i as usize).as_node();
-        engine.stomach.push_node(&engine.fontstore,&engine.state,f)
+        ET::Stomach::push_node(engine,f)
     }))
 }
 
@@ -663,7 +665,7 @@ pub fn pdfstartlink<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
     } else { None };
 
     let action = action_spec(engine);
-    engine.stomach.push_node(&engine.fontstore,&engine.state,
+    ET::Stomach::push_node(engine,
                              PDFTeXNode::PDFStartLink{width,height,depth,attr,action}.as_node()
     );
 }

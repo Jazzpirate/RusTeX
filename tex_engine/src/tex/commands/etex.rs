@@ -348,6 +348,42 @@ pub fn marks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     super::tex::do_mark(engine,cmd,i as usize)
 }
 
+pub fn topmarks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,f:&mut Vec<ET::Token>) {
+    let i = engine.get_int().to_i64();
+    if i < 0 {
+        throw!("Invalid mark number: {}",i => cmd.cause)
+    }
+    super::tex::do_topmark(engine,cmd,i as usize,f)
+}
+pub fn firstmarks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,f:&mut Vec<ET::Token>) {
+    let i = engine.get_int().to_i64();
+    if i < 0 {
+        throw!("Invalid mark number: {}",i => cmd.cause)
+    }
+    super::tex::do_firstmark(engine,cmd,i as usize,f)
+}
+pub fn botmarks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,f:&mut Vec<ET::Token>) {
+    let i = engine.get_int().to_i64();
+    if i < 0 {
+        throw!("Invalid mark number: {}",i => cmd.cause)
+    }
+    super::tex::do_botmark(engine,cmd,i as usize,f)
+}
+pub fn splitfirstmarks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,f:&mut Vec<ET::Token>) {
+    let i = engine.get_int().to_i64();
+    if i < 0 {
+        throw!("Invalid mark number: {}",i => cmd.cause)
+    }
+    super::tex::do_splitfirstmark(engine,cmd,i as usize,f)
+}
+pub fn splitbotmarks<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,f:&mut Vec<ET::Token>) {
+    let i = engine.get_int().to_i64();
+    if i < 0 {
+        throw!("Invalid mark number: {}",i => cmd.cause)
+    }
+    super::tex::do_splitbotmark(engine,cmd,i as usize,f)
+}
+
 pub const MUEXPR: &str = "muexpr";
 /// `\muexpr`: evaluate a mu expression; returns a [`MuSkip`].
 pub fn muexpr<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
@@ -482,6 +518,11 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_conditional!(iffontchar,engine,(e,cmd) =>iffontchar::<ET>(e,&cmd));
     register_int!(lastnodetype,engine,(e,c) => lastnodetype::<ET>(e,&c));
     register_unexpandable!(marks,engine,None,(e,cmd) =>marks::<ET>(e,&cmd));
+    register_expandable!(topmarks,engine,(e,c,f) =>topmarks::<ET>(e,&c,f));
+    register_expandable!(firstmarks,engine,(e,c,f) =>firstmarks::<ET>(e,&c,f));
+    register_expandable!(botmarks,engine,(e,c,f) =>botmarks::<ET>(e,&c,f));
+    register_expandable!(splitfirstmarks,engine,(e,c,f) =>splitfirstmarks::<ET>(e,&c,f));
+    register_expandable!(splitbotmarks,engine,(e,c,f) =>splitbotmarks::<ET>(e,&c,f));
     register_muskip!(muexpr,engine,(e,c) => muexpr::<ET>(e,&c));
     register_int!(numexpr,engine,(e,c) => numexpr::<ET>(e,&c));
     register_assign!(readline,engine,(eu,cmd,global) =>readline::<ET>(eu,&cmd,global));
@@ -498,7 +539,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
 
     cmtodo!(engine,beginL);
     cmtodo!(engine,beginR);
-    cmtodo!(engine,botmarks);
     cmtodo!(engine,clubpenalties);
     cmtodo!(engine,currentgrouplevel);
     cmtodo!(engine,currentgrouptype);
@@ -508,7 +548,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,displaywidowpenalties);
     cmtodo!(engine,endL);
     cmtodo!(engine,endR);
-    cmtodo!(engine,firstmarks);
     cmtodo!(engine,glueshrink);
     cmtodo!(engine,glueshrinkorder);
     cmtodo!(engine,gluestretch);
@@ -528,10 +567,7 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showgroups);
     cmtodo!(engine,showifs);
     cmtodo!(engine,showtokens);
-    cmtodo!(engine,splitbotmarks);
     cmtodo!(engine,splitdiscards);
-    cmtodo!(engine,splitfirstmarks);
     cmtodo!(engine,TeXXeTstate);
-    cmtodo!(engine,topmarks);
     cmtodo!(engine,widowpenalties);
 }

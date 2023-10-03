@@ -12,6 +12,7 @@ use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
 use crate::tex::token::Token;
 use std::fmt::Write;
+use crate::utils::collections::HMap;
 
 pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
@@ -46,11 +47,11 @@ pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) 
         }
         FinishedBox {name,get} => {
             let b = get(engine,cmd.source);
-            engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node());
+            ET::Stomach::push_node(engine,b.as_node());
         }
         Whatsit {name,apply} => {
             let wi = apply(engine,cmd.source);
-            engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Whatsit(wi));
+            ET::Stomach::push_node(engine,TeXNode::Whatsit(wi));
         },
         Relax => (),
         _ => match engine.state.mode() {
@@ -88,7 +89,7 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
                 ET::Stomach::maybe_shipout(engine,false)
             }
             let node = get(engine, cmd.source);
-            engine.stomach.push_node(&engine.fontstore,&engine.state,node);
+            ET::Stomach::push_node(engine,node);
             if engine.state.mode() == TeXMode::Vertical {
                 ET::Stomach::maybe_shipout(engine,false)
             }
@@ -121,7 +122,7 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
-                engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font:engine.state.get_current_font().clone(),cls:None}.as_node());
+                ET::Stomach::push_node(engine,SimpleNode::Char {char, font:engine.state.get_current_font().clone(),cls:None}.as_node());
             }
             _ => {
                 ET::Stomach::open_paragraph(engine,cmd);
@@ -130,7 +131,7 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
         Superscript => throw!("Superscript character not allowed in non-math mode"),
         Subscript => throw!("Subscript character not allowed in non-math mode"),
         Space if engine.state.mode().is_vertical() => (),
-        Space => engine.stomach.push_node(&engine.fontstore,&engine.state,SkipNode::Space.as_node()),
+        Space => ET::Stomach::push_node(engine,SkipNode::Space.as_node()),
         MathShift => match engine.state.mode() {
             TeXMode::RestrictedHorizontal => do_math(engine),
             TeXMode::Horizontal => {
@@ -174,7 +175,7 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
                     match engine.stomach.shipout_data_mut().box_stack.pop() {
                         Some(crate::tex::nodes::OpenBox::Box {list,mode,on_close}) if mode == b => {
                             match on_close(engine,list) {
-                                Some(b) => engine.stomach.push_node(&engine.fontstore,&engine.state,b.as_node()),
+                                Some(b) => ET::Stomach::push_node(engine,b.as_node()),
                                 None => {}
                             }
                         }
@@ -200,7 +201,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 Some(HorV::Vertical) => throw!("Not allowed in math mode" => cmd.source.cause)
             }
             let node = get(engine, cmd.source);
-            engine.stomach.push_node(&engine.fontstore,&engine.state,node);
+            ET::Stomach::push_node(engine,node);
         }
         Unexpandable {name,apply,ref forces_mode} => {
             match forces_mode {
@@ -217,7 +218,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 return ()
             }
             let (char,font,cls) = do_mathchar::<ET>(&engine.state,num,Some(char));
-            engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font,cls:Some(cls)}.as_node());
+            ET::Stomach::push_node(engine,SimpleNode::Char {char, font,cls:Some(cls)}.as_node());
         }
         Space => (),
         MathShift => match engine.state.mode() {
@@ -231,7 +232,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                         }
                         match engine.stomach.shipout_data_mut().box_stack.pop() {
                             Some(crate::tex::nodes::OpenBox::Math {list:ls,display,..}) => {
-                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display,cls:None})
+                                ET::Stomach::push_node(engine,TeXNode::Math{ls,display,cls:None})
                             }
                             _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                         }
@@ -256,7 +257,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                         }
                         match engine.stomach.shipout_data_mut().box_stack.pop() {
                             Some(crate::tex::nodes::OpenBox::Math {list:ls,display,..}) => {
-                                engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display,cls:None})
+                                ET::Stomach::push_node(engine,TeXNode::Math{ls,display,cls:None})
                             }
                             _ =>throw!("Unexpected box on stack" => cmd.source.cause)
                         }
@@ -268,7 +269,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
         }
         MathChar(num) => {
             let (char,font,cls) = do_mathchar::<ET>(&engine.state,num,None);
-            engine.stomach.push_node(&engine.fontstore,&engine.state,SimpleNode::Char {char, font, cls:Some(cls)}.as_node());
+            ET::Stomach::push_node(engine,SimpleNode::Char {char, font, cls:Some(cls)}.as_node());
         }
         Superscript => {
             let last = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut().last_mut();
@@ -278,7 +279,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 Some(TeXNode::Simple(SimpleNode::WithScripts {superscript:Some(_),..})) =>
                     throw!("Double superscript"),
                 None => {
-                    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::OpenKernel(OpenKernel::Superscript(Box::new(
+                    ET::Stomach::push_node(engine,TeXNode::OpenKernel(OpenKernel::Superscript(Box::new(
                         TeXNode::Math {ls:vec!(),display:false,cls:None} // TODO display
                     ))))
                 }
@@ -296,7 +297,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 Some(TeXNode::Simple(SimpleNode::WithScripts {subscript:Some(_),..})) =>
                     throw!("Double subscript"),
                 None => {
-                    engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::OpenKernel(OpenKernel::Subscript(Box::new(
+                    ET::Stomach::push_node(engine,TeXNode::OpenKernel(OpenKernel::Subscript(Box::new(
                         TeXNode::Math {ls:vec!(),display:false,cls:None} // TODO display
                     ))))
                 }
@@ -325,7 +326,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     }
                     match engine.stomach.shipout_data_mut().box_stack.pop() {
                         Some(crate::tex::nodes::OpenBox::Math {list:ls,display,cls}) => {
-                            engine.stomach.push_node(&engine.fontstore,&engine.state,TeXNode::Math{ls,display,cls})
+                            ET::Stomach::push_node(engine,TeXNode::Math{ls,display,cls})
                         }
                         o =>throw!("Unexpected box on stack: {:?}",o => cmd.source.cause)
                     }
@@ -459,7 +460,7 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
     for mut line in lines {
         line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
         line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
-        engine.stomach.push_node(&engine.fontstore,&engine.state,HBox {
+        ET::Stomach::push_node(engine,HBox {
             kind:"paragraphline",
             children:line,
             ..Default::default()
@@ -476,7 +477,8 @@ pub fn split_paragraph_roughly<ET:EngineType>(fs:&ET::FontStore,nodes:Vec<TeXNod
     let mut hgoal = ET::Dim::default();
     let mut hgoals = linespecs.into_iter();
     let mut iter = nodes.into_iter();
-    // TODO vadjust
+    let mut reinserts : Vec<TeXNode<ET>> = vec!();
+    // TODO vadjust,marks
     'A:loop {
         let mut goal = match hgoals.next() {
             Some(v) => {
@@ -489,6 +491,12 @@ pub fn split_paragraph_roughly<ET:EngineType>(fs:&ET::FontStore,nodes:Vec<TeXNod
         while goal > ET::Dim::default() {
             match iter.next() {
                 None => break 'A,
+                Some(n@TeXNode::VAdjust(_)) => {
+                    reinserts.push(n)
+                }
+                Some(n@TeXNode::Mark(_,_)) => {
+                    reinserts.push(n)
+                }
                 Some(node) => {
                     // TODO penalty etc
                     goal = goal - node.width(fs);
@@ -496,19 +504,36 @@ pub fn split_paragraph_roughly<ET:EngineType>(fs:&ET::FontStore,nodes:Vec<TeXNod
                 }
             }
         }
+        if !reinserts.is_empty() {
+            lines.push(std::mem::take(&mut reinserts))
+        }
     }
     lines
 }
 
-pub fn split_vertical_roughly<ET:EngineType>(fs:&ET::FontStore,state: &ET::State, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
     let mut nodes = nodes.into_iter();
     let mut result = vec!();
     let mut rest = vec!();
+
+    let sd = engine.stomach.shipout_data_mut();
+    let topmarks = std::mem::take(&mut sd.botmarks);
+    sd.topmarks = topmarks;
+    sd.firstmarks.clear();
+    sd.botmarks.clear();
+
     while target > ET::Dim::default() {
         match nodes.next() {
             None => break,
+            Some(TeXNode::Mark(i,v)) => {
+                if !sd.firstmarks.contains_key(&i) {
+                    sd.firstmarks.insert(i,v.clone());
+                }
+                sd.botmarks.insert(i,v.clone());
+                result.push(TeXNode::Mark(i,v));
+            }
             Some(node) => { // TODO marks
-                target = target - node.height(fs);
+                target = target - node.height(&engine.fontstore);
                 if target < ET::Dim::default() {
                     rest.push(node);
                     break
@@ -518,7 +543,20 @@ pub fn split_vertical_roughly<ET:EngineType>(fs:&ET::FontStore,state: &ET::State
             }
         }
     }
+
+    sd.splitfirstmarks.clear();
+    sd.splitbotmarks.clear();
+
     for n in nodes {
+        match n {
+            TeXNode::Mark(i,ref v) => {
+                if !sd.splitfirstmarks.contains_key(&i) {
+                    sd.splitfirstmarks.insert(i,v.clone());
+                }
+                sd.splitbotmarks.insert(i,v.clone());
+            }
+            _ => ()
+        }
         rest.push(n);
     }
     (result,rest)

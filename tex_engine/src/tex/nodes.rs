@@ -12,12 +12,94 @@ use crate::utils::errors::TeXError;
 use crate::utils::{Mut, Ptr};
 use crate::tex::numbers::Dim;
 
+pub struct NodeIterator<'a,ET:EngineType> {
+    nodes:&'a Vec<TeXNode<ET>>,
+    stack:Vec<(&'a Vec<TeXNode<ET>>,usize)>,
+    index:usize,
+}
+impl<'a,ET:EngineType> NodeIterator<'a,ET> {
+    pub fn new(vec:&'a Vec<TeXNode<ET>>) -> Self {
+        NodeIterator { nodes:vec, stack:Vec::new(), index:0 }
+    }
+}
+impl<'a,ET:EngineType> Iterator for NodeIterator<'a,ET> {
+    type Item = &'a TeXNode<ET>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.nodes.len() {
+            match self.stack.pop() {
+                None => None,
+                Some((n,i)) => {
+                    self.nodes = n;
+                    self.index = i;
+                    self.next()
+                }
+            }
+        } else {
+            let ret = &self.nodes[self.index];
+            self.index += 1;
+            match ret.iterate() {
+                None => (),
+                Some(n) => {
+                    self.stack.push((self.nodes, self.index));
+                    self.nodes = n;
+                    self.index = 0;
+                }
+            }
+            Some(ret)
+        }
+    }
+}
+
+pub struct ReverseNodeIterator<'a,ET:EngineType> {
+    nodes:&'a Vec<TeXNode<ET>>,
+    stack:Vec<(&'a Vec<TeXNode<ET>>,Option<usize>)>,
+    index:Option<usize>,
+}
+impl<'a,ET:EngineType> ReverseNodeIterator<'a,ET> {
+    pub fn new(vec:&'a Vec<TeXNode<ET>>) -> Self {
+        Self { nodes:vec, stack:Vec::new(), index:if vec.len() == 0 {None} else {Some(vec.len()-1)} }
+    }
+}
+impl<'a,ET:EngineType> Iterator for ReverseNodeIterator<'a,ET> {
+    type Item = &'a TeXNode<ET>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.index {
+            None => match self.stack.pop() {
+                None => None,
+                Some((n,i)) => {
+                    self.nodes = n;
+                    self.index = i;
+                    self.next()
+                }
+            }
+            Some(index) => {
+                let ret = &self.nodes[index];
+                if index == 0 {
+                    self.index = None;
+                } else { self.index = Some(index - 1) }
+                match ret.iterate() {
+                    None => (),
+                    Some(n) => {
+                        self.stack.push((self.nodes, self.index));
+                        self.nodes = n;
+                        self.index = if n.len() == 0 {None} else {Some(n.len()-1)};
+                    }
+                }
+                Some(ret)
+            }
+        }
+    }
+}
+
 pub trait NodeTrait<ET:EngineType> {
     fn as_node(self) -> TeXNode<ET>;
     fn height(&self,fs:&ET::FontStore) -> ET::Dim;
     fn depth(&self,fs:&ET::FontStore) -> ET::Dim;
     fn width(&self,fs:&ET::FontStore) -> ET::Dim;
     fn nodetype(&self) -> u8;
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>>;
 }
 
 #[derive(Debug,Clone)]
@@ -118,6 +200,21 @@ impl<ET:EngineType> NodeTrait<ET> for TeXNode<ET> {
             OpenKernel(k) => k.base().nodetype()
         }
     }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> {
+        use TeXNode::*;
+        match self {
+            Box(b) => match b {
+                HVBox::H(b) => Some(&b.children),
+                HVBox::V(b) => Some(&b.children),
+                HVBox::Void => None
+            },
+            Math{ls,..} => Some(ls),
+            Insert(_,n) => Some(n),
+            VAdjust(n) => Some(n),
+            OpenKernel(k) => None,
+            _ => None
+        }
+    }
 }
 
 #[derive(Debug,Clone)]
@@ -149,6 +246,7 @@ impl<ET:EngineType> NodeTrait<ET> for SkipNode<ET> {
         }
     }
     fn nodetype(&self) -> u8 { 11 }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> { None }
 }
 
 
@@ -250,6 +348,14 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Leaders{skip,..} => skip.nodetype()
         }
     }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> {
+        use SimpleNode::*;
+        match self {
+            Raise{node,..} => node.iterate(),
+            WithScripts {kernel,..} => None,
+            _ => None
+        }
+    }
 }
 
 pub trait CustomNode<ET:EngineType>:Debug+Sized+Clone+NodeTrait<ET>+'static {}
@@ -262,6 +368,7 @@ impl<ET:EngineType<Node = ()>> NodeTrait<ET> for () {
     fn depth(&self,fs:&ET::FontStore) -> ET::Dim { ET::Dim::from_sp(0) }
     fn width(&self,fs:&ET::FontStore) -> ET::Dim { ET::Dim::from_sp(0) }
     fn nodetype(&self) -> u8 {9 }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> { None }
 }
 impl<ET:EngineType<Node=()>> CustomNode<ET> for () {}
 
@@ -350,6 +457,13 @@ impl<ET:EngineType> NodeTrait<ET> for HVBox<ET> {
             HVBox::Void => unreachable!()
         }
     }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> {
+        match self {
+            HVBox::H(b) => Some(&b.children),
+            HVBox::V(b) => Some(&b.children),
+            HVBox::Void => None
+        }
+    }
 }
 
 #[derive(Clone,Debug)]
@@ -380,6 +494,9 @@ impl<ET:EngineType> NodeTrait<ET> for HBox<ET> {
         })
     }
     fn nodetype(&self) -> u8 {1 }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> {
+        Some(&self.children)
+    }
 }
 impl<ET:EngineType> Default for HBox<ET> {
     fn default() -> Self {
@@ -425,6 +542,9 @@ impl<ET:EngineType> NodeTrait<ET> for VBox<ET> {
         })
     }
     fn nodetype(&self) -> u8 {2 }
+    fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> {
+        Some(&self.children)
+    }
 }
 impl<ET:EngineType> Default for VBox<ET> {
     fn default() -> Self {

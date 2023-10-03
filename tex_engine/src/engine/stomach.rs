@@ -1,9 +1,12 @@
 pub mod methods;
 
+use std::default;
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
+use crate::engine::mouth::Mouth;
+use crate::engine::state::modes::TeXMode;
 use crate::engine::state::State;
-use crate::tex::nodes::{OpenBox, HVBox, TeXNode, SimpleNode};
+use crate::tex::nodes::{OpenBox, HVBox, TeXNode, SimpleNode, VBox, ReverseNodeIterator};
 use crate::tex::commands::StomachCommand;
 use crate::tex::fonts::{Font, FontStore};
 use crate::tex::numbers::{Dim, Int, Skip};
@@ -18,7 +21,12 @@ pub struct ShipoutData<ET:EngineType> {
     pub pagetotal:ET::Dim,
     pub prevdepth: ET::Dim,
     pub spacefactor: i32,
-    pub to_ship:Option<ET::Node>
+    pub to_ship:Option<ET::Node>,
+    pub topmarks:HMap<usize,Vec<ET::Token>>,
+    pub firstmarks:HMap<usize,Vec<ET::Token>>,
+    pub botmarks:HMap<usize,Vec<ET::Token>>,
+    pub splitfirstmarks:HMap<usize,Vec<ET::Token>>,
+    pub splitbotmarks:HMap<usize,Vec<ET::Token>>
 }
 impl<ET:EngineType> ShipoutData<ET> {
     pub fn new() -> Self {
@@ -29,7 +37,12 @@ impl<ET:EngineType> ShipoutData<ET> {
             pagetotal:ET::Dim::from_sp(0),
             prevdepth:ET::Dim::from_sp(-65536000),
             spacefactor:1000,
-            to_ship:None
+            to_ship:None,
+            topmarks:HMap::default(),
+            firstmarks:HMap::default(),
+            botmarks:HMap::default(),
+            splitfirstmarks:HMap::default(),
+            splitbotmarks:HMap::default(),
         }
     }
     pub fn get_page(&mut self) -> Vec<TeXNode<ET>> {
@@ -41,12 +54,14 @@ impl<ET:EngineType> ShipoutData<ET> {
     }
 }
 use crate::tex::nodes::NodeTrait;
+use crate::utils::collections::HMap;
+
 pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data(&self) -> &ShipoutData<ET>;
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
     fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
     fn split_paragraph(fs:&ET::FontStore,state:&ET::State, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>>;
-    fn split_vertical(fs:&ET::FontStore,state:&ET::State, nodes:Vec<TeXNode<ET>>, target:ET::Dim) -> (Vec<TeXNode<ET>>,Vec<TeXNode<ET>>);
+    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>);
 
     fn shipout(&mut self,bx:HVBox<ET>) {
         /* INSERTS:
@@ -81,16 +96,21 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         methods::close_paragraph(engine)
     }
 
-    fn push_node(&mut self,fs:&ET::FontStore,state:&ET::State,node:TeXNode<ET>) {
-        let sd = self.shipout_data_mut();
+    fn push_node(engine:&mut EngineRef<ET>,node:TeXNode<ET>) {
+        let sd = engine.stomach.shipout_data_mut();
         match node {
             TeXNode::Simple(SimpleNode::Char {char,..}) => {
-                let sf = state.get_sfcode(char).to_i64();
+                let sf = engine.state.get_sfcode(char).to_i64();
                 if sf > 1000 && sd.spacefactor < 1000 {
                     sd.spacefactor = 1000;
                 } else {
                     sd.spacefactor = sf as i32;
                 }
+            }
+            TeXNode::Penalty(i) if i <= -10000 && sd.box_stack.is_empty() => {
+                debug_log!(trace=>"Forced shipout");
+                sd.page.push(node);
+                return Self::maybe_shipout(engine,true);
             }
             _ => sd.spacefactor = 1000
         }
@@ -99,13 +119,13 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                 if b.is_vertical() {
                     match &node {
                         TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
-                        o => sd.prevdepth = o.depth(fs)
+                        o => sd.prevdepth = o.depth(&engine.fontstore)
                     }
                 } else {
                     match (b.ls_mut().last_mut(),&node) {
                         (Some(TeXNode::Simple(SimpleNode::Char {char,font,cls:None})),
                             TeXNode::Simple(SimpleNode::Char {char:char2,font:font2,cls:None})) if *font == *font2 => {
-                            if let Some(r) = fs.get(*font).ligature(*char,*char2) {
+                            if let Some(r) = engine.fontstore.get(*font).ligature(*char,*char2) {
                                 *char = r
                             } else {
                                 b.ls_mut().push(node)
@@ -125,10 +145,10 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                 }
             },
             _ => {
-                sd.pagetotal = sd.pagetotal + node.height(fs);
+                sd.pagetotal = sd.pagetotal + node.height(&engine.fontstore);
                 match &node {
                     TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
-                    o => sd.prevdepth = o.depth(fs)
+                    o => sd.prevdepth = o.depth(&engine.fontstore)
                 }
                 sd.page.push(node)
             }
@@ -136,9 +156,48 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     }
 
     fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
-        let sd = engine.stomach.shipout_data();
-        if (force || (  sd.box_stack.is_empty()  &&sd.pagetotal >= sd.pagegoal)) && !sd.page.is_empty() {
-            todo!("shipout: {}>={}\nPage: {:?}",sd.pagetotal,sd.pagegoal,sd.page)
+        if (force || (  engine.stomach.shipout_data().box_stack.is_empty()  && engine.stomach.shipout_data().pagetotal >= engine.stomach.shipout_data().pagegoal)) && !engine.stomach.shipout_data().page.is_empty() {
+            let page = engine.stomach.shipout_data_mut().get_page();
+            let pagegoal = engine.stomach.shipout_data().pagegoal;
+            let (first,rest) = ET::Stomach::split_vertical(engine,page,pagegoal);
+            // TODO more precisely
+            engine.state.set_primitive_int("badness",ET::Int::from_i64(10),true);
+
+            engine.stomach.shipout_data_mut().page = rest;
+            for n in ReverseNodeIterator::<ET>::new(&first) {
+                match n {
+                    TeXNode::Penalty(i) => {
+                        engine.state.set_primitive_int("outputpenalty",ET::Int::from_i64(*i as i64),true);
+                        break
+                    }
+                    _ => ()
+                }
+            }
+/*
+            std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace,,tex_engine::engine::state=trace");
+            env_logger::try_init();
+*/
+
+            engine.state.set_box_register(255,HVBox::V(VBox {
+                kind:"page",
+                children:first,
+                ..Default::default()
+            }),false);
+
+            let mode = engine.state.mode();
+
+            engine.with_mouth(vec!(),|engine| {
+                engine.mouth.insert_every(&engine.state,"output");
+                engine.state.set_mode(TeXMode::InternalVertical);
+                loop {
+                    match engine.get_next_stomach_command() {
+                        None => break,
+                        Some(cmd) => Self::digest(engine,cmd)
+                    }
+                }
+            });
+            engine.state.set_mode(mode);
+
         }
     }
 
@@ -181,8 +240,8 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
     fn split_paragraph(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
         methods::split_paragraph_roughly(fs,nodes,linespecs)
     }
-    fn split_vertical(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
-        methods::split_vertical_roughly(fs,state,nodes,target)
+    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+        methods::split_vertical_roughly(engine,nodes,target)
     }
 }
 
@@ -216,7 +275,7 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
     fn split_paragraph(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
         methods::split_paragraph_roughly(fs,nodes,linespecs)
     }
-    fn split_vertical(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
-        methods::split_vertical_roughly(fs,state,nodes,target)
+    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+        methods::split_vertical_roughly(engine,nodes,target)
     }
 }
