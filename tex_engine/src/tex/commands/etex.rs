@@ -200,6 +200,10 @@ fn expr_loop<ET:EngineType,Num:Numeric>(engine:&mut EngineRef<ET>, cmd:&CommandS
 
 // --------------------------------------------------------------------------------------------------
 
+pub fn currentgrouplevel<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
+    ET::Int::from_i64(engine.state.grouplevel() as i64)
+}
+
 pub const DETOKENIZE: &str = "detokenize";
 /// `\detokenize`: convert a token list into a string of [`CategoryCode`] [`Other`](CategoryCode::Other)
 /// (except for ` `, which gets code [`Space`](CategoryCode::Space)).
@@ -502,6 +506,7 @@ pub fn unless<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
 
 /// Initialize a TeX engine with default implementations for all eTeX primitives.
 pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
+    register_int!(currentgrouplevel,engine,(e,c) => currentgrouplevel::<ET>(e,&c));
     register_expandable!(detokenize,engine,(e,c,f) =>detokenize::<ET>(e,&c,f));
     register_dim!(dimexpr,engine,(e,c) => dimexpr::<ET>(e,&c));
     register_expandable!(eTeXrevision,engine,(e,c,f) => eTeXrevision::<ET>(e,&c,f));
@@ -540,7 +545,6 @@ pub fn initialize_etex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,beginL);
     cmtodo!(engine,beginR);
     cmtodo!(engine,clubpenalties);
-    cmtodo!(engine,currentgrouplevel);
     cmtodo!(engine,currentgrouptype);
     cmtodo!(engine,currentifbranch);
     cmtodo!(engine,currentiflevel);
