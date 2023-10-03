@@ -2372,6 +2372,60 @@ pub fn month<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) ->
     ET::Int::from_i64(engine.start_time.month() as i64)
 }
 
+pub const MOVERIGHT: &str = "moveright";
+pub fn moveright<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\moveright");
+    let i = engine.get_dim();
+    match engine.get_next_unexpandable() {
+        None => file_end_prim!(RAISE,cmd),
+        Some(c) => match c.command {
+            BaseCommand::OpenBox {name,mode,apply} => {
+                let f = apply(engine,c.source);
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |engine,v| {
+                    let bx = match f(engine,v) {
+                        Some(r) => {r}
+                        None => {todo!("make void box")}
+                    };
+                    ET::Stomach::push_node(engine,SimpleNode::MoveRight {by:i,node:bx}.as_node());
+                    None
+                })})
+            }
+            BaseCommand::FinishedBox {get,..} => {
+                let bx = get(engine,c.source);
+                ET::Stomach::push_node(engine,SimpleNode::MoveRight {by:i,node:bx}.as_node());
+            }
+            _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
+        }
+    }
+}
+
+pub const MOVELEFT: &str = "moveleft";
+pub fn moveleft<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\moveleft");
+    let i = engine.get_dim();
+    match engine.get_next_unexpandable() {
+        None => file_end_prim!(RAISE,cmd),
+        Some(c) => match c.command {
+            BaseCommand::OpenBox {name,mode,apply} => {
+                let f = apply(engine,c.source);
+                engine.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close:Ptr::new(move |engine,v| {
+                    let bx = match f(engine,v) {
+                        Some(r) => {r}
+                        None => {todo!("make void box")}
+                    };
+                    ET::Stomach::push_node(engine,SimpleNode::MoveRight {by:-i,node:bx}.as_node());
+                    None
+                })})
+            }
+            BaseCommand::FinishedBox {get,..} => {
+                let bx = get(engine,c.source);
+                ET::Stomach::push_node(engine,SimpleNode::MoveRight {by:-i,node:bx}.as_node());
+            }
+            _ => throw!("Box expected: {}",c.source.cause.printable(&engine.interner))
+        }
+    }
+}
+
 pub fn mskip<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\mskip");
     match engine.state.mode() {
@@ -3786,6 +3840,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(message,engine,None,(e,cmd) =>message::<ET>(e,&cmd));
     register_unexpandable!(mkern,engine,None,(e,cmd) =>mkern::<ET>(e,&cmd));
     register_int!(month,engine,(e,cmd) => month::<ET>(e,&cmd));
+    register_unexpandable!(moveright,engine,Some(HorV::Vertical),(e,cmd) =>moveright::<ET>(e,&cmd));
+    register_unexpandable!(moveleft,engine,Some(HorV::Vertical),(e,cmd) =>moveleft::<ET>(e,&cmd));
     register_unexpandable!(mskip,engine,None,(e,cmd) =>mskip::<ET>(e,&cmd));
     register_assign!(multiply,engine,(e,cmd,global) =>multiply::<ET>(e,&cmd,global));
     register_value_assign_muskip!(muskip,engine);
@@ -3943,8 +3999,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,showlists);
     cmtodo!(engine,showthe);
     cmtodo!(engine,special);
-    cmtodo!(engine,moveleft);
-    cmtodo!(engine,moveright);
     cmtodo!(engine,noboundary);
     cmtodo!(engine,accent);
     cmtodo!(engine,discretionary);

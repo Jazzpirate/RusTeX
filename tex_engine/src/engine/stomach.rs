@@ -21,7 +21,7 @@ pub struct ShipoutData<ET:EngineType> {
     pub pagetotal:ET::Dim,
     pub prevdepth: ET::Dim,
     pub spacefactor: i32,
-    pub to_ship:Option<ET::Node>,
+    pub to_ship:Option<TeXNode<ET>>,
     pub topmarks:HMap<usize,Vec<ET::Token>>,
     pub firstmarks:HMap<usize,Vec<ET::Token>>,
     pub botmarks:HMap<usize,Vec<ET::Token>>,
@@ -64,22 +64,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>);
 
     fn shipout(&mut self,bx:HVBox<ET>) {
-        /* INSERTS:
-        1. read vbox => \box n = b
-
-        g = \pagegoal
-        t = \pagetotal
-        q = \insertpenalties (accumulated for the current page)
-        d = \pagedepth (<= \maxdepth)
-        z = \pageshrink
-        x = b.height() + b.depth()
-        f = \count n / 1000
-
-        if (\box n is empty) {
-            g -= h*f + w
-        } else {}
-    */
-        todo!("shipout")
+        self.shipout_data_mut().to_ship = Some(TeXNode::Box(bx).into())
     }
 
     fn open_box(&mut self,bx:OpenBox<ET>) {
@@ -157,6 +142,21 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
 
     fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
         if (force || (  engine.stomach.shipout_data().box_stack.is_empty()  && engine.stomach.shipout_data().pagetotal >= engine.stomach.shipout_data().pagegoal)) && !engine.stomach.shipout_data().page.is_empty() {
+            /* INSERTS:
+            1. read vbox => \box n = b
+
+            g = \pagegoal
+            t = \pagetotal
+            q = \insertpenalties (accumulated for the current page)
+            d = \pagedepth (<= \maxdepth)
+            z = \pageshrink
+            x = b.height() + b.depth()
+            f = \count n / 1000
+
+            if (\box n is empty) {
+                g -= h*f + w
+            } else {}
+        */
             let page = engine.stomach.shipout_data_mut().get_page();
             let pagegoal = engine.stomach.shipout_data().pagegoal;
             let (first,rest) = ET::Stomach::split_vertical(engine,page,pagegoal);
@@ -201,9 +201,9 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
         }
     }
 
-    fn next_shipout_box(engine:&mut EngineRef<ET>) -> Option<ET::Node> {
+    fn next_shipout_box(engine:&mut EngineRef<ET>) -> Option<TeXNode<ET>> {
         loop {
-            match engine.stomach.shipout_data().to_ship {
+            match &mut engine.stomach.shipout_data_mut().to_ship {
                 None =>
                     match engine.get_next_stomach_command() {
                         Some(cmd) => {
@@ -215,7 +215,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                             return std::mem::take(&mut engine.stomach.shipout_data_mut().to_ship)
                         }
                     }
-                Some(_) => todo!()
+                s@Some(_) => return std::mem::take(s)
             }
         }
     }

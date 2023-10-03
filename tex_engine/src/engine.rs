@@ -11,7 +11,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::state::{PDFState, State};
 use crate::engine::stomach::Stomach;
 use crate::tex;
-use crate::tex::nodes::CustomNode;
+use crate::tex::nodes::{CustomNode, TeXNode};
 use crate::tex::commands::{Assignable, CommandReference};
 use crate::tex::commands::pdftex::PDFTeXNode;
 use crate::tex::fonts::{Font, FontStore};
@@ -87,7 +87,7 @@ pub trait Engine<ET:EngineType> {
             Err(e) => Err(TeXError{msg:format!("Panic: {:?}",e),cause:None,source:None})
         }
     }}
-    fn do_file(&mut self,s:PathBuf) -> Result<Vec<ET::Node>,TeXError<ET>> {match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||{
+    fn do_file(&mut self,s:PathBuf) -> Result<Vec<TeXNode<ET>>,TeXError<ET>> {match std::panic::catch_unwind(std::panic::AssertUnwindSafe( ||{
         debug!("Running file {:?}",s);
         let mut ret = vec!();
         let mut comps = self.components();

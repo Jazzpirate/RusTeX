@@ -541,7 +541,10 @@ impl<ET:EngineType<Mouth = Self>> StandardMouth<ET> {
                 _ => unreachable!()
             },*/
             Some(TeXMouthSource::Tkls(v)) => {
-                let ret = v.pop().unwrap();
+                let ret = match v.pop() {
+                    None => return None,
+                    Some(t) => t
+                };
                 if v.is_empty() {
                     match self.stack.pop() {
                         Some(TeXMouthSource::Tkls(v)) => {
