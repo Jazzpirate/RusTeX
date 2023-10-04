@@ -19,6 +19,12 @@ pub struct ShipoutData<ET:EngineType> {
     pub page:Vec<TeXNode<ET>>,
     pub pagegoal:ET::Dim,
     pub pagetotal:ET::Dim,
+    pub pagestretch:ET::Dim,
+    pub pagefilstretch:ET::Dim,
+    pub pagefillstretch:ET::Dim,
+    pub pagefilllstretch:ET::Dim,
+    pub pageshrink:ET::Dim,
+    pub pagedepth:ET::Dim,
     pub prevdepth: ET::Dim,
     pub spacefactor: i32,
     pub to_ship:Option<TeXNode<ET>>,
@@ -36,6 +42,12 @@ impl<ET:EngineType> ShipoutData<ET> {
             pagegoal:ET::Dim::from_sp(i32::MAX as i64),
             pagetotal:ET::Dim::from_sp(0),
             prevdepth:ET::Dim::from_sp(-65536000),
+            pagestretch:ET::Dim::from_sp(0),
+            pagefilstretch:ET::Dim::from_sp(0),
+            pagefillstretch:ET::Dim::from_sp(0),
+            pagefilllstretch:ET::Dim::from_sp(0),
+            pageshrink:ET::Dim::from_sp(0),
+            pagedepth:ET::Dim::from_sp(0),
             spacefactor:1000,
             to_ship:None,
             topmarks:HMap::default(),
@@ -50,6 +62,12 @@ impl<ET:EngineType> ShipoutData<ET> {
         // TODO moar
         self.pagetotal = ET::Dim::from_sp(0);
         self.pagegoal = ET::Dim::from_sp(i32::MAX as i64);
+        self.pagestretch = ET::Dim::from_sp(0);
+        self.pagefilstretch = ET::Dim::from_sp(0);
+        self.pagefillstretch = ET::Dim::from_sp(0);
+        self.pagefilllstretch = ET::Dim::from_sp(0);
+        self.pageshrink = ET::Dim::from_sp(0);
+        self.pagedepth = ET::Dim::from_sp(0);
         ret
     }
 }
@@ -158,8 +176,8 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
             } else {}
         */
             debug_log!(debug=>"SHIPOUT");
+            let pagegoal = engine.stomach.shipout_data().pagegoal; // TODO check what's going on here
             let page = engine.stomach.shipout_data_mut().get_page();
-            let pagegoal = engine.stomach.shipout_data().pagegoal;
             let (first,rest) = ET::Stomach::split_vertical(engine,page,pagegoal);
             // TODO more precisely
             engine.state.set_primitive_int("badness",ET::Int::from_i64(10),true);

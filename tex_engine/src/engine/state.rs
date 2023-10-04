@@ -10,7 +10,7 @@ use crate::tex::token::{CSLike, Token};
 use crate::utils::strings::TeXStr;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::memory::{Interner, Memory};
-use crate::tex::commands::pdftex::{PDFColorstack, PDFObj, PDFXForm};
+use crate::tex::commands::pdftex::{PDFColorstack, PDFObj, PDFXForm, PDFXImage};
 use crate::tex::nodes::HVBox;
 use crate::tex::fonts::FontStore;
 use crate::tex::numbers::{Int, MuSkip, Skip};
@@ -210,6 +210,7 @@ pub trait PDFState<ET:EngineType>:State<ET> {
     fn pdfmatches(&mut self) -> &mut Vec<String>;
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>>;
     fn pdfcolorstacks(&mut self) -> &mut Vec<PDFColorstack>;
     fn set_current_colorstack(&mut self,index:usize);
     fn get_colorstack(&mut self,u:usize) -> &mut PDFColorstack;
@@ -222,6 +223,7 @@ pub struct PDFStateWrapper<ET:EngineType,S:State<ET>> {
     pdfobjs:Vec<PDFObj>,
     pdfxforms:Vec<PDFXForm<ET>>,
     pdfcolorstacks:Vec<PDFColorstack>,
+    pdfximages:Vec<PDFXImage<ET>>,
     current_colorstack:usize,
 }
 impl<ET:EngineType,S:State<ET>> PDFStateWrapper<ET,S> {
@@ -233,6 +235,7 @@ impl<ET:EngineType,S:State<ET>> PDFStateWrapper<ET,S> {
             pdfxforms:vec!(),
             pdfcolorstacks:vec!(PDFColorstack(vec!())),
             current_colorstack:0,
+            pdfximages:vec!(),
         }
     }
 }
@@ -241,6 +244,7 @@ impl<ET:EngineType,S:State<ET>> PDFState<ET> for PDFStateWrapper<ET,S> {
     fn pdfmatches(&mut self) -> &mut Vec<String> { &mut self.pdfmatches }
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>> { &mut self.pdfximages }
     fn pdfcolorstacks(&mut self) -> &mut Vec<PDFColorstack> {
         &mut self.pdfcolorstacks
     }

@@ -1,7 +1,7 @@
 //! TeX primitive [`BaseCommand`]s
 
 use std::hint::unreachable_unchecked;
-use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, register_box, register_skip, register_expandable_notk };
+use crate::{debug_log, register_assign, register_conditional, register_int_assign, register_unexpandable, register_tok_assign, register_int, register_whatsit, register_value_assign_int, register_value_assign_dim, register_value_assign_muskip, register_value_assign_skip, register_dim_assign, register_skip_assign, cmtodo, register_value_assign_font, register_open_box, cmstodo, register_muskip_assign, register_expandable, file_end, throw, catch_prim, file_end_prim, register_value_assign_toks, register_box, register_skip, register_expandable_notk, register_dim};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::resolve_token;
@@ -1750,6 +1750,18 @@ pub fn lastbox<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) 
     }
 }
 
+pub fn lastkern<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Dim {
+    let ls = match engine.stomach.shipout_data().box_stack.last() {
+        None => &engine.stomach.shipout_data().page,
+        Some(bx) => bx.ls()
+    };
+    for n in ls.iter().rev() { match n {
+        TeXNode::Kern{dim,..} => return *dim,
+        _ => return ET::Dim::default()
+    }}
+    ET::Dim::default()
+}
+
 pub fn lastskip<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> Skip<ET::SkipDim> {
     let ls = match engine.stomach.shipout_data().box_stack.last() {
         None => &engine.stomach.shipout_data().page,
@@ -1761,6 +1773,18 @@ pub fn lastskip<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>)
         _ => return Skip::default()
     }}
     Skip::default()
+}
+
+pub fn lastpenalty<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -> ET::Int {
+    let ls = match engine.stomach.shipout_data().box_stack.last() {
+        None => &engine.stomach.shipout_data().page,
+        Some(bx) => bx.ls()
+    };
+    for n in ls.iter().rev() { match n {
+        TeXNode::Penalty(i) => return ET::Int::from_i64(*i as i64),
+        _ => return ET::Int::default()
+    }}
+    ET::Int::default()
 }
 
 pub const LCCODE: &str = "lccode";
@@ -2777,6 +2801,95 @@ pub fn outer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, g
     }
 }
 
+pub fn pagegoal_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagegoal");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagegoal = i;
+}
+
+pub fn pagegoal_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagegoal");
+    engine.stomach.shipout_data().pagegoal
+}
+
+pub fn pagetotal_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagetotal");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagetotal = i;
+}
+pub fn pagetotal_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagetotal");
+    engine.stomach.shipout_data().pagetotal
+}
+
+pub fn pagestretch_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagestretch");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagestretch = i;
+}
+pub fn pagestretch_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagestretch");
+    engine.stomach.shipout_data().pagestretch
+}
+
+pub fn pagefilstretch_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagefilstretch");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagefilstretch = i;
+}
+pub fn pagefilstretch_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagefilstretch");
+    engine.stomach.shipout_data().pagefilstretch
+}
+
+pub fn pagefillstretch_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagefillstretch");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagefillstretch = i;
+}
+pub fn pagefillstretch_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagefillstretch");
+    engine.stomach.shipout_data().pagefillstretch
+}
+
+pub fn pagefilllstretch_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagefilllstretch");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagefilllstretch = i;
+}
+pub fn pagefilllstretch_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagefilllstretch");
+    engine.stomach.shipout_data().pagefilllstretch
+}
+
+pub fn pageshrink_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pageshrink");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pageshrink = i;
+}
+pub fn pageshrink_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pageshrink");
+    engine.stomach.shipout_data().pageshrink
+}
+
+pub fn pagedepth_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
+    debug_log!(trace=>"Assigning \\pagedepth");
+    engine.skip_eq_char();
+    let i = engine.get_dim();
+    engine.stomach.shipout_data_mut().pagedepth = i;
+}
+pub fn pagedepth_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
+    debug_log!(trace=>"Getting \\pagedepth");
+    engine.stomach.shipout_data().pagedepth
+}
+
 pub const PAR: &str = "par";
 pub fn par<ET:EngineType>(engine:&mut EngineRef<ET>, _cmd:&CommandSource<ET>) {
     debug_log!(trace=>"par");
@@ -2823,6 +2936,7 @@ pub fn penalty<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
 pub const PREVDEPTH : &str = "prevdepth";
 pub fn prevdepth_assign<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning \\prevdepth");
+    engine.skip_eq_char();
     let v = engine.get_dim();
     debug_log!(debug=>"\\prevdepth = {}",v);
     engine.stomach.shipout_data_mut().prevdepth = v;
@@ -3847,7 +3961,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
     register_int_assign!(language,engine);
     register_box!(lastbox,engine,(e,cmd) =>lastbox::<ET>(e,&cmd));
+    register_dim!(lastkern,engine,(e,cmd) => lastkern::<ET>(e,&cmd));
     register_skip!(lastskip,engine,(e,cmd) => lastskip::<ET>(e,&cmd));
+    register_int!(lastpenalty,engine,(e,cmd) => lastpenalty::<ET>(e,&cmd));
     register_value_assign_int!(lccode,engine);
     register_unexpandable!(leaders,engine,None,(e,cmd) =>leaders::<ET>(e,&cmd));
     register_unexpandable!(cleaders,engine,None,(e,cmd) =>cleaders::<ET>(e,&cmd));
@@ -3911,6 +4027,14 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_tok_assign!(output,engine);
     register_int_assign!(outputpenalty,engine);
     register_dim_assign!(overfullrule,engine);
+    register_value_assign_dim!(pagegoal,engine);
+    register_value_assign_dim!(pagetotal,engine);
+    register_value_assign_dim!(pagestretch,engine);
+    register_value_assign_dim!(pagefilstretch,engine);
+    register_value_assign_dim!(pagefillstretch,engine);
+    register_value_assign_dim!(pagefilllstretch,engine);
+    register_value_assign_dim!(pageshrink,engine);
+    register_value_assign_dim!(pagedepth,engine);
 
     engine.state.set_command(ET::Char::from_str("par",&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
         name:"par",
@@ -4025,19 +4149,9 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmstodo!(engine,scriptstyle);
     cmstodo!(engine,scriptscriptstyle);
 
-    cmtodo!(engine,lastpenalty);
     cmtodo!(engine,prevgraf);
     cmtodo!(engine,deadcycles);
     cmtodo!(engine,insertpenalties);
-    cmtodo!(engine,lastkern);
-    cmtodo!(engine,pagegoal);
-    cmtodo!(engine,pagetotal);
-    cmtodo!(engine,pagestretch);
-    cmtodo!(engine,pagefilstretch);
-    cmtodo!(engine,pagefillstretch);
-    cmtodo!(engine,pagefilllstretch);
-    cmtodo!(engine,pageshrink);
-    cmtodo!(engine,pagedepth);
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);
