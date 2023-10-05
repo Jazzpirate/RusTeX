@@ -3680,6 +3680,41 @@ pub fn vcenter<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     file_end_prim!("vcenter",cmd);
 }
 
+pub fn vtop<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> CloseBoxFun<ET> {
+    debug_log!(trace=>"\\vtop");
+    let (to,spread) = match engine.get_keywords(vec!("spread","to")) {
+        None => (None,None),
+        Some(s) if s == "to" => {
+            let a = engine.get_dim();
+            (Some(a),None)
+        },
+        Some(s) if s == "spread" => {
+            let a = engine.get_dim();
+            (None,Some(a))
+        },
+        _ => unreachable!()
+    };
+    while let Some(next) = engine.get_next_unexpandable() {
+        match next.command {
+            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
+            BaseCommand::Relax => {},
+            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
+                engine.state.stack_push(GroupType::Box(BoxMode::V));
+                engine.mouth.insert_every(&engine.state,"everyvbox");
+                return Ptr::new(move |e,children| {
+                    Some(HVBox::V(VBox {
+                        kind:"vtop",
+                        children, to, spread,
+                        ..Default::default()
+                    }))
+                })
+            }
+            _ => throw!("Expected begin group, found {:?}",next.source.cause => cmd.cause)
+        }
+    }
+    file_end_prim!("vbox",cmd);
+}
+
 pub const VFIL: &str = "vfil";
 pub fn vfil<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\vfil");
@@ -4152,6 +4187,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(valign,engine,Some(HorV::Vertical),(e,cmd) =>valign::<ET>(e,&cmd));
     register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
     register_open_box!(vcenter,engine,BoxMode::V,(e,cmd) =>vcenter::<ET>(e,&cmd));
+    register_open_box!(vtop,engine,BoxMode::V,(e,cmd) =>vtop::<ET>(e,&cmd));
     register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,&cmd));
     register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,&cmd));
     register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,&cmd));
@@ -4197,7 +4233,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,scrollmode);
     cmtodo!(engine,nonstopmode);
     cmtodo!(engine,batchmode);
-    cmtodo!(engine,vtop);
     cmtodo!(engine,show);
     cmtodo!(engine,showbox);
     cmtodo!(engine,showlists);

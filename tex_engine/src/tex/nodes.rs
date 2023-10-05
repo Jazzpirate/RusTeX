@@ -1,5 +1,6 @@
 //! Boxes producing actual output
 
+use std::cmp::{max, min};
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use crate::engine::{EngineRef, EngineType};
@@ -541,23 +542,37 @@ pub struct VBox<ET:EngineType> {
     pub assigned_height:Option<ET::Dim>,
     pub assigned_depth:Option<ET::Dim>
 }
+impl<ET:EngineType> VBox<ET> {
+    fn default_height(&self,fs:&ET::FontStore) -> ET::Dim {
+        self.children.iter().map(|c| c.height(fs)).sum()
+    }
+    fn default_depth(&self,fs:&ET::FontStore) -> ET::Dim {
+        // TODO not quite - filter penalties etc.
+        self.children.iter().rev().find(|c| c.depth(fs) > ET::Dim::from_sp(0)).map(|c| c.depth(fs)).unwrap_or_else(|| ET::Dim::from_sp(0))
+    }
+    fn default_width(&self,fs:&ET::FontStore) -> ET::Dim {
+        self.children.iter().map(|c| c.width(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0))
+    }
+}
+
 impl<ET:EngineType> NodeTrait<ET> for VBox<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(HVBox::V(self)) }
     fn height(&self,fs:&ET::FontStore) -> ET::Dim {
-        self.assigned_height.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.height(fs)).sum()
+        self.assigned_height.unwrap_or_else(|| match self.kind {
+            "vcenter" => (self.default_height(fs) + self.default_depth(fs)).tex_div(2),
+            "vtop" => min(self.default_height(fs) + self.default_depth(fs),ET::Dim::from_sp(655360)), // TODO properly
+            _ => self.default_height(fs)
         })
     }
     fn depth(&self,fs:&ET::FontStore) -> ET::Dim {
-        self.assigned_depth.unwrap_or_else(|| {
-            // TODO not quite - filter penalties etc.
-            self.children.iter().rev().find(|c| c.depth(fs) > ET::Dim::from_sp(0)).map(|c| c.depth(fs)).unwrap_or_else(|| ET::Dim::from_sp(0))
+        self.assigned_depth.unwrap_or_else(|| match self.kind {
+            "vcenter" => (self.default_height(fs) + self.default_depth(fs)).tex_div(2),
+            "vtop" => max(self.default_height(fs) + self.default_depth(fs) - ET::Dim::from_sp(655360),ET::Dim::from_sp(0)), // TODO properly
+            _ => self.default_depth(fs)
         })
     }
     fn width(&self,fs:&ET::FontStore) -> ET::Dim {
-        self.assigned_width.unwrap_or_else(|| {
-            self.children.iter().map(|c| c.width(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0))
-        })
+        self.assigned_width.unwrap_or_else(|| self.default_width(fs))
     }
     fn nodetype(&self) -> u8 {2 }
     fn iterate(&self) -> Option<&Vec<TeXNode<ET>>> {
