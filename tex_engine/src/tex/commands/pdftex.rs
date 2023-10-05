@@ -94,7 +94,9 @@ pub enum PDFTeXNode<ET:EngineType> where ET::Node:From<PDFTeXNode<ET>> {
     PDFStartLink{
         width:Option<ET::Dim>, height:Option<ET::Dim>, depth:Option<ET::Dim>,
         attr:Option<String>,action:ActionSpec
-    },PDFEndLink
+    },PDFEndLink,
+    PDFSave,PDFRestore,
+    PDFSetMatrix(f64,f64,f64,f64)
 }
 
 #[derive(Debug,Clone)]
@@ -711,6 +713,27 @@ pub fn pdfresettimer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSourc
     engine.elapsed = std::time::Instant::now();
 }
 
+pub fn pdfrestore<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::State:PDFState<ET>,ET::Node:From<PDFTeXNode<ET>> {
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFRestore.as_node());
+}
+
+pub fn pdfsave<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::State:PDFState<ET>,ET::Node:From<PDFTeXNode<ET>> {
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFSave.as_node());
+}
+
+pub fn pdfsetmatrix<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
+    where ET::State:PDFState<ET>,ET::Node:From<PDFTeXNode<ET>> {
+    let mut str = engine.memory.get_string();
+    engine.get_braced_string(&mut str);
+    let nums = str.split(' ').map(|s| s.parse::<f64>().unwrap()).collect::<Vec<f64>>();
+    if nums.len() != 4 {
+        throw!("Expected 4 numbers in matrix" => cmd.cause)
+    }
+    ET::Stomach::push_node(engine,PDFTeXNode::PDFSetMatrix(nums[0],nums[1],nums[2],nums[3]).as_node());
+}
+
 pub fn pdfstartlink<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>)
     where ET::Node:From<PDFTeXNode<ET>> {
     debug_log!(trace=>"\\pdfstartlink");
@@ -1044,6 +1067,9 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     register_whatsit!(pdfrefxform,engine,(e,cmd) =>pdfrefxform::<ET>(e,&cmd));
     register_unexpandable!(pdfrefximage,engine,None,(e,cmd) =>pdfrefximage::<ET>(e,&cmd));
     register_unexpandable!(pdfresettimer,engine,None,(e,cmd) =>pdfresettimer::<ET>(e,&cmd));
+    register_unexpandable!(pdfrestore,engine,None,(e,cmd) => pdfrestore::<ET>(e,&cmd));
+    register_unexpandable!(pdfsave,engine,None,(e,cmd) => pdfsave::<ET>(e,&cmd));
+    register_unexpandable!(pdfsetmatrix,engine,None,(e,cmd) =>pdfsetmatrix::<ET>(e,&cmd));
     register_int!(pdfshellescape,engine,(_,c) => pdfshellescape::<ET>(&c));
     register_unexpandable!(pdfstartlink,engine,None,(e,cmd) =>pdfstartlink::<ET>(e,&cmd));
     register_expandable!(pdfstrcmp,engine,(e,cmd,f) =>pdfstrcmp::<ET>(e,&cmd,f));
@@ -1141,12 +1167,9 @@ pub fn initialize_pdftex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) wh
     cmtodo!(engine,pdfnoligatures);
     cmtodo!(engine,pdfprimitive);
     cmtodo!(engine,pdfrefobj);
-    cmtodo!(engine,pdfrestore);
     cmtodo!(engine,pdfrunninglinkoff);
     cmtodo!(engine,pdfrunninglinkon);
-    cmtodo!(engine,pdfsave);
     cmtodo!(engine,pdfsavepos);
-    cmtodo!(engine,pdfsetmatrix);
     cmtodo!(engine,pdfsetrandomseed);
     cmtodo!(engine,pdfspacefont);
     cmtodo!(engine,pdfthread);

@@ -463,6 +463,14 @@ pub fn dimendef<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET
     engine.set_command_for_tk(name,Some(ret),global);
 }
 
+pub fn discretionary<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\discretionary");
+    let pre = engine.get_nodes_h("discretionary");
+    let post = engine.get_nodes_h("discretionary");
+    let non = engine.get_nodes_h("discretionary");
+    ET::Stomach::push_node(engine,SimpleNode::Discretionary {pre,post,non}.as_node());
+}
+
 pub fn displaylimits<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"\\displaylimits");
     let last_ls = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut();
@@ -1535,7 +1543,7 @@ pub fn ifhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
 }
 
 pub fn ifinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
-    debug_log!(trace=>"ifhmode");
+    debug_log!(trace=>"ifinner");
     match engine.state.mode() {
         TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::Math => true,
         _ => false
@@ -2096,6 +2104,21 @@ pub fn mathpunct<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET
 pub fn mathinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) { mathclass_get(engine,cmd,MathClass::Ord) } // TODO?
 
 fn mathchoice_get_one<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>,display:bool,style:FontStyle) -> Vec<TeXNode<ET>> {
+    engine.get_nodes("mathchoice",|engine,sc| {
+        ET::Stomach::digest(engine,sc);
+        engine.state.set_displaymode(display,false);
+        engine.state.set_fontstyle(style,false);
+    },|engine,sc| {
+        ET::Stomach::digest(engine,sc);
+        let sd = engine.stomach.shipout_data_mut();
+        let ls = if sd.box_stack.is_empty() {&mut sd.page} else {sd.box_stack.last_mut().unwrap().ls_mut()};
+        match ls.pop() {
+            Some(TeXNode::Math {ls,..}) => return ls,
+            o => unreachable!("{:?}",o)
+        }
+    })
+    /*
+
     match engine.get_next_stomach_command() {
         None => file_end!(),
         Some(sc) => match sc.command {
@@ -2125,6 +2148,8 @@ fn mathchoice_get_one<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSour
             None => file_end!()
         }
     }
+
+     */
 }
 
 pub fn mathchoice<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
@@ -3866,6 +3891,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_value_assign_int!(delcode,engine);
     register_value_assign_dim!(dimen,engine);
     register_assign!(dimendef,engine,(e,cmd,global) =>dimendef::<ET>(e,&cmd,global));
+    register_unexpandable!(discretionary,engine,Some(HorV::Horizontal),(e,cmd) =>discretionary::<ET>(e,&cmd));
     register_dim_assign!(displayindent,engine);
     register_unexpandable!(displaylimits,engine,None,(e,cmd) =>displaylimits::<ET>(e,&cmd));
     register_int_assign!(displaywidowpenalty,engine);
@@ -4163,7 +4189,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,special);
     cmtodo!(engine,noboundary);
     cmtodo!(engine,accent);
-    cmtodo!(engine,discretionary);
     cmtodo!(engine,setlanguage);
     cmtodo!(engine,nonscript);
     cmtodo!(engine,underline);

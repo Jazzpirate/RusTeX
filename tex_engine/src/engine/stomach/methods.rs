@@ -1,11 +1,11 @@
-use crate::{catch, debug_log, throw};
+use crate::{catch, debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::engine::state::State;
 use crate::engine::stomach::{LineSpec, Stomach};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseStomachCommand, StomachCommand};
+use crate::tex::commands::{BaseStomachCommand, CloseBoxFun, StomachCommand};
 use crate::tex::nodes::{HBox, HorV, MathClass, NodeTrait, OpenBox, OpenKernel, SimpleNode, SkipNode, TeXNode};
 use crate::tex::numbers::{Dim, Int, Skip};
 use crate::utils::errors::TeXError;
@@ -13,6 +13,7 @@ use crate::utils::strings::CharType;
 use crate::tex::token::Token;
 use std::fmt::Write;
 use crate::utils::collections::HMap;
+use crate::utils::Ptr;
 
 pub fn digest<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
     use BaseStomachCommand::*;
@@ -560,4 +561,48 @@ pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nod
         rest.push(n);
     }
     (result,rest)
+}
+
+impl<ET:EngineType> EngineRef<ET> {
+    pub fn get_nodes<
+        R,
+        F1:FnMut(&mut EngineRef<ET>,StomachCommand<ET>),
+        F2:FnMut(&mut EngineRef<ET>,StomachCommand<ET>) -> R,
+    >(&mut self,
+                                             cmdname:&'static str,
+                                             mut setup_group:F1,mut end_group:F2) -> R {
+        match self.get_next_stomach_command() {
+            None => file_end!(),
+            Some(sc) => match sc.command {
+                BaseStomachCommand::BeginGroup => setup_group(self,sc),
+                _ => throw!("Expected begin group after \\{}",cmdname => sc.source.cause)
+            }
+        }
+        let currlevel = self.stomach.shipout_data().box_stack.len();
+        loop {
+            match self.get_next_stomach_command() {
+                Some(cmd) => match cmd.command {
+                    BaseStomachCommand::EndGroup if self.stomach.shipout_data().box_stack.len() == currlevel =>
+                        return end_group(self,cmd),
+                    _ => ET::Stomach::digest(self,cmd)
+                }
+                None => file_end!()
+            }
+        }
+    }
+    pub fn get_nodes_h(&mut self,cmdname:&'static str) -> Vec<TeXNode<ET>> {
+        let curr = self.state.mode();
+        self.get_nodes(cmdname,|e,cmd| {
+            let on_close:CloseBoxFun<ET> = Ptr::new(|e,l| None);
+            e.stomach.open_box(OpenBox::Box {list:vec!(),mode:BoxMode::H,on_close});
+            e.state.set_mode(TeXMode::RestrictedHorizontal);
+        },|e,cmd| {
+            match e.stomach.shipout_data_mut().box_stack.pop() {
+                Some(OpenBox::Box {list,mode:BoxMode::H,on_close:on_close}) =>
+                return list,
+                _ => throw!("Unexpected end group token in \\{}",cmdname => cmd.source.cause),
+            }
+        }
+        )
+    }
 }
