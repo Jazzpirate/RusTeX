@@ -1077,7 +1077,23 @@ fn start_row<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, c
                     },
                     BaseCommand::Char {catcode:CategoryCode::Space,..} => (),
                     BaseCommand::Unexpandable {name,..} if name == CRCR => (),
-                    BaseCommand::Unexpandable {name,..} if name == NOALIGN => todo!(),
+                    BaseCommand::Unexpandable {name,..} if name == NOALIGN => {
+                        match colmode {
+                            BoxMode::H => {
+                                let ls = engine.get_nodes_v(NOALIGN);
+                                ET::Stomach::push_node(engine,VBox {
+                                    kind:NOALIGN, children:ls, ..Default::default()
+                                }.as_node())
+                            }
+                            BoxMode::V => {
+                                let ls = engine.get_nodes_h(NOALIGN);
+                                ET::Stomach::push_node(engine,HBox {
+                                    kind:NOALIGN, children:ls, ..Default::default()
+                                }.as_node())
+                            },
+                            _ => unreachable!()
+                        };
+                    }
                     _ => {
                         engine.mouth.requeue(res.source.cause);
                         break

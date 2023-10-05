@@ -198,12 +198,18 @@ pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> b
                     return true
                 }
                 else if !kw.starts_with(&current) {
+                    while let Some(s) = rs.pop() {
+                        engine.mouth.requeue(s);
+                    }
                     engine.mouth.push_expansion(rs);
                     engine.memory.return_string(current);
                     return false
                 }
             }
             _ => {
+                while let Some(s) = rs.pop() {
+                    engine.mouth.requeue(s);
+                }
                 engine.mouth.push_expansion(rs);
                 engine.memory.return_string(current);
                 return false
@@ -227,7 +233,9 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                     current.push(us as char);
                     keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
                     if keywords.is_empty() {
-                        engine.mouth.push_expansion(rs);
+                        while let Some(s) = rs.pop() {
+                            engine.mouth.requeue(s);
+                        }
                         return None
                     }
                     else if keywords.len() == 1 && keywords[0] == current {
@@ -242,7 +250,9 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                     keywords = keywords.into_iter().filter(|s| s == &current).collect();
                     return Some(keywords[0])
                 } else {
-                    engine.mouth.push_expansion(rs);
+                    while let Some(s) = rs.pop() {
+                        engine.mouth.requeue(s);
+                    }
                     return None
                 }
             }
@@ -254,7 +264,9 @@ pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Ve
                 return Some(keywords[0])
             }
             _ => {
-                engine.mouth.push_expansion(rs);
+                while let Some(s) = rs.pop() {
+                    engine.mouth.requeue(s);
+                }
                 return None
             }
         }
@@ -336,7 +348,6 @@ pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRef {
 
 
 impl<ET:EngineType> EngineRef<ET> {
-    #[inline(never)]
     pub fn eat_relax(&mut self) {
         match self.get_next_token() {
             Some((t,_)) => match t.as_cs_like() {

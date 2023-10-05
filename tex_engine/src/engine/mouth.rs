@@ -406,9 +406,11 @@ impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
     fn requeue(&mut self, tk: ET::Token) {
         if !self.alignspecs.is_empty() {
             if tk.is_begin_group() {
+                debug!("-");
                 self.alignspecs.last_mut().unwrap().ingroups -=1;
             }
             if tk.is_end_group() {
+                debug!("+");
                 self.alignspecs.last_mut().unwrap().ingroups +=1;
             }
         }

@@ -606,4 +606,19 @@ impl<ET:EngineType> EngineRef<ET> {
         }
         )
     }
+    pub fn get_nodes_v(&mut self,cmdname:&'static str) -> Vec<TeXNode<ET>> {
+        let curr = self.state.mode();
+        self.get_nodes(cmdname,|e,cmd| {
+            let on_close:CloseBoxFun<ET> = Ptr::new(|e,l| None);
+            e.stomach.open_box(OpenBox::Box {list:vec!(),mode:BoxMode::V,on_close});
+            e.state.set_mode(TeXMode::InternalVertical);
+        },|e,cmd| {
+            e.state.set_mode(curr);
+            match e.stomach.shipout_data_mut().box_stack.pop() {
+                Some(OpenBox::Box {list,mode:BoxMode::V,on_close:on_close}) =>
+                    return list,
+                _ => throw!("Unexpected end group token in \\{}",cmdname => cmd.source.cause),
+            }
+        })
+    }
 }
