@@ -597,6 +597,7 @@ impl<ET:EngineType> EngineRef<ET> {
             e.stomach.open_box(OpenBox::Box {list:vec!(),mode:BoxMode::H,on_close});
             e.state.set_mode(TeXMode::RestrictedHorizontal);
         },|e,cmd| {
+            e.state.set_mode(curr);
             match e.stomach.shipout_data_mut().box_stack.pop() {
                 Some(OpenBox::Box {list,mode:BoxMode::H,on_close:on_close}) =>
                 return list,

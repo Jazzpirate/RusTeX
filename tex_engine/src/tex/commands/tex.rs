@@ -1543,7 +1543,7 @@ pub fn ifhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
 }
 
 pub fn ifinner<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> bool {
-    debug_log!(trace=>"ifinner");
+    debug_log!(trace=>"ifinner: {}; {:?}",engine.state.mode(), engine.stomach.shipout_data().box_stack);
     match engine.state.mode() {
         TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::Math => true,
         _ => false

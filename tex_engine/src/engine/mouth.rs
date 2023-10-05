@@ -113,6 +113,7 @@ pub trait Mouth<ET:EngineType>:Sized {
                 }
                 file_end!()
             }
+            Some(t) if t.is_end_group() => throw!("Unexpected end group token"),
             Some(o) => {
                 vec.push(o);
             }
@@ -141,6 +142,7 @@ pub trait Mouth<ET:EngineType>:Sized {
                 }
                 file_end!()
             }
+            Some(t) if t.is_end_group() => throw!("Unexpected end group token"),
             Some(o) => {
                 v.push(o);
             }

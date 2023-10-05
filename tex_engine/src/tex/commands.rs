@@ -354,6 +354,7 @@ impl<ET:EngineType> PartialEq for BaseCommand<ET> {
             (BaseCommand::Def(a), BaseCommand::Def(b)) => *a == *b,
             (BaseCommand::Conditional{name:a,..}, BaseCommand::Conditional{name:b,..}) => a == b,
             (BaseCommand::Expandable {name:a,..}, BaseCommand::Expandable {name:c,..}) => a == c,
+            (BaseCommand::ExpandableNoTokens {name:a,..}, BaseCommand::ExpandableNoTokens {name:c,..}) => a == c,
             (BaseCommand::Unexpandable {name:a,..}, BaseCommand::Unexpandable {name:b,..}) => a == b,
             (BaseCommand::Assignment{name:a,..}, BaseCommand::Assignment{name:c,..}) => a == c,
             (BaseCommand::Whatsit{name:a,..}, BaseCommand::Whatsit{name:c,..}) => a == c,
