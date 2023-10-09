@@ -1,6 +1,7 @@
 pub mod methods;
 
 use std::default;
+use log::debug;
 use crate::debug_log;
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::mouth::Mouth;
@@ -78,8 +79,8 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
     fn shipout_data(&self) -> &ShipoutData<ET>;
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET>;
     fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>);
-    fn split_paragraph(fs:&ET::FontStore,state:&ET::State, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>>;
-    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>);
+    fn split_paragraph(engine:&EngineRef<ET>, nodes:Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<ParLine<ET>>;
+    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>,i32);
 
     fn shipout(&mut self,bx:HVBox<ET>) {
         self.shipout_data_mut().to_ship = Some(TeXNode::Box(bx).into())
@@ -133,32 +134,45 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                             } else {
                                 b.ls_mut().push(node)
                             }
-                        } // TODO no OpenKernel when group closes!
-                        (Some(TeXNode::OpenKernel(k)),_) => {
+                        }
+                        /*(Some(TeXNode::OpenKernel(k)),_) => {
                             match b.ls_mut().pop() {
                                 Some(TeXNode::OpenKernel(k)) =>
                                     // TODO limits
                                     b.ls_mut().push(k.merge(node,false)),
                                 _ => unreachable!()
                             };
-
-                        }
+                        }*/
                         _ => b.ls_mut().push(node)
                     }
                 }
             },
             _ => {
+                debug!("page total {} += {} (goal {})",sd.pagetotal,node.height(&engine.fontstore),sd.pagegoal);
+                if sd.pagegoal == ET::Dim::from_sp(i32::MAX as i64) {
+                    match node {
+                        TeXNode::Box(_)|TeXNode::Insert(..) => {
+                            sd.pagegoal = engine.state.get_primitive_dim("vsize");
+                            debug!("=> new goal {}",sd.pagegoal);
+                        }
+                        _ => ()
+                    }
+                }
                 sd.pagetotal = sd.pagetotal + node.height(&engine.fontstore);
                 match &node {
                     TeXNode::Simple(SimpleNode::Rule{..}) => sd.prevdepth = ET::Dim::from_sp(-65536000),
                     o => sd.prevdepth = o.depth(&engine.fontstore)
                 }
-                sd.page.push(node)
+                sd.page.push(node);
+                ET::Stomach::maybe_shipout(engine,false);
             }
         }
     }
 
     fn maybe_shipout(engine:&mut EngineRef<ET>, force:bool) {
+        if !force {
+            debug!("Shipout? {} >= {}",engine.stomach.shipout_data().pagetotal,engine.stomach.shipout_data().pagegoal);
+        }
         if (force || (  engine.stomach.shipout_data().box_stack.is_empty()  && engine.stomach.shipout_data().pagetotal >= engine.stomach.shipout_data().pagegoal)) && !engine.stomach.shipout_data().page.is_empty() {
             /* INSERTS:
             1. read vbox => \box n = b
@@ -178,19 +192,30 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
             debug_log!(debug=>"SHIPOUT");
             let pagegoal = engine.stomach.shipout_data().pagegoal; // TODO check what's going on here
             let page = engine.stomach.shipout_data_mut().get_page();
-            let (first,rest) = ET::Stomach::split_vertical(engine,page,pagegoal);
             // TODO more precisely
             engine.state.set_primitive_int("badness",ET::Int::from_i64(10),true);
 
-            engine.stomach.shipout_data_mut().page = rest;
-            for n in ReverseNodeIterator::<ET>::new(&first) {
-                match n {
-                    TeXNode::Penalty(i) => {
-                        engine.state.set_primitive_int("outputpenalty",ET::Int::from_i64(*i as i64),true);
-                        break
-                    }
-                    _ => ()
+
+
+            let (mut first,rest,penalty) = if (force) {
+                (page,vec!(),None)
+            } else {
+                let (f,r,p) = ET::Stomach::split_vertical(engine,page,pagegoal);
+                (f,r,Some(p))
+            };
+            let mut deletes = vec!();
+            for (i,b) in first.iter_mut().enumerate() { match b {
+                TeXNode::Insert(n,v) => {
+                    engine.state.set_box_register(*n, HVBox::V(VBox { children: std::mem::take(v), kind: "insert", ..Default::default() }), false);
+                    deletes.push(i);
                 }
+                _ => ()
+            }}
+            for i in deletes {
+                first.remove(i);
+            }
+            if let Some(p) = penalty {
+                engine.state.set_primitive_int("outputpenalty",ET::Int::from_i64(p as i64),true);
             }
 /*
             std::env::set_var("RUST_LOG","debug,tex_engine::tex::commands=trace,tex_engine::engine::gullet=trace,,tex_engine::engine::state=trace");
@@ -203,6 +228,7 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                 ..Default::default()
             }),false);
 
+            for r in rest { Self::push_node(engine,r) }
             let mode = engine.state.mode();
 
             engine.with_mouth(vec!(),|engine| {
@@ -216,7 +242,6 @@ pub trait Stomach<ET:EngineType<Stomach=Self>>:Sized + Clone+'static {
                 }
             });
             engine.state.set_mode(mode);
-
         }
     }
 
@@ -250,16 +275,22 @@ impl<ET:EngineType<Stomach=Self>> ShipoutDefaultStomach<ET> {
         shipout_data:ShipoutData::new(),
     } }
 }
+
+pub enum ParLine<ET:EngineType> {
+    Line(Vec<TeXNode<ET>>),
+    Between(TeXNode<ET>)
+}
+
 impl<ET:EngineType<Stomach=Self>> Stomach<ET> for ShipoutDefaultStomach<ET> {
     fn digest(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
         methods::digest::<ET>(engine,cmd)
     }
     fn shipout_data(&self) -> &ShipoutData<ET> { &self.shipout_data }
     fn shipout_data_mut(&mut self) -> &mut ShipoutData<ET> { &mut self.shipout_data }
-    fn split_paragraph(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
-        methods::split_paragraph_roughly(fs,nodes,linespecs)
+    fn split_paragraph(engine:&EngineRef<ET>, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<ParLine<ET>> {
+        methods::split_paragraph_roughly(engine,nodes,linespecs)
     }
-    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>,i32) {
         methods::split_vertical_roughly(engine,nodes,target)
     }
 }
@@ -291,10 +322,10 @@ impl<ET:EngineType<Stomach=Self>> Stomach<ET> for NoShipoutDefaultStomach<ET> {
     fn close_paragraph(engine: &mut EngineRef<ET>) {
         todo!()
     }
-    fn split_paragraph(fs:&ET::FontStore,state: &ET::State, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
-        methods::split_paragraph_roughly(fs,nodes,linespecs)
+    fn split_paragraph(engine:&EngineRef<ET>, nodes: Vec<TeXNode<ET>>, linespecs: Vec<LineSpec<ET>>) -> Vec<ParLine<ET>> {
+        methods::split_paragraph_roughly(engine,nodes,linespecs)
     }
-    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+    fn split_vertical(engine:&mut EngineRef<ET>, nodes: Vec<TeXNode<ET>>, target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>,i32) {
         methods::split_vertical_roughly(engine,nodes,target)
     }
 }

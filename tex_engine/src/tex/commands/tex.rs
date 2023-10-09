@@ -1718,28 +1718,20 @@ pub fn insert<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) 
     if n < 0 {
         throw!("Invalid insert number: {}",n => cmd.cause)
     }
-    while let Some(next) = engine.get_next_unexpandable() {
-        match next.command {
-            BaseCommand::Char{catcode:CategoryCode::Space,..} => {},
-            BaseCommand::Relax => {},
-            BaseCommand::Char{catcode:CategoryCode::BeginGroup,..} => {
-                engine.state.stack_push(GroupType::Box(BoxMode::V));
-                engine.stomach.open_box(OpenBox::Box {
-                    mode: BoxMode::V,
-                    list: vec![],
-                    on_close: Ptr::new(move |engine,children| {
-                        ET::Stomach::push_node(engine,
-                            TeXNode::Insert(n as usize,children)
-                        );
-                        None
-                    }),
-                });
-                return ()
+    let ls = engine.get_nodes_v("insert");
+    let ret = TeXNode::Insert(n as usize,ls).as_node();
+    for b in engine.stomach.shipout_data_mut().box_stack.iter_mut().rev() {
+        match b {
+            crate::tex::nodes::OpenBox::Box {list,mode:BoxMode::V,on_close} => {
+                list.push(ret); return
+            },
+            crate::tex::nodes::OpenBox::Paragraph {list,..} => {
+                list.push(ret); return
             }
-            _ => throw!("Expected begin group, found {}",next.source.cause.printable(&engine.interner) => cmd.cause)
+            _ => {}
         }
     }
-    file_end!()
+    engine.stomach.shipout_data_mut().page.push(ret);
 }
 
 pub fn jobname<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>, exp:&mut Vec<ET::Token>) {
@@ -2846,7 +2838,9 @@ pub fn pagegoal_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSou
     debug_log!(trace=>"Assigning \\pagegoal");
     engine.skip_eq_char();
     let i = engine.get_dim();
-    engine.stomach.shipout_data_mut().pagegoal = i;
+    if engine.stomach.shipout_data().pagegoal != ET::Dim::from_sp(i32::MAX as i64) {
+        engine.stomach.shipout_data_mut().pagegoal = i;
+    }
 }
 
 pub fn pagegoal_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) -> ET::Dim {
@@ -3450,6 +3444,16 @@ pub fn uccode_get<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<E
     v
 }
 
+pub fn underline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\underline");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        _ => throw!("\\underline is only allowed in math mode" => cmd.cause)
+    }
+    let ret = engine.get_node_m("underline");
+    ET::Stomach::push_node(engine,SimpleNode::Underline(Box::new(ret)).as_node());
+}
+
 pub fn unhbox<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace => "\\unhbox");
     let i = engine.get_int().to_i64();
@@ -3799,7 +3803,7 @@ pub fn vsplit<ET:EngineType>(engine:&mut EngineRef<ET>,cmd:&CommandSource<ET>) -
                 assigned_width:vb.assigned_width,
                 kind:"vbox",
             };
-            let (f,s) = ET::Stomach::split_vertical(engine,vb.children,target);
+            let (f,s,_) = ET::Stomach::split_vertical(engine,vb.children,target);
             first.children = f;
             second.children = s;
             engine.state.set_box_register(i,HVBox::V(second),false);
@@ -4174,6 +4178,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_int_assign!(tracingstats,engine);
     register_value_assign_int!(uccode,engine);
     register_int_assign!(uchyph,engine);
+    register_unexpandable!(underline,engine,None,(e,cmd) =>underline::<ET>(e,&cmd));
     register_unexpandable!(unhbox,engine,Some(HorV::Horizontal),(e,cmd) =>unhbox::<ET>(e,&cmd));
     register_unexpandable!(unhcopy,engine,Some(HorV::Horizontal),(e,cmd) =>unhcopy::<ET>(e,&cmd));
     register_unexpandable!(unvbox,engine,Some(HorV::Vertical),(e,cmd) =>unvbox::<ET>(e,&cmd));
@@ -4242,7 +4247,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,accent);
     cmtodo!(engine,setlanguage);
     cmtodo!(engine,nonscript);
-    cmtodo!(engine,underline);
     cmtodo!(engine,overline);
     cmtodo!(engine,limits);
     cmtodo!(engine,nolimits);

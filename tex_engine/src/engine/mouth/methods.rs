@@ -30,7 +30,7 @@ impl<ET:EngineType> EngineRef<ET> {
         debug_log!(trace=>"skipping '='");
         if let Some((tk,_)) = self.get_next_token() {
             match tk.get_char() {
-                Some(c) if c.as_byte() == b'=' => {
+                Some(c) if c.as_byte() == b'=' && tk.get_catcode() == CategoryCode::Other => {
                     match self.get_next_token() {
                         Some((tk,_)) if tk.is_space() => (),
                         Some((tk,_)) => self.mouth.requeue(tk),

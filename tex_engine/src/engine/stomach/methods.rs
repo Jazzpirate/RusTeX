@@ -2,11 +2,11 @@ use crate::{catch, debug_log, file_end, throw};
 use crate::engine::{EngineRef, EngineType};
 use crate::engine::state::modes::{BoxMode, FontStyle, GroupType, TeXMode};
 use crate::engine::state::State;
-use crate::engine::stomach::{LineSpec, Stomach};
+use crate::engine::stomach::{LineSpec, ParLine, Stomach};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CategoryCode;
 use crate::tex::commands::{BaseStomachCommand, CloseBoxFun, StomachCommand};
-use crate::tex::nodes::{HBox, HorV, MathClass, NodeTrait, OpenBox, OpenKernel, SimpleNode, SkipNode, TeXNode};
+use crate::tex::nodes::{HBox, HorV, MathClass, NodeTrait, OpenBox, SimpleNode, SkipNode, TeXNode};
 use crate::tex::numbers::{Dim, Int, Skip};
 use crate::utils::errors::TeXError;
 use crate::utils::strings::CharType;
@@ -86,14 +86,8 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
                     }
                 }
             }
-            if engine.state.mode() == TeXMode::Vertical {
-                ET::Stomach::maybe_shipout(engine,false)
-            }
             let node = get(engine, cmd.source);
             ET::Stomach::push_node(engine,node);
-            if engine.state.mode() == TeXMode::Vertical {
-                ET::Stomach::maybe_shipout(engine,false)
-            }
         }
         Unexpandable {name,apply,ref forces_mode} => {
             match forces_mode {
@@ -117,9 +111,6 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
                 }
             }
             apply(engine, cmd.source);
-            if engine.state.mode() == TeXMode::Vertical {
-                ET::Stomach::maybe_shipout(engine,false)
-            }
         }
         Char(char) => match engine.state.mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
@@ -181,9 +172,6 @@ fn digest_hv<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>) {
                             }
                         }
                         _ =>throw!("Unexpected box on stack" => cmd.source.cause)
-                    }
-                    if engine.stomach.shipout_data().box_stack.is_empty() {
-                        ET::Stomach::maybe_shipout(engine,false)
                     }
                 }
                 _ => throw!("Unexpected end group" => cmd.source.cause)
@@ -273,13 +261,14 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
             ET::Stomach::push_node(engine,SimpleNode::Char {char, font, cls:Some(cls)}.as_node());
         }
         Superscript => {
-            let last = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut().last_mut();
-            match last {
-                Some(TeXNode::OpenKernel(_)) =>
-                    throw!("Unexpected superscript character: {:?}",last),
+            let last = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut();
+            let last = match last.pop() {
+                /*Some(TeXNode::OpenKernel(_)) =>
+                    throw!("Unexpected superscript character: {:?}",last),*/
                 Some(TeXNode::Simple(SimpleNode::WithScripts {superscript:Some(_),..})) =>
                     throw!("Double superscript"),
-                None => {
+                o => o
+                /*None => {
                     ET::Stomach::push_node(engine,TeXNode::OpenKernel(OpenKernel::Superscript(Box::new(
                         TeXNode::Math {ls:vec!(),display:false,cls:None} // TODO display
                     ))))
@@ -287,17 +276,30 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 Some(n) => {
                     let old = std::mem::replace(n, TeXNode::Mark(0,vec!()));
                     *n = TeXNode::OpenKernel(OpenKernel::Superscript(Box::new(old)))
+                }*/
+            };
+            let fs = engine.state.get_fontstyle();
+            engine.state.set_fontstyle(fs.inc(),false);
+            let node = Box::new(engine.get_node_m("superscript"));
+            let kernel = Box::new(match last {
+                None => TeXNode::Math {ls:vec!(),display:engine.state.get_displaymode(),cls:None},
+                Some(TeXNode::Simple(SimpleNode::WithScripts {kernel,subscript,limits,..})) => {
+                    ET::Stomach::push_node(engine,SimpleNode::WithScripts {kernel,subscript,limits,superscript:Some(node)}.as_node());
+                    return
                 }
-            }
+                Some(n) => n
+            });
+            ET::Stomach::push_node(engine,SimpleNode::WithScripts {kernel,superscript:Some(node),subscript:None, limits: engine.state.get_displaymode() }.as_node());
         }
         Subscript => {
-            let last = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut().last_mut();
-            match last {
-                Some(TeXNode::OpenKernel(_)) =>
-                    throw!("Unexpected subscript character"),
+            let last = engine.stomach.shipout_data_mut().box_stack.last_mut().unwrap().ls_mut();
+            let last = match last.pop() {
+                /*Some(TeXNode::OpenKernel(_)) =>
+                    throw!("Unexpected subscript character"),*/
                 Some(TeXNode::Simple(SimpleNode::WithScripts {subscript:Some(_),..})) =>
                     throw!("Double subscript"),
-                None => {
+                o => o
+                /*None => {
                     ET::Stomach::push_node(engine,TeXNode::OpenKernel(OpenKernel::Subscript(Box::new(
                         TeXNode::Math {ls:vec!(),display:false,cls:None} // TODO display
                     ))))
@@ -305,8 +307,20 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                 Some(n) => {
                     let old = std::mem::replace(n, TeXNode::Mark(0,vec!()));
                     *n = TeXNode::OpenKernel(OpenKernel::Subscript(Box::new(old)))
+                }*/
+            };
+            let fs = engine.state.get_fontstyle();
+            engine.state.set_fontstyle(fs.inc(),false);
+            let node = Box::new(engine.get_node_m("subscript"));
+            let kernel = Box::new(match last {
+                None => TeXNode::Math {ls:vec!(),display:engine.state.get_displaymode(),cls:None},
+                Some(TeXNode::Simple(SimpleNode::WithScripts {kernel,superscript,limits,..})) => {
+                    ET::Stomach::push_node(engine,SimpleNode::WithScripts {kernel,superscript,limits,subscript:Some(node)}.as_node());
+                    return
                 }
-            }
+                Some(n) => n
+            });
+            ET::Stomach::push_node(engine,SimpleNode::WithScripts {kernel,subscript:Some(node),superscript:None, limits: engine.state.get_displaymode() }.as_node());
         }
         BeginGroup => {
             let mode = match engine.state.mode() {
@@ -457,30 +471,37 @@ pub fn close_paragraph<ET:EngineType>(engine:&mut EngineRef<ET>) {
                 target:hsize - (leftskip.base + rightskip.base),left_skip:leftskip,right_skip:rightskip
             })
     };
-    let lines = ET::Stomach::split_paragraph(&engine.fontstore,&engine.state,par,specs);
+    let lines = ET::Stomach::split_paragraph(&engine,par,specs);
     for mut line in lines {
-        line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
-        line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
-        ET::Stomach::push_node(engine,HBox {
-            kind:"paragraphline",
-            children:line,
-            ..Default::default()
-        }.as_node())
+        match line {
+            ParLine::Line(mut line) => {
+                line.insert(0,SkipNode::Skip{skip:leftskip,axis:HorV::Horizontal}.as_node());
+                line.push(SkipNode::Skip{skip:rightskip,axis:HorV::Horizontal}.as_node());
+                ET::Stomach::push_node(engine,HBox {
+                    kind:"paragraphline",
+                    children:line,
+                    ..Default::default()
+                }.as_node());
+            }
+            ParLine::Between(node) => ET::Stomach::push_node(engine,node)
+        }
     }
+    ET::Stomach::push_node(engine,SkipNode::Skip{skip:engine.state.get_primitive_skip("parskip"),axis:HorV::Vertical}.as_node());
 }
 
-pub fn knuth_plass<ET:EngineType>(nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
+pub fn knuth_plass<ET:EngineType>(engine:&EngineRef<ET>,nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
     todo!()
 }
 
-pub fn split_paragraph_roughly<ET:EngineType>(fs:&ET::FontStore,nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<Vec<TeXNode<ET>>> {
-    let mut lines = vec!();
+pub fn split_paragraph_roughly<ET:EngineType>(engine:&EngineRef<ET>,nodes:Vec<TeXNode<ET>>, mut linespecs: Vec<LineSpec<ET>>) -> Vec<ParLine<ET>> {
+    let mut lines:Vec<ParLine<ET>> = vec!();
     let mut hgoal = ET::Dim::default();
     let mut hgoals = linespecs.into_iter();
     let mut iter = nodes.into_iter();
-    let mut reinserts : Vec<TeXNode<ET>> = vec!();
     // TODO vadjust,marks
     'A:loop {
+        let mut line = vec!();
+        let mut reinserts : Vec<TeXNode<ET>> = vec!();
         let mut goal = match hgoals.next() {
             Some(v) => {
                 hgoal = v.target;
@@ -488,31 +509,42 @@ pub fn split_paragraph_roughly<ET:EngineType>(fs:&ET::FontStore,nodes:Vec<TeXNod
             },
             None => hgoal.clone()
         };
-        lines.push(vec!());
         while goal > ET::Dim::default() {
             match iter.next() {
                 None => break 'A,
-                Some(n@TeXNode::VAdjust(_)) => {
+                Some(n@(TeXNode::VAdjust(_)|TeXNode::Mark(_,_)|TeXNode::Insert(_,_))) => {
                     reinserts.push(n)
                 }
-                Some(n@TeXNode::Mark(_,_)) => {
-                    reinserts.push(n)
+                Some(m@TeXNode::Math {display:true,..}) => {
+                    lines.push(ParLine::Line(std::mem::take(&mut line)));
+                    for r in reinserts {
+                        lines.push(ParLine::Between(r));
+                    }
+                    lines.push(ParLine::Between( SkipNode::Skip{skip:engine.state.get_primitive_skip("abovedisplayskip"),axis:HorV::Vertical}.as_node()));
+                    lines.push(ParLine::Between(TeXNode::Penalty(engine.state.get_primitive_int("predisplaypenalty").to_i64() as i32)));
+                    lines.push(ParLine::Line(vec!(m)));
+                    lines.push(ParLine::Between(TeXNode::Penalty(engine.state.get_primitive_int("postdisplaypenalty").to_i64() as i32)));
+                    lines.push(ParLine::Between(SkipNode::Skip{skip:engine.state.get_primitive_skip("belowdisplayskip"),axis:HorV::Vertical}.as_node()));
+                    continue 'A
                 }
                 Some(node) => {
                     // TODO penalty etc
-                    goal = goal - node.width(fs);
-                    lines.last_mut().unwrap().push(node);
+                    goal = goal - node.width(&engine.fontstore);
+                    line.push(node);
                 }
             }
         }
-        if !reinserts.is_empty() {
-            lines.push(std::mem::take(&mut reinserts))
+        lines.push(ParLine::Line(line));
+        lines.push(ParLine::Between(SkipNode::Skip{skip:engine.state.get_primitive_skip("baselineskip"),axis:HorV::Vertical}.as_node())); // TODO properly
+        lines.push(ParLine::Between(TeXNode::Penalty(engine.state.get_primitive_int("interlinepenalty").to_i64() as i32)));
+        for r in reinserts {
+            lines.push(ParLine::Between(r));
         }
     }
     lines
 }
 
-pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>) {
+pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> (Vec<TeXNode<ET>>, Vec<TeXNode<ET>>,i32) {
     let mut nodes = nodes.into_iter();
     let mut result = vec!();
     let mut rest = vec!();
@@ -522,6 +554,7 @@ pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nod
     sd.topmarks = topmarks;
     sd.firstmarks.clear();
     sd.botmarks.clear();
+    let mut returnpenalty = 0i32;
 
     while target > ET::Dim::default() {
         match nodes.next() {
@@ -544,6 +577,14 @@ pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nod
             }
         }
     }
+    let mut nodes = nodes.peekable();
+    match nodes.peek() {
+        Some(TeXNode::Penalty(p)) => {
+            returnpenalty = *p;
+            nodes.next();
+        }
+        _ => ()
+    }
 
     sd.splitfirstmarks.clear();
     sd.splitbotmarks.clear();
@@ -560,7 +601,7 @@ pub fn split_vertical_roughly<ET:EngineType>(engine: &mut EngineRef<ET>, mut nod
         }
         rest.push(n);
     }
-    (result,rest)
+    (result,rest,returnpenalty)
 }
 
 impl<ET:EngineType> EngineRef<ET> {
@@ -615,10 +656,29 @@ impl<ET:EngineType> EngineRef<ET> {
         },|e,cmd| {
             e.state.set_mode(curr);
             match e.stomach.shipout_data_mut().box_stack.pop() {
-                Some(OpenBox::Box {list,mode:BoxMode::V,on_close:on_close}) =>
+                Some(OpenBox::Box {list,mode:BoxMode::V,..}) =>
                     return list,
                 _ => throw!("Unexpected end group token in \\{}",cmdname => cmd.source.cause),
             }
+        })
+    }
+    pub fn get_node_m(&mut self,cmdname:&'static str) -> TeXNode<ET> {
+        let mut tks = self.mouth.get_expansion();
+        self.get_argument(&mut tks);
+        tks.insert(0,ET::Token::new_char_from_string(ET::Char::from(b'{'),CategoryCode::BeginGroup,None,(0,0),(0,0)));
+        tks.push(ET::Token::new_char_from_string(ET::Char::from(b'}'),CategoryCode::EndGroup,None,(0,0),(0,0)));
+        self.mouth.push_expansion(tks);
+        let mode = if self.state.get_displaymode() {BoxMode::DM} else {BoxMode::M};
+        self.get_nodes(cmdname,|e,cmd| {
+            let on_close:CloseBoxFun<ET> = Ptr::new(|e,l| None);
+            e.stomach.open_box(OpenBox::Box {list:vec!(),mode,on_close});
+        },|e,cmd| match e.stomach.shipout_data_mut().box_stack.pop() {
+            Some(OpenBox::Box {mut list,mode:m,..}) if m == mode => {
+                if list.len() == 1 { list.pop().unwrap() } else {
+                    TeXNode::Math { ls: list, display: e.state.get_displaymode(), cls: None }
+                }
+            }
+            _ => throw!("Unexpected end group token in \\{}",cmdname => cmd.source.cause),
         })
     }
 }
