@@ -281,6 +281,7 @@ pub enum SimpleNode<ET:EngineType> {
     MathChoice{display:Vec<TeXNode<ET>>,text:Vec<TeXNode<ET>>,script:Vec<TeXNode<ET>>,scriptscript:Vec<TeXNode<ET>>},
     MoveRight{by:ET::Dim, node:HVBox<ET>},
     Underline(Box<TeXNode<ET>>),
+    Overline(Box<TeXNode<ET>>),
     Char {char:ET::Char, font:ET::FontRef,cls:Option<MathClass> },
     Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef,small_cls:MathClass,large_cls:MathClass},
     WithScripts {kernel:Box<TeXNode<ET>>,superscript:Option<Box<TeXNode<ET>>>,subscript:Option<Box<TeXNode<ET>>>,limits:bool},
@@ -300,6 +301,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 if d > ET::Dim::from_sp(0) { d } else { ET::Dim::from_sp(0) }
             },
             SimpleNode::Underline(node) => node.depth(fs),
+            SimpleNode::Overline(node) => node.depth(fs),
             SimpleNode::MoveRight {node,..} => node.depth(fs),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_dp(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_dp(*large_char),
@@ -324,6 +326,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
                 if h > ET::Dim::from_sp(0) { h } else { ET::Dim::from_sp(0) }
             },
             SimpleNode::Underline(node) => node.height(fs),
+            SimpleNode::Overline(node) => node.height(fs),
             SimpleNode::Discretionary {non:v,..} => v.iter().map(|n| n.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::MoveRight {node,..} => node.height(fs),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_ht(*char),
@@ -346,6 +349,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Raise{node,..} => node.width(fs),
             SimpleNode::MoveRight {node,..} => node.width(fs),
             SimpleNode::Underline(node) => node.width(fs),
+            SimpleNode::Overline(node) => node.width(fs),
             SimpleNode::Discretionary {non:v,..} => v.iter().map(|n| n.width(fs)).sum(),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_wd(*char),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_wd(*large_char),
@@ -362,7 +366,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Raise{node,..} => node.nodetype(),
             MoveRight{node,..} => node.nodetype(),
             Discretionary {..} => 8,
-            Delimiter {..} | WithScripts {..} | Underline(_) => 15,
+            Delimiter {..} | WithScripts {..} | Underline(_) | Overline(_) => 15,
             Char{..} => 0,
             MathChoice{..} => 10,
             Leaders{skip,..} => skip.nodetype()
@@ -374,6 +378,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Raise{node,..} => node.iterate(),
             Discretionary {non,..} => Some(non),
             Underline(node) => node.iterate(),
+            Overline(node) => node.iterate(),
             MoveRight{node,..} => node.iterate(),
             WithScripts {kernel,..} => None,
             MathChoice {text,..} => Some(text),

@@ -2910,6 +2910,16 @@ pub fn outer<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, g
     }
 }
 
+pub fn overline<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"\\overline");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        _ => throw!("\\overline is only allowed in math mode" => cmd.cause)
+    }
+    let ret = engine.get_node_m("overline");
+    ET::Stomach::push_node(engine,SimpleNode::Overline(Box::new(ret)).as_node());
+}
+
 pub fn pagegoal_assign<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>, global:bool) {
     debug_log!(trace=>"Assigning \\pagegoal");
     engine.skip_eq_char();
@@ -4186,6 +4196,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_tok_assign!(output,engine);
     register_int_assign!(outputpenalty,engine);
     register_dim_assign!(overfullrule,engine);
+    register_unexpandable!(overline,engine,None,(e,cmd) =>overline::<ET>(e,&cmd));
     register_value_assign_dim!(pagegoal,engine);
     register_value_assign_dim!(pagetotal,engine);
     register_value_assign_dim!(pagestretch,engine);
@@ -4325,7 +4336,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,accent);
     cmtodo!(engine,setlanguage);
     cmtodo!(engine,nonscript);
-    cmtodo!(engine,overline);
     cmtodo!(engine,limits);
     cmtodo!(engine,nolimits);
     cmtodo!(engine,over);
