@@ -404,6 +404,16 @@ pub fn delcode_get<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource
     v
 }
 
+pub fn do_delimiter<ET:EngineType>(engine: &mut EngineRef<ET>,num:u32) -> TeXNode<ET> {
+    let large = num & 0xFFF;
+    let small = num >> 12;
+    let (small_char,small_font,small_cls) = do_mathchar::<ET>(&engine.state,small,None);
+    let (large_char,large_font,large_cls) = do_mathchar::<ET>(&engine.state,large,None);
+    SimpleNode::Delimiter {
+        small_char,small_font,large_char,large_font,small_cls,large_cls
+    }.as_node()
+}
+
 pub fn delimiter<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     match engine.state.mode() {
         TeXMode::Math | TeXMode::Displaymath => (),
@@ -411,14 +421,8 @@ pub fn delimiter<ET:EngineType>(engine: &mut EngineRef<ET>, cmd:&CommandSource<E
     }
     let num = engine.get_int().to_i64();
     if num < 0 { throw!("Invalid delimiter code: {}",num => cmd.cause) }
-    let num = num as u32;
-    let large = num & 0xFFF;
-    let small = num >> 12;
-    let (small_char,small_font,small_cls) = do_mathchar::<ET>(&engine.state,small,None);
-    let (large_char,large_font,large_cls) = do_mathchar::<ET>(&engine.state,large,None);
-    ET::Stomach::push_node(engine,SimpleNode::Delimiter {
-        small_char,small_font,large_char,large_font,small_cls,large_cls
-    }.as_node());
+    let node = do_delimiter(engine,num as u32);
+    ET::Stomach::push_node(engine,node);
 }
 
 pub const DIMEN : &str = "dimen";
@@ -1885,6 +1889,78 @@ pub fn cleaders<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>
 }
 pub fn xleaders<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     do_leaders(engine,cmd,LeadersType::X)
+}
+
+pub fn left<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"left");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        o => throw!("\\left not allowed in {} mode",o => cmd.cause),
+    }
+    let next = engine.get_next_unexpandable().unwrap_or_else(|| file_end!());
+    let delim = match next.command {
+        BaseCommand::Unexpandable {name:"delimiter",..} => {
+            let num = engine.get_int().to_i64();
+            if num < 0 { throw!("Invalid delimiter code: {}",num => cmd.cause) }
+            Some(do_delimiter(engine,num as u32))
+        }
+        BaseCommand::Char {char:c,..} => {
+            match engine.state.get_delcode(c).to_i64() {
+                0 => None,
+                i if i < 0 => throw!("Invalid delimiter code: {}",i => cmd.cause),
+                i => Some(do_delimiter(engine,i as u32))
+            }
+        }
+        _ => throw!("Expected '.' after \\left" => next.source.cause)
+    };
+    engine.stomach.open_box(OpenBox::Math {list:vec!(),display:engine.state.get_displaymode(),cls:None});
+    engine.state.stack_push(GroupType::Box(BoxMode::LeftRight));
+    if let Some(d) = delim {
+        ET::Stomach::push_node(engine,d);
+    }
+}
+
+pub fn right<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"right");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        o => throw!("\\left not allowed in {} mode",o => cmd.cause),
+    }
+    let next = engine.get_next_unexpandable().unwrap_or_else(|| file_end!());
+    let delim = match next.command {
+        BaseCommand::Unexpandable {name:"delimiter",..} => {
+            let num = engine.get_int().to_i64();
+            if num < 0 { throw!("Invalid delimiter code: {}",num => cmd.cause) }
+            Some(do_delimiter(engine,num as u32))
+        }
+        BaseCommand::Char {char:c,..} => {
+            match engine.state.get_delcode(c).to_i64() {
+                0 => None,
+                i if i < 0 => throw!("Invalid delimiter code: {}",i => cmd.cause),
+                i => Some(do_delimiter(engine,i as u32))
+            }
+        }
+        _ => throw!("Expected '.' after \\right" => next.source.cause)
+    };
+    if let Some(d) = delim {
+        ET::Stomach::push_node(engine,d);
+    }
+    match engine.state.stack_pop(&mut engine.memory) {
+        Some((v,GroupType::Box(BoxMode::LeftRight))) => {
+            if !v.is_empty() {
+                let mut rs = engine.mouth.get_expansion();
+                rs.extend(v.into_iter());
+                engine.mouth.push_expansion(rs);
+            }
+            match engine.stomach.shipout_data_mut().box_stack.pop() {
+                Some(crate::tex::nodes::OpenBox::Math {list:ls,display,cls}) => {
+                    ET::Stomach::push_node(engine,TeXNode::Math{ls,display,cls})
+                }
+                o =>throw!("Unexpected box on stack: {:?}",o => cmd.cause)
+            }
+        }
+        _ => throw!("Unexpected \\right" => cmd.cause)
+    }
 }
 
 use string_interner::Symbol;
@@ -4049,6 +4125,8 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_unexpandable!(leaders,engine,None,(e,cmd) =>leaders::<ET>(e,&cmd));
     register_unexpandable!(cleaders,engine,None,(e,cmd) =>cleaders::<ET>(e,&cmd));
     register_unexpandable!(xleaders,engine,None,(e,cmd) =>xleaders::<ET>(e,&cmd));
+    register_unexpandable!(left,engine,None,(e,cmd) =>left::<ET>(e,&cmd));
+    register_unexpandable!(right,engine,None,(e,cmd) =>right::<ET>(e,&cmd));
     register_int_assign!(lefthyphenmin,engine);
     register_skip_assign!(leftskip,engine);
     register_assign!(let,engine,(e,cmd,global) =>let_::<ET>(e,&cmd,global));
@@ -4250,8 +4328,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     cmtodo!(engine,overline);
     cmtodo!(engine,limits);
     cmtodo!(engine,nolimits);
-    cmtodo!(engine,left);
-    cmtodo!(engine,right);
     cmtodo!(engine,over);
     cmtodo!(engine,atop);
     cmtodo!(engine,above);
