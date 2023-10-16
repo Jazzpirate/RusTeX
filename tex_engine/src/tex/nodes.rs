@@ -283,6 +283,7 @@ pub enum SimpleNode<ET:EngineType> {
     Underline(Box<TeXNode<ET>>),
     Overline(Box<TeXNode<ET>>),
     Char {char:ET::Char, font:ET::FontRef,cls:Option<MathClass> },
+    MathAccent {content:Box<TeXNode<ET>>,accent:ET::Char,accent_font:ET::FontRef,accent_cls:MathClass},
     Delimiter {small_char:ET::Char,small_font:ET::FontRef,large_char:ET::Char,large_font:ET::FontRef,small_cls:MathClass,large_cls:MathClass},
     WithScripts {kernel:Box<TeXNode<ET>>,superscript:Option<Box<TeXNode<ET>>>,subscript:Option<Box<TeXNode<ET>>>,limits:bool},
     Leaders {bx:HVBox<ET>,skip:SkipNode<ET>,tp:LeadersType},
@@ -304,6 +305,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Overline(node) => node.depth(fs),
             SimpleNode::MoveRight {node,..} => node.depth(fs),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_dp(*char),
+            SimpleNode::MathAccent {content,..} => content.depth(fs),
             SimpleNode::Delimiter {large_char,large_font,..} => fs.get(*large_font).char_dp(*large_char),
             SimpleNode::WithScripts {kernel,subscript,..} => {
                 match subscript {
@@ -327,6 +329,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             },
             SimpleNode::Underline(node) => node.height(fs),
             SimpleNode::Overline(node) => node.height(fs),
+            SimpleNode::MathAccent {content,..} => content.height(fs), // TODO
             SimpleNode::Discretionary {non:v,..} => v.iter().map(|n| n.height(fs)).max().unwrap_or_else(|| ET::Dim::from_sp(0)),
             SimpleNode::MoveRight {node,..} => node.height(fs),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_ht(*char),
@@ -349,6 +352,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::Raise{node,..} => node.width(fs),
             SimpleNode::MoveRight {node,..} => node.width(fs),
             SimpleNode::Underline(node) => node.width(fs),
+            SimpleNode::MathAccent {content,..} => content.width(fs), // TODO
             SimpleNode::Overline(node) => node.width(fs),
             SimpleNode::Discretionary {non:v,..} => v.iter().map(|n| n.width(fs)).sum(),
             SimpleNode::Char {char,font,..} => fs.get(*font).char_wd(*char),
@@ -366,7 +370,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Raise{node,..} => node.nodetype(),
             MoveRight{node,..} => node.nodetype(),
             Discretionary {..} => 8,
-            Delimiter {..} | WithScripts {..} | Underline(_) | Overline(_) => 15,
+            Delimiter {..} | WithScripts {..} | Underline(_) | Overline(_) | MathAccent {..} => 15,
             Char{..} => 0,
             MathChoice{..} => 10,
             Leaders{skip,..} => skip.nodetype()
@@ -380,6 +384,7 @@ impl<ET:EngineType> NodeTrait<ET> for SimpleNode<ET> {
             Underline(node) => node.iterate(),
             Overline(node) => node.iterate(),
             MoveRight{node,..} => node.iterate(),
+            MathAccent {content,..} => content.iterate(),
             WithScripts {kernel,..} => None,
             MathChoice {text,..} => Some(text),
             _ => None

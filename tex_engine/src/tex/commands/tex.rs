@@ -2142,6 +2142,22 @@ pub fn splitbotmark<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource
     do_splitbotmark(engine,cmd,0,f)
 }
 
+pub fn mathaccent<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
+    debug_log!(trace=>"mathaccent");
+    match engine.state.mode() {
+        TeXMode::Math | TeXMode::Displaymath => (),
+        o => throw!("mathaccent not allowed in mode: {}",o => cmd.cause)
+    }
+    let num =engine.get_int().to_i64();
+    if num < 0 {
+        throw!("Invalid math char: {}",num => cmd.cause)
+    }
+    let (accent,accent_font,accent_cls) = do_mathchar::<ET>(&engine.state,num as u32,None);
+    let content = Box::new(engine.get_node_m("mathaccent"));
+
+    ET::Stomach::push_node(engine,SimpleNode::MathAccent {content,accent,accent_font,accent_cls}.as_node())
+}
+
 pub fn mathchar<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:&CommandSource<ET>) {
     debug_log!(trace=>"mathchar");
     match engine.state.mode() {
@@ -4156,6 +4172,7 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     register_expandable!(splitbotmark,engine,(e,c,f) =>splitbotmark::<ET>(e,&c,f));
     register_int_assign!(maxdeadcycles,engine);
     register_dim_assign!(maxdepth,engine);
+    register_unexpandable!(mathaccent,engine,None,(e,cmd) =>mathaccent::<ET>(e,&cmd));
     register_unexpandable!(mathchar,engine,None,(e,cmd) =>mathchar::<ET>(e,&cmd));
     register_unexpandable!(mathord,engine,None,(e,cmd) =>mathord::<ET>(e,&cmd));
     register_unexpandable!(mathop,engine,None,(e,cmd) =>mathop::<ET>(e,&cmd));
@@ -4314,7 +4331,6 @@ pub fn initialize_tex_primitives<ET:EngineType>(engine:&mut EngineRef<ET>) {
     // TODOS ---------------------------------------------------------------------
 
 
-    cmstodo!(engine,mathaccent);
     cmstodo!(engine,radical);
     cmstodo!(engine,displaystyle);
     cmstodo!(engine,textstyle);

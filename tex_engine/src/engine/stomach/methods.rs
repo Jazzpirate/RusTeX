@@ -238,7 +238,7 @@ fn digest_math<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:StomachCommand<ET>)
                     }
                 }
                 match engine.state.stack_pop(&mut engine.memory) {
-                    Some((v,GroupType::Box(BoxMode::M))) => {
+                    Some((v,GroupType::Box(BoxMode::DM))) => {
                         if !v.is_empty() {
                             let mut rs = engine.mouth.get_expansion();
                             rs.extend(v.into_iter());
