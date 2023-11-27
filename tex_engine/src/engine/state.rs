@@ -248,6 +248,9 @@ impl<S:State> Clone for StateStack<S> {
 
 }
 impl<S:State> StateStack<S> {
+    pub fn give_back(&mut self,lvl:StackLevel<S>) {
+        self.factory.give_back(lvl.changes);
+    }
     /// Create a new [`StateStack`]
     pub fn new() -> Self { Self { stack:vec!(),factory:ReusableVectorFactory::new(8,8) } }
     /// Push a new stack level onto the stack with the given [`GroupType`], as a new group begins

@@ -72,29 +72,30 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
     fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName>::Handler { &mut self.handler }
     #[inline(always)]
     fn get_string(&mut self) -> String {
-        self.strings.pop().unwrap_or_default()
+        //self.strings.pop().unwrap_or_default()
+        String::new()
     }
     #[inline(always)]
     fn return_string(&mut self,mut s:String) {
-        s.clear();
-        self.strings.push(s)
+        /*s.clear();
+        self.strings.push(s)*/
     }
     #[inline(always)]
     fn get_bytes(&mut self) -> Vec<u8> {
-        self.bytes.pop().unwrap_or_default()
+        Vec::new()//self.bytes.pop().unwrap_or_default()
     }
     #[inline(always)]
     fn return_bytes(&mut self,mut b:Vec<u8>) {
-        b.clear();
-        self.bytes.push(b)
+        //b.clear();
+        //self.bytes.push(b)
     }
     #[inline(always)]
     fn get_token_vec(&mut self) -> Vec<T> {
-        self.factory.get()
+        Vec::new()//self.factory.get()
     }
     #[inline(always)]
     fn return_token_vec(&mut self, mut v: Vec<T>) {
-        self.factory.give_back(v)
+        //self.factory.give_back(v)
     }
 }
 

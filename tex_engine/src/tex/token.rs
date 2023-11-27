@@ -279,7 +279,3 @@ impl Token for CompactToken {
         !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 4
     }
 }
-
-thread_local! {
-    pub static COMPACT_TOKEN_LIST_FACTORY : RefCell<ReusableVectorFactory<CompactToken>> = RefCell::new(ReusableVectorFactory::new(32,32));
-}
