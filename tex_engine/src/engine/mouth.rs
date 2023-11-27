@@ -1,620 +1,332 @@
-/*! A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
-
- The default implementations ([`NoTracingMouth`] and [`Mouth`]) are
- just wrappers around a [`Vec`]`<`[`TeXMouthSource`]`>`,
- which are either [`TokenSource`]s or [`StringSource`]s.
-
- [`TokenSource`]s are [`Token`]s that have already been processed, while [`StringSource`]s
- represent a string of characters to be tokenized; e.g. from a source file.
- */
-pub mod string_source;
-pub mod methods;
-pub mod experiments;
-
-use log::debug;
-use crate::engine::{EngineRef, EngineType, Outputs};
-use crate::engine::filesystem::File;
-use crate::engine::mouth::string_source::StringSource;
+use std::fmt::Display;
+use crate::engine::{EngineAux, EngineReferences, EngineTypes};
+use crate::engine::filesystem::{File, FileLineSource};
+use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::engine::mouth::pretokenized::{MacroExpansion, TokenListIterator};
+use crate::engine::mouth::strings::StringTokenizer;
 use crate::engine::state::State;
-use crate::{debug_log, file_end, throw};
-use crate::engine::memory::{Interner, Memory, VEC_SIZE};
-use crate::engine::state::modes::BoxMode;
-use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, DefReplacement, ExpToken};
-use crate::tex::commands::tex::{ALIGN_END, CR, CR_END, CRCR, SPAN};
-use crate::tex::numbers::Skip;
-use crate::tex::token::{Token, PrintableTokenList, CSLike};
-use crate::utils::errors::TeXError;
-use crate::utils::Ptr;
-use crate::utils::strings::{CharType, TeXStr};
+use crate::engine::utils::outputs::Outputs;
+use crate::tex::catcodes::CategoryCodeScheme;
+use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::input_text::StringLineSource;
+use crate::tex::token::Token;
 
-/// A [`Mouth`] is the source of [`Token`]s to be processed by a TeX engine.
-pub trait Mouth<ET:EngineType>:Sized {
-    fn new(memory:&mut Memory<ET>) -> Self;
-    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, tks:Vec<ET::Token>, f:F) -> R;
+pub mod strings;
+pub mod pretokenized;
 
-    /// Insert a [`File`] into the [`Mouth`], to be processed next
-    fn push_file(&mut self, file: &ET::File,interner:&mut Interner);
-    fn push_string(&mut self,str:&Vec<u8>);
+type C<M> = <<M as Mouth>::Token as Token>::Char;
 
-    /// Insert a single [`Token`] into the [`Mouth`], not to be expanded when processed
-    fn push_noexpand(&mut self,tk:ET::Token,interner:&Interner);
-
-    fn add_align_spec(&mut self,interner:&mut Interner, spec: Vec<AlignSpec<ET>>, rec_index: Option<usize>,colmode:BoxMode);
-    fn get_align_spec(&mut self) -> Option<&mut AlignData<ET>>;
-    fn pop_align_spec(&mut self);
-
-    /// Insert a single [`Token`] into the [`Mouth`], to be processed next
-    /// (for implementations with a peek buffer)
-    fn requeue(&mut self,tk:ET::Token);
-
-    /// Return the next [`Token`] from the [`Mouth`], and whether to expand it (due to `\noexpand`)
-    //#[inline(always)]
-    fn get_next(&mut self,state:&ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<ET::Token>;
-    fn get_next_simple(&mut self,state:&ET::State,interner:&mut Interner) -> Option<ET::Token>;
-    fn get_literal(&mut self,state:&ET::State,interner:&mut Interner) -> ET::Char;
-
-    /// Return the next n characters from the [`Mouth`] as a [`String`], without consuming them
-    /// (for error messages, debugging purposes, etc.)
-    fn preview(&self,len:usize,interner:&Interner) -> String;
-
-    /// Return the current file and line number as presentable string
-    fn file_line(&self,interner:&Interner) -> String;
-
-    fn line_no(&self) -> usize;
-
-    fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs);
-    fn get_expansion(&mut self) -> Vec<ET::Token>;
-    fn push_expansion(&mut self, expansion: Vec<ET::Token>);
-    fn push_expansion_norev(&mut self, expansion: Vec<ET::Token>);
-    fn insert_every(&mut self,state:&ET::State,every:&'static str) {
-        match state.get_primitive_toks(every) {
-            None => (),
-            Some(v) if v.is_empty() => (),
-            Some(v) =>{
-                let mut rs = self.get_expansion();
-                rs.extend(v.iter().rev().map(|t| t.clone()));
-                self.push_expansion_norev(rs);
+pub trait Mouth:Sized {
+    type Token:Token;
+    type File:File<Char=C<Self>>;
+    fn push_file(&mut self,f:Self::File);
+    fn push_exp(&mut self,exp:TokenListIterator<Self::Token>);
+    fn push_macro_exp(&mut self,exp:MacroExpansion<Self::Token>);
+    fn get_next_opt<ET:EngineTypes<Char = C<Self>,Token = Self::Token,File = Self::File>>(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<Self::Token>;
+    fn iterate<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,cont:Fn);
+    fn requeue(&mut self,t:Self::Token);
+    fn num_exps(&self) -> usize;
+    fn line_number(&self) -> usize;
+    fn endinput(&mut self);
+    fn read_until_endgroup<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token)>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,mut cont:Fn) -> Self::Token {
+        let mut ingroups = 0;
+        let mut eg:Option<Self::Token> = None;
+        self.iterate(aux,cc,endline,|a,t| {
+            if t.is_end_group()  {
+                if ingroups == 0 { eg = Some(t);  return false }
+                ingroups -= 1;
             }
-        }
+            if t.is_begin_group() {
+                ingroups += 1;
+            }
+            cont(a,t);
+            true
+        });
+        eg.unwrap()
     }
-
-    /// like [`get_next`](`Mouth::get_next`), but throws an error on `\par` (and [`EOL`](crate::tex::catcodes::CategoryCode::EOL))
-    fn get_next_no_par(&mut self, state:&ET::State, interner:&mut Interner) -> Option<ET::Token> {
-        match self.get_next_simple(state,interner) {
-            Some(t) => {
-                match t.get_cs_name() {
-                    Some(s) if s == interner.par => throw!("Paragraph ended while reading argument" => t),
-                    None if t.is_eof() => file_end!(),
-                    _ => Some(t)
-                }
-            }
-            o => o
-        }
+    fn current_position_fmt<W:std::fmt::Write>(&self,w:W) -> std::fmt::Result;
+    #[inline(always)]
+    fn current_position(&self) -> MouthPosition<Self> {
+        MouthPosition(self)
     }
+    fn preview(&self,int:&<<Self::Token as Token>::CS as ControlSequenceName>::Handler,cc:&CategoryCodeScheme<C<Self>>,esc:Option<C<Self>>) -> String;
+}
 
-    /// reads a macro argument from the [`Mouth`], i.e. a sequence of [`Token`]s enclosed in
-    /// braces (category codes [`BeginGroup`](CategoryCode::BeginGroup) and
-    /// [`EndGroup`](CategoryCode::EndGroup)), or a single non-space [`Token`] if the argument is
-    /// not enclosed.
-
-    fn get_argument(engine:&mut EngineRef<ET>, vec: &mut Vec<ET::Token>) {
-        match engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
-            None => file_end!(),
-            Some(t) if t.is_begin_group() => {
-                let mut ingroup = 1;
-                while let Some(t) = engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
-                    if t.is_begin_group() { ingroup += 1 }
-                    else if t.is_end_group() {
-                        ingroup -= 1;
-                        if ingroup == 0 { return () }
-                    }
-                    vec.push(t);
-                }
-                file_end!()
-            }
-            Some(t) if t.is_end_group() => throw!("Unexpected end group token"),
-            Some(o) => {
-                vec.push(o);
-            }
-        }
-    }
-
-    /// Like [`read_argument`](`Mouth::read_argument`), but throws an error on `\par` (and [`EOF`](crate::tex::catcodes::CategoryCode::EOF))
-    fn get_argument_no_par(engine:&mut EngineRef<ET>, v:&mut Vec<ET::Token>) {
-        match engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
-            None => file_end!(),
-            Some(t) if t.is_begin_group() => {
-                let mut depth = 1;
-                let par = engine.interner.par;
-                while let Some(t) = engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
-                    if t.is_begin_group() { depth += 1}
-                    else if t.is_end_group() {
-                        depth -= 1;
-                        if depth == 0 { return () }
-                    } else {
-                        match t.get_cs_name() {
-                            Some(n) if n == par => throw!("Paragraph ended while reading argument" => t),
-                            _ => ()
-                        }
-                    }
-                    v.push(t);
-                }
-                file_end!()
-            }
-            Some(t) if t.is_end_group() => throw!("Unexpected end group token"),
-            Some(o) => {
-                v.push(o);
-            }
-        }
-    }
-
-    /// Skip whitespace characters from the [`Mouth`]
-    fn skip_whitespace(&mut self,state:&ET::State,interner:&mut Interner) {
-        debug_log!(trace=>"skipping whitespace");
-        while let Some(tk) = self.get_next_simple(state,interner) {
-            if !tk.is_space() {
-                self.requeue(tk);break
-            }
-        }
+pub struct MouthPosition<'a,M:Mouth>(&'a M);
+impl<'a,M:Mouth> Display for MouthPosition<'a,M> {
+    #[inline(always)]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.current_position_fmt(f)
     }
 }
 
-
-/// Either a [`TokenSource`] or a [`StringSource`]
-#[derive(Clone)]
-pub enum TeXMouthSource<ET:EngineType> {
-    Tkls(Vec<ET::Token>),
-    //Noexpand(ET::Token),
-    String(StringSource<ET::Char>)
-}
-
-#[derive(Clone)]
-pub struct AlignSpec<ET:EngineType> {
-    pub left:Vec<ET::Token>,
-    pub right:Vec<ET::Token>,
-    pub skip:Skip<ET::SkipDim>
-}
-
-#[derive(Clone)]
-pub struct AlignData<ET:EngineType> {
-    pub specs:Vec<AlignSpec<ET>>,
-    pub recindex:Option<usize>,
-    pub colmode:BoxMode,
-    pub current:usize,
-    pub in_right:bool,
-    pub ingroups:usize,
-    pub omit:bool,
-    pub span:bool
-}
-impl<ET:EngineType> AlignData<ET> {
-    pub fn new(specs:Vec<AlignSpec<ET>>,recindex:Option<usize>,colmode:BoxMode) -> Self {
-        AlignData {
-            specs,
-            recindex,
-            colmode,
-            current:0,
-            in_right:false,
-            ingroups:0,
-            omit:false,
-            span:false
-        }
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    #[inline(always)]
+    pub fn push_file(&mut self,f:ET::File) {
+        self.mouth.push_file(f);
     }
 }
 
-#[derive(Clone)]
-pub struct StandardMouth<ET:EngineType>{
-    pub stack:Vec<TeXMouthSource<ET>>,
-    pub buffer:Vec<Vec<ET::Token>>,
-    alignspecs:Vec<AlignData<ET>>,
+pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
+    String(StringTokenizer<T::Char,StringLineSource>),
+    File(StringTokenizer<T::Char,F::LineSource>),
+    Expansion(MacroExpansion<T>),
+    TokenList(TokenListIterator<T>),
+    Requeued(T)
 }
 
-impl<ET:EngineType<Mouth=Self>> Mouth<ET> for StandardMouth<ET> {
-    fn new(memory:&mut Memory<ET>) -> Self {
-        StandardMouth {
-            stack:Vec::with_capacity(2097152),
-            buffer:(0..32).map(|_|Vec::with_capacity(2940000)).collect(),
-            alignspecs:vec!()
-        }
-    }
-    fn get_align_spec(&mut self) -> Option<&mut AlignData<ET>> {
-        self.alignspecs.last_mut()
-    }
-    fn pop_align_spec(&mut self) {
-        self.alignspecs.pop().unwrap_or_else(|| throw!("Unexpected end group token"));
-    }
-    fn get_literal(&mut self, state: &ET::State, interner: &mut Interner) -> ET::Char {
-        match self.next_simple(state,interner) {
-            None => file_end!(),
-            Some(tk) => {
-                match tk.name_or_char() {
-                    Err(c) => c,
-                    Ok(name) => match ET::Char::single_char(name.to_str(interner)) {
-                        Some(c) => c,
-                        None => throw!("Character expected" => tk)
-                    }
-                }
-            }
-        }
-    }
 
-    fn get_next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<ET::Token> {
-        if self.alignspecs.is_empty() {
-            self.next_simple(state, interner)
-        } else {
-            let tk = self.next_simple(state,interner);
-            let spec = self.alignspecs.last_mut().unwrap();
-            match tk {
-                Some(t) if t.is_begin_group() => {
-                    spec.ingroups += 1;
-                    Some(t)
-                }
-                Some(t) if t.is_end_group() => {
-                    if spec.ingroups == 0 { throw!("Unexpected end group token" => t)}
-                    spec.ingroups -= 1;
-                    Some(t)
-                }
-                Some(t) if t.is_align_tab() && spec.ingroups == 0 && !spec.in_right => {
-                    spec.in_right = true;
-                    if spec.omit {
-                        return Some(ET::Token::new_cs_from_string(TeXStr::from_static(ALIGN_END,interner),None,(0,0),(0,0)))
-                    } else {
-                        debug_log!(trace=>"Current: {}",spec.current);
-                        let v = &spec.specs[spec.current];
-                        let mut r = self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE));
-                        r.push(ET::Token::new_cs_from_string(TeXStr::from_static(ALIGN_END, interner), None, (0, 0), (0, 0)));
-                        for t in v.right.iter().rev() { r.push(t.clone()) }
-                        self.push_expansion_norev(r);
-                        return self.get_next_simple(state,interner);
-                    }
-                }
-                Some(t) if !spec.in_right && spec.ingroups == 0 => {
-                    match t.as_cs_like() {
-                        Some(csl) => {
-                            let cm = match csl {
-                                CSLike::CS(name) => state.get_command(name),
-                                CSLike::ActiveChar(c) => state.get_ac_command(c)
-                            };
-                            match cm {
-                                Some(b) => {
-                                    match b.base {
-                                        BaseCommand::Unexpandable {name,..} if name == SPAN => {
-                                            todo!("\\span in mouth")
-                                        }
-                                        BaseCommand::Unexpandable {name,..} if name == CR || name == CRCR => {
-                                            spec.in_right = true;
-                                            self.do_cr(state,interner,None)
-                                        }
-                                        _ => Some(t)
-                                    }
-                                }
-                                None => Some(t)
-                            }
-                        }
-                        None => Some(t)
-                    }
-                }
-                Some(t) => Some(t),
-                _ => file_end!()
-            }
-        }
-    }
+pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
+    inputs:Vec<TokenSource<T,F>>
+}
+impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
+    type Token = T;
+    type File = F;
 
-    fn get_next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<ET::Token> {
-        if self.alignspecs.is_empty() {
-            self.next(state, interner, outputs)
-        } else {
-            let tk = self.next(state, interner, outputs);
-            let spec = self.alignspecs.last_mut().unwrap();
-            match tk {
-                Some(t) if t.is_begin_group() => {
-                    spec.ingroups += 1;
-                    Some(t)
-                }
-                Some(t) if t.is_end_group() => {
-                    if spec.ingroups == 0 { throw!("Unexpected end group token" => t)}
-                    spec.ingroups -= 1;
-                    Some(t)
-                }
-                Some(t) if t.is_align_tab() && spec.ingroups == 0 && !spec.in_right => {
-                    spec.in_right = true;
-                    if spec.omit {
-                        return Some(ET::Token::new_cs_from_string(TeXStr::from_static(ALIGN_END,interner),None,(0,0),(0,0)))
-                    } else {
-                        debug_log!(trace=>"Current: {}",spec.current);
-                        let v = &spec.specs[spec.current];
-                        let mut r = self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE));
-                        r.push(ET::Token::new_cs_from_string(TeXStr::from_static(ALIGN_END, interner), None, (0, 0), (0, 0)));
-                        for t in v.right.iter().rev() { r.push(t.clone()) }
-                        self.push_expansion_norev(r);
-                        return self.get_next(state,interner,outputs);
-                    }
-                }
-                Some(t) if !spec.in_right && spec.ingroups == 0 => {
-                    match t.as_cs_like() {
-                        Some(csl) => {
-                            let cm = match csl {
-                                CSLike::CS(name) => state.get_command(name),
-                                CSLike::ActiveChar(c) => state.get_ac_command(c)
-                            };
-                            match cm {
-                                Some(b) => {
-                                    match b.base {
-                                        BaseCommand::Unexpandable {name,..} if name == CR || name == CRCR => {
-                                            spec.in_right = true;
-                                            self.do_cr(state,interner,Some(outputs))
-                                        }
-                                        _ => Some(t)
-                                    }
-                                }
-                                None => Some(t)
-                            }
-                        }
-                        None => Some(t)
-                    }
-                }
-                Some(t) => Some(t),
-                _ => file_end!()
-            }
-        }
-    }
-
-    fn add_align_spec(&mut self,interner:&mut Interner, spec: Vec<AlignSpec<ET>>, rec_index: Option<usize>,colmode:BoxMode) {
-        self.alignspecs.push(AlignData::new(spec,rec_index,colmode));
-        //self.requeue(ET::Token::new_cs_from_string(TeXStr::from_static(CR_END,interner),None,(0,0),(0,0)))
-    }
-
-    fn with_mouth<F:FnMut(&mut EngineRef<ET>) -> R,R>(engine:&mut EngineRef<ET>, mut tks:Vec<ET::Token>, mut f:F) -> R {
-        tks.reverse();
-        let old = std::mem::replace(&mut engine.mouth.stack,vec!(TeXMouthSource::Tkls(tks)));
-        let specs = std::mem::replace(&mut engine.mouth.alignspecs,vec!());
-        let ret = f(engine);
-        engine.mouth.stack = old;
-        engine.mouth.alignspecs = specs;
-        ret
-    }
-
-    fn push_noexpand(&mut self, tk: ET::Token,interner:&Interner) {
-        match self.stack.last_mut() {
-            Some(TeXMouthSource::Tkls(v)) => {
-                v.push(tk);
-                v.push(ET::Token::new_cs_from_string(interner.noexpand_tk,None,(0,0),(0,0)));
-            },
-            _ => {
-                let mut v = self.get_vec();
-                v.push(tk);
-                v.push(ET::Token::new_cs_from_string(interner.noexpand_tk,None,(0,0),(0,0)));
-                self.stack.push(TeXMouthSource::Tkls(v))
-            }
-        }
-    }
-
-    fn push_file(&mut self, file: &ET::File,interner:&mut Interner) {
-        debug!("Pushing file {:?}", file.path());
-        let source = TeXMouthSource::String(StringSource::new(
-            file.content_string().unwrap().clone(),
-            Some(interner.from_string(file.path().to_str().unwrap()))
-        ));
-        self.stack.push(source);
-    }
-
-    fn push_string(&mut self, str: &Vec<u8>) {
-        let source = TeXMouthSource::String(StringSource::new(StringSource::<ET::Char>::from_str(str),None));
-        self.stack.push(source);
-    }
-
-    fn requeue(&mut self, tk: ET::Token) {
-        if !self.alignspecs.is_empty() {
-            if tk.is_begin_group() {
-                debug!("-");
-                self.alignspecs.last_mut().unwrap().ingroups -=1;
-            }
-            if tk.is_end_group() {
-                debug!("+");
-                self.alignspecs.last_mut().unwrap().ingroups +=1;
-            }
-        }
-        match self.stack.last_mut() {
-            Some(TeXMouthSource::Tkls(v)) => v.push(tk),
-            _ => {
-                let mut v = self.get_vec();
-                v.push(tk);
-                self.stack.push(TeXMouthSource::Tkls(v))
-            }
-        }
-    }
-
-    fn preview(&self,len:usize,interner:&Interner) -> String { // TODO memory
-        let mut ret = String::new();
-        for s in self.stack.iter().rev() {
-            ret.push_str(&match s {
-                //TeXMouthSource::Noexpand(ts) => ts.printable(interner).to_string(),
-                TeXMouthSource::Tkls(v) => v.iter().rev().map(|t| t.printable(interner).to_string()).collect::<String>(),
-                TeXMouthSource::String(ss) => ss.preview(len - ret.len())
-            });
-            if ret.len() > len { /*ret.truncate(len);*/return ret.replace("\r","\\r").replace("\n","\\n") }
-        }
-        ret.replace("\r","\\r").replace("\n","\\n")
-    }
-
-    fn line_no(&self) -> usize {
-        for s in self.stack.iter().rev() {
+    fn endinput(&mut self) {
+        for (i,s) in self.inputs.iter().enumerate().rev() {
             match s {
-                TeXMouthSource::String(ss) => return ss.line(),
+                TokenSource::File(_) => {
+                    self.inputs.remove(i);
+                    return
+                }
+                _ => ()
+            }
+        }
+    }
+
+    fn num_exps(&self) -> usize {
+        let mut ret = 0;
+        for s in self.inputs.iter().rev() {
+            match s {
+                TokenSource::Expansion(_) => ret += 1,
+                TokenSource::TokenList(_) => ret += 1,
+                _ => return ret
+            }
+        }
+        return ret
+    }
+    fn line_number(&self) -> usize {
+        for s in self.inputs.iter().rev() {
+            match s {
+                TokenSource::File(s) => return s.line(),
                 _ => ()
             }
         }
         0
     }
-
-    fn endinput(&mut self, interner:&Interner,outputs:&mut Outputs) {
-        for s in self.stack.iter().enumerate().rev() {
-            match s.1 {
-                TeXMouthSource::String(ss) => {
-                    match &ss.source {
-                        Some(s) => (outputs.file_close)(interner.resolve(s.symbol())),
-                        None => ()
+    #[inline(always)]
+    fn push_macro_exp(&mut self, exp: MacroExpansion<Self::Token>) {
+        loop {
+            match self.inputs.last_mut() {
+                Some(TokenSource::Expansion(e)) =>
+                    if !e.has_next() {
+                        self.inputs.pop();
+                        continue
+                    } else {
+                        break
                     }
-                    self.stack.remove(s.0);
-                    return
-                },
-                _ => ()
+                Some(TokenSource::TokenList(e)) =>
+                    if !e.has_next() {
+                        self.inputs.pop();
+                        continue
+                    } else {
+                        break
+                    }
+                _ => break
             }
         }
+        self.inputs.push(TokenSource::Expansion(exp))
     }
-
-    fn file_line(&self,interner:&Interner) -> String {
-        for s in self.stack.iter().rev() {
-            match s {
-                TeXMouthSource::String(ss) => {
-                    match &ss.source {
-                        Some(s) => return format!("{}:({},{})",interner.resolve(s.symbol()),ss.line(),ss.column()),
-                        None => ()
-                    }
+    #[inline(always)]
+    fn push_exp(&mut self, exp: TokenListIterator<Self::Token>) {
+        self.inputs.push(TokenSource::TokenList(exp))
+    }
+    #[inline(always)]
+    fn requeue(&mut self,t:T) {
+        self.inputs.push(TokenSource::Requeued(t))
+    }
+    fn push_file(&mut self, f: F) {
+        let s = f.line_source().unwrap();
+        self.inputs.push(TokenSource::File(StringTokenizer::new(s)));
+    }
+    fn current_position_fmt<W:std::fmt::Write>(&self,mut w:W) -> std::fmt::Result {
+        for i in self.inputs.iter().rev() { match i {
+            TokenSource::File(s) => return write!(w,"{} l. {} c. {}",s.source.path().display(),s.line(),s.column()),
+            _ => ()
+        }}
+        Ok(())
+    }
+    fn get_next_opt<ET:EngineTypes<Char=T::Char,Token =T,File = F>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> Option<T> {
+        let cc: &CategoryCodeScheme<T::Char> = state.get_catcode_scheme();
+        let endline: Option<T::Char> = state.get_endline_char();
+        loop {
+            match self.inputs.last_mut() {
+                None => return None,
+                Some(TokenSource::Requeued(_)) => {
+                    if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
+                        return Some(t)
+                    } else { unreachable!() }
                 }
-                _ => ()
-            }
-        }
-        "unknown source".to_string()
-    }
-
-    fn get_expansion(&mut self) -> Vec<ET::Token> {
-        self.get_vec()
-    }
-
-    fn push_expansion(&mut self, mut expansion: Vec<ET::Token>) {
-        if expansion.is_empty() { self.buffer.push(expansion) } else {
-            expansion.reverse();
-            self.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-    }
-
-    fn push_expansion_norev(&mut self, mut expansion: Vec<ET::Token>) {
-        if expansion.is_empty() { self.buffer.push(expansion) } else {
-            self.stack.push(TeXMouthSource::Tkls(expansion))
-        }
-    }
-}
-
-impl<ET:EngineType<Mouth = Self>> StandardMouth<ET> {
-    pub fn print_stats(&self) {
-        println!("\nBuffer: {}",self.buffer.len());
-        for b in &self.buffer {
-            println!(" -  {}",b.capacity());
-        }
-    }
-
-    pub fn get_vec(&mut self) -> Vec<ET::Token> {
-        self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE))
-    }
-
-    /*pub fn in_align<R,F:FnOnce(&mut Self,&ET::State,&mut Interner) -> R>(&mut self,state:&ET::State,interner:&mut Interner,next:F) -> R {
-
-    }*/
-
-    fn next_simple(&mut self, state: &ET::State, interner: &mut Interner) -> Option<ET::Token> {
-        match self.stack.last_mut() {
-            /*Some(TeXMouthSource::Noexpand(tk)) => todo!() match self.stack.pop() {
-                Some(TeXMouthSource::Noexpand(t)) => Some(t),
-                _ => unreachable!()
-            },*/
-            Some(TeXMouthSource::Tkls(ref mut v)) => {
-                let mut ret = v.pop().unwrap();
-                if ret.is_noexpand_marker(&*interner) {
-                    ret = v.pop().unwrap();
-                }
-                if v.is_empty() {
-                    match self.stack.pop() {
-                        Some(TeXMouthSource::Tkls(v)) => {
-                            self.buffer.push(v);
+                Some(TokenSource::TokenList(s)) => {
+                    match s.next() {
+                        Some(t) => return Some(t),
+                        _ => match self.inputs.pop() {
+                            Some(TokenSource::TokenList(ls)) => ls.give_back_maybe(&mut aux.memory),
+                            _ => unreachable!()
                         }
-                        _ => unreachable!()
                     }
                 }
-                Some(ret)
-            }
-            Some(TeXMouthSource::String(ref mut s)) => {
-                match s.get_next::<ET>(interner,state.get_catcode_scheme(),state.get_endlinechar()) {
-                    Some(t) => Some(t),
-                    None => panic!("File ended unexpectedly")
-                }
-            }
-            None => None
-        }
-    }
-
-
-    fn next(&mut self, state: &ET::State,interner:&mut Interner,outputs:&mut Outputs) -> Option<ET::Token> {
-        match self.stack.last_mut() {
-            /*Some(TeXMouthSource::Noexpand(tk)) => todo!(),match self.stack.pop() {
-                Some(TeXMouthSource::Noexpand(t)) => Some((t, false)),
-                _ => unreachable!()
-            },*/
-            Some(TeXMouthSource::Tkls(v)) => {
-                let ret = match v.pop() {
-                    None => return None,
-                    Some(t) => t
-                };
-                if v.is_empty() {
-                    match self.stack.pop() {
-                        Some(TeXMouthSource::Tkls(v)) => {
-                            self.buffer.push(v);
+                Some(TokenSource::Expansion(s)) => {
+                    match s.next() {
+                        Some(t) => return Some(t),
+                        _ => match self.inputs.pop() {
+                            Some(TokenSource::Expansion(ls)) => ls.give_back_maybe(&mut aux.memory),
+                            _ => unreachable!()
                         }
-                        _ => unreachable!()
                     }
                 }
-                Some(ret)
-            }
-            Some(TeXMouthSource::String(ref mut s)) => {
-                match s.get_next::<ET>(interner,state.get_catcode_scheme(), state.get_endlinechar()) {
-                    Some(t) => return Some(t),
-                    None => {
-                        match &s.source {
-                            None => (),
-                            Some(s) => (outputs.file_close)(interner.resolve(s.symbol()))
+                Some(TokenSource::String(s)) => {
+                    match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        Some(t) => return Some(t),
+                        _ => {
+                            self.inputs.pop();
+                            todo!("file end in mouth")
                         }
-                        self.stack.pop();
-                        debug_log!(debug => "file end; inserting \\everyeof");
-                        let eof = ET::Token::eof();
-                        let everyeof = state.get_primitive_toks("everyeof");
-                        debug_log!(debug => "everyeof: {}",match everyeof {
-                            None => "None".to_string(),
-                            Some(v) => PrintableTokenList::<ET>(v,interner).to_string()
-                        });
-                        match everyeof {
-                            None => Some(eof),
-                            Some(v) if v.is_empty() => Some(eof),
-                            Some(v) => {
-                                let mut nv = self.get_vec();
-                                nv.push(eof);
-                                nv.extend(v.iter().skip(1).rev().map(|t| t.clone()));
-                                self.stack.push(TeXMouthSource::Tkls(nv));
-                                Some(v.first().unwrap().clone())
+                    }
+                }
+                Some(TokenSource::File(s)) => {
+                    match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        Some(t) => return Some(t),
+                        _ => {
+                            let f = match self.inputs.pop() {
+                                Some(TokenSource::File(f)) => f,
+                                _ => unreachable!()
+                            };
+                            aux.outputs.file_close(f.source.path().display());
+                            let everyeof = state.get_primitive_tokens(PRIMITIVES.everyeof);
+                            if everyeof.is_empty() {
+                                return Some(T::eof())
+                            } else {
+                                todo!("everyeof");
+                                self.inputs.push(TokenSource::TokenList(TokenListIterator::new(Some(PRIMITIVES.everyeof),everyeof.clone())))
                             }
                         }
                     }
                 }
-            },
-            None => None
+            }
         }
     }
 
-    fn do_cr(&mut self,state:&ET::State,interner:&mut Interner,outputs:Option<&mut Outputs>) -> Option<ET::Token> {
-        self.insert_every(state,"everycr");
-        let spec = self.alignspecs.last_mut().unwrap();
-        if spec.omit {
-            return Some(ET::Token::new_cs_from_string(TeXStr::from_static(CR_END,interner),None,(0,0),(0,0)))
-        } else {
-            let v = &spec.specs[spec.current];
-            let mut r = self.buffer.pop().unwrap_or(Vec::with_capacity(VEC_SIZE));
-            r.push(ET::Token::new_cs_from_string(TeXStr::from_static(CR_END, interner), None, (0, 0), (0, 0)));
-            for t in v.right.iter().rev() { r.push(t.clone()) }
-            self.push_expansion_norev(r);
-            if let Some(outputs) = outputs {
-                return self.get_next(state, interner, outputs);
-            } else {
-                return self.get_next_simple(state, interner);
+    fn iterate<ET:EngineTypes<Token = T,File = F>,Fn:FnMut(&mut EngineAux<ET>,T) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,mut cont:Fn) {
+        macro_rules! iterate {
+            ($iter:ident) => {
+                for t in $iter {
+                    if !cont(aux,t) { return }
+                }
+            };
+        }
+        loop {
+            match self.inputs.last_mut() {
+                Some(TokenSource::Requeued(t)) => {
+                    if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
+                        if t.is_noexpand_marker() {continue}
+                        if !cont(aux,t) {return}
+                    } else { unreachable!() }
+                }
+                Some(TokenSource::TokenList(s)) => {
+                    iterate!(s);
+                    match self.inputs.pop() {
+                        Some(TokenSource::TokenList(ls)) => ls.give_back_maybe(&mut aux.memory),
+                        _ => unreachable!()
+                    }
+                }
+                Some(TokenSource::Expansion(s)) => {
+                    iterate!(s);
+                    match self.inputs.pop() {
+                        Some(TokenSource::Expansion(ls)) => ls.give_back_maybe(&mut aux.memory),
+                        _ => unreachable!()
+                    }
+                }
+                Some(TokenSource::String(s)) => {
+                    while let Some(t) = s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        if !cont(aux,t) { return }
+                    }
+                    todo!()
+                }
+                Some(TokenSource::File(s)) => {
+                    while let Some(t) = s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        if !cont(aux,t) { return }
+                    }
+                    todo!()
+                }
+                None => todo!()
             }
         }
+    }
+    fn preview(&self,int:&<T::CS as ControlSequenceName>::Handler,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) -> String {
+        let mut str = String::new();
+        for src in self.inputs.iter().rev() {
+            match src {
+                TokenSource::TokenList(s) => s.preview(int,cc,esc,&mut str),
+                TokenSource::String(s) => s.preview(&mut 500,&mut str).unwrap(),
+                TokenSource::Expansion(s) => s.preview(int,cc,esc,&mut str),
+                TokenSource::File(s) => {
+                    s.preview(&mut 50,&mut str).unwrap();break
+                },
+                TokenSource::Requeued(t) => {
+                    t.display_fmt(int,cc,esc,&mut str).unwrap()
+                }
+                _ => ()
+            }
+        }
+        str
+    }
+}
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    pub fn preview(&self) -> String {
+        self.mouth.preview(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char())
+    }
+}
+impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
+    pub fn new() -> Self {
+        DefaultMouth {
+            inputs:Vec::new()
+        }
+    }
+/*
+    fn get_argument<Fn:FnMut(T),E:ErrorHandler,M:MemoryManager<T>>(&mut self,eh:&E,mem:&mut M,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,delim:Option<&[T]>,nopar:Option<T::CS>,mut cont:Fn) {
+        match delim {
+            Some(d) => self.get_argument_with_delim(d,nopar,cont),
+            _ => match self.get_next_opt(eh,mem,cc,endline) {
+                Some(t) if t.is_noexpand_marker() => cont(self.get_next_opt(eh,mem,cc,endline).unwrap()),
+                // not None because of the noexpand marker, and not begin group, because a begin group
+                // character is not expandable
+                Some(t) if t.is_begin_group() => self.read_until_endgroup(eh,mem,cc,endline,nopar,cont),
+                Some(t) => cont(t),
+                _ => todo!()
+            }
+        }
+    }
+
+ */
+/*
+    fn read_until_endgroup<Fn:FnMut(T),E:ErrorHandler,M:MemoryManager<T>>(&mut self,eh:&E,mem:&mut M,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,nopar:Option<T::CS>,mut cont:Fn) {
+        let mut ingroups = 0;
+        self.iterate(eh,mem,cc,endline,|t| {
+            if t.is_begin_group() { ingroups += 1;
+            } else if t.is_end_group() {
+                if ingroups == 0 { return false }
+                ingroups -= 1;
+            } else if t.is_noexpand_marker() { return true }
+            cont(t);
+            true
+        });
+    }
+
+ */
+
+    fn get_argument_with_delim<Fn:FnMut(T)>(&mut self,delim:&[T],nopar:Option<T::CS>,cont:Fn) {
+        todo!()
     }
 }

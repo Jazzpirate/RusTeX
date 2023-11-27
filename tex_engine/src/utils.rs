@@ -1,17 +1,15 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::thread;
+/*! Utility methods and data structures.*/
+
 use lazy_static::lazy_static;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 
-pub mod strings;
 pub mod errors;
-pub mod collections;
 
-/// A pointer type for use in TeX - this is just an alias for `Rc`, but may by replaced by `Arc` in the future.
-pub type Ptr<A> = Arc<A>;
-pub type Mut<A> = RefCell<A>;
+/// A [`HashMap`](std::collections::HashMap) with [`ahash::RandomState`] as hasher.
+pub type HMap<A,B> = ahash::HashMap<A,B>;
+/// The reference counting pointer type used throughout the engine.
+pub type Ptr<A> = Rc<A>;
 
 lazy_static! {
     /// The current working directory.
@@ -19,108 +17,35 @@ lazy_static! {
         .as_path().to_path_buf();
 }
 
-//pub const STACK_SIZE : usize = 16 * 1024 * 1024;
-/// run a function in a new thread with a given stack size. Useful to increase the stack size.
-pub fn with_stack_size<A : 'static,B : 'static>(size:usize,f : B) -> A  where B: FnOnce() -> A + Send, A : Send {
-    let child = thread::Builder::new()
-        .stack_size(size)
-        .spawn(f)
-        .unwrap();
-
-    // Wait for thread to join
-    child.join().unwrap()
+/// Provides [`Vec`]s of some type for reuse, avoiding unnecessary allocations.
+/// Primarily used for reusing [`Vec`]`<`[`Token`](crate::tex::token::Token)`>`s.
+pub struct ReusableVectorFactory<T> {
+    size:usize,
+    vecs:Vec<Vec<T>>
 }
-
-/*
-pub trait Poolable:Hash+PartialEq+Clone+'static {
-    fn with_pool<F,R>(f:F) -> R where F:FnMut(&mut StringPool<Self>) -> R;
-}
-
-#[derive(Clone,Copy,Hash)]
-pub struct PRef<A: Poolable>(usize, PhantomData<A>);
-
-impl<A: Poolable + Debug> Debug for PRef<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.with(|v| write!(f,"{:?}",v))
+impl<T> ReusableVectorFactory<T> {
+    /// Initializes a new [`ReusableVectorFactory`] with `initial_vecs` [`Vec`]s of size `size`.
+    pub fn new(initial_vecs:usize,size:usize) -> Self {
+        let mut vecs = Vec::with_capacity(initial_vecs);
+        for _ in 0..initial_vecs {
+            vecs.push(Vec::with_capacity(size));
+        }
+        ReusableVectorFactory { vecs,size }
     }
-}
-impl<A: Poolable + Display> Display for PRef<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.with(|v| write!(f,"{}",v))
+    pub const fn constant() -> Self {
+        ReusableVectorFactory { vecs:Vec::new(),size:0 }
     }
-}
-impl<A: Poolable> PartialEq for PRef<A> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+    /// Returns an empty [`Vec`] with capacity `≥ size` for reuse.
+    pub fn get(&mut self) -> Vec<T> {
+        if let Some(vec) = self.vecs.pop() {
+            vec
+        } else {
+            Vec::with_capacity(self.size)
+        }
+    }
+    /// Give a [`Vec`] of back for later reuse, clearing it first.
+    pub fn give_back(&mut self,mut vec:Vec<T>) {
+        vec.clear();
+        self.vecs.push(vec);
     }
 }
-impl<A: Poolable +Eq> Eq for PRef<A> {}
-
-impl<A: Poolable +PartialOrd+Eq+PartialEq> PartialOrd for PRef<A> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        A::with_pool(|p| p.get_value(self.0).partial_cmp(p.get_value(other.0)))
-    }
-}
-impl<A: Poolable +Ord+Eq> Ord for PRef<A> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        A::with_pool(|p| p.get_value(self.0).cmp(p.get_value(other.0)))
-    }
-}
-
-impl<K: Poolable> PRef<K> {
-    fn with<F,R>(&self,mut f:F) -> R where F:FnMut(&K) -> R {
-        K::with_pool(|p| f(p.get_value(self.0)))
-    }
-    fn copy_value(&self) -> K {
-        self.with(|v| v.clone())
-    }
-}
-
-pub struct StringPool<K: Poolable> {
-    table:hashbrown::raw::RawTable<(K,usize)>,
-    values:Vec<K>
-}
-impl<K: Poolable> StringPool<K> {
-    fn get_value(&self,i:usize) -> &K {
-        &self.values[i]
-    }
-    pub fn len(&self) -> usize {
-        self.table.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-    pub fn clear(&mut self) {
-        self.table.clear();
-    }
-    pub const fn new() -> Self {
-        Self { table: hashbrown::raw::RawTable::new(),values:Vec::new() }
-    }
-
-    pub fn get(&mut self,k:&K) -> PRef<K> {
-        use std::hash::Hasher;
-        let mut hasher = ahash::AHasher::default();
-        let hash = {k.hash(&mut hasher);hasher.finish()};
-        let i = match self.table.find_or_find_insert_slot(hash,|p| p.0 == *k,|p| {
-            let mut mhash = ahash::AHasher::default();
-            p.0.hash(&mut mhash);
-            mhash.finish()
-        }) {
-            Ok(bucket) => unsafe{bucket.as_ref().1},
-            Err(slot) => {
-                let ret = self.values.len();
-                self.values.push(k.clone());
-                unsafe{self.table.insert_in_slot(hash,slot,(k.clone(),ret));}
-                ret
-            }
-        };
-        PRef(i, PhantomData)
-    }
-}
-/*
-thread_local! {
-    pub(crate) static u8vecpool: Mut<StringPool<Vec<u8>>> = Mut::new(StringPool::new());
-    pub(crate) static charvecpool: Mut<StringPool<Vec<char>>> = Mut::new(StringPool::new());
-}
-*/
-*/

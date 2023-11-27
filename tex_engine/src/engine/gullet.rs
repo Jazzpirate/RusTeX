@@ -1,222 +1,378 @@
-/*! A [`Gullet`] is the part of the TeX engine that reads tokens from the input stream,
-    expands macros, and outputs a stream of primitives to be processed by a
-    [`Stomach`](crate::engine::stomach::Stomach).
-*/
+
 pub mod methods;
-pub mod numeric_methods;
 
+use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
-use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::methods::{do_conditional, resolve_token};
+use crate::commands::{Command, Macro};
+use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
+use crate::engine::mouth::pretokenized::{ExpansionContainer, MacroExpansion, TLVecMeaning, TokenListIterator};
 use crate::engine::state::State;
-use crate::tex::ConditionalBranch;
-use crate::tex::numbers::{Skip, MuSkip};
-use crate::tex::commands::{ResolvedToken, StomachCommand, BaseCommand, CommandSource};
-use crate::tex::commands::methods::expand_def;
-use crate::tex::fonts::FontStore;
-use crate::tex::token::{CSLike, Token};
-use crate::utils::errors::TeXError;
+use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::outputs::Outputs;
+use crate::tex::catcodes::CommandCode;
+use crate::tex::input_text::Character;
+use crate::tex::numerics::NumSet;
+use crate::tex::token::{StandardToken, Token};
+use crate::tex::control_sequences::ControlSequenceNameHandler;
 
+type M<G> = <<G as Gullet>::ET as EngineTypes>::Mouth;
+type A<G> = EngineAux<<G as Gullet>::ET>;
+type S<G> = <<G as Gullet>::ET as EngineTypes>::State;
+type T<G> = <<G as Gullet>::ET as EngineTypes>::Token;
+type C<G> = <<G as Gullet>::ET as EngineTypes>::Char;
+type Int<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Int;
+type Dim<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Dim;
+type Skip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Skip;
+type MuSkip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::MuSkip;
 
-/// The [`Gullet`] trait defines the interface for the part of the TeX engine that reads tokens from the input stream,
-/// and expands macros. It has basically no components other than a [`Mouth`], so it is implemented as a trait
-/// to allow for overriding its methods.
-pub trait Gullet<ET:EngineType<Gullet=Self>>:Sized + Clone +'static {
+pub trait Gullet {
+    type ET:EngineTypes<Gullet=Self>;
 
-    /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-    /// (or [`None`] if the [`Mouth`] is empty)
-    fn get_next_unexpandable(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
-        while let Some((next,e)) = engine.get_next_token() {
-            if !e {return Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false})}
-            match engine.expand(resolve_token(&engine.state,next)) {
-                Some(r) => return Some(r),
-                _ => ()
-            }
-        }
-        None
-    }
+    fn get_align_data(&mut self) -> Option<&mut AlignData>;
+    fn get_conditional(&self) -> Option<ActiveConditional<Self::ET>>;
+    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<Self::ET>>;
+    fn csnames(&mut self) -> &mut usize;
 
-    /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
-    /// the input stream, after expanding macros as necessary.
-    fn get_next_stomach_command(engine:&mut EngineRef<ET>) -> Option<StomachCommand<ET>> {
-        match Self::get_next_unexpandable(engine) {
-            Some(rt) =>
-                Some(StomachCommand::from_resolved(rt,&engine.interner)),
-            None => None
-        }
-    }
-
-    /// Expands the given [`Token`], if expandable, by calling `f` on every element of its expansion and returns [`None`].
-    /// If not expandable, returns the [`ResolvedToken`] for `tk`
-    fn expand(engine:&mut EngineRef<ET>, ret:ResolvedToken<ET>) -> Option<ResolvedToken<ET>>;
-
-    /// Reads a number from the input stream.
-    fn get_int(engine:&mut EngineRef<ET>) -> ET::Int {
-        numeric_methods::get_int::<ET>(engine)
-    }
-
-    /// Reads a dimension from the input stream.
-    fn get_dim(engine:&mut EngineRef<ET>) -> ET::Dim {
-        numeric_methods::get_dim::<ET>(engine)
-    }
-
-    /// Reads a skip from the input stream.
-    fn get_skip(engine:&mut EngineRef<ET>) -> Skip<ET::SkipDim> {
-        numeric_methods::get_skip::<ET>(engine)
-    }
-
-    /// Reads a muskip from the input stream.
-    fn get_muskip(engine:&mut EngineRef<ET>) -> MuSkip<ET::MuDim,ET::MuStretchShrinkDim> {
-        numeric_methods::get_muskip::<ET>(engine)
-    }
-
-    fn get_mudim(engine:&mut EngineRef<ET>) -> ET::MuDim {
-        numeric_methods::get_mudim::<ET>(engine)
-    }
-
-    /// read a single keyword from the input stream; returns `true` if the keyword is found.
-    fn get_keyword<'a>(engine:&mut EngineRef<ET>, keyword:&'a str) -> bool {
-        methods::get_keyword::<ET>(engine, keyword)
-    }
-
-    /// reads one of several optional keywords from the input stream;
-    /// returns `None` if none of the keywords are found.
-    fn get_keywords<'a>(engine:&mut EngineRef<ET>, keywords:Vec<&'a str>) -> Option<&'a str> {
-        methods::get_keywords::<ET>(engine, keywords)
-    }
-
-    fn get_string(engine:&mut EngineRef<ET>, string:&mut String) {
-        methods::get_string::<ET>(engine,string)
-    }
-
-    fn get_font(engine:&mut EngineRef<ET>) -> ET::FontRef {
-        methods::get_font::<ET>(engine)
-    }
-
-    fn new_conditional(&mut self,name:&'static str) -> usize;
-    fn set_conditional(&mut self,idx:usize,branch:ConditionalBranch);
-    fn set_top_conditional(&mut self,branch:ConditionalBranch);
-    fn pop_conditional(&mut self);
-    fn current_conditional(&self) -> (Option<ConditionalBranch>,usize);
-}
-
-pub struct TeXGullet<ET:EngineType<Gullet=Self>> {
-    in_conditionals:Vec<ConditionalBranch>,phantom:PhantomData<ET>
-}
-impl<ET:EngineType<Gullet=Self>> Clone for TeXGullet<ET> {
-    fn clone(&self) -> Self { Self {
-        in_conditionals: self.in_conditionals.clone(),phantom:PhantomData
-    }}
-}
-
-impl<ET:EngineType<Gullet=Self>> TeXGullet<ET> {
-    pub fn new() -> Self {
-        Self {in_conditionals:Vec::new(),phantom:PhantomData}
-    }
-}
-impl<ET:EngineType<Gullet=Self>> Gullet<ET> for TeXGullet<ET> {
-    fn new_conditional(&mut self,name:&'static str) -> usize {
-        let ret = self.in_conditionals.len();
-        self.in_conditionals.push(ConditionalBranch::None(name));
-        ret
-    }
-    fn set_conditional(&mut self,idx:usize,branch:ConditionalBranch) {
-        match self.in_conditionals.get_mut(idx) {
-            None =>
-                panic!("Conditional index out of bounds"),
-            Some(r) => {
-                *r = branch;
+    fn get_next_opt(&mut self,
+        mouth:&mut M<Self>,
+        aux:&mut A<Self>,
+        state:&<Self::ET as EngineTypes>::State) -> Option<T<Self>> {
+        match self.get_align_data() {
+            None => mouth.get_next_opt(aux,state),
+            Some(a) => match mouth.get_next_opt(aux,state) {
+                Some(t) if t.is_begin_group()  => { a.ingroups += 1; Some(t) },
+                Some(t) if a.ingroups == 0 && t.is_align_tab() => todo!(),
+                Some(t) if t.is_end_group() => {
+                    if a.ingroups == 0 { todo!() }
+                    a.ingroups -= 1;
+                    Some(t)
+                },
+                o => o
             }
         }
     }
-    fn set_top_conditional(&mut self,branch:ConditionalBranch) {
-        match self.in_conditionals.last_mut() {
-            None =>
-                panic!("Conditional index out of bounds"),
-            Some(r) => {
-                *r = branch;
-            }
-        }
+
+    #[inline(always)]
+    fn read_int(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> Int<Self> {
+        methods::read_int(engine,skip_eq)
     }
-    fn pop_conditional(&mut self) {
-        match self.in_conditionals.pop() {
-            None =>
-                panic!("Conditional index out of bounds"),
-            Some(_) => ()
-        }
+    #[inline(always)]
+    fn read_dim(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> Dim<Self> {
+        methods::read_dim(engine,skip_eq)
     }
-    fn current_conditional(&self) -> (Option<ConditionalBranch>,usize) {
-        (self.in_conditionals.last().copied(),self.in_conditionals.len() - 1)
+    #[inline(always)]
+    fn read_skip(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> Skip<Self> {
+        methods::read_skip(engine,skip_eq)
+    }
+    #[inline(always)]
+    fn read_muskip(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> MuSkip<Self> {
+        methods::read_muskip(engine,skip_eq)
     }
 
-    fn get_next_unexpandable(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
-        while let Some((next,e)) = engine.get_next_token() {
-            if !e {return Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false})}
-            let cmd = match next.as_cs_like() {
-                None => return Some(resolve_token(&engine.state,next)),
-                Some(CSLike::CS(name)) => engine.state.get_command(name),
-                Some(CSLike::ActiveChar(c)) => engine.state.get_ac_command(c)
-            };
-            match cmd {
-                None => return Some(resolve_token(&engine.state,next)),
-                Some(cmd) => match &cmd.base {
-                    BaseCommand::Def(d) => {
-                        let source = CommandSource{cause: next,reference:cmd.reference};
-                        let mut rs = engine.mouth.get_expansion();
-                        let d = d.clone();
-                        expand_def(&d,engine,source,&mut rs);
-                        engine.mouth.push_expansion_norev(rs);
-                    }
-                    BaseCommand::ExpandableNoTokens {apply,..} => {
-                        let source = CommandSource{cause: next,reference:cmd.reference};
-                        apply(engine,source);
-                    }
-                    BaseCommand::Expandable {apply,..} => {
-                        let source = CommandSource{cause: next,reference:cmd.reference};
-                        let mut rs = engine.mouth.get_expansion();
-                        apply(engine,source,&mut rs);
-                        engine.mouth.push_expansion(rs);
-                    },
-                    BaseCommand::Conditional {name,apply} => {
-                        let source = CommandSource{cause: next,reference:cmd.reference};
-                        do_conditional(engine,source, name,*apply, false);
-                    }
-                    _ => return Some(ResolvedToken {
-                        command: cmd.base.clone(),
-                        source: CommandSource { cause: next, reference: cmd.reference },
-                        expand: true
-                    })
+    #[inline(always)]
+    fn read_chars(engine:& mut EngineReferences<Self::ET>,kws:&[u8]) -> Result<u8,T<Self>> {
+        methods::read_chars(engine,kws)
+    }
+    fn resolve<'a>(&self,state:&'a S<Self>,token:T<Self>) -> ResolvedToken<'a,Self::ET> {
+        let cm = match token.to_enum() {
+            StandardToken::Character(c,CommandCode::Active) => state.get_ac_command(c),
+            StandardToken::Character(c,o) => return ResolvedToken::Tk{token,char:c,code:o},
+            StandardToken::ControlSequence(cs) => state.get_command(&cs)
+        };
+        match cm {
+            Some(Command::Expandable(e)) if e.name == PRIMITIVES.else_ || e.name == PRIMITIVES.fi => {
+                match self.get_conditional() {
+                    Some(ActiveConditional::Unfinished(_)) => todo!("\\else/\\fi in unfinished conditional"),
+                    _ => ResolvedToken::Cmd{token,cmd:cm}
+                }
+            }
+            _ => ResolvedToken::Cmd{token,cmd:cm}
+        }
+    }
+
+    #[inline(always)]
+    fn get_expansion_container(engine:&mut EngineReferences<Self::ET>) -> ExpansionContainer<T<Self>> {
+        ExpansionContainer::new(engine.aux.memory.get_token_vec())
+    }
+
+    fn do_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,&mut ExpansionContainer<T<Self>>,T<Self>)) {
+        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        let mut exp = ExpansionContainer::new(engine.aux.memory.get_token_vec());
+        f(engine,&mut exp,token);
+        engine.mouth.push_exp(exp.to_iter());
+    }
+    fn do_macro(engine: &mut EngineReferences<Self::ET>,m:Macro<T<Self>>,token:T<Self>);
+    #[inline(always)]
+    fn do_simple_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,T<Self>)) {
+        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        f(engine,token)
+    }
+    #[inline(always)]
+    fn read_string(engine:&mut EngineReferences<Self::ET>,skip_eq:bool,target:&mut String) {
+        methods::read_string(engine,skip_eq,target)
+    }
+    #[inline(always)]
+    fn read_keyword(engine:&mut EngineReferences<Self::ET>,kw:&[u8]) -> bool {
+        methods::read_keyword(engine,kw,None)
+    }
+    #[inline(always)]
+    fn read_keywords<'a>(engine:&mut EngineReferences<Self::ET>,kw:&'a[&'a[u8]]) -> Option<&'a[u8]>     {
+        methods::read_keywords(engine,kw,None)
+    }
+
+    fn do_conditional(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,T<Self>) -> bool,unless:bool) {
+        let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > Int::<Self>::default();
+        let index = engine.gullet.get_conditionals().len();
+        engine.gullet.get_conditionals().push(ActiveConditional::Unfinished(name));
+        if trace {
+            engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",PRIMITIVES.printable(name,engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
+        }
+        let mut ret = f(engine,token);
+        if unless { ret = !ret }
+        if ret {
+            if trace {
+                engine.aux.outputs.write_neg1("{true}");
+            }
+            if name != PRIMITIVES.ifcase {
+                match engine.gullet.get_conditionals().get_mut(index) {
+                    Some(u@ActiveConditional::Unfinished(_)) =>
+                        *u = ActiveConditional::True(name),
+                    _ => todo!("throw proper error")
+                }
+            }
+        } else {
+            if trace {
+                engine.aux.outputs.write_neg1("{false}");
+            }
+            if name == PRIMITIVES.ifcase {
+                methods::case_loop(engine, index + 1);
+            } else {
+                methods::false_loop(engine, index + 1, true,false);
+            }
+            if trace {
+                if engine.gullet.get_conditionals().len() > index {
+                    engine.aux.outputs.write_neg1(
+                        format_args!("{{{}else: {} (level {}) entered on line {}}}",
+                                     <C<Self> as Character>::displayable_opt(engine.state.get_escape_char()),
+                                     PRIMITIVES.printable(name,engine.state.get_escape_char()),
+                                     index+1,engine.mouth.line_number()
+                        ));
+                } else {
+                    engine.aux.outputs.write_neg1(
+                        format_args!("{{{}fi: {} (level {}) entered on line {}}}",
+                                     <C<Self> as Character>::displayable_opt(engine.state.get_escape_char()),
+                                     PRIMITIVES.printable(name,engine.state.get_escape_char()),
+                                     index+1,engine.mouth.line_number()
+                        ));
                 }
             }
         }
-        None
     }
+    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,&mut Self,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
+        let mut ret = match engine.gullet.get_align_data() {
+            None => methods::expand_until_endgroup(engine,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t)),
+            Some(_) => methods::expand_until_endgroup::<Self::ET,_>(engine,expand_protected,edef_like,|a,s,g,t| {
+                if t.is_begin_group() { g.get_align_data().unwrap().ingroups += 1 }
+                if t.is_align_tab() && g.get_align_data().unwrap().ingroups == 0 { todo!()}
+                if t.is_end_group() {
+                    let ig = &mut g.get_align_data().unwrap().ingroups;
+                    if *ig == 0 { todo!() }
+                    *ig -= 1;
+                }
+                cont(a,s,g,t)
+            })
+        };
+    }
+}
 
-    fn expand(engine:&mut EngineRef<ET>, ret: ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
-        use crate::engine::mouth::Mouth;
-        match ret.command {
-            BaseCommand::Def(d) => {
-                let mut rs = engine.mouth.get_expansion();
-                expand_def(&d,engine,ret.source,&mut rs);
-                engine.mouth.push_expansion_norev(rs);
-                None
-            }
-            BaseCommand::ExpandableNoTokens {apply,..} => {
-                apply(engine,ret.source);
-                None
-            }
-            BaseCommand::Expandable {apply,..} => {
-                let mut rs = engine.mouth.get_expansion();
-                apply(engine,ret.source,&mut rs);
-                engine.mouth.push_expansion(rs);
-                None
-            },
-            BaseCommand::Conditional {name,apply} => {
-                do_conditional(engine,ret.source, name,apply, false);
-                None
-            }
-            _ => Some(ret)
+#[derive(Copy,Clone,Eq,PartialEq,Debug)]
+pub enum ActiveConditional<ET:EngineTypes> {
+    Unfinished(PrimitiveIdentifier),
+    Case(<ET::Num as NumSet>::Int),
+    True(PrimitiveIdentifier),
+    Else(PrimitiveIdentifier),
+}
+impl<ET:EngineTypes> ActiveConditional<ET> {
+    pub fn name(&self) -> PrimitiveIdentifier {
+        match self {
+            ActiveConditional::Unfinished(n) => *n,
+            ActiveConditional::Case(_) => PRIMITIVES.ifcase,
+            ActiveConditional::True(n) => *n,
+            ActiveConditional::Else(n) => *n,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum ResolvedToken<'a,ET:EngineTypes> {
+    Tk{token:ET::Token,char:ET::Char,code:CommandCode},
+    Cmd{token:ET::Token,cmd:Option<&'a Command<ET>>},
+}
+
+pub struct AlignData {
+    ingroups:u8
+}
+
+
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    #[inline(always)]
+    pub fn get_next(&mut self) -> Option<ET::Token> {
+        self.gullet.get_next_opt(self.mouth,self.aux,self.state)
+    }
+    #[inline(always)]
+    pub fn read_int(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::Int {
+        ET::Gullet::read_int(self,skip_eq)
+    }
+    #[inline(always)]
+    pub fn read_string(&mut self,skip_eq:bool,target:&mut String) {
+        ET::Gullet::read_string(self,skip_eq,target)
+    }
+    #[inline(always)]
+    pub fn read_keyword(&mut self,kw:&[u8]) -> bool {
+        ET::Gullet::read_keyword(self,kw)
+    }
+
+    #[inline(always)]
+    pub fn read_keywords<'a>(&mut self,kw:&'a[&'a[u8]]) -> Option<&'a[u8]> {
+        ET::Gullet::read_keywords(self,kw)
+    }
+
+    pub fn read_charcode(&mut self,skip_eq:bool) -> ET::Char {
+        let i:i64 = ET::Gullet::read_int(self,skip_eq).into();
+        if i < 0 {
+            todo!("negative charcode")
+        }
+        match ET::Char::try_from(i as u64) {
+            Ok(c) => c,
+            _ => todo!("charcode too large: {}",i)
+        }
+    }
+
+    pub fn read_braced_string(&mut self, mut str:&mut String) {
+        match self.get_next() {
+            Some(t) if t.is_begin_group() => (),
+            Some(_) => todo!("should be begingroup"),
+            None => todo!("file end")
+        }
+        ET::Gullet::expand_until_endgroup(self,true,false,|a,s,_,t| {
+            t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
+                          s.get_escape_char(),&mut str).unwrap();
+        });
+    }
+
+    #[inline(always)]
+    pub fn read_dim(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::Dim {
+        ET::Gullet::read_dim(self,skip_eq)
+    }
+    #[inline(always)]
+    pub fn read_skip(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::Skip {
+        ET::Gullet::read_skip(self,skip_eq)
+    }
+    #[inline(always)]
+    pub fn read_muskip(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::MuSkip {
+        ET::Gullet::read_muskip(self,skip_eq)
+    }
+    #[inline(always)]
+    pub fn read_chars(&mut self,kws:&[u8]) -> Result<u8,ET::Token> {
+        ET::Gullet::read_chars(self,kws)
+    }
+    #[inline(always)]
+    pub fn resolve(&self,token:ET::Token) -> ResolvedToken<ET> {
+        self.gullet.resolve(self.state,token)
+    }
+}
+
+
+pub struct DefaultGullet<ET:EngineTypes> {
+    align_data:Vec<AlignData>,
+    conditionals:Vec<ActiveConditional<ET>>,
+    csnames:usize,
+    phantom:PhantomData<ET>
+}
+impl<ET:EngineTypes> DefaultGullet<ET> {
+    #[inline(always)]
+    fn get_args(&mut self,mem:&mut ET::Memory) -> [Vec<ET::Token>;9] {
+        array_init::array_init(|_| mem.get_token_vec())
+    }
+}
+struct Dots(usize);
+impl Display for Dots {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for _ in 0..self.0 {
+            write!(f,".")?;
+        }
+        Ok(())
+    }
+}
+impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
+    type ET = ET;
+    #[inline(always)]
+    fn csnames(&mut self) -> &mut usize { &mut self.csnames }
+
+    fn do_macro(engine: &mut EngineReferences<Self::ET>, m: Macro<T<Self>>, token: T<Self>) {
+        let trace = engine.state.get_primitive_int(PRIMITIVES.tracingcommands) > Int::<Self>::default();
+        if trace {
+            match token.to_enum() {
+                StandardToken::ControlSequence(cs) =>
+                    engine.aux.outputs.write_neg1(format_args!("~.{}{}{} {}",
+                                 Dots(engine.mouth.num_exps()),
+                                ET::Char::displayable_opt(engine.state.get_escape_char()),
+                                engine.aux.memory.cs_interner().resolve(&cs),
+                                 m.meaning::<ET>(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
+                    )),
+                StandardToken::Character(c,_) =>
+                    engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
+                                 Dots(engine.mouth.num_exps()),
+                                 c.displayable(),
+                                m.meaning::<ET>(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
+                    ))
+            };
+            //crate::debug_log!(debug => "Here: {}",engine.preview());
+        }
+        if m.signature.params.is_empty() {
+            engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));
+            return;
+        }
+        let mut args = engine.gullet.get_args(&mut engine.aux.memory);
+        methods::read_arguments(engine,&mut args,m.signature.params,m.long);
+        if trace {
+            for i in 0..m.signature.arity {
+                engine.aux.outputs.write_neg1(
+                    format_args!("#{}<-{}",
+                                 i+1,
+                                 TLVecMeaning::new(&args[i as usize], engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
+                ));
+
+            }
+        }
+        if m.signature.arity == 0 {
+            for v in args {
+                engine.aux.memory.return_token_vec(v);
+            }
+            engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));
+        } else {
+            engine.mouth.push_macro_exp(MacroExpansion::new(m.expansion,args))
+        }
+    }
+    #[inline(always)]
+    fn get_align_data(&mut self) -> Option<&mut AlignData> {
+        self.align_data.last_mut()
+    }
+    #[inline(always)]
+    fn get_conditional(&self) -> Option<ActiveConditional<ET>> {
+        self.conditionals.last().cloned()
+    }
+    #[inline(always)]
+    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET>> {
+        &mut self.conditionals
+    }
+}
+impl<ET:EngineTypes> DefaultGullet<ET> {
+    pub fn new() -> Self { DefaultGullet {
+        align_data:Vec::new(),
+        phantom:PhantomData::default(),
+        conditionals:Vec::new(),
+        csnames:0
+    }}
 }

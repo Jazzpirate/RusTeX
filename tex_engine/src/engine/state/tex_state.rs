@@ -1,0 +1,1021 @@
+/*! Implementation of a plain TeX [`State`]. */
+use crate::engine::{EngineAux, EngineTypes};
+use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::state::{Ch, CS, State, StateChange, StateChangeTracker, StateStack};
+use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
+use crate::commands::Command;
+use crate::engine::mouth::Mouth;
+use crate::engine::mouth::pretokenized::TokenList;
+use crate::engine::utils::outputs::Outputs;
+use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::input_text::Character;
+use crate::tex::numerics::NumSet;
+use crate::tex::token::Token;
+use crate::tex::input_text::CharacterMap;
+use crate::tex::types::{GroupType, TeXMode};
+use crate::utils::HMap;
+use crate::engine::FontSystem;
+use crate::tex::nodes::TeXBox;
+
+type Int<ET> = <<ET as EngineTypes>::Num as NumSet>::Int;
+type Dim<ET> = <<ET as EngineTypes>::Num as NumSet>::Dim;
+type Skip<ET> = <<ET as EngineTypes>::Num as NumSet>::Skip;
+type MuSkip<ET> = <<ET as EngineTypes>::Num as NumSet>::MuSkip;
+type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
+
+/// Default implementation of a plain TeX [`State`].
+#[derive(Clone)]
+pub struct TeXState<ET:EngineTypes<State=Self>> {
+    stack:StateStack<Self>,
+    current_mode:TeXMode,
+    catcodes: CategoryCodeScheme<ET::Char>,
+    sfcodes: <ET::Char as Character>::CharMap<u16>,
+    lccodes: <ET::Char as Character>::CharMap<ET::Char>,
+    uccodes: <ET::Char as Character>::CharMap<ET::Char>,
+    mathcodes: <ET::Char as Character>::CharMap<u32>,
+    delcodes: <ET::Char as Character>::CharMap<ET::Int>,
+    primitive_ints: Vec<Int<ET>>,
+    int_register:Vec<Int<ET>>,
+    dim_register:Vec<Dim<ET>>,
+    skip_register:Vec<Skip<ET>>,
+    muskip_register:Vec<MuSkip<ET>>,
+    toks_register:Vec<TokenList<ET::Token>>,
+    box_register:Vec<Option<TeXBox<ET>>>,
+    primitive_dims: Vec<Dim<ET>>,
+    primitive_skips: Vec<Skip<ET>>,
+    primitive_muskips: Vec<MuSkip<ET>>,
+    commands:HMap<<ET::Token as Token>::CS,Command<ET>>,
+    ac_commands:<ET::Char as Character>::CharMap<Option<Command<ET>>>,
+    endline_char:Option<ET::Char>,
+    escape_char:Option<ET::Char>,
+    newline_char:Option<ET::Char>,
+    current_font:Fnt<ET>,
+    primitive_toks:Vec<TokenList<ET::Token>>,
+    empty_list:TokenList<ET::Token>
+}
+impl<ET:EngineTypes<State=Self>> TeXState<ET> {
+    /// Create a new [`TeXState`].
+    pub fn new(nullfont:Fnt<ET>) -> Self {
+        let mut lccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
+        let mut uccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
+        let mut mathcodes: <ET::Char as Character>::CharMap<u32> = CharacterMap::default();
+        for i in 97..123 {
+            *uccodes.get_mut(i.into()) = (i-32).into();
+            *lccodes.get_mut((i-32).into()) = i.into();
+            *mathcodes.get_mut(ET::Char::from(i-32)) = (i as u32-32) +
+                                            (1 * 16 * 16) +
+                                            (7 * 16 * 16 * 16);
+            *mathcodes.get_mut(ET::Char::from(i)) = (i as u32) +
+                                            (1 * 16 * 16) +
+                                            (7 * 16 * 16 * 16);
+        }
+        for i in 48..58 {
+            *mathcodes.get_mut(ET::Char::from(i)) = (i as u32) +
+                                            (0 * 16 * 16) +
+                                            (7 * 16 * 16 * 16);
+        }
+        Self {
+            stack: StateStack::new(),
+            current_mode: TeXMode::Vertical,
+            catcodes: ET::Char::starting_catcode_scheme(),
+            sfcodes: CharacterMap::default(),
+            delcodes: CharacterMap::default(),
+            lccodes, uccodes, mathcodes,
+            current_font:nullfont,
+            primitive_ints: Vec::new(),
+            int_register: Vec::new(),
+            dim_register: Vec::new(),
+            skip_register: Vec::new(),
+            muskip_register: Vec::new(),
+            toks_register: Vec::new(),
+            box_register: Vec::new(),
+            primitive_dims: Vec::new(),
+            primitive_skips: Vec::new(),
+            primitive_muskips: Vec::new(),
+            commands:HMap::default(),
+            ac_commands:<ET::Char as Character>::CharMap::default(),
+            endline_char:Some(ET::Char::from(b'\r')),
+            escape_char:Some(ET::Char::from(b'\\')),
+            newline_char:Some(ET::Char::from(b'\n')),
+            primitive_toks:Vec::new(),
+            empty_list:TokenList::empty()
+        }
+    }
+
+    fn tracing_assigns(&self) -> bool {
+        match self.primitive_ints.get(PRIMITIVES.tracingassigns.to_usize()) {
+            Some(v) if *v > Int::<ET>::default() => true,
+            _ => false
+        }
+    }
+    fn tracing_restores(&self) -> bool {
+        match self.primitive_ints.get(PRIMITIVES.tracingrestores.to_usize()) {
+            Some(v) if *v > Int::<ET>::default() => true,
+            _ => false
+        }
+    }
+}
+
+impl<ET:EngineTypes<State=Self>> StateChangeTracker for TeXState<ET> {
+    #[inline(always)]
+    fn stack(&mut self) -> &mut StateStack<Self> { &mut self.stack }
+}
+
+
+impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
+    type ET = ET;
+
+    #[inline(always)]
+    fn get_group_type(&self) -> Option<GroupType> {
+        self.stack.stack.last().map(|lvl| lvl.group_type)
+    }
+
+    #[inline(always)]
+    fn push(&mut self,aux:&EngineAux<ET>, group_type: GroupType,line_number:usize) {
+        self.stack.push(group_type,&mut self.current_mode);
+        let tracing = match self.primitive_ints.get(PRIMITIVES.tracinggroups.to_usize()) {
+            Some(v) if *v > Int::<ET>::default() => true,
+            _ => false
+        };
+        if tracing {
+            match group_type {
+                GroupType::ControlSequence =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{entering semi simple group (level {}) at line {}}}",
+                        self.stack.stack.len(), line_number
+                    )),
+                GroupType::Character =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{entering simple group (level {}) at line {}}}",
+                        self.stack.stack.len(), line_number
+                    )),
+                GroupType::Box(bt) =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{entering {} group (level {}) at line {}}}",bt,
+                        self.stack.stack.len(), line_number
+                    )),
+                _ => todo!()
+            }
+        }
+    }
+    fn pop(&mut self,aux:&EngineAux<ET>,mouth: &mut ET::Mouth) {
+        let mut lvl = match self.stack.stack.pop() {
+            Some(lvl) => lvl,
+            _ => todo!("throw error")
+        };
+        let trace = match self.primitive_ints.get(PRIMITIVES.tracinggroups.to_usize()) {
+            Some(v) if *v > Int::<ET>::default() => true,
+            _ => false
+        };
+        if trace {
+            match lvl.group_type {
+                GroupType::ControlSequence =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{leaving semi simple group (level {}) at line {}}}",
+                        self.stack.stack.len() + 1, mouth.line_number()
+                    )),
+                GroupType::Character =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{leaving simple group (level {}) at line {}}}",
+                        self.stack.stack.len() + 1, mouth.line_number()
+                    )),
+                GroupType::Box(bt) =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{leaving {} group (level {}) at line {}}}",bt,
+                        self.stack.stack.len() + 1, mouth.line_number()
+                    )),
+                _ => todo!()
+            }
+        }
+        let trace = self.tracing_restores();
+        for c in lvl.changes.drain(..) {
+            match c {
+                //StateChange::Custom { change } => change.restore(aux,self,trace),
+                StateChange::Catcode {char,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}catcode{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            char.into(),old));
+                    }
+                    *self.catcodes.get_mut(char) = old;
+                }
+                StateChange::CurrentFont(font) => {
+                    if trace {
+                        todo!("trace font restore")
+                    }
+                    self.current_font = font;
+                }
+                StateChange::SfCode {char,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}sfcode{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            char.into(),old));
+                    }
+                    *self.sfcodes.get_mut(char) = old;
+                }
+                StateChange::DelCode {char,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}delcode{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            char.into(),old));
+                    }
+                    *self.delcodes.get_mut(char) = old;
+                }
+                StateChange::LcCode {char,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}lccode{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            char.into(),old));
+                    }
+                    *self.lccodes.get_mut(char) = old;
+                }
+                StateChange::UcCode {char,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}uccode{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            char.into(),old));
+                    }
+                    *self.uccodes.get_mut(char) = old;
+                }
+                StateChange::MathCode {char,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}mathcode{}=\"{:X}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            char.into(),old));
+                    }
+                    *self.mathcodes.get_mut(char) = old;
+                }
+                StateChange::TeXMode {old} =>
+                    self.current_mode = old,
+                StateChange::EndlineChar {old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}endlinechar={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            match old {
+                                                                None => -1,
+                                                                Some(c) => c.into() as i64
+                                                            }));
+                    }
+                    self.endline_char = old;
+                }
+                StateChange::EscapeChar {old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}escapechar={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            match old {
+                                                                None => -1,
+                                                                Some(c) => c.into() as i64
+                                                            }));
+                    }
+                    self.escape_char = old;
+                }
+                StateChange::NewlineChar {old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}newlinechar={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            match old {
+                                                                None => -1,
+                                                                Some(c) => c.into() as i64
+                                                            }));
+                    }
+                    self.newline_char = old;
+                }
+                StateChange::IntRegister {idx,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}count{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            idx,old));
+                    }
+                    self.int_register[idx as usize] = old;
+                }
+                StateChange::DimRegister {idx,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}dimen{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            idx,old));
+                    }
+                    self.dim_register[idx as usize] = old;
+                }
+                StateChange::SkipRegister {idx,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}skip{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            idx,old));
+                    }
+                    self.skip_register[idx as usize] = old;
+                }
+                StateChange::MuSkipRegister {idx,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}muskip{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            idx,old));
+                    }
+                    self.muskip_register[idx as usize] = old;
+                }
+                StateChange::ToksRegister {idx,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}toks{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            idx,old.displayable( aux.memory.cs_interner(), &self.catcodes, self.escape_char)
+                                                            ));
+                    }
+                    self.toks_register[idx as usize] = old;
+                }
+                StateChange::BoxRegister {idx,old} => {
+                    if trace {
+                        todo!("trace box restore")
+                    }
+                    self.box_register[idx as usize] = old;
+                }
+                StateChange::PrimitiveInt {name,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            old));
+                    }
+                    self.primitive_ints[name.to_usize()] = old;
+                }
+                StateChange::PrimitiveDim {name,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            old));
+                    }
+                    self.primitive_dims[name.to_usize()] = old;
+                }
+                StateChange::PrimitiveSkip {name,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            old));
+                    }
+                    self.primitive_skips[name.to_usize()] = old;
+                }
+                StateChange::PrimitiveMuSkip {name,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            old));
+                    }
+                    self.primitive_muskips[name.to_usize()] = old;
+                }
+                StateChange::PrimitiveToks {name,old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            old.displayable( aux.memory.cs_interner(), &self.catcodes, self.escape_char)
+                                                            ));
+                    }
+                    self.primitive_toks[name.to_usize()] = old;
+                }
+                StateChange::Command {name,old} => {
+                    if trace {
+                        match old {
+                            None => aux.outputs.write_neg1(
+                                format_args!("{{restoring {}{}={}undefined}}",
+                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             aux.memory.cs_interner().resolve(&name),
+                                             <ET::Char as Character>::displayable_opt(self.escape_char)
+                                )
+                            ),
+                            Some(ref c) => aux.outputs.write_neg1(
+                                format_args!("{{restoring {}{}={}}}",
+                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             aux.memory.cs_interner().resolve(&name),
+                                             c.meaning(aux.memory.cs_interner(),&self.catcodes,self.escape_char)
+                                )
+                            )
+                        }
+                    }
+                    match old {
+                        None => self.commands.remove(&name),
+                        Some(c) => self.commands.insert(name, c)
+                    };
+                }
+                StateChange::AcCommand {char,old} => {
+                    if trace {
+                        match old {
+                            None => aux.outputs.write_neg1(
+                                format_args!("{{restoring {}{}={}undefined}}",
+                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             char.displayable(),
+                                             <ET::Char as Character>::displayable_opt(self.escape_char)
+                                )
+                            ),
+                            Some(ref c) => aux.outputs.write_neg1(
+                                format_args!("{{restoring {}{}={}}}",
+                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             char.displayable(),
+                                             c.meaning(aux.memory.cs_interner(),&self.catcodes,self.escape_char)
+                                )
+                            )
+                        }
+                    }
+                    *self.ac_commands.get_mut(char) = old;
+                }
+            }
+        }
+        match lvl.aftergroup {
+            Some(ag) => todo!("insert aftergroup"),
+            _ => ()
+        }
+    }
+
+    #[inline(always)]
+    fn get_mode(&self) -> TeXMode {
+        self.current_mode
+    }
+    #[inline(always)]
+    fn set_mode(&mut self, mode: TeXMode) {
+        self.current_mode = mode
+    }
+
+    #[inline(always)]
+    fn get_current_font(&self) -> &crate::engine::state::Fnt<Self> {
+        &self.current_font
+    }
+    #[inline(always)]
+    fn set_current_font(&mut self, aux: &EngineAux<Self::ET>, fnt: crate::engine::state::Fnt<Self>, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                todo!("trace font change")
+            }
+            let old = std::mem::replace(&mut s.current_font, fnt);
+            StateChange::CurrentFont(old)
+        })
+    }
+
+    #[inline(always)]
+    fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char> { &self.catcodes }
+    fn set_catcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, cc: CategoryCode, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                let num = c.into();
+                let cc: u8 = cc.into();
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}catcode{}={}}}",
+                                 if g {"globally changing"} else {"reassigning"},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,cc));
+            }
+            let old = std::mem::replace(s.catcodes.get_mut(c), cc);
+            StateChange::Catcode { char: c, old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_sfcode(&self,c:ET::Char) -> u16 { *self.sfcodes.get(c) }
+    fn set_sfcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:u16, globally: bool) {
+        self.change_field(globally, |s,g| {
+            let old = std::mem::replace(s.sfcodes.get_mut(c), val);
+            if s.tracing_assigns() {
+                let num = c.into();
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}sfcode{}={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,old));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}sfcode{}={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,val));
+            }
+            StateChange::SfCode { char: c, old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_delcode(&self,c:ET::Char) -> ET::Int { *self.delcodes.get(c) }
+    fn set_delcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Int, globally: bool) {
+        self.change_field(globally, |s,g| {
+            let old = std::mem::replace(s.delcodes.get_mut(c), val);
+            if s.tracing_assigns() {
+                let num = c.into();
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}delcode{}={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,old));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}delcode{}={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,val));
+            }
+            StateChange::DelCode { char: c, old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_lccode(&self,c:ET::Char) -> ET::Char { *self.lccodes.get(c) }
+    fn set_lccode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Char, globally: bool) {
+        self.change_field(globally, |s,g| {
+            let old = std::mem::replace(s.lccodes.get_mut(c), val);
+            if s.tracing_assigns() {
+                let num = c.into();
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}lccode{}={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,old.into()));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}lccode{}={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,val.into()));
+            }
+            StateChange::LcCode { char: c, old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_uccode(&self,c:ET::Char) -> ET::Char { *self.uccodes.get(c) }
+    fn set_uccode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Char, globally: bool) {
+        self.change_field(globally, |s,g| {
+            let old = std::mem::replace(s.uccodes.get_mut(c), val);
+            if s.tracing_assigns() {
+                let num = c.into();
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}uccode{}={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,old.into()));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}uccode{}={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,val.into()));
+            }
+            StateChange::UcCode { char: c, old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_mathcode(&self,c:ET::Char) -> u32 { *self.mathcodes.get(c) }
+    fn set_mathcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:u32, globally: bool) {
+        self.change_field(globally, |s,g| {
+            let old = std::mem::replace(s.mathcodes.get_mut(c), val);
+            if s.tracing_assigns() {
+                let num = c.into();
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}mathcode{}=\"{:X}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,old));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}mathcode{}=\"{:X}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 num,val));
+            }
+            StateChange::MathCode { char: c, old }
+        })
+    }
+
+
+    #[inline(always)]
+    fn get_endline_char(&self) -> Option<ET::Char> { self.endline_char }
+    fn set_endline_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}endlinechar={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 match s.endline_char {
+                                     None => -1,
+                                     Some(c) => c.into() as i64
+                                 }));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}endlinechar={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 match c {
+                                     None => -1,
+                                     Some(c) => c.into() as i64
+                                 }));
+            }
+            let old = std::mem::replace(&mut s.endline_char, c);
+            StateChange::EndlineChar { old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_escape_char(&self) -> Option<ET::Char> { self.escape_char }
+    fn set_escape_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}escapechar={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 match s.escape_char {
+                                     None => -1,
+                                     Some(c) => c.into() as i64
+                                 }));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}escapechar={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 match c {
+                                     None => -1,
+                                     Some(c) => c.into() as i64
+                                 }));
+            }
+            let old = std::mem::replace(&mut s.escape_char, c);
+            StateChange::EscapeChar { old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_newline_char(&self) -> Option<ET::Char> { self.newline_char }
+    fn set_newline_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}newlinechar={}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 match s.newline_char {
+                                     None => -1,
+                                     Some(c) => c.into() as i64
+                                 }));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}newlinechar={}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 match c {
+                                     None => -1,
+                                     Some(c) => c.into() as i64
+                                 }));
+            }
+            let old = std::mem::replace(&mut s.newline_char, c);
+            StateChange::NewlineChar { old }
+        })
+    }
+
+    #[inline(always)]
+    fn get_primitive_int(&self, name: PrimitiveIdentifier) -> Int<ET> {
+        match self.primitive_ints.get(name.to_usize()) {
+            Some(i) => *i,
+            _ => Int::<ET>::default()
+        }
+    }
+    fn set_primitive_int(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Int<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = name.to_usize();
+            if s.primitive_ints.len() <= idx {
+                s.primitive_ints.resize(idx + 1, Int::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.primitive_ints[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+            }
+            StateChange::PrimitiveInt { name, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_int_register(&self, idx: u16) -> crate::engine::state::Int<Self> {
+        match self.int_register.get(idx as usize) {
+            Some(i) => *i,
+            _ => Int::<ET>::default()
+        }
+    }
+    fn set_int_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: crate::engine::state::Int<Self>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = idx as usize;
+            if s.int_register.len() <= idx {
+                s.int_register.resize(idx + 1, Int::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.int_register[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}count{}={}}}",
+                                                    if g {"globally "} else {""},
+                                                    ET::Char::displayable_opt(s.escape_char),
+                                                    idx,old));
+                aux.outputs.write_neg1(format_args!("{{into {}count{}={}}}",
+                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+            }
+            StateChange::IntRegister { idx:idx as u16, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_dim_register(&self, idx: u16) -> Dim<ET> {
+        match self.dim_register.get(idx as usize) {
+            Some(i) => *i,
+            _ => Dim::<ET>::default()
+        }
+    }
+    fn set_dim_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Dim<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = idx as usize;
+            if s.dim_register.len() <= idx {
+                s.dim_register.resize(idx + 1, Dim::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.dim_register[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}dimen{}={}}}",
+                                                    if g {"globally "} else {""},
+                                                    ET::Char::displayable_opt(s.escape_char),
+                                                    idx,old));
+                aux.outputs.write_neg1(format_args!("{{into {}dimen{}={}}}",
+                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+            }
+            StateChange::DimRegister { idx:idx as u16, old }
+        });
+    }
+
+
+    #[inline(always)]
+    fn get_skip_register(&self, idx: u16) -> Skip<ET> {
+        match self.skip_register.get(idx as usize) {
+            Some(i) => *i,
+            _ => Skip::<ET>::default()
+        }
+    }
+    fn set_skip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Skip<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = idx as usize;
+            if s.skip_register.len() <= idx {
+                s.skip_register.resize(idx + 1, Skip::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.skip_register[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}skip{}={}}}",
+                                                    if g {"globally "} else {""},
+                                                    ET::Char::displayable_opt(s.escape_char),
+                                                    idx,old));
+                aux.outputs.write_neg1(format_args!("{{into {}skip{}={}}}",
+                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+            }
+            StateChange::SkipRegister { idx:idx as u16, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_muskip_register(&self, idx: u16) -> MuSkip<ET> {
+        match self.muskip_register.get(idx as usize) {
+            Some(i) => *i,
+            _ => MuSkip::<ET>::default()
+        }
+    }
+    fn set_muskip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: MuSkip<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = idx as usize;
+            if s.muskip_register.len() <= idx {
+                s.muskip_register.resize(idx + 1, MuSkip::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.muskip_register[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}muskip{}={}}}",
+                                                    if g {"globally "} else {""},
+                                                    ET::Char::displayable_opt(s.escape_char),
+                                                    idx,old));
+                aux.outputs.write_neg1(format_args!("{{into {}muskip{}={}}}",
+                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+            }
+            StateChange::MuSkipRegister { idx:idx as u16, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_box_register(&self, idx: u16) -> Option<&TeXBox<ET>> {
+        match self.box_register.get(idx as usize) {
+            None => None,
+            Some(i) => i.as_ref()
+        }
+    }
+    #[inline(always)]
+    fn take_box_register(&mut self, idx: u16) -> Option<TeXBox<Self::ET>> {
+        match self.box_register.get_mut(idx as usize) {
+            None => None,
+            Some(i) => std::mem::take(i)
+        }
+    }
+    fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Option<TeXBox<ET>>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = idx as usize;
+            if s.box_register.len() <= idx {
+                s.box_register.resize(idx + 1, None);
+            }
+            let old = std::mem::replace(&mut s.box_register[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1("TODO: trace box register change");
+            }
+            StateChange::BoxRegister { idx:idx as u16, old }
+        });
+    }
+
+
+    #[inline(always)]
+    fn get_toks_register(&self, idx: u16) -> &TokenList<ET::Token> {
+        match self.toks_register.get(idx as usize) {
+            Some(i) => i,
+            _ => &self.empty_list
+        }
+    }
+    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: TokenList<ET::Token>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = idx as usize;
+            if s.toks_register.len() <= idx {
+                s.toks_register.resize(idx + 1, s.empty_list.clone());
+            }
+            let trace = s.tracing_assigns();
+            if trace {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}toks{}={}}}",
+                                                    if g { "globally " } else { "" },
+                                                    ET::Char::displayable_opt(s.escape_char),
+                                                    idx, s.toks_register[idx].displayable(aux.memory.cs_interner(), &s.catcodes, s.escape_char)
+                ));
+            }
+            let old = std::mem::replace(&mut s.toks_register[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{into {}toks{}={}}}",
+                                                    ET::Char::displayable_opt(s.escape_char),idx,
+                                                    s.toks_register[idx].displayable( aux.memory.cs_interner(), &s.catcodes, s.escape_char)
+                                                    ))
+            }
+            StateChange::ToksRegister { idx:idx as u16, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_primitive_tokens(&self, name: PrimitiveIdentifier) -> &TokenList<ET::Token> {
+        match self.primitive_toks.get(name.to_usize()) {
+            Some(i) => i,
+            _ => &self.empty_list
+        }
+    }
+    fn set_primitive_tokens(&mut self, aux: &EngineAux<Self::ET>, name: PrimitiveIdentifier, v: TokenList<ET::Token>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = name.to_usize();
+            if s.primitive_toks.len() <= idx {
+                s.primitive_toks.resize(idx + 1, s.empty_list.clone());
+            }
+            let old = std::mem::replace(&mut s.primitive_toks[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing {}={}}}",
+                                 if g {"globally "} else {""},
+                                 PRIMITIVES.printable(name,s.escape_char),
+                                 old.displayable(aux.memory.cs_interner(), &s.catcodes, s.escape_char)
+                    ));
+                aux.outputs.write_neg1(
+                    format_args!("{{into {}={}}}",
+                                 PRIMITIVES.printable(name,s.escape_char),
+                                 s.primitive_toks[idx].displayable(aux.memory.cs_interner(), &s.catcodes, s.escape_char)))
+            }
+            StateChange::PrimitiveToks { name, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_primitive_dim(&self, name: PrimitiveIdentifier) -> Dim<ET> {
+        match self.primitive_dims.get(name.to_usize()) {
+            Some(i) => *i,
+            _ => Dim::<ET>::default()
+        }
+    }
+    fn set_primitive_dim(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Dim<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = name.to_usize();
+            if s.primitive_dims.len() <= idx {
+                s.primitive_dims.resize(idx + 1, Dim::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.primitive_dims[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+            }
+            StateChange::PrimitiveDim { name, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> Skip<ET> {
+        match self.primitive_skips.get(name.to_usize()) {
+            Some(i) => *i,
+            _ => Skip::<ET>::default()
+        }
+    }
+    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Skip<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = name.to_usize();
+            if s.primitive_skips.len() <= idx {
+                s.primitive_skips.resize(idx + 1, Skip::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.primitive_skips[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+            }
+            StateChange::PrimitiveSkip { name, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> MuSkip<ET> {
+        match self.primitive_muskips.get(name.to_usize()) {
+            Some(i) => *i,
+            _ => MuSkip::<ET>::default()
+        }
+    }
+    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: MuSkip<ET>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let idx = name.to_usize();
+            if s.primitive_muskips.len() <= idx {
+                s.primitive_muskips.resize(idx + 1, MuSkip::<ET>::default());
+            }
+            let old = std::mem::replace(&mut s.primitive_muskips[idx], v);
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+            }
+            StateChange::PrimitiveMuSkip { name, old }
+        });
+    }
+
+    #[inline(always)]
+    fn get_command(&self, name: &CS<Self>) -> Option<&Command<Self::ET>> {
+        self.commands.get(name)
+    }
+    fn set_command(&mut self,aux:&EngineAux<ET>, name: CS<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
+        self.change_field(globally,|s,g| {
+            let old = match cmd {
+                None => {
+                    let o = s.commands.remove(&name);
+                    if s.tracing_assigns() {
+                        match o {
+                            None => aux.outputs.write_neg1(
+                                format_args!("{{{}changing {}{}={}undefined}}",
+                                             if g { "globally " } else { "" },
+                                             ET::Char::displayable_opt(s.escape_char),
+                                             aux.memory.cs_interner().resolve(&name),
+                                             ET::Char::displayable_opt(s.escape_char)
+                                )
+                            ),
+                            Some(ref c) => aux.outputs.write_neg1(
+                                format_args!("{{{}changing {}{}={}}}",
+                                             if g { "globally " } else { "" },
+                                             ET::Char::displayable_opt(s.escape_char),
+                                             aux.memory.cs_interner().resolve(&name),
+                                             c.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char)
+                                )
+                            )
+                        }
+                        aux.outputs.write_neg1(
+                            format_args!("{{into {}{}={}undefined}}",
+                                         ET::Char::displayable_opt(s.escape_char),
+                                         aux.memory.cs_interner().resolve(&name),
+                                         ET::Char::displayable_opt(s.escape_char)
+                            )
+                        );
+                    }
+                    o
+                },
+                Some(cmd) => {
+                    if s.tracing_assigns() {
+                        match s.commands.get(&name) {
+                            None => aux.outputs.write_neg1(
+                                format_args!("{{{}changing {}{}={}undefined}}",
+                                             if g { "globally " } else { "" },
+                                             ET::Char::displayable_opt(s.escape_char),
+                                             aux.memory.cs_interner().resolve(&name),
+                                             ET::Char::displayable_opt(s.escape_char)
+                                )
+                            ),
+                            Some(ref c) => aux.outputs.write_neg1(
+                                format_args!("{{{}changing {}{}={}}}",
+                                             if g { "globally " } else { "" },
+                                             ET::Char::displayable_opt(s.escape_char),
+                                             aux.memory.cs_interner().resolve(&name),
+                                             c.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char)
+                                )
+                            )
+                        }
+                        aux.outputs.write_neg1(
+                            format_args!("{{into {}{}={}}}",
+                                         ET::Char::displayable_opt(s.escape_char),
+                                         aux.memory.cs_interner().resolve(&name),
+                                         cmd.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char)
+                            )
+                        );
+                    }
+                    s.commands.insert(name.clone(), cmd)
+                }
+            };
+            StateChange::Command { name, old }
+        });
+    }
+    #[inline(always)]
+    fn get_ac_command(&self, c: Ch<Self>) -> Option<&Command<Self::ET>> {
+        self.ac_commands.get(c).as_ref()
+    }
+    fn set_ac_command(&mut self, aux: &EngineAux<Self::ET>, c: Ch<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
+        self.change_field(globally,|s,_| {
+            let old = std::mem::replace(s.ac_commands.get_mut(c), cmd);
+            StateChange::AcCommand { char: c, old }
+        });
+    }
+}

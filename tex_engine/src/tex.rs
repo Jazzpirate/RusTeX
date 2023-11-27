@@ -1,11 +1,8 @@
-//! Basic TeX concepts, such as [`Token`](token::Token)s, [`CategoryCode`](catcodes::CategoryCode)s
-//! and [`Command`](commands::BaseCommand)s.
+/*! Core data structures, such as [`CategoryCode`](catcodes::CategoryCode)s and [`Token`](token::Token)s.*/
 pub mod catcodes;
+pub mod input_text;
 pub mod token;
-pub mod commands;
+pub mod control_sequences;
+pub mod numerics;
+pub mod types;
 pub mod nodes;
-pub mod numbers;
-pub mod fonts;
-
-#[derive(Copy,Clone,Debug,PartialEq)]
-pub enum ConditionalBranch { None(&'static str),True(&'static str),Else(&'static str),Case(i64,usize) }

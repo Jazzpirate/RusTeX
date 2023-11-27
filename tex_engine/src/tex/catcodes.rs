@@ -1,11 +1,10 @@
 /*!
-    Category codes for characters, implemented as the enum [`CategoryCode`]. A [`CategoryCodeScheme`]
-    maps each character of type `Char:`[`CharType`] to a [`CategoryCode`].
-*/
+Category codes
+ */
 
 use std::fmt::Formatter;
 use lazy_static::lazy_static;
-use crate::utils::strings::CharType;
+use crate::tex::input_text::Character;
 
 /** The category code of a character.
 
@@ -23,7 +22,7 @@ let cat2 = CategoryCode::try_from(1).unwrap();
 assert_eq!(cat2,cat);
 ```
  */
-#[derive(Copy,PartialEq,Clone)]
+#[derive(Copy,PartialEq,Eq,Clone)]
 pub enum CategoryCode {
     /// Escape character (0); usually `\`
     Escape = 0,
@@ -71,22 +70,22 @@ impl std::fmt::Display for CategoryCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         use CategoryCode::*;
         write!(f,"{}",match self {
-            Escape => "Escape",
-            BeginGroup => "BeginGroup",
-            EndGroup => "EndGroup",
-            MathShift => "MathShift",
-            AlignmentTab => "AlignmentTab",
-            EOL => "EOL",
-            Parameter => "Parameter",
-            Superscript => "Superscript",
-            Subscript => "Subscript",
-            Ignored => "Ignored",
-            Space => "Space",
-            Letter => "Letter",
-            Other => "Other",
-            Active => "Active",
-            Comment => "Comment",
-            Invalid => "Invalid"
+            Escape => "escape",
+            BeginGroup => "begin group",
+            EndGroup => "end group",
+            MathShift => "math shift",
+            AlignmentTab => "alignment",
+            EOL => "end of line",
+            Parameter => "parameter",
+            Superscript => "superscript",
+            Subscript => "subscript",
+            Ignored => "ignored",
+            Space => "space",
+            Letter => "letter",
+            Other => "other",
+            Active => "active",
+            Comment => "comment",
+            Invalid => "invalid"
         })
     }
 }
@@ -117,7 +116,6 @@ impl Into<u8> for CategoryCode {
 
 impl TryFrom<u8> for CategoryCode {
     type Error = ();
-
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         use CategoryCode::*;
         Ok(match value {
@@ -142,13 +140,13 @@ impl TryFrom<u8> for CategoryCode {
     }
 }
 
-/// A [`CategoryCodeScheme`] assigns a [`CategoryCode`] to each character for a given [`CharType`].
-pub type CategoryCodeScheme<Char> = <Char as CharType>::Allchars<CategoryCode>;
+/// A [`CategoryCodeScheme`] assigns a [`CategoryCode`] to each [`Character`].
+pub type CategoryCodeScheme<Char> = <Char as Character>::CharMap<CategoryCode>;
 
 
 lazy_static! {
     /** The [`CategoryCodeScheme`] where all characters have [`CategoryCode::Other`] (12) except for
-        the space character, which has [`CategoryCode::Space`] (10).
+           the space character, which has [`CategoryCode::Space`] (10).
      */
     pub static ref OTHER_SCHEME_U8 : CategoryCodeScheme<u8> = {
         let mut catcodes = [CategoryCode::Other;256];
@@ -165,9 +163,9 @@ lazy_static! {
      | ` `          | [`Space`](CategoryCode::Space)|
     | a-z, A-Z     | [`Letter`](CategoryCode::Letter) |
     | `\`          | [`Escape`](CategoryCode::Other)  |
-    | `\n`         | [`EOL`](CategoryCode::EOL)       |
+    | `\r`         | [`EOL`](CategoryCode::EOL)       |
     | `%`          | [`Comment`](CategoryCode::Comment)|
-    */
+     */
     pub static ref STARTING_SCHEME_U8 : CategoryCodeScheme<u8> = {
         let mut catcodes = [CategoryCode::Other;256];
         catcodes[92] = CategoryCode::Escape;
@@ -188,7 +186,7 @@ lazy_static! {
          | ` `          | [`Space`](CategoryCode::Space)|
         | a-z, A-Z     | [`Letter`](CategoryCode::Letter) |
         | `\`          | [`Escape`](CategoryCode::Other)  |
-        | `\n`         | [`EOL`](CategoryCode::EOL)       |
+        | `\r`         | [`EOL`](CategoryCode::EOL)       |
         | `%`          | [`Comment`](CategoryCode::Comment)|
         | `~`          | [`Active`](CategoryCode::Active)  |
         | `#`          | [`Parameter`](CategoryCode::Parameter)|
@@ -217,4 +215,112 @@ lazy_static! {
         for i in 97..123 { catcodes[i] = CategoryCode::Letter}
         catcodes
     };
+}
+
+/// After scanning a file, [`CategoryCode`]s such as [`EOL`](CategoryCode::EOL),
+/// [`Comment`](CategoryCode::Comment) or [`Invalid`](CategoryCode::Invalid)
+/// can not occur anymore. Instead, a [`Token`](super::token::Token) can represent e.g. a
+/// *numbered parameter* (e.g. `#1` in a macro expansion), or an end-of-file, or
+/// a `\noexpand` marker, or a marker for the end of an alignment cell, etc.
+#[derive(Copy,PartialEq,Eq,Clone,Debug)]
+pub enum CommandCode {
+    /// Escape character (0); usually `\`
+    Escape = 0,
+    /// Begin group character (1); usually `{`
+    BeginGroup = 1,
+    /// End group character (2); usually `}`
+    EndGroup = 2,
+    /// Math shift character (3); usually `$`
+    MathShift = 3,
+    /// Alignment tab character (4); usually `&`
+    AlignmentTab = 4,
+    /// End of file marker`
+    EOF = 5,
+    /// Parameter character (6); usually `#`
+    Parameter = 6,
+    /// Superscript character (7); usually `^`
+    Superscript = 7,
+    /// Subscript character (8); usually `_`
+    Subscript = 8,
+    /// `\noexpand` marker
+    Noexpand = 9,
+    /// Space character (10); usually ` `
+    Space = 10,
+    /// Letter character (11), usually a-z and A-Z
+    Letter = 11,
+    /// Other character (12), usually e.g. `@`, `!`, `?`, etc.
+    Other = 12,
+    /// Active character (13); usually `~`
+    Active = 13,
+    /// Argument Marker
+    Argument = 14
+}
+
+impl Into<u8> for CommandCode {
+    fn into(self) -> u8 {
+        use CommandCode::*;
+        match self {
+            Escape => 0,
+            BeginGroup => 1,
+            EndGroup => 2,
+            MathShift => 3,
+            AlignmentTab => 4,
+            EOF => 5,
+            Parameter => 6,
+            Superscript => 7,
+            Subscript => 8,
+            Noexpand => 9,
+            Space => 10,
+            Letter => 11,
+            Other => 12,
+            Active => 13,
+            Argument => 14
+        }
+    }
+}
+
+impl From<CategoryCode> for CommandCode {
+    fn from(value: CategoryCode) -> Self {
+        match value {
+            CategoryCode::Escape => CommandCode::Escape,
+            CategoryCode::BeginGroup => CommandCode::BeginGroup,
+            CategoryCode::EndGroup => CommandCode::EndGroup,
+            CategoryCode::MathShift => CommandCode::MathShift,
+            CategoryCode::AlignmentTab => CommandCode::AlignmentTab,
+            CategoryCode::EOL => CommandCode::EOF,
+            CategoryCode::Parameter => CommandCode::Parameter,
+            CategoryCode::Superscript => CommandCode::Superscript,
+            CategoryCode::Subscript => CommandCode::Subscript,
+            CategoryCode::Space => CommandCode::Space,
+            CategoryCode::Letter => CommandCode::Letter,
+            CategoryCode::Other => CommandCode::Other,
+            CategoryCode::Active => CommandCode::Active,
+            _ => panic!("Invalid category code for command code: {:?}\n This is an implementation error and should not happen",value)
+        }
+    }
+}
+
+impl TryFrom<u8> for CommandCode {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        use CommandCode::*;
+        Ok(match value {
+            0 => Escape,
+            1 => BeginGroup,
+            2 => EndGroup,
+            3 => MathShift,
+            4 => AlignmentTab,
+            5 => EOF,
+            6 => Parameter,
+            7 => Superscript,
+            8 => Subscript,
+            9 => Noexpand,
+            10 => Space,
+            11 => Letter,
+            12 => Other,
+            13 => Active,
+            14 => Argument,
+            _ => return Err(())
+        })
+    }
 }

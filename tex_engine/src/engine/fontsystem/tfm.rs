@@ -1,12 +1,12 @@
-use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
-use crate::utils::collections::HMap;
+use crate::utils::HMap;
 
 #[derive(Debug)]
 pub struct TfmFile {
     pub hyphenchar:u8,
     pub skewchar:u8,
-    pub dimen:[f64;256],
+    pub dimen:Vec<f64>,
     pub size : i64,
     pub typestr : String,
     pub widths:[f64;256],
@@ -14,30 +14,28 @@ pub struct TfmFile {
     pub depths: [f64;256],
     pub ics:[f64;256],
     pub ligs:HMap<(u8,u8),u8>,
-    pub name:String,
-    pub filepath:String,
+    pub filepath:PathBuf,
 }
+
 impl PartialEq for TfmFile {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.filepath == other.filepath
     }
 }
 
-// https://www.tug.org/TUGboat/tb02-1/tb02fuchstfm.pdf
-
 impl TfmFile {
+    #[inline(always)]
+    pub fn name(&self) -> &str {
+        self.filepath.file_stem().unwrap().to_str().unwrap()
+    }
     pub fn new(pb : PathBuf) -> TfmFile {
-        let filepath = pb.as_path().to_str().unwrap().into();
-        let name: String = pb.file_stem().unwrap().to_str().unwrap().into();
-        let mut state = FontState {
-            ret:fs::read(pb).unwrap(),
-            i:0
-        };
-        state.ret.reverse();
+        let filepath = pb;
+        let mut state = FontState::new(&filepath);
+        //state.ret.reverse();
 
         let hyphenchar : u8 = 45;
         let skewchar : u8 = 255;
-        let mut dimen: [f64;256] = [0.0;256];
+        let mut dimen = vec!();
         let mut size: i64 = 65536;
         let mut typestr = "".to_string();
         let mut widths: [f64;256] = [0.0;256];
@@ -104,15 +102,16 @@ impl TfmFile {
         state.skip(nk + ne);
         assert_eq!(state.i,lh + 6 + (ec-bc+1) + nw + nh + nd + ni + nl + nk + ne);
         if np > 0 {
-            dimen[0] = state.read_float();
+            dimen.push(state.read_float());
         }
         for i in 2..(np+1) {
-            dimen[i-1] = state.read_float();
+            dimen.push(state.read_float());
         }
 
-        let factor = match dimen[6 - 1] {
-            p if p == 0.0 => 1.0,
-            f => f
+        let factor = match dimen.get(5) {
+            Some(p) if *p == 0.0 => 1.0,
+            None => 1.0,
+            Some(f) => *f
         };
 
         for t in finfo_table {
@@ -144,54 +143,67 @@ impl TfmFile {
 
         TfmFile {
             hyphenchar,skewchar,dimen,size,typestr,widths,
-            heights,depths,ics,ligs,name,filepath
+            heights,depths,ics,ligs,filepath
         }
     }
 }
 
 struct FontState {
-    pub ret : Vec<u8>,
-    pub i : usize
+    ret : std::io::BufReader<std::fs::File>,
+    buf:[u8;4],
+    pub i:usize
 }
 impl FontState {
+    fn new(path:&std::path::Path) -> Self {
+        let file = std::fs::File::open(path).unwrap();
+        let ret = std::io::BufReader::new(file);
+        Self {
+            ret,buf:[0,0,0,0],i:0
+        }
+    }
+    fn read_word(&mut self) {
+        self.ret.read(&mut self.buf).unwrap();
+        self.i += 1;
+    }
     fn pop(&mut self) -> (u8,u8,u8,u8) {
         self.i += 1;
-        (self.ret.pop().unwrap(),self.ret.pop().unwrap(),self.ret.pop().unwrap(),self.ret.pop().unwrap())
+        self.ret.read(&mut self.buf).unwrap();
+        (self.buf[0],self.buf[1],self.buf[2],self.buf[3])
     }
     fn read_int(&mut self) -> (u16,u16) {
-        let (a,b,c,d) = self.pop();
-        let i1 = ((a as u16) << 8) | (b as u16);
-        let i2 = ((c as u16) << 8) | (d as u16);
+        self.read_word();
+        let i1 = ((self.buf[0] as u16) << 8) | (self.buf[1] as u16);
+        let i2 = ((self.buf[2] as u16) << 8) | (self.buf[3] as u16);
         (i1,i2)
     }
     fn read_float(&mut self) -> f64 {
-        let (a,b,c,d) = self.pop();
-        let int = ((a as i32) << 24) | ((b as i32) << 16) |
-            ((c as i32) << 8) | (d as i32);
+        self.read_word();
+        let int = ((self.buf[0] as i32) << 24) | ((self.buf[1] as i32) << 16) |
+            ((self.buf[2] as i32) << 8) | (self.buf[3] as i32);
         let f = ((int & 0x7fffffff) as f64) / ((1 << 20) as f64);
         if int < 0 {-f} else {f}
     }
     fn skip(&mut self, len:usize) {
         for _ in 0..len {
-            self.pop();
+            self.read_word();
         }
     }
     fn read_fifo(&mut self,char:u8) -> FInfoEntry {
-        let (a,b,c,d) = self.pop();
-        let width_index = 0x000000FF & a;
+        self.read_word();
+        let width_index = 0x000000FF & self.buf[0];
         let (height_index,depth_index) = {
-            let byte = 0x000000FF & b;
+            let byte = 0x000000FF & self.buf[1];
             let second = byte % 16;
             let first = (byte - second) / 16;
             (first,second)
         };
         let (char_ic_index,tag_field) = {
-            let full = 0x000000FF & c;
+            let full = 0x000000FF & self.buf[2];
             let second = full % 4;
             let first = (full - second) / 4;
             (first,second)
         };
-        let remainder = 0x000000FF & d;
+        let remainder = 0x000000FF & self.buf[3];
 
         FInfoEntry {
             char,width_index,height_index,depth_index,char_ic_index,tag_field,remainder

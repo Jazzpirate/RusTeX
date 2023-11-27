@@ -1,240 +1,405 @@
-/*! A TeX [`Engine`](crate::engine::Engine) needs to read and write files, and find them
-    in the using simple file names relative to e.g. the `TEXMF` tree.
+/*! Accessing files on `\input`, `\open`/`\write` etc. */
 
-    This module provides [`FileSystem`](FileSystem) traits and implementations for
-    [`PhysicalFile`](PhysicalFile) and [`VirtualFile`](VirtualFile) types. The latter
-    do not actually modify the local file system.
-
-    For retrieval, a bare bones implementation of [`Kpathsea`](Kpathsea) is provided.
-*/
+use std::path::{Path, PathBuf};
+use crate::debug_log;
+use crate::engine::{EngineAux, EngineTypes};
+use crate::engine::filesystem::kpathsea::Kpathsea;
+use crate::engine::mouth::strings::StringTokenizer;
+use crate::engine::utils::outputs::Outputs;
+use crate::tex::catcodes::CategoryCodeScheme;
+use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::input_text::{Character, TextLine, TextLineSource};
+use crate::tex::token::Token;
+use crate::utils::{HMap, Ptr};
+use crate::utils::errors::ErrorHandler;
 
 pub mod kpathsea;
 
-use std::collections::hash_map::Entry;
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use kpathsea::Kpathsea;
-use crate::engine::EngineType;
-use crate::engine::filesystem::kpathsea::KpseResult;
-use crate::engine::memory::{Interner, Memory};
-use crate::engine::mouth::string_source::StringSource;
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::token::{Token};
-use crate::throw;
-use crate::utils::errors::TeXError;
-use crate::utils::collections::HMap;
-use crate::utils::{Mut, Ptr};
-use crate::utils::strings::CharType;
-
-pub trait File<Char:CharType>:Clone {
-    fn path(&self) -> &PathBuf;
-    fn exists(&self) -> bool;
-    fn content_string(&self) -> Option<Ptr<[Box<[u8]>]>>;
-    fn open_out(&self);
-    fn open_in(&self,interner:&mut Interner);
-    fn close_out(&self);
-    fn close_in(&self);
-    fn write(&self,string:&str);
-    fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool;
-    fn read<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F);
-    fn readline<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,f:F);
-}
-
-pub trait FileSystem<Char:CharType>:Clone + 'static {
-    type F:File<Char>;
+/// A [`FileSystem`] provides access to files.
+pub trait FileSystem:Clone {
+    /// The type of files provided by this [`FileSystem`].
+    type File:File;
+    /// Creates a new [`FileSystem`] with the given working directory.
     fn new(pwd:PathBuf) -> Self;
-    fn get(&mut self,path:&str) -> Self::F;
+    /// Returns the file with the given name in the file database.
+    /// May return nonexistent files in the CWD
+    fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File;
+    /// Sets the working directory of this [`FileSystem`], returning the old working directory
+    /// and updating the file database.
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf;
-}
-/*
-pub struct PhysicalFile<Char:CharType> {path:PathBuf,contents:Ptr<[Box<[u8]>]>,phantom:PhantomData<Char>}
-impl<Char:CharType> PhysicalFile<Char> {
-    pub fn new(path:PathBuf) -> Self {
-        PhysicalFile {
-            contents: {
-                if path.exists() {
-                    Some(std::fs::read(&path).ok().unwrap_or(vec!()))
-                } else {
-                    None
-                }
-            },
-            phantom: PhantomData,
-            path
-        }
-    }
-}
-impl<Char:CharType> File<Char> for Ptr<PhysicalFile<Char>> {
-    type OptionRef<'a> = &'a Option<Vec<u8>>;
-    fn path(&self) -> &PathBuf { &self.path }
-    fn exists(&self) -> bool { self.path.exists() }
-    fn content_string(&self) -> Self::OptionRef<'_> {
-        &self.contents
-    }
-    fn open_out(&self) {
-        todo!("Physical file system not implemented yet")
-    }
-    fn close_in(&self) {
-        todo!("Physical file system not implemented yet")
-    }
-    fn close_out(&self) {
-        todo!("Physical file system not implemented yet")
-    }
-    fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
-        todo!("Physical file system not implemented yet")
-    }
-    fn open_in(&self,interner:&mut Interner) {
-        todo!("Physical file system not implemented yet")
-    }
-    fn write(&self,_:&str) {
-        todo!("Physical file system not implemented yet")
-    }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,f:F) -> Result<(),TeXError<ET>> {
-        todo!("Physical file system not implemented yet")
-    }
-}
-*/
 
-enum FileState<Char:CharType> {
-    OpenIn(StringSource<Char>),
-    OpenOut(Vec<Box<[u8]>>),
-    Closed(Option<Ptr<[Box<[u8]>]>>)
+    fn open_out(&mut self,idx:u8,file:Self::File);
+    fn open_in(&mut self,idx:u8,file:Self::File);
+    fn close_in(&mut self,idx:u8);
+    fn close_out(&mut self,idx:u8);
+    fn eof(&self,idx:u8) -> bool;
+    fn write<ET:EngineTypes<FileSystem=Self>,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
+    fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
+                                                  idx:u8,eh:&E,
+                                                  handler:&mut <T::CS as ControlSequenceName>::Handler,
+                                                  cc:&CategoryCodeScheme<<Self::File as File>::Char>,endline:Option<<Self::File as File>::Char>,cont:F
+    );
+    fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F);
 }
-struct VirtualFileI<Char:CharType> {path:PathBuf,state:Mut<FileState<Char>>}
-#[derive(Clone)]
-pub struct VirtualFile<Char:CharType>(Ptr<VirtualFileI<Char>>);
-impl<Char:CharType> File<Char> for VirtualFile<Char> {
-    fn path(&self) -> &PathBuf { &self.0.path }
-    fn exists(&self) -> bool { match &*self.0.state.borrow() {
-        FileState::Closed(o) => o.is_some(),
-        _ => true
+
+/// A (virtual or physical) file.
+pub trait File:std::fmt::Display + 'static {
+    /// The type of characters to be read from the file.
+    type Char:Character;
+    /// The type of line sources to be read from the file.
+    type LineSource: FileLineSource<Self::Char>;
+    //type Write: WriteOpenFile<Self::Char>;
+    fn path(&self) -> &Path;
+    fn line_source(self) -> Option<Self::LineSource>;
+    //fn write(self) -> Self::Write;
+    #[inline(always)]
+    fn exists(&self) -> bool {
+        self.path().exists()
+    }
+    fn size(&self) -> usize;
+}
+
+pub trait FileLineSource<C:Character>:TextLineSource<C> {
+    fn path(&self) -> &Path;
+}
+
+/// A [`FileSystem`] that does not write to the local physical file system.
+/// If a file is modified, its contents are kept in memory.
+///
+pub struct NoOutputFileSystem<C:Character> {
+    kpse:Kpathsea,
+    files:HMap<PathBuf,VirtualFile<C>>,
+    write_files:Vec<Option<WritableVirtualFile<C>>>,
+    read_files:Vec<Option<StringTokenizer<C,VirtualFileLineSource<C>>>>
+}
+impl<C:Character> Clone for NoOutputFileSystem<C> {
+    fn clone(&self) -> Self { Self {
+        kpse:self.kpse.clone(),
+        files:self.files.clone(),
+        write_files:self.write_files.clone(),
+        read_files:Vec::new()
     } }
-    fn content_string(&self) -> Option<Ptr<[Box<[u8]>]>> {
-        match &*self.0.state.borrow() {
-            FileState::Closed(v@None) => v.clone(),
-            FileState::Closed(v) => v.clone(),
-            FileState::OpenIn(ss) => Some(ss.string.clone()),
-            _ => None
-        }
-    }
-    fn close_out(&self) {
-        let s = &mut *self.0.state.borrow_mut();
-        match s {
-            FileState::OpenOut(v) => *s = FileState::Closed(Some((std::mem::take(v)).into())),
-            _ => unreachable!()
-        }
-    }
-    fn open_out(&self) {
-        (*self.0.state.borrow_mut()) = FileState::OpenOut(vec!());
-    }
-    fn open_in(&self,interner:&mut Interner) {
-        let s = &mut *self.0.state.borrow_mut();
-        match s {
-            FileState::Closed(Some(v)) => {
-                let mut ss = StringSource::new(v.clone(),Some(interner.from_string(self.0.path.to_str().unwrap())));
-                *s = FileState::OpenIn(ss);
-            },
-            FileState::Closed(None) => (),
-            _ => unreachable!()
-        }
-    }
-    fn close_in(&self) {
-        let s = &mut *self.0.state.borrow_mut();
-        match s {
-            FileState::OpenIn(ss) => *s = FileState::Closed(Some(ss.string.clone())),
-            FileState::Closed(_) => (),
-            _ => unreachable!()
-        }
-    }
-    fn eof<ET:EngineType<Char=Char>>(&self,state:&ET::State) -> bool {
-        match &mut *self.0.state.borrow_mut() {
-            FileState::OpenIn(ss) => ss.eof::<ET>(state),
-            FileState::Closed(_) => true,
-            _ => unreachable!()
-        }
-    }
-    fn read<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,cc:&CategoryCodeScheme<Char>,endlinechar:Option<Char>,mut f:F) {
-        let s = &mut *self.0.state.borrow_mut();
-        match s {
-            FileState::OpenIn(ss) => ss.read::<ET,_>(interner,cc,endlinechar,f),
-            FileState::Closed(_) => (),
-            _ => unreachable!()
-        }
-    }
-
-    fn readline<ET:EngineType<Char=Char>,F:FnMut(ET::Token)>(&self,interner:&mut Interner,mut f:F) {
-        let s = &mut *self.0.state.borrow_mut();
-        match s {
-            FileState::OpenIn(ss) => ss.readline::<ET,_>(interner,f),
-            FileState::Closed(_) => (),
-            _ => unreachable!()
-        }
-    }
-
-    fn write(&self, string: &str) {
-        let s = &mut *self.0.state.borrow_mut();
-        match s {
-            FileState::OpenOut(v) => {
-                for s in string.split('\n') {
-                    v.push(s.as_bytes().into())
-                }
-            },
-            _ => unreachable!()
-        }
-    }
 }
-/*
-#[derive(Clone)]
-pub struct KpsePhysicalFileSystem<Char:CharType> {kpathsea:Kpathsea,phantom:PhantomData<Char>}
-impl<Char:CharType> FileSystem<Char> for KpsePhysicalFileSystem<Char> {
-    type F = Ptr<PhysicalFile<Char>>;
-    fn new(pwd:PathBuf) -> Self { KpsePhysicalFileSystem {kpathsea:Kpathsea::new(pwd),phantom:PhantomData} }
-    fn get(&mut self, _path: &str) -> Self::F {
-        todo!("Physical file system not implemented yet")
+impl<C:Character> FileSystem for NoOutputFileSystem<C> {
+    type File = VirtualFile<C>;
+    fn new(pwd:PathBuf) -> Self {
+        Self {
+            //phantom:PhantomData::default(),
+            kpse:Kpathsea::new(pwd),
+            files:HMap::default(),
+            write_files:Vec::new(),
+            read_files:Vec::new()
+        }
     }
-    fn set_pwd(&mut self, _pwd: PathBuf) -> PathBuf {
-        todo!("Physical file system not implemented yet")
+    fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
+        let path = self.kpse.kpsewhich(path);
+        match self.files.get(&path.path) {
+            Some(f) => f.clone(),
+            None => VirtualFile {
+                path:path.path,
+                source:None
+            }
+        }
     }
-}
-impl<Char:CharType> KpsePhysicalFileSystem<Char> {
-    pub fn kpsewhich(&self, path: &str) -> KpseResult {
-        self.kpathsea.kpsewhich(path)
-    }
-}
-
- */
-
-#[derive(Clone)]
-pub struct KpseVirtualFileSystem<Char:CharType> {pwd:PathBuf,kpathsea:Kpathsea,files:HMap<PathBuf,VirtualFile<Char>>}
-
-impl<Char:CharType> KpseVirtualFileSystem<Char> {
-    pub fn kpsewhich(&self, path: &str) -> KpseResult {
-        self.kpathsea.kpsewhich(path)
-    }
-}
-impl<Char:CharType> FileSystem<Char> for KpseVirtualFileSystem<Char> {
-    type F = VirtualFile<Char>;
-    fn new(pwd:PathBuf) -> Self { KpseVirtualFileSystem {
-        pwd:pwd.clone(),
-        kpathsea:Kpathsea::new(pwd),
-        files:HMap::default()
-    } }
-    fn set_pwd(&mut self, pwd: PathBuf) -> PathBuf {
-        let old = std::mem::replace(&mut self.kpathsea, Kpathsea::new(pwd));
+    fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf {
+        let old = std::mem::replace(&mut self.kpse, Kpathsea::new(pwd));
         old.pwd
     }
-    fn get(&mut self, path: &str) -> Self::F {
-        let ret = self.kpathsea.kpsewhich(path);
-        match self.files.entry(ret.path) {
-            Entry::Occupied(e) => e.get().clone(),
-            Entry::Vacant(e) => {
-                let s: Option<Vec<u8>> = self.kpathsea.get(&self.pwd,e.key());
-                let ret = VirtualFile(Ptr::new(VirtualFileI{
-                    path:e.key().clone(),
-                    state:Mut::new(FileState::Closed(s.map(|s|StringSource::<Char>::from_str(&s))))
-                }));
-                e.insert(ret.clone());
-                ret
+    fn open_in(&mut self, idx: u8, file: Self::File) {
+        while self.read_files.len() <= idx as usize {
+            self.read_files.push(None);
+        }
+        match self.read_files.get_mut(idx as usize) {
+            Some(n@None) =>
+                *n = match file.line_source() {
+                    Some(src) => Some(StringTokenizer::new( src)),
+                    _ => None
+                },
+            _ => todo!("throw File already open error")
+        }
+    }
+    fn read<T:Token<Char=C>,E:ErrorHandler,F:FnMut(T)>(&mut self,
+                                                  idx:u8,eh:&E,
+                                                  handler:&mut <T::CS as ControlSequenceName>::Handler,
+        cc:&CategoryCodeScheme<C>,endline:Option<C>,cont:F
+    ) {
+        match self.read_files.get_mut(idx as usize) {
+            Some(Some(f)) => {
+                f.read(eh,handler,cc,endline,cont);
+            }
+            _ => todo!("throw File not open error")
+        }
+    }
+    fn readline<T:Token<Char=C>,F:FnMut(T)>(&mut self, idx:u8,cont:F) {
+        match self.read_files.get_mut(idx as usize) {
+            Some(Some(f)) => {
+                //debug_log!(debug => "readline: {}",f.source.path.display());
+                f.readline(cont);
+            }
+            _ => todo!("throw File not open error")
+        }
+    }
+    fn eof(&self,idx:u8) -> bool {
+        match self.read_files.get(idx as usize) {
+            Some(Some(f)) => f.eof(),
+            _ => true,
+        }
+    }
+
+    fn close_in(&mut self,idx:u8) {
+        if let Some(f) = self.read_files.get_mut(idx as usize) {
+            *f = None;
+        }
+    }
+    fn open_out(&mut self, idx: u8, file: Self::File) {
+        if idx as usize >= self.write_files.len() {
+            self.write_files.resize((idx+1) as usize, None);
+        }
+        match &mut self.write_files[idx as usize] {
+            n@None => *n = Some(WritableVirtualFile::new(file.path)),
+            _ => todo!("throw File already open error")
+        }
+    }
+    fn close_out(&mut self,idx:u8) {
+        match self.write_files.get_mut(idx as usize) {
+            Some(o) => match std::mem::take(o) {
+                Some(f) => {
+                    let vf = VirtualFile {
+                        path:f.1,
+                        source:Some(f.0.into())
+                    };
+                    self.files.insert(vf.path.clone(),vf);
+                }
+                _ => ()
+            }
+            _ => ()
+        }
+    }
+    fn write<ET:EngineTypes<FileSystem=Self>,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
+        if idx < 0 {
+            aux.outputs.write_neg1(string)
+        } else if idx == 16 {
+            aux.outputs.write_16(string)
+        } else if idx == 17 {
+            aux.outputs.write_17(string)
+        } else if idx == 18 {
+            aux.outputs.write_18(string)
+        } else {
+            match self.write_files.get_mut(idx as usize) {
+                Some(Some(f)) => {
+                    let s = string.to_string().into_bytes();
+                    match newlinechar {
+                        Some(c) =>
+                        match c.try_into() {
+                            Ok(u) => {
+                                for l in s.split(|b| *b == u) {
+                                    f.0.push(C::convert(l.to_vec()));
+                                }
+                                return
+                            }
+                            _ => ()
+                        }
+                        _ => ()
+                    }
+                    let tl = C::convert(s);
+                    f.0.push(tl);
+                }
+                _ => aux.outputs.write_other(string)
             }
         }
     }
 }
+
+#[derive(Clone)]
+struct WritableVirtualFile<C:Character>(Vec<Box<[C]>>, PathBuf);
+impl<C:Character> WritableVirtualFile<C> {
+    #[inline(always)]
+    fn new(p:PathBuf) -> Self {
+        Self(Vec::new(),p)
+    }
+}
+
+type VirtualFileContents<C> = Ptr<[TextLine<C>]>;
+
+enum VirtualOrPhysicalFile<C:Character> {
+    Virtual(VirtualFileContents<C>,usize),
+    Physical(std::io::Split<std::io::BufReader<std::fs::File>>)
+}
+
+pub struct VirtualFileLineSource<C:Character> {
+    path:PathBuf,
+    source:VirtualOrPhysicalFile<C>
+}
+impl <C:Character> FileLineSource<C> for VirtualFileLineSource<C> {
+    #[inline(always)]
+    fn path(&self) -> &Path { &self.path }
+}
+impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
+    fn get_line(&mut self) -> Option<TextLine<C>> {
+        match &mut self.source {
+            VirtualOrPhysicalFile::Virtual(v,i) => {
+                if *i >= v.len() {
+                    None
+                } else {
+                    let ret = v[*i].clone();
+                    *i += 1;
+                    Some(ret)
+                }
+            }
+            VirtualOrPhysicalFile::Physical(f) => {
+                match f.next() {
+                    Some(Ok(mut s)) => {
+                        if let Some(b'\r') = s.last() {
+                            s.pop();
+                        }
+                        while let Some(b' ') = s.last() {
+                            s.pop();
+                        }
+                        Some(C::convert(s))
+                    }
+                    _ => None
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct VirtualFile<C:Character> {
+    path:PathBuf,
+    source:Option<VirtualFileContents<C>>
+}
+impl<C:Character> std::fmt::Display for VirtualFile<C> {
+    #[inline(always)]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.path.display())
+    }
+}
+impl<C:Character> File for VirtualFile<C> {
+    type Char = C;
+    type LineSource = VirtualFileLineSource<C>;
+    #[inline(always)]
+    fn path(&self) -> &Path { &self.path }
+    fn line_source(self) -> Option<Self::LineSource> {
+        use std::io::BufRead;
+        match self.source {
+            Some(src) => Some(VirtualFileLineSource {
+                path:self.path,
+                source:VirtualOrPhysicalFile::Virtual(src,0)
+            }),
+            None => {
+                let f = std::fs::File::open(&self.path).ok()?;
+                let f = std::io::BufReader::new(f);
+                let f = f.split(b'\n');
+                Some(VirtualFileLineSource {
+                    path:self.path,
+                    source:VirtualOrPhysicalFile::Physical(f)
+                })
+            }
+        }
+    }
+    fn size(&self) -> usize {
+        match &self.source {
+            Some(src) => {
+                let cnt = src.iter().count() + src.len();
+                if cnt == 0 { 0 } else { cnt - 1 }
+            }
+            None => {
+                match std::fs::metadata(&self.path) {
+                    Ok(md) => md.len() as usize,
+                    _ => 0
+                }
+
+            }
+        }
+    }
+}
+
+/*
+
+pub trait FileLineSource<C:Character>:TextLineSource<C> {
+    fn path(&self) -> &Path;
+}
+
+pub struct ReadOpenPhysicalFile<C:Character> {
+    path:PathBuf,
+    reader:std::io::Split<std::io::BufReader<std::fs::File>>,
+    phantom:PhantomData<C>
+}
+impl<C:Character> FileLineSource<C> for ReadOpenPhysicalFile<C> {
+    #[inline(always)]
+    fn path(&self) -> &Path { &self.path }
+}
+impl<C:Character> TextLineSource<C> for ReadOpenPhysicalFile<C> {
+    fn get_line(&mut self) -> Option<TextLine<C>> {
+        match self.reader.next() {
+            Some(Ok(mut s)) => {
+                if let Some(b'\r') = s.last() {
+                    s.pop();
+                }
+                while let Some(b' ') = s.last() {
+                    s.pop();
+                }
+                Some(C::convert(s))
+            }
+            _ => None
+        }
+    }
+}
+
+
+pub trait WriteOpenFile<C:Character> {
+    //fn write_line<I:Iterator<Item = C>>(&mut self,chars:&mut I);
+}
+
+
+
+
+impl<C:Character> File for VirtualFile<C> {
+    type Char = C;
+    type LineSource = ReadOpenVirtualFile<C>;
+    type Write = WriteOpenVirtualFile<C>;
+    fn path(&self) -> &Path { &self.path }
+    fn line_source(self) -> Option<Self::LineSource> {
+        ReadOpenVirtualFile {
+            path:self.path,
+            source:match self.source {
+                Some(src) => ROVF::Memory((*src).clone()),
+                None => ROVF::Physical()
+            }
+        }
+        match self.source {
+        }
+    }
+    fn write(self) -> Self::Write { todo!() }
+}
+
+pub struct ReadOpenVirtualFile<C:Character> {
+    path:PathBuf,
+    source:ROVF<C>
+}
+impl<C:Character> FileLineSource<C> for ReadOpenVirtualFile<C> {
+    #[inline(always)]
+    fn path(&self) -> &Path { &self.path }
+}
+impl<C:Character> TextLineSource<C> for ReadOpenVirtualFile<C> {
+    #[inline(always)]
+    fn get_line(&mut self) -> Option<Box<[C]>> { match self.source {
+        ROVF::Physical(ref mut f) => f.get_line(),
+        ROVF::Memory(ref mut s) => s.get_line()
+    } }
+}
+
+enum ROVF<C:Character> {
+    Physical(ReadOpenPhysicalFile<C>),
+    Memory(StringLineSource)
+}
+
+pub struct WriteOpenVirtualFile<C:Character> {
+    phantom:PhantomData<C>
+}
+
+impl<C:Character> WriteOpenFile<C> for WriteOpenVirtualFile<C> {
+}
+
+*/

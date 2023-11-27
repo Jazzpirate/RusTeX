@@ -1,28 +1,44 @@
-//! An implementation of (the central part of) kpathsea, the path searching library used by TeX.
+/*! An implementation of (the central part of) kpathsea, the path searching library used by TeX.
+Used by instantiating a [Kpathsea] instance with the working directory.
+
+
+**Example:**
+```rust
+use tex_engine::engine::filesystem::kpathsea::Kpathsea;
+let kpse = Kpathsea::new(std::env::current_dir().unwrap());
+assert!(kpse.kpsewhich("latex.ltx").path.to_str().unwrap().ends_with("tex/latex/base/latex.ltx"));
+assert!(kpse.kpsewhich("article.cls").path.to_str().unwrap().ends_with("tex/latex/base/article.cls"));
+// as expected, the `.tex` file extension is optional:
+assert!(kpse.kpsewhich("expl3-code").path.to_str().unwrap().ends_with("tex/latex/l3kernel/expl3-code.tex"));
+```
+*/
 
 use std::collections::hash_map::Entry;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::sync::Arc;
 use lazy_static::lazy_static;
 use crate::debug_log;
-use crate::utils::collections::HMap;
+use crate::utils::HMap;
 
-/// A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
-/// `TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].
-/// and lazily computed on first use.
-
+/** A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
+`TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].
+and lazily computed on first use.
+**/
 #[derive(Clone)]
-pub struct Kpathsea {pub pwd:PathBuf,local:Vec<PathBuf>,global:Arc<KpathseaBase>}
+pub struct Kpathsea {pub pwd:PathBuf,local:Box<[PathBuf]>,global:Arc<KpathseaBase>}
 impl Kpathsea {
     /// Create a new [`Kpathsea`] instance with the given working directory.
     pub fn new(pwd:PathBuf) -> Kpathsea {
         let global = KPATHSEA.clone();
         let mut local:Vec<PathBuf> = vec!();
         KpathseaBase::fill_set(&mut local,pwd.clone(),global.recdot);
-        Kpathsea { pwd, local, global }
+        Kpathsea { pwd, local:local.into(), global }
     }
-    pub fn kpsewhich(&self,filestr:&str) -> KpseResult {
+
+    /// Search for a file in the database.
+    pub fn kpsewhich<S:AsRef<str>>(&self,filestr:S) -> KpseResult {
+        let filestr = filestr.as_ref();
         if filestr.starts_with("|kpsewhich") {
             return KpseResult{path:self.pwd.join(filestr),local:true}
         }
@@ -38,13 +54,13 @@ impl Kpathsea {
             if pb.is_file() {return KpseResult{path:pb,local:false} }
             else {return KpseResult{path:pb.join(".tex"),local:true} }
         }
-        for l in &self.local {
+        for l in &*self.local {
             let mut p = l.join(filestr);
             if p.is_file() { return KpseResult{path:p,local:true} }
             p = l.join(format!("{}.tex",filestr));
             if p.is_file() { return KpseResult{path:p,local:true} }
         }
-        for l in &self.global.set {
+        for l in &*self.global.set {
             let mut p = l.join(filestr);
             if p.is_file() { return KpseResult{path:p,local:false} }
             p = l.join(format!("{}.tex",filestr));
@@ -53,10 +69,11 @@ impl Kpathsea {
         KpseResult{path:self.pwd.join(filestr),local:true}
     }
 
-    pub fn get(&self,pwd:&PathBuf,path:&PathBuf) -> Option<Vec<u8>> {
+    /// Get the contents of a file in the database.
+    pub fn get(&self,path:&PathBuf) -> Option<Vec<u8>> {
         match path.file_name().map(|s| s.to_str()).flatten() {
             Some(filename) if filename.starts_with("|kpsewhich ") => {
-                let pwd = pwd.to_str().unwrap();
+                let pwd = self.pwd.to_str().unwrap();
                 let out = if cfg!(target_os = "windows") {
                     std::process::Command::new("cmd").current_dir(&pwd).env("PWD",&pwd).env("CD",&pwd).args(&["/C",&filename[1..]])//args.collect::<Vec<&str>>())
                         .output().expect("kpsewhich not found!")
@@ -74,30 +91,36 @@ impl Kpathsea {
     }
 }
 
+lazy_static! {
+    static ref KPATHSEA : Arc<KpathseaBase> = Arc::new(KpathseaBase::new());
+}
+
+/// The result of a [`Kpathsea`] search.
 pub struct KpseResult {
+    /// The path to the file.
     pub path : PathBuf,
+    /// Whether the file was found in the "local" part (i.e. the PWD) of the database.
+    /// Note that if the file does not exist, this is always `true`.
     pub local : bool
 }
 
-#[derive(Clone)]
-pub struct KpathseaBase {
-    set: Vec<PathBuf>,
+#[derive(Clone,Debug)]
+struct KpathseaBase {
+    set: Box<[PathBuf]>,
     recdot:bool
 }
-impl Debug for KpathseaBase {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { write!(f,"KPATHSEA") }
-}
+
 impl KpathseaBase {
-    pub fn get(&self,filestr:&str) -> Option<KpseResult> {
-        for l in &self.set {
+    /*pub fn get(&self,filestr:&str) -> Option<KpseResult> {
+        for l in &*self.set {
             let mut p = l.join(filestr);
             if p.exists() { return Some(KpseResult{path:p,local:false}) }
             p = l.join(format!("{}.tex",filestr));
             if p.exists() { return Some(KpseResult{path:p,local:true}) }
         }
         None
-    }
-    pub fn new() -> KpathseaBase {
+    }*/
+    fn new() -> KpathseaBase {
         debug_log!(debug=>"Initializing kpathsea database");
         let mut vars = HMap::<String,String>::default();
         let loc = std::str::from_utf8(std::process::Command::new("kpsewhich")
@@ -192,7 +215,7 @@ impl KpathseaBase {
         }
         let mut set: Vec<PathBuf> = vec!();
         for (path,recurse) in paths.into_iter() { KpathseaBase::fill_set(&mut set, path, recurse) }
-        KpathseaBase { set,recdot }
+        KpathseaBase { set:set.into(),recdot }
     }
 
     fn fill_set(set: &mut Vec<PathBuf>, path : PathBuf, recurse: bool) {
@@ -285,9 +308,4 @@ impl KpathseaBase {
             }
         }
     }
-
-}
-
-lazy_static! {
-    pub static ref KPATHSEA : Arc<KpathseaBase> = Arc::new(KpathseaBase::new());
 }

@@ -1,565 +1,1359 @@
-//! Default implementations for [`Gullet`] methods.
-use crate::{debug_log, file_end, throw};
-use crate::engine::{EngineRef, EngineType};
-use crate::engine::gullet::Gullet;
-use crate::engine::memory::Interner;
-use crate::engine::state::State;
-use crate::tex::catcodes::CategoryCode;
-use crate::tex::commands::{BaseCommand, ResolvedToken, ConditionalFun, CommandSource, StomachCommand};
-use crate::tex::numbers::{Int, MuSkip, Skip};
-use crate::tex::token::{CSLike, StringConsumer, Token, TokenConsumer};
+use crate::commands::{Command, IntCommand, SimpleExpandable};
+use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
-use crate::tex::commands::etex::UNEXPANDED;
-use crate::tex::commands::tex::{IFCASE, NOEXPAND, THE};
-use crate::tex::ConditionalBranch;
-use crate::tex::fonts::{Font,FontStore};
-use crate::utils::errors::TeXError;
-use crate::utils::strings::CharType;
-use crate::utils::strings::AllCharsTrait;
+use crate::tex::catcodes::CommandCode;
+use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
+use crate::engine::state::State;
+use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::file_end;
+use std::str::FromStr;
+use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
+use crate::engine::mouth::pretokenized::TokenList;
+use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::numerics::TeXDimen;
+use crate::tex::token::{StandardToken, Token};
+use crate::utils::errors::ErrorHandler;
+use crate::tex::input_text::Character;
+use crate::engine::EngineAux;
+use crate::tex::numerics::TeXInt;
 
-
-/// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-/// (or [`None`] if the [`Mouth`] is empty)
-pub fn get_next_unexpandable<ET:EngineType>(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
-    while let Some((next,e)) = engine.get_next_token() {
-        if !e {return Some(ResolvedToken{command:BaseCommand::Relax,source:CommandSource{cause:next,reference:None},expand:false})}
-        match engine.expand(resolve_token(&engine.state,next)) {
-            Some(r) => return Some(r),
-            _ => ()
-        }
-    }
-    None
-}
-
-/// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-/// (or [`None`] if the [`Mouth`] is empty). Throws an error if the file ends in the process
-pub fn get_next_unexpandable_same_file<ET:EngineType>(engine:&mut EngineRef<ET>) -> Option<ResolvedToken<ET>> {
-    while let Some(next) = engine.mouth.get_next_simple(&engine.state,&mut engine.interner) {
-        match engine.expand(resolve_token(&engine.state,next)) {
-            Some(r) => return Some(r),
-            _ => ()
-        }
-    }
-    None
-}
-
-
-/// Resolves the given [`Token`]
-pub fn resolve_token<ET:EngineType>(state:&ET::State,tk:ET::Token) -> ResolvedToken<ET> {
-    let cmd = match tk.as_cs_like() {
-        None => return ResolvedToken {
-            command: tk.to_command(),
-            source: CommandSource { cause: tk, reference: None },
-            expand: true
-        },
-        Some(CSLike::CS(name)) => state.get_command(name),
-        Some(CSLike::ActiveChar(c)) => state.get_ac_command(c)
-    };
-    match cmd {
-        Some(c) => ResolvedToken {
-            command: c.base.clone(),
-            source: CommandSource { cause: tk, reference: c.reference.clone() },
-            expand: true
-        },
-        None => ResolvedToken {
-            command: BaseCommand::None,
-            source: CommandSource { cause: tk, reference: None },
-            expand: true
-        }
-    }
-    /*
-    match match &tk.base {
-        BaseToken::Char(c, CategoryCode::Active) => state.get_ac_command(c),
-        BaseToken::CS(name) => state.get_command(name),
-        BaseToken::Char(char,catcode) =>
-            return ResolvedToken {
-                command: BaseCommand::Char { char: *char, catcode: *catcode },
-                source: CommandSource { cause: tk, reference: None },
-                expand: true
+pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut [Vec<ET::Token>;9],params:TokenList<ET::Token>,long:bool) {
+    let mut i = 1usize;
+    let inner = params.inner();
+    let mut next = &inner[0];
+    loop {
+        match next.is_argument_marker() {
+            Some(a) => match inner.get(i) {
+                Some(n) if n.is_argument_marker().is_some() =>
+                    {next = n; i += 1;read_argument(engine,&mut args[a as usize],long)},
+                None => {
+                    read_argument(engine,&mut args[a as usize],long);
+                    return
+                },
+                Some(o) => {
+                    let mut delim = engine.aux.memory.get_token_vec();
+                    delim.push(o.clone());
+                    i += 1;
+                    while let Some(n) = inner.get(i) {
+                        if n.is_argument_marker().is_some() {break}
+                        delim.push(n.clone());
+                        i += 1;
+                    }
+                    read_delimited_argument(engine,&mut args[a as usize],&delim,long);
+                    engine.aux.memory.return_token_vec(delim);
+                    match inner.get(i) {
+                        Some(n) => {next = n; i += 1},
+                        _ => return ()
+                    }
+                }
+            },
+            _ => match engine.mouth.get_next_opt(engine.aux,engine.state) {
+                Some(o) if o == *next =>
+                    match inner.get(i) {
+                        Some(n) => {next = n; i += 1},
+                        _ => return ()
+                    },
+                _ => todo!("error")
             }
-    } {
-        None => ResolvedToken {
-            command:BaseCommand::None,
-            source:CommandSource{cause:tk,reference:None},
-            expand:true
-        },
-        Some(cmd) => ResolvedToken{
-            command:cmd.base.clone(),
-            source:CommandSource{cause:tk,reference:cmd.reference.clone()},
-            expand:true
         }
     }
-
-     */
 }
 
-pub fn do_conditional<ET:EngineType>(engine:&mut EngineRef<ET>, cmd:CommandSource<ET>, name:&'static str, apply:ConditionalFun<ET>, unless:bool) {
-    if name == IFCASE {
-        debug_log!(trace=>"ifcase");
-        let i = engine.gullet.new_conditional(IFCASE);
-        let ret = engine.get_int().to_i64();
-        debug_log!(trace=>"ifcase: {}",ret);
-        engine.gullet.set_conditional(i, ConditionalBranch::Case(ret, 0));
-        if ret == 0 {
-            debug_log!(trace=>"True conditional");
+fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,delim:&Vec<ET::Token>,long:bool) {
+    let par = engine.aux.memory.cs_interner().par();
+    let last = delim.last().unwrap();
+    let ends_with_bgroup = last.is_begin_group();
+    let mut remove_braces:Option<Option<usize>> = None;
+    while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        if t.is_noexpand_marker() { continue }
+        if t.is_begin_group() && !ends_with_bgroup {
+            if arg.is_empty() { remove_braces = Some(None) }
+            arg.push(t);
+            let r = if long { engine.mouth.read_until_endgroup(
+                engine.aux,
+                engine.state.get_catcode_scheme(),
+                engine.state.get_endline_char(),
+                |_,t| arg.push(t)
+            ) } else { engine.mouth.read_until_endgroup(
+                engine.aux,
+                engine.state.get_catcode_scheme(),
+                engine.state.get_endline_char(),
+                |_,t| if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
+            ) };
+            arg.push(r);
+            match remove_braces {
+                Some(ref mut n@None) => *n = Some(arg.len()),
+                _ => ()
+            }
+            continue
+        }
+        if !long {
+            if t.is_cs(&par) {todo!("\\par in read_argument")}
+        }
+        if t == *last {
+            arg.push(t);
+            if arg.ends_with(delim) {
+                arg.truncate(arg.len()-delim.len());
+                if let Some(Some(n)) = remove_braces {
+                    if arg.len() == n {
+                        arg.pop();
+                        arg.remove(0);
+                    }
+                }
+                return
+            }
         } else {
-            false_loop::<ET>(engine,IFCASE,i)
+            arg.push(t);
         }
-    } else {
-        let i = engine.gullet.new_conditional(name);
-        let b = apply(engine,cmd);
-        if (b && !unless) || (!b && unless) {
-            engine.gullet.set_conditional(i,ConditionalBranch::True(name));
-            debug_log!(trace=>"True conditional");
-        } else { false_loop::<ET>(engine,name,i) }
+    }
+    todo!("file end")
+}
+
+fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool) {
+    while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        if t.is_noexpand_marker() { continue }
+        if t.is_space() { continue }
+        if t.is_begin_group() {
+            if long {
+                engine.mouth.read_until_endgroup(
+                    engine.aux,
+                    engine.state.get_catcode_scheme(),
+                    engine.state.get_endline_char(),
+                    |_, t| arg.push(t)
+                );
+            } else {
+                let par = engine.aux.memory.cs_interner().par();
+                engine.mouth.read_until_endgroup(
+                    engine.aux,
+                    engine.state.get_catcode_scheme(),
+                    engine.state.get_endline_char(),
+                    |_,t|
+                        if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
+                );
+            }
+            return
+        }
+        arg.push(t);
+        return
     }
 }
 
-pub fn false_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,condidx:usize) {
-    debug_log!(trace=>"False conditional. Skipping...");
-    let mut incond:usize = engine.gullet.current_conditional().1 - condidx;
-    for i in 0..incond {
-        engine.gullet.pop_conditional();
-    }
-    while let Some((next,_)) = engine.get_next_token() {
-        match next.as_cs_like() {
-            Some(_) => match resolve_token::<ET>(&engine.state,next).command {
-                BaseCommand::Conditional {..} => incond += 1,
-                BaseCommand::ExpandableNoTokens {name:"else",..} if incond == 0 => {
-                    engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
-                    debug_log!(trace=>"...else branch.");
-                    return ()
+pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
+    let mut ingroups = 0;'A: while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        if t.is_end_group()  {
+            if ingroups == 0 { return }
+            ingroups -= 1;
+            cont(engine.aux,engine.state,engine.gullet,t);
+            continue
+        }
+        if t.is_begin_group() {
+            ingroups += 1;
+            cont(engine.aux,engine.state,engine.gullet,t);
+            continue
+        }
+        if t.is_noexpand_marker() {
+            let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
+            cont(engine.aux,engine.state,engine.gullet,next);
+            continue
+        }
+        match engine.resolve(t) {
+            ResolvedToken::Tk{token,char,code} => {
+                cont(engine.aux,engine.state,engine.gullet, token)
+            }
+            ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
+                cont(engine.aux,engine.state,engine.gullet,token),
+            ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} =>
+                ET::Gullet::do_macro(engine,m.clone(),token),
+            ResolvedToken::Cmd{cmd: Some(Command::Conditional(cond)),token} =>
+                ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
+            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token}
+                if e.name == PRIMITIVES.unexpanded => {
+                engine.expand_until_bgroup(false);
+                engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|a,t|{
+                    if edef_like && t.command_code() == CommandCode::Parameter {
+                        cont(a,engine.state,engine.gullet,t.clone());
+                    }
+                    cont(a,engine.state,engine.gullet,t)
+                });
+            }
+            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token}
+                if e.name == PRIMITIVES.the => {
+                crate::commands::tex::do_the(engine,|a,s,g,t| {
+                    if edef_like && t.command_code() == CommandCode::Parameter {
+                        cont(a,s,g,t.clone());
+                    }
+                    cont(a,s,g,t)
+                })
+            }
+            ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),token}
+                if e.name == PRIMITIVES.noexpand => {
+                match engine.mouth.get_next_opt(engine.aux,engine.state) {
+                    Some(t) if !t.is_end_group() =>
+                        cont(engine.aux,engine.state,engine.gullet,t),
+                    _ => todo!("throw error")
                 }
-                BaseCommand::ExpandableNoTokens {name:"or",..} if incond == 0 && condname == "ifcase" => {
-                    match engine.gullet.current_conditional() {
-                        (Some(ConditionalBranch::Case(i, j)),_) => {
-                            engine.gullet.set_top_conditional(ConditionalBranch::Case(i, j + 1));
-                            if i == ((j+1) as i64) {
-                                debug_log!(trace=>"...or branch.");
-                                return ()
-                            }
-                        }
+            }
+            ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),token} =>
+                ET::Gullet::do_simple_expandable(engine, e.name, token, e.expand),
+            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token} =>
+                ET::Gullet::do_expandable(engine,e.name,token,e.expand),
+            ResolvedToken::Cmd{token,..} => {
+                cont(engine.aux,engine.state,engine.gullet,token)
+            }
+        }
+    }
+    todo!("throw error")
+}
+
+pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
+    let (mut incond,cond) = {
+        let conds = engine.gullet.get_conditionals();
+        let ic = conds.len() - idx;
+        for i in 0..ic { conds.pop();}
+        (ic,match conds.pop() {
+            Some(ActiveConditional::Case(c)) => c,
+            _ => unreachable!()
+        })
+    };
+    let mut curr_int = <ET::Num as NumSet>::Int::default();
+    let one = <ET::Num as NumSet>::Int::from(1);
+    let state = &*engine.state;
+    let endline = state.get_endline_char();
+    let cc = state.get_catcode_scheme();
+    let gullet = &mut *engine.gullet;
+    engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
+        match gullet.resolve(state,t) {
+            ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
+                {incond += 1;true},
+            ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
+            if *name == PRIMITIVES.else_ && incond == 0 => {
+                gullet.get_conditionals().push(
+                    ActiveConditional::Else(PRIMITIVES.ifcase)
+                );
+                false
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
+            if *name == PRIMITIVES.fi => {
+                if incond == 0 {false}
+                else {incond -= 1; true}
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
+            if *name == PRIMITIVES.or && incond == 0 => {
+                curr_int = curr_int + one;
+                if cond == curr_int {
+                    gullet.get_conditionals().push(
+                        ActiveConditional::Case(cond)
+                    );
+                    false
+                }
+                else {true}
+            }
+            _ => true
+        }
+    })
+}
+
+pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,allowelse:bool,mut skipelse:bool) {
+    let (mut incond,cond) = {
+        let conds = engine.gullet.get_conditionals();
+        let ic = conds.len() - idx;
+        for i in 0..ic { conds.pop();}
+        (ic,conds.pop().unwrap().name())
+    };
+    let state = &*engine.state;
+    let endline = state.get_endline_char();
+    let cc = state.get_catcode_scheme();
+    let gullet = &mut *engine.gullet;
+    engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
+        match gullet.resolve(state,t) {
+            ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
+                {incond += 1;true},
+            ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
+                if *name == PRIMITIVES.else_ && incond == 0 => {
+                if allowelse {
+                    gullet.get_conditionals().push(
+                        ActiveConditional::Else(cond)
+                    );
+                    false
+                }
+                else if skipelse {
+                    skipelse = false;true
+                }
+                else {todo!("throw spurious else in false-loop error")}
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
+                if *name == PRIMITIVES.fi => {
+                if incond == 0 {false}
+                else {incond -= 1; true}
+            }
+            _ => true
+        }
+    })
+}
+
+pub enum ACOrCS<T:Token>{
+    Active(T::Char),
+    Name(T::CS)
+}
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    pub fn read_control_sequence(&mut self) -> ACOrCS<ET::Token> {
+        while let Some(tk) = self.get_next() {
+            match self.resolve(tk) {
+                ResolvedToken::Cmd {cmd:Some(Command::Expandable(f)),token} =>
+                    ET::Gullet::do_expandable(self,f.name,token,f.expand),
+                ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(f)),token} =>
+                    ET::Gullet::do_simple_expandable(self,f.name,token,f.expand),
+                ResolvedToken::Cmd {cmd:Some(Command::Conditional(f)),token} =>
+                    ET::Gullet::do_conditional(self,f.name,token,f.expand,false),
+                ResolvedToken::Cmd {token,..} => {
+                    let ret = match token.to_enum() {
+                        StandardToken::Character(c, CommandCode::Active) => ACOrCS::Active(c),
+                        StandardToken::ControlSequence(cs) => ACOrCS::Name(cs),
                         _ => unreachable!()
-                    }
+                    };
+                    self.set_command(&ret,Some(Command::Relax),false);
+                    return ret
                 }
-                BaseCommand::ExpandableNoTokens {name:"fi",..} if incond > 0 => incond -= 1,
-                BaseCommand::ExpandableNoTokens {name:"fi",..} => {
-                    debug_log!(trace=>"...end of conditional.");
-                    engine.gullet.pop_conditional();
-                    return ()
-                }
-                _ => ()
+                ResolvedToken::Tk {code:CommandCode::Space,..} => (),
+                o => todo!("read_control_sequence: {:?}",o)
             }
-            _ => ()
         }
+        todo!("file ended unexpectedly")
     }
+}
+
+pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool, ret:&mut String) {
+    let mut quoted = false;
+    let mut had_eq = !skip_eq;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,..} => match code {
+            CommandCode::Space if ret.is_empty() => (),
+            CommandCode::Space if quoted => ret.push(' '),
+            CommandCode::Space => return,
+            CommandCode::Other if !had_eq && ret.is_empty() && matches!(char.try_into(),Ok(b'=')) => {
+                had_eq = true;
+            }
+            _ => {
+                if matches!(char.try_into(),Ok(b'\"')) {
+                    quoted = !quoted;
+                } else {
+                    char.display(ret);
+                }
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Relax),..} if !quoted => return,
+        ResolvedToken::Cmd {token,..} if !quoted => {
+            engine.mouth.requeue(token);
+            return
+        }
+        o => todo!("unexpandable in read_string: {:?}",o)
+    );
+    crate::file_end!()
+}
+
+#[inline(always)]
+fn is_ascii_digit(u:u8) -> bool {
+    u >= 48 && u <= 57
+}
+#[inline(always)]
+fn is_ascii_oct_digit(u:u8) -> bool {
+    u >= 48 && u <= 55
+}
+#[inline(always)]
+fn is_ascii_hex_digit(u:u8) -> bool {
+    is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
+}
+
+pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool)
+                                    -> (bool,Result<u8,(Command<ET>,ET::Token)>) {
+    let mut is_negative = false;
+    let mut had_eq = !skip_eq;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'='),CommandCode::Other) => {
+                if had_eq { todo!("throw error") }
+                had_eq = true;
+            }
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
+            _ => todo!("number expected; got: {} {:?} -- l. {}",(char.try_into().ok().unwrap() as char),code,engine.mouth.line_number())
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),token} => match ((*char).try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'='),CommandCode::Other) => {
+                if had_eq { todo!("throw error") }
+                had_eq = true;
+            }
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
+            _ => todo!("number expected")
+        }
+        ResolvedToken::Cmd {cmd:None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
+        ResolvedToken::Cmd {cmd:Some(cmd),token} => return (is_negative,Err((cmd.clone(),token)))
+    );
+    todo!("file end")
+}
+/*
+pub fn read_numeric<R,ET:EngineTypes,
+    B:FnOnce(&mut EngineReferences<ET>,bool,u8) -> R,
+    C:FnOnce(&mut EngineReferences<ET>,bool,Command<ET>,ET::Token) -> R
+    >(engine:&mut EngineReferences<ET>, skip_eq:bool,cf:B,ccm:C) -> R {
+    let mut is_negative = false;
+    let mut had_eq = !skip_eq;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'='),CommandCode::Other) => {
+                if had_eq { todo!("throw error") }
+                had_eq = true;
+            }
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) => return cf(engine,is_negative,b),
+            _ => todo!("number expected")
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),token} => match ((*char).try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'='),CommandCode::Other) => {
+                if had_eq { todo!("throw error") }
+                had_eq = true;
+            }
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) => return cf(engine,is_negative,b),
+            _ => todo!("number expected")
+        }
+        ResolvedToken::Cmd {cmd:None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
+        ResolvedToken::Cmd {cmd:Some(cmd),token} => return ccm(engine,is_negative,cmd.clone(),token)
+    );
+    todo!("file end")
+}
+
+ */
+
+pub fn read_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Int {
+    let (is_negative,r) = read_numeric(engine, skip_eq);
+    match r {
+        Ok(b) => read_int_byte(engine,is_negative,b),
+        Err((cmd,token)) => read_int_command(engine,is_negative,cmd,token)
+    }
+}
+
+pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> <ET::Num as NumSet>::Int {
+    match b {
+        b'\"' => read_hex_int(engine, is_negative),
+        b'\'' => read_oct_int(engine, is_negative),
+        b'`' => read_int_char(engine,is_negative),
+        b if is_ascii_digit(b) => read_dec_int(engine, is_negative, b),
+        _ => todo!("number expected")
+    }
+}
+
+pub fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
+    let next = engine.mouth.get_next_opt(engine.aux, engine.state);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{char,code,token} => {
+            if code != CommandCode::Space {
+                engine.mouth.requeue(token);
+            }
+            break
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+            break
+        }
+        ResolvedToken::Cmd {token,..} => {
+            engine.mouth.requeue(token);
+            break
+        }
+    );
+    match next {
+        Some(t) => match t.to_enum() {
+            StandardToken::Character(c, _) => {
+                let i: u64 = c.into();
+                match <ET::Num as NumSet>::Int::try_from(i as i64) {
+                    Ok(v) => if is_negative { -v } else { v },
+                    _ => todo!("throw error here")
+                }
+            }
+            StandardToken::ControlSequence(cs) => {
+                let resolved = engine.aux.memory.cs_interner().resolve(&cs);
+                match ET::Char::single_char(resolved.as_ref()) {
+                    Some(c) =>
+                        if is_negative {
+                            -<ET::Num as NumSet>::Int::from(c.into() as i32)
+                        } else {
+                            <ET::Num as NumSet>::Int::from(c.into() as i32)
+                        },
+                    None => todo!("throw error here")
+                }
+            }
+        },
+        None => todo!("throw error here")
+    }
+}
+
+pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> <ET::Num as NumSet>::Int {
+    match cmd {
+        Command::Int(IntCommand{read,..}) => {
+            if is_negative {-read(engine,token)}
+            else {read(engine,token)}
+        },
+        Command::PrimitiveInt(id) => {
+            if is_negative {-engine.state.get_primitive_int(id)}
+            else {engine.state.get_primitive_int(id)}
+        }
+        Command::IntRegister(u) => {
+            let i = engine.state.get_int_register(u);
+            if is_negative {-i}
+            else {i}
+        }
+        Command::CharDef(c) => {
+            let val:u64 = c.into();
+            match <ET::Num as NumSet>::Int::try_from(val as i64) {
+                Ok(val) => {
+                    if is_negative {-val}
+                    else {val}
+                }
+                _ => todo!("throw error")
+            }
+        }
+        Command::MathChar(u) => {
+            match <ET::Num as NumSet>::Int::try_from(u as i64) {
+                Ok(val) => {
+                    if is_negative {-val}
+                    else {val}
+                }
+                _ => todo!("throw error")
+            }
+        }
+        Command::DimRegister(u) => {
+            let base = ET::Num::dim_to_int(engine.state.get_dim_register(u));
+            if is_negative {-base} else {base}
+        }
+        Command::Dim(dc) => {
+            let base = ET::Num::dim_to_int((dc.read)(engine,token));
+            if is_negative {-base} else {base}
+        }
+        o => todo!("read_int: {:?}",o)
+    }
+}
+
+
+fn ret_num<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> <ET::Num as NumSet>::Int {
+    let i = match <ET::Num as NumSet>::Int::from_str(std::str::from_utf8(&v).unwrap()) {
+        Ok(i) => i,
+        Err(_) => todo!("throw error")
+    };
+    engine.aux.memory.return_bytes(v);
+    return if is_negative { -i } else { i }
+}
+
+fn ret_hex<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> <ET::Num as NumSet>::Int {
+    let i = match <ET::Num as NumSet>::Int::from_str_radix(std::str::from_utf8(&v).unwrap(),16) {
+        Ok(i) => i,
+        Err(_) => todo!("throw error")
+    };
+    engine.aux.memory.return_bytes(v);
+    return if is_negative { -i } else { i }
+}
+
+fn ret_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> f64 {
+    let f = f64::from_str(std::str::from_utf8(&v).unwrap()).unwrap();
+    engine.aux.memory.return_bytes(v);
+    return if is_negative { -f } else { f }
+}
+
+pub fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> <ET::Num as NumSet>::Int {
+    let mut ret = engine.aux.memory.get_bytes();
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (_,CommandCode::Space) => return ret_num(engine,ret,is_negative),
+            _ if !ret.is_empty() => {
+                engine.mouth.requeue(token);
+                return ret_num(engine,ret,is_negative)
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+            return ret_num(engine,ret,is_negative)
+        }
+        ResolvedToken::Cmd {token,..} if !ret.is_empty() => {
+            engine.mouth.requeue(token);
+            return ret_num(engine,ret,is_negative)
+        }
+        o => todo!("{:?}; current: {:?}",o,ret)
+    );
     file_end!()
 }
 
-pub fn else_loop<ET:EngineType>(engine:&mut EngineRef<ET>,condname:&'static str,condidx:usize,allowelse:bool) {
-    debug_log!(trace=>"\\else. Skipping...");
-    engine.gullet.set_top_conditional(ConditionalBranch::Else(condname));
-    let mut incond:usize = engine.gullet.current_conditional().1 - condidx;
-    while let Some((next,exp)) = engine.get_next_token() {
-        match next.as_cs_like() {
-            Some(_) => match resolve_token::<ET>(&engine.state,next).command {
-                BaseCommand::Conditional {..} => incond += 1,
-                BaseCommand::ExpandableNoTokens {name:"else",..} if incond == 0 && !allowelse => {
-                    throw!("Unexpected \\else")
-                }
-                BaseCommand::ExpandableNoTokens {name:"fi",..} if incond > 0 => incond -= 1,
-                BaseCommand::ExpandableNoTokens {name:"fi",..} => {
-                    debug_log!(trace=>"...end of conditional.");
-                    engine.gullet.pop_conditional();
-                    return ()
-                }
-                _ => ()
+pub fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
+    let mut ret = engine.aux.memory.get_bytes();
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other|CommandCode::Letter) if is_ascii_hex_digit(b) => {
+                ret.push(b);
             }
-            _ => ()
+            (_,CommandCode::Space) => return ret_hex(engine,ret,is_negative),
+            _ if !ret.is_empty() => {
+                engine.mouth.requeue(token);
+                return ret_hex(engine,ret,is_negative)
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
         }
-    }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+            return ret_hex(engine,ret,is_negative)
+        }
+        ResolvedToken::Cmd {token,..} if !ret.is_empty() => {
+            engine.mouth.requeue(token);
+            return ret_hex(engine,ret,is_negative)
+        }
+        o => todo!("{:?}; current: {:?}",o,ret)
+    );
     file_end!()
 }
 
-pub fn get_keyword<'a,ET:EngineType>(engine:&mut EngineRef<ET>, kw:&'a str) -> bool {
-    debug_log!(trace=>"Reading keyword {:?}: {}...\n at {}",kw,engine.preview(50).replace("\n","\\n"),engine.current_position());
-    let mut current = engine.memory.get_string();
-    let mut rs = engine.mouth.get_expansion();
-    while let Some(next) = engine.get_next_unexpandable() {
-        rs.push(next.source.cause);
-        match next.command {
-            BaseCommand::Char {char,..} if char.as_bytes().len() == 1 => {
-                let us = char.as_bytes()[0];
-                current.push(us as char);
-                if current == kw {
-                    rs.clear();
-                    engine.mouth.push_expansion(rs);
-                    engine.memory.return_string(current);
-                    return true
-                }
-                else if !kw.starts_with(&current) {
-                    while let Some(s) = rs.pop() {
-                        engine.mouth.requeue(s);
-                    }
-                    engine.mouth.push_expansion(rs);
-                    engine.memory.return_string(current);
+pub fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
+    todo!("read_oct_int")
+}
+
+pub fn read_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Dim {
+    let (is_negative,r) = read_numeric(engine, skip_eq);
+    match r {
+        Ok(b) => read_dim_byte(engine,is_negative,b),
+        Err((cmd,token)) => read_dim_command(engine,is_negative,cmd,token)
+    }
+}
+
+pub fn read_dim_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> <ET::Num as NumSet>::Dim {
+    if b == b',' || b == b'.' {
+        read_dim_float(engine,is_negative,b'.')
+    } else if is_ascii_digit(b) {
+        read_dim_float(engine,is_negative,b)
+    } else {
+        todo!("error?")
+    }
+}
+
+pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> <ET::Num as NumSet>::Dim {
+    match cmd {
+        Command::DimRegister(u) => {
+            if is_negative {return -engine.state.get_dim_register(u)}
+            else {return engine.state.get_dim_register(u)}
+        },
+        Command::IntRegister(u) => {
+            let i = engine.state.get_int_register(u);
+            let i = if is_negative {-i} else {i};
+            let i = i.into() as f64;
+            read_unit_or_dim(engine,i)
+        }
+        Command::CharDef(c) => {
+            let val = if is_negative {-(c.into() as f64)} else {c.into() as f64};
+            read_unit_or_dim(engine,val)
+        }
+        Command::Int(ic) => {
+            let i = if is_negative {-(ic.read)(engine,token)} else {(ic.read)(engine,token)};
+            let f = i.into() as f64;
+            read_unit_or_dim(engine,f)
+        }
+        Command::Dim(dc) => {
+            let val = (dc.read)(engine,token);
+            if is_negative {return -val} else {return val}
+        }
+        Command::PrimitiveDim(dc) => {
+            let val = engine.state.get_primitive_dim(dc);
+            if is_negative {return -val} else {return val}
+        }
+        o => todo!("command in read_dim: {:?}",o)
+    }
+}
+
+fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> <ET::Num as NumSet>::Dim {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (Ok(b','|b'.'),CommandCode::Other) => {
+                if in_decimal { todo!("throw error") }
+                in_decimal = true;
+                ret.push(b'.');
+            }
+            (_,CommandCode::Space) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_dim_unit(engine,f,None)
+            }
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_dim_unit(engine,f,Some((b,token)))
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(c),token} => {
+            let base = read_dim_command(engine,false,c.clone(),token);
+            let f = ret_float(engine,ret,is_negative);
+            return base.scale_float(f)
+        }
+        _ => todo!("command in read_dim_inner")
+    );
+    todo!("read_dim_inner")
+}
+
+pub fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) -> <ET::Num as NumSet>::Dim {
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                return read_dim_unit(engine,float,Some((b,token)))
+            }
+            (_,CommandCode::Space) => (),
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => (),
+        ResolvedToken::Cmd {cmd:Some(Command::Char{char,code:(CommandCode::Other | CommandCode::Letter)}),token} => match (*char).try_into() {
+            Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
+            _ => todo!("throw error")
+        }
+        ResolvedToken::Cmd {cmd:Some(cmd),token} => match cmd {
+            Command::DimRegister(u) => {
+                let base = engine.state.get_dim_register(*u);
+                let scale = (float * 65536.0).round() as i32;
+                return base.scale(scale.into(),65536.into())
+            }
+            o => todo!("command in read_unit_or_dim: {:?}",o)
+        }
+        ResolvedToken::Cmd {cmd:None,token} =>
+            engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token)
+    );
+    todo!("file end")
+}
+
+pub fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64, mut first:Option<(u8, ET::Token)>) -> <ET::Num as NumSet>::Dim {
+    let is_true = match &first {
+        Some((b't'|b'T',t)) => {
+            read_keyword(engine,b"true",std::mem::take(&mut first))
+        },
+        Some(_) => false,
+        None => read_keyword(engine,b"true",None)
+    };
+    if is_true {
+        let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
+        float *= Into::<i64>::into(mag) as f64 / 1000.0;
+    }
+    let units = <ET::Num as NumSet>::Dim::units();
+    match read_keywords(engine,units,first) {
+        Some(d) => <ET::Num as NumSet>::Dim::from_float(engine,float,d),
+        _ => todo!("wut: {}",engine.preview())
+    }
+}
+
+
+pub fn read_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Skip {
+    let (is_negative,r) = read_numeric(engine, skip_eq);
+    match r {
+        Ok(b) => read_skip_byte(engine,is_negative,b),
+        Err((cmd,token)) => read_skip_command(engine,is_negative,cmd,token)
+    }
+}
+
+pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> <ET::Num as NumSet>::Skip {
+    if b == b',' || b == b'.' {
+        read_skip_dim(engine,is_negative,b'.')
+    } else if is_ascii_digit(b) {
+        read_skip_dim(engine,is_negative,b)
+    } else {
+        todo!("error?")
+    }
+}
+
+pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> <ET::Num as NumSet>::Skip {
+    match cmd {
+        Command::DimRegister(u) => {
+            let base = engine.state.get_dim_register(u);
+            let base = if is_negative {-base} else {base};
+            read_skip_ii(engine,base)
+        }
+        Command::SkipRegister(u) => {
+            let base = engine.state.get_skip_register(u);
+            if is_negative {-base} else {base}
+        }
+        _ => todo!("read skip command: {:?}",cmd)
+    }
+}
+/*
+pub fn read_skip_old<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Skip {
+    let mut is_negative = false;
+    let mut had_eq = !skip_eq;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'='),CommandCode::Other) => {
+                if had_eq { todo!("throw error") }
+                had_eq = true;
+            }
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_skip_dim(engine,is_negative,b),
+            (Ok(b','|b'.'),CommandCode::Other) => return read_skip_dim(engine,is_negative,b'.'),
+            o => todo!("error?")
+        }
+        o => todo!("command in read_skip")
+    );
+    crate::file_end!()
+}
+*/
+
+type Sk<ET> = <<ET as EngineTypes>::Num as NumSet>::Skip;
+type Str<ET> = <<<ET as EngineTypes>::Num as NumSet>::Skip as Skip>::Stretch;
+type Shr<ET> = <<<ET as EngineTypes>::Num as NumSet>::Skip as Skip>::Shrink;
+
+const PLUS: &[u8] = b"plus";
+const MINUS: &[u8] = b"minus";
+
+#[inline(always)]
+fn read_skip_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> Sk<ET> {
+    let base = read_dim_float(engine,is_negative,first);
+    read_skip_ii(engine,base)
+}
+
+fn read_skip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:<ET::Num as NumSet>::Dim) -> Sk<ET> {
+    match read_keywords(engine,&[PLUS,MINUS],None) {
+        Some(b) if b == PLUS => {
+            let stretch = read_stretch(engine);
+            if read_keyword(engine,MINUS,None) {
+                Sk::<ET>::new(base,Some(stretch),Some(read_shrink(engine)))
+            } else {
+                Sk::<ET>::new(base, Some(stretch), None)
+            }
+        }
+        Some(b) if b == MINUS => {
+            let shrink = read_shrink(engine);
+            if read_keyword(engine,PLUS,None) {
+                Sk::<ET>::new(base,Some(read_stretch(engine)),Some(shrink))
+            } else {
+                Sk::<ET>::new(base,None,Some(shrink))
+            }
+        }
+        _ => <ET::Num as NumSet>::Skip::new(base,None,None)
+    }
+}
+
+fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
+    let mut is_negative = false;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_stretch_float(engine,is_negative,b),
+            (Ok(b','|b'.'),CommandCode::Other) => return read_stretch_float(engine,is_negative,b'.'),
+            o => todo!("error?")
+        }
+        o => todo!("command in read_skip")
+    );
+    crate::file_end!()
+}
+fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Str<ET> {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (Ok(b','|b'.'),CommandCode::Other) => {
+                if in_decimal { todo!("throw error") }
+                in_decimal = true;
+                ret.push(b'.');
+            }
+            (_,CommandCode::Space) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_stretch_unit(engine,f,None)
+            }
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_stretch_unit(engine,f,Some((b,token)))
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
+            let base = engine.state.get_dim_register(*u);
+            let scale = ret_float(engine,ret,is_negative);
+            return Sk::<ET>::stretch_from_dimen(engine,scale,base)
+        }
+        o => todo!("command in read_stretch_inner: {:?}",o)
+    );
+    todo!("read_dim_inner")
+}
+fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> Str<ET> {
+    let is_true = match &first {
+        Some((b't'|b'T',t)) => {
+            read_keyword(engine,b"true",std::mem::take(&mut first))
+        },
+        Some(_) => false,
+        None => read_keyword(engine,b"true",None)
+    };
+    if is_true {
+        let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
+        float *= Into::<i64>::into(mag) as f64 / 1000.0;
+    }
+    let units = Sk::<ET>::stretch_units();
+    match read_keywords(engine,units,first) {
+        Some(d) => Sk::<ET>::stretch_from_float(engine,float,d),
+        _ => todo!("wut: {}\n  (l.{})",engine.preview(),engine.mouth.line_number())
+    }
+}
+
+fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
+    let mut is_negative = false;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_shrink_float(engine,is_negative,b),
+            (Ok(b','|b'.'),CommandCode::Other) => return read_shrink_float(engine,is_negative,b'.'),
+            o => todo!("error?")
+        }
+        o => todo!("command in read_skip")
+    );
+    crate::file_end!()
+}
+fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Shr<ET> {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (Ok(b','|b'.'),CommandCode::Other) => {
+                if in_decimal { todo!("throw error") }
+                in_decimal = true;
+                ret.push(b'.');
+            }
+            (_,CommandCode::Space) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_shrink_unit(engine,f,None)
+            }
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_shrink_unit(engine,f,Some((b,token)))
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
+            let base = engine.state.get_dim_register(*u);
+            let scale = ret_float(engine,ret,is_negative);
+            return Sk::<ET>::shrink_from_dimen(engine,scale,base)
+        }
+        _ => todo!("command in read_dim_inner")
+    );
+    todo!("read_dim_inner")
+}
+fn read_shrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> Shr<ET> {
+    let is_true = match &first {
+        Some((b't'|b'T',t)) => {
+            read_keyword(engine,b"true",std::mem::take(&mut first))
+        },
+        Some(_) => false,
+        None => read_keyword(engine,b"true",None)
+    };
+    if is_true {
+        let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
+        float *= Into::<i64>::into(mag) as f64 / 1000.0;
+    }
+    let units = Sk::<ET>::shrink_units();
+    match read_keywords(engine,units,first) {
+        Some(d) => Sk::<ET>::shrink_from_float(engine,float,d),
+        _ => todo!("wut")
+    }
+}
+
+type MS<ET> = <<ET as EngineTypes>::Num as NumSet>::MuSkip;
+type MB<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Base;
+type MSt<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Stretch;
+type MSh<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Shrink;
+
+pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> MS<ET> {
+    let (is_negative,r) = read_numeric(engine, skip_eq);
+    match r {
+        Ok(b) => read_muskip_byte(engine,is_negative,b),
+        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token)
+    }
+}
+
+pub fn read_muskip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> MS<ET> {
+    if b == b',' || b == b'.' {
+        read_muskip_dim(engine,is_negative,b'.')
+    } else if is_ascii_digit(b) {
+        read_muskip_dim(engine,is_negative,b)
+    } else {
+        todo!("error?")
+    }
+}
+
+pub fn read_muskip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> MS<ET> {
+    match cmd {
+        _ => todo!("read skip command: {:?}",cmd)
+    }
+}
+
+#[inline(always)]
+fn read_muskip_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> MS<ET> {
+    let base = read_mudim_float(engine,is_negative,first);
+    read_muskip_ii(engine,base)
+}
+
+fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MB<ET> {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (Ok(b','|b'.'),CommandCode::Other) => {
+                if in_decimal { todo!("throw error") }
+                in_decimal = true;
+                ret.push(b'.');
+            }
+            (_,CommandCode::Space) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_mudim_unit(engine,f,None)
+            }
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_mudim_unit(engine,f,Some((b,token)))
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        _ => todo!("command in read_dim_inner")
+    );
+    todo!("read_dim_inner")
+}
+
+pub fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64, mut first:Option<(u8, ET::Token)>) -> MB<ET> {
+    let units = MS::<ET>::units();
+    match read_keywords(engine,units,first) {
+        Some(d) => MS::<ET>::from_float(engine,float,d),
+        _ => todo!("wut")
+    }
+}
+
+fn read_muskip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:MB<ET>) -> MS<ET> {
+    match read_keywords(engine,&[PLUS,MINUS],None) {
+        Some(b) if b == PLUS => {
+            let stretch = read_mustretch(engine);
+            if read_keyword(engine,MINUS,None) {
+                MS::<ET>::new(base,Some(stretch),Some(read_mushrink(engine)))
+            } else {
+                MS::<ET>::new(base, Some(stretch), None)
+            }
+        }
+        Some(b) if b == MINUS => {
+            let shrink = read_mushrink(engine);
+            if read_keyword(engine,PLUS,None) {
+                MS::<ET>::new(base,Some(read_mustretch(engine)),Some(shrink))
+            } else {
+                MS::<ET>::new(base,None,Some(shrink))
+            }
+        }
+        _ => MS::<ET>::new(base,None,None)
+    }
+}
+
+fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
+    let mut is_negative = false;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mustretch_float(engine,is_negative,b),
+            (Ok(b','|b'.'),CommandCode::Other) => return read_mustretch_float(engine,is_negative,b'.'),
+            o => todo!("error?")
+        }
+        o => todo!("command in read_skip")
+    );
+    crate::file_end!()
+}
+fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSt<ET> {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (Ok(b','|b'.'),CommandCode::Other) => {
+                if in_decimal { todo!("throw error") }
+                in_decimal = true;
+                ret.push(b'.');
+            }
+            (_,CommandCode::Space) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_mustretch_unit(engine,f,None)
+            }
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_mustretch_unit(engine,f,Some((b,token)))
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        _ => todo!("command in read_dim_inner")
+    );
+    todo!("read_dim_inner")
+}
+fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> MSt<ET> {
+    let units = MS::<ET>::stretch_units();
+    match read_keywords(engine,units,first) {
+        Some(d) => MS::<ET>::stretch_from_float(engine,float,d),
+        _ => todo!("wut")
+    }
+}
+
+fn read_mushrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSh<ET> {
+    let mut is_negative = false;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b'-'),CommandCode::Other) => {
+                is_negative =!is_negative;
+            }
+            (Ok(b'+'),CommandCode::Other) => (),
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mushrink_float(engine,is_negative,b),
+            (Ok(b','|b'.'),CommandCode::Other) => return read_mushrink_float(engine,is_negative,b'.'),
+            o => todo!("error?")
+        }
+        o => todo!("command in read_skip")
+    );
+    crate::file_end!()
+}
+
+fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSh<ET> {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
+    ret.push(first);
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
+                ret.push(b);
+            }
+            (Ok(b','|b'.'),CommandCode::Other) => {
+                if in_decimal { todo!("throw error") }
+                in_decimal = true;
+                ret.push(b'.');
+            }
+            (_,CommandCode::Space) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_mushrink_unit(engine,f,None)
+            }
+            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
+                let f = ret_float(engine,ret,is_negative);
+                return read_mushrink_unit(engine,f,Some((b,token)))
+            }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
+        }
+        _ => todo!("command in read_dim_inner")
+    );
+    todo!("read_dim_inner")
+}
+
+fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> MSh<ET> {
+    let units = MS::<ET>::shrink_units();
+    match read_keywords(engine,units,first) {
+        Some(d) => MS::<ET>::shrink_from_float(engine,float,d),
+        _ => todo!("wut")
+    }
+}
+
+
+pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],first:Option<(u8,ET::Token)>) -> bool {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut read = engine.aux.memory.get_token_vec();
+    if let Some((b,t)) = first {
+        ret.push(b.to_ascii_lowercase());
+        read.push(t);
+    }
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+            (_,CommandCode::Space) if ret.is_empty() => (),
+            (Ok(b),_) => {
+                ret.push(b.to_ascii_lowercase());
+                read.push(token);
+                if !kw.starts_with(&ret) {
+                    for t in read.drain(..).rev() {engine.mouth.requeue(t)}
+                    engine.aux.memory.return_bytes(ret);
+                    engine.aux.memory.return_token_vec(read);
                     return false
+                }
+                if kw.len() == ret.len() {
+                    engine.aux.memory.return_token_vec(read);
+                    engine.aux.memory.return_bytes(ret);
+                    return true
                 }
             }
             _ => {
-                while let Some(s) = rs.pop() {
-                    engine.mouth.requeue(s);
-                }
-                engine.mouth.push_expansion(rs);
-                engine.memory.return_string(current);
+                read.push(token);
+                for t in read.drain(..).rev() {engine.mouth.requeue(t)}
+                engine.aux.memory.return_bytes(ret);
+                engine.aux.memory.return_token_vec(read);
                 return false
             }
         }
-    }
-    file_end!()
+        ResolvedToken::Cmd {token,..} => {
+            read.push(token);
+            for t in read.drain(..).rev() {engine.mouth.requeue(t)}
+            engine.aux.memory.return_bytes(ret);
+            engine.aux.memory.return_token_vec(read);
+            return false
+        }
+    );
+    todo!("read_keyword")
 }
 
-pub fn get_keywords<'a,ET:EngineType>(engine:&mut EngineRef<ET>, mut keywords:Vec<&'a str>) -> Option<&'a str> {
-    debug_log!(trace=>"Reading keywords {:?}: {}...\n at {}",keywords,engine.preview(50).replace("\n","\\n"),engine.current_position());
-    let mut current = String::new();
-    let mut rs = engine.mouth.get_expansion();
-    while let Some(next) = engine.get_next_unexpandable() {
-        rs.push(next.source.cause.clone());
-        match next.command {
-            BaseCommand::Char{char,..} if char.as_bytes().len() == 1 => {
-                let us = char.as_bytes()[0];
-                let us = us.to_ascii_lowercase();
-                if keywords.iter().any(|s| s.starts_with(&current) && s.len()>current.len() && s.as_bytes()[current.len()] == us) {
-                    current.push(us as char);
-                    keywords = keywords.into_iter().filter(|s| s.starts_with(&current)).collect();
-                    if keywords.is_empty() {
-                        while let Some(s) = rs.pop() {
-                            engine.mouth.requeue(s);
+
+pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&'a[u8]],first:Option<(u8,ET::Token)>) -> Option<&'a[u8]> {
+    let mut ret = engine.aux.memory.get_bytes();
+    let mut read = engine.aux.memory.get_token_vec();
+    if let Some((b,t)) = first {
+        ret.push(b.to_ascii_lowercase());
+        read.push(t);
+    }
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+            (_,CommandCode::Space) if ret.is_empty() => (),
+            (Ok(b),_) => {
+                ret.push(b.to_ascii_lowercase());
+                let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
+                if curr.len() == 0 {
+                    ret.pop();
+                    match kws.iter().find(|e| **e == ret.as_slice()) {
+                        Some(w) => {
+                            engine.mouth.requeue(token);
+                            engine.aux.memory.return_token_vec(read);
+                            engine.aux.memory.return_bytes(ret);
+                            return Some(w)
                         }
+                        None => {
+                            engine.mouth.requeue(token);
+                            for t in read.drain(..).rev() {engine.mouth.requeue(t)}
+                            engine.aux.memory.return_bytes(ret);
+                            engine.aux.memory.return_token_vec(read);
+                            return None
+                        }
+                    }
+                }
+                read.push(token);
+                if curr.len() == 1 && curr[0].len() == ret.len() {
+                    engine.aux.memory.return_token_vec(read);
+                    engine.aux.memory.return_bytes(ret);
+                    return Some(curr[0])
+                }
+            }
+            _ => {
+                let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
+                match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
+                    Some((i,_)) => {
+                        engine.mouth.requeue(token);
+                        engine.aux.memory.return_token_vec(read);
+                        engine.aux.memory.return_bytes(ret);
+                        return Some(curr[i])
+                    }
+                    _ => {
+                        engine.mouth.requeue(token);
+                        for t in read.drain(..).rev() {engine.mouth.requeue(t)}
+                        engine.aux.memory.return_bytes(ret);
+                        engine.aux.memory.return_token_vec(read);
                         return None
                     }
-                    else if keywords.len() == 1 && keywords[0] == current {
-                        rs.clear();
-                        engine.mouth.push_expansion(rs);
-                        return Some(keywords[0])
-                    }
-                } else if keywords.contains(&current.as_str()) {
-                    engine.mouth.requeue(next.source.cause);
-                    rs.clear();
-                    engine.mouth.push_expansion(rs);
-                    keywords = keywords.into_iter().filter(|s| s == &current).collect();
-                    return Some(keywords[0])
-                } else {
-                    while let Some(s) = rs.pop() {
-                        engine.mouth.requeue(s);
-                    }
+                }
+            }
+        }
+        ResolvedToken::Cmd {token,..} => {
+            let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
+            match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
+                Some((i,_)) => {
+                    engine.mouth.requeue(token);
+                    engine.aux.memory.return_token_vec(read);
+                    engine.aux.memory.return_bytes(ret);
+                    return Some(curr[i])
+                }
+                _ => {
+                    engine.mouth.requeue(token);
+                    for t in read.drain(..).rev() {engine.mouth.requeue(t)}
+                    engine.aux.memory.return_bytes(ret);
+                    engine.aux.memory.return_token_vec(read);
                     return None
                 }
             }
-            _ if keywords.contains(&current.as_str()) => {
-                engine.mouth.requeue(next.source.cause);
-                rs.clear();
-                engine.mouth.push_expansion(rs);
-                keywords = keywords.into_iter().filter(|s| s == &current).collect();
-                return Some(keywords[0])
+        }
+    );
+    todo!("read_keyword")
+}
+
+
+pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) -> Result<u8,ET::Token> {
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+            (_,CommandCode::Space) => (),
+            (Ok(b),_) if kws.contains(&b) => {
+                return Ok(b)
             }
             _ => {
-                while let Some(s) = rs.pop() {
-                    engine.mouth.requeue(s);
-                }
-                return None
+                return Err(token)
             }
         }
-    }
-    file_end!()
-}
-
-pub fn get_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
-    debug_log!(trace=>"Reading string {}...\n at {}",engine.preview(50).replace("\n","\\n"),engine.current_position());
-    engine.skip_whitespace();
-    let mut quoted = false;
-    while let Some(next) = engine.get_next_unexpandable() {
-        match next.command {
-            BaseCommand::Char {catcode:CategoryCode::Space,..} if quoted => ret.push(' '),
-            BaseCommand::Char {catcode:CategoryCode::Space,..} => return (),
-            BaseCommand::Char {char,..} if char.as_byte() == b'\"' => {
-                quoted = !quoted;
-            }
-            BaseCommand::Char {char,..} => ret.push(char.as_char()), //(char.as_bytes())),//ret.push(char.to_char()),
-            _ => {
-                engine.mouth.requeue(next.source.cause);
-                return ()
-            }
+        ResolvedToken::Cmd {token,..} => {
+            return Err(token)
         }
-    }
-}
-
-pub fn get_braced_string<ET:EngineType>(engine:&mut EngineRef<ET>, ret:&mut String) {
-    let mut s = StringConsumer::<&mut String,ET>::simple(ret);
-    engine.get_expanded_group(false,false,true,|engine,t| s.consume_tk(&t,&engine.interner));
-}
-
-pub fn get_control_sequence<ET:EngineType>(engine:&mut EngineRef<ET>) -> CSLike<ET::Char> {
-    engine.skip_whitespace();
-    while let Some((next,e)) = engine.get_next_token() {
-        let resolved = resolve_token::<ET>(&engine.state,next);
-        match resolved.command {
-            BaseCommand::Char{char,catcode:CategoryCode::Active} =>
-                match get_cs_check_command::<ET>(engine, resolved) {
-                    None => (),
-                    Some(t) => return t,
-                }
-            BaseCommand::Char{..} => {
-                throw!("Control sequence expected")
-                // error
-            }
-            _ => match get_cs_check_command::<ET>(engine, resolved) {
-                None => (),
-                Some(t) => return t,
-            }
-        }
-    }
-    file_end!()
-}
-
-fn get_cs_check_command<ET:EngineType>(engine:&mut EngineRef<ET>, resolved:ResolvedToken<ET>)
-                                       -> Option<CSLike<ET::Char>> {
-    match resolved.command {
-        BaseCommand::Expandable {..} | BaseCommand::Conditional { .. } | BaseCommand::ExpandableNoTokens {..} => {
-            engine.expand(resolved);
-            None
-        },
-        _ => Some(resolved.source.cause.as_cs_like().unwrap())
-    }
-}
-
-pub fn get_font<ET:EngineType>(engine:&mut EngineRef<ET>) -> ET::FontRef {
-    match engine.get_next_unexpandable() {
-        None => file_end!(),
-        Some(res) => match res.command {
-            BaseCommand::Font(f) => f,
-            BaseCommand::FontCommand {get,..} => {
-                get(engine,res.source)
-            }
-            _ => throw!("Expected a font, got {:?}",res.command)
-        }
-    }
-}
-
-
-impl<ET:EngineType> EngineRef<ET> {
-    pub fn eat_relax(&mut self) {
-        match self.get_next_token() {
-            Some((t,_)) => match t.as_cs_like() {
-                Some(CSLike::CS(n)) => match self.state.get_command(n) {
-                    Some(c) if c.base == BaseCommand::Relax => (),
-                    _ => self.mouth.requeue(t)
-                }
-                Some(CSLike::ActiveChar(c)) => match self.state.get_ac_command(c) {
-                    Some(c) if c.base == BaseCommand::Relax => (),
-                    _ => self.mouth.requeue(t)
-                }
-                _ => self.mouth.requeue(t)
-            }
-            _ => ()
-        }
-    }
-
-    /// Expands [`Token`]s for as long as possible and returns the [`ResolvedToken`] for the next unexpandable [`Token`] encountered
-    /// (or [`None`] if the [`Mouth`] is empty)
-    pub fn get_next_unexpandable(&mut self) -> Option<ResolvedToken<ET>> {
-        ET::Gullet::get_next_unexpandable(self)
-    }
-
-
-    /// Returns the next primitive to be processed by the [`Stomach`](crate::engine::stomach::Stomach) from
-    /// the input stream, after expanding macros as necessary.
-    pub fn get_next_stomach_command(&mut self) -> Option<StomachCommand<ET>> {
-        ET::Gullet::get_next_stomach_command(self)
-    }
-
-    /// read a single keyword from the input stream; returns `true` if the keyword is found.
-    pub fn get_keyword<'a>(&mut self, keyword: &'a str) -> bool {
-        ET::Gullet::get_keyword(self, keyword)
-    }
-
-    /// reads one of several optional keywords from the input stream;
-    /// returns `None` if none of the keywords are found.
-    pub fn get_keywords<'a>(&mut self, keywords: Vec<&'a str>) -> Option<&'a str> {
-        ET::Gullet::get_keywords(self, keywords)
-    }
-
-    /// Reads a number from the input stream.
-    pub fn get_int(&mut self) -> ET::Int {
-        ET::Gullet::get_int(self)
-    }
-
-    /// Reads a dimension from the input stream.
-    pub fn get_dim(&mut self) -> ET::Dim {
-        ET::Gullet::get_dim(self)
-    }
-
-    /// Reads a skip from the input stream.
-    pub fn get_skip(&mut self) -> Skip<ET::SkipDim> {
-        ET::Gullet::get_skip(self)
-    }
-
-    /// Reads a muskip from the input stream.
-    pub fn get_muskip(&mut self) -> MuSkip<ET::MuDim, ET::MuStretchShrinkDim> {
-        ET::Gullet::get_muskip(self)
-    }
-
-    pub fn get_mudim(&mut self) -> ET::MuDim {
-        ET::Gullet::get_mudim(self)
-    }
-
-    pub fn get_control_sequence(&mut self) -> CSLike<ET::Char> {
-        get_control_sequence::<ET>(self)
-    }
-
-    pub fn get_char(&mut self) -> ET::Char {
-        let num = self.get_int();
-        match ET::Char::from_i64(num.to_i64()) {
-            Some(i) => i,
-            None => throw!("Not a valid character: {}",num)
-        }
-    }
-
-    pub fn get_string(&mut self, string: &mut String) {
-        ET::Gullet::get_string(self, string)
-    }
-
-    pub fn get_braced_string(&mut self, string: &mut String) {
-        get_braced_string::<ET>(self, string)
-    }
-
-    pub fn get_font(&mut self) -> ET::FontRef {
-        ET::Gullet::get_font(self)
-    }
-
-    pub fn is_next_char_one_of(&mut self, chars: &'static [u8]) -> Option<u8> {
-        match self.get_next_unexpandable() {
-            None => file_end!(),
-            Some(res) => match res.command {
-                BaseCommand::Char { char, .. } if char.as_bytes().len() == 1 => {
-                    let c = char.as_bytes()[0];
-                    if chars.contains(&c) {
-                        Some(c)
-                    } else {
-                        self.mouth.requeue(res.source.cause);
-                        None
-                    }
-                }
-                _ => {
-                    self.mouth.requeue(res.source.cause);
-                    None
-                }
-            }
-        }
-    }
-
-    pub fn is_next_char(&mut self, char: u8) -> bool {
-        match self.get_next_unexpandable() {
-            None => file_end!(),
-            Some(res) => match res.command {
-                BaseCommand::Char { char: c, .. } if c.as_bytes() == [char] => true,
-                _ => {
-                    self.mouth.requeue(res.source.cause);
-                    false
-                }
-            }
-        }
-    }
-
-    pub fn expand(&mut self, r: ResolvedToken<ET>) -> Option<ResolvedToken<ET>> {
-        ET::Gullet::expand(self, r)
-    }
-
-    pub fn get_expanded_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self, expand_protected: bool, edef_like: bool, err_on_unknowns: bool, mut f: F) {
-        match self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
-            Some(t) if t.is_begin_group() => (),
-            _ => throw!("begin group expected")
-        }
-        let mut ingroup = 0;
-        let mut ok = false;
-        while let Some(mut tk) = self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs) {
-            let e = if tk.is_noexpand_marker(&self.interner) {
-                tk = self.mouth.get_next(&self.state, &mut self.interner, &mut self.outputs).unwrap();
-                false
-            } else {
-                if tk.is_begin_group() {
-                    ingroup += 1;
-                    f(self, tk);
-                    continue
-                }
-                if tk.is_end_group() {
-                    if ingroup == 0 {
-                        ok = true;
-                        break
-                    } else { ingroup -= 1; }
-                    f(self, tk);
-                    continue
-                }
-                true
-            };
-            if e {
-                let res = crate::engine::gullet::methods::resolve_token::<ET>(&self.state, tk);
-                match res.command {
-                    BaseCommand::Def(d) if d.protected && !expand_protected => {
-                        f(self, res.source.cause)
-                    }
-                    BaseCommand::ExpandableNoTokens { name, .. } if name == crate::tex::commands::tex::NOEXPAND => {
-                        match self.get_next_token() {
-                            Some((t, _)) if t.is_eof() => (),
-                            None => file_end!(),
-                            Some((tk, _)) => { f(self, tk) }
-                        }
-                    },
-                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::etex::UNEXPANDED && edef_like => {
-                        self.expand_until_group(|engine,tk| {
-                            if tk.is_parameter() {
-                                f(engine,tk.clone())
-                            }
-                            f(engine,tk);
-                        });
-                    }
-                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::etex::UNEXPANDED => {
-                        self.expand_until_group(&mut f);
-                    }
-                    BaseCommand::Expandable { name, apply } if name == crate::tex::commands::tex::THE && edef_like =>
-                        crate::tex::commands::tex::do_the::<ET,_>(self,&res.source,|engine,tk| {
-                            if tk.is_parameter() {
-                                f(engine,tk.clone())
-                            }
-                            f(engine,tk)
-                        }),
-                    BaseCommand::None if err_on_unknowns => match res.source.cause.as_cs_like() {
-                        Some(crate::tex::token::CSLike::ActiveChar(c)) => throw!("Undefined active character {}",c.as_char()),
-                        Some(crate::tex::token::CSLike::CS(name)) => throw!("Undefined control sequence {}",name.to_str(&self.interner)),
-                        _ => unreachable!()
-                    }
-                    _ => match self.expand(res) {
-                        Some(res) => {
-                            f(self, res.source.cause)
-                        },
-                        _ => ()
-                    }
-                }
-            } else { f(self, tk) }
-        }
-        if (!ok) { file_end!() }
-    }
-
-    pub fn expand_until_group<F: FnMut(&mut EngineRef<ET>, ET::Token)>(&mut self,f:F) {
-        match self.get_next_unexpandable() {
-            None => file_end!(),
-            Some(res) => match res.command {
-                BaseCommand::Char { catcode:CategoryCode::BeginGroup, .. } => {
-                    self.get_until_endgroup(f)
-                //ET::Mouth::get_until_endgroup(self,f)
-                }
-                _ => throw!("begin group expected; found: {}",res.source.cause.printable(&self.interner))
-            }
-        }
-    }
+    );
+    todo!("read_chars")
 }
