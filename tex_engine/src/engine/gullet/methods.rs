@@ -549,16 +549,6 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     }
 }
 
-
-fn ret_num<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> <ET::Num as NumSet>::Int {
-    let i = match <ET::Num as NumSet>::Int::from_str(std::str::from_utf8(&v).unwrap()) {
-        Ok(i) => i,
-        Err(_) => todo!("throw error")
-    };
-    engine.aux.memory.return_bytes(v);
-    return if is_negative { -i } else { i }
-}
-
 fn ret_hex<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> <ET::Num as NumSet>::Int {
     let i = match <ET::Num as NumSet>::Int::from_str_radix(std::str::from_utf8(&v).unwrap(),16) {
         Ok(i) => i,
@@ -575,28 +565,24 @@ fn ret_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negat
 }
 
 pub fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> <ET::Num as NumSet>::Int {
-    let mut ret = engine.aux.memory.get_bytes();
-    ret.push(first);
+    let mut ret = (first - b'0') as i32;
     crate::expand_loop!(engine,
         ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                ret = 10*ret + ((b - b'0') as i32);
             }
-            (_,CommandCode::Space) => return ret_num(engine,ret,is_negative),
-            _ if !ret.is_empty() => {
+            (_,CommandCode::Space) => return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)},
+            _  => {
                 engine.mouth.requeue(token);
-                return ret_num(engine,ret,is_negative)
-            }
-            _ => {
-                todo!("{}:{:?}",char,code);
+                return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
             }
         }
         ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
-            return ret_num(engine,ret,is_negative)
+            return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
-        ResolvedToken::Cmd {token,..} if !ret.is_empty() => {
+        ResolvedToken::Cmd {token,..} => {
             engine.mouth.requeue(token);
-            return ret_num(engine,ret,is_negative)
+            return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
         o => todo!("{:?}; current: {:?}",o,ret)
     );
@@ -1216,8 +1202,8 @@ fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float
 
 
 pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],first:Option<(u8,ET::Token)>) -> bool {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut read = engine.aux.memory.get_token_vec();
+    let mut ret = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_bytes();
+    let mut read = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_token_vec();
     if let Some((b,t)) = first {
         ret.push(b.to_ascii_lowercase());
         read.push(t);
@@ -1229,30 +1215,30 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
                 ret.push(b.to_ascii_lowercase());
                 read.push(token);
                 if !kw.starts_with(&ret) {
-                    for t in read.drain(..).rev() {engine.mouth.requeue(t)}
-                    engine.aux.memory.return_bytes(ret);
-                    engine.aux.memory.return_token_vec(read);
+                    for t in read.into_iter().rev() {engine.mouth.requeue(t)}
+                    //engine.aux.memory.return_bytes(ret);
+                    //engine.aux.memory.return_token_vec(read);
                     return false
                 }
                 if kw.len() == ret.len() {
-                    engine.aux.memory.return_token_vec(read);
-                    engine.aux.memory.return_bytes(ret);
+                    //engine.aux.memory.return_token_vec(read);
+                    //engine.aux.memory.return_bytes(ret);
                     return true
                 }
             }
             _ => {
                 read.push(token);
-                for t in read.drain(..).rev() {engine.mouth.requeue(t)}
-                engine.aux.memory.return_bytes(ret);
-                engine.aux.memory.return_token_vec(read);
+                for t in read.into_iter().rev() {engine.mouth.requeue(t)}
+                //engine.aux.memory.return_bytes(ret);
+                //engine.aux.memory.return_token_vec(read);
                 return false
             }
         }
         ResolvedToken::Cmd {token,..} => {
             read.push(token);
-            for t in read.drain(..).rev() {engine.mouth.requeue(t)}
-            engine.aux.memory.return_bytes(ret);
-            engine.aux.memory.return_token_vec(read);
+            for t in read.into_iter().rev() {engine.mouth.requeue(t)}
+            //engine.aux.memory.return_bytes(ret);
+            //engine.aux.memory.return_token_vec(read);
             return false
         }
     );
@@ -1261,8 +1247,8 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
 
 
 pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&'a[u8]],first:Option<(u8,ET::Token)>) -> Option<&'a[u8]> {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut read = engine.aux.memory.get_token_vec();
+    let mut ret = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_bytes();
+    let mut read = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_token_vec();
     if let Some((b,t)) = first {
         ret.push(b.to_ascii_lowercase());
         read.push(t);
@@ -1278,23 +1264,23 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
                     match kws.iter().find(|e| **e == ret.as_slice()) {
                         Some(w) => {
                             engine.mouth.requeue(token);
-                            engine.aux.memory.return_token_vec(read);
-                            engine.aux.memory.return_bytes(ret);
+                            //engine.aux.memory.return_token_vec(read);
+                            //engine.aux.memory.return_bytes(ret);
                             return Some(w)
                         }
                         None => {
                             engine.mouth.requeue(token);
-                            for t in read.drain(..).rev() {engine.mouth.requeue(t)}
-                            engine.aux.memory.return_bytes(ret);
-                            engine.aux.memory.return_token_vec(read);
+                            for t in read.into_iter().rev() {engine.mouth.requeue(t)}
+                            //engine.aux.memory.return_bytes(ret);
+                            //engine.aux.memory.return_token_vec(read);
                             return None
                         }
                     }
                 }
                 read.push(token);
                 if curr.len() == 1 && curr[0].len() == ret.len() {
-                    engine.aux.memory.return_token_vec(read);
-                    engine.aux.memory.return_bytes(ret);
+                    //engine.aux.memory.return_token_vec(read);
+                    //engine.aux.memory.return_bytes(ret);
                     return Some(curr[0])
                 }
             }
@@ -1303,15 +1289,15 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
                 match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
                     Some((i,_)) => {
                         engine.mouth.requeue(token);
-                        engine.aux.memory.return_token_vec(read);
-                        engine.aux.memory.return_bytes(ret);
+                        //engine.aux.memory.return_token_vec(read);
+                        //engine.aux.memory.return_bytes(ret);
                         return Some(curr[i])
                     }
                     _ => {
                         engine.mouth.requeue(token);
-                        for t in read.drain(..).rev() {engine.mouth.requeue(t)}
-                        engine.aux.memory.return_bytes(ret);
-                        engine.aux.memory.return_token_vec(read);
+                        for t in read.into_iter().rev() {engine.mouth.requeue(t)}
+                        //engine.aux.memory.return_bytes(ret);
+                        //engine.aux.memory.return_token_vec(read);
                         return None
                     }
                 }
@@ -1322,15 +1308,15 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
             match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
                 Some((i,_)) => {
                     engine.mouth.requeue(token);
-                    engine.aux.memory.return_token_vec(read);
-                    engine.aux.memory.return_bytes(ret);
+                    //engine.aux.memory.return_token_vec(read);
+                    //engine.aux.memory.return_bytes(ret);
                     return Some(curr[i])
                 }
                 _ => {
                     engine.mouth.requeue(token);
-                    for t in read.drain(..).rev() {engine.mouth.requeue(t)}
-                    engine.aux.memory.return_bytes(ret);
-                    engine.aux.memory.return_token_vec(read);
+                    for t in read.into_iter().rev() {engine.mouth.requeue(t)}
+                    //engine.aux.memory.return_bytes(ret);
+                    //engine.aux.memory.return_token_vec(read);
                     return None
                 }
             }

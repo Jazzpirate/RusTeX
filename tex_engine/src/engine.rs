@@ -83,7 +83,7 @@ pub struct DefaultPlainTeXEngineTypes;
 impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Char = u8;
     type CSName = utils::memory::InternedString;
-    type Token = super::tex::token::CompactToken;
+    type Token = super::tex::token::CompactToken;//::StandardToken<Self::CSName,u8>;//
     type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = ();
     type Int = i32;
@@ -152,7 +152,7 @@ pub struct PlainTeXEngine {
     pub state: state::tex_state::TeXState<DefaultPlainTeXEngineTypes>,
     filesystem: filesystem::NoOutputFileSystem<u8>,
     fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedString>,
-    mouth: mouth::DefaultMouth<super::tex::token::CompactToken,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
+    mouth: mouth::DefaultMouth<<DefaultPlainTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
     gullet: gullet::DefaultGullet<DefaultPlainTeXEngineTypes>,
     stomach: stomach::StomachWithShipout<DefaultPlainTeXEngineTypes>
 }

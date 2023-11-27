@@ -23,7 +23,7 @@ path = "src/lib.rs"
 #strip = "none"
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 lto = true
 debug = 2
 
@@ -47,6 +47,7 @@ string-interner = "0.14.0"
 #paste="1.0.13"
 chrono = "0.4.23"
 array-init = "2.1.0"
+arrayvec = "0.7.4"
 #regex = "1.9.3"
 #md5 = "0.7.0"
 #image = "0.24.7"
@@ -58,7 +59,6 @@ array-init = "2.1.0"
 #interned = "0.1.1"
 #staticize = "0.1.1"
 #bumpalo = {version ="3.13.0", features = ["collections"]}
-#arrayvec = "0.7.4"
 #blink-alloc = "0.3.0"
 #allocator-api2 = "0.2.16"
 #include_dir = "0.7.3"

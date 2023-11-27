@@ -11,7 +11,7 @@ use crate::tex::input_text::Character;
 use crate::tex::input_text::CharacterMap;
 
 #[derive(Clone,Debug)]
-pub struct TokenList<T:Token>(Ptr<Box<[T]>>);
+pub struct TokenList<T:Token>(Ptr<[T]>);
 impl<T:Token> PartialEq for TokenList<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
@@ -21,20 +21,20 @@ impl<T:Token> TokenList<T> {
     #[inline(always)]
     pub fn inner(&self) -> &[T] { &*self.0 }
     pub fn give_back_maybe<M:MemoryManager<T>>(self,memory:&mut M) {
-        match std::rc::Rc::try_unwrap(self.0) {
+        /*match std::rc::Rc::try_unwrap(self.0) {
             Ok(sl) => memory.return_token_vec(sl.into_vec()),
             _ => ()
-        }
+        }*/
     }
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
     pub fn empty() -> Self {
-        Self(Ptr::new(Box::new([])))
+        Self(Ptr::new([]))
     }
     #[inline(always)]
     pub fn get(&self,i:usize) -> &T {
-        &(**self.0)[i]
+        &(*self.0)[i]
     }
 
     pub fn meaning_fmt(&self, int:&<T::CS as ControlSequenceName>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>,double_par:bool) -> std::fmt::Result {
@@ -155,7 +155,7 @@ impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Tokenizer<'a,T,F> {
 
 impl<T:Token> From<Vec<T>> for TokenList<T> {
     fn from(value: Vec<T>) -> Self {
-        Self(Ptr::new(value.into()))
+        Self(value.into())
     }
 }
 

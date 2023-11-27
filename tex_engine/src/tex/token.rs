@@ -13,7 +13,7 @@ use crate::utils::ReusableVectorFactory;
 use crate::tex::input_text::CharacterMap;
 
 /// Trait for Tokens, to be implemented for an engine.
-pub trait Token:Clone+Eq+'static+std::fmt::Debug {
+pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     /// The type of the control sequence name.
     type CS : ControlSequenceName;
     /// The type of the character.

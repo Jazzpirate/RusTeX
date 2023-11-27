@@ -79,6 +79,29 @@ pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
 pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
     inputs:Vec<TokenSource<T,F>>
 }
+impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
+    fn clean(&mut self) {
+        loop {
+            match self.inputs.last_mut() {
+                Some(TokenSource::Expansion(e)) =>
+                    if !e.has_next() {
+                        self.inputs.pop();
+                        continue
+                    } else {
+                        break
+                    }
+                Some(TokenSource::TokenList(e)) =>
+                    if !e.has_next() {
+                        self.inputs.pop();
+                        continue
+                    } else {
+                        break
+                    }
+                _ => break
+            }
+        }
+    }
+}
 impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     type Token = T;
     type File = F;
@@ -117,36 +140,22 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     }
     #[inline(always)]
     fn push_macro_exp(&mut self, exp: MacroExpansion<Self::Token>) {
-        loop {
-            match self.inputs.last_mut() {
-                Some(TokenSource::Expansion(e)) =>
-                    if !e.has_next() {
-                        self.inputs.pop();
-                        continue
-                    } else {
-                        break
-                    }
-                Some(TokenSource::TokenList(e)) =>
-                    if !e.has_next() {
-                        self.inputs.pop();
-                        continue
-                    } else {
-                        break
-                    }
-                _ => break
-            }
-        }
+        self.clean();
         self.inputs.push(TokenSource::Expansion(exp))
     }
     #[inline(always)]
     fn push_exp(&mut self, exp: TokenListIterator<Self::Token>) {
+        self.clean();
         self.inputs.push(TokenSource::TokenList(exp))
     }
     #[inline(always)]
     fn requeue(&mut self,t:T) {
+        self.clean();
         self.inputs.push(TokenSource::Requeued(t))
     }
+    #[inline(always)]
     fn push_file(&mut self, f: F) {
+        self.clean();
         let s = f.line_source().unwrap();
         self.inputs.push(TokenSource::File(StringTokenizer::new(s)));
     }
