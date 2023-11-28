@@ -152,9 +152,9 @@ pub struct PlainTeXEngine {
     pub state: state::tex_state::TeXState<DefaultPlainTeXEngineTypes>,
     filesystem: filesystem::NoOutputFileSystem<u8>,
     fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedString>,
-    mouth: mouth::DefaultMouth<<DefaultPlainTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
+    pub mouth: mouth::DefaultMouth<<DefaultPlainTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
     gullet: gullet::DefaultGullet<DefaultPlainTeXEngineTypes>,
-    stomach: stomach::StomachWithShipout<DefaultPlainTeXEngineTypes>
+    pub stomach: stomach::StomachWithShipout<DefaultPlainTeXEngineTypes>
 }
 impl TeXEngine for PlainTeXEngine {
     type Types = DefaultPlainTeXEngineTypes;
@@ -171,6 +171,12 @@ impl TeXEngine for PlainTeXEngine {
     }
 }
 impl PlainTeXEngine {
+    pub fn reset(&mut self, s:state::tex_state::TeXState<DefaultPlainTeXEngineTypes>) {
+        self.state = s;
+        self.mouth = DefaultMouth::new();
+        self.gullet = DefaultGullet::new();
+        self.stomach = StomachWithShipout::new();
+    }
     pub fn new() -> Self {
         let mut aux = EngineAux {
             memory: utils::memory::ReuseTokenLists::new(),

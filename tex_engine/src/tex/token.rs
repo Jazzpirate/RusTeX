@@ -53,6 +53,15 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     }
 
     #[inline(always)]
+    fn is_cs_or_active(&self) -> bool {
+        match self.to_enum() {
+            StandardToken::ControlSequence(_) => true,
+            StandardToken::Character(_, CommandCode::Active) => true,
+            _ => false
+        }
+    }
+
+    #[inline(always)]
     fn is_cs(&self,name:&Self::CS) -> bool {
         match self.to_enum() {
             StandardToken::ControlSequence(cs) => cs == *name,
@@ -104,6 +113,13 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     fn is_end_group(&self) -> bool {
         match self.to_enum() {
             StandardToken::Character(_, CommandCode::EndGroup) => true,
+            _ => false
+        }
+    }
+    #[inline(always)]
+    fn is_param(&self) -> bool {
+        match self.to_enum() {
+            StandardToken::Character(_, CommandCode::Parameter) => true,
             _ => false
         }
     }
@@ -251,6 +267,11 @@ impl Token for CompactToken {
     }
 
     #[inline(always)]
+    fn is_cs_or_active(&self) -> bool {
+        self.is_string() || ((self.0 & 0x0000_FF00) >> 8) == 13
+    }
+
+    #[inline(always)]
     fn is_cs(&self,name:&Self::CS) -> bool {
         self.0 == name.to_usize() as u32
     }
@@ -277,5 +298,10 @@ impl Token for CompactToken {
     #[inline(always)]
     fn is_align_tab(&self) -> bool {
         !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 4
+    }
+
+    #[inline(always)]
+    fn is_param(&self) -> bool {
+        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 6
     }
 }

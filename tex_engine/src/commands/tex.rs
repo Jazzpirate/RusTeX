@@ -336,7 +336,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
     engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
         if inparam {
             inparam = false;
-            if t.command_code() == CommandCode::Parameter {
+            if t.is_param() {
                 exp.push(t);
             } else {
                 match t.char_value() {
@@ -348,7 +348,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
                 }
             }
         } else {
-            if t.command_code() == CommandCode::Parameter {
+            if t.is_param() {
                 inparam = true;
             } else {
                 exp.push(t);
@@ -383,7 +383,7 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
     ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,_,t| {
         if inparam {
             inparam = false;
-            if t.command_code() == CommandCode::Parameter {
+            if t.is_param() {
                 exp.push(t);
             }
             else {
@@ -396,7 +396,7 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
                 }
             }
         } else {
-            if t.command_code() == CommandCode::Parameter {
+            if t.is_param() {
                 inparam = true;
             } else {
                 exp.push(t);
@@ -515,7 +515,7 @@ pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cm:&ACOr
         }
         if inparam {
             inparam = false;
-            if t.command_code() == CommandCode::Parameter {
+            if t.is_param() {
                 params.push(t);
             }
             else {
@@ -529,7 +529,7 @@ pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cm:&ACOr
                 arity += 1
             }
         } else {
-            if t.command_code() == CommandCode::Parameter {
+            if t.is_param() {
                 inparam = true;
             } else {
                 params.push(t);
@@ -815,8 +815,11 @@ pub fn ifcat<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
 fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
     let mut exp = true;
     while let Some(t) = engine.get_next() {
+        if t.is_noexpand_marker() {
+            exp = false;
+            continue
+        }
         match engine.gullet.resolve(engine.state,t) {
-            ResolvedToken::Tk {char,code:CommandCode::Noexpand,..} => exp=false,
             ResolvedToken::Tk {char,code,..} => return (Some(char),code),
             ResolvedToken::Cmd {cmd,token} => match cmd {
                 Some(Command::Macro(m)) if exp =>

@@ -109,15 +109,18 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     type Token = T;
     type File = F;
 
+    #[inline(always)]
     fn get_args(&mut self) -> [Vec<T>;9] {
-        match self.args.pop() {
+        /*match self.args.pop() {
             Some(a) => a,
             None => array_init::array_init(|_| Vec::new())
-        }
+        }*/
+        array_init::array_init(|_| Vec::new())
     }
+    #[inline(always)]
     fn return_args(&mut self,mut exp:[Vec<T>;9]) {
-        for a in exp.iter_mut() { a.clear() }
-        self.args.push(exp)
+        /*for a in exp.iter_mut() { a.clear() }
+        self.args.push(exp)*/
     }
 
     fn endinput(&mut self) {

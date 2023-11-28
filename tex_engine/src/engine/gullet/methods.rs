@@ -156,6 +156,10 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
             cont(engine.aux,engine.state,engine.gullet,next);
             continue
         }
+        if !t.is_cs_or_active() {
+            cont(engine.aux,engine.state,engine.gullet,t);
+            continue
+        }
         match engine.resolve(t) {
             ResolvedToken::Tk{token,char,code} => {
                 cont(engine.aux,engine.state,engine.gullet, token)
@@ -170,7 +174,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 if e.name == PRIMITIVES.unexpanded => {
                 engine.expand_until_bgroup(false);
                 engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|a,t|{
-                    if edef_like && t.command_code() == CommandCode::Parameter {
+                    if edef_like && t.is_param() {
                         cont(a,engine.state,engine.gullet,t.clone());
                     }
                     cont(a,engine.state,engine.gullet,t)
@@ -179,7 +183,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
             ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token}
                 if e.name == PRIMITIVES.the => {
                 crate::commands::tex::do_the(engine,|a,s,g,t| {
-                    if edef_like && t.command_code() == CommandCode::Parameter {
+                    if edef_like && t.is_param() {
                         cont(a,s,g,t.clone());
                     }
                     cont(a,s,g,t)
@@ -222,6 +226,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let cc = state.get_catcode_scheme();
     let gullet = &mut *engine.gullet;
     engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
+        if !t.is_cs_or_active() { return true }
         match gullet.resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
                 {incond += 1;true},
@@ -265,6 +270,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
     let cc = state.get_catcode_scheme();
     let gullet = &mut *engine.gullet;
     engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
+        if !t.is_cs_or_active() { return true }
         match gullet.resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
                 {incond += 1;true},
@@ -400,47 +406,6 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
     );
     todo!("file end")
 }
-/*
-pub fn read_numeric<R,ET:EngineTypes,
-    B:FnOnce(&mut EngineReferences<ET>,bool,u8) -> R,
-    C:FnOnce(&mut EngineReferences<ET>,bool,Command<ET>,ET::Token) -> R
-    >(engine:&mut EngineReferences<ET>, skip_eq:bool,cf:B,ccm:C) -> R {
-    let mut is_negative = false;
-    let mut had_eq = !skip_eq;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
-            (_,CommandCode::Space) => (),
-            (Ok(b'='),CommandCode::Other) => {
-                if had_eq { todo!("throw error") }
-                had_eq = true;
-            }
-            (Ok(b'-'),CommandCode::Other) => {
-                is_negative =!is_negative;
-            }
-            (Ok(b'+'),CommandCode::Other) => (),
-            (Ok(b),CommandCode::Other) => return cf(engine,is_negative,b),
-            _ => todo!("number expected")
-        }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),token} => match ((*char).try_into(),code) {
-            (_,CommandCode::Space) => (),
-            (Ok(b'='),CommandCode::Other) => {
-                if had_eq { todo!("throw error") }
-                had_eq = true;
-            }
-            (Ok(b'-'),CommandCode::Other) => {
-                is_negative =!is_negative;
-            }
-            (Ok(b'+'),CommandCode::Other) => (),
-            (Ok(b),CommandCode::Other) => return cf(engine,is_negative,b),
-            _ => todo!("number expected")
-        }
-        ResolvedToken::Cmd {cmd:None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
-        ResolvedToken::Cmd {cmd:Some(cmd),token} => return ccm(engine,is_negative,cmd.clone(),token)
-    );
-    todo!("file end")
-}
-
- */
 
 pub fn read_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Int {
     let (is_negative,r) = read_numeric(engine, skip_eq);

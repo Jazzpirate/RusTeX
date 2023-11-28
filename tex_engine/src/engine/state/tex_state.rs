@@ -22,6 +22,7 @@ type Dim<ET> = <<ET as EngineTypes>::Num as NumSet>::Dim;
 type Skip<ET> = <<ET as EngineTypes>::Num as NumSet>::Skip;
 type MuSkip<ET> = <<ET as EngineTypes>::Num as NumSet>::MuSkip;
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
+use crate::tex::control_sequences::ControlSequenceName;
 
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
@@ -45,7 +46,7 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     muskip_register:Vec<MuSkip<ET>>,
     toks_register:Vec<TokenList<ET::Token>>,
     box_register:Vec<Option<TeXBox<ET>>>,
-    commands:HMap<<ET::Token as Token>::CS,Command<ET>>,
+    commands:Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
     ac_commands:<ET::Char as Character>::CharMap<Option<Command<ET>>>,
     endline_char:Option<ET::Char>,
     escape_char:Option<ET::Char>,
@@ -93,7 +94,7 @@ impl<ET:EngineTypes<State=Self>> TeXState<ET> {
             muskip_register: Vec::new(),
             toks_register: Vec::new(),
             box_register: Vec::new(),
-            commands:HMap::default(),
+            commands:Vec::new(),//HMap::default(),
             ac_commands:<ET::Char as Character>::CharMap::default(),
             endline_char:Some(ET::Char::from(b'\r')),
             escape_char:Some(ET::Char::from(b'\\')),
@@ -392,10 +393,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                             )
                         }
                     }
-                    match old {
-                        None => self.commands.remove(&name),
-                        Some(c) => self.commands.insert(name, c)
-                    };
+                    self.commands[name.as_usize()] = old;
                 }
                 StateChange::AcCommand {char,old} => {
                     if trace {
@@ -919,13 +917,20 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
 
     #[inline(always)]
     fn get_command(&self, name: &CS<Self>) -> Option<&Command<Self::ET>> {
-        self.commands.get(name)
+        match self.commands.get(name.as_usize()) {
+            None => None,
+            Some(o) => o.as_ref()
+        }
     }
     fn set_command(&mut self,aux:&EngineAux<ET>, name: CS<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
         self.change_field(globally,|s,g| {
+            let idx = name.as_usize();
+            if s.commands.len() <= idx {
+                s.commands.resize(idx + 1, None);
+            }
             let old = match cmd {
                 None => {
-                    let o = s.commands.remove(&name);
+                    let o = std::mem::replace(&mut s.commands[idx],None);
                     if s.tracing_assigns() {
                         match o {
                             None => aux.outputs.write_neg1(
@@ -957,7 +962,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                 },
                 Some(cmd) => {
                     if s.tracing_assigns() {
-                        match s.commands.get(&name) {
+                        match s.commands[idx] {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}undefined}}",
                                              if g { "globally " } else { "" },
@@ -983,7 +988,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                             )
                         );
                     }
-                    s.commands.insert(name.clone(), cmd)
+                    std::mem::replace(&mut s.commands[idx],Some(cmd))
                 }
             };
             StateChange::Command { name, old }

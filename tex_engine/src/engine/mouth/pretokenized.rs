@@ -194,6 +194,8 @@ impl<T:Token> Iterator for TokenListIterator<T> {
     }
 }
 
+pub type TokenVecIterator<T> = std::vec::IntoIter<T>;
+
 pub struct MacroExpansion<T:Token> {
     pub ls:TokenList<T>,index:usize,currarg:Option<(usize,usize)>,pub args:[Vec<T>;9]
 }
@@ -250,25 +252,23 @@ impl<T:Token> Iterator for MacroExpansion<T> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             if let Some((i, j)) = self.currarg {
-                if j < self.args[i].len() {
-                    let t = self.args[i][j].clone();
+                if let Some(t) = self.args[i].get(j) {
                     self.currarg = Some((i, j + 1));
-                    return Some(t);
+                    return Some(t.clone());
                 } else {
                     self.currarg = None;
                 }
             }
-
-            if self.index >= self.ls.0.len() {
-                return None;
-            }
-
-            let t = self.ls.0[self.index].clone();
-            self.index += 1;
-            if let Some(i) = t.is_argument_marker() {
-                self.currarg = Some((i.into(), 0));
-            } else {
-                return Some(t);
+            match self.ls.0.get(self.index) {
+                None => return None,
+                Some(t) => {
+                    self.index += 1;
+                    if let Some(i) = t.is_argument_marker() {
+                        self.currarg = Some((i.into(), 0));
+                    } else {
+                        return Some(t.clone());
+                    }
+                }
             }
         }
     }

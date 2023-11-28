@@ -185,10 +185,14 @@ pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
                           crate::engine::gullet::methods::read_int_byte,
                           crate::engine::gullet::methods::read_int_command
     );
-    match engine.resolve(r) {
-        ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
-        ResolvedToken::Cmd {token,..} => engine.mouth.requeue(token),
-        ResolvedToken::Tk {token,..} => engine.mouth.requeue(token)
+    if !r.is_cs_or_active() {
+        engine.mouth.requeue(r)
+    } else {
+        match engine.resolve(r) {
+            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
+            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+        }
     }
     i
 }
@@ -198,10 +202,14 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
                           crate::engine::gullet::methods::read_dim_byte,
                           crate::engine::gullet::methods::read_dim_command
     );
-    match engine.resolve(r) {
-        ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
-        ResolvedToken::Cmd {token,..} => engine.mouth.requeue(token),
-        ResolvedToken::Tk {token,..} => engine.mouth.requeue(token)
+    if !r.is_cs_or_active() {
+        engine.mouth.requeue(r)
+    } else {
+        match engine.resolve(r) {
+            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
+            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+        }
     }
     i
 }
@@ -211,10 +219,14 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
                           crate::engine::gullet::methods::read_skip_byte,
                           crate::engine::gullet::methods::read_skip_command
     );
-    match engine.resolve(r) {
-        ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
-        ResolvedToken::Cmd {token,..} => engine.mouth.requeue(token),
-        ResolvedToken::Tk {token,..} => engine.mouth.requeue(token)
+    if !r.is_cs_or_active() {
+        engine.mouth.requeue(r)
+    } else {
+        match engine.resolve(r) {
+            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
+            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+        }
     }
     i
 }
@@ -224,10 +236,14 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
                           crate::engine::gullet::methods::read_muskip_byte,
                           crate::engine::gullet::methods::read_muskip_command
     );
-    match engine.resolve(r) {
-        ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
-        ResolvedToken::Cmd {token,..} => engine.mouth.requeue(token),
-        ResolvedToken::Tk {token,..} => engine.mouth.requeue(token)
+    if !r.is_cs_or_active() {
+        engine.mouth.requeue(r)
+    } else {
+        match engine.resolve(r) {
+            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
+            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+        }
     }
     i
 }

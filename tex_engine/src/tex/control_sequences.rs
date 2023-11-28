@@ -7,6 +7,7 @@
 */
 
 use std::fmt::Debug;
+use string_interner::Symbol;
 use crate::engine::utils::memory::{InternedString, StringInterner};
 use crate::utils::Ptr;
 
@@ -15,6 +16,7 @@ use crate::utils::Ptr;
 pub trait ControlSequenceName: Clone + Eq + 'static + std::hash::Hash + Debug {
     /// The type of the handler for this control sequence name.
     type Handler: ControlSequenceNameHandler<Self>;
+    fn as_usize(&self) -> usize;
 }
 
 /** Handles control sequence names - conversion from/to strings, displaying etc. */
@@ -47,7 +49,13 @@ impl ControlSequenceNameHandler<Ptr<str>> for () {
 
 impl ControlSequenceName for Ptr<str> {
     type Handler = ();
+    fn as_usize(&self) -> usize {
+        todo!()
+    }
 }
 impl ControlSequenceName for InternedString {
     type Handler = StringInterner;
+    fn as_usize(&self) -> usize {
+        self.to_usize()
+    }
 }
