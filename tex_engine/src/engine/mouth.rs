@@ -19,6 +19,8 @@ type C<M> = <<M as Mouth>::Token as Token>::Char;
 pub trait Mouth:Sized {
     type Token:Token;
     type File:File<Char=C<Self>>;
+    fn get_args(&mut self) -> [Vec<Self::Token>;9];
+    fn return_args(&mut self,args:[Vec<Self::Token>;9]);
     fn push_file(&mut self,f:Self::File);
     fn push_exp(&mut self,exp:TokenListIterator<Self::Token>);
     fn push_macro_exp(&mut self,exp:MacroExpansion<Self::Token>);
@@ -77,7 +79,8 @@ pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
 
 
 pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
-    inputs:Vec<TokenSource<T,F>>
+    inputs:Vec<TokenSource<T,F>>,
+    args:Vec<[Vec<T>;9]>
 }
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
     fn clean(&mut self) {
@@ -105,6 +108,17 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
 impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     type Token = T;
     type File = F;
+
+    fn get_args(&mut self) -> [Vec<T>;9] {
+        match self.args.pop() {
+            Some(a) => a,
+            None => array_init::array_init(|_| Vec::new())
+        }
+    }
+    fn return_args(&mut self,mut exp:[Vec<T>;9]) {
+        for a in exp.iter_mut() { a.clear() }
+        self.args.push(exp)
+    }
 
     fn endinput(&mut self) {
         for (i,s) in self.inputs.iter().enumerate().rev() {
@@ -190,7 +204,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     match s.next() {
                         Some(t) => return Some(t),
                         _ => match self.inputs.pop() {
-                            Some(TokenSource::Expansion(ls)) => ls.give_back_maybe(&mut aux.memory),
+                            Some(TokenSource::Expansion(ls)) => self.return_args(ls.args), // ls.give_back_maybe(&mut aux.memory),
                             _ => unreachable!()
                         }
                     }
@@ -253,7 +267,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 Some(TokenSource::Expansion(s)) => {
                     iterate!(s);
                     match self.inputs.pop() {
-                        Some(TokenSource::Expansion(ls)) => ls.give_back_maybe(&mut aux.memory),
+                        Some(TokenSource::Expansion(ls)) => self.return_args(ls.args), //ls.give_back_maybe(&mut aux.memory),
                         _ => unreachable!()
                     }
                 }
@@ -300,7 +314,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
     pub fn new() -> Self {
         DefaultMouth {
-            inputs:Vec::new()
+            inputs:Vec::new(),args:Vec::new()
         }
     }
 /*

@@ -188,18 +188,14 @@ impl<T:Token> TokenListIterator<T> {
 impl<T:Token> Iterator for TokenListIterator<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.ls.0.len() {
-            let t = self.ls.get(self.index);
-            self.index += 1;
-            Some(t.clone())
-        } else {
-            None
-        }
+        let r = self.ls.0.get(self.index).cloned();
+        self.index += 1;
+        r
     }
 }
 
 pub struct MacroExpansion<T:Token> {
-    ls:TokenList<T>,index:usize,currarg:Option<(usize,usize)>,args:[Vec<T>;9]
+    pub ls:TokenList<T>,index:usize,currarg:Option<(usize,usize)>,pub args:[Vec<T>;9]
 }
 impl<T:Token> MacroExpansion<T> {
     #[inline(always)]
@@ -253,22 +249,26 @@ impl<T:Token> Iterator for MacroExpansion<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.currarg {
-                Some((i,j)) if j < self.args[i].len() => {
+            if let Some((i, j)) = self.currarg {
+                if j < self.args[i].len() {
                     let t = self.args[i][j].clone();
-                    self.currarg = Some((i,j+1));
-                    return Some(t)
+                    self.currarg = Some((i, j + 1));
+                    return Some(t);
+                } else {
+                    self.currarg = None;
                 }
-                Some(_) => self.currarg = None,
-                None if self.index < self.ls.0.len() => {
-                    let t = self.ls.get(self.index);
-                    self.index += 1;
-                    match t.is_argument_marker() {
-                        Some(i) => self.currarg = Some((i.into(),0)),
-                        _ => return Some(t.clone())
-                    }
-                }
-                _ => return None
+            }
+
+            if self.index >= self.ls.0.len() {
+                return None;
+            }
+
+            let t = self.ls.0[self.index].clone();
+            self.index += 1;
+            if let Some(i) = t.is_argument_marker() {
+                self.currarg = Some((i.into(), 0));
+            } else {
+                return Some(t);
             }
         }
     }

@@ -290,12 +290,6 @@ pub struct DefaultGullet<ET:EngineTypes> {
     csnames:usize,
     phantom:PhantomData<ET>
 }
-impl<ET:EngineTypes> DefaultGullet<ET> {
-    #[inline(always)]
-    fn get_args(&mut self,mem:&mut ET::Memory) -> [Vec<ET::Token>;9] {
-        array_init::array_init(|_| mem.get_token_vec())
-    }
-}
 struct Dots(usize);
 impl Display for Dots {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -334,7 +328,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
             engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));
             return;
         }
-        let mut args = engine.gullet.get_args(&mut engine.aux.memory);
+        let mut args = engine.mouth.get_args();
         methods::read_arguments(engine,&mut args,m.signature.params,m.long);
         if trace {
             for i in 0..m.signature.arity {
@@ -347,9 +341,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
             }
         }
         if m.signature.arity == 0 {
-            for v in args {
-                engine.aux.memory.return_token_vec(v);
-            }
+            engine.mouth.return_args(args);
             engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));
         } else {
             engine.mouth.push_macro_exp(MacroExpansion::new(m.expansion,args))
