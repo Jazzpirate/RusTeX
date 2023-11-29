@@ -125,7 +125,7 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
     }
 }
 
-pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
     let cc = engine.state.get_catcode_scheme();
     let endline = engine.state.get_endline_char();
@@ -149,7 +149,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Exp
     });
 }
 
-pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     match engine.get_next() {
         Some(t) if t.is_begin_group() => {
             ET::Gullet::expand_until_endgroup(engine,false,false,|a,s,g,t| exp.push(t));
@@ -284,7 +284,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token
     engine.set_command(&cs,Some(Command::Macro(m)),globally)
 }
 
-pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
     engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|a,t|{
         exp.push(t)

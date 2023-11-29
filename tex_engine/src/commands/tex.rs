@@ -1083,7 +1083,7 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     }
 }
 
-pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Tokenizer::new(&mut fi);
     write!(f,"{}",engine.aux.jobname).unwrap();
@@ -1157,7 +1157,7 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,
 
 pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     engine.expand_until_bgroup(false);
-    let mut exp = ET::Gullet::get_expansion_container(engine);
+    let mut exp = Vec::new();// ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
     engine.mouth.read_until_endgroup(engine.aux,state.get_catcode_scheme(),state.get_endline_char(),|_,t| {
         match t.to_enum() {
@@ -1172,12 +1172,12 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Toke
             }
         }
     });
-    engine.mouth.push_exp(exp.to_iter());
+    engine.mouth.push_vec(exp.into_iter());
 }
 
 pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     engine.expand_until_bgroup(false);
-    let mut exp = ET::Gullet::get_expansion_container(engine);
+    let mut exp = Vec::new();//ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
     engine.mouth.read_until_endgroup(engine.aux,state.get_catcode_scheme(),state.get_endline_char(),|_,t| {
         match t.to_enum() {
@@ -1192,7 +1192,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Toke
             }
         }
     });
-    engine.mouth.push_exp(exp.to_iter());
+    engine.mouth.push_vec(exp.into_iter());
 }
 
 pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
@@ -1213,7 +1213,7 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
     engine.set_command(&cm,Some(Command::MathChar(i)),globally)
 }
 
-pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Tokenizer::new(&mut fi);
     match engine.get_next() {
@@ -1271,7 +1271,7 @@ pub fn newlinechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::
     engine.state.set_newline_char(engine.aux,val,globally)
 }
 
-pub fn number<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn number<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let val = engine.read_int(false);
     write!(Tokenizer::new(&mut|t| exp.push(t)),"{}",val).unwrap();
 }
@@ -1346,7 +1346,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,glo
 }
 
 const ROMAN: &[(u8, i64)] = &[(b'm', 0),(b'd', 2),(b'c', 5),(b'l', 2),(b'x', 5),(b'v', 2),(b'i', 5)];
-pub fn romannumeral<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn romannumeral<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut n = engine.read_int(false).into();
     if n < 0 { return }
     let mut v = 1000;
@@ -1401,7 +1401,7 @@ pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
     todo!("file end")
 }
 
-pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     match engine.get_next() {
         Some(t) =>
             match t.to_enum() {
@@ -1602,7 +1602,7 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
 }
 
 #[inline(always)]
-pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     do_the(engine,|_,_,_,t|exp.push(t))
 }
 

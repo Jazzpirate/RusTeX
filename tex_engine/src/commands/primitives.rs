@@ -71,7 +71,7 @@ macro_rules! cmstodo {
 pub fn register_expandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,&mut ExpansionContainer<Tk<E>>,Tk<E>)) {
+    f:fn(&mut EngineReferences<E::Types>,&mut Vec<Tk<E>>,Tk<E>)) {
     let id = PRIMITIVES.get(name);
     let command = Command::Expandable(Expandable{
         name:id,

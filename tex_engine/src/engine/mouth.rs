@@ -2,7 +2,7 @@ use std::fmt::Display;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
-use crate::engine::mouth::pretokenized::{MacroExpansion, TokenListIterator};
+use crate::engine::mouth::pretokenized::{MacroExpansion, TokenListIterator, TokenVecIterator};
 use crate::engine::mouth::strings::StringTokenizer;
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
@@ -23,6 +23,7 @@ pub trait Mouth:Sized {
     fn return_args(&mut self,args:[Vec<Self::Token>;9]);
     fn push_file(&mut self,f:Self::File);
     fn push_exp(&mut self,exp:TokenListIterator<Self::Token>);
+    fn push_vec(&mut self, exp: TokenVecIterator<Self::Token>);
     fn push_macro_exp(&mut self,exp:MacroExpansion<Self::Token>);
     fn get_next_opt<ET:EngineTypes<Char = C<Self>,Token = Self::Token,File = Self::File>>(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<Self::Token>;
     fn iterate<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,cont:Fn);
@@ -74,6 +75,7 @@ pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
     File(StringTokenizer<T::Char,F::LineSource>),
     Expansion(MacroExpansion<T>),
     TokenList(TokenListIterator<T>),
+    TokenVec(TokenVecIterator<T>),
     Requeued(T)
 }
 
@@ -166,6 +168,11 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         self.inputs.push(TokenSource::TokenList(exp))
     }
     #[inline(always)]
+    fn push_vec(&mut self, exp: TokenVecIterator<Self::Token>) {
+        self.clean();
+        self.inputs.push(TokenSource::TokenVec(exp))
+    }
+    #[inline(always)]
     fn requeue(&mut self,t:T) {
         self.clean();
         self.inputs.push(TokenSource::Requeued(t))
@@ -184,36 +191,33 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         Ok(())
     }
     fn get_next_opt<ET:EngineTypes<Char=T::Char,Token =T,File = F>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> Option<T> {
-        let cc: &CategoryCodeScheme<T::Char> = state.get_catcode_scheme();
-        let endline: Option<T::Char> = state.get_endline_char();
-        loop {
-            match self.inputs.last_mut() {
-                None => return None,
-                Some(TokenSource::Requeued(_)) => {
+        while let Some(src) = self.inputs.last_mut() {
+            match src {
+                TokenSource::Requeued(_) => {
                     if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
                         return Some(t)
                     } else { unreachable!() }
                 }
-                Some(TokenSource::TokenList(s)) => {
+                TokenSource::TokenVec(s) => {
                     match s.next() {
                         Some(t) => return Some(t),
-                        _ => match self.inputs.pop() {
-                            Some(TokenSource::TokenList(ls)) => ls.give_back_maybe(&mut aux.memory),
-                            _ => unreachable!()
-                        }
+                        _ => {self.inputs.pop();}
                     }
                 }
-                Some(TokenSource::Expansion(s)) => {
+                TokenSource::TokenList(s) => {
                     match s.next() {
                         Some(t) => return Some(t),
-                        _ => match self.inputs.pop() {
-                            Some(TokenSource::Expansion(ls)) => self.return_args(ls.args), // ls.give_back_maybe(&mut aux.memory),
-                            _ => unreachable!()
-                        }
+                        _ => { self.inputs.pop(); }
                     }
                 }
-                Some(TokenSource::String(s)) => {
-                    match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                TokenSource::Expansion(s) => {
+                    match s.next() {
+                        Some(t) => return Some(t),
+                        _ => { self.inputs.pop(); }
+                    }
+                }
+                TokenSource::String(s) => {
+                    match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
                         Some(t) => return Some(t),
                         _ => {
                             self.inputs.pop();
@@ -221,7 +225,9 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                         }
                     }
                 }
-                Some(TokenSource::File(s)) => {
+                TokenSource::File(s) => {
+                    let cc: &CategoryCodeScheme<T::Char> = state.get_catcode_scheme();
+                    let endline: Option<T::Char> = state.get_endline_char();
                     match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                         Some(t) => return Some(t),
                         _ => {
@@ -242,16 +248,10 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 }
             }
         }
+        None
     }
 
     fn iterate<ET:EngineTypes<Token = T,File = F>,Fn:FnMut(&mut EngineAux<ET>,T) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,mut cont:Fn) {
-        macro_rules! iterate {
-            ($iter:ident) => {
-                for t in $iter {
-                    if !cont(aux,t) { return }
-                }
-            };
-        }
         loop {
             match self.inputs.last_mut() {
                 Some(TokenSource::Requeued(t)) => {
@@ -261,18 +261,16 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     } else { unreachable!() }
                 }
                 Some(TokenSource::TokenList(s)) => {
-                    iterate!(s);
-                    match self.inputs.pop() {
-                        Some(TokenSource::TokenList(ls)) => ls.give_back_maybe(&mut aux.memory),
-                        _ => unreachable!()
-                    }
+                    for t in s { if !cont(aux,t) { return } }
+                    self.inputs.pop();
+                }
+                Some(TokenSource::TokenVec(s)) => {
+                    for t in s { if !cont(aux,t) { return } }
+                    self.inputs.pop();
                 }
                 Some(TokenSource::Expansion(s)) => {
-                    iterate!(s);
-                    match self.inputs.pop() {
-                        Some(TokenSource::Expansion(ls)) => self.return_args(ls.args), //ls.give_back_maybe(&mut aux.memory),
-                        _ => unreachable!()
-                    }
+                    for t in s { if !cont(aux,t) { return } }
+                    self.inputs.pop();
                 }
                 Some(TokenSource::String(s)) => {
                     while let Some(t) = s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {

@@ -62,7 +62,7 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
     }
 }
 
-pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut filename = engine.aux.memory.get_string();
     engine.read_braced_string(&mut filename);
     let file = engine.filesystem.get(&filename);
@@ -85,12 +85,12 @@ pub fn pdftexversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
     <ET::Num as NumSet>::Int::from(140)
 }
 
-pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     exp.push(ET::Token::from_char_cat(b'2'.into(),CommandCode::Other));
     exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
 }
 
-pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut ExpansionContainer<ET::Token>,tk:ET::Token) {
+pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut first = engine.aux.memory.get_string();
     let mut second = engine.aux.memory.get_string();
     engine.read_braced_string(&mut first);

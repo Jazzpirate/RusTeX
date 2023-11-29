@@ -175,7 +175,7 @@ pub struct Conditional<ET:EngineTypes> {
 #[derive(Clone,Debug)]
 pub struct Expandable<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
-    pub expand:fn(&mut EngineReferences<ET>,&mut ExpansionContainer<ET::Token>,ET::Token)
+    pub expand:fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)
 }
 
 #[derive(Clone,Debug)]

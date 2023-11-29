@@ -96,11 +96,11 @@ pub trait Gullet {
         ExpansionContainer::new(engine.aux.memory.get_token_vec())
     }
 
-    fn do_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,&mut ExpansionContainer<T<Self>>,T<Self>)) {
+    fn do_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,&mut Vec<T<Self>>,T<Self>)) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
-        let mut exp = ExpansionContainer::new(engine.aux.memory.get_token_vec());
+        let mut exp = Vec::new();// ExpansionContainer::new(engine.aux.memory.get_token_vec());
         f(engine,&mut exp,token);
-        engine.mouth.push_exp(exp.to_iter());
+        engine.mouth.push_vec(exp.into_iter());
     }
     fn do_macro(engine: &mut EngineReferences<Self::ET>,m:Macro<T<Self>>,token:T<Self>);
     #[inline(always)]
