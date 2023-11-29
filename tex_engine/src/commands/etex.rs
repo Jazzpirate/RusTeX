@@ -97,25 +97,39 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> R,
   cmd:fn(&mut EngineReferences<ET>,bool,Command<ET>,ET::Token) -> R
 ) -> (R,ET::Token) {
-    let mut adds = vec!(Summand::<ET,R>::new(expr_inner(engine,byte,cmd)));
+    let mut prev : Option<R> = None;
+    let mut curr = Summand::<ET,R>::new(expr_inner(engine,byte,cmd));
     loop {
         match engine.read_chars(&[b'+',b'-',b'*',b'/']) {
             Err(r) => {
-                /*let trace = engine.state.get_primitive_int(PRIMITIVES.tracingcommands) > ET::Int::default();
-                return (Summand::reduce(adds,trace,&engine.aux.outputs),r)
-                 */
-                return (Summand::reduce(adds),r)
+                match prev {
+                    Some(p) => return (p + curr.resolve(),r),
+                    _ => return (curr.resolve(),r)
+                }
+                //return (Summand::reduce(adds),r)
             },
-            Ok(b'+') => adds.push(Summand::new(expr_inner(engine,byte,cmd))),
-            Ok(b'-') => adds.push(Summand::new(-expr_inner(engine,byte,cmd))),
+            Ok(b'+') => {
+                let old = std::mem::replace(&mut curr,Summand::new(expr_inner(engine,byte,cmd))).resolve();
+                prev = match prev {
+                    Some(s) => Some(s + old),
+                    None => Some(old)
+                }
+            },
+            Ok(b'-') => {
+                let old = std::mem::replace(&mut curr,Summand::new(-expr_inner(engine,byte,cmd))).resolve();
+                prev = match prev {
+                    Some(s) => Some(s + old),
+                    None => Some(old)
+                }
+            },
             Ok(b'*') => {
-                adds.last_mut().unwrap().mult(expr_inner(engine,
+                curr.mult(expr_inner(engine,
                                            crate::engine::gullet::methods::read_int_byte,
                                            crate::engine::gullet::methods::read_int_command
                 ))
             },
             Ok(b'/') => {
-                adds.last_mut().unwrap().div(expr_inner(engine,
+                curr.div(expr_inner(engine,
                                            crate::engine::gullet::methods::read_int_byte,
                                            crate::engine::gullet::methods::read_int_command
                 ))
