@@ -174,7 +174,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     }
     #[inline(always)]
     fn requeue(&mut self,t:T) {
-        self.clean();
+        //self.clean();
         self.inputs.push(TokenSource::Requeued(t))
     }
     #[inline(always)]
