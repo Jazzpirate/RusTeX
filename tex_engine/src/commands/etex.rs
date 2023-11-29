@@ -285,14 +285,14 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token
         todo!("throw error")
     }
     let cs = engine.read_control_sequence();
-    let mut ret = engine.aux.memory.get_token_vec();
+    let mut ret = shared_vector::Vector::new();
     engine.filesystem.readline(idx,|t| ret.push(t));
     let m = Macro {
         long:false,outer:false,protected:false,
         expansion:ret.into(),
         signature:MacroSignature {
             arity:0,
-            params:TokenList::empty()
+            params:engine.aux.memory.empty().into()
         }
     };
     engine.set_command(&cs,Some(Command::Macro(m)),globally)

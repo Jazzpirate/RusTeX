@@ -188,8 +188,8 @@ impl PlainTeXEngine {
         };
         let fontsystem = fontsystem::TfmFontSystem::new(&mut aux);
         PlainTeXEngine {
+            state: state::tex_state::TeXState::new(fontsystem.null(),&aux.memory),
             aux,
-            state: state::tex_state::TeXState::new(fontsystem.null()),
             fontsystem,
             filesystem: filesystem::NoOutputFileSystem::new(crate::utils::PWD.to_path_buf()),
             mouth: mouth::DefaultMouth::new(),

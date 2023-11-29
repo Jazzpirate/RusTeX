@@ -331,7 +331,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
         None => todo!("file end error")
     };
     let (sig,end) = parse_signature(engine,&cm);
-    let mut exp = engine.aux.memory.get_token_vec();
+    let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
         if inparam {
@@ -378,7 +378,7 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
         None => todo!("file end error")
     };
     let (sig,end) = parse_signature(engine,&cm);
-    let mut exp = engine.aux.memory.get_token_vec();
+    let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,_,t| {
         if inparam {
@@ -502,7 +502,7 @@ pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
 pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cm:&ACOrCS<ET::Token>)
     -> (MacroSignature<ET::Token>,Option<ET::Token>) {
     let mut arity = 0;
-    let mut params = engine.aux.memory.get_token_vec();
+    let mut params = shared_vector::Vector::new();
     let mut inparam = false;
     let mut ends_with_brace = None;
     engine.mouth.iterate(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
@@ -1317,7 +1317,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,glo
         todo!("throw error")
     }
     let cs = engine.read_control_sequence();
-    let mut ret = engine.aux.memory.get_token_vec();
+    let mut ret = shared_vector::Vector::new();
     engine.filesystem.read(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),
     engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|t| ret.push(t));
 
@@ -1339,7 +1339,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,glo
         expansion:ret.into(),
         signature:MacroSignature {
             arity:0,
-            params:TokenList::empty()
+            params:engine.aux.memory.empty().into()
         }
     };
     engine.set_command(&cs,Some(Command::Macro(m)),globally)
@@ -1627,7 +1627,7 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
                 had_eq = true;
             }
             (_,CommandCode::BeginGroup) => {
-                let mut tks = engine.aux.memory.get_token_vec();
+                let mut tks = shared_vector::Vector::new();
                 let cc = engine.state.get_catcode_scheme();
                 let endline = engine.state.get_endline_char();
                 engine.mouth.read_until_endgroup(engine.aux,cc,endline,|_,t| tks.push(t));

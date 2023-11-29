@@ -96,7 +96,7 @@ pub trait Gullet {
 
     #[inline(always)]
     fn get_expansion_container(engine:&mut EngineReferences<Self::ET>) -> ExpansionContainer<T<Self>> {
-        ExpansionContainer::new(engine.aux.memory.get_token_vec())
+        ExpansionContainer::new()
     }
 
     fn do_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,&mut Vec<T<Self>>,T<Self>)) {

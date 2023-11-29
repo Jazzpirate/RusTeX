@@ -11,7 +11,7 @@ use crate::tex::input_text::Character;
 use crate::tex::input_text::CharacterMap;
 
 #[derive(Clone,Debug)]
-pub struct TokenList<T:Token>(pub Ptr<[T]>);
+pub struct TokenList<T:Token>(pub shared_vector::SharedVector<T>);
 impl<T:Token> PartialEq for TokenList<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
@@ -28,9 +28,6 @@ impl<T:Token> TokenList<T> {
     }
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
-    }
-    pub fn empty() -> Self {
-        Self(Ptr::new([]))
     }
     #[inline(always)]
     pub fn get(&self,i:usize) -> &T {
@@ -153,8 +150,8 @@ impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Tokenizer<'a,T,F> {
     }
 }
 
-impl<T:Token> From<Vec<T>> for TokenList<T> {
-    fn from(value: Vec<T>) -> Self {
+impl<T:Token> From<shared_vector::Vector<T>> for TokenList<T> {
+    fn from(value: shared_vector::Vector<T>) -> Self {
         Self(value.into())
     }
 }
@@ -304,15 +301,15 @@ pub trait HasNoPar<T:Token>:Iterator<Item = T>+Sized {
 }
 impl<T:Token,I:Iterator<Item = T>> HasNoPar<T> for I {}
 
-pub struct ExpansionContainer<T:Token>(Vec<T>);
+pub struct ExpansionContainer<T:Token>(shared_vector::Vector<T>);
 impl<T:Token> ExpansionContainer<T> {
     #[inline(always)]
     pub fn push(&mut self,t:T) {
         self.0.push(t)
     }
     #[inline(always)]
-    pub fn new(v:Vec<T>) -> Self {
-        Self(v)
+    pub fn new() -> Self {
+        Self(shared_vector::Vector::new())
     }
     #[inline(always)]
     pub fn to_iter(self) -> TokenListIterator<T> {

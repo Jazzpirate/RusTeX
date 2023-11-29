@@ -56,7 +56,7 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
 }
 impl<ET:EngineTypes<State=Self>> TeXState<ET> {
     /// Create a new [`TeXState`].
-    pub fn new(nullfont:Fnt<ET>) -> Self {
+    pub fn new(nullfont:Fnt<ET>,mem:&ET::Memory) -> Self {
         let mut lccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
         let mut uccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
         let mut mathcodes: <ET::Char as Character>::CharMap<u32> = CharacterMap::default();
@@ -99,7 +99,7 @@ impl<ET:EngineTypes<State=Self>> TeXState<ET> {
             endline_char:Some(ET::Char::from(b'\r')),
             escape_char:Some(ET::Char::from(b'\\')),
             newline_char:Some(ET::Char::from(b'\n')),
-            empty_list:TokenList::empty()
+            empty_list:mem.empty()
         }
     }
 
@@ -844,7 +844,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
     fn set_primitive_tokens(&mut self, aux: &EngineAux<Self::ET>, name: PrimitiveIdentifier, v: TokenList<ET::Token>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_toks.insert(name,v).unwrap_or(vec!().into());
+            let old = s.primitive_toks.insert(name,v).unwrap_or(s.empty_list.clone());
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}={}}}",

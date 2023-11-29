@@ -4,6 +4,7 @@ use std::sync::RwLock;
 use lazy_static::lazy_static;
 use shared_vector::SharedVector;
 use string_interner::Symbol;
+use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
 use crate::tex::input_text::Character;
 use crate::tex::token::Token;
@@ -29,12 +30,15 @@ pub trait MemoryManager<T:Token> {
         Vec::new()
     }
     fn return_token_vec(&mut self,_:Vec<T>) {}
+    fn empty(&self) -> TokenList<T>;
 }
 impl<CS:ControlSequenceName<Handler=()>,T:Token<CS=CS>> MemoryManager<T> for () {
     #[inline(always)]
     fn cs_interner(&self) -> &<T::CS as ControlSequenceName>::Handler { self }
     #[inline(always)]
     fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName>::Handler { self }
+    #[inline(always)]
+    fn empty(&self) -> TokenList<T> { TokenList(shared_vector::SharedVector::new()) }
 }
 
 /// The default memory manager, which does not do any memory management.
@@ -55,6 +59,7 @@ pub struct ReuseTokenLists<T:Token> {
     handler:<T::CS as ControlSequenceName>::Handler,
     strings:Vec<String>,
     bytes:Vec<Vec<u8>>,
+    empty:shared_vector::SharedVector<T>
 }
 impl<T:Token> ReuseTokenLists<T> {
     pub fn new() -> Self {
@@ -63,6 +68,7 @@ impl<T:Token> ReuseTokenLists<T> {
             handler:<T::CS as ControlSequenceName>::Handler::default(),
             strings:Vec::new(),
             bytes:Vec::new(),
+            empty:shared_vector::SharedVector::new()
         }
     }
 }
@@ -98,6 +104,8 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
     fn return_token_vec(&mut self, mut v: Vec<T>) {
         //self.factory.give_back(v)
     }
+    #[inline(always)]
+    fn empty(&self) -> TokenList<T> { TokenList(self.empty.clone()) }
 }
 
 /// We always intern the names for primitive macros, for efficiency; in particular for equality checks.

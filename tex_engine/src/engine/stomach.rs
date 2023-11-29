@@ -135,7 +135,7 @@ pub trait Stomach {
                     had_eq = true;
                 }
                 (_,CommandCode::BeginGroup) => {
-                    let mut tks = engine.aux.memory.get_token_vec();
+                    let mut tks = shared_vector::Vector::new();
                     let cc = engine.state.get_catcode_scheme();
                     let endline = engine.state.get_endline_char();
                     engine.mouth.read_until_endgroup(engine.aux,cc,endline,|_,t| tks.push(t));
@@ -182,7 +182,7 @@ pub trait Stomach {
                     had_eq = true;
                 }
                 (_,CommandCode::BeginGroup) => {
-                    let mut tks = engine.aux.memory.get_token_vec();
+                    let mut tks = shared_vector::Vector::new();
                     let cc = engine.state.get_catcode_scheme();
                     let endline = engine.state.get_endline_char();
                     engine.mouth.read_until_endgroup(engine.aux,cc,endline,|_,t| tks.push(t));
