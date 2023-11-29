@@ -2,6 +2,7 @@
 
 use std::sync::RwLock;
 use lazy_static::lazy_static;
+use shared_vector::SharedVector;
 use string_interner::Symbol;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
 use crate::tex::input_text::Character;

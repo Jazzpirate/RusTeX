@@ -73,10 +73,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
     String(StringTokenizer<T::Char,StringLineSource>),
     File(StringTokenizer<T::Char,F::LineSource>),
-    Expansion(MacroExpansion<T>),
-    TokenList(TokenListIterator<T>),
-    TokenVec(TokenVecIterator<T>),
-    Requeued(T)
+    Vec(Vec<T>)
 }
 
 
@@ -86,6 +83,11 @@ pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
 }
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
     fn clean(&mut self) {
+        match self.inputs.last_mut() {
+            Some(TokenSource::Vec(v)) if v.is_empty() => {self.inputs.pop();}
+            _ => ()
+        }
+        /*
         loop {
             match self.inputs.last_mut() {
                 Some(TokenSource::Expansion(e)) =>
@@ -105,6 +107,8 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
                 _ => break
             }
         }
+
+         */
     }
 }
 impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
@@ -113,16 +117,16 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
 
     #[inline(always)]
     fn get_args(&mut self) -> [Vec<T>;9] {
-        /*match self.args.pop() {
+        match self.args.pop() {
             Some(a) => a,
             None => array_init::array_init(|_| Vec::new())
-        }*/
-        array_init::array_init(|_| Vec::new())
+        }
+        //array_init::array_init(|_| Vec::new())
     }
     #[inline(always)]
     fn return_args(&mut self,mut exp:[Vec<T>;9]) {
-        /*for a in exp.iter_mut() { a.clear() }
-        self.args.push(exp)*/
+        for a in exp.iter_mut() { a.clear() }
+        self.args.push(exp)
     }
 
     fn endinput(&mut self) {
@@ -139,13 +143,13 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
 
     fn num_exps(&self) -> usize {
         let mut ret = 0;
-        for s in self.inputs.iter().rev() {
+        /*for s in self.inputs.iter().rev() {
             match s {
                 TokenSource::Expansion(_) => ret += 1,
                 TokenSource::TokenList(_) => ret += 1,
                 _ => return ret
             }
-        }
+        }*/
         return ret
     }
     fn line_number(&self) -> usize {
@@ -158,28 +162,75 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         0
     }
     #[inline(always)]
-    fn push_macro_exp(&mut self, exp: MacroExpansion<Self::Token>) {
-        self.clean();
-        self.inputs.push(TokenSource::Expansion(exp))
+    fn push_macro_exp(&mut self, mut exp: MacroExpansion<Self::Token>) {
+        //self.clean();
+        let v = match self.inputs.last_mut() {
+            Some(TokenSource::Vec(v)) => v,
+            _ => {
+                let v = Vec::new();
+                self.inputs.push(TokenSource::Vec(v));
+                match self.inputs.last_mut() {
+                    Some(TokenSource::Vec(v)) => v,
+                    _ => unreachable!()
+                }
+            }
+        };
+        exp.consume_rev(v);
+        self.return_args(exp.args);
     }
     #[inline(always)]
     fn push_exp(&mut self, exp: TokenListIterator<Self::Token>) {
-        self.clean();
-        self.inputs.push(TokenSource::TokenList(exp))
+        //self.clean();
+        //self.inputs.push(TokenSource::TokenList(exp))
+        let v = match self.inputs.last_mut() {
+            Some(TokenSource::Vec(v)) => v,
+            _ => {
+                let v = Vec::new();
+                self.inputs.push(TokenSource::Vec(v));
+                match self.inputs.last_mut() {
+                    Some(TokenSource::Vec(v)) => v,
+                    _ => unreachable!()
+                }
+            }
+        };
+        v.extend(exp.ls.0.iter().rev().map(|t| t.clone()));
     }
     #[inline(always)]
     fn push_vec(&mut self, exp: TokenVecIterator<Self::Token>) {
-        self.clean();
-        self.inputs.push(TokenSource::TokenVec(exp))
+        //self.clean();
+        let v = match self.inputs.last_mut() {
+            Some(TokenSource::Vec(v)) => v,
+            _ => {
+                let v = Vec::new();
+                self.inputs.push(TokenSource::Vec(v));
+                match self.inputs.last_mut() {
+                    Some(TokenSource::Vec(v)) => v,
+                    _ => unreachable!()
+                }
+            }
+        };
+        v.extend(exp.rev());
     }
     #[inline(always)]
     fn requeue(&mut self,t:T) {
         //self.clean();
-        self.inputs.push(TokenSource::Requeued(t))
+        //self.inputs.push(TokenSource::Requeued(t))
+        let v = match self.inputs.last_mut() {
+            Some(TokenSource::Vec(v)) => v,
+            _ => {
+                let v = Vec::new();
+                self.inputs.push(TokenSource::Vec(v));
+                match self.inputs.last_mut() {
+                    Some(TokenSource::Vec(v)) => v,
+                    _ => unreachable!()
+                }
+            }
+        };
+        v.push(t)
     }
     #[inline(always)]
     fn push_file(&mut self, f: F) {
-        self.clean();
+        //self.clean();
         let s = f.line_source().unwrap();
         self.inputs.push(TokenSource::File(StringTokenizer::new(s)));
     }
@@ -193,6 +244,13 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     fn get_next_opt<ET:EngineTypes<Char=T::Char,Token =T,File = F>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> Option<T> {
         while let Some(src) = self.inputs.last_mut() {
             match src {
+                TokenSource::Vec(v) => {
+                    match v.pop() {
+                        Some(t) => return Some(t),
+                        _ => { self.inputs.pop(); }
+                    }
+                }
+                /*
                 TokenSource::Requeued(_) => {
                     if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
                         return Some(t)
@@ -216,6 +274,8 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                         _ => { self.inputs.pop(); }
                     }
                 }
+
+                 */
                 TokenSource::String(s) => {
                     match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
                         Some(t) => return Some(t),
@@ -241,6 +301,13 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     fn iterate<ET:EngineTypes<Token = T,File = F>,Fn:FnMut(&mut EngineAux<ET>,T) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,mut cont:Fn) {
         loop {
             match self.inputs.last_mut() {
+                Some(TokenSource::Vec(v)) => {
+                    while let Some(t) = v.pop() {
+                        if !cont(aux,t) {return}
+                    }
+                    self.inputs.pop();
+                }
+                /*
                 Some(TokenSource::Requeued(t)) => {
                     if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
                         if t.is_noexpand_marker() {continue}
@@ -259,6 +326,8 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     for t in s { if !cont(aux,t) { return } }
                     self.inputs.pop();
                 }
+
+                 */
                 Some(TokenSource::String(s)) => {
                     while let Some(t) = s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                         if !cont(aux,t) { return }
@@ -279,15 +348,15 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         let mut str = String::new();
         for src in self.inputs.iter().rev() {
             match src {
-                TokenSource::TokenList(s) => s.preview(int,cc,esc,&mut str),
+                //TokenSource::TokenList(s) => s.preview(int,cc,esc,&mut str),
                 TokenSource::String(s) => s.preview(&mut 500,&mut str).unwrap(),
-                TokenSource::Expansion(s) => s.preview(int,cc,esc,&mut str),
+                //TokenSource::Expansion(s) => s.preview(int,cc,esc,&mut str),
                 TokenSource::File(s) => {
                     s.preview(&mut 50,&mut str).unwrap();break
                 },
-                TokenSource::Requeued(t) => {
+                /*TokenSource::Requeued(t) => {
                     t.display_fmt(int,cc,esc,&mut str).unwrap()
-                }
+                }*/
                 _ => ()
             }
         }
@@ -317,10 +386,11 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
         if everyeof.is_empty() {
             T::eof()
         } else {
-            let mut iter = TokenListIterator::new(Some(PRIMITIVES.everyeof),everyeof.clone());
+            todo!()
+            /*let mut iter = TokenListIterator::new(Some(PRIMITIVES.everyeof),everyeof.clone());
             let ret = iter.next().unwrap();
             self.inputs.push(TokenSource::TokenList(iter));
-            ret
+            ret*/
         }
     }
 }

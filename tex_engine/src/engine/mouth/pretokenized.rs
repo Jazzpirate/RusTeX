@@ -11,7 +11,7 @@ use crate::tex::input_text::Character;
 use crate::tex::input_text::CharacterMap;
 
 #[derive(Clone,Debug)]
-pub struct TokenList<T:Token>(Ptr<[T]>);
+pub struct TokenList<T:Token>(pub Ptr<[T]>);
 impl<T:Token> PartialEq for TokenList<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
@@ -161,7 +161,7 @@ impl<T:Token> From<Vec<T>> for TokenList<T> {
 
 pub struct TokenListIterator<T:Token> {
     pub name:Option<PrimitiveIdentifier>,
-    ls:TokenList<T>,
+    pub ls:TokenList<T>,
     index:usize
 }
 impl<T:Token> TokenListIterator<T> {
@@ -198,6 +198,19 @@ pub type TokenVecIterator<T> = std::vec::IntoIter<T>;
 
 pub struct MacroExpansion<T:Token> {
     pub ls:TokenList<T>,index:usize,currarg:Option<(usize,usize)>,pub args:[Vec<T>;9]
+}
+impl<T:Token> MacroExpansion<T> {
+    pub fn consume_rev(&mut self, v:&mut Vec<T>) {
+        for t in self.ls.0.iter().rev() {
+            if let Some(i) = t.is_argument_marker() {
+                for t in self.args[i as usize].iter().rev() {
+                    v.push(t.clone());
+                }
+            } else {
+                v.push(t.clone());
+            }
+        }
+    }
 }
 impl<T:Token> MacroExpansion<T> {
     #[inline(always)]
