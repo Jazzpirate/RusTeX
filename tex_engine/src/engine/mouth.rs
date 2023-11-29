@@ -230,20 +230,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     let endline: Option<T::Char> = state.get_endline_char();
                     match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                         Some(t) => return Some(t),
-                        _ => {
-                            let f = match self.inputs.pop() {
-                                Some(TokenSource::File(f)) => f,
-                                _ => unreachable!()
-                            };
-                            aux.outputs.file_close(f.source.path().display());
-                            let everyeof = state.get_primitive_tokens(PRIMITIVES.everyeof);
-                            if everyeof.is_empty() {
-                                return Some(T::eof())
-                            } else {
-                                todo!("everyeof");
-                                self.inputs.push(TokenSource::TokenList(TokenListIterator::new(Some(PRIMITIVES.everyeof),everyeof.clone())))
-                            }
-                        }
+                        _ => return Some(self.end_file(aux,state))
                     }
                 }
             }
@@ -307,50 +294,33 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         str
     }
 }
+
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn preview(&self) -> String {
         self.mouth.preview(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char())
     }
 }
+
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
     pub fn new() -> Self {
         DefaultMouth {
             inputs:Vec::new(),args:Vec::new()
         }
     }
-/*
-    fn get_argument<Fn:FnMut(T),E:ErrorHandler,M:MemoryManager<T>>(&mut self,eh:&E,mem:&mut M,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,delim:Option<&[T]>,nopar:Option<T::CS>,mut cont:Fn) {
-        match delim {
-            Some(d) => self.get_argument_with_delim(d,nopar,cont),
-            _ => match self.get_next_opt(eh,mem,cc,endline) {
-                Some(t) if t.is_noexpand_marker() => cont(self.get_next_opt(eh,mem,cc,endline).unwrap()),
-                // not None because of the noexpand marker, and not begin group, because a begin group
-                // character is not expandable
-                Some(t) if t.is_begin_group() => self.read_until_endgroup(eh,mem,cc,endline,nopar,cont),
-                Some(t) => cont(t),
-                _ => todo!()
-            }
+    fn end_file<ET:EngineTypes<Char=T::Char,Token =T,File = F>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> T {
+        let f = match self.inputs.pop() {
+            Some(TokenSource::File(f)) => f,
+            _ => unreachable!()
+        };
+        aux.outputs.file_close(f.source.path().display());
+        let everyeof = state.get_primitive_tokens(PRIMITIVES.everyeof);
+        if everyeof.is_empty() {
+            T::eof()
+        } else {
+            let mut iter = TokenListIterator::new(Some(PRIMITIVES.everyeof),everyeof.clone());
+            let ret = iter.next().unwrap();
+            self.inputs.push(TokenSource::TokenList(iter));
+            ret
         }
-    }
-
- */
-/*
-    fn read_until_endgroup<Fn:FnMut(T),E:ErrorHandler,M:MemoryManager<T>>(&mut self,eh:&E,mem:&mut M,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,nopar:Option<T::CS>,mut cont:Fn) {
-        let mut ingroups = 0;
-        self.iterate(eh,mem,cc,endline,|t| {
-            if t.is_begin_group() { ingroups += 1;
-            } else if t.is_end_group() {
-                if ingroups == 0 { return false }
-                ingroups -= 1;
-            } else if t.is_noexpand_marker() { return true }
-            cont(t);
-            true
-        });
-    }
-
- */
-
-    fn get_argument_with_delim<Fn:FnMut(T)>(&mut self,delim:&[T],nopar:Option<T::CS>,cont:Fn) {
-        todo!()
     }
 }

@@ -75,11 +75,14 @@ pub trait Gullet {
         methods::read_chars(engine,kws)
     }
     fn resolve<'a>(&self,state:&'a S<Self>,token:T<Self>) -> ResolvedToken<'a,Self::ET> {
-        let cm = match token.to_enum() {
-            StandardToken::Character(c,CommandCode::Active) => state.get_ac_command(c),
+        match token.to_enum() {
+            StandardToken::Character(c,CommandCode::Active) =>
+                ResolvedToken::Cmd{token,cmd:state.get_ac_command(c)},
             StandardToken::Character(c,o) => return ResolvedToken::Tk{token,char:c,code:o},
-            StandardToken::ControlSequence(cs) => state.get_command(&cs)
-        };
+            StandardToken::ControlSequence(cs) =>
+                ResolvedToken::Cmd{token,cmd:state.get_command(&cs)}
+        }
+        /*
         match cm {
             Some(Command::Expandable(e)) if e.name == PRIMITIVES.else_ || e.name == PRIMITIVES.fi => {
                 match self.get_conditional() {
@@ -88,7 +91,7 @@ pub trait Gullet {
                 }
             }
             _ => ResolvedToken::Cmd{token,cmd:cm}
-        }
+        }*/
     }
 
     #[inline(always)]
