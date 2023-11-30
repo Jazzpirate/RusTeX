@@ -29,6 +29,7 @@ type MuSkip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::MuSkip;
 pub trait Gullet {
     type ET:EngineTypes<Gullet=Self>;
 
+    fn push_align(&mut self,ad:AlignData);
     fn get_align_data(&mut self) -> Option<&mut AlignData>;
     fn get_conditional(&self) -> Option<ActiveConditional<Self::ET>>;
     fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<Self::ET>>;
@@ -51,6 +52,34 @@ pub trait Gullet {
                 o => o
             }
         }
+    }
+
+    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,T<Self>)>(&mut self,
+                                                                           mouth:&mut M<Self>,
+                                                                           aux:&mut A<Self>,
+                                                                           state:&<Self::ET as EngineTypes>::State,cont:Fn) -> T<Self> {
+        match self.get_align_data() {
+            None => (),
+            Some(d) => {
+                if d.ingroups == 0 { todo!() }
+                d.ingroups -= 1
+            }
+        }
+        mouth.read_until_endgroup(aux,state.get_catcode_scheme(),state.get_endline_char(),cont)
+    }
+    fn requeue(&mut self,mouth:&mut M<Self>,t:T<Self>) {
+        if t.is_begin_group() || t.is_end_group() {
+            match self.get_align_data() {
+                None => (),
+                Some(d) => {
+                    if t.is_begin_group() { d.ingroups -= 1 }
+                    if t.is_end_group() {
+                        d.ingroups += 1;
+                    }
+                }
+            }
+        }
+        mouth.requeue(t)
     }
 
     #[inline(always)]
@@ -214,11 +243,22 @@ pub enum ResolvedToken<'a,ET:EngineTypes> {
 }
 
 pub struct AlignData {
-    ingroups:u8
+    pub(crate) ingroups:u8
 }
 
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
+
+    #[inline(always)]
+    pub fn requeue(&mut self,t:ET::Token) {
+        self.gullet.requeue(self.mouth,t)
+    }
+
+    #[inline(always)]
+    pub fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,ET::Token)>(&mut self, cont:Fn) -> ET::Token {
+        self.gullet.read_until_endgroup(self.mouth,self.aux,self.state,cont)
+    }
+
     #[inline(always)]
     pub fn get_next(&mut self) -> Option<ET::Token> {
         self.gullet.get_next_opt(self.mouth,self.aux,self.state)
@@ -306,6 +346,11 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     type ET = ET;
     #[inline(always)]
     fn csnames(&mut self) -> &mut usize { &mut self.csnames }
+
+    #[inline(always)]
+    fn push_align(&mut self, ad: AlignData) {
+        self.align_data.push(ad)
+    }
 
     fn do_macro(engine: &mut EngineReferences<Self::ET>, m: Macro<T<Self>>, token: T<Self>) {
         let trace = engine.state.get_primitive_int(PRIMITIVES.tracingcommands) > Int::<Self>::default();

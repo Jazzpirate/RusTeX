@@ -141,11 +141,9 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
 
 pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
-    let cc = engine.state.get_catcode_scheme();
-    let endline = engine.state.get_endline_char();
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char().map(|c| ET::Token::from_char_cat(c,CommandCode::Other));
-    engine.mouth.read_until_endgroup(engine.aux,cc,endline,|a,t| match t.to_enum() {
+    engine.read_until_endgroup(|a,t| match t.to_enum() {
         StandardToken::Character(c,CommandCode::Space) =>
             f(ET::Token::space()),
         StandardToken::Character(c,CommandCode::Parameter) => {
@@ -200,12 +198,12 @@ pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
                           crate::engine::gullet::methods::read_int_command
     );
     if !r.is_cs_or_active() {
-        engine.mouth.requeue(r)
+        engine.requeue(r)
     } else {
         match engine.resolve(r) {
             ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.requeue(token)
         }
     }
     i
@@ -217,12 +215,12 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
                           crate::engine::gullet::methods::read_dim_command
     );
     if !r.is_cs_or_active() {
-        engine.mouth.requeue(r)
+        engine.requeue(r)
     } else {
         match engine.resolve(r) {
             ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.requeue(token)
         }
     }
     i
@@ -234,12 +232,12 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
                           crate::engine::gullet::methods::read_skip_command
     );
     if !r.is_cs_or_active() {
-        engine.mouth.requeue(r)
+        engine.requeue(r)
     } else {
         match engine.resolve(r) {
             ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.requeue(token)
         }
     }
     i
@@ -251,12 +249,12 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
                           crate::engine::gullet::methods::read_muskip_command
     );
     if !r.is_cs_or_active() {
-        engine.mouth.requeue(r)
+        engine.requeue(r)
     } else {
         match engine.resolve(r) {
             ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.mouth.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.mouth.requeue(token)
+            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
+            ResolvedToken::Tk { token, .. } => engine.requeue(token)
         }
     }
     i
@@ -300,7 +298,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token
 
 pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
-    engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|a,t|{
+    engine.read_until_endgroup(|a,t|{
         exp.push(t)
     });
 }

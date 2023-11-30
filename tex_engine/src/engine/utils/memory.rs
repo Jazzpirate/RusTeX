@@ -1,5 +1,7 @@
 /*! Memory manangement and string interning. */
 
+use std::fmt::Display;
+use std::marker::PhantomData;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use shared_vector::SharedVector;
@@ -8,7 +10,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
 use crate::tex::input_text::Character;
 use crate::tex::token::Token;
-use crate::utils::ReusableVectorFactory;
+use crate::utils::{HMap, ReusableVectorFactory};
 
 /// Utility component for managing memory allocation, string interning and similar
 /// tasks one might want to do.
@@ -278,8 +280,14 @@ impl Default for StringInterner {
     #[inline(always)]
     fn default() -> Self { Self::new() }
 }
-
 /*
+pub type InternedCSName<C> = (u32,PhantomData<C>);
+impl<C:Character> ControlSequenceName for InternedCSName<C> {
+    type Handler = CharacterVecInterner<C>;
+    fn as_usize(&self) -> usize {
+        *self.0 as usize
+    }
+}
 struct CharacterVecInterner<C:Character> {
     map:HMap<Box<[C]>,u32>,
     ls:Vec<C>
@@ -292,6 +300,18 @@ impl<C:Character> CharacterVecInterner<C> {
             map, ls:Vec::new()
         }
     }
+    #[inline(always)]
+    pub fn from_static(&mut self,s:&'static str) -> InternedCSName<C> {
+        todo!()
+    }
+    #[inline(always)]
+    pub fn from_string<S:AsRef<str>>(&mut self,s:S) -> InternedCSName<C> {
+        todo!()
+    }
+    #[inline(always)]
+    pub fn resolve(&self,i:InternedCSName<C>) -> &[C] {
+        self.get(i)
+    }
     fn intern(&mut self,v:&[C]) -> u32 {
         match self.map.entry(v.into()) {
             std::collections::hash_map::Entry::Occupied(e) => return *e.get(),
@@ -301,7 +321,7 @@ impl<C:Character> CharacterVecInterner<C> {
                 }
                 let len = self.ls.len();
                 e.insert(len as u32);
-                len as u32
+                (len as u32,PhantomData::default())
             }
         }
     }
@@ -311,5 +331,32 @@ impl<C:Character> CharacterVecInterner<C> {
         &self.ls[i-1..i]
     }
 }
-
- */
+impl<C:Character> ControlSequenceNameHandler<InternedCSName<C>> for CharacterVecInterner<C> {
+    type Printable<'a> = DisplayCSName<'a,C>;
+    #[inline(always)]
+    fn new(&mut self,s: &str) -> InternedCSName<C> {
+        self.intern(s.chars().collect::<Vec<_>>().as_slice())
+    }
+    #[inline(always)]
+    fn par(&self) -> InternedCSName<C> { (1,PhantomData::default()) }
+    #[inline(always)]
+    fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData::default()) }
+    #[inline(always)]
+    fn resolve<'a>(&'a self, cs: &InternedCSName<C>) -> DisplayCSName<'a,C> {
+        DisplayCSName(self.get(cs.0))
+    }
+}
+pub struct DisplayCSName<'a,C:Character>(&'a [C]);
+impl<C:Character> Display for DisplayCSName<'_,C> {
+    fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for c in self.0 {
+            c.display(f)?
+        }
+        Ok(())
+    }
+}
+impl <C:Character> Default for CharacterVecInterner<C> {
+    #[inline(always)]
+    fn default() -> Self { Self::new() }
+}
+*/

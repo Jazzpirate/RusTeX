@@ -19,7 +19,7 @@ type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
 
 fn afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     match std::mem::take(engine.stomach.afterassignment()) {
-        Some(t) => engine.mouth.requeue(t),
+        Some(t) => engine.requeue(t),
         _ => ()
     }
 }
@@ -136,9 +136,7 @@ pub trait Stomach {
                 }
                 (_,CommandCode::BeginGroup) => {
                     let mut tks = shared_vector::Vector::new();
-                    let cc = engine.state.get_catcode_scheme();
-                    let endline = engine.state.get_endline_char();
-                    engine.mouth.read_until_endgroup(engine.aux,cc,endline,|_,t| tks.push(t));
+                    engine.read_until_endgroup(|_,t| tks.push(t));
                     engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
                     afterassignment(engine);
                     return ()
@@ -183,9 +181,7 @@ pub trait Stomach {
                 }
                 (_,CommandCode::BeginGroup) => {
                     let mut tks = shared_vector::Vector::new();
-                    let cc = engine.state.get_catcode_scheme();
-                    let endline = engine.state.get_endline_char();
-                    engine.mouth.read_until_endgroup(engine.aux,cc,endline,|_,t| tks.push(t));
+                    engine.read_until_endgroup(|_,t| tks.push(t));
                     engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
                     afterassignment(engine);
                     return ()

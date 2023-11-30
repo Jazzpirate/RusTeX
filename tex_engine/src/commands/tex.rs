@@ -3,7 +3,7 @@ use crate::{cmstodo, cmstodos, cmtodo, cmtodos, debug_log, expand_loop};
 use crate::commands::{Assignment, Command, DimCommand, Expandable, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
+use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
 use crate::engine::mouth::pretokenized::{ExpansionContainer, TLVecMeaning, Tokenizer, TokenList};
@@ -71,12 +71,12 @@ pub fn expandafter<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
             Command::Conditional(cond) => ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
             Command::Expandable(e) => ET::Gullet::do_expandable(engine,e.name,token,e.expand),
             Command::SimpleExpandable(e) => ET::Gullet::do_simple_expandable(engine,e.name,token,e.expand),
-            _ => engine.mouth.requeue(token)
+            _ => engine.requeue(token)
         }
         ResolvedToken::Cmd{token,..} | ResolvedToken::Tk {token,..} =>
-            engine.mouth.requeue(token)
+            engine.requeue(token)
     }
-    engine.mouth.requeue(first)
+    engine.requeue(first)
 }
 
 pub fn catcode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
@@ -333,7 +333,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
     let (sig,end) = parse_signature(engine,&cm);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
-    engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
+    engine.read_until_endgroup(|_,t| {
         if inparam {
             inparam = false;
             if t.is_param() {
@@ -774,6 +774,10 @@ pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
     },None))
 }
 
+pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    engine.gullet.push_align(AlignData { ingroups: 0 })
+}
+
 pub fn hyphenchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     let font = engine.read_font();
     font.get_hyphenchar()
@@ -1030,7 +1034,7 @@ pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
             match engine.gullet.resolve(engine.state,next) {
                 ResolvedToken::Cmd { cmd: Some(Command::Char{code:CommandCode::Space,..}), .. } => (),
                 ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} => {
-                    engine.mouth.requeue(token);
+                    engine.requeue(token);
                     break
                 }
             }
@@ -1151,15 +1155,15 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,
             Some(Command::Char{char:c,code:cc})
     };
     engine.set_command(&cm,cmd,globally);
-    engine.mouth.requeue(second);
-    engine.mouth.requeue(first);
+    engine.requeue(second);
+    engine.requeue(first);
 }
 
 pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     engine.expand_until_bgroup(false);
     let mut exp = Vec::new();// ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
-    engine.mouth.read_until_endgroup(engine.aux,state.get_catcode_scheme(),state.get_endline_char(),|_,t| {
+    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,t| {
         match t.to_enum() {
             StandardToken::ControlSequence(_) => exp.push(t),
             StandardToken::Character(c,cc) => {
@@ -1179,7 +1183,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Toke
     engine.expand_until_bgroup(false);
     let mut exp = Vec::new();//ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
-    engine.mouth.read_until_endgroup(engine.aux,state.get_catcode_scheme(),state.get_endline_char(),|_,t| {
+    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,t| {
         match t.to_enum() {
             StandardToken::ControlSequence(_) => exp.push(t),
             StandardToken::Character(c,cc) => {
@@ -1283,7 +1287,7 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     };
     match res {
         ResolvedToken::Tk {token,..} =>
-            engine.mouth.requeue(token),
+            engine.requeue(token),
         ResolvedToken::Cmd {cmd:Some(cm),token} => {
             match cm {
                 Command::Macro(_) |
@@ -1456,7 +1460,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
         Some(_) => todo!("should be begingroup"),
         None => todo!("file end")
     }
-    engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
+    engine.read_until_endgroup(|_,t| {
         tks.push(t);
     });
     Ptr::new(move |engine| do_write(engine,idx,tks))
@@ -1630,7 +1634,7 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
                 let mut tks = shared_vector::Vector::new();
                 let cc = engine.state.get_catcode_scheme();
                 let endline = engine.state.get_endline_char();
-                engine.mouth.read_until_endgroup(engine.aux,cc,endline,|_,t| tks.push(t));
+                engine.read_until_endgroup(|_,t| tks.push(t));
                 engine.state.set_toks_register(engine.aux,u,TokenList::from(tks),global);
                 return ()
             }
@@ -1777,8 +1781,7 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
         Some(t) if t.is_begin_group() => (),
         _ => todo!("throw error")
     }
-    engine.mouth.read_until_endgroup(
-        engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,_| {});
+    engine.read_until_endgroup(|_,_| {});
 }
 
 pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
@@ -1895,6 +1898,11 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_whatsit(engine,"write",write,write_immediate);
 
     register_box(engine,"hbox",hbox);
+
+
+
+    // TODO test to make sure this is callable from the POV of the compiler
+    register_unexpandable(engine,"halign",halign);
 
     cmtodos!(engine,aftergroup,box,char,
         copy,cr,crcr,discretionary,displaylimits,dp,
