@@ -113,7 +113,7 @@ mod tests {
         use crate::utils::Ptr;
         use crate::tex::token::Token;
 
-        type T = StandardToken<Ptr<str>,u8>;
+        type T = StandardToken<u8,Ptr<str>>;
         let eh = ErrorThrower;
         let mut cs_handler = ();
         let cc = &*DEFAULT_SCHEME_U8;
@@ -173,7 +173,7 @@ mod tests {
         info!("primitive id: {}b",std::mem::size_of::<crate::engine::utils::memory::PrimitiveIdentifier>());
         info!("control sequence name: {}b",std::mem::size_of::<CS>());
         info!("compact token: {}b",std::mem::size_of::<Tk>());
-        info!("standard token: {}b",std::mem::size_of::<crate::tex::token::StandardToken<CS,u8>>());
+        info!("standard token: {}b",std::mem::size_of::<crate::tex::token::StandardToken<u8,CS>>());
         info!("command: {}b",std::mem::size_of::<crate::commands::Command<DefaultPlainTeXEngineTypes>>());
         info!("macro: {}b",std::mem::size_of::<crate::commands::Macro<Tk>>());
         info!("fn: {}b",std::mem::size_of::<fn(&mut EngineReferences<DefaultPlainTeXEngineTypes>,&mut ExpansionContainer<Tk>,Tk)>());

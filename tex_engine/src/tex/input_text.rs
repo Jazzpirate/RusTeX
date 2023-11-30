@@ -1,36 +1,33 @@
 /*! Data structures for reading input text. */
 use std::fmt::{Debug, Display, Write};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
+use crate::tex::control_sequences::ResolvedCSName;
 
 /** A single character in a `.tex` file; in plain TeX, this is a `u8`,
     but in e.g. XeTeX, it is a UTF-8 character. */
 pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8> + TryFrom<u64> + Into<u64> + Ord + std::hash::Hash + Default + 'static {
     /// Type that maps characters to other data.
     type CharMap<A:Clone + Default> : CharacterMap<Self,A>;
+    type Iter<'a>:ExactSizeIterator<Item=Self>;
     /// minimal value of this type in numeric form (e.g. `0` for `u8`)
     const MIN: Self;
     /// maximal value of this type in numeric form (e.g. `255` for `u8`)
     const MAX: Self;
     /// Convert a line in a file/string (as a vector of bytes) into a [`Vec`] of [`Character`]s.
     fn convert(input:Vec<u8>) -> TextLine<Self>;
-    fn convert_fn<I:Iterator<Item=u8>,F:FnMut(Self)>(i:I,f:F);
     /// Display this character to a [`Write`](std::fmt::Write) (e.g. a `&mut String`).
     fn display<W:std::fmt::Write>(&self, target:&mut W);
     #[inline(always)]
     fn displayable(&self) -> DisplayableCharacter<Self> { DisplayableCharacter(*self) }
 
-    #[inline(always)]
-    #[allow(unused_must_use)]
-    fn display_opt<W:std::fmt::Write>(c:Option<Self>, target:&mut W) {
-        if let Some(c) = c { c.display(target); }
-    }
 
     #[inline(always)]
     fn displayable_opt(c:Option<Self>) -> DisplayableCharacterOpt<Self> { DisplayableCharacterOpt(c) }
     /// The starting [`CategoryCodeScheme`] for this character type.
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
 
-    fn single_char(string:&str) -> Option<Self>;
+    //fn single_char(string:&str) -> Option<Self>;
+    fn string_to_iter<'a>(string:&'a str) -> Self::Iter<'a>;
 }
 
 pub struct DisplayableCharacter<C:Character>(C);
@@ -60,12 +57,15 @@ impl Character for u8 {
     type CharMap<A:Clone + Default> = [A;256];
     const MIN: Self = 0;
     const MAX: Self = 255;
+    
+    type Iter<'a> = ByteIterator<'a>;
+
+    fn string_to_iter<'a>(string: &'a str) -> Self::Iter<'a> {
+        ByteIterator(string)
+    }
     #[inline(always)]
     fn convert(input:Vec<u8>) -> TextLine<Self> { input.into() }
-    #[inline(always)]
-    fn convert_fn<I:Iterator<Item=u8>,F:FnMut(Self)>(i:I,mut f:F) {
-        for c in i { f(c); }
-    }
+
     #[inline(always)]
     #[allow(unused_must_use)]
     fn display<W:std::fmt::Write>(&self, target:&mut W) {
@@ -79,7 +79,7 @@ impl Character for u8 {
             target.write_str(format!("^^{:x}",*self).as_str());
         }
     }
-
+/*
     #[inline(always)]
     fn single_char(string: &str) -> Option<Self> {
         if string.len()==1 {
@@ -96,8 +96,61 @@ impl Character for u8 {
         } else { None }
     }
 
+ */
+
     fn starting_catcode_scheme() -> [CategoryCode;256] {
         super::catcodes::STARTING_SCHEME_U8.clone()
+    }
+}
+pub struct ByteIterator<'a>(&'a str);
+impl<'a> Iterator for ByteIterator<'a> {
+    type Item = u8;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0.is_empty() { None } else
+        if self.0.starts_with("^^") {
+            let b = self.0.as_bytes()[2];
+            if b <= 60 || self.0.len() == 3 {
+                self.0 = &self.0[3..];
+                Some(b + 64)
+            } else {
+                let r = u8::from_str_radix(&self.0[2..4],16).unwrap();
+                self.0 = &self.0[4..];
+                Some(r)
+            }
+        } else {
+            let b = self.0.as_bytes()[0];
+            self.0 = &self.0[1..];
+            Some(b)
+        }
+    }
+}
+
+impl <'a> ExactSizeIterator for ByteIterator<'_> {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        let mut num = 0usize;
+        let mut iter = self.0.as_bytes().iter();
+        while let Some(b) = iter.next() {
+            if *b == b'^' {
+                if let Some(b'^') = iter.next() {
+                    if let Some(b) = iter.next() {
+                        if *b <= 60 {
+                            num += 1;
+                        } else {
+                            iter.next();
+                            num += 1;
+                        }
+                    } else {
+                        num += 1;
+                    }
+                } else {
+                    num += 1;
+                }
+            } else {
+                num += 1;
+            }
+        }
+        num
     }
 }
 

@@ -1,9 +1,9 @@
-use std::fmt::{Display, Write};
+use std::fmt::{Arguments, Display, Write};
 use std::marker::PhantomData;
 use log::kv::Source;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
+use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::token::{StandardToken, Token};
 use crate::utils::Ptr;
 use crate::tex::catcodes::CategoryCodeScheme;
@@ -34,33 +34,7 @@ impl<T:Token> TokenList<T> {
         &(*self.0)[i]
     }
 
-    pub fn meaning_fmt(&self, int:&<T::CS as ControlSequenceName>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>,double_par:bool) -> std::fmt::Result {
-        meaning_fmt(self.0.iter(),int,cc,escapechar,f,double_par)
-        /*for t in self.0.iter() {
-            match t.is_argument_marker() {
-                Some(i) => write!(f,"#{}",(i + 1))?,
-                _ => match t.to_enum() {
-                    StandardToken::Character(c,CommandCode::Parameter) => write!(f,"{}{}",c.displayable(),c.displayable())?,
-                    StandardToken::Character(_,CommandCode::Space) => write!(f," ")?,
-                    StandardToken::Character(c,_) => write!(f,"{}",c.displayable())?,
-                    StandardToken::ControlSequence(cs) => {
-                        let res = int.resolve(&cs);
-                        let str = res.as_ref();
-                        write!(f, "{}{}", T::Char::displayable_opt(escapechar), str)?;
-                        match T::Char::single_char(str) {
-                            None => write!(f," ")?,
-                            Some(c) => match cc.get(c) {
-                                CategoryCode::Letter => write!(f," ")?,
-                                _ => ()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(())*/
-    }
-    pub fn displayable<'a>(&'a self,int:&'a <T::CS as ControlSequenceName>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> TLMeaning<'a,T> {
+    pub fn displayable<'a>(&'a self,int:&'a <T::CS as ControlSequenceName<T::Char>>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> TLMeaning<'a,T> {
         TLMeaning {
             ls:self,
             int,
@@ -68,54 +42,58 @@ impl<T:Token> TokenList<T> {
             escapechar
         }
     }
+    pub fn meaning_char<W:WriteChars<T::Char,T::CS>>(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: W,double_par:bool) {
+        meaning_char(self.0.iter(),int,cc,escapechar,f,double_par).unwrap();
+    }
 }
 
-pub fn meaning_fmt<'a,T:Token,I:Iterator<Item=&'a T>,W:std::fmt::Write>(iter:I, int:&<T::CS as ControlSequenceName>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W,double_par:bool) -> std::fmt::Result {
+pub fn meaning_char<'a,T:Token,I:Iterator<Item=&'a T>,W:WriteChars<T::Char,T::CS>>(iter:I, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W,double_par:bool) -> std::fmt::Result {
     for t in iter {
         match t.is_argument_marker() {
             Some(i) => write!(f,"#{}",(i + 1))?,
-            _ => match t.to_enum() {
-                StandardToken::Character(c,CommandCode::Parameter) if double_par => write!(f,"{}{}",c.displayable(),c.displayable())?,
-                StandardToken::Character(_,CommandCode::Space) => write!(f," ")?,
-                StandardToken::Character(c,_) => write!(f,"{}",c.displayable())?,
-                StandardToken::ControlSequence(cs) => {
-                    let res = int.resolve(&cs);
-                    let str = res.as_ref();
-                    write!(f, "{}{}", T::Char::displayable_opt(escapechar), str)?;
-                    match T::Char::single_char(str) {
-                        None => write!(f," ")?,
-                        Some(c) => match cc.get(c) {
-                            CategoryCode::Letter => write!(f," ")?,
-                            _ => ()
-                        }
+            _ => {
+                match t.to_enum() {
+                    StandardToken::Character(c,CommandCode::Parameter) if double_par => {
+                        f.push_char(c);
+                        f.push_char(c);
                     }
+                    StandardToken::Character(_,CommandCode::Space) => f.push_char(b' '.into()),
+                    StandardToken::Character(c,_) => f.push_char(c),
+                    StandardToken::ControlSequence(cs) =>
+                        f.push_cs(cs,int,cc,escapechar)
                 }
             }
         }
     }
     Ok(())
 }
+pub fn meaning_fmt<'a,T:Token,I:Iterator<Item=&'a T>>(iter:I, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>,double_par:bool) {
+    let s = Stringify::<T::Char,T::CS>::new(f);
+    meaning_char(iter,int,cc,escapechar,s,double_par).unwrap();
+}
 
 pub struct TLMeaning<'a,T:Token> {
     ls:&'a TokenList<T>,
-    int:&'a <T::CS as ControlSequenceName>::Handler,
+    int:&'a <T::CS as ControlSequenceName<T::Char>>::Handler,
     cc:&'a CategoryCodeScheme<T::Char>,
     escapechar:Option<T::Char>
 }
 impl<'a,T:Token> Display for TLMeaning<'a,T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        meaning_fmt(self.ls.0.iter(),self.int,self.cc,self.escapechar,f,false)
+        let i =self.ls.0.iter();
+        meaning_fmt(i,self.int,self.cc,self.escapechar,f,false);
+        Ok(())
     }
 }
 
 pub struct TLVecMeaning<'a,T:Token> {
     ls:&'a Vec<T>,
-    int:&'a <T::CS as ControlSequenceName>::Handler,
+    int:&'a <T::CS as ControlSequenceName<T::Char>>::Handler,
     cc:&'a CategoryCodeScheme<T::Char>,
     escapechar:Option<T::Char>
 }
 impl<'a,T:Token> TLVecMeaning<'a,T> {
-    pub fn new(ls:&'a Vec<T>,int:&'a <T::CS as ControlSequenceName>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> Self {
+    pub fn new(ls:&'a Vec<T>,int:&'a <T::CS as ControlSequenceName<T::Char>>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> Self {
         Self {
             ls,
             int,
@@ -126,7 +104,58 @@ impl<'a,T:Token> TLVecMeaning<'a,T> {
 }
 impl<'a,T:Token> Display for TLVecMeaning<'a,T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        meaning_fmt(self.ls.iter(),self.int,self.cc,self.escapechar,f,false)
+        meaning_fmt(self.ls.iter(),self.int,self.cc,self.escapechar,f,false);
+        Ok(())
+    }
+}
+pub trait WriteChars<C:Character,CS:ControlSequenceName<C>>: std::fmt::Write {
+    fn push_char(&mut self,c:C);
+    fn push_cs<I:ControlSequenceNameHandler<C,CS>>(&mut self,cs:CS,int:&I,cc:&CategoryCodeScheme<C>,esc:Option<C>);
+}
+impl<'a,C:Character,CS:ControlSequenceName<C>,A:WriteChars<C,CS>> WriteChars<C,CS> for &'a mut A {
+    fn push_char(&mut self, c: C) { (*self).push_char(c) }
+    fn push_cs<I:ControlSequenceNameHandler<C,CS>>(&mut self,cs:CS,int:&I,cc:&CategoryCodeScheme<C>,esc:Option<C>) {
+        (*self).push_cs(cs,int,cc,esc)
+    }
+}
+pub struct Stringify<'a,'b,C:Character,CS:ControlSequenceName<C>>(&'a mut std::fmt::Formatter<'b>,PhantomData<C>,PhantomData<CS>);
+impl <'a,'b,C:Character,CS:ControlSequenceName<C>> Stringify<'a,'b,C,CS> {
+    #[inline(always)]
+    pub fn new(f:&'a mut std::fmt::Formatter<'b>) -> Self {
+        Self(f,PhantomData,PhantomData)
+    }
+}
+impl<'a,'b,C:Character,CS:ControlSequenceName<C>> std::fmt::Write for Stringify<'a,'b,C,CS> {
+    #[inline(always)]
+    fn write_char(&mut self, c: char) -> std::fmt::Result {
+        self.0.write_char(c)
+    }
+    #[inline(always)]
+    fn write_fmt(&mut self, args: Arguments<'_>) -> std::fmt::Result {
+        self.0.write_fmt(args)
+    }
+    #[inline(always)]
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.0.write_str(s)
+    }
+}
+impl<'a,'b,C:Character,CS:ControlSequenceName<C>> WriteChars<C,CS> for Stringify<'a,'b,C,CS> {
+    fn push_char(&mut self, c: C) {
+        c.display(self.0)
+    }
+    fn push_cs<I:ControlSequenceNameHandler<C,CS>>(&mut self,cs:CS,int:&I,cc:&CategoryCodeScheme<C>,esc:Option<C>) {
+        let res = int.resolve(&cs);
+        //let str = res.as_ref();
+        write!(self, "{}{}", C::displayable_opt(esc), res).unwrap();
+        if res.len() == 1 {
+            let c = res.iter().next().unwrap();
+            match cc.get(c) {
+                CategoryCode::Letter => self.write_char(' ').unwrap(),
+                _ => ()
+            }
+        } else {
+            self.write_char(' ').unwrap()
+        }
     }
 }
 
@@ -135,6 +164,31 @@ impl<'a,T:Token,F:FnMut(T)> Tokenizer<'a,T,F> {
     #[inline(always)]
     pub fn new(f:&'a mut F) -> Self {
         Self(f,PhantomData)
+    }
+}
+impl<'a,T:Token,F:FnMut(T)> WriteChars<T::Char,T::CS> for Tokenizer<'a,T,F> {
+    fn push_char(&mut self, c:T::Char) { (self.0)(T::from_char_cat(c, CommandCode::Other)) }
+    fn push_cs<I:ControlSequenceNameHandler<T::Char,T::CS>>(&mut self,cs:T::CS,int:&I,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) {
+        if let Some(e) = esc {
+            (self.0)(T::from_char_cat(e, CommandCode::Other));
+        }
+        let res = int.resolve(&cs);
+        for c in res.iter() {
+            if matches!(c.try_into(),Ok(b' ')) {
+                (self.0)(T::space());
+            } else {
+                (self.0)(T::from_char_cat(c, CommandCode::Other));
+            }
+        }
+        if res.len() == 1 {
+            let c = res.iter().next().unwrap();
+            match cc.get(c) {
+                CategoryCode::Letter => (self.0)(T::space()),
+                _ => ()
+            }
+        } else {
+            (self.0)(T::space())
+        }
     }
 }
 impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Tokenizer<'a,T,F> {
@@ -166,11 +220,11 @@ impl<T:Token> TokenListIterator<T> {
     pub fn give_back_maybe<M:MemoryManager<T>>(self,memory:&mut M) {
         self.ls.give_back_maybe(memory)
     }
-    pub fn preview<W:Write>(&self, int:&<T::CS as ControlSequenceName>::Handler,
+    /*pub fn preview<W:Write>(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler,
                             cc:&CategoryCodeScheme<T::Char>,
                             escapechar:Option<T::Char>,w:W) {
         meaning_fmt(self.ls.0[self.index..].iter(),int,cc,escapechar,w,false).unwrap()
-    }
+    }*/
     pub fn new(name:Option<PrimitiveIdentifier>,ls:TokenList<T>) -> Self {
         Self {
             name,
@@ -226,7 +280,7 @@ impl<T:Token> MacroExpansion<T> {
         }
     }
 
-    pub fn preview<W:Write>(&self, int:&<T::CS as ControlSequenceName>::Handler,
+    pub fn preview<W:Write>(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler,
                             cc:&CategoryCodeScheme<T::Char>,
                             escapechar:Option<T::Char>,mut w:W) {
         let mut currarg = self.currarg;
@@ -283,23 +337,6 @@ impl<T:Token> Iterator for MacroExpansion<T> {
         }
     }
 }
-
-pub struct NoParIterator<'a, T:Token,I:Iterator<Item=T>>(pub &'a mut I,&'a <T::CS as ControlSequenceName>::Handler);
-impl<T:Token,I:Iterator<Item=T>> Iterator for NoParIterator<'_,T,I> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(t) if t.is_cs(&self.1.par()) => todo!(),
-            o => o
-        }
-    }
-}
-pub trait HasNoPar<T:Token>:Iterator<Item = T>+Sized {
-    fn no_par<'a>(&'a mut self,handler:&'a <T::CS as ControlSequenceName>::Handler) -> NoParIterator<'a,T,Self> {
-        NoParIterator(self,handler)
-    }
-}
-impl<T:Token,I:Iterator<Item = T>> HasNoPar<T> for I {}
 
 pub struct ExpansionContainer<T:Token>(shared_vector::Vector<T>);
 impl<T:Token> ExpansionContainer<T> {

@@ -32,7 +32,7 @@ pub trait ErrorHandler {
         todo!()
     }
 
-    fn undefined<T:Token,R>(&self,csi:&<T::CS as ControlSequenceName>::Handler,token:T) -> R {
+    fn undefined<T:Token,R>(&self,csi:&<T::CS as ControlSequenceName<T::Char>>::Handler,token:T) -> R {
         match token.to_enum() {
             StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs)),
             StandardToken::Character(c,_) => self.undefined_active_character(c)

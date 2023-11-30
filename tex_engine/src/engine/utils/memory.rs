@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use shared_vector::SharedVector;
 use string_interner::Symbol;
 use crate::engine::mouth::pretokenized::TokenList;
-use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
+use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::input_text::Character;
 use crate::tex::token::Token;
 use crate::utils::{HMap, ReusableVectorFactory};
@@ -16,9 +16,9 @@ use crate::utils::{HMap, ReusableVectorFactory};
 /// tasks one might want to do.
 pub trait MemoryManager<T:Token> {
     /// Returns the interner for control sequence names.
-    fn cs_interner(&self) -> &<T::CS as ControlSequenceName>::Handler;
+    fn cs_interner(&self) -> &<T::CS as ControlSequenceName<T::Char>>::Handler;
     /// Returns the interner for control sequence names mutably.
-    fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName>::Handler;
+    fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName<T::Char>>::Handler;
 
     fn get_string(&mut self) -> String {
         String::new()
@@ -34,23 +34,23 @@ pub trait MemoryManager<T:Token> {
     fn return_token_vec(&mut self,_:Vec<T>) {}
     fn empty(&self) -> TokenList<T>;
 }
-impl<CS:ControlSequenceName<Handler=()>,T:Token<CS=CS>> MemoryManager<T> for () {
+impl<CS:ControlSequenceName<T::Char,Handler=()>,T:Token<CS=CS>> MemoryManager<T> for () {
     #[inline(always)]
-    fn cs_interner(&self) -> &<T::CS as ControlSequenceName>::Handler { self }
+    fn cs_interner(&self) -> &<T::CS as ControlSequenceName<T::Char>>::Handler { self }
     #[inline(always)]
-    fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName>::Handler { self }
+    fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName<T::Char>>::Handler { self }
     #[inline(always)]
     fn empty(&self) -> TokenList<T> { TokenList(shared_vector::SharedVector::new()) }
 }
 
 /// The default memory manager, which does not do any memory management.
 pub struct DefaultMemoryManager<T:Token> {
-    handler:<T::CS as ControlSequenceName>::Handler
+    handler:<T::CS as ControlSequenceName<T::Char>>::Handler
 }
 impl<T:Token> DefaultMemoryManager<T> {
     pub fn new() -> Self {
         DefaultMemoryManager {
-            handler:<T::CS as ControlSequenceName>::Handler::default()
+            handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default()
         }
     }
 }
@@ -58,7 +58,7 @@ impl<T:Token> DefaultMemoryManager<T> {
 /// A memory manager that reuses allocated memory for token lists.
 pub struct ReuseTokenLists<T:Token> {
     factory:ReusableVectorFactory<T>,
-    handler:<T::CS as ControlSequenceName>::Handler,
+    handler:<T::CS as ControlSequenceName<T::Char>>::Handler,
     strings:Vec<String>,
     bytes:Vec<Vec<u8>>,
     empty:shared_vector::SharedVector<T>
@@ -67,7 +67,7 @@ impl<T:Token> ReuseTokenLists<T> {
     pub fn new() -> Self {
         ReuseTokenLists {
             factory:ReusableVectorFactory::new(32,32),
-            handler:<T::CS as ControlSequenceName>::Handler::default(),
+            handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default(),
             strings:Vec::new(),
             bytes:Vec::new(),
             empty:shared_vector::SharedVector::new()
@@ -76,9 +76,9 @@ impl<T:Token> ReuseTokenLists<T> {
 }
 impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
     #[inline(always)]
-    fn cs_interner(&self) -> &<T::CS as ControlSequenceName>::Handler { &self.handler }
+    fn cs_interner(&self) -> &<T::CS as ControlSequenceName<T::Char>>::Handler { &self.handler }
     #[inline(always)]
-    fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName>::Handler { &mut self.handler }
+    fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName<T::Char>>::Handler { &mut self.handler }
     #[inline(always)]
     fn get_string(&mut self) -> String {
         //self.strings.pop().unwrap_or_default()
@@ -196,6 +196,11 @@ impl PrimitiveInterner {
     pub fn printable<C:Character>(&'static self,ident:PrimitiveIdentifier,escapechar:Option<C>) -> PrintableIdentifier<C> {
         PrintableIdentifier(ident,escapechar,&self)
     }
+    #[inline(always)]
+    pub fn with<F:FnOnce(&str)>(&'static self,ident:PrimitiveIdentifier,f:F) {
+        let lock = self.interner.read().unwrap();
+        f(lock.resolve(ident.0).unwrap())
+    }
 }
 pub struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>,&'static PrimitiveInterner);
 impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
@@ -260,82 +265,95 @@ impl StringInterner {
         self.interner.get_or_intern(s)
     }
 }
-
-impl ControlSequenceNameHandler<InternedString> for StringInterner {
-    type Printable<'a> = &'a str;
-    #[inline(always)]
-    fn new(&mut self,s: &str) -> InternedString {
-        self.from_string(s)
-    }
-    #[inline(always)]
-    fn par(&self) -> InternedString { self.par }
+impl<C:Character> ControlSequenceNameHandler<C,InternedString> for StringInterner {
+    type Resolved<'a> where Self: 'a = &'a str;
     #[inline(always)]
     fn empty_str(&self) -> InternedString { self.empty_str }
     #[inline(always)]
-    fn resolve<'a>(&'a self, cs: &InternedString) -> &'a str {
+    fn par(&self) -> InternedString { self.par }
+    #[inline(always)]
+    fn new(&mut self, s: &str) -> InternedString { self.from_string(s) }
+    #[inline(always)]
+    fn resolve<'a>(&'a self, cs: &'a InternedString) -> Self::Resolved<'a> {
         self.interner.resolve(*cs).unwrap()
+    }
+    fn from_chars(&mut self, v: &Vec<C>) -> InternedString {
+        let mut s = String::new();
+        for c in v {
+            c.display(&mut s);
+        }
+        self.from_string(s)
     }
 }
 impl Default for StringInterner {
     #[inline(always)]
     fn default() -> Self { Self::new() }
 }
-/*
+
 pub type InternedCSName<C> = (u32,PhantomData<C>);
-impl<C:Character> ControlSequenceName for InternedCSName<C> {
+impl<C:Character> ControlSequenceName<C> for InternedCSName<C> {
     type Handler = CharacterVecInterner<C>;
+    #[inline(always)]
     fn as_usize(&self) -> usize {
-        *self.0 as usize
+        self.0 as usize
     }
 }
-struct CharacterVecInterner<C:Character> {
+pub struct CharacterVecInterner<C:Character> {
     map:HMap<Box<[C]>,u32>,
-    ls:Vec<C>
+    ls:Vec<C>,
+    idx:Vec<usize>
 }
 impl<C:Character> CharacterVecInterner<C> {
     fn new() -> Self {
         let mut map: HMap<Box<[C]>,u32> = HMap::default();
         map.insert(Box::new([]),0);
-        CharacterVecInterner {
-            map, ls:Vec::new()
-        }
+        let mut r = CharacterVecInterner {
+            map, ls:Vec::new(),idx:vec!(0)
+        };
+        r.from_static("par");
+        r
     }
     #[inline(always)]
     pub fn from_static(&mut self,s:&'static str) -> InternedCSName<C> {
-        todo!()
+        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice().into())
     }
     #[inline(always)]
     pub fn from_string<S:AsRef<str>>(&mut self,s:S) -> InternedCSName<C> {
-        todo!()
+        self.intern(C::string_to_iter(s.as_ref()).collect::<Vec<_>>().as_slice().into())
     }
     #[inline(always)]
     pub fn resolve(&self,i:InternedCSName<C>) -> &[C] {
-        self.get(i)
+        self.get(i.0)
     }
-    fn intern(&mut self,v:&[C]) -> u32 {
-        match self.map.entry(v.into()) {
-            std::collections::hash_map::Entry::Occupied(e) => return *e.get(),
-            std::collections::hash_map::Entry::Vacant(e) => {
-                for x in &**e.key() {
-                    self.ls.push(*x);
-                }
-                let len = self.ls.len();
-                e.insert(len as u32);
-                (len as u32,PhantomData::default())
-            }
+    fn intern(&mut self,v:&[C]) -> InternedCSName<C> {
+        match self.map.get(v) {
+            Some(x) => return (*x,PhantomData::default()),
+            None => ()
         }
+        self.ls.extend(v);
+        let len = self.ls.len();
+        self.idx.push(len);
+        let len = self.idx.len() - 1;
+        self.map.insert(v.into(),len as u32);
+        (len as u32,PhantomData::default())
     }
     fn get(&self,i:u32) -> &[C] {
         if i == 0 { return &[] }
         let i = i as usize;
-        &self.ls[i-1..i]
+        let s = self.idx[i - 1];
+        let e = self.idx[i];
+        &self.ls[s..e]
     }
 }
-impl<C:Character> ControlSequenceNameHandler<InternedCSName<C>> for CharacterVecInterner<C> {
-    type Printable<'a> = DisplayCSName<'a,C>;
+impl<C:Character> ControlSequenceNameHandler<C,InternedCSName<C>> for CharacterVecInterner<C> {
+    type Resolved<'a> = DisplayCSName<'a,C>;
     #[inline(always)]
     fn new(&mut self,s: &str) -> InternedCSName<C> {
-        self.intern(s.chars().collect::<Vec<_>>().as_slice())
+        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
+    }
+    #[inline(always)]
+    fn from_chars(&mut self, v: &Vec<C>) -> InternedCSName<C> {
+        self.intern(v.as_slice())
     }
     #[inline(always)]
     fn par(&self) -> InternedCSName<C> { (1,PhantomData::default()) }
@@ -350,13 +368,20 @@ pub struct DisplayCSName<'a,C:Character>(&'a [C]);
 impl<C:Character> Display for DisplayCSName<'_,C> {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for c in self.0 {
-            c.display(f)?
+            c.display(f)
         }
         Ok(())
     }
+}
+
+impl<'a,C:Character> ResolvedCSName<'a,C> for DisplayCSName<'a,C> {
+    type Iter = std::iter::Copied<std::slice::Iter<'a,C>>;
+    #[inline(always)]
+    fn iter(&self) -> Self::Iter { self.0.iter().copied() }
+    #[inline(always)]
+    fn len(&self) -> usize { self.0.len() }
 }
 impl <C:Character> Default for CharacterVecInterner<C> {
     #[inline(always)]
     fn default() -> Self { Self::new() }
 }
-*/

@@ -52,7 +52,7 @@ pub trait Mouth:Sized {
     fn current_position(&self) -> MouthPosition<Self> {
         MouthPosition(self)
     }
-    fn preview(&self,int:&<<Self::Token as Token>::CS as ControlSequenceName>::Handler,cc:&CategoryCodeScheme<C<Self>>,esc:Option<C<Self>>) -> String;
+    fn preview(&self,int:&<<Self::Token as Token>::CS as ControlSequenceName<C<Self>>>::Handler,cc:&CategoryCodeScheme<C<Self>>,esc:Option<C<Self>>) -> String;
 }
 
 pub struct MouthPosition<'a,M:Mouth>(&'a M);
@@ -344,7 +344,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
             }
         }
     }
-    fn preview(&self,int:&<T::CS as ControlSequenceName>::Handler,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) -> String {
+    fn preview(&self,int:&<T::CS as ControlSequenceName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) -> String {
         let mut str = String::new();
         for src in self.inputs.iter().rev() {
             match src {

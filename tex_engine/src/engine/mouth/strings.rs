@@ -68,10 +68,10 @@ pub struct StringTokenizer<C:Character,S:TextLineSource<C>> {
     current_line:TextLine<C>,
     pub source:S,
     pub(crate) eof:bool,
-    tempstr:String
+    tempstr:Vec<C>
 }
 
-type CSHandler<T> = <<T as Token>::CS as ControlSequenceName>::Handler;
+type CSHandler<T> = <<T as Token>::CS as ControlSequenceName<<T as Token>::Char>>::Handler;
 impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
     /// Create a new [`StringTokenizer`] from a [`TextLineSource`]
     pub fn new(mut source:S) -> Self {
@@ -82,7 +82,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
             current_line:source.get_line().unwrap_or(TextLine::default()),
             source,
             eof: false,
-            tempstr:String::new()
+            tempstr:Vec::new()
         }
     }
     /// The current line
@@ -99,7 +99,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
 
     /// Convert the [`StringTokenizer`] into an iterator over [`Token`]s for a fixed
     /// [`ErrorHandler`], [`CategoryCodeScheme`] and endline [`Character`].
-    pub fn to_iter<'a, T:Token<Char = C>, E: ErrorHandler>(&'a mut self, eh:&'a E, handler:&'a mut <T::CS as ControlSequenceName>::Handler, catcodes:&'a CategoryCodeScheme<C>, endline:Option<C>) -> StringTokenizerIterator<'a,T,E,S> {
+    pub fn to_iter<'a, T:Token<Char = C>, E: ErrorHandler>(&'a mut self, eh:&'a E, handler:&'a mut <T::CS as ControlSequenceName<C>>::Handler, catcodes:&'a CategoryCodeScheme<C>, endline:Option<C>) -> StringTokenizerIterator<'a,T,E,S> {
         StringTokenizerIterator {
             tokenizer:self,
             handler,
@@ -294,8 +294,8 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
                     None => {
                         self.state = MouthState::MidLine;
                         self.tempstr.clear();
-                        next.display(&mut self.tempstr);
-                        handler.new(&self.tempstr)
+                        self.tempstr.push(next);
+                        handler.from_chars(&self.tempstr)
                     }
                 }
             }
@@ -303,25 +303,25 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
             _ => {
                 self.state = MouthState::MidLine;
                 self.tempstr.clear();
-                next.display(&mut self.tempstr);
-                handler.new(&self.tempstr)
+                self.tempstr.push(next);
+                handler.from_chars(&self.tempstr)
             }
         }
     }
 
     fn get_cs_name<T:Token<Char=C>>(&mut self, handler:&mut CSHandler<T>, cc:&CategoryCodeScheme<C>, first:C) -> T::CS {
         self.tempstr.clear();
-        first.display(&mut self.tempstr);
+        self.tempstr.push(first);
         self.state = MouthState::SkipBlank;
         loop {
             match self.get_char() {
                 None => break,
                 Some(next) => match cc.get(next) {
-                    CategoryCode::Letter => next.display(&mut self.tempstr),
+                    CategoryCode::Letter => self.tempstr.push(next),
                     CategoryCode::Superscript => {
                         let curr = self.col;
                         match self.maybe_superscript(next) {
-                            Some(c) if *cc.get(c) == CategoryCode::Letter => c.display(&mut self.tempstr),
+                            Some(c) if *cc.get(c) == CategoryCode::Letter => self.tempstr.push(c),
                             _ => {
                                 self.col = curr;
                                 self.col -= 1;
@@ -336,7 +336,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
                 }
             }
         }
-        handler.new(&self.tempstr)
+        handler.from_chars(&self.tempstr)
     }
 
     #[inline(always)]
@@ -439,7 +439,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
 /// Iterator over the [`Token`]s in a [`StringTokenizer`].
 pub struct StringTokenizerIterator<'a, T:Token, EC: ErrorHandler,S:TextLineSource<T::Char>> {
     tokenizer: &'a mut StringTokenizer<T::Char,S>,
-    handler:&'a mut <T::CS as ControlSequenceName>::Handler,
+    handler:&'a mut <T::CS as ControlSequenceName<T::Char>>::Handler,
     eh: &'a EC,
     catcodes:&'a CategoryCodeScheme<T::Char>,
     endline:Option<T::Char>

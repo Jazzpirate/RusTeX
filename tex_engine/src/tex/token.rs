@@ -4,25 +4,26 @@ or a pair of a [character](Character) and a [category code](super::catcodes::Cat
 
 use std::cell::RefCell;
 use std::fmt::Write;
+use std::marker::PhantomData;
 use string_interner::Symbol;
-use crate::engine::utils::memory::InternedString;
+use crate::engine::utils::memory::{InternedCSName, InternedString};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
 use crate::tex::input_text::Character;
-use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
+use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
 use crate::utils::ReusableVectorFactory;
 use crate::tex::input_text::CharacterMap;
 
 /// Trait for Tokens, to be implemented for an engine.
 pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     /// The type of the control sequence name.
-    type CS : ControlSequenceName;
+    type CS : ControlSequenceName<Self::Char>;
     /// The type of the character.
     type Char : Character;
 
     //const TOKEN_LIST_FACTORY: Option<RefCell<ReusableVectorFactory<Self>>> = None;
 
     /// Converts to the canonical enum representation of a token, i.e. [`StandardToken`].
-    fn to_enum(&self) -> StandardToken<Self::CS,Self::Char>;
+    fn to_enum(&self) -> StandardToken<Self::Char,Self::CS>;
     /// Create a new token from a control sequence name.
     fn from_cs(cs:Self::CS) -> Self;
     /// Create a new space token.
@@ -124,20 +125,21 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
         }
     }
 
-    fn display_fmt<W:Write>(&self,int:&<Self::CS as ControlSequenceName>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, mut f: W)  -> std::fmt::Result {
+    fn display_fmt<W:Write>(&self,int:&<Self::CS as ControlSequenceName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, mut f: W)  -> std::fmt::Result {
         match self.to_enum() {
             StandardToken::Character(_,CommandCode::Space) => write!(f," "),
             StandardToken::Character(c,_) => write!(f,"{}",c.displayable()),
             StandardToken::ControlSequence(cs) => {
                 let res = int.resolve(&cs);
-                let str = res.as_ref();
-                write!(f, "{}{}", Self::Char::displayable_opt(escapechar), str)?;
-                match Self::Char::single_char(str) {
-                    None => write!(f," "),
-                    Some(c) => match cc.get(c) {
+                write!(f, "{}{}", Self::Char::displayable_opt(escapechar), res)?;
+                if res.len() == 1 {
+                    let c = res.iter().next().unwrap();
+                    match cc.get(c) {
                         CategoryCode::Letter => write!(f," "),
                         _ => Ok(())
                     }
+                } else {
+                    write!(f," ")
                 }
             }
         }
@@ -149,11 +151,11 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
  Is [`Copy`] iff [`CS`](Token::CS) is [`Copy`].
  */
 #[derive(Clone,Copy,Eq,Debug)]
-pub enum StandardToken<CS:ControlSequenceName,Char:Character> {
+pub enum StandardToken<Char:Character,CS:ControlSequenceName<Char>> {
     ControlSequence(CS),
     Character(Char,CommandCode)
 }
-impl<CS:ControlSequenceName,Char:Character> PartialEq for StandardToken<CS,Char> {
+impl<Char:Character,CS:ControlSequenceName<Char>> PartialEq for StandardToken<Char,CS> {
     fn eq(&self,other:&Self) -> bool {
         match (self,other) {
             (StandardToken::ControlSequence(a), StandardToken::ControlSequence(b)) => a==b,
@@ -163,11 +165,11 @@ impl<CS:ControlSequenceName,Char:Character> PartialEq for StandardToken<CS,Char>
         }
     }
 }
-impl<CS:ControlSequenceName,Char:Character> Token for StandardToken<CS,Char> {
+impl<Char:Character,CS:ControlSequenceName<Char>> Token for StandardToken<Char,CS> {
     type CS = CS;
     type Char = Char;
     #[inline(always)]
-    fn to_enum(&self) -> StandardToken<CS,Char> { self.clone() }
+    fn to_enum(&self) -> StandardToken<Char,CS> { self.clone() }
     #[inline(always)]
     fn from_cs(cs:CS) -> Self { StandardToken::ControlSequence(cs) }
     #[inline(always)]
@@ -200,9 +202,10 @@ impl CompactToken {
     #[inline(always)]
     fn is_string(&self) -> bool { self.0 < 0x8000_0000 }
     #[inline(always)]
-    fn as_string(&self) -> Option<InternedString> {
+    fn as_string(&self) -> Option<InternedCSName<u8>> {
         if self.is_string() {
-            Some(InternedString::try_from_usize(self.0 as usize).unwrap())
+            Some((self.0,PhantomData::default()))
+            //Some(InternedString::try_from_usize(self.0 as usize).unwrap())
         } else {
             None
         }
@@ -229,17 +232,17 @@ impl PartialEq for CompactToken {
     }
 }
 impl Token for CompactToken {
-    type CS = InternedString;
+    type CS = InternedCSName<u8>;//InternedString;
     type Char = u8;
     //const TOKEN_LIST_FACTORY: Option<RefCell<ReusableVectorFactory<Self>>> = Some(RefCell::new(ReusableVectorFactory::constant()));
-    fn to_enum(&self) -> StandardToken<InternedString,u8> {
+    fn to_enum(&self) -> StandardToken<u8,InternedCSName<u8>> {
         match self.as_string() {
             Some(s) => StandardToken::ControlSequence(s),
             None => StandardToken::Character(self.u8(), self.catcode())
         }
     }
     #[inline(always)]
-    fn from_cs(cs: Self::CS) -> Self { Self(cs.to_usize() as u32) }
+    fn from_cs(cs: Self::CS) -> Self { Self(cs.0) }
     #[inline(always)]
     fn space() -> Self { Self(0x8000_0000 | (10 << 8) | 32) }
     #[inline(always)]
@@ -273,7 +276,7 @@ impl Token for CompactToken {
 
     #[inline(always)]
     fn is_cs(&self,name:&Self::CS) -> bool {
-        self.0 == name.to_usize() as u32
+        self.0 == name.0
     }
     #[inline(always)]
     fn is_space(&self) -> bool {

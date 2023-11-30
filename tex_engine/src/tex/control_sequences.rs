@@ -6,54 +6,80 @@
     we don't want to do any interning and just use [`Ptr`]`<str>`s.
 */
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use string_interner::Symbol;
 use crate::engine::utils::memory::{InternedString, StringInterner};
+use crate::tex::input_text::Character;
 use crate::utils::Ptr;
 
 
 /** The name of a control sequence. */
-pub trait ControlSequenceName: Clone + Eq + 'static + std::hash::Hash + Debug {
+pub trait ControlSequenceName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
     /// The type of the handler for this control sequence name.
-    type Handler: ControlSequenceNameHandler<Self>;
+    type Handler: ControlSequenceNameHandler<C,Self>;
     fn as_usize(&self) -> usize;
 }
 
+pub trait ResolvedCSName<'a,C:Character>:Display {
+    type Iter:Iterator<Item=C>;
+    fn iter(&self) -> Self::Iter;
+    fn len(&self) -> usize;
+}
+
 /** Handles control sequence names - conversion from/to strings, displaying etc. */
-pub trait ControlSequenceNameHandler<CS: ControlSequenceName>:Default {
-    type Printable<'a>:AsRef<str>+std::fmt::Display where Self:'a;
+pub trait ControlSequenceNameHandler<C:Character,CS: ControlSequenceName<C>>:Default {
+    type Resolved<'a>:ResolvedCSName<'a,C> where Self:'a;
     /// Creates a new control sequence name from a string.
     fn new(&mut self,s: &str) -> CS;
+    fn from_chars(&mut self,v: &Vec<C>) -> CS;
     ///
-    fn resolve<'a>(&'a self,cs:&'a CS) -> Self::Printable<'a>;
+    fn resolve<'a>(&'a self,cs:&'a CS) -> Self::Resolved<'a>;
     /// Returns the name of the `\par` control sequence.
     fn par(&self) -> CS;
     /// Returns the name of the empty control sequence.
     fn empty_str(&self) -> CS;
 }
-impl ControlSequenceNameHandler<Ptr<str>> for () {
-    type Printable<'a> = &'a str;
+
+impl<'a,C:Character> ResolvedCSName<'a,C> for &'a str {
+    type Iter = C::Iter<'a>;
+    fn iter(&self) -> Self::Iter {
+        C::string_to_iter(self)
+    }
+    fn len(&self) -> usize {
+        C::string_to_iter(self).len()
+    }
+}
+
+impl<C:Character> ControlSequenceNameHandler<C,Ptr<str>> for () {
+    type Resolved<'a> = &'a str;
     #[inline(always)]
     fn new(&mut self,s: &str) -> Ptr<str> {
         s.into()
     }
     #[inline(always)]
-    fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Printable<'a> {
+    fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Resolved<'a> {
         &*cs
     }
     #[inline(always)]
     fn par(&self) -> Ptr<str> { "par".to_string().into() }
     #[inline(always)]
     fn empty_str(&self) -> Ptr<str> { "".to_string().into() }
+    fn from_chars(&mut self, v: &Vec<C>) -> Ptr<str> {
+        let mut s = String::new();
+        for c in v {
+            c.display(&mut s);
+        }
+        s.into()
+    }
 }
 
-impl ControlSequenceName for Ptr<str> {
+impl<C:Character> ControlSequenceName<C> for Ptr<str> {
     type Handler = ();
     fn as_usize(&self) -> usize {
         todo!()
     }
 }
-impl ControlSequenceName for InternedString {
+impl<C:Character> ControlSequenceName<C> for InternedString {
     type Handler = StringInterner;
     fn as_usize(&self) -> usize {
         self.to_usize()

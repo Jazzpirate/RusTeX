@@ -143,20 +143,22 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char().map(|c| ET::Token::from_char_cat(c,CommandCode::Other));
-    engine.read_until_endgroup(|a,t| match t.to_enum() {
-        StandardToken::Character(c,CommandCode::Space) =>
-            f(ET::Token::space()),
-        StandardToken::Character(c,CommandCode::Parameter) => {
-            f(ET::Token::from_char_cat(c,CommandCode::Other));
-            f(ET::Token::from_char_cat(c,CommandCode::Other));
+    engine.read_until_endgroup(|a,t| {
+        if t.is_space() {f(t)}
+        else if t.is_param() {
+            f(t.clone());f(t)
         }
-        StandardToken::Character(c,_) =>
-            f(ET::Token::from_char_cat(c,CommandCode::Other)),
-        StandardToken::ControlSequence(cs) => {
-            if let Some(e) = &escapechar { f(e.clone()) }
-            let name = a.memory.cs_interner().resolve(&cs);
-            let mut tokenizer = Tokenizer::new(&mut f);
-            write!(tokenizer,"{}",name).unwrap();
+        else {
+            match t.to_enum() {
+                StandardToken::Character(c, _) =>
+                    f(ET::Token::from_char_cat(c, CommandCode::Other)),
+                StandardToken::ControlSequence(cs) => {
+                    if let Some(e) = &escapechar { f(e.clone()) }
+                    let name = a.memory.cs_interner().resolve(&cs);
+                    let mut tokenizer = Tokenizer::new(&mut f);
+                    write!(tokenizer, "{}", name).unwrap();
+                }
+            }
         }
     });
 }

@@ -21,7 +21,7 @@ use std::fmt::{Display, Write};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::utils::Ptr;
-use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, TeXBox};
 
@@ -180,13 +180,13 @@ pub fn csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 pub fn do_csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ET::CSName {
     *engine.gullet.csnames() += 1;
-    let mut name = engine.aux.memory.get_string();
+    let mut name = vec!();
     crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,..} => char.display(&mut name),
+        ResolvedToken::Tk {char,..} => name.push(char),
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(e)),..} if e.name == PRIMITIVES.endcsname => {
             *engine.gullet.csnames() -= 1;
-            let id = engine.aux.memory.cs_interner_mut().new(&name);
-            engine.aux.memory.return_string(name);
+            let id = engine.aux.memory.cs_interner_mut().from_chars(&name);
+            //engine.aux.memory.return_string(name);
             return id
         }
         o => todo!("csname: {:?}",o)
@@ -1220,30 +1220,33 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
 pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Tokenizer::new(&mut fi);
+    use crate::engine::mouth::pretokenized::WriteChars;
     match engine.get_next() {
         None => todo!("throw error"),
         Some(t) => match engine.gullet.resolve(engine.state,t) {
             ResolvedToken::Cmd {cmd:None,..} => {
-                write!(f,"{}undefined",
-                        ET::Char::displayable_opt(engine.state.get_escape_char())
-                ).unwrap();
+                if let Some(c) = engine.state.get_escape_char() {
+                    f.push_char(c);
+                }
+                write!(f,"undefined").unwrap();
             }
             ResolvedToken::Cmd{cmd:Some(cmd),..} => {
-                write!(f,"{}",
-                       cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
-                ).unwrap();
+                cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).write_chars(f)
             }
-            ResolvedToken::Tk {char,code,..} => {match code {
-                CommandCode::BeginGroup => write!(f,"begin-group character {}",char.displayable()),
-                CommandCode::EndGroup => write!(f,"end-group character {}",char.displayable()),
-                CommandCode::MathShift => write!(f,"math shift character {}",char.displayable()),
-                CommandCode::Parameter => write!(f,"macro parameter character {}",char.displayable()),
-                CommandCode::Superscript => write!(f,"superscript character {}",char.displayable()),
-                CommandCode::Subscript => write!(f,"subscript character {}",char.displayable()),
-                CommandCode::Space => write!(f,"blank space  "),
-                CommandCode::Letter => write!(f,"the letter {}",char.displayable()),
-                _ => write!(f,"the character {}",char.displayable()),
-            }.unwrap();}
+            ResolvedToken::Tk {char,code,..} => {
+                match code {
+                    CommandCode::BeginGroup => write!(f,"begin-group character "),
+                    CommandCode::EndGroup => write!(f,"end-group character "),
+                    CommandCode::MathShift => write!(f,"math shift character "),
+                    CommandCode::Parameter => write!(f,"macro parameter character "),
+                    CommandCode::Superscript => write!(f,"superscript character "),
+                    CommandCode::Subscript => write!(f,"subscript character "),
+                    CommandCode::Space => {write!(f,"blank space  ").unwrap();return},
+                    CommandCode::Letter => write!(f,"the letter "),
+                    _ => write!(f,"the character "),
+                }.unwrap();
+                f.push_char(char);
+            }
         }
     }
 }
@@ -1407,26 +1410,28 @@ pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
 
 pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     match engine.get_next() {
-        Some(t) =>
-            match t.to_enum() {
-                StandardToken::Character(_,CommandCode::Space) =>exp.push(ET::Token::space()),
-                StandardToken::Character(c,_) => exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
-                StandardToken::ControlSequence(cs) => {
-                    let res = engine.aux.memory.cs_interner().resolve(&cs);
-                    let str = res.as_ref();
-                    match engine.state.get_escape_char() {
-                        Some(c) => exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
-                        _ => ()
-                    }
-                    for u in str.as_bytes() {
-                        if u == &b' ' {
-                            exp.push(ET::Token::space())
-                        } else {
-                            exp.push(ET::Token::from_char_cat(ET::Char::from(*u), CommandCode::Other))
+        Some(t) => {
+            if t.is_space() {exp.push(t)}
+            else {
+                match t.to_enum() {
+                    StandardToken::Character(c, _) => exp.push(ET::Token::from_char_cat(c, CommandCode::Other)),
+                    StandardToken::ControlSequence(cs) => {
+                        let res = engine.aux.memory.cs_interner().resolve(&cs);
+                        match engine.state.get_escape_char() {
+                            Some(c) => exp.push(ET::Token::from_char_cat(c, CommandCode::Other)),
+                            _ => ()
+                        }
+                        for u in res.iter() {
+                            match u.try_into() {
+                                Ok(b' ') => exp.push(ET::Token::space()),
+                                _ =>
+                                    exp.push(ET::Token::from_char_cat(u, CommandCode::Other))
+                            }
                         }
                     }
                 }
-            },
+            }
+        }
         None => todo!("file end")
     }
 }

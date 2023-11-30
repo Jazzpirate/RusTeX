@@ -3,7 +3,7 @@
 */
 use std::fmt::Debug;
 use crate::engine::gullet::{DefaultGullet, Gullet, ResolvedToken};
-use crate::engine::utils::memory::{InternedString, MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::{InternedCSName, InternedString, MemoryManager, PRIMITIVES};
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
@@ -33,7 +33,7 @@ pub mod fontsystem;
 */
 pub trait EngineTypes:Sized+Copy+Clone+Debug {
     type Char: Character;
-    type CSName: ControlSequenceName;
+    type CSName: ControlSequenceName<Self::Char>;
     type Token: Token<Char = Self::Char, CS = Self::CSName>;
     type ErrorHandler: ErrorHandler;
     type Extension: EngineExtension;
@@ -82,7 +82,7 @@ pub struct EngineReferences<'et,ET:EngineTypes> {
 pub struct DefaultPlainTeXEngineTypes;
 impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Char = u8;
-    type CSName = utils::memory::InternedString;
+    type CSName = utils::memory::InternedCSName<u8>;//InternedString;
     type Token = super::tex::token::CompactToken;//::StandardToken<Self::CSName,u8>;//
     type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = ();
@@ -99,7 +99,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Mouth = DefaultMouth<Self::Token,Self::File>;
     type Gullet = DefaultGullet<Self>;
     type Stomach = StomachWithShipout<Self>;
-    type FontSystem = TfmFontSystem<i32,Dim32,InternedString>;
+    type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }
 
 //type Int<S> = <<<S as TeXEngine>::Types as EngineTypes>::Num as NumSet>::Int;
@@ -151,7 +151,7 @@ pub struct PlainTeXEngine {
     aux:EngineAux<DefaultPlainTeXEngineTypes>,
     pub state: state::tex_state::TeXState<DefaultPlainTeXEngineTypes>,
     filesystem: filesystem::NoOutputFileSystem<u8>,
-    fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedString>,
+    fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedCSName<u8>>,
     pub mouth: mouth::DefaultMouth<<DefaultPlainTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
     gullet: gullet::DefaultGullet<DefaultPlainTeXEngineTypes>,
     pub stomach: stomach::StomachWithShipout<DefaultPlainTeXEngineTypes>

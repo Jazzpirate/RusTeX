@@ -9,7 +9,7 @@ use crate::file_end;
 use std::str::FromStr;
 use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
 use crate::engine::mouth::pretokenized::TokenList;
-use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::token::{StandardToken, Token};
 use crate::utils::errors::ErrorHandler;
@@ -455,14 +455,15 @@ pub fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
             }
             StandardToken::ControlSequence(cs) => {
                 let resolved = engine.aux.memory.cs_interner().resolve(&cs);
-                match ET::Char::single_char(resolved.as_ref()) {
-                    Some(c) =>
-                        if is_negative {
-                            -<ET::Num as NumSet>::Int::from(c.into() as i32)
-                        } else {
-                            <ET::Num as NumSet>::Int::from(c.into() as i32)
-                        },
-                    None => todo!("throw error here")
+                if resolved.len() == 1 {
+                    let c: ET::Char = resolved.iter().next().unwrap();
+                    if is_negative {
+                        -<ET::Num as NumSet>::Int::from(c.into() as i32)
+                    } else {
+                        <ET::Num as NumSet>::Int::from(c.into() as i32)
+                    }
+                } else  {
+                    todo!("throw error here")
                 }
             }
         },

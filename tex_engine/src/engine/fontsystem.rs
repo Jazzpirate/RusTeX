@@ -16,7 +16,7 @@ use crate::tex::control_sequences::ControlSequenceNameHandler;
 
 pub trait FontSystem:Clone+std::fmt::Debug {
     type Char:Character;
-    type CS:ControlSequenceName;
+    type CS:ControlSequenceName<Self::Char>;
     type Int:TeXInt;
     type Font:Font<Char=Self::Char,CS=Self::CS,D=Self::Dim,Int=Self::Int>;
     type Dim:TeXDimen;
@@ -28,7 +28,7 @@ pub trait Font:Clone+std::fmt::Debug {
     type Char:Character;
     type D:TeXDimen;
     type Int:TeXInt;
-    type CS:ControlSequenceName;
+    type CS:ControlSequenceName<Self::Char>;
     fn get_at(&self) -> Self::D;
     fn set_at(&mut self,d:Self::D);
     fn name(&self) -> &Self::CS;
@@ -38,15 +38,15 @@ pub trait Font:Clone+std::fmt::Debug {
     fn set_hyphenchar(&mut self,c:Self::Int);
     fn get_skewchar(&self) -> Self::Int;
     fn set_skewchar(&mut self,c:Self::Int);
-    fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName>::Handler,w:W) -> std::fmt::Result;
+    fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<Self::Char>>::Handler,w:W) -> std::fmt::Result;
 }
 #[derive(Clone,Debug)]
-pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> {
+pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> {
     files:HMap<PathBuf,Ptr<TfmFile>>,
     null:Ptr<TfmFontI<I,D,CS>>
 }
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> TfmFontSystem<I,D,CS> {
-    pub fn new<ET:EngineTypes<FontSystem=Self,CSName = CS>>(aux:&mut EngineAux<ET>) -> Self  {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> TfmFontSystem<I,D,CS> {
+    pub fn new<ET:EngineTypes<Char=u8,FontSystem=Self,CSName = CS>>(aux:&mut EngineAux<ET>) -> Self  {
         use crate::tex::control_sequences::ControlSequenceNameHandler;
         let null_file = TfmFile {
             hyphenchar:45,
@@ -73,7 +73,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> TfmFontSystem<I,D,
         }
     }
 }
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> FontSystem for TfmFontSystem<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for TfmFontSystem<I,D,CS> {
     type Char = u8;
     type Int = I;
     type Font = TfmFont<I,D,CS>;
@@ -123,12 +123,12 @@ struct Mutables<I:TeXInt,D:TeXDimen + Numeric<I>>  {
     dimens:Vec<D>
 }
 
-pub struct TfmFontI<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName>  {
+pub struct TfmFontI<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>>  {
     file:Ptr<TfmFile>,
     name:CS,
     muts:RwLock<Mutables<I,D>>
 }
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> std::fmt::Debug for TfmFontI<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> std::fmt::Debug for TfmFontI<I,D,CS> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,"Font {:?}",self.name)
     }
@@ -136,7 +136,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> std::fmt::Debug fo
 }
 
 pub type TfmFont<I,D,CS> = Ptr<TfmFontI<I,D,CS>>;
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> Font for TfmFont<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFont<I,D,CS> {
     type Char = u8;
     type CS = CS;
     type Int = I;
@@ -190,7 +190,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName> Font for TfmFont<I
     fn name(&self) -> &Self::CS {
         &self.name
     }
-    fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName>::Handler,mut w:W) -> std::fmt::Result {
+    fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<u8>>::Handler,mut w:W) -> std::fmt::Result {
         let at = self.muts.read().unwrap().at;
         match at {
             Some(d) => write!(w,"{} at {}",self.file.name(),d),

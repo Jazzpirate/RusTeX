@@ -3,10 +3,11 @@
 */
 
 use std::fmt::Display;
+use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::mouth::pretokenized::{ExpansionContainer, TokenList};
+use crate::engine::mouth::pretokenized::{ExpansionContainer, Stringify, TokenList, WriteChars};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
 use crate::tex::numerics::NumSet;
@@ -59,62 +60,99 @@ pub enum Command<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> Command<ET> {
     #[inline(always)]
-    pub fn meaning<'a>(&'a self,int:&'a <<ET::Token as Token>::CS as ControlSequenceName>::Handler,cc:&'a CategoryCodeScheme<ET::Char>,escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
+    pub fn meaning<'a>(&'a self,int:&'a <<ET::Token as Token>::CS as ControlSequenceName<ET::Char>>::Handler,cc:&'a CategoryCodeScheme<ET::Char>,escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
         Meaning{cmd:self,int,cc,escapechar}
     }
 }
 
 pub struct Meaning<'a,ET:EngineTypes>{
     cmd:&'a Command<ET>,
-    int:&'a <<ET::Token as Token>::CS as ControlSequenceName>::Handler,
+    int:&'a <<ET::Token as Token>::CS as ControlSequenceName<ET::Char>>::Handler,
     cc:&'a CategoryCodeScheme<ET::Char>,
     escapechar:Option<ET::Char>
 }
+impl<'a,ET:EngineTypes> Meaning<'a,ET> {
+    fn write_chars<W:WriteChars<ET::Char,ET::CSName>>(&self,mut f:W) {
+        match self.cmd {
+            Command::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
+
+            Command::Char{char,code} => {
+                match code {
+                    CommandCode::BeginGroup => write!(f,"begin-group character "),
+                    CommandCode::EndGroup => write!(f,"end-group character "),
+                    CommandCode::MathShift => write!(f,"math shift character "),
+                    CommandCode::Parameter => write!(f,"macro parameter character "),
+                    CommandCode::Superscript => write!(f,"superscript character "),
+                    CommandCode::Subscript => write!(f,"subscript character "),
+                    CommandCode::Space => {write!(f,"blank space  ").unwrap();return},
+                    CommandCode::Letter => write!(f,"the letter "),
+                    _ => write!(f,"the character "),
+                }.unwrap();
+                f.push_char(*char);
+            }
+            Command::CharDef(c) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                write!(f,"char\"{:X}",Into::<u64>::into(*c)).unwrap();
+            },
+            Command::MathChar(u) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                write!(f,"mathchar\"{:X}",u).unwrap();
+            },
+            Command::Font(i) => {
+                write!(f,"select font ").unwrap();
+                i.display(self.int,f).unwrap();
+            },
+            Command::IntRegister(i) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                write!(f,"count{}",i).unwrap();
+            },
+            Command::DimRegister(i) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                write!(f,"dimen{}",i).unwrap();
+            },
+            Command::SkipRegister(i) => {
+                if let Some(e) = self.escapechar { f.push_char(e) }
+                write!(f, "skip{}", i).unwrap();
+            }
+            Command::MuSkipRegister(i) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                write!(f,"muskip{}",i).unwrap();
+            },
+            Command::ToksRegister(i) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                write!(f,"toks{}",i).unwrap();
+            },
+            Command::Relax => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                f.write_str("relax").unwrap();
+            },
+            Command::Conditional(Conditional{name,..}) |
+            Command::Expandable(Expandable{name,..}) |
+            Command::SimpleExpandable(SimpleExpandable{name,..}) |
+            Command::Unexpandable(Unexpandable{name,..}) |
+            Command::Assignment(Assignment{name,..}) |
+            Command::Int(IntCommand{name,..}) |
+            Command::Dim(DimCommand{name,..}) |
+            Command::Skip(SkipCommand{name,..}) |
+            Command::MuSkip(MuSkipCommand{name,..}) |
+            Command::FontCmd(FontCommand{name,..}) |
+            Command::Box(BoxCommand{name,..}) |
+            Command::PrimitiveInt(name) |
+            Command::PrimitiveDim(name) |
+            Command::PrimitiveSkip(name) |
+            Command::PrimitiveMuSkip(name) |
+            Command::PrimitiveToks(name) |
+            Command::Whatsit(Whatsit{name,..}) => {
+                if let Some(e) = self.escapechar { f.push_char(e)}
+                PRIMITIVES.with(*name,|s| f.write_str(s).unwrap());
+            },
+        }
+    }
+}
 impl<'a,ET:EngineTypes> Display for Meaning<'a,ET> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.cmd {
-            Command::Macro(m) => m.meaning_fmt(self.int, self.cc, self.escapechar, f),
-            Command::Conditional(c) => write!(f,"{}",PRIMITIVES.printable(c.name,self.escapechar)),
-            Command::Expandable(e) => write!(f,"{}",PRIMITIVES.printable(e.name,self.escapechar)),
-            Command::SimpleExpandable(e) => write!(f,"{}",PRIMITIVES.printable(e.name,self.escapechar)),
-            Command::Unexpandable(u) => write!(f,"{}",PRIMITIVES.printable(u.name,self.escapechar)),
-            Command::Assignment(a) => write!(f,"{}",PRIMITIVES.printable(a.name,self.escapechar)),
-            Command::Char{char,code} => match code {
-                CommandCode::BeginGroup => write!(f,"begin-group character {}",char.displayable()),
-                CommandCode::EndGroup => write!(f,"end-group character {}",char.displayable()),
-                CommandCode::MathShift => write!(f,"math shift character {}",char.displayable()),
-                CommandCode::Parameter => write!(f,"macro parameter character {}",char.displayable()),
-                CommandCode::Superscript => write!(f,"superscript character {}",char.displayable()),
-                CommandCode::Subscript => write!(f,"subscript character {}",char.displayable()),
-                CommandCode::Space => write!(f,"blank space  "),
-                CommandCode::Letter => write!(f,"the letter {}",char.displayable()),
-                _ => write!(f,"the character {}",char.displayable()),
-            },
-            Command::CharDef(c) => write!(f,"{}char\"{:X}",ET::Char::displayable_opt(self.escapechar),Into::<u64>::into(*c)),
-            Command::MathChar(u) => write!(f,"{}mathchar\"{:X}",ET::Char::displayable_opt(self.escapechar),u),
-            Command::Int(i) => write!(f,"{}",PRIMITIVES.printable(i.name,self.escapechar)),
-            Command::Dim(i) => write!(f,"{}",PRIMITIVES.printable(i.name,self.escapechar)),
-            Command::Skip(i) => write!(f,"{}",PRIMITIVES.printable(i.name,self.escapechar)),
-            Command::MuSkip(i) => write!(f,"{}",PRIMITIVES.printable(i.name,self.escapechar)),
-            Command::FontCmd(i) => write!(f,"{}",PRIMITIVES.printable(i.name,self.escapechar)),
-            Command::Box(i) => write!(f,"{}",PRIMITIVES.printable(i.name,self.escapechar)),
-            Command::Font(i) => {
-                write!(f,"select font ")?;
-                i.display(self.int,f)
-            },
-            Command::IntRegister(i) => write!(f,"{}count{}",ET::Char::displayable_opt(self.escapechar),i),
-            Command::DimRegister(i) => write!(f,"{}dimen{}",ET::Char::displayable_opt(self.escapechar),i),
-            Command::SkipRegister(i) => write!(f,"{}skip{}",ET::Char::displayable_opt(self.escapechar),i),
-            Command::MuSkipRegister(i) => write!(f,"{}muskip{}",ET::Char::displayable_opt(self.escapechar),i),
-            Command::ToksRegister(i) => write!(f,"{}toks{}",ET::Char::displayable_opt(self.escapechar),i),
-            Command::PrimitiveInt(i) => write!(f,"{}",PRIMITIVES.printable(*i,self.escapechar)),
-            Command::PrimitiveDim(i) => write!(f,"{}",PRIMITIVES.printable(*i,self.escapechar)),
-            Command::PrimitiveSkip(i) => write!(f,"{}",PRIMITIVES.printable(*i,self.escapechar)),
-            Command::PrimitiveMuSkip(i) => write!(f,"{}",PRIMITIVES.printable(*i,self.escapechar)),
-            Command::PrimitiveToks(i) => write!(f,"{}",PRIMITIVES.printable(*i,self.escapechar)),
-            Command::Whatsit(w) => write!(f,"{}",PRIMITIVES.printable(w.name,self.escapechar)),
-            Command::Relax => write!(f,"{}relax",ET::Char::displayable_opt(self.escapechar))
-        }
+        self.write_chars(Stringify::new(f));
+        Ok(())
     }
 }
 
@@ -134,29 +172,36 @@ pub struct Macro<T:Token> {
 }
 impl<T:Token> Macro<T> {
     #[inline(always)]
-    pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self,int:&'a <T::CS as ControlSequenceName>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
+    pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self,int:&'a <T::CS as ControlSequenceName<ET::Char>>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
         MacroMeaning{cmd:self,int,cc,escapechar}
     }
-    pub fn meaning_fmt(&self, int:&<T::CS as ControlSequenceName>::Handler, cc:&CategoryCodeScheme<T::Char>, endline:Option<T::Char>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn meaning_char<F:WriteChars<T::Char,T::CS>>(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: F) {
         if self.protected {
-            write!(f,"{}protected ",T::Char::displayable_opt(endline))?;
+            if let Some(e) = escapechar { f.push_char(e) }
+            write!(f,"protected ").unwrap();
         }
         if self.long {
-            write!(f,"{}long ",T::Char::displayable_opt(endline))?;
+            if let Some(e) = escapechar { f.push_char(e) }
+            write!(f,"long ").unwrap();
         }
         if self.outer {
-            write!(f,"{}outer ",T::Char::displayable_opt(endline))?;
+            if let Some(e) = escapechar { f.push_char(e) }
+            write!(f,"outer ").unwrap();
         }
-        write!(f,"macro:")?;
-        self.signature.params.meaning_fmt(int, cc, endline, f,false)?;
-        write!(f,"->")?;
-        self.expansion.meaning_fmt(int, cc, endline, f,true)
+        write!(f,"macro:").unwrap();
+        self.signature.params.meaning_char(int, cc, escapechar, &mut f, false);
+        write!(f,"->").unwrap();
+        self.expansion.meaning_char(int, cc, escapechar, &mut f, true)
+    }
+    pub fn meaning_fmt(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.meaning_char( int, cc, escapechar,Stringify::new(f));
+        Ok(())
     }
 }
 
 pub struct MacroMeaning<'a,ET:EngineTypes>{
     cmd:&'a Macro<ET::Token>,
-    int:&'a <<ET::Token as Token>::CS as ControlSequenceName>::Handler,
+    int:&'a <<ET::Token as Token>::CS as ControlSequenceName<ET::Char>>::Handler,
     cc:&'a CategoryCodeScheme<ET::Char>,
     escapechar:Option<ET::Char>
 }
