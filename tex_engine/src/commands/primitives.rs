@@ -1,5 +1,5 @@
 /*! Methods for registering primitives */
-use crate::commands::{Assignment, BoxCommand, Command, Conditional, DimCommand, Expandable, FontCommand, IntCommand, MuSkipCommand, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::{Assignment, BoxCommand, Command, Conditional, DimCommand, Expandable, FontCommand, IntCommand, MuSkipCommand, NodeCommand, NodeCommandScope, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::utils::memory::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::nodes::{BoxInfo, NodeList, TeXBox};
+use crate::tex::nodes::{BoxInfo, NodeList, TeXBox, TeXNode};
 use crate::tex::numerics::NumSet;
 use crate::utils::Ptr;
 
@@ -66,6 +66,17 @@ macro_rules! cmstodo {
     };
 }
 
+pub fn register_node<E:TeXEngine>(engine:&mut E,name:&'static str, scope:NodeCommandScope,
+                                  f:fn(&mut EngineReferences<E::Types>,Tk<E>) -> TeXNode<E::Types>
+){
+    let id = PRIMITIVES.get(name);
+    let command = Command::Node(NodeCommand{
+        name:id, scope, read:f
+    });
+    let refs = engine.get_engine_refs();
+    let name = refs.aux.memory.cs_interner_mut().new(name);
+    refs.state.set_command(refs.aux,name,Some(command),true);
+}
 
 /// Creates a new [`Expandable`] primitive and registers it with the engine.
 pub fn register_expandable<E:TeXEngine>(

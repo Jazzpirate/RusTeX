@@ -1,5 +1,5 @@
 use crate::commands::NodeCommandScope;
-use crate::engine::{EngineReferences, EngineTypes};
+use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
@@ -7,11 +7,12 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, TeXBox, TeXNode};
+use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode};
 use crate::tex::numerics::NumSet;
-use crate::tex::types::GroupType;
+use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::Ptr;
 use crate::tex::numerics::TeXDimen;
+use crate::tex::nodes::NodeTrait;
 
 type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
 type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
@@ -52,6 +53,29 @@ pub trait Stomach {
         assign(engine,token,global);
         afterassignment(engine);
     }
+    fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
+        match engine.stomach.data_mut().open_lists.pop() {
+            Some(ls) => match ls.tp {
+                NodeListType::Paragraph => {
+                    todo!("close paragraph")
+                }
+                NodeListType::Box(bi,start,reg) if bi.tp == bt => {
+                    engine.state.pop(engine.aux,engine.mouth);
+                    let bx = TeXBox {
+                        children:ls.children,info:bi,start,end:engine.mouth.current_sourceref(),
+                    };
+                    match reg {
+                        Some((reg,global)) =>
+                            engine.state.set_box_register(engine.aux,reg,Some(bx),global),
+                        None =>
+                            engine.stomach.add_node(&engine.state,bx.as_node())
+                    }
+                }
+                _ => todo!("throw error")
+            }
+            None => todo!("throw error"),
+        }
+    }
     fn do_char(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,char:Ch<Self>,code:CommandCode) {
         match code {
             CommandCode::EOF => (),
@@ -62,37 +86,8 @@ pub trait Stomach {
                 match engine.state.get_group_type() {
                     Some(GroupType::Character) =>
                         engine.state.pop(engine.aux,engine.mouth),
-                    Some(GroupType::Box(bt)) => {
-                        match engine.stomach.data_mut().open_lists.pop() {
-                            Some(ls) => match ls.tp {
-                                NodeListType::Paragraph => {
-                                    todo!("close paragraph")
-                                }
-                                NodeListType::Box(bi,start,reg) if bi.tp == bt => {
-                                    engine.state.pop(engine.aux,engine.mouth);
-                                    let bx = TeXBox {
-                                        children:ls.children,info:bi,start,end:engine.mouth.current_sourceref(),
-                                    };
-                                    match reg {
-                                        Some((reg,global)) =>
-                                            engine.state.set_box_register(engine.aux,reg,Some(bx),global),
-                                        None => {
-                                            let data = engine.stomach.data_mut();
-                                            match data.open_lists.last_mut() {
-                                                Some(ls) => ls.children.push(todo!("box as node")),
-                                                None => {
-                                                    data.page.push(todo!("box as node"));
-                                                    todo!("update goal etc")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => todo!("throw error")
-                            }
-                            None => todo!("throw error"),
-                        }
-                    }
+                    Some(GroupType::Box(bt)) =>
+                    Self::end_box(engine,bt),
                     _ => todo!("throw error / close box")
                 }
             }
@@ -102,8 +97,43 @@ pub trait Stomach {
     fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<TeXBox<Self::ET>,(BoxInfo<Self::ET>,Option<(u16,bool)>)>) {
         todo!("box in stomach")
     }
+    fn add_node(&mut self,state:&<Self::ET as EngineTypes>::State,node:TeXNode<Self::ET>) {
+        let data = self.data_mut();
+        match data.open_lists.last_mut() {
+            Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
+                match node {
+                    TeXNode::Simple(SimpleNode::VRule {..}) =>
+                        data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
+                    _ => ()
+                }
+                children.push(node)
+            }
+            Some(ls) => {
+                match node {
+                    TeXNode::Char {..} => todo!("check ligatures"),
+                    _ => ()
+                }
+                data.prevdepth = node.depth();
+                ls.children.push(node)
+            },
+            None => {
+                todo!();
+                data.page.push(node)
+            }
+        }
+    }
     fn do_node(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> TeXNode<Self::ET>,scope:NodeCommandScope) {
-        todo!("node in stomach")
+        engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
+        match (scope,engine.state.get_mode()) {
+            (NodeCommandScope::Any, _) => (),
+            (NodeCommandScope::SwitchesToHorizontal, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => (),
+            (NodeCommandScope::SwitchesToVertical, TeXMode::Vertical | TeXMode::InternalVertical) => (),
+            (NodeCommandScope::MathOnly, TeXMode::InlineMath | TeXMode::DisplayMath) => (),
+            (NodeCommandScope::MathOnly, _) => todo!("throw error"),
+            _ => todo!("switch modes maybe")
+        }
+        let node = read(engine,token);
+        engine.stomach.add_node(&engine.state,node)
     }
     fn do_font(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
         engine.state.set_current_font(engine.aux,f,global);

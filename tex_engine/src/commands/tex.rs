@@ -1,6 +1,6 @@
 use chrono::{Datelike, Timelike};
 use crate::{cmstodo, cmstodos, cmtodo, cmtodos, debug_log, expand_loop};
-use crate::commands::{Assignment, Command, DimCommand, Expandable, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::{Assignment, Command, DimCommand, Expandable, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, NodeCommandScope, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
@@ -23,7 +23,7 @@ use crate::utils::errors::ErrorHandler;
 use crate::utils::Ptr;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, TeXBox};
+use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, NodeTrait, SimpleNode, TeXBox, TeXNode};
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -1654,6 +1654,29 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
     )
 }
 
+pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    let start = engine.mouth.start_ref();
+    let mut width = None;
+    let mut height = None;
+    let mut depth = None;
+    loop {
+        match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+            Some(b"width") => {
+                width = Some(engine.read_dim(false));
+            }
+            Some(b"height") => {
+                height = Some(engine.read_dim(false));
+            }
+            Some(b"depth") => {
+                depth = Some(engine.read_dim(false));
+            }
+            _ => break
+        }
+    }
+    let mut end = engine.mouth.current_sourceref();
+    SimpleNode::VRule {width,height,depth,start,end}.as_node()
+}
+
 #[inline(always)]
 pub fn year<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.aux.start_time.year())
@@ -1910,6 +1933,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     register_box(engine,"hbox",hbox);
 
+    register_node(engine,"vrule",NodeCommandScope::SwitchesToHorizontal,vrule);
 
 
     // TODO test to make sure this is callable from the POV of the compiler
@@ -1930,7 +1954,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         scriptfont,scriptscriptfont,shipout,
         spacefactor,span,textfont,underline,
         unhbox,unhcopy,unpenalty,unskip,unkern,unvbox,unvcopy,vadjust,valign,
-        vbox,vcenter,vtop,vfil,vfill,vfilneg,vskip,vss,vsplit,vrule,wd
+        vbox,vcenter,vtop,vfil,vfill,vfilneg,vskip,vss,vsplit,wd
     );
     cmstodos!(engine,
         mathclose,mathbin,mathord,mathop,mathrel,mathopen,

@@ -3,6 +3,10 @@ use crate::engine::EngineTypes;
 use crate::engine::filesystem::kpathsea::SourceReference;
 use crate::tex::types::{BoxType, NodeType};
 use crate::engine::filesystem::File;
+use crate::engine::fontsystem::FontSystem;
+use crate::tex::numerics::TeXDimen;
+
+type SR<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
 
 #[derive(Debug,Clone)]
 pub struct NodeList<ET:EngineTypes> {
@@ -12,7 +16,7 @@ pub struct NodeList<ET:EngineTypes> {
 
 #[derive(Clone,Debug)]
 pub enum NodeListType<ET:EngineTypes> {
-    Paragraph,Box(BoxInfo<ET>,SourceReference<<ET::File as File>::SourceRefID>,Option<(u16,bool)>)
+    Paragraph,Box(BoxInfo<ET>,SR<ET>,Option<(u16,bool)>)
 }
 
 pub trait NodeTrait<ET:EngineTypes> {
@@ -27,37 +31,82 @@ pub trait NodeTrait<ET:EngineTypes> {
 pub enum TeXNode<ET:EngineTypes> {
     Penalty(i32),
     Skip(SkipNode<ET>),
-    Box(TeXBox<ET>)
+    Box(TeXBox<ET>),
+    Simple(SimpleNode<ET>),
+    Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { self }
     fn height(&self) -> ET::Dim {
-        match self {
+        match &self {
             TeXNode::Penalty(_) => ET::Dim::default(),
             TeXNode::Skip(s) => s.height(),
-            TeXNode::Box(b) => b.height()
+            TeXNode::Box(b) => b.height(),
+            TeXNode::Simple(s) => s.height(),
+            TeXNode::Char { height, .. } => *height
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
             TeXNode::Penalty(_) => ET::Dim::default(),
             TeXNode::Skip(s) => s.width(),
-            TeXNode::Box(b) => b.width()
+            TeXNode::Box(b) => b.width(),
+            TeXNode::Simple(s) => s.width(),
+            TeXNode::Char { width, .. } => *width
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
             TeXNode::Penalty(_) | TeXNode::Skip(_) => ET::Dim::default(),
-            TeXNode::Box(b) => b.depth()
+            TeXNode::Box(b) => b.depth(),
+            TeXNode::Simple(s) => s.depth(),
+            TeXNode::Char { depth, .. } => *depth
         }
     }
     fn nodetype(&self) -> NodeType {
         match self {
             TeXNode::Penalty(_) => NodeType::Penalty,
             TeXNode::Skip(_) => NodeType::Glue,
-            TeXNode::Box(b) => b.nodetype()
+            TeXNode::Box(b) => b.nodetype(),
+            TeXNode::Simple(s) => s.nodetype(),
+            TeXNode::Char { .. } => NodeType::Char
+        }
+    }
+}
+
+#[derive(Debug,Clone)]
+pub enum SimpleNode<ET:EngineTypes> {
+    VRule{
+        width:Option<ET::Dim>,
+        height:Option<ET::Dim>,
+        depth:Option<ET::Dim>,
+        start:SR<ET>,end:SR<ET>
+    }
+}
+
+impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
+    #[inline(always)]
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(self) }
+    fn height(&self) -> ET::Dim {
+        match self {
+            SimpleNode::VRule { height, .. } => height.unwrap_or_default(),
+        }
+    }
+    fn width(&self) -> ET::Dim {
+        match self {
+            SimpleNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
+        }
+    }
+    fn depth(&self) -> ET::Dim {
+        match self {
+            SimpleNode::VRule { depth, .. } => depth.unwrap_or_default(),
+        }
+    }
+    fn nodetype(&self) -> NodeType {
+        match self {
+            SimpleNode::VRule {..} => NodeType::Rule
         }
     }
 }
@@ -91,8 +140,8 @@ pub struct BoxInfo<ET:EngineTypes> {
 pub struct TeXBox<ET:EngineTypes> {
     pub children:Vec<TeXNode<ET>>,
     pub info:BoxInfo<ET>,
-    pub start:SourceReference<<ET::File as File>::SourceRefID>,
-    pub end:SourceReference<<ET::File as File>::SourceRefID>
+    pub start:SR<ET>,
+    pub end:SR<ET>
 }
 
 impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
