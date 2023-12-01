@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 use crate::engine::EngineTypes;
+use crate::engine::filesystem::kpathsea::SourceReference;
 use crate::tex::types::{BoxType, NodeType};
+use crate::engine::filesystem::File;
 
 #[derive(Debug,Clone)]
 pub struct NodeList<ET:EngineTypes> {
@@ -10,7 +12,7 @@ pub struct NodeList<ET:EngineTypes> {
 
 #[derive(Clone,Debug)]
 pub enum NodeListType<ET:EngineTypes> {
-    Paragraph,Box(BoxInfo<ET>,Option<(u16,bool)>)
+    Paragraph,Box(BoxInfo<ET>,SourceReference<<ET::File as File>::SourceRefID>,Option<(u16,bool)>)
 }
 
 pub trait NodeTrait<ET:EngineTypes> {
@@ -89,6 +91,8 @@ pub struct BoxInfo<ET:EngineTypes> {
 pub struct TeXBox<ET:EngineTypes> {
     pub children:Vec<TeXNode<ET>>,
     pub info:BoxInfo<ET>,
+    pub start:SourceReference<<ET::File as File>::SourceRefID>,
+    pub end:SourceReference<<ET::File as File>::SourceRefID>
 }
 
 impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {

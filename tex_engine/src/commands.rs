@@ -15,7 +15,7 @@ use crate::tex::token::Token;
 use crate::utils::Ptr;
 use crate::tex::input_text::Character;
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, NodeList, TeXBox};
+use crate::tex::nodes::{BoxInfo, NodeList, TeXBox, TeXNode};
 
 pub mod primitives;
 pub mod tex;
@@ -55,6 +55,7 @@ pub enum Command<ET:EngineTypes> {
     PrimitiveSkip(PrimitiveIdentifier),
     PrimitiveMuSkip(PrimitiveIdentifier),
     PrimitiveToks(PrimitiveIdentifier),
+    Node(NodeCommand<ET>),
     Whatsit(Whatsit<ET>),
     Relax
 }
@@ -142,6 +143,7 @@ impl<'a,ET:EngineTypes> Meaning<'a,ET> {
             Command::PrimitiveSkip(name) |
             Command::PrimitiveMuSkip(name) |
             Command::PrimitiveToks(name) |
+            Command::Node(NodeCommand{name,..}) |
             Command::Whatsit(Whatsit{name,..}) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 PRIMITIVES.with(*name,|s| f.write_str(s).unwrap());
@@ -280,6 +282,18 @@ pub struct FontCommand<ET:EngineTypes> {
 pub struct BoxCommand<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
     pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<TeXBox<ET>,(BoxInfo<ET>,Option<(u16,bool)>)>,
+}
+
+#[derive(Clone,Debug,Copy)]
+pub enum NodeCommandScope {
+    SwitchesToVertical,SwitchesToHorizontal,MathOnly,Any
+}
+
+#[derive(Clone,Debug)]
+pub struct NodeCommand<ET:EngineTypes> {
+    pub name:PrimitiveIdentifier,
+    pub scope:NodeCommandScope,
+    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXNode<ET>,
 }
 
 #[derive(Clone,Debug)]

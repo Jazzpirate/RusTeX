@@ -7,7 +7,7 @@ use crate::engine::utils::memory::{InternedCSName, InternedString, MemoryManager
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
-use crate::tex;
+use crate::{debug_log, tex};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::{Assignment, Command, DimCommand, FontCommand, IntCommand, MuSkipCommand, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
@@ -57,6 +57,7 @@ pub struct EngineAux<ET:EngineTypes> {
     pub error_handler:ET::ErrorHandler,
     pub outputs:ET::Outputs,
     pub start_time:chrono::DateTime<chrono::Local>,
+    pub elapsed:std::time::Instant,//chrono::DateTime<chrono::Local>,
     pub jobname:String,
     pub extension:ET::Extension
 }
@@ -121,6 +122,19 @@ pub trait TeXEngine:Sized {
         //comps.filesystem.set_pwd(old);
         comps.top_loop();
     })}
+    fn do_file(&mut self,s:&str) -> Result<(),TeXError> {catch( ||{
+        log::debug!("Running file {}",s);
+        let mut comps = self.get_engine_refs();
+        let file = comps.filesystem.get(s);
+        comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
+        comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        comps.push_file(file);
+        comps.mouth.insert_every::<Self::Types>(&comps.state,PRIMITIVES.everyjob);
+        comps.aux.start_time = chrono::Local::now();
+        comps.aux.elapsed = std::time::Instant::now();
+        debug_log!(debug =>"Here: {}",comps.preview());
+        comps.top_loop();
+    })}
     fn initialize_plain_tex(&mut self) {
         super::commands::tex::register_tex_primitives(self);
         let mag = PRIMITIVES.mag;
@@ -183,6 +197,7 @@ impl PlainTeXEngine {
             outputs: LogOutputs,
             error_handler: super::utils::errors::ErrorThrower,
             start_time:chrono::Local::now(),
+            elapsed:std::time::Instant::now(),
             extension: (),
             jobname: String::new()
         };
@@ -216,7 +231,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
     pub fn top_loop(&mut self) {
         use crate::tex::control_sequences::ControlSequenceNameHandler;
-        crate::expand_loop!(self,
+        crate::expand_loop!(self.mouth.update_start_ref() => self,
             ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),
             ResolvedToken::Cmd{cmd: None,token} => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
@@ -241,6 +256,13 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 macro_rules! expand_loop {
     ($engine:ident,$($case:tt)*) => {{
         crate::expand_loop!(ET;$engine,$($case)*)
+    }};
+    ($then:expr => $engine:ident,$($case:tt)*) => {{
+        $then;
+        while let Some(tk) = $engine.get_next() {
+            crate::expand!(ET;$engine,tk;$($case)*);
+            $then;
+        }
     }};
     ($ET:ty; $engine:ident,$($case:tt)*) => {{
         while let Some(tk) = $engine.get_next() {
@@ -294,6 +316,8 @@ macro_rules! do_cmd {
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Box(crate::commands::BoxCommand { name, read }) =>
                 <$ET as EngineTypes>::Stomach::do_box($engine, *name, $token, *read),
+            crate::commands::Command::Node(crate::commands::NodeCommand { name, read, scope }) =>
+                <$ET as EngineTypes>::Stomach::do_node($engine, *name, $token, *read,*scope),
             crate::commands::Command::Font(f) =>
                 <$ET as EngineTypes>::Stomach::do_font($engine, $token, f.clone(),false),
             crate::commands::Command::IntRegister(u) =>

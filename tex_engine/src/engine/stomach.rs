@@ -1,3 +1,4 @@
+use crate::commands::NodeCommandScope;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
@@ -67,10 +68,10 @@ pub trait Stomach {
                                 NodeListType::Paragraph => {
                                     todo!("close paragraph")
                                 }
-                                NodeListType::Box(bi,reg) if bi.tp == bt => {
+                                NodeListType::Box(bi,start,reg) if bi.tp == bt => {
                                     engine.state.pop(engine.aux,engine.mouth);
                                     let bx = TeXBox {
-                                        children:ls.children,info:bi
+                                        children:ls.children,info:bi,start,end:engine.mouth.current_sourceref(),
                                     };
                                     match reg {
                                         Some((reg,global)) =>
@@ -100,6 +101,9 @@ pub trait Stomach {
     }
     fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<TeXBox<Self::ET>,(BoxInfo<Self::ET>,Option<(u16,bool)>)>) {
         todo!("box in stomach")
+    }
+    fn do_node(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> TeXNode<Self::ET>,scope:NodeCommandScope) {
+        todo!("node in stomach")
     }
     fn do_font(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
         engine.state.set_current_font(engine.aux,f,global);

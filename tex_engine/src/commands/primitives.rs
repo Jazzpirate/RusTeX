@@ -26,7 +26,7 @@ macro_rules! cmtodo {
             name:id,
             expand:|e,_| todo!("\\{} at {}",
                 stringify!($name),
-                crate::engine::mouth::Mouth::current_position(e.mouth)
+                crate::engine::mouth::Mouth::display_position(e.mouth)
             )
         });
         let refs = $engine.get_engine_refs();
@@ -57,7 +57,7 @@ macro_rules! cmstodo {
             name:id,
             apply:|e,_| todo!("\\{} at {}",
                 stringify!($name),
-                crate::engine::mouth::Mouth::current_position(e.mouth)
+                crate::engine::mouth::Mouth::display_position(e.mouth)
             )
         });
         let refs = $engine.get_engine_refs();

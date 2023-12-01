@@ -43,9 +43,10 @@ pub trait FileSystem:Clone {
 }
 
 /// A (virtual or physical) file.
-pub trait File:std::fmt::Display + 'static {
+pub trait File:std::fmt::Display+Clone+std::fmt::Debug + 'static {
     /// The type of characters to be read from the file.
     type Char:Character;
+    type SourceRefID:Copy+std::fmt::Debug;
     /// The type of line sources to be read from the file.
     type LineSource: FileLineSource<Self::Char>;
     //type Write: WriteOpenFile<Self::Char>;
@@ -57,6 +58,7 @@ pub trait File:std::fmt::Display + 'static {
         self.path().exists()
     }
     fn size(&self) -> usize;
+    fn sourceref(&self) -> Self::SourceRefID;
 }
 
 pub trait FileLineSource<C:Character>:TextLineSource<C> {
@@ -70,14 +72,16 @@ pub struct NoOutputFileSystem<C:Character> {
     kpse:Kpathsea,
     files:HMap<PathBuf,VirtualFile<C>>,
     write_files:Vec<Option<WritableVirtualFile<C>>>,
-    read_files:Vec<Option<StringTokenizer<C,VirtualFileLineSource<C>>>>
+    read_files:Vec<Option<StringTokenizer<C,VirtualFileLineSource<C>>>>,
+    interner:string_interner::StringInterner<string_interner::DefaultBackend<string_interner::symbol::SymbolU32>,ahash::RandomState>
 }
 impl<C:Character> Clone for NoOutputFileSystem<C> {
     fn clone(&self) -> Self { Self {
         kpse:self.kpse.clone(),
         files:self.files.clone(),
         write_files:self.write_files.clone(),
-        read_files:Vec::new()
+        read_files:Vec::new(),
+        interner:self.interner.clone()
     } }
 }
 impl<C:Character> FileSystem for NoOutputFileSystem<C> {
@@ -88,16 +92,29 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             kpse:Kpathsea::new(pwd),
             files:HMap::default(),
             write_files:Vec::new(),
-            read_files:Vec::new()
+            read_files:Vec::new(),
+            interner:string_interner::StringInterner::new()
         }
     }
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         let path = self.kpse.kpsewhich(path);
         match self.files.get(&path.path) {
             Some(f) => f.clone(),
-            None => VirtualFile {
-                path:path.path,
-                source:None
+            None => {
+                let string = if path.path.starts_with(&self.kpse.pwd) {
+                    format!("./{}",path.path.strip_prefix(&self.kpse.pwd).unwrap().display())
+                } else if self.kpse.global.set.iter().any(|p| path.path.starts_with(p)) {
+                    format!("<TEXINPUTS>/{}",path.path.file_name().unwrap().to_str().unwrap())
+                } else {
+                    path.path.display().to_string()
+                };
+                let f = VirtualFile {
+                    path:path.path,
+                    source:None,
+                    id:self.interner.get_or_intern(string)
+                };
+                self.files.insert(f.path.clone(),f.clone());
+                f
             }
         }
     }
@@ -156,7 +173,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             self.write_files.resize((idx+1) as usize, None);
         }
         match &mut self.write_files[idx as usize] {
-            n@None => *n = Some(WritableVirtualFile::new(file.path)),
+            n@None => *n = Some(WritableVirtualFile::new(file.path,file.id)),
             _ => todo!("throw File already open error")
         }
     }
@@ -166,7 +183,8 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 Some(f) => {
                     let vf = VirtualFile {
                         path:f.1,
-                        source:Some(f.0.into())
+                        source:Some(f.0.into()),id:f.2
+
                     };
                     self.files.insert(vf.path.clone(),vf);
                 }
@@ -211,11 +229,11 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
 }
 
 #[derive(Clone)]
-struct WritableVirtualFile<C:Character>(Vec<Box<[C]>>, PathBuf);
+struct WritableVirtualFile<C:Character>(Vec<Box<[C]>>, PathBuf,string_interner::symbol::SymbolU32);
 impl<C:Character> WritableVirtualFile<C> {
     #[inline(always)]
-    fn new(p:PathBuf) -> Self {
-        Self(Vec::new(),p)
+    fn new(p:PathBuf,id:string_interner::symbol::SymbolU32) -> Self {
+        Self(Vec::new(),p,id)
     }
 }
 
@@ -264,9 +282,9 @@ impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct VirtualFile<C:Character> {
-    path:PathBuf,
+    path:PathBuf,id:string_interner::symbol::SymbolU32,
     source:Option<VirtualFileContents<C>>
 }
 impl<C:Character> std::fmt::Display for VirtualFile<C> {
@@ -278,6 +296,9 @@ impl<C:Character> std::fmt::Display for VirtualFile<C> {
 impl<C:Character> File for VirtualFile<C> {
     type Char = C;
     type LineSource = VirtualFileLineSource<C>;
+    type SourceRefID = string_interner::symbol::SymbolU32;
+    #[inline(always)]
+    fn sourceref(&self) -> Self::SourceRefID { self.id }
     #[inline(always)]
     fn path(&self) -> &Path { &self.path }
     fn line_source(self) -> Option<Self::LineSource> {

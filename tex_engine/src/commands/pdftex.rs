@@ -1,16 +1,17 @@
 use crate::{cmtodo, cmtodos};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::mouth::pretokenized::ExpansionContainer;
+use crate::engine::mouth::pretokenized::{ExpansionContainer, Tokenizer};
 use crate::tex::catcodes::CommandCode;
 use super::primitives::*;
 use crate::engine::utils::memory::MemoryManager;
 use crate::tex::token::Token;
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
+use std::fmt::Write;
 
 pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    todo!()
+    *engine.gullet.csnames() > 0
 }
 pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
     let first = engine.read_int(false);
@@ -62,6 +63,16 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
     }
 }
 
+pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    use chrono::{Datelike,Timelike};
+    let dt = engine.aux.start_time;
+    let mut f = |t| exp.push(t);
+    let mut tk = Tokenizer::new(&mut f);
+    write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
+                      dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
+                      dt.offset().to_string().replace(":","'")).unwrap();
+}
+
 pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut filename = engine.aux.memory.get_string();
     engine.read_braced_string(&mut filename);
@@ -83,6 +94,11 @@ pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET
 #[inline(always)]
 pub fn pdftexversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)
+}
+
+#[inline(always)]
+pub fn pdfshellescape<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
+    <ET::Num as NumSet>::Int::from(2)
 }
 
 pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
@@ -139,11 +155,13 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
 
 pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E) {
 
+    register_expandable(engine,"pdfcreationdate",pdfcreationdate);
     register_expandable(engine,"pdffilesize",pdffilesize);
     register_expandable(engine,"pdfstrcmp",pdfstrcmp);
     register_expandable(engine,"pdftexrevision",pdftexrevision);
 
     register_int(engine,"pdftexversion",pdftexversion,None);
+    register_int(engine,"pdfshellescape",pdfshellescape,None);
 
     register_conditional(engine,"ifincsname",ifincsname);
     register_conditional(engine,"ifpdfabsdim",ifpdfabsdim);
@@ -157,10 +175,10 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E) {
 
     cmtodos!(engine,
         lpcode,pdfcatalog,pdfcolorstack,pdfcolorstackinit,
-        pdfcreationdate,pdfdest,pdfelapsedtime,pdfendlink,pdfescapestring,
+        pdfdest,pdfelapsedtime,pdfendlink,pdfescapestring,
         pdffontexpand,pdffontsize,pdflastobj,pdflastxform,pdflastximage,
         pdfliteral,pdfmajorversion,pdfmatch,pdfmdfivesum,pdfobj,pdfoutline,pdfrefxform,
-        pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfshellescape,pdfstartlink,
+        pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
         pdfxform,pdfximage,rpcode
     );
 

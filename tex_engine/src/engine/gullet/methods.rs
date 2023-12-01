@@ -636,6 +636,10 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let val = engine.state.get_primitive_dim(dc);
             if is_negative {return -val} else {return val}
         }
+        Command::PrimitiveSkip(dc) => {
+            let val = engine.state.get_primitive_skip(dc).base();
+            if is_negative {return -val} else {return val}
+        }
         o => todo!("command in read_dim: {:?}",o)
     }
 }
@@ -754,6 +758,10 @@ pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_ne
         Command::SkipRegister(u) => {
             let base = engine.state.get_skip_register(u);
             if is_negative {-base} else {base}
+        }
+        Command::PrimitiveSkip(dc) => {
+            let val = engine.state.get_primitive_skip(dc);
+            if is_negative {return -val} else {return val}
         }
         _ => todo!("read skip command: {:?}",cmd)
     }

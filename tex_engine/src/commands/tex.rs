@@ -751,10 +751,7 @@ fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,ever
         ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
         ResolvedToken::Cmd {cmd:Some(Command::Char{code:CommandCode::BeginGroup,..}),..} => {
             engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
-            let every = engine.state.get_primitive_tokens(every);
-            if !every.is_empty() {
-                todo!("insert every box")
-            }
+            engine.mouth.insert_every::<ET>(&engine.state,every);
             return (to,spread)
         }
         o => todo!("throw error: {:?}",o)
@@ -1258,6 +1255,14 @@ pub fn message<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     engine.aux.memory.return_string(out);
 }
 
+pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    let mut out = engine.aux.memory.get_string();
+    engine.read_braced_string(&mut out);
+    write!(out," (line {})",engine.mouth.line_number());
+    engine.aux.outputs.errmessage(&out);
+    engine.aux.memory.return_string(out);
+}
+
 pub fn newlinechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(match engine.state.get_newline_char() {
         Some(c) => c.into() as i32,
@@ -1396,7 +1401,7 @@ pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
                     engine.stomach.data_mut().open_lists.push(
                         NodeList {
                             children:vec!(),
-                            tp:NodeListType::Box(bi, Some((idx,globally)))
+                            tp:NodeListType::Box(bi,engine.mouth.start_ref(), Some((idx,globally)))
                         }
                     );
                 }
@@ -1887,6 +1892,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"lowercase",lowercase);
     register_unexpandable(engine,"uppercase",uppercase);
     register_unexpandable(engine,"message",message);
+    register_unexpandable(engine,"errmessage",errmessage);
     register_unexpandable(engine,"openin",openin);
     register_unexpandable(engine,"par",par);
     register_unexpandable(engine, "patterns", |e,_|skip_argument(e));
@@ -1911,7 +1917,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     cmtodos!(engine,aftergroup,box,char,
         copy,cr,crcr,discretionary,displaylimits,dp,
-        end,errmessage,
+        end,
         halign,hfil,hfill,hfilneg,hss,hrule,hskip,ht,
         indent,insert,kern,lastbox,lastkern,lastskip,
         lastpenalty,leaders,cleaders,xleaders,left,right,lower,

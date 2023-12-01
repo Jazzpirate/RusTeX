@@ -169,6 +169,7 @@ pub trait Skip:Copy + Eq + Default + Debug + Display + Neg<Output=Self> {
     type Stretch;
     type Shrink;
     type Base : TeXDimen;
+    fn base(self) -> Self::Base;
     fn new(base:Self::Base,stretch:Option<Self::Stretch>,shrink:Option<Self::Shrink>) -> Self;
     fn stretch_units() -> &'static[&'static [u8]];
     fn shrink_units() -> &'static[&'static [u8]];
@@ -228,6 +229,8 @@ impl<D:TeXDimen> Skip for Skip32<D> {
     type Base = D;
     type Stretch = Fill<D>;
     type Shrink = Fill<D>;
+    #[inline(always)]
+    fn base(self) -> Self::Base { self.base }
     #[inline(always)]
     fn new(base: D, stretch: Option<Fill<D>>, shrink: Option<Fill<D>>) -> Self {
         Self{base,stretch,shrink}

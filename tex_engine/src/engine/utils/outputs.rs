@@ -6,6 +6,11 @@ pub trait Outputs {
         log::info!(target:"message","{}",text);
     }
     #[inline(always)]
+    fn errmessage<D:Display>(&self,text:D) {
+        log::error!(target:"errmessage","{}",text);
+        crate::throw!("run aborted")
+    }
+    #[inline(always)]
     fn file_open<D:Display>(&self,text:D) {
         log::info!(target:"file","({}",text);
     }

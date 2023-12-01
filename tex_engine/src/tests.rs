@@ -165,6 +165,22 @@ mod tests {
     }
 
     #[test]
+    fn thesis() {
+        debug();
+        let mut engine = PlainTeXEngine::new();
+        engine.initialize_pdflatex().unwrap();
+        {
+            let refs = engine.get_engine_refs();
+            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
+            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingifs,1,true);
+            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingcommands,1,true);
+            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracinggroups,1,true);
+            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingrestores,1,true);
+        }
+        engine.do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex").unwrap();
+    }
+
+    #[test]
     fn memory_things() {
         debug();
         type Tk = crate::tex::token::CompactToken;

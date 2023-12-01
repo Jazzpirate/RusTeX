@@ -137,6 +137,7 @@ pub struct PrimitiveInterner {
     pub everyeof:PrimitiveIdentifier,
     pub everyhbox:PrimitiveIdentifier,
     pub everyvbox:PrimitiveIdentifier,
+    pub everyjob:PrimitiveIdentifier,
     pub count:PrimitiveIdentifier,
     pub noexpand:PrimitiveIdentifier,
     pub unexpanded:PrimitiveIdentifier,
@@ -171,6 +172,7 @@ impl PrimitiveInterner {
         let everyeof = PrimitiveIdentifier(interner.get_or_intern_static("everyeof"));
         let everyhbox = PrimitiveIdentifier(interner.get_or_intern_static("everyhbox"));
         let everyvbox = PrimitiveIdentifier(interner.get_or_intern_static("everyvbox"));
+        let everyjob = PrimitiveIdentifier(interner.get_or_intern_static("everyjob"));
         let count = PrimitiveIdentifier(interner.get_or_intern_static("count"));
         let noexpand = PrimitiveIdentifier(interner.get_or_intern_static("noexpand"));
         let endcsname = PrimitiveIdentifier(interner.get_or_intern_static("endcsname"));
@@ -182,7 +184,7 @@ impl PrimitiveInterner {
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
             tracinggroups, else_, fi, or, global, long, outer, protected, def, edef, xdef,
             gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
-            everyhbox,everyvbox
+            everyhbox,everyvbox,everyjob
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.

@@ -23,6 +23,7 @@ type Skip<ET> = <<ET as EngineTypes>::Num as NumSet>::Skip;
 type MuSkip<ET> = <<ET as EngineTypes>::Num as NumSet>::MuSkip;
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::tex::control_sequences::ControlSequenceName;
+use crate::engine::fontsystem::Font;
 
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
@@ -202,7 +203,10 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                 }
                 StateChange::CurrentFont(font) => {
                     if trace {
-                        todo!("trace font restore")
+                        aux.outputs.write_neg1(format_args!("{{restoring current font ={}{}}}",
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                            aux.memory.cs_interner().resolve(font.name())
+                        ));
                     }
                     self.current_font = font;
                 }
@@ -442,7 +446,17 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     fn set_current_font(&mut self, aux: &EngineAux<Self::ET>, fnt: crate::engine::state::Fnt<Self>, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
-                todo!("trace font change")
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing current font={}{}}}",
+                                 if g {"globally "} else {""},
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                aux.memory.cs_interner().resolve(s.current_font.name())
+                                 ));
+                aux.outputs.write_neg1(
+                    format_args!("{{into current font={}{}}}",
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(fnt.name())
+                    ));
             }
             let old = std::mem::replace(&mut s.current_font, fnt);
             StateChange::CurrentFont(old)
@@ -457,7 +471,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                 let num = c.into();
                 let cc: u8 = cc.into();
                 aux.outputs.write_neg1(
-                    format_args!("{{{}changing {}catcode{}={}}}",
+                    format_args!("{{{} {}catcode{}={}}}",
                                  if g {"globally changing"} else {"reassigning"},
                                  <ET::Char as Character>::displayable_opt(s.escape_char),
                                  num,cc));
