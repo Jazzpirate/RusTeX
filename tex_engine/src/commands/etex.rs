@@ -17,6 +17,9 @@ use crate::engine::gullet::Gullet;
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::utils::outputs::Outputs;
+use crate::tex::nodes::NodeTrait;
+use crate::commands::NodeList;
+use crate::engine::stomach::Stomach;
 
 fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
 >(engine:&mut EngineReferences<ET>,
@@ -262,6 +265,18 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
     i
 }
 
+pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+    let data = engine.stomach.data_mut();
+    let ls = match data.open_lists.last_mut() {
+        Some(NodeList{children,..}) => children,
+        _ => &mut data.page
+    };
+    match ls.last() {
+        None => (-1).into(),
+        Some(n) => (n.nodetype().to_u8() as i32).into()
+    }
+}
+
 pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
     crate::expand_loop!(engine,
         ResolvedToken::Cmd {cmd:Some(Command::Assignment(a)),token} => match a.name {
@@ -339,6 +354,8 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_skip(engine,"glueexpr",glueexpr,None);
     register_muskip(engine,"muexpr",muexpr,None);
 
+    register_int(engine,"lastnodetype",lastnodetype,None);
+
     register_assignment(engine,"protected",|e,cmd,g|protected(e,cmd,false,false,false,g));
     register_assignment(engine,"readline",readline);
 
@@ -355,7 +372,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodos!(engine,
         currentgrouplevel,eTeXrevision,eTeXversion,
         fontchardp,fontcharht,fontcharic,fontcharwd,
-        lastnodetype,marks,topmarks,firstmarks,botmarks,splitfirstmarks,splitbotmarks,
+        marks,topmarks,firstmarks,botmarks,splitfirstmarks,splitbotmarks,
         scantokens
     );
 

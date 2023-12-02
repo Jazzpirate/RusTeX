@@ -55,6 +55,11 @@ pub enum NodeType {
     Unset = 14,
     MathChar = 15,
 }
+impl NodeType {
+    pub fn to_u8(&self) -> u8 {
+        *self as u8
+    }
+}
 
 
 /// The mode the engine is currently in, e.g. horizontal mode or vertical mode.

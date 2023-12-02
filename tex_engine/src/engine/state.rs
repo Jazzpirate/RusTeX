@@ -30,6 +30,7 @@ pub trait State:Sized+Clone {
     fn push(&mut self,aux:&EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
     fn pop(&mut self,aux:&EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);
     fn get_group_type(&self) -> Option<GroupType>;
+    fn get_group_level(&self) -> usize;
 
     fn get_current_font(&self) -> &Fnt<Self>;
     fn set_current_font(&mut self,aux:&EngineAux<Self::ET>,fnt:Fnt<Self>,globally:bool);
@@ -90,6 +91,7 @@ pub trait State:Sized+Clone {
     fn set_toks_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:TokenList<T<Self>>,globally:bool);
 
     fn get_box_register(&self,idx:u16) -> Option<&TeXBox<Self::ET>>;
+    fn get_box_register_mut(&mut self,idx:u16) -> Option<&mut TeXBox<Self::ET>>;
     fn take_box_register(&mut self,idx:u16) -> Option<TeXBox<Self::ET>>;
     fn set_box_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:Option<TeXBox<Self::ET>>,globally:bool);
 

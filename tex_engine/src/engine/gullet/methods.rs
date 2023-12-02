@@ -513,6 +513,10 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let base = ET::Num::dim_to_int((dc.read)(engine,token));
             if is_negative {-base} else {base}
         }
+        Command::PrimitiveSkip(u) => {
+            let base = ET::Num::dim_to_int(engine.state.get_primitive_skip(u).base());
+            if is_negative {-base} else {base}
+        }
         o => todo!("read_int: {:?}",o)
     }
 }
@@ -702,6 +706,11 @@ pub fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f
                 let scale = (float * 65536.0).round() as i32;
                 return base.scale(scale.into(),65536.into())
             }
+            Command::PrimitiveSkip(s) => {
+                let base = engine.state.get_primitive_skip(*s).base();
+                let scale = (float * 65536.0).round() as i32;
+                return base.scale(scale.into(),65536.into())
+            }
             o => todo!("command in read_unit_or_dim: {:?}",o)
         }
         ResolvedToken::Cmd {cmd:None,token} =>
@@ -755,12 +764,21 @@ pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_ne
             let base = if is_negative {-base} else {base};
             read_skip_ii(engine,base)
         }
+        Command::Dim(c) => {
+            let base = (c.read)(engine,token);
+            let base = if is_negative {-base} else {base};
+            read_skip_ii(engine,base)
+        }
         Command::SkipRegister(u) => {
             let base = engine.state.get_skip_register(u);
             if is_negative {-base} else {base}
         }
         Command::PrimitiveSkip(dc) => {
             let val = engine.state.get_primitive_skip(dc);
+            if is_negative {return -val} else {return val}
+        }
+        Command::Skip(sk) => {
+            let val = (sk.read)(engine,token);
             if is_negative {return -val} else {return val}
         }
         _ => todo!("read skip command: {:?}",cmd)
@@ -839,7 +857,14 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
             (Ok(b','|b'.'),CommandCode::Other) => return read_stretch_float(engine,is_negative,b'.'),
             o => todo!("error?")
         }
-        o => todo!("command in read_skip")
+        ResolvedToken::Cmd {cmd,..} => match cmd {
+            Some(Command::DimRegister(u)) => {
+                let base = engine.state.get_dim_register(*u);
+                return Sk::<ET>::stretch_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
+            }
+            o => todo!("command in read_stretch: {:?}",o)
+        }
+        o => todo!("command in read_stretch: {:?}",o)
     );
     crate::file_end!()
 }
@@ -910,7 +935,14 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
             (Ok(b','|b'.'),CommandCode::Other) => return read_shrink_float(engine,is_negative,b'.'),
             o => todo!("error?")
         }
-        o => todo!("command in read_skip")
+        ResolvedToken::Cmd {cmd,..} => match cmd {
+            Some(Command::DimRegister(u)) => {
+                let base = engine.state.get_dim_register(*u);
+                return Sk::<ET>::shrink_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
+            }
+            o => todo!("command in read_stretch: {:?}",o)
+        }
+        o => todo!("command in read_shrink: {:?}",o)
     );
     crate::file_end!()
 }

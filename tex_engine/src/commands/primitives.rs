@@ -226,7 +226,7 @@ pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields a
 /// box and registers it with the engine.
 pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,Tk<E>) -> Result<TeXBox<E::Types>,(BoxInfo<E::Types>,Option<(u16,bool)>)>
+                                  read:fn(&mut EngineReferences<E::Types>,Tk<E>) -> Result<Option<TeXBox<E::Types>>,(BoxInfo<E::Types>,Option<(u16,bool)>)>
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);

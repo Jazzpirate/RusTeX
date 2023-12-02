@@ -131,6 +131,10 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     fn get_group_type(&self) -> Option<GroupType> {
         self.stack.stack.last().map(|lvl| lvl.group_type)
     }
+    #[inline(always)]
+    fn get_group_level(&self) -> usize {
+        self.stack.stack.len()
+    }
 
     #[inline(always)]
     fn push(&mut self,aux:&EngineAux<ET>, group_type: GroupType,line_number:usize) {
@@ -328,7 +332,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                 }
                 StateChange::BoxRegister {idx,old} => {
                     if trace {
-                        todo!("trace box restore")
+                        aux.outputs.write_neg1("TODO trace box restore")
                     }
                     self.box_register[idx as usize] = old;
                 }
@@ -793,6 +797,14 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
         match self.box_register.get(idx as usize) {
             None => None,
             Some(i) => i.as_ref()
+        }
+    }
+
+    #[inline(always)]
+    fn get_box_register_mut(&mut self, idx: u16) -> Option<&mut TeXBox<ET>> {
+        match self.box_register.get_mut(idx as usize) {
+            None => None,
+            Some(i) => i.as_mut()
         }
     }
     #[inline(always)]

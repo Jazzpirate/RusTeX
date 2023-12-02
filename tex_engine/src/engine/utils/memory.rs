@@ -144,6 +144,10 @@ pub struct PrimitiveInterner {
     pub endcsname:PrimitiveIdentifier,
     pub the:PrimitiveIdentifier,
     pub toks:PrimitiveIdentifier,
+    pub vsize:PrimitiveIdentifier,
+    pub output:PrimitiveIdentifier,
+    pub badness:PrimitiveIdentifier,
+    pub outputpenalty:PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -179,12 +183,16 @@ impl PrimitiveInterner {
         let unexpanded = PrimitiveIdentifier(interner.get_or_intern_static("unexpanded"));
         let the = PrimitiveIdentifier(interner.get_or_intern_static("the"));
         let toks = PrimitiveIdentifier(interner.get_or_intern_static("toks"));
+        let vsize = PrimitiveIdentifier(interner.get_or_intern_static("vsize"));
+        let output = PrimitiveIdentifier(interner.get_or_intern_static("output"));
+        let badness = PrimitiveIdentifier(interner.get_or_intern_static("badness"));
+        let outputpenalty = PrimitiveIdentifier(interner.get_or_intern_static("outputpenalty"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
             tracinggroups, else_, fi, or, global, long, outer, protected, def, edef, xdef,
             gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
-            everyhbox,everyvbox,everyjob
+            everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.

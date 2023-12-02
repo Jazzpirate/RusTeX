@@ -281,7 +281,7 @@ pub struct FontCommand<ET:EngineTypes> {
 #[derive(Clone,Debug)]
 pub struct BoxCommand<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<TeXBox<ET>,(BoxInfo<ET>,Option<(u16,bool)>)>,
+    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,(BoxInfo<ET>,Option<(u16,bool)>)>,
 }
 
 #[derive(Clone,Debug,Copy)]
