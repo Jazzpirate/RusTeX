@@ -332,6 +332,50 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     }
 }
 
+pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 {
+        todo!("throw error")
+    }
+    super::tex::do_marks(engine,i as usize)
+}
+
+pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 {
+        todo!("throw error")
+    }
+    super::tex::get_marks(engine,exp,|d| &mut d.topmarks,i as usize)
+}
+pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 {
+        todo!("throw error")
+    }
+    super::tex::get_marks(engine,exp,|d| &mut d.firstmarks,i as usize)
+}
+pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 {
+        todo!("throw error")
+    }
+    super::tex::get_marks(engine,exp,|d| &mut d.botmarks,i as usize)
+}
+pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 {
+        todo!("throw error")
+    }
+    super::tex::get_marks(engine,exp,|d| &mut d.splitfirstmarks,i as usize)
+}
+pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 {
+        todo!("throw error")
+    }
+    super::tex::get_marks(engine,exp,|d| &mut d.splitbotmarks,i as usize)
+}
+
 const PRIMITIVE_INTS:&[&'static str] = &[
     "savinghyphcodes",
     "tracingassigns",
@@ -367,12 +411,19 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"expanded",expanded);
     register_expandable(engine,"unexpanded",unexpanded);
 
+    register_unexpandable(engine,"marks",marks);
+
     register_simple_expandable(engine,"unless",unless);
+
+    register_expandable(engine,"topmarks",topmarks);
+    register_expandable(engine,"firstmarks",firstmarks);
+    register_expandable(engine,"botmarks",botmarks);
+    register_expandable(engine,"splitfirstmarks",splitfirstmarks);
+    register_expandable(engine,"splitbotmarks",splitbotmarks);
 
     cmtodos!(engine,
         currentgrouplevel,eTeXrevision,eTeXversion,
         fontchardp,fontcharht,fontcharic,fontcharwd,
-        marks,topmarks,firstmarks,botmarks,splitfirstmarks,splitbotmarks,
         scantokens
     );
 

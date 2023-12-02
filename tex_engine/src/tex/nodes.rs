@@ -4,7 +4,9 @@ use crate::engine::filesystem::kpathsea::SourceReference;
 use crate::tex::types::{BoxType, NodeType};
 use crate::engine::filesystem::File;
 use crate::engine::fontsystem::FontSystem;
+use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::numerics::{Skip, TeXDimen};
+use crate::utils::Ptr;
 
 type SR<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
 
@@ -33,6 +35,7 @@ pub enum TeXNode<ET:EngineTypes> {
     Skip(SkipNode<ET>),
     Kern(KernNode<ET>),
     Box(TeXBox<ET>),
+    Mark(usize,TokenList<ET::Token>),
     Insert,
     Simple(SimpleNode<ET>),
     Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
@@ -49,6 +52,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Simple(s) => s.height(),
             TeXNode::Char { height, .. } => *height,
             TeXNode::Kern(k) => k.height(),
+            TeXNode::Mark(_,_) => ET::Dim::default(),
             TeXNode::Insert => todo!()
         }
     }
@@ -60,6 +64,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Simple(s) => s.width(),
             TeXNode::Char { width, .. } => *width,
             TeXNode::Kern(k) => k.width(),
+            TeXNode::Mark(_,_) => ET::Dim::default(),
             TeXNode::Insert => todo!()
         }
     }
@@ -70,6 +75,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Simple(s) => s.depth(),
             TeXNode::Char { depth, .. } => *depth,
             TeXNode::Kern(k) => k.depth(),
+            TeXNode::Mark(_,_) => ET::Dim::default(),
             TeXNode::Insert => todo!()
         }
     }
@@ -81,7 +87,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Simple(s) => s.nodetype(),
             TeXNode::Char { .. } => NodeType::Char,
             TeXNode::Kern(_) => NodeType::Kern,
-            TeXNode::Insert => NodeType::Insertion
+            TeXNode::Insert => NodeType::Insertion,
+            TeXNode::Mark(_,_) => NodeType::Mark
         }
     }
 }

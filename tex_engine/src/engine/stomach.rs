@@ -10,7 +10,7 @@ use crate::tex::catcodes::CommandCode;
 use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
-use crate::utils::Ptr;
+use crate::utils::{HMap, Ptr};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::NodeTrait;
 use crate::tex::token::Token;
@@ -317,6 +317,7 @@ pub trait Stomach {
                 return
             }
             crate::expand!(Self::ET;engine,next;
+                ResolvedToken::Tk { char, code:CommandCode::Noexpand, token } => {engine.get_next();},
                 ResolvedToken::Tk { char, code, token } => Self::do_char(engine, token, char, code),
                 ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, *char, *code),
                 ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
@@ -349,6 +350,11 @@ pub struct StomachData<ET:EngineTypes> {
     pub pagedepth:ET::Dim,
     pub prevdepth:ET::Dim,
     pub spacefactor:i32,
+    pub topmarks:HMap<usize,TokenList<ET::Token>>,
+    pub firstmarks:HMap<usize,TokenList<ET::Token>>,
+    pub botmarks:HMap<usize,TokenList<ET::Token>>,
+    pub splitfirstmarks:HMap<usize,TokenList<ET::Token>>,
+    pub splitbotmarks:HMap<usize,TokenList<ET::Token>>,
 }
 impl <ET:EngineTypes> StomachData<ET> {
     pub fn new() -> Self {
@@ -364,7 +370,12 @@ impl <ET:EngineTypes> StomachData<ET> {
             pageshrink:ET::Dim::default(),
             pagedepth:ET::Dim::default(),
             prevdepth:ET::Dim::from_sp(-65536000),
-            spacefactor:1000
+            spacefactor:1000,
+            topmarks:HMap::default(),
+            firstmarks:HMap::default(),
+            botmarks:HMap::default(),
+            splitfirstmarks:HMap::default(),
+            splitbotmarks:HMap::default(),
         }
     }
 }
@@ -390,7 +401,58 @@ impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
         &mut self.data
     }
 
+    #[inline(always)]
     fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
-        todo!()
+        split_roughly(engine,nodes,target)
     }
+}
+
+pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
+    let data = engine.stomach.data_mut();
+    data.topmarks.clear();
+    std::mem::swap(&mut data.botmarks,&mut data.topmarks);
+    data.firstmarks.clear();
+    data.splitfirstmarks.clear();
+    data.splitbotmarks.clear();
+    let mut split = nodes.len();
+    let iter = nodes.iter().enumerate();
+    for (i,n) in iter {
+        match n {
+            TeXNode::Mark(i,v) => {
+                if !data.firstmarks.contains_key(&i) {
+                    data.firstmarks.insert(*i,v.clone());
+                }
+                data.botmarks.insert(*i,v.clone());
+            }
+            _ => {
+                target = target + (-n.height()); // - n.depth() ?
+                if target < ET::Dim::default() {
+                    split = i;
+                    break
+                }
+            }
+        }
+    };
+    let mut rest = nodes.split_off(split);
+    let split_penalty = match rest.first() {
+        Some(TeXNode::Penalty(p)) => {
+            let p = *p;
+            rest.remove(0);
+            Some(p)
+        }
+        _ => None
+    };
+
+    for n in &rest {
+        match n {
+            TeXNode::Mark(i,v) => {
+                if !data.splitfirstmarks.contains_key(&i) {
+                    data.splitfirstmarks.insert(*i,v.clone());
+                }
+                data.splitbotmarks.insert(*i,v.clone());
+            }
+            _ => ()
+        }
+    }
+    SplitResult{first:nodes,rest,split_penalty}
 }

@@ -260,6 +260,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     #[inline(always)]
+    pub fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,expand_protected:bool,edef_like:bool,mut cont:Fn) {
+        ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t))
+    }
+
+    #[inline(always)]
     pub fn get_next(&mut self) -> Option<ET::Token> {
         self.gullet.get_next_opt(self.mouth,self.aux,self.state)
     }

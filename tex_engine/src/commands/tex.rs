@@ -15,12 +15,12 @@ use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
-use crate::engine::stomach::Stomach;
+use crate::engine::stomach::{SplitResult, Stomach, StomachData};
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use std::fmt::{Display, Write};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
-use crate::utils::Ptr;
+use crate::utils::{HMap, Ptr};
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::{BoxInfo, KernNode, NodeList, NodeListType, NodeTrait, SimpleNode, SkipNode, TeXBox, TeXNode};
@@ -1961,6 +1961,43 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
     }
 }
 
+pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,(BoxInfo<ET>, Option<(u16, bool)>)> {
+    let idx = read_register(engine);
+    let (kind,ls,wd,start,end) = match engine.state.get_box_register_mut(idx) {
+        Some(TeXBox{info:BoxInfo{tp:BoxType::Vertical,kind,assigned_width,assigned_depth,assigned_height,..},children,start,end}) => {
+            *assigned_depth = None;
+            *assigned_height = None;
+            (*kind, std::mem::take(children), *assigned_width,*start,*end)
+        }
+        _ => todo!("throw error")
+    };
+    if !engine.read_keyword(b"to") {
+        todo!("throw error")
+    }
+    let target = engine.read_dim(false);
+    let mut ret = TeXBox{
+        children:vec!(),
+        info:BoxInfo {
+            tp:BoxType::Vertical,
+            kind,
+            to: Some(target),
+            spread: None,
+            assigned_width:wd,
+            assigned_height: None,
+            assigned_depth: None,
+        },
+        start, end
+    };
+    let SplitResult {first,rest,..} = ET::Stomach::split_vertical(engine,ls,target);
+    ret.children = first;
+    if let Some(TeXBox{children,..}) = engine.state.get_box_register_mut(idx) {
+        *children = rest;
+    } else {
+        unreachable!()
+    }
+    Ok(Some(ret))
+}
+
 #[inline(always)]
 pub fn year<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.aux.start_time.year())
@@ -1979,6 +2016,54 @@ pub fn day<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> In
 #[inline(always)]
 pub fn inputlineno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.mouth.line_number() as i32)
+}
+
+pub fn mark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    do_marks(engine,0)
+}
+pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
+    let mut v = shared_vector::Vector::new();
+    engine.expand_until_bgroup(false);
+    engine.expand_until_endgroup(true,true,|_,_,_,t| v.push(t));
+    let data = engine.stomach.data_mut();
+    for NodeList {children,tp } in data.open_lists.iter_mut().rev() {
+        match tp {
+            NodeListType::Box(BoxInfo {tp:BoxType::Horizontal|BoxType::InlineMath|BoxType::DisplayMath,..},_,_) => (),
+            _ => {
+                children.push(TeXNode::Mark(idx,v.into()));
+                return
+            }
+        }
+    }
+    data.page.push(TeXNode::Mark(idx,v.into()));
+}
+
+pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
+    match f(engine.stomach.data_mut()).get(&idx) {
+        Some(v) => exp.extend(v.0.iter().cloned()),
+        _ => ()
+    }
+}
+
+#[inline(always)]
+pub fn topmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    get_marks(engine,exp,|d| &mut d.topmarks,0)
+}
+#[inline(always)]
+pub fn firstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    get_marks(engine,exp,|d| &mut d.firstmarks,0)
+}
+#[inline(always)]
+pub fn botmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    get_marks(engine,exp,|d| &mut d.botmarks,0)
+}
+#[inline(always)]
+pub fn splitfirstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    get_marks(engine,exp,|d| &mut d.splitfirstmarks,0)
+}
+#[inline(always)]
+pub fn splitbotmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+    get_marks(engine,exp,|d| &mut d.splitbotmarks,0)
 }
 
 const PRIMITIVE_INTS:&[&'static str] = &[
@@ -2174,6 +2259,11 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"romannumeral",romannumeral);
     register_expandable(engine,"string",string);
     register_expandable(engine,"the",the);
+    register_expandable(engine,"topmark",topmark);
+    register_expandable(engine,"firstmark",firstmark);
+    register_expandable(engine,"botmark",botmark);
+    register_expandable(engine,"splitfirstmark",splitfirstmark);
+    register_expandable(engine,"splitbotmark",splitbotmark);
 
     register_conditional(engine,"if",if_);
     register_conditional(engine,"ifcase",ifcase);
@@ -2224,6 +2314,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         refs.state.set_command(refs.aux,relax,Some(Command::Relax),true);
         refs.state.set_command(refs.aux,nullfont,Some(Command::Font(refs.fontsystem.null())),true)
     }
+    register_unexpandable(engine,"mark",mark);
 
     register_whatsit(engine,"closeout",closeout,closeout_immediate);
     register_whatsit(engine,"openout",openout,openout_immediate);
@@ -2234,6 +2325,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine,"box",box_);
     register_box(engine,"copy",copy);
     register_box(engine,"lastbox",lastbox);
+    register_box(engine, "vsplit", vsplit);
 
     register_node(engine,"penalty",NodeCommandScope::Any,penalty);
     register_node(engine,"kern",NodeCommandScope::Any,kern);
@@ -2257,7 +2349,6 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodos!(engine,aftergroup,char,
         cr,crcr,discretionary,displaylimits,end,halign,
         indent,insert,leaders,cleaders,xleaders,left,right,lower,
-        mark,topmark,firstmark,botmark,splitfirstmark,splitbotmark,
         mathchar,mathchoice,mkern,
         moveright,moveleft,mskip,noalign,
         noindent,omit,overline,
@@ -2265,7 +2356,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         pagedepth,pageshrink,parshape,raise,
         scriptfont,scriptscriptfont,shipout,
         spacefactor,span,textfont,underline,vadjust,valign,
-        vcenter,vtop,vsplit
+        vcenter,vtop
     );
     cmstodos!(engine,
         mathclose,mathbin,mathord,mathop,mathrel,mathopen,
