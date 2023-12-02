@@ -232,6 +232,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn top_loop(&mut self) {
         use crate::tex::control_sequences::ControlSequenceNameHandler;
         crate::expand_loop!(self.mouth.update_start_ref() => self,
+            ResolvedToken::Tk { char, code:CommandCode::Noexpand, token } => {self.get_next();},
             ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),
             ResolvedToken::Cmd{cmd: None,token} => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),

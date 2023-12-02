@@ -46,6 +46,7 @@ pub trait Mouth:Sized {
             if t.is_begin_group() {
                 ingroups += 1;
             }
+            if t.is_noexpand_marker() { return true }
             cont(a,t);
             true
         });
