@@ -39,6 +39,10 @@ pub trait Font:Clone+std::fmt::Debug {
     fn get_skewchar(&self) -> Self::Int;
     fn set_skewchar(&mut self,c:Self::Int);
     fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<Self::Char>>::Handler,w:W) -> std::fmt::Result;
+    fn get_wd(&self,c:Self::Char) -> Self::D;
+    fn get_ht(&self,c:Self::Char) -> Self::D;
+    fn get_dp(&self,c:Self::Char) -> Self::D;
+    fn ligature(&self,c1:Self::Char,c2:Self::Char) -> Option<Self::Char>;
 }
 #[derive(Clone,Debug)]
 pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> {
@@ -112,9 +116,6 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
 #[derive(Default)]
 struct Mutables<I:TeXInt,D:TeXDimen + Numeric<I>>  {
     at:Option<D>,
-    heights:HMap<u8,D>,
-    depths:HMap<u8,D>,
-    widths:HMap<u8,D>,
     lps:HMap<u8,D>,
     rps:HMap<u8,D>,
     ics:HMap<u8,D>,
@@ -196,6 +197,25 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
             Some(d) => write!(w,"{} at {}",self.file.name(),d),
             None => write!(w,"{}",self.file.name())
         }
+    }
+    #[inline(always)]
+    fn get_wd(&self, c: Self::Char) -> Self::D {
+        let d = self.file.widths[c as usize];
+        self.get_at().scale_float(d)
+    }
+    #[inline(always)]
+    fn get_ht(&self, c: Self::Char) -> Self::D {
+        let d = self.file.heights[c as usize];
+        self.get_at().scale_float(d)
+    }
+    #[inline(always)]
+    fn get_dp(&self, c: Self::Char) -> Self::D {
+        let d = self.file.depths[c as usize];
+        self.get_at().scale_float(d)
+    }
+    #[inline(always)]
+    fn ligature(&self,char1:Self::Char,char2:Self::Char) -> Option<Self::Char> {
+        self.file.ligs.get(&(char1,char2)).copied()
     }
 }
 

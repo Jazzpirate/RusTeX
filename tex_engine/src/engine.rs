@@ -278,7 +278,9 @@ macro_rules! expand {
         crate::expand!(ET;$engine,$tk;$($case)*)
     };
     ($ET:ty; $engine:ident,$tk:expr;$($case:tt)*) => {
-        let cmd = $engine.resolve($tk);
+        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::resolve(
+            &$engine.state,$tk
+        );
         match cmd {
             crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Macro(m)),token} =>
                 <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::do_macro($engine,m.clone(),token),

@@ -193,15 +193,21 @@ impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
 
 }
 
+#[derive(Debug,Clone,PartialEq,Eq)]
+pub enum ToOrSpread<D:TeXDimen> {
+    None,To(D),Spread(D)
+}
+
 #[derive(Debug,Clone)]
 pub struct BoxInfo<ET:EngineTypes> {
     pub tp:BoxType,
     pub kind:&'static str,
-    pub to:Option<ET::Dim>,
-    pub spread:Option<ET::Dim>,
+    pub scaled:ToOrSpread<ET::Dim>,
     pub assigned_width:Option<ET::Dim>,
     pub assigned_height:Option<ET::Dim>,
     pub assigned_depth:Option<ET::Dim>,
+    pub moved_left:Option<ET::Dim>,
+    pub raised:Option<ET::Dim>,
 }
 
 #[derive(Debug,Clone)]

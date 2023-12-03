@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode};
+use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
@@ -16,9 +16,11 @@ use crate::tex::nodes::NodeTrait;
 use crate::tex::token::Token;
 use crate::commands::Command;
 use crate::utils::errors::ErrorHandler;
+use crate::engine::fontsystem::Font;
 
 type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
 type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
+type St<S> = <<S as Stomach>::ET as EngineTypes>::State;
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
 
@@ -83,6 +85,8 @@ pub trait Stomach {
         match code {
             CommandCode::EOF => (),
             CommandCode::Space if engine.state.get_mode().is_vertical() => (),
+            CommandCode::BeginGroup if engine.state.get_mode().is_math() => todo!(),
+            CommandCode::EndGroup if engine.state.get_mode().is_math() => todo!(),
             CommandCode::BeginGroup =>
                 engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number()),
             CommandCode::EndGroup => {
@@ -90,20 +94,94 @@ pub trait Stomach {
                     Some(GroupType::Character) =>
                         engine.state.pop(engine.aux,engine.mouth),
                     Some(GroupType::Box(bt)) =>
-                    Self::end_box(engine,bt),
-                    _ => todo!("throw error / close box")
+                        Self::end_box(engine,bt),
+                    _ => todo!("throw error")
                 }
+            }
+            CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_horizontal() =>
+                Self::do_word(engine,char),
+            CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_vertical() => {
+                engine.requeue(token);
+                todo!("Open Paragraph")
+            }
+            CommandCode::Other | CommandCode::Letter => {
+                todo!("Char in math mode")
             }
             _ => todo!("{} > {:?}",char,code)
             // todo!("check ligatures, do spacefactor")
         }
     }
+    fn do_word(engine:&mut EngineReferences<Self::ET>,char:Ch<Self>) {
+        // TODO trace
+        let mut current = char;
+        macro_rules! char {
+            ($c:expr) => {{
+                let font = engine.state.get_current_font().clone();
+                match font.ligature(current,char) {
+                    Some(c) => current = c,
+                    None => {
+                        engine.stomach.add_char(engine.state,current,font);
+                        current = char;
+                    }
+                }
+            }};
+        }
+        macro_rules! end {
+            ($e:expr) => {{
+                let font = engine.state.get_current_font().clone();
+                engine.stomach.add_char(engine.state,current,font);
+                engine.stomach.data_mut().spacefactor = 1000;
+                return $e
+            }}
+        }
+        crate::expand_loop!(Self::ET;engine,
+            ResolvedToken::Tk { code:CommandCode::Noexpand, .. } => {engine.get_next();},
+            ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } => char!(char),
+            ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
+                char!(*char),
+            ResolvedToken::Tk { code:CommandCode::Space, .. } |
+            ResolvedToken::Cmd{ cmd:Some(Command::Char {code:CommandCode::Space,..}),.. } => {
+                todo!()
+            }
+            ResolvedToken::Tk { char, code, token } =>
+                end!(Self::do_char(engine,token,char,code)),
+            ResolvedToken::Cmd{ cmd:Some(Command::Char {char, code}),token} => {
+                end!(Self::do_char(engine,token,*char,*code))
+            }
+            ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
+            ResolvedToken::Cmd{cmd: Some(cmd),token} => {
+                end!(crate::do_cmd!(Self::ET;engine,token,cmd))
+            }
+        );
+        todo!()
+    }
+    fn add_char(&mut self,state:&St<Self>,char:Ch<Self>,font:<<Self::ET as EngineTypes>::FontSystem as FontSystem>::Font) {
+        let width = font.get_wd(char);
+        let height = font.get_ht(char);
+        let depth = font.get_dp(char);
+        let sf = state.get_sfcode(char);
+        let data = self.data_mut();
+        if sf > 1000 && data.spacefactor < 1000 {
+            data.spacefactor = 1000;
+        } else { data.spacefactor = sf as i32; }
+        data.open_lists.last_mut().unwrap().children.push(TeXNode::Char {
+            char,font,width,height,depth
+        });
+    }
     fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,(BoxInfo<Self::ET>,Option<(u16,bool)>)>) {
-        todo!("box in stomach")
+        match bx(engine,token) {
+            Ok(Some(bx)) => Self::add_node(engine,bx.as_node()),
+            Ok(None) => (),
+            Err((bi,reg)) => {
+                engine.stomach.data_mut().open_lists.push(NodeList {
+                    tp:NodeListType::Box(bi,engine.mouth.start_ref(),reg),
+                    children:vec!()
+                });
+            }
+        }
     }
     fn add_node(engine:&mut EngineReferences<Self::ET>,node:TeXNode<Self::ET>) {
         let data = engine.stomach.data_mut();
-        data.spacefactor = 1000;
         match data.open_lists.last_mut() {
             Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
                 match node {
@@ -294,11 +372,11 @@ pub trait Stomach {
             info:BoxInfo {
                 tp:BoxType::Vertical,
                 kind: "output",
-                to: None,
-                spread: None,
+                scaled:ToOrSpread::None,
                 assigned_width: None,
                 assigned_height: None,
                 assigned_depth: None,
+                moved_left: None,raised:None
             },
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
@@ -330,6 +408,20 @@ pub trait Stomach {
     fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
 }
 
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, (BoxInfo<ET>,Option<(u16,bool)>)> {
+        let mut read_eq = !skip_eq;
+        crate::expand_loop!(self,
+            ResolvedToken::Tk {char,code:CommandCode::Other,..} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
+            ResolvedToken::Tk {char,code:CommandCode::Space,..} => (),
+            ResolvedToken::Cmd {cmd:Some(Command::Box(b)),token} =>
+                return (b.read)(self,token),
+            _ => todo!("error")
+        );
+        todo!("file end")
+    }
+}
+
 pub struct SplitResult<ET:EngineTypes> {
     pub first:Vec<TeXNode<ET>>,
     pub rest:Vec<TeXNode<ET>>,
@@ -357,6 +449,12 @@ pub struct StomachData<ET:EngineTypes> {
     pub splitbotmarks:HMap<usize,TokenList<ET::Token>>,
 }
 impl <ET:EngineTypes> StomachData<ET> {
+    pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
+        match self.open_lists.last_mut() {
+            Some(ls) => &mut ls.children,
+            None => &mut self.page
+        }
+    }
     pub fn new() -> Self {
         StomachData {
             page:vec!(),

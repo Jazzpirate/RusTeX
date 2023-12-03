@@ -229,7 +229,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let gullet = &mut *engine.gullet;
     engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
         if !t.is_cs_or_active() { return true }
-        match gullet.resolve(state,t) {
+        match ET::Gullet::resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
                 {incond += 1;true},
             ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
@@ -273,7 +273,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
     let gullet = &mut *engine.gullet;
     engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
         if !t.is_cs_or_active() { return true }
-        match gullet.resolve(state,t) {
+        match ET::Gullet::resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
                 {incond += 1;true},
             ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}

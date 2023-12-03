@@ -1,7 +1,7 @@
 /*! Implementation of a plain TeX [`State`]. */
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::state::{Ch, CS, State, StateChange, StateChangeTracker, StateStack};
+use crate::engine::state::{Ch, CS, State, StateChange, StateChangeTracker, StateStack, T};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
 use crate::engine::mouth::Mouth;
@@ -134,6 +134,14 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     #[inline(always)]
     fn get_group_level(&self) -> usize {
         self.stack.stack.len()
+    }
+
+    #[inline(always)]
+    fn aftergroup(&mut self, token: T<Self>) {
+        match self.stack.stack.last_mut() {
+            None => todo!("error"),
+            Some(lvl) => lvl.aftergroup.push(token)
+        }
     }
 
     #[inline(always)]
@@ -426,9 +434,8 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                 }
             }
         }
-        match lvl.aftergroup {
-            Some(ag) => todo!("insert aftergroup"),
-            _ => ()
+        if !lvl.aftergroup.is_empty() {
+            mouth.push_vec(std::mem::take(&mut lvl.aftergroup).into_iter())
         }
         self.stack.give_back(lvl);
     }

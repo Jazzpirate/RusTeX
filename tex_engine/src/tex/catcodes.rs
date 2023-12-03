@@ -4,6 +4,9 @@ Category codes
 
 use std::fmt::Formatter;
 use lazy_static::lazy_static;
+use crate::commands::Command;
+use crate::engine::mouth::pretokenized::WriteChars;
+use crate::tex::control_sequences::ControlSequenceName;
 use crate::tex::input_text::Character;
 
 /** The category code of a character.
@@ -254,6 +257,22 @@ pub enum CommandCode {
     Active = 13,
     /// Argument Marker
     Argument = 14
+}
+impl CommandCode {
+    pub fn meaning<C:Character,CS:ControlSequenceName<C>,W:WriteChars<C,CS>>(&self,c:C,mut f:W) {
+        match self {
+            CommandCode::BeginGroup => write!(f,"begin-group character "),
+            CommandCode::EndGroup => write!(f,"end-group character "),
+            CommandCode::MathShift => write!(f,"math shift character "),
+            CommandCode::Parameter => write!(f,"macro parameter character "),
+            CommandCode::Superscript => write!(f,"superscript character "),
+            CommandCode::Subscript => write!(f,"subscript character "),
+            CommandCode::Space => {write!(f,"blank space  ").unwrap();return},
+            CommandCode::Letter => write!(f,"the letter "),
+            _ => write!(f,"the character "),
+        }.unwrap();
+        f.push_char(c);
+    }
 }
 
 impl Into<u8> for CommandCode {

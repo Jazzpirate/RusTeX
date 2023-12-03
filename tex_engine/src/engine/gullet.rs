@@ -103,7 +103,7 @@ pub trait Gullet {
     fn read_chars(engine:& mut EngineReferences<Self::ET>,kws:&[u8]) -> Result<u8,T<Self>> {
         methods::read_chars(engine,kws)
     }
-    fn resolve<'a>(&self,state:&'a S<Self>,token:T<Self>) -> ResolvedToken<'a,Self::ET> {
+    fn resolve<'a>(state:&'a S<Self>,token:T<Self>) -> ResolvedToken<'a,Self::ET> {
         match token.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 ResolvedToken::Cmd{token,cmd:state.get_ac_command(c)},
@@ -327,7 +327,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
     #[inline(always)]
     pub fn resolve(&self,token:ET::Token) -> ResolvedToken<ET> {
-        self.gullet.resolve(self.state,token)
+        ET::Gullet::resolve(self.state,token)
     }
 }
 

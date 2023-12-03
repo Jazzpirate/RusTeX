@@ -27,6 +27,8 @@ type Fnt<S> = <<<S as State>::ET as EngineTypes>::FontSystem as FontSystem>::Fon
 pub trait State:Sized+Clone {
     type ET:EngineTypes<State=Self>;
 
+    fn aftergroup(&mut self,token:T<Self>);
+
     fn push(&mut self,aux:&EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
     fn pop(&mut self,aux:&EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);
     fn get_group_type(&self) -> Option<GroupType>;
@@ -230,7 +232,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 #[derive(Clone)]
 pub struct StackLevel<S:State> {
     pub group_type:GroupType,
-    pub aftergroup:Option<Vec<<S::ET as EngineTypes>::Token>>,
+    pub aftergroup:Vec<<S::ET as EngineTypes>::Token>,
     pub changes:Vec<StateChange<S>>,
     //keep_track:Vec<C>
 }
@@ -259,7 +261,7 @@ impl<S:State> StateStack<S> {
     pub fn push(&mut self,group_type:GroupType,current_mode:&mut TeXMode) {
         let mut lvl = StackLevel {
             group_type,
-            aftergroup:None,
+            aftergroup:vec!(),
             changes:self.factory.get()
         };
         match group_type {

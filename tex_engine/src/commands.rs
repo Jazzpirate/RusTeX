@@ -76,21 +76,8 @@ impl<'a,ET:EngineTypes> Meaning<'a,ET> {
     fn write_chars<W:WriteChars<ET::Char,ET::CSName>>(&self,mut f:W) {
         match self.cmd {
             Command::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
-
-            Command::Char{char,code} => {
-                match code {
-                    CommandCode::BeginGroup => write!(f,"begin-group character "),
-                    CommandCode::EndGroup => write!(f,"end-group character "),
-                    CommandCode::MathShift => write!(f,"math shift character "),
-                    CommandCode::Parameter => write!(f,"macro parameter character "),
-                    CommandCode::Superscript => write!(f,"superscript character "),
-                    CommandCode::Subscript => write!(f,"subscript character "),
-                    CommandCode::Space => {write!(f,"blank space  ").unwrap();return},
-                    CommandCode::Letter => write!(f,"the letter "),
-                    _ => write!(f,"the character "),
-                }.unwrap();
-                f.push_char(*char);
-            }
+            Command::Char{char,code} =>
+                code.meaning(*char,f),
             Command::CharDef(c) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"char\"{:X}",Into::<u64>::into(*c)).unwrap();

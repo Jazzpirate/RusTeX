@@ -142,6 +142,10 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
     }
 }
 
+pub fn currentgrouplevel<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+    (engine.state.get_group_level() as i32).into()
+}
+
 pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
@@ -267,10 +271,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 
 pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     let data = engine.stomach.data_mut();
-    let ls = match data.open_lists.last_mut() {
-        Some(NodeList{children,..}) => children,
-        _ => &mut data.page
-    };
+    let ls = data.get_list();
     match ls.last() {
         None => (-1).into(),
         Some(n) => (n.nodetype().to_u8() as i32).into()
@@ -323,7 +324,7 @@ pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     match engine.get_next() {
         None => todo!("file end"),
-        Some(t) => match engine.gullet.resolve(engine.state,t) {
+        Some(t) => match ET::Gullet::resolve(engine.state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(cnd)),token} => {
                 ET::Gullet::do_conditional(engine,cnd.name,token,cnd.expand,true)
             }
@@ -398,6 +399,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_skip(engine,"glueexpr",glueexpr,None);
     register_muskip(engine,"muexpr",muexpr,None);
 
+    register_int(engine,"currentgrouplevel",currentgrouplevel,None);
     register_int(engine,"lastnodetype",lastnodetype,None);
 
     register_assignment(engine,"protected",|e,cmd,g|protected(e,cmd,false,false,false,g));
@@ -422,7 +424,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"splitbotmarks",splitbotmarks);
 
     cmtodos!(engine,
-        currentgrouplevel,eTeXrevision,eTeXversion,
+        eTeXrevision,eTeXversion,
         fontchardp,fontcharht,fontcharic,fontcharwd,
         scantokens
     );
