@@ -15,7 +15,7 @@ use crate::tex::token::Token;
 use crate::utils::Ptr;
 use crate::tex::input_text::Character;
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, NodeList, TeXBox, TeXNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, TeXNode};
 
 pub mod primitives;
 pub mod tex;
@@ -268,7 +268,7 @@ pub struct FontCommand<ET:EngineTypes> {
 #[derive(Clone,Debug)]
 pub struct BoxCommand<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,(BoxInfo<ET>,Option<(u16,bool)>)>,
+    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>,
 }
 
 #[derive(Clone,Debug,Copy)]
@@ -287,6 +287,6 @@ pub struct NodeCommand<ET:EngineTypes> {
 pub struct Whatsit<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
     pub get:fn(&mut EngineReferences<ET>, ET::Token)
-               -> Ptr<dyn FnOnce(&mut EngineReferences<ET>)>,
+               -> Ptr<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>,
     pub immediate:fn(&mut EngineReferences<ET>,ET::Token)
 }

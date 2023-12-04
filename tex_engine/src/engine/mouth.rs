@@ -20,6 +20,7 @@ type C<M> = <<M as Mouth>::Token as Token>::Char;
 pub trait Mouth:Sized {
     type Token:Token;
     type File:File<Char=C<Self>>;
+    fn new<ET:EngineTypes<Mouth=Self>>(aux:&mut EngineAux<ET>,state:&mut ET::State) -> Self;
     fn current_sourceref(&self) -> SourceReference<<Self::File as File>::SourceRefID>;
     fn start_ref(&self) -> SourceReference<<Self::File as File>::SourceRefID>;
     fn update_start_ref(&mut self);
@@ -131,6 +132,13 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
 impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     type Token = T;
     type File = F;
+
+    fn new<ET: EngineTypes<Mouth=Self>>(aux: &mut EngineAux<ET>, state: &mut ET::State) -> Self {
+        Self {
+            inputs:Vec::new(),args:Some(array_init::array_init(|_| Vec::new())),
+            start_ref:None
+        }
+    }
 
     fn current_sourceref(&self) -> SourceReference<<Self::File as File>::SourceRefID> {
         for s in self.inputs.iter().rev() {
@@ -389,12 +397,6 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 }
 
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
-    pub fn new() -> Self {
-        DefaultMouth {
-            inputs:Vec::new(),args:Some(array_init::array_init(|_| Vec::new())),
-            start_ref:None
-        }
-    }
     fn end_file<ET:EngineTypes<Char=T::Char,Token =T,File = F>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> T {
         let f = match self.inputs.pop() {
             Some(TokenSource::File(f,_)) => f,

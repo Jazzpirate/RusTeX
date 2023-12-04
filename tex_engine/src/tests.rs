@@ -66,14 +66,20 @@ mod tests {
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
-    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainTeXEngine, TeXEngine};
+    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainPDFTeXEngine, PlainTeXEngine, TeXEngine};
+    use crate::engine::gullet::DefaultGullet;
+    use crate::engine::mouth::DefaultMouth;
     use crate::engine::mouth::pretokenized::ExpansionContainer;
     use crate::engine::state::{CustomStateChange, State};
     use crate::engine::utils::memory::PRIMITIVES;
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::{Character, StringLineSource};
+    use crate::tex::nodes::NodeTrait;
     use crate::tex::token::Token;
     use crate::utils::Ptr;
+    use crate::engine::PDFTeXEngine;
+    use crate::engine::state::tex_state::TeXState;
+    use crate::engine::stomach::StomachWithShipout;
 
 
     #[test]
@@ -147,7 +153,7 @@ mod tests {
     #[test]
     fn initex() {
         debug();
-        let mut engine = PlainTeXEngine::new();
+        let mut engine = PlainPDFTeXEngine::new();
         {
             let refs = engine.get_engine_refs();
            // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
@@ -167,7 +173,7 @@ mod tests {
     #[test]
     fn thesis() {
         debug();
-        let mut engine = PlainTeXEngine::new();
+        let mut engine = PlainPDFTeXEngine::new();
         engine.initialize_pdflatex().unwrap();
         {
             let refs = engine.get_engine_refs();
@@ -177,7 +183,10 @@ mod tests {
             refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracinggroups,1,true);
             refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingrestores,1,true);
         }
-        engine.do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex").unwrap();
+        engine.do_file_pdf("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",|b| {
+            info!("{}",b.readable());
+            todo!()
+        }).unwrap();
     }
 
     #[test]

@@ -29,6 +29,8 @@ type MuSkip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::MuSkip;
 pub trait Gullet {
     type ET:EngineTypes<Gullet=Self>;
 
+    fn new(aux:&mut EngineAux<Self::ET>,state:&mut S<Self>,mouth:&mut M<Self>) -> Self;
+
     fn push_align(&mut self,ad:AlignData);
     fn get_align_data(&mut self) -> Option<&mut AlignData>;
     fn get_conditional(&self) -> Option<ActiveConditional<Self::ET>>;
@@ -349,6 +351,16 @@ impl Display for Dots {
 }
 impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     type ET = ET;
+
+    fn new(aux: &mut EngineAux<Self::ET>, state: &mut S<Self>, mouth: &mut M<Self>) -> Self {
+        DefaultGullet {
+            align_data:Vec::new(),
+            phantom:PhantomData::default(),
+            conditionals:Vec::new(),
+            csnames:0
+        }
+    }
+
     #[inline(always)]
     fn csnames(&mut self) -> &mut usize { &mut self.csnames }
 
@@ -412,12 +424,4 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET>> {
         &mut self.conditionals
     }
-}
-impl<ET:EngineTypes> DefaultGullet<ET> {
-    pub fn new() -> Self { DefaultGullet {
-        align_data:Vec::new(),
-        phantom:PhantomData::default(),
-        conditionals:Vec::new(),
-        csnames:0
-    }}
 }

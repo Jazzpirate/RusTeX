@@ -33,6 +33,7 @@ pub trait MemoryManager<T:Token> {
     }
     fn return_token_vec(&mut self,_:Vec<T>) {}
     fn empty(&self) -> TokenList<T>;
+    fn new() -> Self;
 }
 impl<CS:ControlSequenceName<T::Char,Handler=()>,T:Token<CS=CS>> MemoryManager<T> for () {
     #[inline(always)]
@@ -41,6 +42,7 @@ impl<CS:ControlSequenceName<T::Char,Handler=()>,T:Token<CS=CS>> MemoryManager<T>
     fn cs_interner_mut(&mut self) -> &mut <T::CS as ControlSequenceName<T::Char>>::Handler { self }
     #[inline(always)]
     fn empty(&self) -> TokenList<T> { TokenList(shared_vector::SharedVector::new()) }
+    fn new() -> Self { () }
 }
 
 /// The default memory manager, which does not do any memory management.
@@ -63,8 +65,8 @@ pub struct ReuseTokenLists<T:Token> {
     bytes:Vec<Vec<u8>>,
     empty:shared_vector::SharedVector<T>
 }
-impl<T:Token> ReuseTokenLists<T> {
-    pub fn new() -> Self {
+impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
+    fn new() -> Self {
         ReuseTokenLists {
             factory:ReusableVectorFactory::new(32,32),
             handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default(),
@@ -73,8 +75,7 @@ impl<T:Token> ReuseTokenLists<T> {
             empty:shared_vector::SharedVector::new()
         }
     }
-}
-impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
+
     #[inline(always)]
     fn cs_interner(&self) -> &<T::CS as ControlSequenceName<T::Char>>::Handler { &self.handler }
     #[inline(always)]

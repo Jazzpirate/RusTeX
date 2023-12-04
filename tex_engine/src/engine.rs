@@ -2,6 +2,7 @@
     some output format.
 */
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use crate::engine::gullet::{DefaultGullet, Gullet, ResolvedToken};
 use crate::engine::utils::memory::{InternedCSName, InternedString, MemoryManager, PRIMITIVES};
 use crate::engine::mouth::{DefaultMouth, Mouth};
@@ -10,11 +11,13 @@ use crate::engine::stomach::{Stomach, StomachWithShipout};
 use crate::{debug_log, tex};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::{Assignment, Command, DimCommand, FontCommand, IntCommand, MuSkipCommand, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::pdftex::{MinimalPDFExtension, PDFExtension};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{FontSystem, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
 use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::nodes::TeXNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
 use crate::tex::token::{CompactToken, Token};
 use crate::utils::errors::{catch, ErrorHandler, TeXError};
@@ -57,9 +60,28 @@ pub struct EngineAux<ET:EngineTypes> {
     pub error_handler:ET::ErrorHandler,
     pub outputs:ET::Outputs,
     pub start_time:chrono::DateTime<chrono::Local>,
-    pub elapsed:std::time::Instant,//chrono::DateTime<chrono::Local>,
     pub jobname:String,
     pub extension:ET::Extension
+}
+
+pub struct Colon<'c,ET:EngineTypes> {
+    out:Box<dyn FnMut(TeXNode<ET>) + 'c>
+}
+impl<'c,ET:EngineTypes> Colon<'c,ET> {
+    #[inline(always)]
+    pub fn new<F:FnMut(TeXNode<ET>)+'c>(f:F) -> Self {
+        Colon { out:Box::new(f) }
+    }
+    #[inline(always)]
+    pub fn out(&mut self, n:TeXNode<ET>) {
+        (self.out)(n)
+    }
+}
+impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
+    #[inline(always)]
+    fn default() -> Self {
+        Colon { out:Box::new(|_|{}) }
+    }
 }
 
 /**
@@ -75,6 +97,7 @@ pub struct EngineReferences<'et,ET:EngineTypes> {
     pub stomach:&'et mut ET::Stomach,
     pub filesystem:&'et mut ET::FileSystem,
     pub fontsystem:&'et mut ET::FontSystem,
+    pub colon:Colon<'et,ET>,
     pub aux:&'et mut EngineAux<ET>
 }
 
@@ -103,26 +126,20 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }
 
-//type Int<S> = <<<S as TeXEngine>::Types as EngineTypes>::Num as NumSet>::Int;
-
 pub trait TeXEngine:Sized {
     type Types:EngineTypes;
+    fn register_primitive(&mut self,cmd:Command<Self::Types>,name:&str);
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
     fn init_file(&mut self,s:&str) -> Result<(),TeXError> {catch( ||{
         log::debug!("Initializing with file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
         comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
-        //comps.start_time = Local::now();
         comps.push_file(file);
-        //(comps.outputs.file_open)(file.path().to_str().unwrap());
-        //comps.mouth.push_file(&file,&mut comps.interner);
-        // should not produce any boxes, so loop until file end
-        //ET::Stomach::next_shipout_box(&mut comps);
-        //comps.filesystem.set_pwd(old);
+        comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
-    fn do_file(&mut self,s:&str) -> Result<(),TeXError> {catch( ||{
+    fn do_file_default<F:FnMut(TeXNode<Self::Types>)>(&mut self,s:&str,f:F) -> Result<(),TeXError> {catch( ||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
@@ -131,8 +148,9 @@ pub trait TeXEngine:Sized {
         comps.push_file(file);
         comps.mouth.insert_every::<Self::Types>(&comps.state,PRIMITIVES.everyjob);
         comps.aux.start_time = chrono::Local::now();
-        comps.aux.elapsed = std::time::Instant::now();
+        //comps.aux.elapsed = std::time::Instant::now();
         debug_log!(debug =>"Here: {}",comps.preview());
+        comps.colon = Colon::new(f);
         comps.top_loop();
     })}
     fn initialize_plain_tex(&mut self) {
@@ -151,6 +169,75 @@ pub trait TeXEngine:Sized {
     fn load_latex(&mut self) -> Result<(),TeXError> {
         self.init_file("latex.ltx")
     }
+}
+
+pub struct DefaultEngine<ET:EngineTypes> {
+    pub aux:EngineAux<ET>,
+    pub state: ET::State,
+    pub filesystem: ET::FileSystem,
+    pub fontsystem: ET::FontSystem,
+    pub mouth: ET::Mouth,
+    pub gullet: ET::Gullet,
+    pub stomach: ET::Stomach,
+}
+impl<ET:EngineTypes> DefaultEngine<ET> {
+    pub fn reset(&mut self, s:ET::State) {
+        self.state = s;
+        self.mouth = ET::Mouth::new(&mut self.aux,&mut self.state);
+        self.gullet = ET::Gullet::new(&mut self.aux,&mut self.state,&mut self.mouth);
+        self.stomach = ET::Stomach::new(&mut self.aux,&mut self.state);
+    }
+    pub fn new() -> Self {
+        let mut aux = EngineAux {
+            memory: ET::Memory::new(),
+            outputs: ET::Outputs::new(),
+            error_handler: ET::ErrorHandler::new(),
+            start_time:chrono::Local::now(),
+            extension: ET::Extension::new(),
+            jobname: String::new()
+        };
+        let fontsystem = ET::FontSystem::new(&mut aux);
+        let mut state = ET::State::new(fontsystem.null(),&mut aux);
+        let mut mouth = ET::Mouth::new(&mut aux,&mut state);
+        let gullet = ET::Gullet::new(&mut aux,&mut state,&mut mouth);
+        let stomach = ET::Stomach::new(&mut aux,&mut state);
+        Self {
+            state,
+            aux,
+            fontsystem,
+            filesystem: ET::FileSystem::new(crate::utils::PWD.to_path_buf()),
+            mouth,gullet,stomach
+        }
+    }
+}
+impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
+    type Types = ET;
+    fn register_primitive(&mut self,cmd: Command<ET>, name: &str) {
+        use crate::tex::control_sequences::ControlSequenceNameHandler;
+        let name = self.aux.memory.cs_interner_mut().new(name);
+        self.state.set_command(&self.aux,name,Some(cmd),true);
+    }
+    fn get_engine_refs(&mut self) -> EngineReferences<ET> {
+        EngineReferences {
+            aux: &mut self.aux,
+            state: &mut self.state,
+            filesystem: &mut self.filesystem,
+            fontsystem: &mut self.fontsystem,
+            mouth: &mut self.mouth,
+            gullet: &mut self.gullet,
+            stomach: &mut self.stomach,
+            colon: Colon::default()
+        }
+    }
+}
+pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
+
+pub trait PDFTeXEngine: TeXEngine
+    where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension {
+    fn do_file_pdf<F:FnMut(TeXNode<Self::Types>)>(&mut self,s:&str,f:F) -> Result<(),TeXError> {
+        *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
+        self.do_file_default(s,f)
+    }
 
     fn initialize_pdflatex(&mut self) -> Result<(),TeXError> {
         self.initialize_etex();
@@ -160,65 +247,44 @@ pub trait TeXEngine:Sized {
     }
 }
 
-/// Example implementation of a plain TeX engine.
-pub struct PlainTeXEngine {
-    aux:EngineAux<DefaultPlainTeXEngineTypes>,
-    pub state: state::tex_state::TeXState<DefaultPlainTeXEngineTypes>,
-    filesystem: filesystem::NoOutputFileSystem<u8>,
-    fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedCSName<u8>>,
-    pub mouth: mouth::DefaultMouth<<DefaultPlainTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
-    gullet: gullet::DefaultGullet<DefaultPlainTeXEngineTypes>,
-    pub stomach: stomach::StomachWithShipout<DefaultPlainTeXEngineTypes>
+
+/// Example implementation of [`EngineTypes`] for a plain TeX engine.
+#[derive(Copy,Clone,Debug)]
+pub struct DefaultPDFTeXEngineTypes;
+impl EngineTypes for DefaultPDFTeXEngineTypes {
+    type Char = u8;
+    type CSName = utils::memory::InternedCSName<u8>;//InternedString;
+    type Token = super::tex::token::CompactToken;//::StandardToken<Self::CSName,u8>;//
+    type ErrorHandler = super::utils::errors::ErrorThrower;
+    type Extension = MinimalPDFExtension;
+    type Int = i32;
+    type Dim = Dim32;
+    type Skip = Skip32<Dim32>;
+    type MuSkip = MuSkip32;
+    type Num = tex::numerics::DefaultNumSet;
+    type State = state::tex_state::TeXState<Self>;
+    type Memory = utils::memory::ReuseTokenLists<Self::Token>;
+    type File = VirtualFile<u8>;
+    type FileSystem = filesystem::NoOutputFileSystem<u8>;
+    type Outputs = LogOutputs;
+    type Mouth = DefaultMouth<Self::Token,Self::File>;
+    type Gullet = DefaultGullet<Self>;
+    type Stomach = StomachWithShipout<Self>;
+    type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }
-impl TeXEngine for PlainTeXEngine {
-    type Types = DefaultPlainTeXEngineTypes;
-    fn get_engine_refs(&mut self) -> EngineReferences<DefaultPlainTeXEngineTypes> {
-        EngineReferences {
-            aux: &mut self.aux,
-            state: &mut self.state,
-            filesystem: &mut self.filesystem,
-            fontsystem: &mut self.fontsystem,
-            mouth: &mut self.mouth,
-            gullet: &mut self.gullet,
-            stomach: &mut self.stomach
-        }
-    }
-}
-impl PlainTeXEngine {
-    pub fn reset(&mut self, s:state::tex_state::TeXState<DefaultPlainTeXEngineTypes>) {
-        self.state = s;
-        self.mouth = DefaultMouth::new();
-        self.gullet = DefaultGullet::new();
-        self.stomach = StomachWithShipout::new();
-    }
-    pub fn new() -> Self {
-        let mut aux = EngineAux {
-            memory: utils::memory::ReuseTokenLists::new(),
-            outputs: LogOutputs,
-            error_handler: super::utils::errors::ErrorThrower,
-            start_time:chrono::Local::now(),
-            elapsed:std::time::Instant::now(),
-            extension: (),
-            jobname: String::new()
-        };
-        let fontsystem = fontsystem::TfmFontSystem::new(&mut aux);
-        PlainTeXEngine {
-            state: state::tex_state::TeXState::new(fontsystem.null(),&aux.memory),
-            aux,
-            fontsystem,
-            filesystem: filesystem::NoOutputFileSystem::new(crate::utils::PWD.to_path_buf()),
-            mouth: mouth::DefaultMouth::new(),
-            gullet: gullet::DefaultGullet::new(),
-            stomach: stomach::StomachWithShipout::new()
-        }
-    }
-}
+
+pub type PlainPDFTeXEngine = DefaultEngine<DefaultPDFTeXEngineTypes>;
+impl PDFTeXEngine for PlainPDFTeXEngine {}
 
 /** Additional components we want to add to a [`EngineReferences`] can be implemented here.
     Notably, `()` extends this trait if we don't need any additional components.
  */
-pub trait EngineExtension {}
-impl EngineExtension for () {}
+pub trait EngineExtension {
+    fn new() -> Self;
+}
+impl EngineExtension for () {
+    fn new() -> Self { () }
+}
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn trace_command<D:std::fmt::Display,F:FnOnce(&mut Self) -> D>(&mut self, f:F) {
@@ -334,7 +400,7 @@ macro_rules! do_cmd {
             crate::commands::Command::ToksRegister(u) =>
                 <$ET as EngineTypes>::Stomach::assign_toks_register($engine, *u,false),
             crate::commands::Command::Whatsit(crate::commands::Whatsit { name, get, .. }) =>
-                <$ET as EngineTypes>::Stomach::do_whatsit($engine, $token, *get),
+                <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get),
             crate::commands::Command::PrimitiveInt(name) =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false),
             crate::commands::Command::PrimitiveDim(name) =>
@@ -357,3 +423,342 @@ macro_rules! do_cmd {
         }
     }
 }
+
+/*
+/// Example implementation of a plain TeX engine.
+pub struct PlainTeXEngine {
+    aux:EngineAux<DefaultPlainTeXEngineTypes>,
+    pub state: state::tex_state::TeXState<DefaultPlainTeXEngineTypes>,
+    filesystem: filesystem::NoOutputFileSystem<u8>,
+    fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedCSName<u8>>,
+    pub mouth: mouth::DefaultMouth<<DefaultPlainTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
+    gullet: gullet::DefaultGullet<DefaultPlainTeXEngineTypes>,
+    pub stomach: stomach::StomachWithShipout<DefaultPlainTeXEngineTypes>,
+}
+impl TeXEngine for PlainTeXEngine {
+    type Types = DefaultPlainTeXEngineTypes;
+    fn register_primitive(&mut self,cmd: Command<Self::Types>, name: &str) {
+        use crate::tex::control_sequences::ControlSequenceNameHandler;
+        let name = self.aux.memory.cs_interner_mut().new(name);
+        self.state.set_command(&self.aux,name,Some(cmd),true);
+    }
+    fn get_engine_refs(&mut self) -> EngineReferences<DefaultPlainTeXEngineTypes> {
+        EngineReferences {
+            aux: &mut self.aux,
+            state: &mut self.state,
+            filesystem: &mut self.filesystem,
+            fontsystem: &mut self.fontsystem,
+            mouth: &mut self.mouth,
+            gullet: &mut self.gullet,
+            stomach: &mut self.stomach,
+            colon: Colon::default()
+        }
+    }
+}
+impl PlainTeXEngine {
+    pub fn reset(&mut self, s:state::tex_state::TeXState<DefaultPlainTeXEngineTypes>) {
+        self.state = s;
+        self.mouth = DefaultMouth::new(&mut self.aux,&mut self.state);
+        self.gullet = DefaultGullet::new(&mut self.aux,&mut self.state,&mut self.mouth);
+        self.stomach = StomachWithShipout::new(&mut self.aux,&mut self.state);
+    }
+    pub fn new() -> Self {
+        let mut aux = EngineAux {
+            memory: utils::memory::ReuseTokenLists::new(),
+            outputs: LogOutputs,
+            error_handler: super::utils::errors::ErrorThrower,
+            start_time:chrono::Local::now(),
+            //elapsed:std::time::Instant::now(),
+            extension: (),
+            jobname: String::new()
+        };
+        let fontsystem = fontsystem::TfmFontSystem::new(&mut aux);
+        let mut state = state::tex_state::TeXState::new(fontsystem.null(),&mut aux);
+        let mut mouth = DefaultMouth::new(&mut aux,&mut state);
+        let gullet = DefaultGullet::new(&mut aux,&mut state,&mut mouth);
+        let stomach = StomachWithShipout::new(&mut aux,&mut state);
+
+        PlainTeXEngine {
+            aux,
+            state,
+            fontsystem,
+            filesystem: filesystem::NoOutputFileSystem::new(crate::utils::PWD.to_path_buf()),
+            mouth,gullet,stomach
+        }
+    }
+}
+*/
+/*
+/// Example implementation of a plain pdfTeX engine.
+pub struct PlainPDFTeXEngine {
+    aux:EngineAux<DefaultPDFTeXEngineTypes>,
+    pub state: state::tex_state::TeXState<DefaultPDFTeXEngineTypes>,
+    filesystem: filesystem::NoOutputFileSystem<u8>,
+    fontsystem: fontsystem::TfmFontSystem<i32,Dim32,InternedCSName<u8>>,
+    pub mouth: mouth::DefaultMouth<<DefaultPDFTeXEngineTypes as EngineTypes>::Token,<filesystem::NoOutputFileSystem<u8> as FileSystem>::File>,
+    gullet: gullet::DefaultGullet<DefaultPDFTeXEngineTypes>,
+    pub stomach: stomach::StomachWithShipout<DefaultPDFTeXEngineTypes>,
+}
+impl PDFTeXEngine for PlainPDFTeXEngine {}
+impl TeXEngine for PlainPDFTeXEngine {
+    type Types = DefaultPDFTeXEngineTypes;
+    fn register_primitive(&mut self,cmd: Command<Self::Types>, name: &str) {
+        use crate::tex::control_sequences::ControlSequenceNameHandler;
+        let name = self.aux.memory.cs_interner_mut().new(name);
+        self.state.set_command(&self.aux,name,Some(cmd),true);
+    }
+    fn get_engine_refs(&mut self) -> EngineReferences<DefaultPDFTeXEngineTypes> {
+        EngineReferences {
+            aux: &mut self.aux,
+            state: &mut self.state,
+            filesystem: &mut self.filesystem,
+            fontsystem: &mut self.fontsystem,
+            mouth: &mut self.mouth,
+            gullet: &mut self.gullet,
+            stomach: &mut self.stomach,
+            colon: Colon::default()
+        }
+    }
+}
+impl PlainPDFTeXEngine {
+    pub fn reset(&mut self, s:state::tex_state::TeXState<DefaultPDFTeXEngineTypes>) {
+        self.state = s;
+        self.mouth = DefaultMouth::new(&mut self.aux,&mut self.state);
+        self.gullet = DefaultGullet::new(&mut self.aux,&mut self.state,&mut self.mouth);
+        self.stomach = StomachWithShipout::new(&mut self.aux,&mut self.state);
+    }
+    pub fn new() -> Self {
+        let mut aux = EngineAux {
+            memory: utils::memory::ReuseTokenLists::new(),
+            outputs: LogOutputs,
+            error_handler: super::utils::errors::ErrorThrower,
+            start_time:chrono::Local::now(),
+            //elapsed:std::time::Instant::now(),
+            extension: MinimalPDFExtension::new(),
+            jobname: String::new()
+        };
+        let fontsystem = fontsystem::TfmFontSystem::new(&mut aux);
+        let mut state = state::tex_state::TeXState::new(fontsystem.null(),&mut aux);
+        let mut mouth = DefaultMouth::new(&mut aux,&mut state);
+        let gullet = DefaultGullet::new(&mut aux,&mut state,&mut mouth);
+        let stomach = StomachWithShipout::new(&mut aux,&mut state);
+        PlainPDFTeXEngine {
+            state,aux,
+            fontsystem,
+            filesystem: filesystem::NoOutputFileSystem::new(crate::utils::PWD.to_path_buf()),
+            mouth,gullet,stomach
+        }
+    }
+}
+
+ */
+
+/*
+
+pub struct EngineSpec<
+    IState:State<ET=Self>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=Self>,
+    IStomach:Stomach<ET=Self>,
+    Tk:Token = CompactToken,
+    EH:ErrorHandler = super::utils::errors::ErrorThrower,
+    EXT:EngineExtension = (),
+    NS:NumSet = tex::numerics::DefaultNumSet,
+    F:File<Char=Tk::Char> = VirtualFile<u8>,
+    FS:FileSystem<File=F> = filesystem::NoOutputFileSystem<u8>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>
+        = TfmFontSystem<<NS as NumSet>::Int,<NS as NumSet>::Dim,<Tk as Token>::CS>,
+>(
+    PhantomData<IState>,PhantomData<IGullet>,PhantomData<IStomach>,
+    PhantomData<Tk>,PhantomData<EH>,PhantomData<EXT>,PhantomData<FS>,
+    PhantomData<IMouth>,PhantomData<F>,PhantomData<Fnt>,PhantomData<NS>
+);
+
+impl<
+    IState:State<ET=Self>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=Self>,
+    IStomach:Stomach<ET=Self>,
+    Tk:Token,
+    EH:ErrorHandler,
+    EXT:EngineExtension,
+    NS:NumSet,
+    F:File<Char=Tk::Char>,
+    FS:FileSystem<File=F>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>,
+> EngineTypes for EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt> {
+    type Char = Tk::Char;
+    type CSName = Tk::CS;//InternedString;
+    type Token = Tk;//::StandardToken<Self::CSName,u8>;//
+    type ErrorHandler = EH;
+    type Extension = EXT;
+    type Int = NS::Int;
+    type Dim = NS::Dim;
+    type Skip = NS::Skip;
+    type MuSkip = NS::MuSkip;
+    type Num = NS;
+    type State = IState;
+    type Memory = utils::memory::ReuseTokenLists<Self::Token>;
+    type File = F;
+    type FileSystem = FS;
+    type Outputs = LogOutputs;
+    type Mouth = IMouth;
+    type Gullet = IGullet;
+    type Stomach = IStomach;
+    type FontSystem = Fnt;//InternedString>;
+}
+impl<
+    IState:State<ET=Self>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=Self>,
+    IStomach:Stomach<ET=Self>,
+    Tk:Token,
+    EH:ErrorHandler,
+    EXT:EngineExtension,
+    NS:NumSet,
+    F:File<Char=Tk::Char>,
+    FS:FileSystem<File=F>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>,
+> Debug for EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("EngineSpec")
+    }
+}
+impl<
+    IState:State<ET=Self>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=Self>,
+    IStomach:Stomach<ET=Self>,
+    Tk:Token,
+    EH:ErrorHandler,
+    EXT:EngineExtension,
+    NS:NumSet,
+    F:File<Char=Tk::Char>,
+    FS:FileSystem<File=F>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>,
+> Clone for EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt> {
+    fn clone(&self) -> Self {
+        EngineSpec(PhantomData,PhantomData,
+                   PhantomData,PhantomData,
+        PhantomData,PhantomData,
+                   PhantomData,PhantomData,
+            PhantomData,PhantomData,
+            PhantomData
+        )
+    }
+}
+
+impl<
+    IState:State<ET=Self>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=Self>,
+    IStomach:Stomach<ET=Self>,
+    Tk:Token,
+    EH:ErrorHandler,
+    EXT:EngineExtension,
+    NS:NumSet,
+    F:File<Char=Tk::Char>,
+    FS:FileSystem<File=F>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>,
+> std::marker::Copy for EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt> {}
+
+
+pub struct StandardEngine<
+    IState:State<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    IStomach:Stomach<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    Tk:Token = CompactToken,
+    EH:ErrorHandler = super::utils::errors::ErrorThrower,
+    EXT:EngineExtension = (),
+    NS:NumSet = tex::numerics::DefaultNumSet,
+    F:File<Char=Tk::Char> = VirtualFile<u8>,
+    FS:FileSystem<File=F> = filesystem::NoOutputFileSystem<u8>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>
+    = TfmFontSystem<<NS as NumSet>::Int,<NS as NumSet>::Dim,<Tk as Token>::CS>,
+> {
+    pub aux:EngineAux<EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    pub state: IState,
+    pub filesystem: FS,
+    pub fontsystem: Fnt,
+    pub mouth: IMouth,
+    pub gullet: IGullet,
+    pub stomach: IStomach,
+}
+
+impl<
+    IState:State<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    IStomach:Stomach<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    Tk:Token,
+    EH:ErrorHandler,
+    EXT:EngineExtension,
+    NS:NumSet,
+    F:File<Char=Tk::Char>,
+    FS:FileSystem<File=F>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>,
+> TeXEngine for StandardEngine<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt> {
+    type Types = EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>;
+    fn register_primitive(&mut self,cmd: Command<Self::Types>, name: &str) {
+        use crate::tex::control_sequences::ControlSequenceNameHandler;
+        let name = self.aux.memory.cs_interner_mut().new(name);
+        self.state.set_command(&self.aux,name,Some(cmd),true);
+    }
+    fn get_engine_refs(&mut self) -> EngineReferences<Self::Types> {
+        EngineReferences {
+            aux: &mut self.aux,
+            state: &mut self.state,
+            filesystem: &mut self.filesystem,
+            fontsystem: &mut self.fontsystem,
+            mouth: &mut self.mouth,
+            gullet: &mut self.gullet,
+            stomach: &mut self.stomach,
+            colon: Colon::default()
+        }
+    }
+}
+
+impl<
+    IState:State<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    IMouth:Mouth<Token=Tk,File=FS::File>,
+    IGullet:Gullet<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    IStomach:Stomach<ET=EngineSpec<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt>>,
+    Tk:Token,
+    EH:ErrorHandler,
+    EXT:EngineExtension,
+    NS:NumSet,
+    F:File<Char=Tk::Char>,
+    FS:FileSystem<File=F>,
+    Fnt:FontSystem<Char=Tk::Char,CS=Tk::CS,Font=F,Int=NS::Int,Dim=NS::Dim>,
+> StandardEngine<IState,IMouth,IGullet,IStomach,Tk,EH,EXT,NS,F,FS,Fnt> {
+    pub fn reset(&mut self, s:IState) {
+        self.state = s;
+        self.mouth = IMouth::new(&mut self.aux,&mut self.state);
+        self.gullet = IGullet::new(&mut self.aux,&mut self.state,&mut self.mouth);
+        self.stomach = IStomach::new(&mut self.aux,&mut self.state);
+    }
+    pub fn new() -> Self {
+        let mut aux = EngineAux {
+            memory: utils::memory::ReuseTokenLists::new(),
+            outputs: LogOutputs,
+            error_handler: EH::new(),
+            start_time:chrono::Local::now(),
+            extension: EXT::new(),
+            jobname: String::new()
+        };
+        let fontsystem = Fnt::new(&mut aux);
+        let mut state = IState::new(fontsystem.null(),&mut aux);
+        let mut mouth = IMouth::new(&mut aux,&mut state);
+        let gullet = IGullet::new(&mut aux,&mut state,&mut mouth);
+        let stomach = IStomach::new(&mut aux,&mut state);
+        Self {
+            state,
+            aux,
+            fontsystem,
+            filesystem: FS::new(crate::utils::PWD.to_path_buf()),
+            mouth,gullet,stomach
+        }
+    }
+}
+ */

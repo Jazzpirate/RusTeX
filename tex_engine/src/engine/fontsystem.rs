@@ -21,6 +21,7 @@ pub trait FontSystem:Clone+std::fmt::Debug {
     type Font:Font<Char=Self::Char,CS=Self::CS,D=Self::Dim,Int=Self::Int>;
     type Dim:TeXDimen;
     fn null(&self) -> Self::Font;
+    fn new<ET:EngineTypes<FontSystem=Self,Char=Self::Char,CSName=Self::CS>>(aux:&mut EngineAux<ET>) -> Self;
     fn new_font<S:AsRef<str>,F:FileSystem>(&mut self,path:S,macroname:<Self::Font as Font>::CS,fs:&mut F) -> Self::Font;
 }
 
@@ -49,8 +50,15 @@ pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName
     files:HMap<PathBuf,Ptr<TfmFile>>,
     null:Ptr<TfmFontI<I,D,CS>>
 }
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> TfmFontSystem<I,D,CS> {
-    pub fn new<ET:EngineTypes<Char=u8,FontSystem=Self,CSName = CS>>(aux:&mut EngineAux<ET>) -> Self  {
+
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for TfmFontSystem<I,D,CS> {
+    type Char = u8;
+    type Int = I;
+    type Font = TfmFont<I,D,CS>;
+    type Dim = D;
+    type CS=CS;
+
+    fn new<ET: EngineTypes<FontSystem=Self,Char=Self::Char,CSName=Self::CS>>(aux: &mut EngineAux<ET>) -> Self {
         use crate::tex::control_sequences::ControlSequenceNameHandler;
         let null_file = TfmFile {
             hyphenchar:45,
@@ -76,13 +84,6 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> TfmFontSystem<
             null
         }
     }
-}
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for TfmFontSystem<I,D,CS> {
-    type Char = u8;
-    type Int = I;
-    type Font = TfmFont<I,D,CS>;
-    type Dim = D;
-    type CS=CS;
 
     fn new_font<S:AsRef<str>,F:FileSystem>(&mut self,path:S,macroname:CS,fs:&mut F) -> Self::Font {
         let path = path.as_ref();

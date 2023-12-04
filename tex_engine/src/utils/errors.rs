@@ -15,6 +15,7 @@ use crate::tex::token::StandardToken;
 
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler {
+    fn new() -> Self;
     /// Invalid character in input file/string
     fn invalid_character<T:Token,D:Display>(&self,_character:T::Char,text:D) -> Option<T> {
         crate::throw!("! Text line contains an invalid character.\n{}",text);
@@ -147,7 +148,9 @@ pub fn catch<R,F:FnOnce() -> R>(f:F) -> Result<R,TeXError> {
 
 /// Default [`ErrorHandler`] that just panics.
 pub struct ErrorThrower;
-impl ErrorHandler for ErrorThrower {}
+impl ErrorHandler for ErrorThrower {
+    fn new() -> Self { Self }
+}
 
 #[derive(Clone)]
 pub struct TeXError {

@@ -21,6 +21,14 @@ use crate::tex::nodes::NodeTrait;
 use crate::commands::NodeList;
 use crate::engine::stomach::Stomach;
 
+pub fn eTeXversion<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+    2.into()
+}
+pub fn eTeXrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    exp.push(ET::Token::from_char_cat(b'.'.into(),CommandCode::Other));
+    exp.push(ET::Token::from_char_cat(b'6'.into(),CommandCode::Other));
+}
+
 fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
 >(engine:&mut EngineReferences<ET>,
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> R,
@@ -401,6 +409,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
 
     register_int(engine,"currentgrouplevel",currentgrouplevel,None);
     register_int(engine,"lastnodetype",lastnodetype,None);
+    register_int(engine,"eTeXversion",eTeXversion,None);
 
     register_assignment(engine,"protected",|e,cmd,g|protected(e,cmd,false,false,false,g));
     register_assignment(engine,"readline",readline);
@@ -412,6 +421,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"detokenize",detokenize);
     register_expandable(engine,"expanded",expanded);
     register_expandable(engine,"unexpanded",unexpanded);
+    register_expandable(engine,"eTeXrevision",eTeXrevision);
 
     register_unexpandable(engine,"marks",marks);
 
@@ -424,7 +434,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"splitbotmarks",splitbotmarks);
 
     cmtodos!(engine,
-        eTeXrevision,eTeXversion,
         fontchardp,fontcharht,fontcharic,fontcharwd,
         scantokens
     );

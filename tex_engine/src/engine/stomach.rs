@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
@@ -33,6 +33,7 @@ fn afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
 
 pub trait Stomach {
     type ET:EngineTypes<Stomach = Self>;
+    fn new(aux:&mut EngineAux<Self::ET>,state:&mut St<Self>) -> Self;
     fn afterassignment(&mut self) -> &mut Option<Tk<Self>>;
     fn data_mut(&mut self) -> &mut StomachData<Self::ET>;
 
@@ -70,10 +71,10 @@ pub trait Stomach {
                         children:ls.children,info:bi,start,end:engine.mouth.current_sourceref(),
                     };
                     match reg {
-                        Some((reg,global)) =>
-                            engine.state.set_box_register(engine.aux,reg,Some(bx),global),
-                        None =>
-                            Self::add_node(engine,bx.as_node())
+                        BoxTarget::Register { index, globally } =>
+                            engine.state.set_box_register(engine.aux,index,Some(bx),globally),
+                        BoxTarget::List => Self::add_node(engine,bx.as_node()),
+                        BoxTarget::Out => todo!()
                     }
                 }
                 _ => todo!("throw error")
@@ -168,13 +169,13 @@ pub trait Stomach {
             char,font,width,height,depth
         });
     }
-    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,(BoxInfo<Self::ET>,Option<(u16,bool)>)>) {
+    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
         match bx(engine,token) {
             Ok(Some(bx)) => Self::add_node(engine,bx.as_node()),
             Ok(None) => (),
-            Err((bi,reg)) => {
+            Err(bi) => {
                 engine.stomach.data_mut().open_lists.push(NodeList {
-                    tp:NodeListType::Box(bi,engine.mouth.start_ref(),reg),
+                    tp:NodeListType::Box(bi,engine.mouth.start_ref(),BoxTarget::List),
                     children:vec!()
                 });
             }
@@ -196,10 +197,13 @@ pub trait Stomach {
                 ls.children.push(node)
             },
             None => {
-                if data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX) {
+                if !data.page_contains_boxes /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
                     match node {
-                        TeXNode::Box(_) | TeXNode::Insert =>
-                            data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize),
+                        TeXNode::Box(_) | TeXNode::Insert => {
+                            data.page_contains_boxes = true;
+                            data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
+                        }
+                        n if n.discardable() => return,
                         _ => ()
                     }
                 }
@@ -208,13 +212,14 @@ pub trait Stomach {
                     TeXNode::Simple(SimpleNode::VRule {..}) =>
                         data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
                     TeXNode::Penalty(i) if i <= -10000 => {
-                        data.page.push(node);
-                        return Self::maybe_shipout(engine,true)
+                        if data.page_contains_boxes {
+                            return Self::do_shipout(engine, Some(i))
+                        } else { return }
                     }
                     _ => data.prevdepth = node.depth()
                 }
                 data.page.push(node);
-                Self::maybe_shipout(engine,false)
+                Self::maybe_shipout(engine)
             }
         }
     }
@@ -331,30 +336,35 @@ pub trait Stomach {
             _ => todo!("throw error")
         )
     }
-    fn do_whatsit(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
-                                                                                -> Ptr<dyn FnOnce(&mut EngineReferences<Self::ET>)>) {
-        todo!()
+    fn do_whatsit(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
+                                                                                -> Ptr<dyn FnOnce(&mut EngineReferences<Self::ET>) -> Option<TeXNode<Self::ET>>>) {
+        let ret = read(engine,token);
+        let wi = WhatsitNode::new(ret,name);
+        Self::add_node(engine,wi.as_node());
     }
 
-    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>,force:bool) {
-        if force || {
-            let data = engine.stomach.data_mut();
-            data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty()
-        } {
-            Self::do_shipout(engine,force)
+    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
+        let data = engine.stomach.data_mut();
+        if data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
+            Self::do_shipout(engine,None)
         }
     }
 
-    fn do_shipout(engine:&mut EngineReferences<Self::ET>,forced:bool) {
+    fn do_shipout(engine:&mut EngineReferences<Self::ET>,forced:Option<i32>) {
         let data = engine.stomach.data_mut();
         let page = std::mem::take(&mut data.page);
+        data.page_contains_boxes = false;
         // TODO more precisely
         engine.state.set_primitive_int(engine.aux,PRIMITIVES.badness,(10).into(),true);
 
-        let SplitResult{mut first,rest,split_penalty} = if (forced) { SplitResult{first:page,rest:vec!(),split_penalty:None} } else {
-            let goal = data.pagegoal;
-            Self::split_vertical(engine,page,goal)
+        let SplitResult{mut first,rest,split_penalty} = match forced {
+            Some(p) => SplitResult{first:page,rest:vec!(),split_penalty:Some(p)},
+            _ => {
+                let goal = data.pagegoal;
+                Self::split_vertical(engine,page,goal)
+            }
         };
+
         let data = engine.stomach.data_mut();
 
 
@@ -367,7 +377,7 @@ pub trait Stomach {
             engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,p.into(),true);
         }
 
-        engine.state.set_box_register(engine.aux,255,Some(TeXBox {
+        let bx = TeXBox {
             children:first,
             info:BoxInfo {
                 tp:BoxType::Vertical,
@@ -380,7 +390,11 @@ pub trait Stomach {
             },
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
-        }),false);
+        };
+
+        //crate::debug_log!(debug => "Here: {} ",bx.readable());
+
+        engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
         for r in rest{ Self::add_node(engine,r) }
         let mode = engine.state.get_mode();
@@ -388,6 +402,9 @@ pub trait Stomach {
         engine.get_next(); // '{':BeginGroup
         engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
         engine.state.set_mode(TeXMode::InternalVertical);
+
+        //crate::debug_log!(debug => "Here: {} at {}",engine.mouth.display_position(),engine.preview());
+
         let depth = engine.state.get_group_level();
         while let Some(next) = engine.get_next() {
             if engine.state.get_group_level() == depth && next.is_end_group() {
@@ -409,7 +426,7 @@ pub trait Stomach {
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, (BoxInfo<ET>,Option<(u16,bool)>)> {
+    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, BoxInfo<ET>> {
         let mut read_eq = !skip_eq;
         crate::expand_loop!(self,
             ResolvedToken::Tk {char,code:CommandCode::Other,..} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
@@ -447,6 +464,7 @@ pub struct StomachData<ET:EngineTypes> {
     pub botmarks:HMap<usize,TokenList<ET::Token>>,
     pub splitfirstmarks:HMap<usize,TokenList<ET::Token>>,
     pub splitbotmarks:HMap<usize,TokenList<ET::Token>>,
+    pub page_contains_boxes:bool
 }
 impl <ET:EngineTypes> StomachData<ET> {
     pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
@@ -474,6 +492,7 @@ impl <ET:EngineTypes> StomachData<ET> {
             botmarks:HMap::default(),
             splitfirstmarks:HMap::default(),
             splitbotmarks:HMap::default(),
+            page_contains_boxes:false
         }
     }
 }
@@ -482,14 +501,14 @@ pub struct StomachWithShipout<ET:EngineTypes<Stomach=Self>> {
     afterassignment:Option<Tk<Self>>,
     data:StomachData<ET>,
 }
-impl<ET:EngineTypes<Stomach=Self>> StomachWithShipout<ET> {
-    pub fn new() -> Self { StomachWithShipout {
-        afterassignment:None,
-        data:StomachData::new()
-    } }
-}
 impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
     type ET = ET;
+    fn new(aux: &mut EngineAux<Self::ET>, state: &mut St<Self>) -> Self {
+        StomachWithShipout {
+            afterassignment:None,
+            data:StomachData::new()
+        }
+    }
     #[inline(always)]
     fn afterassignment(&mut self) -> &mut Option<Tk<Self>> {
         &mut self.afterassignment

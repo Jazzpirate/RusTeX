@@ -17,10 +17,6 @@ use crate::utils::HMap;
 use crate::engine::FontSystem;
 use crate::tex::nodes::TeXBox;
 
-type Int<ET> = <<ET as EngineTypes>::Num as NumSet>::Int;
-type Dim<ET> = <<ET as EngineTypes>::Num as NumSet>::Dim;
-type Skip<ET> = <<ET as EngineTypes>::Num as NumSet>::Skip;
-type MuSkip<ET> = <<ET as EngineTypes>::Num as NumSet>::MuSkip;
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::tex::control_sequences::ControlSequenceName;
 use crate::engine::fontsystem::Font;
@@ -36,15 +32,15 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     uccodes: <ET::Char as Character>::CharMap<ET::Char>,
     mathcodes: <ET::Char as Character>::CharMap<u32>,
     delcodes: <ET::Char as Character>::CharMap<ET::Int>,
-    primitive_ints: HMap<PrimitiveIdentifier,Int<ET>>,
-    primitive_dims: HMap<PrimitiveIdentifier,Dim<ET>>,
-    primitive_skips: HMap<PrimitiveIdentifier,Skip<ET>>,
-    primitive_muskips: HMap<PrimitiveIdentifier,MuSkip<ET>>,
+    primitive_ints: HMap<PrimitiveIdentifier,ET::Int>,
+    primitive_dims: HMap<PrimitiveIdentifier,ET::Dim>,
+    primitive_skips: HMap<PrimitiveIdentifier,ET::Skip>,
+    primitive_muskips: HMap<PrimitiveIdentifier,ET::MuSkip>,
     primitive_toks:HMap<PrimitiveIdentifier,TokenList<ET::Token>>,
-    int_register:Vec<Int<ET>>,
-    dim_register:Vec<Dim<ET>>,
-    skip_register:Vec<Skip<ET>>,
-    muskip_register:Vec<MuSkip<ET>>,
+    int_register:Vec<ET::Int>,
+    dim_register:Vec<ET::Dim>,
+    skip_register:Vec<ET::Skip>,
+    muskip_register:Vec<ET::MuSkip>,
     toks_register:Vec<TokenList<ET::Token>>,
     box_register:Vec<Option<TeXBox<ET>>>,
     commands:Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
@@ -56,8 +52,31 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     empty_list:TokenList<ET::Token>
 }
 impl<ET:EngineTypes<State=Self>> TeXState<ET> {
-    /// Create a new [`TeXState`].
-    pub fn new(nullfont:Fnt<ET>,mem:&ET::Memory) -> Self {
+
+    fn tracing_assigns(&self) -> bool {
+        match self.primitive_ints.get(&PRIMITIVES.tracingassigns) {
+            Some(v) if *v > ET::Int::default() => true,
+            _ => false
+        }
+    }
+    fn tracing_restores(&self) -> bool {
+        match self.primitive_ints.get(&PRIMITIVES.tracingrestores) {
+            Some(v) if *v > ET::Int::default() => true,
+            _ => false
+        }
+    }
+}
+
+impl<ET:EngineTypes<State=Self>> StateChangeTracker for TeXState<ET> {
+    #[inline(always)]
+    fn stack(&mut self) -> &mut StateStack<Self> { &mut self.stack }
+}
+
+
+impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
+    type ET = ET;
+    fn new(nullfont:Fnt<ET>,aux:&mut EngineAux<ET>) -> Self {
+        let mem = &aux.memory;
         let mut lccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
         let mut uccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
         let mut mathcodes: <ET::Char as Character>::CharMap<u32> = CharacterMap::default();
@@ -65,16 +84,16 @@ impl<ET:EngineTypes<State=Self>> TeXState<ET> {
             *uccodes.get_mut(i.into()) = (i-32).into();
             *lccodes.get_mut((i-32).into()) = i.into();
             *mathcodes.get_mut(ET::Char::from(i-32)) = (i as u32-32) +
-                                            (1 * 16 * 16) +
-                                            (7 * 16 * 16 * 16);
+                (1 * 16 * 16) +
+                (7 * 16 * 16 * 16);
             *mathcodes.get_mut(ET::Char::from(i)) = (i as u32) +
-                                            (1 * 16 * 16) +
-                                            (7 * 16 * 16 * 16);
+                (1 * 16 * 16) +
+                (7 * 16 * 16 * 16);
         }
         for i in 48..58 {
             *mathcodes.get_mut(ET::Char::from(i)) = (i as u32) +
-                                            (0 * 16 * 16) +
-                                            (7 * 16 * 16 * 16);
+                (0 * 16 * 16) +
+                (7 * 16 * 16 * 16);
         }
         Self {
             stack: StateStack::new(),
@@ -104,29 +123,6 @@ impl<ET:EngineTypes<State=Self>> TeXState<ET> {
         }
     }
 
-    fn tracing_assigns(&self) -> bool {
-        match self.primitive_ints.get(&PRIMITIVES.tracingassigns) {
-            Some(v) if *v > Int::<ET>::default() => true,
-            _ => false
-        }
-    }
-    fn tracing_restores(&self) -> bool {
-        match self.primitive_ints.get(&PRIMITIVES.tracingrestores) {
-            Some(v) if *v > Int::<ET>::default() => true,
-            _ => false
-        }
-    }
-}
-
-impl<ET:EngineTypes<State=Self>> StateChangeTracker for TeXState<ET> {
-    #[inline(always)]
-    fn stack(&mut self) -> &mut StateStack<Self> { &mut self.stack }
-}
-
-
-impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
-    type ET = ET;
-
     #[inline(always)]
     fn get_group_type(&self) -> Option<GroupType> {
         self.stack.stack.last().map(|lvl| lvl.group_type)
@@ -139,7 +135,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     #[inline(always)]
     fn aftergroup(&mut self, token: T<Self>) {
         match self.stack.stack.last_mut() {
-            None => todo!("error"),
+            None => (),
             Some(lvl) => lvl.aftergroup.push(token)
         }
     }
@@ -148,7 +144,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     fn push(&mut self,aux:&EngineAux<ET>, group_type: GroupType,line_number:usize) {
         self.stack.push(group_type,&mut self.current_mode);
         let tracing = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
-            Some(v) if *v > Int::<ET>::default() => true,
+            Some(v) if *v > ET::Int::default() => true,
             _ => false
         };
         if tracing {
@@ -178,7 +174,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
             _ => todo!("throw error")
         };
         let trace = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
-            Some(v) if *v > Int::<ET>::default() => true,
+            Some(v) if *v > ET::Int::default() => true,
             _ => false
         };
         if trace {
@@ -677,13 +673,13 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_primitive_int(&self, name: PrimitiveIdentifier) -> Int<ET> {
+    fn get_primitive_int(&self, name: PrimitiveIdentifier) -> ET::Int {
         match self.primitive_ints.get(&name) {
             Some(i) => *i,
-            _ => Int::<ET>::default()
+            _ => ET::Int::default()
         }
     }
-    fn set_primitive_int(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Int<ET>, globally: bool) {
+    fn set_primitive_int(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::Int, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = s.primitive_ints.insert(name,v).unwrap_or(ET::Int::default());
             if s.tracing_assigns() {
@@ -698,14 +694,14 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     fn get_int_register(&self, idx: u16) -> crate::engine::state::Int<Self> {
         match self.int_register.get(idx as usize) {
             Some(i) => *i,
-            _ => Int::<ET>::default()
+            _ => ET::Int::default()
         }
     }
     fn set_int_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: crate::engine::state::Int<Self>, globally: bool) {
         self.change_field(globally,|s,g| {
             let idx = idx as usize;
             if s.int_register.len() <= idx {
-                s.int_register.resize(idx + 1, Int::<ET>::default());
+                s.int_register.resize(idx + 1, ET::Int::default());
             }
             let old = std::mem::replace(&mut s.int_register[idx], v);
             if s.tracing_assigns() {
@@ -721,17 +717,17 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_dim_register(&self, idx: u16) -> Dim<ET> {
+    fn get_dim_register(&self, idx: u16) -> ET::Dim {
         match self.dim_register.get(idx as usize) {
             Some(i) => *i,
-            _ => Dim::<ET>::default()
+            _ => ET::Dim::default()
         }
     }
-    fn set_dim_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Dim<ET>, globally: bool) {
+    fn set_dim_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: ET::Dim, globally: bool) {
         self.change_field(globally,|s,g| {
             let idx = idx as usize;
             if s.dim_register.len() <= idx {
-                s.dim_register.resize(idx + 1, Dim::<ET>::default());
+                s.dim_register.resize(idx + 1, ET::Dim::default());
             }
             let old = std::mem::replace(&mut s.dim_register[idx], v);
             if s.tracing_assigns() {
@@ -748,17 +744,17 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
 
 
     #[inline(always)]
-    fn get_skip_register(&self, idx: u16) -> Skip<ET> {
+    fn get_skip_register(&self, idx: u16) -> ET::Skip {
         match self.skip_register.get(idx as usize) {
             Some(i) => *i,
-            _ => Skip::<ET>::default()
+            _ => ET::Skip::default()
         }
     }
-    fn set_skip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Skip<ET>, globally: bool) {
+    fn set_skip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: ET::Skip, globally: bool) {
         self.change_field(globally,|s,g| {
             let idx = idx as usize;
             if s.skip_register.len() <= idx {
-                s.skip_register.resize(idx + 1, Skip::<ET>::default());
+                s.skip_register.resize(idx + 1, ET::Skip::default());
             }
             let old = std::mem::replace(&mut s.skip_register[idx], v);
             if s.tracing_assigns() {
@@ -774,17 +770,17 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_muskip_register(&self, idx: u16) -> MuSkip<ET> {
+    fn get_muskip_register(&self, idx: u16) -> ET::MuSkip {
         match self.muskip_register.get(idx as usize) {
             Some(i) => *i,
-            _ => MuSkip::<ET>::default()
+            _ => ET::MuSkip::default()
         }
     }
-    fn set_muskip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: MuSkip<ET>, globally: bool) {
+    fn set_muskip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: ET::MuSkip, globally: bool) {
         self.change_field(globally,|s,g| {
             let idx = idx as usize;
             if s.muskip_register.len() <= idx {
-                s.muskip_register.resize(idx + 1, MuSkip::<ET>::default());
+                s.muskip_register.resize(idx + 1, ET::MuSkip::default());
             }
             let old = std::mem::replace(&mut s.muskip_register[idx], v);
             if s.tracing_assigns() {
@@ -895,13 +891,13 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_primitive_dim(&self, name: PrimitiveIdentifier) -> Dim<ET> {
+    fn get_primitive_dim(&self, name: PrimitiveIdentifier) -> ET::Dim {
         match self.primitive_dims.get(&name) {
             Some(i) => *i,
-            _ => Dim::<ET>::default()
+            _ => ET::Dim::default()
         }
     }
-    fn set_primitive_dim(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Dim<ET>, globally: bool) {
+    fn set_primitive_dim(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::Dim, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = s.primitive_dims.insert(name,v).unwrap_or(ET::Dim::default());
             if s.tracing_assigns() {
@@ -913,13 +909,13 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> Skip<ET> {
+    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> ET::Skip {
         match self.primitive_skips.get(&name) {
             Some(i) => *i,
-            _ => Skip::<ET>::default()
+            _ => ET::Skip::default()
         }
     }
-    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Skip<ET>, globally: bool) {
+    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::Skip, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = s.primitive_skips.insert(name,v).unwrap_or(ET::Skip::default());
             if s.tracing_assigns() {
@@ -931,13 +927,13 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> MuSkip<ET> {
+    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> ET::MuSkip {
         match self.primitive_muskips.get(&name) {
             Some(i) => *i,
-            _ => MuSkip::<ET>::default()
+            _ => ET::MuSkip::default()
         }
     }
-    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: MuSkip<ET>, globally: bool) {
+    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::MuSkip, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = s.primitive_muskips.insert(name,v).unwrap_or(ET::MuSkip::default());
             if s.tracing_assigns() {

@@ -1,5 +1,5 @@
 use crate::{cmtodo, cmtodos};
-use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
+use crate::engine::{EngineExtension, EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::mouth::pretokenized::{ExpansionContainer, Tokenizer};
 use crate::tex::catcodes::CommandCode;
@@ -8,7 +8,134 @@ use crate::engine::utils::memory::MemoryManager;
 use crate::tex::token::Token;
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
-use std::fmt::Write;
+use std::fmt::{Display, Write};
+
+
+#[inline(always)]
+pub fn pdftexversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
+    <ET::Num as NumSet>::Int::from(140)
+}
+pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    exp.push(ET::Token::from_char_cat(b'2'.into(),CommandCode::Other));
+    exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
+}
+
+pub trait PDFExtension: EngineExtension {
+    fn pdfmatches(&mut self) -> &mut Vec<String>;
+    fn elapsed(&mut self) -> &mut std::time::Instant;
+    fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>>;
+    fn current_colorstack(&mut self) -> &mut usize;
+}
+
+pub struct MinimalPDFExtension {
+    matches: Vec<String>,
+    elapsed:std::time::Instant,//chrono::DateTime<chrono::Local>,
+    colorstacks:Vec<Vec<PDFColor>>,
+    current_colorstack:usize,
+}
+impl EngineExtension for MinimalPDFExtension {
+    fn new() -> Self {
+        Self {
+            matches: Vec::new(),
+            elapsed: std::time::Instant::now(),
+            colorstacks:vec!(vec!(PDFColor::black())),
+            current_colorstack:0,
+        }
+    }
+}
+impl PDFExtension for MinimalPDFExtension {
+    #[inline(always)]
+    fn pdfmatches(&mut self) -> &mut Vec<String> {
+        &mut self.matches
+    }
+    #[inline(always)]
+    fn elapsed(&mut self) -> &mut std::time::Instant {
+        &mut self.elapsed
+    }
+    #[inline(always)]
+    fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>> { &mut self.colorstacks }
+    #[inline(always)]
+    fn current_colorstack(&mut self) -> &mut usize { &mut self.current_colorstack }
+}
+
+
+#[derive(Debug,Clone,Copy)]
+pub struct PDFColor{R:u8,G:u8,B:u8}
+impl PDFColor {
+    pub fn black() -> Self { PDFColor{R:0,G:0,B:0} }
+    pub fn parse<S:AsRef<str>+Display>(s:S) -> Self {
+        macro_rules! parse {
+            ($s:expr) => {
+                match $s.parse::<f32>() {
+                    Ok(f) => f,
+                    _ => todo!("Invalid color specification: {}",s)
+                }
+            }
+        }
+        let ls : Vec<_> = s.as_ref().split(' ').collect();
+        if matches!(ls.last(),Some(&"K")) && ls.len() > 4 {
+            let third = 1.0 - parse!(ls[3]);
+            let r = 255.0*(1.0 - parse!(ls[0])) * third;
+            let g = 255.0*(1.0 - parse!(ls[1])) * third;
+            let b = 255.0*(1.0 - parse!(ls[2])) * third;
+            if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
+                todo!("Invalid color specification: {}",s);
+            }
+            PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
+        } else if matches!(ls.last(),Some(&"RG")) && ls.len() > 3 {
+            let r = 255.0 * parse!(ls[0]);
+            let g = 255.0 * parse!(ls[1]);
+            let b = 255.0 * parse!(ls[2]);
+            if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
+                todo!("Invalid color specification: {}",s);
+            }
+            PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
+        } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
+            let x = 255.0 * parse!(ls[0]);
+            if x > 255.0 || x < 0.0  {
+                todo!("Invalid color specification: {}",s);
+            }
+            let x = (x.round()) as u8;
+            PDFColor{R:x, G:x, B:x}
+        } else {
+            todo!("Invalid color specification: {}",s);
+        }
+    }
+}
+
+pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
+    where ET::Extension : PDFExtension {
+    let index = engine.read_int(false).into();
+    if index < 0 {todo!("throw error")}
+    let index = index as usize;
+    let kw = engine.read_keywords(&[b"push",b"pop",b"set",b"current"]);
+    match kw {
+        Some(b"current") => *engine.aux.extension.current_colorstack() = index,
+        Some(b"pop") => {
+            let stack = engine.aux.extension.colorstacks();
+            if index >= stack.len() {
+                todo!("throw error")
+            }
+            stack[index].pop();
+        }
+        Some(b"set") => {
+            let mut color = String::new();
+            engine.read_braced_string(&mut color);
+            let color = PDFColor::parse(color);
+            let stack = engine.aux.extension.colorstacks();
+            *stack[index].last_mut().unwrap() = color;
+        }
+        Some(b"push") => {
+            let mut color = String::new();
+            engine.read_braced_string(&mut color);
+            let color = PDFColor::parse(color);
+            let stack = engine.aux.extension.colorstacks();
+            stack[index].push(color);
+        }
+        _ => todo!("error")
+    }
+}
+
 
 pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
     *engine.gullet.csnames() > 0
@@ -91,20 +218,51 @@ pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET
     super::tex::skip_argument(engine);
 }
 
-#[inline(always)]
-pub fn pdftexversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
-    <ET::Num as NumSet>::Int::from(140)
+pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
+    where ET::Extension : PDFExtension {
+    let icase = engine.read_keyword(b"icase");
+    let subcount = if engine.read_keyword(b"subcount") {
+        engine.read_int(false).into()
+    } else { -1 };
+    let mut pattern_string = engine.aux.memory.get_string();
+    let mut target_string = engine.aux.memory.get_string();
+    if icase {pattern_string.push_str("(?i)");}
+    engine.read_braced_string(&mut pattern_string);
+    engine.read_braced_string(&mut target_string);
+    let pdfmatches = engine.aux.extension.pdfmatches();
+    pdfmatches.clear();
+
+    match regex::Regex::new(&pattern_string) {
+        Err(_) => {
+            exp.push(ET::Token::from_char_cat(b'-'.into(),CommandCode::Other));
+            exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
+        }
+        Ok(reg) => match reg.captures_iter(&target_string).next() {
+            None =>
+                exp.push(ET::Token::from_char_cat(b'0'.into(),CommandCode::Other)),
+            Some(capture) => {
+                let cap = capture.get(0).unwrap();
+                pdfmatches.push(format!("{}->{}",cap.start(),cap.as_str()));
+                for cap in capture.iter().skip(1) {
+                    match cap {
+                        None => pdfmatches.push("-1".to_string()),
+                        Some(cap) => {
+                            pdfmatches.push(format!("{}->{}",cap.start(),cap.as_str()));
+                        }
+                    }
+                }
+                exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
+            }
+        }
+    }
 }
+
 
 #[inline(always)]
 pub fn pdfshellescape<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(2)
 }
 
-pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    exp.push(ET::Token::from_char_cat(b'2'.into(),CommandCode::Other));
-    exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
-}
 
 pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut first = engine.aux.memory.get_string();
@@ -153,10 +311,12 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
     "pdfpageresources",
 ];
 
-pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E) {
+pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
+    where <E::Types as EngineTypes>::Extension : PDFExtension {
 
     register_expandable(engine,"pdfcreationdate",pdfcreationdate);
     register_expandable(engine,"pdffilesize",pdffilesize);
+    register_expandable(engine,"pdfmatch",pdfmatch);
     register_expandable(engine,"pdfstrcmp",pdfstrcmp);
     register_expandable(engine,"pdftexrevision",pdftexrevision);
 
@@ -168,16 +328,17 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E) {
     register_conditional(engine,"ifpdfabsnum",ifpdfabsnum);
 
     register_unexpandable(engine,"pdfglyphtounicode",pdfglyphtounicode);
+    register_unexpandable(engine,"pdfcolorstack",pdfcolorstack);
 
     register_primitive_int(engine,PRIMITIVE_INTS);
     register_primitive_dim(engine,PRIMITIVE_DIMS);
     register_primitive_toks(engine,PRIMITIVE_TOKS);
 
     cmtodos!(engine,
-        lpcode,pdfcatalog,pdfcolorstack,pdfcolorstackinit,
+        lpcode,pdfcatalog,pdfcolorstackinit,
         pdfdest,pdfelapsedtime,pdfendlink,pdfescapestring,
         pdffontexpand,pdffontsize,pdflastobj,pdflastxform,pdflastximage,
-        pdfliteral,pdfmajorversion,pdfmatch,pdfmdfivesum,pdfobj,pdfoutline,pdfrefxform,
+        pdfliteral,pdfmajorversion,pdfmdfivesum,pdfobj,pdfoutline,pdfrefxform,
         pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
         pdfxform,pdfximage,rpcode
     );

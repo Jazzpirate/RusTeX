@@ -1,10 +1,14 @@
+use std::cell::OnceCell;
+use std::fmt::{Display, Write};
 use std::marker::PhantomData;
-use crate::engine::EngineTypes;
+use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::kpathsea::SourceReference;
 use crate::tex::types::{BoxType, NodeType};
 use crate::engine::filesystem::File;
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::pretokenized::TokenList;
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
+use crate::tex::input_text::Character;
 use crate::tex::numerics::{Skip, TeXDimen};
 use crate::utils::Ptr;
 
@@ -17,8 +21,15 @@ pub struct NodeList<ET:EngineTypes> {
 }
 
 #[derive(Clone,Debug)]
+pub enum BoxTarget {
+    Register{ index:u16, globally:bool },
+    List,
+    Out
+}
+
+#[derive(Clone,Debug)]
 pub enum NodeListType<ET:EngineTypes> {
-    Paragraph,Box(BoxInfo<ET>,SR<ET>,Option<(u16,bool)>)
+    Paragraph,Box(BoxInfo<ET>,SR<ET>,BoxTarget)
 }
 
 pub trait NodeTrait<ET:EngineTypes> {
@@ -27,9 +38,39 @@ pub trait NodeTrait<ET:EngineTypes> {
     fn depth(&self) -> ET::Dim;
     fn width(&self) -> ET::Dim;
     fn nodetype(&self) -> NodeType;
+    fn readable_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+    #[inline(always)]
+    fn readable_do_indent(indent:usize,mut f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_char('\n')?;
+        for _ in 0..indent {f.write_char(' ')?;}
+        Ok(())
+    }
+    fn readable(&self) -> ReadableNode<ET,Self> where Self:Sized {
+        ReadableNode(self,PhantomData)
+    }
 }
 
-#[derive(Debug,Clone)]
+pub struct ReadableNode<'a,ET:EngineTypes,N:NodeTrait<ET>>(&'a N,PhantomData<ET>);
+impl<'a,ET:EngineTypes,N:NodeTrait<ET>> Display for ReadableNode<'a,ET,N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.readable_fmt(0, f)
+    }
+}
+
+#[derive(Clone)]
+pub struct WhatsitNode<ET:EngineTypes>(String,Option<Ptr<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>>);
+impl<ET:EngineTypes> std::fmt::Debug for WhatsitNode<ET> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"<whatsit {}>",self.0)
+    }
+}
+impl<ET:EngineTypes> WhatsitNode<ET> {
+    pub fn new(f:Ptr<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>,name:PrimitiveIdentifier) -> TeXNode<ET> {
+        TeXNode::Whatsit(WhatsitNode(PRIMITIVES.printable::<ET::Char>(name,None).to_string(),Some(f)))
+    }
+}
+
+#[derive(Clone,Debug)]
 pub enum TeXNode<ET:EngineTypes> {
     Penalty(i32),
     Skip(SkipNode<ET>),
@@ -38,12 +79,49 @@ pub enum TeXNode<ET:EngineTypes> {
     Mark(usize,TokenList<ET::Token>),
     Insert,
     Simple(SimpleNode<ET>),
+    Whatsit(WhatsitNode<ET>),
     Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
+}
+impl<ET:EngineTypes> TeXNode<ET> {
+    pub fn discardable(&self) -> bool {
+        match self {
+            TeXNode::Penalty(_) => true,
+            TeXNode::Skip(_) => true,
+            TeXNode::Kern(_) => true,
+            _ => false
+        }
+    }
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { self }
+    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TeXNode::Penalty(p) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "<penalty:{}>",p)
+            },
+            TeXNode::Skip(s) => s.readable_fmt(indent, f),
+            TeXNode::Kern(k) => k.readable_fmt(indent, f),
+            TeXNode::Box(b) => b.readable_fmt(indent, f),
+            TeXNode::Mark(i,_) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "<mark:{}>",i)
+            },
+            TeXNode::Insert => {
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("<insert>")
+            },
+            TeXNode::Simple(s) => s.readable_fmt(indent, f),
+            TeXNode::Char { char, font, .. } =>
+                Ok(char.display(f)),
+            TeXNode::Whatsit(w) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "{:?}",w)
+            }
+        }
+    }
     fn height(&self) -> ET::Dim {
         match self {
             TeXNode::Penalty(_) => ET::Dim::default(),
@@ -53,7 +131,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { height, .. } => *height,
             TeXNode::Kern(k) => k.height(),
             TeXNode::Mark(_,_) => ET::Dim::default(),
-            TeXNode::Insert => todo!()
+            TeXNode::Insert => todo!(),
+            TeXNode::Whatsit(_) => ET::Dim::default()
         }
     }
     fn width(&self) -> ET::Dim {
@@ -65,7 +144,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { width, .. } => *width,
             TeXNode::Kern(k) => k.width(),
             TeXNode::Mark(_,_) => ET::Dim::default(),
-            TeXNode::Insert => todo!()
+            TeXNode::Insert => todo!(),
+            TeXNode::Whatsit(_) => ET::Dim::default()
         }
     }
     fn depth(&self) -> ET::Dim {
@@ -76,7 +156,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { depth, .. } => *depth,
             TeXNode::Kern(k) => k.depth(),
             TeXNode::Mark(_,_) => ET::Dim::default(),
-            TeXNode::Insert => todo!()
+            TeXNode::Insert => todo!(),
+            TeXNode::Whatsit(_) => ET::Dim::default()
         }
     }
     fn nodetype(&self) -> NodeType {
@@ -88,7 +169,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { .. } => NodeType::Char,
             TeXNode::Kern(_) => NodeType::Kern,
             TeXNode::Insert => NodeType::Insertion,
-            TeXNode::Mark(_,_) => NodeType::Mark
+            TeXNode::Mark(_,_) => NodeType::Mark,
+            TeXNode::Whatsit(_) => NodeType::WhatsIt
         }
     }
 }
@@ -110,6 +192,37 @@ pub enum SimpleNode<ET:EngineTypes> {
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::readable_do_indent(indent,f)?;
+        match self {
+            SimpleNode::VRule { width, height, depth, .. } => {
+                write!(f, "<vrule")?;
+                if let Some(w) = width {
+                    write!(f, " width={}",w)?;
+                }
+                if let Some(h) = height {
+                    write!(f, " height={}",h)?;
+                }
+                if let Some(d) = depth {
+                    write!(f, " depth={}",d)?;
+                }
+                write!(f, ">")
+            },
+            SimpleNode::HRule { width, height, depth, .. } => {
+                write!(f, "<hrule")?;
+                if let Some(w) = width {
+                    write!(f, " width={}",w)?;
+                }
+                if let Some(h) = height {
+                    write!(f, " height={}",h)?;
+                }
+                if let Some(d) = depth {
+                    write!(f, " depth={}",d)?;
+                }
+                write!(f, ">")
+            }
+        }
+    }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(self) }
     fn height(&self) -> ET::Dim {
@@ -149,6 +262,14 @@ impl <ET:EngineTypes> KernNode<ET> {
     } }
 }
 impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::readable_do_indent(indent,f)?;
+        match self {
+            KernNode::VKern(d) => write!(f, "<vkern:{}>",d),
+            KernNode::HKern(d) => write!(f, "<hkern:{}>",d),
+            KernNode::MKern(d) => write!(f, "<mkern:{}>",d),
+        }
+    }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Kern(self) }
     fn height(&self) -> ET::Dim { match self {
@@ -176,6 +297,22 @@ impl <ET:EngineTypes> SkipNode<ET> {
     } }
 }
 impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::readable_do_indent(indent,f)?;
+        match self {
+            SkipNode::VSkip(s) => write!(f, "<vskip:{}>",s),
+            SkipNode::Space => write!(f, "<space>"),
+            SkipNode::VFil => write!(f, "<vfil>"),
+            SkipNode::VFill => write!(f, "<vfill>"),
+            SkipNode::VFilneg => write!(f, "<vfilneg>"),
+            SkipNode::Vss => write!(f, "<vss>"),
+            SkipNode::HSkip(s) => write!(f, "<hskip:{}>",s),
+            SkipNode::HFil => write!(f, "<hfil>"),
+            SkipNode::HFill => write!(f, "<hfill>"),
+            SkipNode::HFilneg => write!(f, "<hfilneg>"),
+            SkipNode::Hss => write!(f, "<hss>"),
+        }
+    }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Skip(self) }
     fn height(&self) -> ET::Dim { match self {
@@ -219,6 +356,15 @@ pub struct TeXBox<ET:EngineTypes> {
 }
 
 impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Self::readable_do_indent(indent, f)?;
+        write!(f,"<{}>",self.info.kind)?;
+        for c in &self.children {
+            c.readable_fmt(indent+2, f)?;
+        }
+        Self::readable_do_indent(indent, f)?;
+        write!(f,"</{}>",self.info.kind)
+    }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(self) }
     fn height(&self) -> ET::Dim {

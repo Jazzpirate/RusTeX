@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 pub trait Outputs {
+    fn new() -> Self;
     #[inline(always)]
     fn message<D:Display>(&self,text:D) {
         log::info!(target:"message","{}",text);
@@ -41,4 +42,6 @@ pub trait Outputs {
 }
 
 pub struct LogOutputs;
-impl Outputs for LogOutputs {}
+impl Outputs for LogOutputs {
+    fn new() -> Self { Self }
+}

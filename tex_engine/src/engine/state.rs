@@ -26,6 +26,7 @@ type Fnt<S> = <<<S as State>::ET as EngineTypes>::FontSystem as FontSystem>::Fon
 /// A TeX state; holds all the different parameters, equivalents, registers etc.
 pub trait State:Sized+Clone {
     type ET:EngineTypes<State=Self>;
+    fn new(nullfont:Fnt<Self>,aux:&mut EngineAux<Self::ET>) -> Self;
 
     fn aftergroup(&mut self,token:T<Self>);
 

@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::nodes::{BoxInfo, NodeList, TeXBox, TeXNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, TeXNode};
 use crate::tex::numerics::NumSet;
 use crate::utils::Ptr;
 
@@ -20,7 +20,7 @@ type Font<E> = <<<E as TeXEngine>::Types as EngineTypes>::FontSystem as FontSyst
 
 #[macro_export]
 macro_rules! cmtodo {
-    ($engine:ident,$name:ident) => {
+    ($engine:ident,$name:ident) => {{
         let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
         let command = crate::commands::Command::SimpleExpandable(crate::commands::SimpleExpandable{
             name:id,
@@ -29,10 +29,8 @@ macro_rules! cmtodo {
                 crate::engine::mouth::Mouth::display_position(e.mouth)
             )
         });
-        let refs = $engine.get_engine_refs();
-        let name =crate::tex::control_sequences::ControlSequenceNameHandler::new(crate::engine::utils::memory::MemoryManager::cs_interner_mut(&mut refs.aux.memory),stringify!($name));
-        crate::engine::state::State::set_command(refs.state,refs.aux,name,Some(command),true);
-    };
+        $engine.register_primitive(command,stringify!($name));
+    }};
 }
 
 #[macro_export]
@@ -51,7 +49,7 @@ macro_rules! cmstodos {
 
 #[macro_export]
 macro_rules! cmstodo {
-    ($engine:ident,$name:ident) => {
+    ($engine:ident,$name:ident) => {{
         let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
         let command = crate::commands::Command::Unexpandable(crate::commands::Unexpandable{
             name:id,
@@ -60,10 +58,8 @@ macro_rules! cmstodo {
                 crate::engine::mouth::Mouth::display_position(e.mouth)
             )
         });
-        let refs = $engine.get_engine_refs();
-        let name =crate::tex::control_sequences::ControlSequenceNameHandler::new(crate::engine::utils::memory::MemoryManager::cs_interner_mut(&mut refs.aux.memory),stringify!($name));
-        refs.state.set_command(refs.aux,name,Some(command),true);
-    };
+        $engine.register_primitive(command,stringify!($name));
+    }};
 }
 
 pub fn register_node<E:TeXEngine>(engine:&mut E,name:&'static str, scope:NodeCommandScope,
@@ -226,7 +222,7 @@ pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields a
 /// box and registers it with the engine.
 pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,Tk<E>) -> Result<Option<TeXBox<E::Types>>,(BoxInfo<E::Types>,Option<(u16,bool)>)>
+                                  read:fn(&mut EngineReferences<E::Types>,Tk<E>) -> Result<Option<TeXBox<E::Types>>,BoxInfo<E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
@@ -295,7 +291,7 @@ pub fn register_whatsit<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
     get:fn(&mut EngineReferences<E::Types>, Tk<E>)
-             -> Ptr<dyn FnOnce(&mut EngineReferences<E::Types>)>,
+             -> Ptr<dyn FnOnce(&mut EngineReferences<E::Types>) -> Option<TeXNode<E::Types>>>,
     immediate:fn(&mut EngineReferences<E::Types>,Tk<E>)) {
     let id = PRIMITIVES.get(name);
     let command = Command::Whatsit(Whatsit{
