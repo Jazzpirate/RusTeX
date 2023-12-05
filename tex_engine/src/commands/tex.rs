@@ -23,7 +23,7 @@ use crate::utils::errors::ErrorHandler;
 use crate::utils::{HMap, Ptr};
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, NodeList, NodeListType, NodeTrait, SimpleNode, SkipNode, TeXBox, TeXNode, ToOrSpread};
+use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, NodeList, NodeListType, PreShipoutNodeTrait, SimpleNode, SkipNode, TeXBox, PreShipoutNode, ToOrSpread, ShipoutNode};use crate::tex::nodes::NodeTrait;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -471,25 +471,33 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,oute
         }
         ResolvedToken::Cmd {cmd:Some(Command::IntRegister(u)),..} if allow_others =>
             return ET::Stomach::assign_int_register(engine,*u,true),
-        ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_dim_register(engine,*u,true),
-        ResolvedToken::Cmd {cmd:Some(Command::SkipRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_skip_register(engine,*u,true),
-        ResolvedToken::Cmd {cmd:Some(Command::MuSkipRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_muskip_register(engine,*u,true),
         ResolvedToken::Cmd {cmd:Some(Command::PrimitiveInt(name)),..} if allow_others =>
             return ET::Stomach::assign_primitive_int(engine,*name,true),
-        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveDim(name)),..} if allow_others =>
-            return ET::Stomach::assign_primitive_dim(engine,*name,true),
-        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveSkip(name)),..} if allow_others =>
-            return ET::Stomach::assign_primitive_skip(engine,*name,true),
-        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveMuSkip(name)),..} if allow_others =>
-            return ET::Stomach::assign_primitive_muskip(engine,*name,true),
-        ResolvedToken::Cmd {cmd:Some(Command::FontCmd(FontCommand{name,assign:Some(f),..})),token} if allow_others =>
-            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd {cmd:Some(Command::Int(IntCommand{name,assign:Some(f),..})),token} if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
+        ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} if allow_others =>
+            return ET::Stomach::assign_dim_register(engine,*u,true),
+        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveDim(name)),..} if allow_others =>
+            return ET::Stomach::assign_primitive_dim(engine,*name,true),
         ResolvedToken::Cmd {cmd:Some(Command::Dim(DimCommand{name,assign:Some(f),..})),token} if allow_others =>
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
+        ResolvedToken::Cmd {cmd:Some(Command::SkipRegister(u)),..} if allow_others =>
+            return ET::Stomach::assign_skip_register(engine,*u,true),
+        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveSkip(name)),..} if allow_others =>
+            return ET::Stomach::assign_primitive_skip(engine,*name,true),
+        ResolvedToken::Cmd {cmd:Some(Command::Skip(SkipCommand{name,assign:Some(f),..})),token} if allow_others =>
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
+        ResolvedToken::Cmd {cmd:Some(Command::MuSkipRegister(u)),..} if allow_others =>
+            return ET::Stomach::assign_muskip_register(engine,*u,true),
+        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveMuSkip(name)),..} if allow_others =>
+            return ET::Stomach::assign_primitive_muskip(engine,*name,true),
+        ResolvedToken::Cmd {cmd:Some(Command::MuSkip(MuSkipCommand{name,assign:Some(f),..})),token} if allow_others =>
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
+        ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} if allow_others =>
+            return ET::Stomach::assign_toks_register(engine,*u,true),
+        ResolvedToken::Cmd {cmd:Some(Command::PrimitiveToks(name)),..} if allow_others =>
+            return ET::Stomach::assign_primitive_toks(engine,*name,true),
+        ResolvedToken::Cmd {cmd:Some(Command::FontCmd(FontCommand{name,assign:Some(f),..})),token} if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         o => todo!("\\global {:?}",o)
     )
@@ -821,11 +829,11 @@ fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,ever
     todo!("file end")
 }
 
-pub fn box_<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn box_<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
     let idx = read_register(engine);
     Ok(engine.state.take_box_register(idx))
 }
-pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
     let idx = read_register(engine);
     Ok(engine.state.get_box_register(idx).cloned())
 }
@@ -859,7 +867,7 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     unbox(engine,tk,NodeCommandScope::SwitchesToVertical,BoxType::Vertical,true)
 }
 
-pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
     let scaled = do_box_start(engine,BoxType::Horizontal,PRIMITIVES.everyhbox);
     Err(BoxInfo {
         tp: BoxType::Horizontal,
@@ -872,7 +880,7 @@ pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
     })
 }
 
-pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
     let scaled = do_box_start(engine,BoxType::Vertical,PRIMITIVES.everyvbox);
     Err(BoxInfo {
         tp: BoxType::Vertical,
@@ -1098,6 +1106,7 @@ impl<ET:EngineTypes> IfxCmd<ET> {
                 Some(Command::Conditional(i)) => Self::Primitive(i.name),
                 Some(Command::Box(i)) => Self::Primitive(i.name),
                 Some(Command::Node(n)) => Self::Primitive(n.name),
+                Some(Command::Whatsit(n)) => Self::Primitive(n.name),
                 Some(Command::Font(f)) => Self::Font(f.clone()),
                 Some(Command::MathChar(u)) => Self::MathChar(*u),
                 Some(Command::IntRegister(u)) => Self::IntRegister(*u),
@@ -1197,6 +1206,13 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     let name = match conds.pop() {
         Some(ActiveConditional::True(id)|ActiveConditional::Else(id)) => id,
         Some(ActiveConditional::Case(_)) => PRIMITIVES.ifcase,
+        Some(u@ActiveConditional::Unfinished(_)) => {
+            conds.push(u);
+            engine.mouth.requeue(tk);
+            let relax = engine.aux.memory.cs_interner_mut().new("relax");
+            engine.mouth.requeue(ET::Token::from_cs(relax));
+            return
+        }
         o => todo!("{:?}",o)
     };
     let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > Int::<ET>::default();
@@ -1427,9 +1443,9 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-               -> Ptr<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>> {
+               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
     let (idx,file) = read_index_and_file(engine);
-    Ptr::new(move |engine| {engine.filesystem.open_out(idx,file);None})
+    Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file);None}))
 }
 pub fn openout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let (idx,file) = read_index_and_file(engine);
@@ -1644,9 +1660,9 @@ pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) 
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                               -> Ptr<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>> {
+                               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
     let idx = read_file_index(engine);
-    Ptr::new(move |engine| {engine.filesystem.close_out(idx);None})
+    Some(Box::new(move |engine| {engine.filesystem.close_out(idx);None}))
 }
 pub fn closeout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let idx = read_file_index(engine);
@@ -1659,7 +1675,7 @@ pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
 }
 
 pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                             -> Ptr<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>> {
+                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
     let idx = engine.read_int(false).into();
     let mut tks = engine.aux.memory.get_token_vec();
     match engine.get_next() {
@@ -1670,7 +1686,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
     engine.read_until_endgroup(|_,t| {
         tks.push(t);
     });
-    Ptr::new(move |engine| {do_write(engine,idx,tks);None})
+    Some(Box::new(move |engine| {do_write(engine,idx,tks);None}))
 }
 pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let idx = engine.read_int(false).into();
@@ -1858,23 +1874,23 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
     )
 }
 
-pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    TeXNode::Penalty(match engine.read_int(false).try_into() {
+pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+    PreShipoutNode::Penalty(match engine.read_int(false).try_into() {
         Ok(i) => i,
         _ => todo!("error: penalty out of range")
     })
 }
 
-pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     let dim = engine.read_dim(false);
     match engine.state.get_mode() {
         TeXMode::Vertical | TeXMode::InternalVertical =>
-            TeXNode::Kern(KernNode::VKern(dim)),
-        _ => TeXNode::Kern(KernNode::HKern(dim))
+            PreShipoutNode::Kern(KernNode::VKern(dim)),
+        _ => PreShipoutNode::Kern(KernNode::HKern(dim))
     }
 }
 
-pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     let start = engine.mouth.start_ref();
     let mut width = None;
     let mut height = None;
@@ -1897,7 +1913,7 @@ pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> T
     SimpleNode::VRule {width,height,depth,start,end}.as_node()
 }
 
-pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     let start = engine.mouth.start_ref();
     let mut width = None;
     let mut height = None;
@@ -1920,122 +1936,161 @@ pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> T
     SimpleNode::HRule {width,height,depth,start,end}.as_node()
 }
 
-pub fn vskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     let sk = engine.read_skip(false);
     SkipNode::VSkip(sk).as_node()
 }
 
-pub fn vfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::VFil.as_node()
 }
-pub fn vfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::VFill.as_node()
 }
-pub fn vfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::VFilneg.as_node()
 }
-pub fn vss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::Vss.as_node()
 }
 
-pub fn hskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     let sk = engine.read_skip(false);
     SkipNode::HSkip(sk).as_node()
 }
-pub fn hfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::HFil.as_node()
 }
-pub fn hfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::HFill.as_node()
 }
-pub fn hfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::HFilneg.as_node()
 }
-pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
     SkipNode::Hss.as_node()
 }
 
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
+
+    let mut readd = arrayvec::ArrayVec::<PreShipoutNode<ET>,10>::new();
     loop {
-        match ls.last() {
-            Some(TeXNode::Skip(_)) => {ls.pop();},
+        match ls.last_mut() {
+            Some(PreShipoutNode::Skip(_)) => { ls.pop(); }
+            Some(n) if n.opaque() => {
+                readd.push(ls.pop().unwrap());
+            }
             _ => break
         }
     }
+    for n in readd.into_iter().rev() {
+        ls.push(n);
+    }
+
 }
 pub fn unkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
+
+    let mut readd = arrayvec::ArrayVec::<PreShipoutNode<ET>,10>::new();
     loop {
-        match ls.last() {
-            Some(TeXNode::Kern(_)) => {ls.pop();},
+        match ls.last_mut() {
+            Some(PreShipoutNode::Kern(_)) => { ls.pop(); }
+            Some(n) if n.opaque() => {
+                readd.push(ls.pop().unwrap());
+            }
             _ => break
         }
+    }
+    for n in readd.into_iter().rev() {
+        ls.push(n);
     }
 }
 pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
+
+    let mut readd = arrayvec::ArrayVec::<PreShipoutNode<ET>,10>::new();
     loop {
-        match ls.last() {
-            Some(TeXNode::Penalty(_)) => {ls.pop();},
+        match ls.last_mut() {
+            Some(PreShipoutNode::Penalty(_)) => { ls.pop(); }
+            Some(n) if n.opaque() => {
+                readd.push(ls.pop().unwrap());
+            }
             _ => break
         }
     }
+    for n in readd.into_iter().rev() {
+        ls.push(n);
+    }
 }
 
-pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
     if engine.state.get_mode() == TeXMode::Vertical {
         todo!("throw error")
     }
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
-    match ls.last() {
-        Some(TeXNode::Box(_)) => {
-            if let Some(TeXNode::Box(bi)) = ls.pop() {
-                Ok(Some(bi))
-            } else {
-                unreachable!()
-            }
+    for (i,n) in ls.iter().enumerate().rev() {
+        if n.opaque() {continue }
+        match n {
+            PreShipoutNode::Box(_) => {
+                if let PreShipoutNode::Box(bi) = ls.remove(i) {
+                    return Ok(Some(bi))
+                } else {
+                    unreachable!()
+                }
+            },
+            _ => return Ok(None)
         }
-        _ => Ok(None)
-
     }
+    Ok(None)
 }
 
 pub fn lastkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
-    match ls.last() {
-        Some(TeXNode::Kern(k)) => k.dim(),
-        _ => ET::Dim::default()
 
+    for n in ls.iter().rev() {
+        if n.opaque() {continue }
+        match n {
+            PreShipoutNode::Kern(k) => return k.dim(),
+            _ => return ET::Dim::default()
+        }
     }
+    ET::Dim::default()
 }
 
 pub fn lastskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Skip {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
-    match ls.last() {
-        Some(TeXNode::Skip(k)) => k.skip(),
-        _ => ET::Skip::default()
-
+    for n in ls.iter().rev() {
+        if n.opaque() {continue }
+        match n {
+            PreShipoutNode::Skip(k) => return k.skip(),
+            _ => return ET::Skip::default()
+        }
     }
+    ET::Skip::default()
 }
 
 pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
-    match ls.last() {
-        Some(TeXNode::Penalty(k)) => (*k).into(),
-        _ => ET::Int::default()
 
+    for n in ls.iter().rev() {
+        if n.opaque() {continue }
+        match n {
+            PreShipoutNode::Penalty(k) => return (*k).into(),
+            _ => return ET::Int::default()
+        }
     }
+    ET::Int::default()
 }
 
-pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
     let idx = read_register(engine);
     let (kind,ls,wd,start,end) = match engine.state.get_box_register_mut(idx) {
         Some(TeXBox{info:BoxInfo{tp:BoxType::Vertical,kind,assigned_width,assigned_depth,assigned_height,..},children,start,end}) => {
@@ -2104,12 +2159,12 @@ pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
         match tp {
             NodeListType::Box(BoxInfo {tp:BoxType::Horizontal|BoxType::InlineMath|BoxType::DisplayMath,..},_,_) => (),
             _ => {
-                children.push(TeXNode::Mark(idx,v.into()));
+                children.push(PreShipoutNode::Mark(idx, v.into()));
                 return
             }
         }
     }
-    data.page.push(TeXNode::Mark(idx,v.into()));
+    data.page.push(PreShipoutNode::Mark(idx, v.into()));
 }
 
 pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
@@ -2142,7 +2197,11 @@ pub fn splitbotmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Ve
 
 pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     match engine.read_box(false) {
-        Ok(Some(bx)) => engine.colon.out(bx.as_node()),
+        Ok(Some(bx)) => {
+            if let Some(n) = bx.as_node().shipout_top(engine) {
+                engine.colon.out(n)
+            }
+        },
         Ok(None) => (),
         Err(bi) => {
             let mut data = engine.stomach.data_mut();

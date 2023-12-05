@@ -590,7 +590,28 @@ pub fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
 }
 
 pub fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
-    todo!("read_oct_int")
+    let mut ret = 0i32;
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
+            (Ok(b),CommandCode::Other) if is_ascii_oct_digit(b) => {
+                ret = 8*ret + ((b - b'0') as i32);
+            }
+            (_,CommandCode::Space) => return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)},
+            _  => {
+                engine.requeue(token);
+                return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
+            }
+        }
+        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+            return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
+        }
+        ResolvedToken::Cmd {token,..} => {
+            engine.mouth.requeue(token);
+            return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
+        }
+        o => todo!("{:?}; current: {:?}",o,ret)
+    );
+    file_end!()
 }
 
 pub fn read_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Dim {
@@ -613,36 +634,50 @@ pub fn read_dim_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 
 pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> <ET::Num as NumSet>::Dim {
     match cmd {
-        Command::DimRegister(u) => {
-            if is_negative {return -engine.state.get_dim_register(u)}
-            else {return engine.state.get_dim_register(u)}
-        },
         Command::IntRegister(u) => {
             let i = engine.state.get_int_register(u);
             let i = if is_negative {-i} else {i};
             let i = i.into() as f64;
             read_unit_or_dim(engine,i)
         }
-        Command::CharDef(c) => {
-            let val = if is_negative {-(c.into() as f64)} else {c.into() as f64};
-            read_unit_or_dim(engine,val)
+        Command::PrimitiveInt(u) => {
+            let i = engine.state.get_primitive_int(u);
+            let i = if is_negative {-i} else {i};
+            let i = i.into() as f64;
+            read_unit_or_dim(engine,i)
         }
         Command::Int(ic) => {
             let i = if is_negative {-(ic.read)(engine,token)} else {(ic.read)(engine,token)};
             let f = i.into() as f64;
             read_unit_or_dim(engine,f)
         }
+        Command::DimRegister(u) => {
+            if is_negative {return -engine.state.get_dim_register(u)}
+            else {return engine.state.get_dim_register(u)}
+        },
+        Command::PrimitiveDim(dc) => {
+            let val = engine.state.get_primitive_dim(dc);
+            if is_negative {return -val} else {return val}
+        }
         Command::Dim(dc) => {
             let val = (dc.read)(engine,token);
             if is_negative {return -val} else {return val}
         }
-        Command::PrimitiveDim(dc) => {
-            let val = engine.state.get_primitive_dim(dc);
+        Command::SkipRegister(u) => {
+            let val = engine.state.get_skip_register(u).base();
             if is_negative {return -val} else {return val}
         }
         Command::PrimitiveSkip(dc) => {
             let val = engine.state.get_primitive_skip(dc).base();
             if is_negative {return -val} else {return val}
+        }
+        Command::Skip(sc) => {
+            let val = (sc.read)(engine,token).base();
+            if is_negative {return -val} else {return val}
+        }
+        Command::CharDef(c) => {
+            let val = if is_negative {-(c.into() as f64)} else {c.into() as f64};
+            read_unit_or_dim(engine,val)
         }
         o => todo!("command in read_dim: {:?}",o)
     }
@@ -1210,8 +1245,8 @@ fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float
 
 
 pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],first:Option<(u8,ET::Token)>) -> bool {
-    let mut ret = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_bytes();
-    let mut read = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_token_vec();
+    let mut ret = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_bytes();
+    let mut read = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_token_vec();
     if let Some((b,t)) = first {
         ret.push(b.to_ascii_lowercase());
         read.push(t);
@@ -1255,8 +1290,8 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
 
 
 pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&'a[u8]],first:Option<(u8,ET::Token)>) -> Option<&'a[u8]> {
-    let mut ret = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_bytes();
-    let mut read = arrayvec::ArrayVec::<_,10>::new();//engine.aux.memory.get_token_vec();
+    let mut ret = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_bytes();
+    let mut read = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_token_vec();
     if let Some((b,t)) = first {
         ret.push(b.to_ascii_lowercase());
         read.push(t);

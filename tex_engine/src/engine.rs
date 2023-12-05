@@ -17,7 +17,7 @@ use crate::engine::fontsystem::{FontSystem, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
 use crate::tex::control_sequences::ControlSequenceName;
-use crate::tex::nodes::TeXNode;
+use crate::tex::nodes::{PreShipoutNode, ShipoutNode};
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
 use crate::tex::token::{CompactToken, Token};
 use crate::utils::errors::{catch, ErrorHandler, TeXError};
@@ -65,15 +65,15 @@ pub struct EngineAux<ET:EngineTypes> {
 }
 
 pub struct Colon<'c,ET:EngineTypes> {
-    out:Box<dyn FnMut(TeXNode<ET>) + 'c>
+    out:Box<dyn FnMut(ShipoutNode<ET>) + 'c>
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
     #[inline(always)]
-    pub fn new<F:FnMut(TeXNode<ET>)+'c>(f:F) -> Self {
+    pub fn new<F:FnMut(ShipoutNode<ET>)+'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
     #[inline(always)]
-    pub fn out(&mut self, n:TeXNode<ET>) {
+    pub fn out(&mut self, n: ShipoutNode<ET>) {
         (self.out)(n)
     }
 }
@@ -139,7 +139,7 @@ pub trait TeXEngine:Sized {
         comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
-    fn do_file_default<F:FnMut(TeXNode<Self::Types>)>(&mut self,s:&str,f:F) -> Result<(),TeXError> {catch( ||{
+    fn do_file_default<F:FnMut(ShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {catch( ||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
@@ -234,7 +234,7 @@ pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 
 pub trait PDFTeXEngine: TeXEngine
     where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension {
-    fn do_file_pdf<F:FnMut(TeXNode<Self::Types>)>(&mut self,s:&str,f:F) -> Result<(),TeXError> {
+    fn do_file_pdf<F:FnMut(ShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
     }

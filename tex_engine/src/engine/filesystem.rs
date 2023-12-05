@@ -127,12 +127,12 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             self.read_files.push(None);
         }
         match self.read_files.get_mut(idx as usize) {
-            Some(n@None) =>
+            Some(n) =>
                 *n = match file.line_source() {
                     Some(src) => Some(StringTokenizer::new( src)),
                     _ => None
                 },
-            _ => todo!("throw File already open error")
+            _ => unreachable!()
         }
     }
     fn read<T:Token<Char=C>,E:ErrorHandler,F:FnMut(T)>(&mut self,
@@ -239,11 +239,12 @@ impl<C:Character> WritableVirtualFile<C> {
 
 type VirtualFileContents<C> = Ptr<[TextLine<C>]>;
 
+#[derive(Debug)]
 enum VirtualOrPhysicalFile<C:Character> {
     Virtual(VirtualFileContents<C>,usize),
     Physical(std::io::Split<std::io::BufReader<std::fs::File>>)
 }
-
+#[derive(Debug)]
 pub struct VirtualFileLineSource<C:Character> {
     path:PathBuf,
     source:VirtualOrPhysicalFile<C>

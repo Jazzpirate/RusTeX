@@ -74,13 +74,13 @@ mod tests {
     use crate::engine::utils::memory::PRIMITIVES;
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::{Character, StringLineSource};
-    use crate::tex::nodes::NodeTrait;
+    use crate::tex::nodes::PreShipoutNodeTrait;
     use crate::tex::token::Token;
     use crate::utils::Ptr;
     use crate::engine::PDFTeXEngine;
     use crate::engine::state::tex_state::TeXState;
     use crate::engine::stomach::StomachWithShipout;
-
+    use crate::tex::nodes::NodeTrait;
 
     #[test]
     fn kpsewhich() { measure!(kpsewhich: {
@@ -177,11 +177,11 @@ mod tests {
         engine.initialize_pdflatex().unwrap();
         {
             let refs = engine.get_engine_refs();
-            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
-            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingifs,1,true);
-            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingcommands,1,true);
-            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracinggroups,1,true);
-            refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingrestores,1,true);
+            //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
+            //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingifs,1,true);
+            //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingcommands,1,true);
+            //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracinggroups,1,true);
+            //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingrestores,1,true);
         }
         engine.do_file_pdf("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",|b| {
             info!("{}",b.readable());

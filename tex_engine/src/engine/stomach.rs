@@ -7,16 +7,17 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, PreShipoutNode, ToOrSpread, WhatsitNode, ShipoutNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
 use crate::tex::numerics::TeXDimen;
-use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::tex::token::Token;
 use crate::commands::Command;
 use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
+use crate::tex::nodes::NodeTrait;
 
 type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
 type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
@@ -165,11 +166,11 @@ pub trait Stomach {
         if sf > 1000 && data.spacefactor < 1000 {
             data.spacefactor = 1000;
         } else { data.spacefactor = sf as i32; }
-        data.open_lists.last_mut().unwrap().children.push(TeXNode::Char {
+        data.open_lists.last_mut().unwrap().children.push(PreShipoutNode::Char {
             char,font,width,height,depth
         });
     }
-    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
+    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET,PreShipoutNode<Self::ET>>>,BoxInfo<Self::ET>>) {
         match bx(engine,token) {
             Ok(Some(bx)) => Self::add_node(engine,bx.as_node()),
             Ok(None) => (),
@@ -181,12 +182,12 @@ pub trait Stomach {
             }
         }
     }
-    fn add_node(engine:&mut EngineReferences<Self::ET>,node:TeXNode<Self::ET>) {
+    fn add_node(engine:&mut EngineReferences<Self::ET>,node: PreShipoutNode<Self::ET>) {
         let data = engine.stomach.data_mut();
         match data.open_lists.last_mut() {
             Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
                 match node {
-                    TeXNode::Simple(SimpleNode::VRule {..}) =>
+                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
                         data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
                     _ => ()
                 }
@@ -199,7 +200,7 @@ pub trait Stomach {
             None => {
                 if !data.page_contains_boxes /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
                     match node {
-                        TeXNode::Box(_) | TeXNode::Insert => {
+                        PreShipoutNode::Box(_) | PreShipoutNode::Insert => {
                             data.page_contains_boxes = true;
                             data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
                         }
@@ -209,11 +210,11 @@ pub trait Stomach {
                 }
                 data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
                 match node {
-                    TeXNode::Simple(SimpleNode::VRule {..}) =>
+                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
                         data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
-                    TeXNode::Penalty(i) if i <= -10000 => {
+                    PreShipoutNode::Penalty(i) if i <= -10000 => {
                         if data.page_contains_boxes {
-                            return Self::do_shipout(engine, Some(i))
+                            return Self::do_shipout_output(engine, Some(i))
                         } else { return }
                     }
                     _ => data.prevdepth = node.depth()
@@ -233,7 +234,7 @@ pub trait Stomach {
             _ => todo!("switch modes maybe")
         }
     }
-    fn do_node(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> TeXNode<Self::ET>,scope:NodeCommandScope) {
+    fn do_node(engine:&mut EngineReferences<Self::ET>, name:PrimitiveIdentifier, token:Tk<Self>, read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> PreShipoutNode<Self::ET>, scope:NodeCommandScope) {
         engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
         if Self::maybe_switch_mode(engine,scope,token.clone()) {
             let node = read(engine, token);
@@ -337,20 +338,21 @@ pub trait Stomach {
         )
     }
     fn do_whatsit(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
-                                                                                -> Ptr<dyn FnOnce(&mut EngineReferences<Self::ET>) -> Option<TeXNode<Self::ET>>>) {
-        let ret = read(engine,token);
-        let wi = WhatsitNode::new(ret,name);
-        Self::add_node(engine,wi.as_node());
+                                                                                -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>) -> Option<ShipoutNode<Self::ET>>>>) {
+        if let Some(ret) = read(engine,token) {
+            let wi = WhatsitNode::new(ret, name);
+            Self::add_node(engine, wi.as_node());
+        }
     }
 
     fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
         let data = engine.stomach.data_mut();
         if data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
-            Self::do_shipout(engine,None)
+            Self::do_shipout_output(engine, None)
         }
     }
 
-    fn do_shipout(engine:&mut EngineReferences<Self::ET>,forced:Option<i32>) {
+    fn do_shipout_output(engine:&mut EngineReferences<Self::ET>, forced:Option<i32>) {
         let data = engine.stomach.data_mut();
         let page = std::mem::take(&mut data.page);
         data.page_contains_boxes = false;
@@ -369,7 +371,7 @@ pub trait Stomach {
 
 
         for (i,b) in first.iter_mut().enumerate() { match b {
-            TeXNode::Insert => todo!(),
+            PreShipoutNode::Insert => todo!(),
             _ => ()
         }}
 
@@ -422,11 +424,11 @@ pub trait Stomach {
         todo!("file end")
     }
 
-    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
+    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, BoxInfo<ET>> {
+    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>, BoxInfo<ET>> {
         let mut read_eq = !skip_eq;
         crate::expand_loop!(self,
             ResolvedToken::Tk {char,code:CommandCode::Other,..} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
@@ -440,14 +442,14 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 }
 
 pub struct SplitResult<ET:EngineTypes> {
-    pub first:Vec<TeXNode<ET>>,
-    pub rest:Vec<TeXNode<ET>>,
+    pub first:Vec<PreShipoutNode<ET>>,
+    pub rest:Vec<PreShipoutNode<ET>>,
     pub split_penalty:Option<i32>
 }
 
 #[derive(Clone,Debug)]
 pub struct StomachData<ET:EngineTypes> {
-    pub page:Vec<TeXNode<ET>>,
+    pub page:Vec<PreShipoutNode<ET>>,
     pub open_lists:Vec<NodeList<ET>>,
     pub pagegoal:ET::Dim,
     pub pagetotal:ET::Dim,
@@ -467,7 +469,7 @@ pub struct StomachData<ET:EngineTypes> {
     pub page_contains_boxes:bool
 }
 impl <ET:EngineTypes> StomachData<ET> {
-    pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
+    pub fn get_list(&mut self) -> &mut Vec<PreShipoutNode<ET>> {
         match self.open_lists.last_mut() {
             Some(ls) => &mut ls.children,
             None => &mut self.page
@@ -519,12 +521,12 @@ impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
     }
 
     #[inline(always)]
-    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
+    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
         split_roughly(engine,nodes,target)
     }
 }
 
-pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
+pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<PreShipoutNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
     let data = engine.stomach.data_mut();
     data.topmarks.clear();
     std::mem::swap(&mut data.botmarks,&mut data.topmarks);
@@ -535,7 +537,7 @@ pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut node
     let iter = nodes.iter().enumerate();
     for (i,n) in iter {
         match n {
-            TeXNode::Mark(i,v) => {
+            PreShipoutNode::Mark(i, v) => {
                 if !data.firstmarks.contains_key(&i) {
                     data.firstmarks.insert(*i,v.clone());
                 }
@@ -552,7 +554,7 @@ pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut node
     };
     let mut rest = nodes.split_off(split);
     let split_penalty = match rest.first() {
-        Some(TeXNode::Penalty(p)) => {
+        Some(PreShipoutNode::Penalty(p)) => {
             let p = *p;
             rest.remove(0);
             Some(p)
@@ -562,7 +564,7 @@ pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut node
 
     for n in &rest {
         match n {
-            TeXNode::Mark(i,v) => {
+            PreShipoutNode::Mark(i, v) => {
                 if !data.splitfirstmarks.contains_key(&i) {
                     data.splitfirstmarks.insert(*i,v.clone());
                 }

@@ -9,6 +9,8 @@ use crate::tex::token::Token;
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
 use std::fmt::{Display, Write};
+use crate::tex::nodes::{PreShipoutNode, ShipoutNode};
+use crate::utils::Ptr;
 
 
 #[inline(always)]
@@ -25,6 +27,9 @@ pub trait PDFExtension: EngineExtension {
     fn elapsed(&mut self) -> &mut std::time::Instant;
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>>;
     fn current_colorstack(&mut self) -> &mut usize;
+    fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
+    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm>;
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage>;
 }
 
 pub struct MinimalPDFExtension {
@@ -32,6 +37,9 @@ pub struct MinimalPDFExtension {
     elapsed:std::time::Instant,//chrono::DateTime<chrono::Local>,
     colorstacks:Vec<Vec<PDFColor>>,
     current_colorstack:usize,
+    pdfobjs:Vec<PDFObj>,
+    pdfxforms:Vec<PDFXForm>,
+    pdfximages:Vec<PDFXImage>,
 }
 impl EngineExtension for MinimalPDFExtension {
     fn new() -> Self {
@@ -40,6 +48,9 @@ impl EngineExtension for MinimalPDFExtension {
             elapsed: std::time::Instant::now(),
             colorstacks:vec!(vec!(PDFColor::black())),
             current_colorstack:0,
+            pdfobjs:Vec::new(),
+            pdfxforms:Vec::new(),
+            pdfximages:Vec::new(),
         }
     }
 }
@@ -56,8 +67,22 @@ impl PDFExtension for MinimalPDFExtension {
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>> { &mut self.colorstacks }
     #[inline(always)]
     fn current_colorstack(&mut self) -> &mut usize { &mut self.current_colorstack }
+    #[inline(always)]
+    fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
+    #[inline(always)]
+    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm> { &mut self.pdfxforms }
+    #[inline(always)]
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage> { &mut self.pdfximages }
 }
 
+#[derive(Debug,Clone)]
+pub struct PDFObj(pub String);
+
+#[derive(Debug,Clone)]
+pub struct PDFXForm();
+
+#[derive(Debug,Clone)]
+pub struct PDFXImage();
 
 #[derive(Debug,Clone,Copy)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
@@ -256,7 +281,57 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
         }
     }
 }
+pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
+    where ET::Extension : PDFExtension {
+    match engine.read_keywords(&[b"reserveobjnum",b"useobjnum",b"stream"]) {
+        Some(b"reserveobjnum") => {
+            engine.aux.extension.pdfobjs().push(PDFObj(String::new()));
+            engine.aux.extension.pdfobjs().len() - 1
+        }
+        Some(b"useobjnum") => {
+            let num = engine.read_int(false).into();
+            if num < 0 {todo!("throw error")}
+            let num = num as usize;
+            if num >= engine.aux.extension.pdfobjs().len() {todo!("throw error")}
+            let mut str = String::new();
+            engine.read_braced_string(&mut str);
+            engine.aux.extension.pdfobjs()[num] = PDFObj(str);
+            num
+        }
+        Some(b"stream") => {
+            if engine.read_keyword(b"attr") {
+                // TODO
+            }
+            let mut str = String::new();
+            engine.read_braced_string(&mut str);
+            engine.aux.extension.pdfobjs().push(PDFObj(str));
+            engine.aux.extension.pdfobjs().len() - 1
+        }
+        _ => todo!("throw error"),
+    }
+}
+pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
+                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>
+    where ET::Extension : PDFExtension {
+    parse_pdfobj(engine);
+    None
+}
+pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension {
+    let num = parse_pdfobj(engine);
+    todo!()
+}
 
+pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension {
+    todo!()
+}
+
+#[inline(always)]
+pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int
+    where ET::Extension : PDFExtension {
+    <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfobjs().len() as i32) - 1)
+}
 
 #[inline(always)]
 pub fn pdfshellescape<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
@@ -322,6 +397,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
 
     register_int(engine,"pdftexversion",pdftexversion,None);
     register_int(engine,"pdfshellescape",pdfshellescape,None);
+    register_int(engine,"pdflastobj",pdflastobj,None);
 
     register_conditional(engine,"ifincsname",ifincsname);
     register_conditional(engine,"ifpdfabsdim",ifpdfabsdim);
@@ -329,6 +405,9 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
 
     register_unexpandable(engine,"pdfglyphtounicode",pdfglyphtounicode);
     register_unexpandable(engine,"pdfcolorstack",pdfcolorstack);
+    register_unexpandable(engine,"pdfrefobj",pdfrefobj);
+
+    register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate);
 
     register_primitive_int(engine,PRIMITIVE_INTS);
     register_primitive_dim(engine,PRIMITIVE_DIMS);
@@ -337,8 +416,8 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodos!(engine,
         lpcode,pdfcatalog,pdfcolorstackinit,
         pdfdest,pdfelapsedtime,pdfendlink,pdfescapestring,
-        pdffontexpand,pdffontsize,pdflastobj,pdflastxform,pdflastximage,
-        pdfliteral,pdfmajorversion,pdfmdfivesum,pdfobj,pdfoutline,pdfrefxform,
+        pdffontexpand,pdffontsize,pdflastxform,pdflastximage,
+        pdfliteral,pdfmajorversion,pdfmdfivesum,pdfoutline,pdfrefxform,
         pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
         pdfxform,pdfximage,rpcode
     );
@@ -426,7 +505,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfnobuiltintounicode);
     cmtodo!(engine,pdfnoligatures);
     cmtodo!(engine,pdfprimitive);
-    cmtodo!(engine,pdfrefobj);
     cmtodo!(engine,pdfrunninglinkoff);
     cmtodo!(engine,pdfrunninglinkon);
     cmtodo!(engine,pdfsavepos);

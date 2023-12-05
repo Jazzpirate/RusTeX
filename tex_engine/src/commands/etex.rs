@@ -17,9 +17,10 @@ use crate::engine::gullet::Gullet;
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::utils::outputs::Outputs;
-use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::commands::NodeList;
 use crate::engine::stomach::Stomach;
+use crate::tex::nodes::NodeTrait;
 
 pub fn eTeXversion<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     2.into()
@@ -280,10 +281,11 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
-    match ls.last() {
-        None => (-1).into(),
-        Some(n) => (n.nodetype().to_u8() as i32).into()
+    for n in ls.iter().rev() {
+        if n.opaque() { continue }
+        return (n.nodetype().to_u8() as i32).into()
     }
+    (-1).into()
 }
 
 pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {

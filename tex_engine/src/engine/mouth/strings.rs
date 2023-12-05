@@ -60,7 +60,7 @@ assert_eq!(next.command_code(), CommandCode::Space);
 assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).is_none()); // EOF
 ```
 */
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct StringTokenizer<C:Character,S:TextLineSource<C>> {
     state : MouthState,
     line : usize,
