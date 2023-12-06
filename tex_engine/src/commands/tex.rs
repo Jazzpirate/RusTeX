@@ -317,7 +317,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
     let (sig,end) = parse_signature(engine,&cm);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
-    engine.read_until_endgroup(|_,t| {
+    engine.read_until_endgroup(|_,_,t| {
         if inparam {
             inparam = false;
             if t.is_param() {
@@ -1301,7 +1301,7 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Toke
     engine.expand_until_bgroup(false);
     let mut exp = Vec::new();// ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
-    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,t| {
+    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
         match t.to_enum() {
             StandardToken::ControlSequence(_) => exp.push(t),
             StandardToken::Character(c,cc) => {
@@ -1321,7 +1321,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Toke
     engine.expand_until_bgroup(false);
     let mut exp = Vec::new();//ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
-    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,t| {
+    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
         match t.to_enum() {
             StandardToken::ControlSequence(_) => exp.push(t),
             StandardToken::Character(c,cc) => {
@@ -1379,14 +1379,14 @@ pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET
 
 pub fn message<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(&mut out);
+    engine.read_braced_string(false,&mut out);
     engine.aux.outputs.message(&out);
     engine.aux.memory.return_string(out);
 }
 
 pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(&mut out);
+    engine.read_braced_string(false,&mut out);
     write!(out," (line {})",engine.mouth.line_number());
     engine.aux.outputs.errmessage(&out);
     engine.aux.memory.return_string(out);
@@ -1419,6 +1419,7 @@ pub fn number<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 
 pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let res = match engine.get_next() {
+        Some(t) if t == ET::Token::eof() => return,
         Some(t) => ET::Gullet::resolve(engine.state,t),
         _ => todo!("throw error")
     };
@@ -1683,7 +1684,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
         Some(_) => todo!("should be begingroup"),
         None => todo!("file end")
     }
-    engine.read_until_endgroup(|_,t| {
+    engine.read_until_endgroup(|_,_,t| {
         tks.push(t);
     });
     Some(Box::new(move |engine| {do_write(engine,idx,tks);None}))
@@ -1864,7 +1865,7 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
                 let mut tks = shared_vector::Vector::new();
                 let cc = engine.state.get_catcode_scheme();
                 let endline = engine.state.get_endline_char();
-                engine.read_until_endgroup(|_,t| tks.push(t));
+                engine.read_until_endgroup(|_,_,t| tks.push(t));
                 engine.state.set_toks_register(engine.aux,idx,TokenList::from(tks),global);
                 return ()
             }
@@ -2330,7 +2331,7 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
         Some(t) if t.is_begin_group() => (),
         _ => todo!("throw error")
     }
-    engine.read_until_endgroup(|_,_| {});
+    engine.read_until_endgroup(|_,_,_| {});
 }
 
 pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {

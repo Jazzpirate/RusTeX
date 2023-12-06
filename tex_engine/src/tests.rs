@@ -126,7 +126,7 @@ mod tests {
 
         let string = "\\foo   \n  \n   {a}{!}";
 // should yield: [ControlSequence("foo"),BeginGroup,Letter("a"),EndGroup,BeginGroup,Other("!"),EndGroup]
-        let input: StringLineSource = string.into();
+        let input: StringLineSource<u8> = string.into();
         let mut tokenizer = StringTokenizer::new(input);
         let eol = Some(b'\r');
         let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo

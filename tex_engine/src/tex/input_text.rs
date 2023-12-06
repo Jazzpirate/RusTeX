@@ -195,19 +195,22 @@ pub trait TextLineSource<C:Character> {
     fn get_line(&mut self) -> Option<TextLine<C>>;
 }
 /// A source of lines of characters generated from a string.
-pub struct StringLineSource {
-    lines:Vec<Vec<u8>>
+pub struct StringLineSource<C:Character> {
+    lines:Vec<Box<[C]>>
 }
-impl<C:Character> TextLineSource<C> for StringLineSource {
+impl<C:Character> From<Vec<Box<[C]>>> for StringLineSource<C> {
+    fn from(lines: Vec<Box<[C]>>) -> Self { Self { lines } }
+}
+impl<C:Character> TextLineSource<C> for StringLineSource<C> {
     #[inline(always)]
     fn get_line(&mut self) -> Option<TextLine<C>> {
-        self.lines.pop().map(|v| C::convert(v))
+        self.lines.pop()
     }
 }
-impl From<&str> for StringLineSource {
+impl<C:Character> From<&str> for StringLineSource<C> {
     fn from(value: &str) -> Self { value.to_string().into() }
 }
-impl From<String> for StringLineSource {
+impl<C:Character> From<String> for StringLineSource<C> {
     fn from(s: String) -> Self {
         let mut lines = Vec::new();
         let all = s.into_bytes().into_iter();
@@ -220,13 +223,13 @@ impl From<String> for StringLineSource {
                 while let Some(b' ') = curr.last() {
                     curr.pop();
                 }
-                lines.push(std::mem::take(&mut curr));
+                lines.push(C::convert(std::mem::take(&mut curr)));
             } else {
                 curr.push(b);
             }
         }
         if !curr.is_empty() {
-            lines.push(curr);
+            lines.push(C::convert(curr));
         }
         lines.reverse();
         Self { lines }

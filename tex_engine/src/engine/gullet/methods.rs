@@ -70,9 +70,9 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
             if arg.is_empty() { remove_braces = Some(None) }
             arg.push(t);
             let r = if long { engine.read_until_endgroup(
-                |_,t| arg.push(t)
+                |_,_,t| arg.push(t)
             ) } else { engine.read_until_endgroup(
-                |_,t| if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
+                |_,_,t| if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
             ) };
             arg.push(r);
             match remove_braces {

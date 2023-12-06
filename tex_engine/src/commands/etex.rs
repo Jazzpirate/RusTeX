@@ -6,7 +6,7 @@ use crate::engine::mouth::Mouth;
 use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
-use crate::tex::catcodes::CommandCode;
+use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::token::{StandardToken, Token};
 use super::primitives::*;
@@ -21,6 +21,8 @@ use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::commands::NodeList;
 use crate::engine::stomach::Stomach;
 use crate::tex::nodes::NodeTrait;
+use crate::tex::control_sequences::ResolvedCSName;
+use crate::tex::input_text::CharacterMap;
 
 pub fn eTeXversion<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     2.into()
@@ -159,7 +161,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char().map(|c| ET::Token::from_char_cat(c,CommandCode::Other));
-    engine.read_until_endgroup(|a,t| {
+    engine.read_until_endgroup(|a,_,t| {
         if t.is_space() {f(t)}
         else if t.is_param() {
             f(t.clone());f(t)
@@ -324,9 +326,49 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token
     engine.set_command(&cs,Some(Command::Macro(m)),globally)
 }
 
+
+pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    engine.expand_until_bgroup(false);
+    let mut ret: Vec<Box<[ET::Char]>> = vec!();
+    let mut curr = vec!();
+    let mut f = |c:ET::Char| if matches!(c.try_into(),Ok(b'\n')) {
+        if curr.last().copied() == Some(b'\r'.into()) {
+            curr.pop();
+        }
+        ret.push(std::mem::take(&mut curr).into());
+    } else {curr.push(c)};
+    let escapechar = engine.state.get_escape_char();
+    engine.read_until_endgroup(|a,state,t| {
+        match t.to_enum() {
+            StandardToken::Character(c,_) => f(c),
+            StandardToken::ControlSequence(cs) => {
+                if let Some(esc) = escapechar {
+                    f(esc);
+                }
+                let res = a.memory.cs_interner().resolve(&cs);
+                for c in res.iter() {
+                    f(c)
+                }
+                if res.len() == 1 {
+                    let c = res.iter().next().unwrap();
+                    match state.get_catcode_scheme().get(c) {
+                        CategoryCode::Letter => f(b' '.into()),
+                        _ => ()
+                    }
+                } else {
+                    f(b' '.into())
+                }
+            }
+        }
+    });
+    if !curr.is_empty() {ret.push(curr.into())}
+    engine.mouth.push_string(ret.into());
+}
+
+
 pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
-    engine.read_until_endgroup(|a,t|{
+    engine.read_until_endgroup(|_,_,t|{
         exp.push(t)
     });
 }
@@ -428,6 +470,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"marks",marks);
 
     register_simple_expandable(engine,"unless",unless);
+    register_simple_expandable(engine,"scantokens",scantokens);
 
     register_expandable(engine,"topmarks",topmarks);
     register_expandable(engine,"firstmarks",firstmarks);
@@ -436,8 +479,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"splitbotmarks",splitbotmarks);
 
     cmtodos!(engine,
-        fontchardp,fontcharht,fontcharic,fontcharwd,
-        scantokens
+        fontchardp,fontcharht,fontcharic,fontcharwd
     );
 
     cmtodo!(engine,beginL);

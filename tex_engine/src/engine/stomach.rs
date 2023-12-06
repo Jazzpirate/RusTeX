@@ -104,7 +104,7 @@ pub trait Stomach {
                 Self::do_word(engine,char),
             CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_vertical() => {
                 engine.requeue(token);
-                todo!("Open Paragraph")
+                todo!("Open Paragraph: depth {}, pos: {}",engine.stomach.data_mut().open_lists.len(),engine.mouth.display_position())
             }
             CommandCode::Other | CommandCode::Letter => {
                 todo!("Char in math mode")
@@ -276,7 +276,7 @@ pub trait Stomach {
                 }
                 (_,CommandCode::BeginGroup) => {
                     let mut tks = shared_vector::Vector::new();
-                    engine.read_until_endgroup(|_,t| tks.push(t));
+                    engine.read_until_endgroup(|_,_,t| tks.push(t));
                     engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
                     afterassignment(engine);
                     return ()
@@ -323,10 +323,10 @@ pub trait Stomach {
                     let mut tks = shared_vector::Vector::new();
                     if name == PRIMITIVES.output {
                         tks.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                        engine.read_until_endgroup(|_,t| tks.push(t));
+                        engine.read_until_endgroup(|_,_,t| tks.push(t));
                         tks.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
                     } else {
-                        engine.read_until_endgroup(|_,t| tks.push(t));
+                        engine.read_until_endgroup(|_,_,t| tks.push(t));
                     }
                     engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
                     afterassignment(engine);

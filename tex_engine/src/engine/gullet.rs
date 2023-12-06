@@ -56,10 +56,10 @@ pub trait Gullet {
         }
     }
 
-    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,T<Self>)>(&mut self,
+    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&<Self::ET as EngineTypes>::State,T<Self>)>(&mut self,
                                                                            mouth:&mut M<Self>,
                                                                            aux:&mut A<Self>,
-                                                                           state:&<Self::ET as EngineTypes>::State,cont:Fn) -> T<Self> {
+                                                                           state:&<Self::ET as EngineTypes>::State,mut cont:Fn) -> T<Self> {
         match self.get_align_data() {
             None => (),
             Some(d) => {
@@ -67,7 +67,7 @@ pub trait Gullet {
                 d.ingroups -= 1
             }
         }
-        mouth.read_until_endgroup(aux,state.get_catcode_scheme(),state.get_endline_char(),cont)
+        mouth.read_until_endgroup(aux,state.get_catcode_scheme(),state.get_endline_char(),|a,t|cont(a,state,t))
     }
     fn requeue(&mut self,mouth:&mut M<Self>,t:T<Self>) {
         if t.is_begin_group() || t.is_end_group() {
@@ -257,7 +257,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     #[inline(always)]
-    pub fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,ET::Token)>(&mut self, cont:Fn) -> ET::Token {
+    pub fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self, cont:Fn) -> ET::Token {
         self.gullet.read_until_endgroup(self.mouth,self.aux,self.state,cont)
     }
 
@@ -299,11 +299,14 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         }
     }
 
-    pub fn read_braced_string(&mut self, mut str:&mut String) {
-        match self.get_next() {
-            Some(t) if t.is_begin_group() => (),
-            Some(_) => todo!("should be begingroup"),
-            None => todo!("file end")
+    pub fn read_braced_string(&mut self,skip_ws:bool, mut str:&mut String) {
+        loop {
+            match self.get_next() {
+                Some(t) if t.is_begin_group() => break,
+                Some(t) if t.is_space() && skip_ws => (),
+                    Some(_) => todo!("should be begingroup"),
+                None => todo!("file end")
+            }
         }
         ET::Gullet::expand_until_endgroup(self,true,false,|a,s,_,t| {
             t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),

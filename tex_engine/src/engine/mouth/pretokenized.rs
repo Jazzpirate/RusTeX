@@ -47,24 +47,26 @@ impl<T:Token> TokenList<T> {
     }
 }
 
-pub fn meaning_char<'a,T:Token,I:Iterator<Item=&'a T>,W:WriteChars<T::Char,T::CS>>(iter:I, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W,double_par:bool) -> std::fmt::Result {
-    for t in iter {
-        match t.is_argument_marker() {
-            Some(i) => write!(f,"#{}",(i + 1))?,
-            _ => {
-                match t.to_enum() {
-                    StandardToken::Character(c,CommandCode::Parameter) if double_par => {
-                        f.push_char(c);
-                        f.push_char(c);
-                    }
-                    StandardToken::Character(_,CommandCode::Space) => f.push_char(b' '.into()),
-                    StandardToken::Character(c,_) => f.push_char(c),
-                    StandardToken::ControlSequence(cs) =>
-                        f.push_cs(cs,int,cc,escapechar)
+pub fn meaning_tk<'a,T:Token,W:WriteChars<T::Char,T::CS>>(t:T, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W,double_par:bool) {
+    match t.is_argument_marker() {
+        Some(i) => write!(f,"#{}",(i + 1)).unwrap(),
+        _ => {
+            match t.to_enum() {
+                StandardToken::Character(c,CommandCode::Parameter) if double_par => {
+                    f.push_char(c);
+                    f.push_char(c)
                 }
+                StandardToken::Character(_,CommandCode::Space) => f.push_char(b' '.into()),
+                StandardToken::Character(c,_) => f.push_char(c),
+                StandardToken::ControlSequence(cs) =>
+                    f.push_cs(cs,int,cc,escapechar)
             }
         }
     }
+}
+
+pub fn meaning_char<'a,T:Token,I:Iterator<Item=&'a T>,W:WriteChars<T::Char,T::CS>>(iter:I, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W,double_par:bool) -> std::fmt::Result {
+    for t in iter { meaning_tk(t.clone(),int,cc,escapechar,&mut f,double_par) }
     Ok(())
 }
 pub fn meaning_fmt<'a,T:Token,I:Iterator<Item=&'a T>>(iter:I, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>,double_par:bool) {
@@ -144,6 +146,9 @@ impl<'a,'b,C:Character,CS:ControlSequenceName<C>> WriteChars<C,CS> for Stringify
         c.display(self.0)
     }
     fn push_cs<I:ControlSequenceNameHandler<C,CS>>(&mut self,cs:CS,int:&I,cc:&CategoryCodeScheme<C>,esc:Option<C>) {
+        if let Some(e) = esc {
+            e.display(self.0);
+        }
         let res = int.resolve(&cs);
         //let str = res.as_ref();
         write!(self, "{}{}", C::displayable_opt(esc), res).unwrap();
@@ -166,6 +171,7 @@ impl<'a,T:Token,F:FnMut(T)> Tokenizer<'a,T,F> {
         Self(f,PhantomData)
     }
 }
+
 impl<'a,T:Token,F:FnMut(T)> WriteChars<T::Char,T::CS> for Tokenizer<'a,T,F> {
     fn push_char(&mut self, c:T::Char) { (self.0)(T::from_char_cat(c, CommandCode::Other)) }
     fn push_cs<I:ControlSequenceNameHandler<T::Char,T::CS>>(&mut self,cs:T::CS,int:&I,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) {

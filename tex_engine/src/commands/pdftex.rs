@@ -23,6 +23,11 @@ use crate::engine::stomach::Stomach;
 pub fn pdftexversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)
 }
+#[inline(always)]
+pub fn pdfmajorversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
+    <ET::Num as NumSet>::Int::from(1)
+}
+
 pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     exp.push(ET::Token::from_char_cat(b'2'.into(),CommandCode::Other));
     exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
@@ -45,14 +50,14 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"set") => {
             let mut color = String::new();
-            engine.read_braced_string(&mut color);
+            engine.read_braced_string(false,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
             *stack[index].last_mut().unwrap() = color;
         }
         Some(b"push") => {
             let mut color = String::new();
-            engine.read_braced_string(&mut color);
+            engine.read_braced_string(false,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
             stack[index].push(color);
@@ -127,7 +132,7 @@ pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
 
 pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut filename = engine.aux.memory.get_string();
-    engine.read_braced_string(&mut filename);
+    engine.read_braced_string(false,&mut filename);
     let file = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     if file.exists() {
@@ -152,8 +157,8 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
     let mut pattern_string = engine.aux.memory.get_string();
     let mut target_string = engine.aux.memory.get_string();
     if icase {pattern_string.push_str("(?i)");}
-    engine.read_braced_string(&mut pattern_string);
-    engine.read_braced_string(&mut target_string);
+    engine.read_braced_string(false,&mut pattern_string);
+    engine.read_braced_string(false,&mut target_string);
     let pdfmatches = engine.aux.extension.pdfmatches();
     pdfmatches.clear();
 
@@ -194,7 +199,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
             let num = num as usize;
             if num >= engine.aux.extension.pdfobjs().len() {todo!("throw error")}
             let mut str = String::new();
-            engine.read_braced_string(&mut str);
+            engine.read_braced_string(false,&mut str);
             engine.aux.extension.pdfobjs()[num] = PDFObj(str);
             num
         }
@@ -203,7 +208,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
                 // TODO
             }
             let mut str = String::new();
-            engine.read_braced_string(&mut str);
+            engine.read_braced_string(false,&mut str);
             engine.aux.extension.pdfobjs().push(PDFObj(str));
             engine.aux.extension.pdfobjs().len() - 1
         }
@@ -217,14 +222,25 @@ pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
     None
 }
 pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension<ET> {
+    where ET::Extension : PDFExtension<ET>,
+          ET::PreCustomNode:PDFNodeTrait<ET> {
     let num = parse_pdfobj(engine);
-    todo!()
+    let obj = engine.aux.extension.pdfobjs()[num].clone();
+    ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfobj(obj)));
 }
 
 pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension<ET> {
-    todo!()
+    where ET::Extension : PDFExtension<ET>,
+          ET::PreCustomNode:PDFNodeTrait<ET> {
+    let num = engine.read_int(false).into();
+    if num < 0 {todo!("throw error")}
+    match engine.aux.extension.pdfobjs().get(num as usize) {
+        None => todo!("throw error"),
+        Some(o) => {
+            let o = o.clone();
+            ET::Stomach::add_node(engine, PreShipoutNode::Custom(ET::PreCustomNode::from_pdfobj(o)))
+        }
+    }
 }
 
 #[inline(always)]
@@ -237,11 +253,11 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     where ET::Extension : PDFExtension<ET> {
     let mut attr = String::new();
     if engine.read_keyword(b"attr") {
-        engine.read_braced_string(&mut attr);
+        engine.read_braced_string(true,&mut attr);
     }
     let mut resources = String::new();
     if engine.read_keyword(b"resources") {
-        engine.read_braced_string(&mut attr);
+        engine.read_braced_string(true,&mut attr);
     }
     let idx = super::tex::read_register(engine);
     let bx = engine.state.take_box_register(idx);
@@ -257,14 +273,25 @@ pub fn pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Toke
     None
 }
 pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension<ET> {
+    where ET::Extension : PDFExtension<ET>,
+      ET::PreCustomNode:PDFNodeTrait<ET> {
     let num = parse_pdfxform(engine);
-    todo!()
+    let form = engine.aux.extension.pdfxforms()[num].clone();
+    ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfxform(form)));
 }
 
 pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension<ET> {
-    todo!()
+    where ET::Extension : PDFExtension<ET>,
+          ET::PreCustomNode:PDFNodeTrait<ET> {
+    let num = engine.read_int(false).into();
+    if num < 0 {todo!("throw error")}
+    match engine.aux.extension.pdfxforms().get(num as usize) {
+        None => todo!("throw error"),
+        Some(n) => {
+            let n = n.clone();
+            ET::Stomach::add_node(engine, PreShipoutNode::Custom(ET::PreCustomNode::from_pdfxform(n)))
+        }
+    }
 }
 
 #[inline(always)]
@@ -285,7 +312,7 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
         todo!("shipout pdfliteral")
     } else {
         let mut str = String::new();
-        engine.read_braced_string(&mut str);
+        engine.read_braced_string(false,&mut str);
         ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfliteral(str,opt)));
     }
 }
@@ -299,8 +326,8 @@ pub fn pdfshellescape<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::T
 pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut first = engine.aux.memory.get_string();
     let mut second = engine.aux.memory.get_string();
-    engine.read_braced_string(&mut first);
-    engine.read_braced_string(&mut second);
+    engine.read_braced_string(false,&mut first);
+    engine.read_braced_string(false,&mut second);
 
     if first == second {
         exp.push(ET::Token::from_char_cat(b'0'.into(),CommandCode::Other))
@@ -354,6 +381,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_expandable(engine,"pdftexrevision",pdftexrevision);
 
     register_int(engine,"pdftexversion",pdftexversion,None);
+    register_int(engine,"pdfmajorversion",pdfmajorversion,None);
     register_int(engine,"pdfshellescape",pdfshellescape,None);
     register_int(engine,"pdflastobj",pdflastobj,None);
     register_int(engine,"pdflastxform",pdflastxform,None);
@@ -379,7 +407,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
         lpcode,pdfcatalog,pdfcolorstackinit,
         pdfdest,pdfelapsedtime,pdfendlink,pdfescapestring,
         pdffontexpand,pdffontsize,pdflastximage,
-        pdfmajorversion,pdfmdfivesum,pdfoutline,
+        pdfmdfivesum,pdfoutline,
         pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
         pdfximage,rpcode
     );
