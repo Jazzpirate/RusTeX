@@ -11,13 +11,13 @@ use crate::engine::stomach::{Stomach, StomachWithShipout};
 use crate::{debug_log, tex};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::{Assignment, Command, DimCommand, FontCommand, IntCommand, MuSkipCommand, SkipCommand, Unexpandable, Whatsit};
-use crate::commands::pdftex::{MinimalPDFExtension, PDFExtension};
+use crate::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFExtension, PDFNode, PDFNodeTrait};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{FontSystem, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
 use crate::tex::control_sequences::ControlSequenceName;
-use crate::tex::nodes::{PreShipoutNode, ShipoutNode};
+use crate::tex::nodes::{NodeTrait, PreShipoutNode, PreShipoutNodeTrait, ShipoutNode, TopNodeTrait};
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
 use crate::tex::token::{CompactToken, Token};
 use crate::utils::errors::{catch, ErrorHandler, TeXError};
@@ -53,6 +53,8 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug {
     type Memory:MemoryManager<Self::Token>;
     type Gullet:Gullet<ET=Self>;
     type Stomach:Stomach<ET=Self>;
+    type PreCustomNode:NodeTrait<Self>+PreShipoutNodeTrait<Self>;
+    type ShipoutCustomNode:NodeTrait<Self>;
     type FontSystem: FontSystem<Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
 }
 pub struct EngineAux<ET:EngineTypes> {
@@ -122,6 +124,8 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Outputs = LogOutputs;
     type Mouth = DefaultMouth<Self::Token,Self::File>;
     type Gullet = DefaultGullet<Self>;
+    type PreCustomNode = ();
+    type ShipoutCustomNode = ();
     type Stomach = StomachWithShipout<Self>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }
@@ -233,7 +237,8 @@ impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
 pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 
 pub trait PDFTeXEngine: TeXEngine
-    where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension {
+    where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension<Self::Types>,
+          <<Self as TeXEngine>::Types as EngineTypes>::PreCustomNode : PDFNodeTrait<Self::Types> {
     fn do_file_pdf<F:FnMut(ShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
@@ -256,7 +261,7 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type CSName = utils::memory::InternedCSName<u8>;//InternedString;
     type Token = super::tex::token::CompactToken;//::StandardToken<Self::CSName,u8>;//
     type ErrorHandler = super::utils::errors::ErrorThrower;
-    type Extension = MinimalPDFExtension;
+    type Extension = MinimalPDFExtension<Self>;
     type Int = i32;
     type Dim = Dim32;
     type Skip = Skip32<Dim32>;
@@ -269,6 +274,8 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Outputs = LogOutputs;
     type Mouth = DefaultMouth<Self::Token,Self::File>;
     type Gullet = DefaultGullet<Self>;
+    type PreCustomNode = PDFNode<Self,PreShipoutNode<Self>>;
+    type ShipoutCustomNode = PDFNode<Self,ShipoutNode<Self>>;
     type Stomach = StomachWithShipout<Self>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }

@@ -1,3 +1,5 @@
+pub mod pdftexnodes;
+
 use crate::{cmtodo, cmtodos};
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
@@ -8,9 +10,13 @@ use crate::engine::utils::memory::MemoryManager;
 use crate::tex::token::Token;
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
-use std::fmt::{Display, Write};
-use crate::tex::nodes::{PreShipoutNode, ShipoutNode};
+use std::fmt::{Display, Formatter, Write};
+use crate::commands::pdftex::pdftexnodes::{PDFColor, PDFExtension, PDFLiteralOption, PDFNodeTrait, PDFObj, PDFXForm};
+use crate::engine::state::State;
+use crate::tex::nodes::{NodeTrait, PreShipoutNode, PreShipoutNodeTrait, ReadableNode, ShipoutNode, TeXBox, TopNodeTrait};
+use crate::tex::types::NodeType;
 use crate::utils::Ptr;
+use crate::engine::stomach::Stomach;
 
 
 #[inline(always)]
@@ -22,114 +28,8 @@ pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
     exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
 }
 
-pub trait PDFExtension: EngineExtension {
-    fn pdfmatches(&mut self) -> &mut Vec<String>;
-    fn elapsed(&mut self) -> &mut std::time::Instant;
-    fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>>;
-    fn current_colorstack(&mut self) -> &mut usize;
-    fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
-    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm>;
-    fn pdfximages(&mut self) -> &mut Vec<PDFXImage>;
-}
-
-pub struct MinimalPDFExtension {
-    matches: Vec<String>,
-    elapsed:std::time::Instant,//chrono::DateTime<chrono::Local>,
-    colorstacks:Vec<Vec<PDFColor>>,
-    current_colorstack:usize,
-    pdfobjs:Vec<PDFObj>,
-    pdfxforms:Vec<PDFXForm>,
-    pdfximages:Vec<PDFXImage>,
-}
-impl EngineExtension for MinimalPDFExtension {
-    fn new() -> Self {
-        Self {
-            matches: Vec::new(),
-            elapsed: std::time::Instant::now(),
-            colorstacks:vec!(vec!(PDFColor::black())),
-            current_colorstack:0,
-            pdfobjs:Vec::new(),
-            pdfxforms:Vec::new(),
-            pdfximages:Vec::new(),
-        }
-    }
-}
-impl PDFExtension for MinimalPDFExtension {
-    #[inline(always)]
-    fn pdfmatches(&mut self) -> &mut Vec<String> {
-        &mut self.matches
-    }
-    #[inline(always)]
-    fn elapsed(&mut self) -> &mut std::time::Instant {
-        &mut self.elapsed
-    }
-    #[inline(always)]
-    fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>> { &mut self.colorstacks }
-    #[inline(always)]
-    fn current_colorstack(&mut self) -> &mut usize { &mut self.current_colorstack }
-    #[inline(always)]
-    fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
-    #[inline(always)]
-    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm> { &mut self.pdfxforms }
-    #[inline(always)]
-    fn pdfximages(&mut self) -> &mut Vec<PDFXImage> { &mut self.pdfximages }
-}
-
-#[derive(Debug,Clone)]
-pub struct PDFObj(pub String);
-
-#[derive(Debug,Clone)]
-pub struct PDFXForm();
-
-#[derive(Debug,Clone)]
-pub struct PDFXImage();
-
-#[derive(Debug,Clone,Copy)]
-pub struct PDFColor{R:u8,G:u8,B:u8}
-impl PDFColor {
-    pub fn black() -> Self { PDFColor{R:0,G:0,B:0} }
-    pub fn parse<S:AsRef<str>+Display>(s:S) -> Self {
-        macro_rules! parse {
-            ($s:expr) => {
-                match $s.parse::<f32>() {
-                    Ok(f) => f,
-                    _ => todo!("Invalid color specification: {}",s)
-                }
-            }
-        }
-        let ls : Vec<_> = s.as_ref().split(' ').collect();
-        if matches!(ls.last(),Some(&"K")) && ls.len() > 4 {
-            let third = 1.0 - parse!(ls[3]);
-            let r = 255.0*(1.0 - parse!(ls[0])) * third;
-            let g = 255.0*(1.0 - parse!(ls[1])) * third;
-            let b = 255.0*(1.0 - parse!(ls[2])) * third;
-            if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
-                todo!("Invalid color specification: {}",s);
-            }
-            PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
-        } else if matches!(ls.last(),Some(&"RG")) && ls.len() > 3 {
-            let r = 255.0 * parse!(ls[0]);
-            let g = 255.0 * parse!(ls[1]);
-            let b = 255.0 * parse!(ls[2]);
-            if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
-                todo!("Invalid color specification: {}",s);
-            }
-            PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
-        } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
-            let x = 255.0 * parse!(ls[0]);
-            if x > 255.0 || x < 0.0  {
-                todo!("Invalid color specification: {}",s);
-            }
-            let x = (x.round()) as u8;
-            PDFColor{R:x, G:x, B:x}
-        } else {
-            todo!("Invalid color specification: {}",s);
-        }
-    }
-}
-
 pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     let index = engine.read_int(false).into();
     if index < 0 {todo!("throw error")}
     let index = index as usize;
@@ -244,7 +144,7 @@ pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET
 }
 
 pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     let icase = engine.read_keyword(b"icase");
     let subcount = if engine.read_keyword(b"subcount") {
         engine.read_int(false).into()
@@ -282,7 +182,7 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
     }
 }
 pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     match engine.read_keywords(&[b"reserveobjnum",b"useobjnum",b"stream"]) {
         Some(b"reserveobjnum") => {
             engine.aux.extension.pdfobjs().push(PDFObj(String::new()));
@@ -312,25 +212,82 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
 }
 pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     parse_pdfobj(engine);
     None
 }
 pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     let num = parse_pdfobj(engine);
     todo!()
 }
 
 pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     todo!()
 }
 
 #[inline(always)]
 pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int
-    where ET::Extension : PDFExtension {
+    where ET::Extension : PDFExtension<ET> {
     <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfobjs().len() as i32) - 1)
+}
+
+pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
+    where ET::Extension : PDFExtension<ET> {
+    let mut attr = String::new();
+    if engine.read_keyword(b"attr") {
+        engine.read_braced_string(&mut attr);
+    }
+    let mut resources = String::new();
+    if engine.read_keyword(b"resources") {
+        engine.read_braced_string(&mut attr);
+    }
+    let idx = super::tex::read_register(engine);
+    let bx = engine.state.take_box_register(idx);
+    engine.aux.extension.pdfxforms().push(PDFXForm {
+        attr,resources,bx
+    });
+    engine.aux.extension.pdfxforms().len() - 1
+}
+pub fn pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
+                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>
+    where ET::Extension : PDFExtension<ET> {
+    parse_pdfxform(engine);
+    None
+}
+pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension<ET> {
+    let num = parse_pdfxform(engine);
+    todo!()
+}
+
+pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension<ET> {
+    todo!()
+}
+
+#[inline(always)]
+pub fn pdflastxform<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int
+    where ET::Extension : PDFExtension<ET> {
+    <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfxforms().len() as i32) - 1)
+}
+
+pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension<ET>, ET::PreCustomNode:PDFNodeTrait<ET> {
+    let shipout = engine.read_keyword(b"shipout");
+    let opt = match engine.read_keywords(&[b"direct",b"page"]) {
+        Some(b"direct") => PDFLiteralOption::Direct,
+        Some(b"page") => PDFLiteralOption::Page,
+        _ => PDFLiteralOption::None
+    };
+    if shipout {
+        todo!("shipout pdfliteral")
+    } else {
+        let mut str = String::new();
+        engine.read_braced_string(&mut str);
+        ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfliteral(str,opt)));
+    }
 }
 
 #[inline(always)]
@@ -387,7 +344,8 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
 ];
 
 pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
-    where <E::Types as EngineTypes>::Extension : PDFExtension {
+    where <E::Types as EngineTypes>::Extension : PDFExtension<E::Types>,
+    <E::Types as EngineTypes>::PreCustomNode : PDFNodeTrait<E::Types> {
 
     register_expandable(engine,"pdfcreationdate",pdfcreationdate);
     register_expandable(engine,"pdffilesize",pdffilesize);
@@ -398,6 +356,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_int(engine,"pdftexversion",pdftexversion,None);
     register_int(engine,"pdfshellescape",pdfshellescape,None);
     register_int(engine,"pdflastobj",pdflastobj,None);
+    register_int(engine,"pdflastxform",pdflastxform,None);
 
     register_conditional(engine,"ifincsname",ifincsname);
     register_conditional(engine,"ifpdfabsdim",ifpdfabsdim);
@@ -405,9 +364,12 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
 
     register_unexpandable(engine,"pdfglyphtounicode",pdfglyphtounicode);
     register_unexpandable(engine,"pdfcolorstack",pdfcolorstack);
+    register_unexpandable(engine,"pdfliteral",pdfliteral);
     register_unexpandable(engine,"pdfrefobj",pdfrefobj);
+    register_unexpandable(engine,"pdfrefxform",pdfrefxform);
 
     register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate);
+    register_whatsit(engine,"pdfxform",pdfxform,pdfxform_immediate);
 
     register_primitive_int(engine,PRIMITIVE_INTS);
     register_primitive_dim(engine,PRIMITIVE_DIMS);
@@ -416,10 +378,10 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodos!(engine,
         lpcode,pdfcatalog,pdfcolorstackinit,
         pdfdest,pdfelapsedtime,pdfendlink,pdfescapestring,
-        pdffontexpand,pdffontsize,pdflastxform,pdflastximage,
-        pdfliteral,pdfmajorversion,pdfmdfivesum,pdfoutline,pdfrefxform,
+        pdffontexpand,pdffontsize,pdflastximage,
+        pdfmajorversion,pdfmdfivesum,pdfoutline,
         pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
-        pdfxform,pdfximage,rpcode
+        pdfximage,rpcode
     );
 
     cmtodo!(engine,efcode);
