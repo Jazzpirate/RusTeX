@@ -43,6 +43,12 @@ pub trait Font:Clone+std::fmt::Debug {
     fn get_wd(&self,c:Self::Char) -> Self::D;
     fn get_ht(&self,c:Self::Char) -> Self::D;
     fn get_dp(&self,c:Self::Char) -> Self::D;
+    fn get_ic(&self,c:Self::Char) -> Self::D;
+    fn set_ic(&mut self,c:Self::Char,d:Self::D);
+    fn get_lp(&self,c:Self::Char) -> Self::Int;
+    fn set_lp(&mut self,c:Self::Char,d:Self::Int);
+    fn get_rp(&self,c:Self::Char) -> Self::Int;
+    fn set_rp(&mut self,c:Self::Char,d:Self::Int);
     fn ligature(&self,c1:Self::Char,c2:Self::Char) -> Option<Self::Char>;
 }
 #[derive(Clone,Debug)]
@@ -117,8 +123,8 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
 #[derive(Default)]
 struct Mutables<I:TeXInt,D:TeXDimen + Numeric<I>>  {
     at:Option<D>,
-    lps:HMap<u8,D>,
-    rps:HMap<u8,D>,
+    lps:HMap<u8,I>,
+    rps:HMap<u8,I>,
     ics:HMap<u8,D>,
     hyphenchar:Option<I>,
     skewchar:Option<I>,
@@ -198,6 +204,45 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
             Some(d) => write!(w,"{} at {}",self.file.name(),d),
             None => write!(w,"{}",self.file.name())
         }
+    }
+
+    fn get_ic(&self, c: Self::Char) -> Self::D {
+        let v = &mut self.muts.write().unwrap().ics;
+        match v.get(&c) {
+            Some(d) => *d,
+            None => {
+                let d = self.file.ics[c as usize];
+                self.get_at().scale_float(d)
+            }
+        }
+    }
+    fn set_ic(&mut self, c: Self::Char, d: Self::D) {
+        let v = &mut self.muts.write().unwrap().ics;
+        v.insert(c,d);
+    }
+
+    fn get_lp(&self, c: Self::Char) -> I {
+        let v = &mut self.muts.write().unwrap().lps;
+        match v.get(&c) {
+            Some(d) => *d,
+            None => I::default()
+        }
+    }
+    fn set_lp(&mut self, c: Self::Char, d: I) {
+        let v = &mut self.muts.write().unwrap().lps;
+        v.insert(c,d);
+    }
+
+    fn get_rp(&self, c: Self::Char) -> I {
+        let v = &mut self.muts.write().unwrap().rps;
+        match v.get(&c) {
+            Some(d) => *d,
+            None => I::default()
+        }
+    }
+    fn set_rp(&mut self, c: Self::Char, d: I) {
+        let v = &mut self.muts.write().unwrap().rps;
+        v.insert(c,d);
     }
     #[inline(always)]
     fn get_wd(&self, c: Self::Char) -> Self::D {

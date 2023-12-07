@@ -3,7 +3,7 @@ use crate::commands::{Command, Macro, MacroSignature};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
+use crate::engine::mouth::pretokenized::{Tokenizer, TokenList, WriteChars};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
@@ -19,6 +19,7 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::commands::NodeList;
+use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;
 use crate::tex::nodes::NodeTrait;
 use crate::tex::control_sequences::ResolvedCSName;
@@ -160,21 +161,19 @@ pub fn currentgrouplevel<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET:
 pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
-    let escapechar = engine.state.get_escape_char().map(|c| ET::Token::from_char_cat(c,CommandCode::Other));
-    engine.read_until_endgroup(|a,_,t| {
+    let escapechar = engine.state.get_escape_char();
+    engine.read_until_endgroup(|a,st,t| {
         if t.is_space() {f(t)}
         else if t.is_param() {
             f(t.clone());f(t)
         }
         else {
+            let mut tokenizer = Tokenizer::new(&mut f);
             match t.to_enum() {
                 StandardToken::Character(c, _) =>
-                    f(ET::Token::from_char_cat(c, CommandCode::Other)),
+                    tokenizer.push_char(c),
                 StandardToken::ControlSequence(cs) => {
-                    if let Some(e) = &escapechar { f(e.clone()) }
-                    let name = a.memory.cs_interner().resolve(&cs);
-                    let mut tokenizer = Tokenizer::new(&mut f);
-                    write!(tokenizer, "{}", name).unwrap();
+                    tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
                 }
             }
         }
@@ -188,6 +187,27 @@ pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
         }
         _ => todo!("throw errors")
     }
+}
+
+pub fn fontchardp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+    let fnt = engine.read_font();
+    let char = engine.read_charcode(false);
+    fnt.get_dp(char)
+}
+pub fn fontcharht<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+    let fnt = engine.read_font();
+    let char = engine.read_charcode(false);
+    fnt.get_ht(char)
+}
+pub fn fontcharwd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+    let fnt = engine.read_font();
+    let char = engine.read_charcode(false);
+    fnt.get_wd(char)
+}
+pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+    let fnt = engine.read_font();
+    let char = engine.read_charcode(false);
+    fnt.get_ic(char)
 }
 
 pub fn ifcsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
@@ -455,6 +475,11 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"lastnodetype",lastnodetype,None);
     register_int(engine,"eTeXversion",eTeXversion,None);
 
+    register_dim(engine,"fontchardp",fontchardp,None);
+    register_dim(engine,"fontcharht",fontcharht,None);
+    register_dim(engine,"fontcharwd",fontcharwd,None);
+    register_dim(engine,"fontcharic",fontcharic,None);
+
     register_assignment(engine,"protected",|e,cmd,g|protected(e,cmd,false,false,false,g));
     register_assignment(engine,"readline",readline);
 
@@ -477,10 +502,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"botmarks",botmarks);
     register_expandable(engine,"splitfirstmarks",splitfirstmarks);
     register_expandable(engine,"splitbotmarks",splitbotmarks);
-
-    cmtodos!(engine,
-        fontchardp,fontcharht,fontcharic,fontcharwd
-    );
 
     cmtodo!(engine,beginL);
     cmtodo!(engine,beginR);

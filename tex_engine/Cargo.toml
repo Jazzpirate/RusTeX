@@ -50,7 +50,7 @@ array-init = "2.1.0"
 arrayvec = "0.7.4"
 shared_vector = "0.4.4"
 regex = "1.10.2"
-#md5 = "0.7.0"
+md5 = "0.7.0"
 #image = "0.24.7"
 #pdfium-render = "0.8.11" #, features = ["static"] }
 

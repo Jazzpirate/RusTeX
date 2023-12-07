@@ -20,6 +20,7 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
     #[inline(always)]
     fn displayable(&self) -> DisplayableCharacter<Self> { DisplayableCharacter(*self) }
 
+    fn to_char(&self) -> char;
 
     #[inline(always)]
     fn displayable_opt(c:Option<Self>) -> DisplayableCharacterOpt<Self> { DisplayableCharacterOpt(c) }
@@ -57,6 +58,9 @@ impl Character for u8 {
     type CharMap<A:Clone + Default> = [A;256];
     const MIN: Self = 0;
     const MAX: Self = 255;
+
+    #[inline(always)]
+    fn to_char(&self) -> char {*self as char}
     
     type Iter<'a> = ByteIterator<'a>;
 

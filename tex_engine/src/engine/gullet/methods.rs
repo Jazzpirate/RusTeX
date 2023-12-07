@@ -509,12 +509,24 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let base = ET::Num::dim_to_int(engine.state.get_dim_register(u));
             if is_negative {-base} else {base}
         }
+        Command::PrimitiveDim(u) => {
+            let base = ET::Num::dim_to_int(engine.state.get_primitive_dim(u));
+            if is_negative {-base} else {base}
+        }
         Command::Dim(dc) => {
             let base = ET::Num::dim_to_int((dc.read)(engine,token));
             if is_negative {-base} else {base}
         }
+        Command::SkipRegister(u) => {
+            let base = ET::Num::dim_to_int(engine.state.get_skip_register(u).base());
+            if is_negative {-base} else {base}
+        }
         Command::PrimitiveSkip(u) => {
             let base = ET::Num::dim_to_int(engine.state.get_primitive_skip(u).base());
+            if is_negative {-base} else {base}
+        }
+        Command::Skip(dc) => {
+            let base = ET::Num::dim_to_int((dc.read)(engine,token).base());
             if is_negative {-base} else {base}
         }
         o => todo!("read_int: {:?}",o)
@@ -651,6 +663,14 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let f = i.into() as f64;
             read_unit_or_dim(engine,f)
         }
+        Command::CharDef(c) => {
+            let val = if is_negative {-(c.into() as f64)} else {c.into() as f64};
+            read_unit_or_dim(engine,val)
+        }
+        Command::MathChar(c) => {
+            let val = if is_negative {-(c as f64)} else {c as f64};
+            read_unit_or_dim(engine,val)
+        }
         Command::DimRegister(u) => {
             if is_negative {return -engine.state.get_dim_register(u)}
             else {return engine.state.get_dim_register(u)}
@@ -674,10 +694,6 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
         Command::Skip(sc) => {
             let val = (sc.read)(engine,token).base();
             if is_negative {return -val} else {return val}
-        }
-        Command::CharDef(c) => {
-            let val = if is_negative {-(c.into() as f64)} else {c.into() as f64};
-            read_unit_or_dim(engine,val)
         }
         o => todo!("command in read_dim: {:?}",o)
     }
@@ -794,8 +810,40 @@ pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
 
 pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> <ET::Num as NumSet>::Skip {
     match cmd {
+        Command::IntRegister(u) => {
+            let base = engine.state.get_int_register(u);
+            let base = if is_negative {-base} else {base};
+            let base = read_unit_or_dim(engine,base.into() as f64);
+            read_skip_ii(engine,base)
+        }
+        Command::PrimitiveInt(u) => {
+            let base = engine.state.get_primitive_int(u);
+            let base = if is_negative {-base} else {base};
+            let base = read_unit_or_dim(engine,base.into() as f64);
+            read_skip_ii(engine,base)
+        }
+        Command::Int(ic) => {
+            let base = (ic.read)(engine,token);
+            let base = if is_negative {-base} else {base};
+            let base = read_unit_or_dim(engine,base.into() as f64);
+            read_skip_ii(engine,base)
+        }
+        Command::CharDef(c) => {
+            let val:u64 = c.into();
+            let base = read_unit_or_dim(engine,val as f64);
+            read_skip_ii(engine,base)
+        }
+        Command::MathChar(u) => {
+            let base = read_unit_or_dim(engine,u as f64);
+            read_skip_ii(engine,base)
+        }
         Command::DimRegister(u) => {
             let base = engine.state.get_dim_register(u);
+            let base = if is_negative {-base} else {base};
+            read_skip_ii(engine,base)
+        }
+        Command::PrimitiveDim(u) => {
+            let base = engine.state.get_primitive_dim(u);
             let base = if is_negative {-base} else {base};
             read_skip_ii(engine,base)
         }

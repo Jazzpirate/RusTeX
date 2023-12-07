@@ -199,11 +199,10 @@ impl<'a,T:Token,F:FnMut(T)> WriteChars<T::Char,T::CS> for Tokenizer<'a,T,F> {
 }
 impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Tokenizer<'a,T,F> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        // todo!("do not use bytes")
-        for u in s.as_bytes() {
-            if *u == b' ' { (self.0)(T::space()) }
+        for u in T::Char::string_to_iter(s) {
+            if matches!(u.try_into(),Ok(b' ')) { (self.0)(T::space()) }
             else {
-                (self.0)(T::from_char_cat(T::Char::from(*u),CommandCode::Other))
+                (self.0)(T::from_char_cat(u,CommandCode::Other))
             }
         }
         Ok(())

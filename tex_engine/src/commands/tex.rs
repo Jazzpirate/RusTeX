@@ -125,6 +125,18 @@ pub fn sfcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     engine.state.set_sfcode(engine.aux,char,sf,globally)
 }
 
+#[inline(always)]
+pub fn spacefactor_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
+    Int::<ET>::from(engine.stomach.data_mut().spacefactor)
+}
+pub fn spacefactor_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
+    let val = match engine.read_int(true).try_into() {
+        Ok(v) => v,
+        _ => todo!("throw error")
+    };
+    engine.stomach.data_mut().spacefactor = val;
+}
+
 pub fn lccode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     let char = engine.read_charcode(false);
     let u = engine.state.get_lccode(char).into();
@@ -1679,6 +1691,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
     let idx = engine.read_int(false).into();
     let mut tks = engine.aux.memory.get_token_vec();
+    tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
     match engine.get_next() {
         Some(t) if t.is_begin_group() => (),
         Some(_) => todo!("should be begingroup"),
@@ -1687,6 +1700,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
     engine.read_until_endgroup(|_,_,t| {
         tks.push(t);
     });
+    tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
     Some(Box::new(move |engine| {do_write(engine,idx,tks);None}))
 }
 pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -1705,7 +1719,10 @@ pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET
     engine.aux.memory.return_string(out);
 }
 pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET::Token>) {
-    todo!("do write")
+    engine.mouth.push_vec(v.into_iter());
+    let mut out = String::new();
+    engine.read_braced_string(false,&mut out);
+    engine.filesystem.write(i,&out,engine.state.get_newline_char(),engine.aux);
 }
 
 pub fn read_file_index<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> u8 {
@@ -1799,6 +1816,10 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
             Command::CharDef(c) => {
                 let val : u64 = (*c).into();
                 write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                return ()
+            }
+            Command::MathChar(u) => {
+                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",*u).unwrap();
                 return ()
             }
             Command::ToksRegister(u) => {
@@ -2348,6 +2369,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"escapechar",escapechar_get,Some(escapechar_set));
     register_int(engine,"newlinechar",newlinechar_get,Some(newlinechar_set));
     register_int(engine,"inputlineno",inputlineno,None);
+    register_int(engine,"spacefactor",spacefactor_get,Some(spacefactor_set));
     register_int(engine,"day",day,None);
     register_int(engine,"time",time,None);
     register_int(engine,"month",month,None);
@@ -2510,8 +2532,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         mathchoice,noalign,noindent,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
         pagedepth,pageshrink,parshape,
-        scriptfont,scriptscriptfont,
-        spacefactor,span,textfont,underline,vadjust
+        scriptfont,scriptscriptfont,span,textfont,underline,vadjust
     );
 
     register_primitive_int(engine,PRIMITIVE_INTS);
