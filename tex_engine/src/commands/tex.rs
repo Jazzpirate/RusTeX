@@ -605,8 +605,15 @@ fn modify_dim_register<ET:EngineTypes,O:FnOnce(Dim<ET>,&mut EngineReferences<ET>
     engine.state.set_dim_register(engine.aux,idx,new,globally);
 }
 
+fn modify_skip_register<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>,idx:u16,globally:bool,op:O) {
+    engine.read_keyword(b"by");
+    let old = engine.state.get_skip_register(idx);
+    let new = op(old,engine);
+    engine.state.set_skip_register(engine.aux,idx,new,globally);
+}
+
 macro_rules! modify_num {
-    ($engine:ident,$globally:ident,$int:expr,$dim:expr) => {
+    ($engine:ident,$globally:ident,$int:expr,$dim:expr,$skip:expr) => {
         crate::expand_loop!($engine,
             ResolvedToken::Cmd {cmd:Some(cm),token} => match cm {
                 Command::Int(IntCommand{name,..}) if *name == PRIMITIVES.count => {
@@ -620,8 +627,27 @@ macro_rules! modify_num {
                 Command::IntRegister(idx) => {
                     return modify_int_register($engine,*idx,$globally,$int)
                 }
+                Command::Dim(DimCommand{name,..}) if *name == PRIMITIVES.dimen => {
+                    let idx = $engine.read_int(false);
+                    let idx = match idx.try_into() {
+                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
+                        _ => todo!("throw error")
+                    };
+                    return modify_dim_register($engine,idx,$globally,$dim)
+                }
                 Command::DimRegister(idx) => {
                     return modify_dim_register($engine,*idx,$globally,$dim)
+                }
+                Command::Skip(SkipCommand{name,..}) if *name == PRIMITIVES.skip => {
+                    let idx = $engine.read_int(false);
+                    let idx = match idx.try_into() {
+                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
+                        _ => todo!("throw error")
+                    };
+                    return modify_skip_register($engine,idx,$globally,$skip)
+                }
+                Command::SkipRegister(idx) => {
+                    return modify_skip_register($engine,*idx,$globally,$skip)
                 }
                 o => todo!("{:?} in \\advance",o)
             }
@@ -634,7 +660,8 @@ macro_rules! modify_num {
 pub fn advance<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
     modify_num!(engine,globally,
         |a,e| a + e.read_int(false),
-        |a,e| a + e.read_dim(false)
+        |a,e| a + e.read_dim(false),
+        |a,e| a + e.read_skip(false)
     );
 }
 pub fn divide<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
@@ -650,12 +677,22 @@ pub fn divide<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
             todo!("divide by zero")
         }
         a.scale(Int::<ET>::from(1),b)
+    },|a,e| {
+        let b = e.read_int(false);
+        if b == Int::<ET>::default() {
+            todo!("divide by zero")
+        }
+        a.scale(Int::<ET>::from(1),b)
     }
     );
 }
 pub fn multiply<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
     modify_num!(engine,globally,
         |a,e| a * e.read_int(false),
+        |a,e| {
+            let b = e.read_int(false);
+            a.scale(b,Int::<ET>::from(1))
+        },
         |a,e| {
             let b = e.read_int(false);
             a.scale(b,Int::<ET>::from(1))
@@ -965,6 +1002,9 @@ fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET:
                     ET::Gullet::do_expandable(engine,e.name,token,e.expand),
                 Some(Command::SimpleExpandable(e)) if exp =>
                     ET::Gullet::do_simple_expandable(engine,e.name,token,e.expand),
+                Some(Command::Char {char,code},..) => {
+                    return (Some(*char),*code)
+                }
                 _ => return (None,CommandCode::Escape)
             },
         }
@@ -1455,6 +1495,12 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     }
 }
 
+pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,tk) {
+        // TODO maybe
+    }
+}
+
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
     let (idx,file) = read_index_and_file(engine);
@@ -1745,9 +1791,12 @@ fn read_index_and_file<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (u8,
 }
 
 pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if !engine.state.get_mode().is_vertical() {
-        todo!("par in horizontal mode")
+    let mode = engine.state.get_mode();
+    if mode.is_vertical() {return}
+    if mode == TeXMode::Horizontal {
+        ET::Stomach::close_paragraph(engine);return
     }
+    todo!("throw error?")
 }
 
 pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(engine: &mut EngineReferences<ET>,mut cont:F) {
@@ -2218,6 +2267,7 @@ pub fn splitbotmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Ve
 }
 
 pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    engine.stomach.data_mut().deadcycles = 0;
     match engine.read_box(false) {
         Ok(Some(bx)) => {
             if let Some(n) = bx.as_node().shipout_top(engine) {
@@ -2355,6 +2405,16 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     engine.read_until_endgroup(|_,_,_| {});
 }
 
+pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+    PreShipoutNode::Skip(SkipNode::Space)
+}
+pub fn char_slash<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    // TODO
+}
+pub fn char_dash<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    // TODO
+}
+
 pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"catcode",catcode_get,Some(catcode_set));
     register_int(engine,"hyphenchar",hyphenchar_get,Some(hyphenchar_set));
@@ -2468,6 +2528,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"uppercase",uppercase);
     register_unexpandable(engine,"message",message);
     register_unexpandable(engine,"errmessage",errmessage);
+    register_unexpandable(engine,"noindent",noindent);
     register_unexpandable(engine,"openin",openin);
     register_unexpandable(engine,"par",par);
     register_unexpandable(engine,"unhbox",unhbox);
@@ -2491,6 +2552,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         refs.state.set_command(refs.aux,nullfont,Some(Command::Font(refs.fontsystem.null())),true)
     }
     register_unexpandable(engine,"mark",mark);
+    register_unexpandable(engine,"/",char_slash);
+    register_unexpandable(engine,"-",char_dash);
+    register_unexpandable(engine,"showlists",|_,_| {}); // TODO
 
     register_whatsit(engine,"closeout",closeout,closeout_immediate);
     register_whatsit(engine,"openout",openout,openout_immediate);
@@ -2517,6 +2581,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_node(engine,"hfill",NodeCommandScope::SwitchesToHorizontal,hfill);
     register_node(engine,"hfilneg",NodeCommandScope::SwitchesToHorizontal,hfilneg);
     register_node(engine,"hss",NodeCommandScope::SwitchesToHorizontal,hss);
+    register_node(engine," ",NodeCommandScope::SwitchesToHorizontal,char_space);
 
 
     // TODO test to make sure this is callable from the POV of the compiler
@@ -2529,7 +2594,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         indent,insert,leaders,cleaders,xleaders,left,right,valign,
         vtop,vcenter,char,
         cr,crcr,discretionary,displaylimits,end,
-        mathchoice,noalign,noindent,omit,overline,
+        mathchoice,noalign,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
         pagedepth,pageshrink,parshape,
         scriptfont,scriptscriptfont,span,textfont,underline,vadjust
@@ -2550,7 +2615,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     cmstodo!(engine,scriptscriptstyle);
 
     cmtodos!(engine,prevgraf,deadcycles,insertpenalties,scrollmode,nonstopmode,batchmode,
-        show,showbox,showlists,showthe,special,noboundary,accent,setlanguage,nonscript,
+        show,showbox,showthe,special,noboundary,accent,setlanguage,nonscript,
         limits,nolimits,over,atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
         leqno,bigskip,bye,fontname,italiccorr,medskip,smallskip
     );

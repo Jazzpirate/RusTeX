@@ -149,6 +149,11 @@ pub struct PrimitiveInterner {
     pub output:PrimitiveIdentifier,
     pub badness:PrimitiveIdentifier,
     pub outputpenalty:PrimitiveIdentifier,
+    pub dimen:PrimitiveIdentifier,
+    pub skip:PrimitiveIdentifier,
+    pub everypar:PrimitiveIdentifier,
+    pub indent:PrimitiveIdentifier,
+    pub noindent:PrimitiveIdentifier
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -188,12 +193,18 @@ impl PrimitiveInterner {
         let output = PrimitiveIdentifier(interner.get_or_intern_static("output"));
         let badness = PrimitiveIdentifier(interner.get_or_intern_static("badness"));
         let outputpenalty = PrimitiveIdentifier(interner.get_or_intern_static("outputpenalty"));
+        let dimen = PrimitiveIdentifier(interner.get_or_intern_static("dimen"));
+        let skip = PrimitiveIdentifier(interner.get_or_intern_static("skip"));
+        let everypar = PrimitiveIdentifier(interner.get_or_intern_static("everypar"));
+        let indent = PrimitiveIdentifier(interner.get_or_intern_static("indent"));
+        let noindent = PrimitiveIdentifier(interner.get_or_intern_static("noindent"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
             tracinggroups, else_, fi, or, global, long, outer, protected, def, edef, xdef,
             gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
-            everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty
+            everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
+            everypar,indent,noindent
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.

@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, PreShipoutNode, ToOrSpread, WhatsitNode, ShipoutNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, PreShipoutNode, ToOrSpread, WhatsitNode, ShipoutNode, SkipNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
@@ -61,6 +61,10 @@ pub trait Stomach {
         afterassignment(engine);
     }
     fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
+        match engine.stomach.data_mut().open_lists.last() {
+            Some(NodeList{tp:NodeListType::Paragraph,..}) => Self::close_paragraph(engine),
+            _ => ()
+        }
         match engine.stomach.data_mut().open_lists.pop() {
             Some(ls) => match ls.tp {
                 NodeListType::Paragraph => {
@@ -87,6 +91,8 @@ pub trait Stomach {
         match code {
             CommandCode::EOF => (),
             CommandCode::Space if engine.state.get_mode().is_vertical() => (),
+            CommandCode::Space =>
+                Self::add_node(engine,SkipNode::Space.as_node()),
             CommandCode::BeginGroup if engine.state.get_mode().is_math() => todo!(),
             CommandCode::EndGroup if engine.state.get_mode().is_math() => todo!(),
             CommandCode::BeginGroup =>
@@ -142,14 +148,12 @@ pub trait Stomach {
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
                 char!(*char),
             ResolvedToken::Tk { code:CommandCode::Space, .. } |
-            ResolvedToken::Cmd{ cmd:Some(Command::Char {code:CommandCode::Space,..}),.. } => {
-                todo!()
-            }
+            ResolvedToken::Cmd{ cmd:Some(Command::Char {code:CommandCode::Space,..}),.. } =>
+                end!(Self::add_node(engine,SkipNode::Space.as_node())),
             ResolvedToken::Tk { char, code, token } =>
                 end!(Self::do_char(engine,token,char,code)),
-            ResolvedToken::Cmd{ cmd:Some(Command::Char {char, code}),token} => {
-                end!(Self::do_char(engine,token,*char,*code))
-            }
+            ResolvedToken::Cmd{ cmd:Some(Command::Char {char, code}),token} =>
+                end!(Self::do_char(engine,token,*char,*code)),
             ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
             ResolvedToken::Cmd{cmd: Some(cmd),token} => {
                 end!(crate::do_cmd!(Self::ET;engine,token,cmd))
@@ -182,48 +186,6 @@ pub trait Stomach {
             }
         }
     }
-    fn add_node(engine:&mut EngineReferences<Self::ET>,node: PreShipoutNode<Self::ET>) {
-        let data = engine.stomach.data_mut();
-        match data.open_lists.last_mut() {
-            Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
-                match node {
-                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
-                        data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
-                    _ => ()
-                }
-                children.push(node)
-            }
-            Some(ls) => {
-                data.prevdepth = node.depth();
-                ls.children.push(node)
-            },
-            None => {
-                if !data.page_contains_boxes /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
-                    match node {
-                        PreShipoutNode::Box(_) | PreShipoutNode::Insert => {
-                            data.page_contains_boxes = true;
-                            data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
-                        }
-                        n if n.discardable() => return,
-                        _ => ()
-                    }
-                }
-                data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
-                match node {
-                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
-                        data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
-                    PreShipoutNode::Penalty(i) if i <= -10000 => {
-                        if data.page_contains_boxes {
-                            return Self::do_shipout_output(engine, Some(i))
-                        } else { return }
-                    }
-                    _ => data.prevdepth = node.depth()
-                }
-                data.page.push(node);
-                Self::maybe_shipout(engine)
-            }
-        }
-    }
     fn maybe_switch_mode(engine:&mut EngineReferences<Self::ET>,scope:NodeCommandScope,token:Tk<Self>) -> bool {
         match (scope,engine.state.get_mode()) {
             (NodeCommandScope::Any, _) => true,
@@ -231,7 +193,11 @@ pub trait Stomach {
             (NodeCommandScope::SwitchesToVertical, TeXMode::Vertical | TeXMode::InternalVertical) => true,
             (NodeCommandScope::MathOnly, TeXMode::InlineMath | TeXMode::DisplayMath) => true,
             (NodeCommandScope::MathOnly, _) => todo!("throw error"),
-            _ => todo!("switch modes maybe")
+            (NodeCommandScope::SwitchesToHorizontal,TeXMode::Vertical | TeXMode::InternalVertical) => {
+                Self::open_paragraph(engine,token);
+                false
+            }
+            (a,b) => todo!("switch modes maybe: {:?} in {:?}",a,b)
         }
     }
     fn do_node(engine:&mut EngineReferences<Self::ET>, name:PrimitiveIdentifier, token:Tk<Self>, read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> PreShipoutNode<Self::ET>, scope:NodeCommandScope) {
@@ -345,6 +311,51 @@ pub trait Stomach {
         }
     }
 
+
+    fn add_node(engine:&mut EngineReferences<Self::ET>,node: PreShipoutNode<Self::ET>) {
+        let data = engine.stomach.data_mut();
+        match data.open_lists.last_mut() {
+            Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
+                match node {
+                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
+                        data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
+                    _ => ()
+                }
+                children.push(node)
+            }
+            Some(ls) => {
+                data.prevdepth = node.depth();
+                ls.children.push(node)
+            },
+            None => {
+                if !data.page_contains_boxes && !data.in_output /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
+                    match &node {
+                        PreShipoutNode::Box(_) | PreShipoutNode::Insert => {
+                            //crate::debug_log!(debug => "Here: {} \n\n {}",node.readable(),engine.mouth.display_position());
+                            data.page_contains_boxes = true;
+                            data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
+                        }
+                        n if n.discardable() => return,
+                        _ => ()
+                    }
+                }
+                data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
+                match node {
+                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
+                        data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
+                    PreShipoutNode::Penalty(i) if i <= -10000 => {
+                        if data.page_contains_boxes {
+                            return Self::do_shipout_output(engine, Some(i))
+                        } else { return }
+                    }
+                    _ => data.prevdepth = node.depth()
+                }
+                data.page.push(node);
+                Self::maybe_shipout(engine)
+            }
+        }
+    }
+
     fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
         let data = engine.stomach.data_mut();
         if data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
@@ -368,7 +379,8 @@ pub trait Stomach {
         };
 
         let data = engine.stomach.data_mut();
-
+        data.in_output = true;
+        data.deadcycles += 1;
 
         for (i,b) in first.iter_mut().enumerate() { match b {
             PreShipoutNode::Insert => todo!(),
@@ -394,7 +406,7 @@ pub trait Stomach {
             end:engine.mouth.current_sourceref(),
         };
 
-        //crate::debug_log!(debug => "Here: {} ",bx.readable());
+        //crate::debug_log!(debug => "Here: {} \n\n {}",bx.readable(),engine.mouth.display_position());
 
         engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
@@ -411,6 +423,7 @@ pub trait Stomach {
         while let Some(next) = engine.get_next() {
             if engine.state.get_group_level() == depth && next.is_end_group() {
                 engine.state.pop(engine.aux,engine.mouth);
+                engine.stomach.data_mut().in_output = false;
                 return
             }
             crate::expand!(Self::ET;engine,next;
@@ -425,6 +438,40 @@ pub trait Stomach {
     }
 
     fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
+    fn open_paragraph(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>) {
+        engine.stomach.data_mut().open_lists.push(NodeList {
+            tp:NodeListType::Paragraph,
+            children:vec!()
+        });
+        engine.state.set_mode(TeXMode::Horizontal);
+        match engine.resolve(token) {
+            ResolvedToken::Cmd{cmd:Some(Command::Node(u)),..}
+                if u.name == PRIMITIVES.indent => todo!(),
+            ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
+                if u.name == PRIMITIVES.noindent => (),
+            ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} =>
+                engine.mouth.requeue(token),
+        }
+        engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.everypar)
+    }
+    fn close_paragraph(engine:&mut EngineReferences<Self::ET>) {
+        let ls = &mut engine.stomach.data_mut().open_lists;
+        match ls.pop() {
+            Some(NodeList{tp:NodeListType::Paragraph,children}) => {
+                if ls.is_empty() {
+                    engine.state.set_mode(TeXMode::Vertical)
+                } else {
+                    engine.state.set_mode(TeXMode::InternalVertical)
+                }
+                if children.is_empty() {
+                    engine.state.take_parshape();
+                    return
+                }
+                todo!("all the things")
+            }
+            _ => todo!("throw error")
+        }
+    }
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
@@ -466,7 +513,9 @@ pub struct StomachData<ET:EngineTypes> {
     pub botmarks:HMap<usize,TokenList<ET::Token>>,
     pub splitfirstmarks:HMap<usize,TokenList<ET::Token>>,
     pub splitbotmarks:HMap<usize,TokenList<ET::Token>>,
-    pub page_contains_boxes:bool
+    pub page_contains_boxes:bool,
+    pub in_output:bool,
+    pub deadcycles:usize,
 }
 impl <ET:EngineTypes> StomachData<ET> {
     pub fn get_list(&mut self) -> &mut Vec<PreShipoutNode<ET>> {
@@ -494,7 +543,9 @@ impl <ET:EngineTypes> StomachData<ET> {
             botmarks:HMap::default(),
             splitfirstmarks:HMap::default(),
             splitbotmarks:HMap::default(),
-            page_contains_boxes:false
+            page_contains_boxes:false,
+            in_output:false,
+            deadcycles:0
         }
     }
 }

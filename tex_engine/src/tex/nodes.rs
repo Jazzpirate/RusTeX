@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Write};
 use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::kpathsea::SourceReference;
-use crate::tex::types::{BoxType, NodeType};
+use crate::tex::types::{BoxType, NodeType, TeXMode};
 use crate::engine::filesystem::File;
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::pretokenized::TokenList;

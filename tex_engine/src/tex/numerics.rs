@@ -300,9 +300,21 @@ impl<D:TeXDimen> Display for Skip32<D> {
 }
 impl<D:TeXDimen> Neg for Skip32<D> {
     type Output = Self;
-    #[inline(always)]
+
     fn neg(self) -> Self::Output {
-        todo!()
+        Skip32 {
+            base:-self.base,
+            stretch:self.stretch.map(|s| match s {
+                Fill::pt(d) => Fill::pt(-d),
+                Fill::fil(i) => Fill::fil(-i),
+                Fill::fill(i) => Fill::fill(-i),
+            }),
+            shrink:self.shrink.map(|s| match s {
+                Fill::pt(d) => Fill::pt(-d),
+                Fill::fil(i) => Fill::fil(-i),
+                Fill::fill(i) => Fill::fill(-i),
+            })
+        }
     }
 }
 

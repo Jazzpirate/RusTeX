@@ -1,7 +1,7 @@
 /*! Implementation of a plain TeX [`State`]. */
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::state::{Ch, CS, State, StateChange, StateChangeTracker, StateStack, T};
+use crate::engine::state::{Ch, CS, Dim, State, StateChange, StateChangeTracker, StateStack, T};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
 use crate::engine::mouth::Mouth;
@@ -49,7 +49,8 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     escape_char:Option<ET::Char>,
     newline_char:Option<ET::Char>,
     current_font:Fnt<ET>,
-    empty_list:TokenList<ET::Token>
+    empty_list:TokenList<ET::Token>,
+    parshape:Vec<ET::Dim>,
 }
 impl<ET:EngineTypes<State=Self>> TeXState<ET> {
 
@@ -119,7 +120,8 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
             endline_char:Some(ET::Char::from(b'\r')),
             escape_char:Some(ET::Char::from(b'\\')),
             newline_char:Some(ET::Char::from(b'\n')),
-            empty_list:mem.empty()
+            empty_list:mem.empty(),
+            parshape:Vec::new(),
         }
     }
 
@@ -217,6 +219,12 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                         ));
                     }
                     self.current_font = font;
+                }
+                StateChange::ParShape {old} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{TODO parshape}}"));
+                    }
+                    self.parshape = old;
                 }
                 StateChange::SfCode {char,old} => {
                     if trace {
@@ -443,6 +451,24 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     #[inline(always)]
     fn set_mode(&mut self, mode: TeXMode) {
         self.current_mode = mode
+    }
+
+    #[inline(always)]
+    fn get_parshape(&self) -> &Vec<Dim<Self>> {
+        &self.parshape
+    }
+    #[inline(always)]
+    fn take_parshape(&mut self) -> Vec<Dim<Self>> {
+        std::mem::take(&mut self.parshape)
+    }
+    fn set_parshape(&mut self, aux: &EngineAux<Self::ET>, parshape: Vec<Dim<Self>>, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(format_args!("{{{}changing parshape}}",if g {"globally "} else {""}));
+            }
+            let old = std::mem::replace(&mut s.parshape, parshape);
+            StateChange::ParShape { old }
+        })
     }
 
     #[inline(always)]

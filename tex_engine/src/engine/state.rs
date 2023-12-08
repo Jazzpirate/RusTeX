@@ -68,6 +68,10 @@ pub trait State:Sized+Clone {
     fn get_newline_char(&self) -> Option<Ch<Self>>;
     fn set_newline_char(&mut self,aux:&EngineAux<Self::ET>, c: Option<Ch<Self>>, globally:bool);
 
+    fn get_parshape(&self) -> &Vec<Dim<Self>>;
+    fn take_parshape(&mut self) -> Vec<Dim<Self>>;
+    fn set_parshape(&mut self,aux:&EngineAux<Self::ET>, parshape:Vec<Dim<Self>>, globally:bool);
+
     /// get an integer register value
     fn get_int_register(&self,idx:u16) -> Int<Self>;
     /// set an integer register value
@@ -151,6 +155,7 @@ pub enum StateChange<S:State> {
     LcCode{char:Ch<S>,old:Ch<S>},
     UcCode{char:Ch<S>,old:Ch<S>},
     MathCode{char:Ch<S>,old:u32},
+    ParShape{old:Vec<Dim<S>>},
     /// A change to the [`TeXMode`], rolled back when a box group ends
     TeXMode{old:TeXMode},
     CurrentFont(Fnt<S>),
@@ -200,6 +205,7 @@ impl<S:State> StateChange<S> {
             (StateChange::EndlineChar{..},StateChange::EndlineChar{..}) => true,
             (StateChange::EscapeChar{..},StateChange::EscapeChar{..}) => true,
             (StateChange::NewlineChar{..},StateChange::NewlineChar{..}) => true,
+            (StateChange::ParShape{..},StateChange::ParShape{..}) => true,
             (StateChange::DelCode {char:c1,..},StateChange::DelCode{char:c2,..}) => c1 == c2,
             (StateChange::IntRegister {idx:i1,..},StateChange::IntRegister{idx:i2,..}) => i1 == i2,
             (StateChange::DimRegister {idx:i1,..},StateChange::DimRegister{idx:i2,..}) => i1 == i2,

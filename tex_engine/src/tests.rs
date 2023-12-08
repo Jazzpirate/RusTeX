@@ -185,7 +185,7 @@ mod tests {
         }
         engine.do_file_pdf("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",|b| {
             info!("{}",b.readable());
-            todo!()
+            println!("HERE");
         }).unwrap();
     }
 

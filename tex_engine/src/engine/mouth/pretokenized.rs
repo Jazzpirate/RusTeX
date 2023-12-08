@@ -146,9 +146,6 @@ impl<'a,'b,C:Character,CS:ControlSequenceName<C>> WriteChars<C,CS> for Stringify
         c.display(self.0)
     }
     fn push_cs<I:ControlSequenceNameHandler<C,CS>>(&mut self,cs:CS,int:&I,cc:&CategoryCodeScheme<C>,esc:Option<C>) {
-        if let Some(e) = esc {
-            e.display(self.0);
-        }
         let res = int.resolve(&cs);
         //let str = res.as_ref();
         write!(self, "{}{}", C::displayable_opt(esc), res).unwrap();
