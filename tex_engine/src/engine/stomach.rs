@@ -1,4 +1,4 @@
-use crate::commands::NodeCommandScope;
+use crate::commands::{NodeCommandScope, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
@@ -15,9 +15,13 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::tex::token::Token;
 use crate::commands::Command;
+use crate::engine::filesystem::File;
+use crate::engine::filesystem::kpathsea::SourceReference;
 use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
+use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::nodes::NodeTrait;
+use crate::tex::numerics::Skip;
 
 type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
 type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
@@ -62,14 +66,12 @@ pub trait Stomach {
     }
     fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
         match engine.stomach.data_mut().open_lists.last() {
-            Some(NodeList{tp:NodeListType::Paragraph,..}) => Self::close_paragraph(engine),
+            Some(NodeList{tp:NodeListType::Paragraph(_),..}) => Self::close_paragraph(engine),
             _ => ()
         }
         match engine.stomach.data_mut().open_lists.pop() {
             Some(ls) => match ls.tp {
-                NodeListType::Paragraph => {
-                    todo!("close paragraph")
-                }
+                NodeListType::Paragraph(_) => { unreachable!() }
                 NodeListType::Box(bi,start,reg) if bi.tp == bt => {
                     engine.state.pop(engine.aux,engine.mouth);
                     let bx = TeXBox {
@@ -108,10 +110,8 @@ pub trait Stomach {
             }
             CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_horizontal() =>
                 Self::do_word(engine,char),
-            CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_vertical() => {
-                engine.requeue(token);
-                todo!("Open Paragraph: depth {}, pos: {}",engine.stomach.data_mut().open_lists.len(),engine.mouth.display_position())
-            }
+            CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_vertical() =>
+                Self::open_paragraph(engine,token),
             CommandCode::Other | CommandCode::Letter => {
                 todo!("Char in math mode")
             }
@@ -125,11 +125,11 @@ pub trait Stomach {
         macro_rules! char {
             ($c:expr) => {{
                 let font = engine.state.get_current_font().clone();
-                match font.ligature(current,char) {
+                match font.ligature(current,$c) {
                     Some(c) => current = c,
                     None => {
                         engine.stomach.add_char(engine.state,current,font);
-                        current = char;
+                        current = $c;
                     }
                 }
             }};
@@ -438,9 +438,11 @@ pub trait Stomach {
     }
 
     fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
+
     fn open_paragraph(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>) {
+        let sref = engine.mouth.start_ref();
         engine.stomach.data_mut().open_lists.push(NodeList {
-            tp:NodeListType::Paragraph,
+            tp:NodeListType::Paragraph(sref),
             children:vec!()
         });
         engine.state.set_mode(TeXMode::Horizontal);
@@ -454,23 +456,33 @@ pub trait Stomach {
         }
         engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.everypar)
     }
+
     fn close_paragraph(engine:&mut EngineReferences<Self::ET>) {
         let ls = &mut engine.stomach.data_mut().open_lists;
         match ls.pop() {
-            Some(NodeList{tp:NodeListType::Paragraph,children}) => {
+            Some(NodeList{tp:NodeListType::Paragraph(sourceref),children}) => {
                 if ls.is_empty() {
                     engine.state.set_mode(TeXMode::Vertical)
                 } else {
                     engine.state.set_mode(TeXMode::InternalVertical)
                 }
                 if children.is_empty() {
-                    engine.state.take_parshape();
+                    let parshape = engine.state.take_parshape();
+                    engine.state.set_primitive_int(engine.aux,PRIMITIVES.hangafter,Int::<Self::ET>::default(),false);
+                    engine.state.set_primitive_dim(engine.aux,PRIMITIVES.hangindent,<Self::ET as EngineTypes>::Dim::default(),false);
                     return
                 }
-                todo!("all the things")
+                let spec = ParLineSpec::make(engine.state,engine.aux);
+                Self::split_paragraph(engine,spec,children,sourceref);
             }
             _ => todo!("throw error")
         }
+    }
+
+    #[inline(always)]
+    fn split_paragraph(engine:&mut EngineReferences<Self::ET>,specs:Vec<ParLineSpec<Self::ET>>,children:Vec<PreShipoutNode<Self::ET>>,sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
+        if children.is_empty() { return }
+        split_paragraph_roughly(engine,specs,children,sourceref)
     }
 }
 
@@ -485,6 +497,59 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             _ => todo!("error")
         );
         todo!("file end")
+    }
+}
+
+pub struct ParLineSpec<ET:EngineTypes> {
+    pub leftskip:ET::Skip,
+    pub rightskip:ET::Skip,
+    pub target:ET::Dim
+}
+impl<ET:EngineTypes> ParLineSpec<ET> {
+    pub fn make(state:&mut ET::State,aux:&mut EngineAux<ET>) -> Vec<ParLineSpec<ET>> {
+        let parshape = state.take_parshape();
+        let hangindent = state.get_primitive_dim(PRIMITIVES.hangindent);
+        let mut hangafter = state.get_primitive_int(PRIMITIVES.hangafter).into();
+        state.set_primitive_int(aux,PRIMITIVES.hangafter,ET::Int::default(),false);
+        state.set_primitive_dim(aux,PRIMITIVES.hangindent,ET::Dim::default(),false);
+        let leftskip = state.get_primitive_skip(PRIMITIVES.leftskip);
+        let rightskip = state.get_primitive_skip(PRIMITIVES.leftskip);
+        let hsize = state.get_primitive_dim(PRIMITIVES.hsize);
+        if parshape.is_empty() {
+            if hangindent == ET::Dim::default() || hangafter == 0 {
+                vec!(ParLineSpec {
+                    target:hsize + -(leftskip.base() + rightskip.base()),
+                    leftskip,rightskip
+                })
+            } else {
+                if hangafter < 0 {
+                    let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|x| ParLineSpec {
+                        target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
+                        leftskip,rightskip
+                    }).collect();
+                    r.push(ParLineSpec {
+                        target:hsize + -(leftskip.base() + rightskip.base()),
+                        leftskip,rightskip
+                    });
+                    r
+                } else {
+                    let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|x| ParLineSpec {
+                        target:hsize + -(leftskip.base() + rightskip.base()),
+                        leftskip,rightskip
+                    }).collect();
+                    r.push(ParLineSpec {
+                        target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
+                        leftskip,rightskip
+                    });
+                    r
+                }
+            }
+        } else {
+            parshape.into_iter().map(|(_,l)| ParLineSpec {
+                leftskip,rightskip,
+                target:l + -(leftskip.base() + rightskip.base())
+            }).collect()
+        }
     }
 }
 
@@ -573,11 +638,11 @@ impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
 
     #[inline(always)]
     fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
-        split_roughly(engine,nodes,target)
+        vsplit_roughly(engine, nodes, target)
     }
 }
 
-pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<PreShipoutNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
+pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<PreShipoutNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
     let data = engine.stomach.data_mut();
     data.topmarks.clear();
     std::mem::swap(&mut data.botmarks,&mut data.topmarks);
@@ -625,4 +690,84 @@ pub fn split_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut node
         }
     }
     SplitResult{first:nodes,rest,split_penalty}
+}
+
+pub enum ParLine<ET:EngineTypes> {
+    Line(Vec<PreShipoutNode<ET>>),
+    Adjust(PreShipoutNode<ET>)
+}
+fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<PreShipoutNode<ET>>,sourceref:SourceReference<<ET::File as File>::SourceRefID>) {
+    let mut ret : Vec<ParLine<ET>> = Vec::new();
+    let mut hgoals = specs.into_iter();
+    let mut nodes = children.into_iter();
+    let mut line_spec = hgoals.next().unwrap();
+    let mut target = line_spec.target;
+    'A:loop {
+        let mut line = vec!();
+        let mut reinserts = vec!();
+
+        macro_rules! next_line {
+            () => {
+                if !line.is_empty() {
+                    ret.push(ParLine::Line(line));
+                }
+                for c in reinserts {
+                    ret.push(ParLine::Adjust(c));
+                }
+                match hgoals.next() {
+                    None => (),
+                    Some(e) => line_spec = e
+                }
+                target = line_spec.target;
+            };
+        }
+
+        while target > ET::Dim::default() {
+            match nodes.next() {
+                None => {
+                    if !line.is_empty() {
+                        ret.push(ParLine::Line(line));
+                    }
+                    for c in reinserts {
+                        ret.push(ParLine::Adjust(c));
+                    }
+                    break 'A
+                }
+                Some(n@(PreShipoutNode::Mark(_,_) | PreShipoutNode::Insert | PreShipoutNode::VAdjust)) =>
+                    reinserts.push(n),
+                Some(m@PreShipoutNode::Math) => todo!(),
+                Some(PreShipoutNode::Penalty(i)) if i <= -10000 => {
+                    next_line!(); // TODO mark somehow
+                    continue 'A
+                }
+                Some(PreShipoutNode::Penalty(_)) => (),
+                Some(node) => {
+                    target = target + (-node.width());
+                    line.push(node);
+                }
+            }
+        }
+        next_line!();
+    }
+    for line in ret {
+        match line {
+            ParLine::Adjust(n) => ET::Stomach::add_node(engine,n),
+            ParLine::Line(v) => ET::Stomach::add_node(engine,
+                TeXBox {
+                    children:v,
+                    info:BoxInfo {
+                        tp:BoxType::Horizontal,
+                        kind: "parline",
+                        scaled:ToOrSpread::None,
+                        assigned_width: None,
+                        assigned_height: None,
+                        assigned_depth: None,
+                        moved_left: None,raised:None
+                    },
+                    start:sourceref,
+                    end:engine.mouth.current_sourceref(),
+                }.as_node()
+            )
+        }
+    }
 }

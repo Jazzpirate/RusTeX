@@ -189,6 +189,17 @@ pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,
     fnt.set_rp(char,code)
 }
 
+pub fn leftmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    // todo
+    let _ = engine.read_int(false);
+    Tokenizer::new(&mut |t| exp.push(t)).write_str("0pt");
+}
+pub fn rightmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    // todo
+    let _ = engine.read_int(false);
+    Tokenizer::new(&mut |t| exp.push(t)).write_str("0pt");
+}
+
 pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     use chrono::{Datelike,Timelike};
     let dt = engine.aux.start_time;
@@ -495,13 +506,11 @@ const PRIMITIVE_INTS:&[&'static str] = &[
 ];
 
 const PRIMITIVE_DIMS:&[&'static str] = &[
-    "leftmarginkern",
     "pdfhorigin",
     "pdflinkmargin",
     "pdfpageheight",
     "pdfpagewidth",
-    "pdfvorigin",
-    "rightmarginkern"
+    "pdfvorigin"
 ];
 
 const PRIMITIVE_TOKS:&[&'static str] = &[
@@ -512,6 +521,8 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     where <E::Types as EngineTypes>::Extension : PDFExtension<E::Types>,
     <E::Types as EngineTypes>::PreCustomNode : PDFNodeTrait<E::Types> {
 
+    register_expandable(engine,"leftmarginkern",leftmarginkern);
+    register_expandable(engine,"rightmarginkern",rightmarginkern);
     register_expandable(engine,"pdfcreationdate",pdfcreationdate);
     register_expandable(engine,"pdfescapestring",pdfescapestring);
     register_expandable(engine,"pdffilesize",pdffilesize);

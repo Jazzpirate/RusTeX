@@ -29,7 +29,8 @@ pub enum BoxTarget {
 
 #[derive(Clone,Debug)]
 pub enum NodeListType<ET:EngineTypes> {
-    Paragraph,Box(BoxInfo<ET>,SR<ET>,BoxTarget)
+    Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
+    Box(BoxInfo<ET>,SR<ET>,BoxTarget)
 }
 
 pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
@@ -190,6 +191,8 @@ pub enum PreShipoutNode<ET:EngineTypes> {
     Kern(KernNode<ET>),
     Box(TeXBox<ET,Self>),
     Insert,
+    VAdjust,
+    Math,
     Simple(SimpleNode<ET>),
     Custom(ET::PreCustomNode),
     Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
@@ -242,6 +245,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for PreShipoutNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<insert>")
             },
+            PreShipoutNode::VAdjust => {
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("<vadjust>")
+            },
+            PreShipoutNode::Math => {
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("<math>")
+            },
             PreShipoutNode::Simple(s) => s.readable_fmt(indent, f),
             PreShipoutNode::Char { char, font, .. } =>
                 Ok(char.display(f)),
@@ -261,7 +272,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PreShipoutNode<ET> {
             PreShipoutNode::Char { height, .. } => *height,
             PreShipoutNode::Kern(k) => k.height(),
             PreShipoutNode::Mark(_, _) => ET::Dim::default(),
-            PreShipoutNode::Insert => todo!(),
+            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
             PreShipoutNode::Whatsit(_) => ET::Dim::default(),
             PreShipoutNode::Custom(n) => n.height()
         }
@@ -275,7 +286,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PreShipoutNode<ET> {
             PreShipoutNode::Char { width, .. } => *width,
             PreShipoutNode::Kern(k) => k.width(),
             PreShipoutNode::Mark(_, _) => ET::Dim::default(),
-            PreShipoutNode::Insert => todo!(),
+            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
             PreShipoutNode::Whatsit(_) => ET::Dim::default(),
             PreShipoutNode::Custom(n) => n.width(),
         }
@@ -288,7 +299,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PreShipoutNode<ET> {
             PreShipoutNode::Char { depth, .. } => *depth,
             PreShipoutNode::Kern(k) => k.depth(),
             PreShipoutNode::Mark(_, _) => ET::Dim::default(),
-            PreShipoutNode::Insert => todo!(),
+            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
             PreShipoutNode::Whatsit(_) => ET::Dim::default(),
             PreShipoutNode::Custom(n) => n.depth(),
         }
@@ -302,6 +313,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for PreShipoutNode<ET> {
             PreShipoutNode::Char { .. } => NodeType::Char,
             PreShipoutNode::Kern(_) => NodeType::Kern,
             PreShipoutNode::Insert => NodeType::Insertion,
+            PreShipoutNode::VAdjust => NodeType::Adjust,
+            PreShipoutNode::Math => NodeType::Math,
             PreShipoutNode::Mark(_, _) => NodeType::Mark,
             PreShipoutNode::Whatsit(_) => NodeType::WhatsIt,
             PreShipoutNode::Custom(n) => n.nodetype(),
@@ -322,7 +335,7 @@ impl<ET:EngineTypes> PreShipoutNodeTrait<ET> for PreShipoutNode<ET> {
             PreShipoutNode::Char { char, font, width, height, depth } => {
                 list.push(ShipoutNode::Char { char, font, width, height, depth })
             },
-            PreShipoutNode::Insert => todo!(),
+            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
             PreShipoutNode::Simple(s) => s.shipout(list,engine),
             PreShipoutNode::Whatsit(w) => {
                 if let Some(n) = w.call(engine) {

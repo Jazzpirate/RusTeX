@@ -68,9 +68,9 @@ pub trait State:Sized+Clone {
     fn get_newline_char(&self) -> Option<Ch<Self>>;
     fn set_newline_char(&mut self,aux:&EngineAux<Self::ET>, c: Option<Ch<Self>>, globally:bool);
 
-    fn get_parshape(&self) -> &Vec<Dim<Self>>;
-    fn take_parshape(&mut self) -> Vec<Dim<Self>>;
-    fn set_parshape(&mut self,aux:&EngineAux<Self::ET>, parshape:Vec<Dim<Self>>, globally:bool);
+    fn get_parshape(&self) -> &Vec<(Dim<Self>,Dim<Self>)>;
+    fn take_parshape(&mut self) -> Vec<(Dim<Self>,Dim<Self>)>;
+    fn set_parshape(&mut self,aux:&EngineAux<Self::ET>, parshape:Vec<(Dim<Self>,Dim<Self>)>, globally:bool);
 
     /// get an integer register value
     fn get_int_register(&self,idx:u16) -> Int<Self>;
@@ -155,7 +155,7 @@ pub enum StateChange<S:State> {
     LcCode{char:Ch<S>,old:Ch<S>},
     UcCode{char:Ch<S>,old:Ch<S>},
     MathCode{char:Ch<S>,old:u32},
-    ParShape{old:Vec<Dim<S>>},
+    ParShape{old:Vec<(Dim<S>,Dim<S>)>},
     /// A change to the [`TeXMode`], rolled back when a box group ends
     TeXMode{old:TeXMode},
     CurrentFont(Fnt<S>),

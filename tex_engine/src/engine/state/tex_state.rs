@@ -50,7 +50,7 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     newline_char:Option<ET::Char>,
     current_font:Fnt<ET>,
     empty_list:TokenList<ET::Token>,
-    parshape:Vec<ET::Dim>,
+    parshape:Vec<(ET::Dim,ET::Dim)>,
 }
 impl<ET:EngineTypes<State=Self>> TeXState<ET> {
 
@@ -454,14 +454,14 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_parshape(&self) -> &Vec<Dim<Self>> {
+    fn get_parshape(&self) -> &Vec<(Dim<Self>,Dim<Self>)> {
         &self.parshape
     }
     #[inline(always)]
-    fn take_parshape(&mut self) -> Vec<Dim<Self>> {
+    fn take_parshape(&mut self) -> Vec<(Dim<Self>,Dim<Self>)> {
         std::mem::take(&mut self.parshape)
     }
-    fn set_parshape(&mut self, aux: &EngineAux<Self::ET>, parshape: Vec<Dim<Self>>, globally: bool) {
+    fn set_parshape(&mut self, aux: &EngineAux<Self::ET>, parshape: Vec<(Dim<Self>,Dim<Self>)>, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing parshape}}",if g {"globally "} else {""}));
@@ -762,7 +762,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                                                     ET::Char::displayable_opt(s.escape_char),
                                                     idx,old));
                 aux.outputs.write_neg1(format_args!("{{into {}dimen{}={}}}",
-                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+                                                    ET::Char::displayable_opt(s.escape_char),idx,v));
             }
             StateChange::DimRegister { idx:idx as u16, old }
         });

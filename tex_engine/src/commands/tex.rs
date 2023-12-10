@@ -61,7 +61,7 @@ pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
         Some(GroupType::ControlSequence) => (),
         _ => todo!("throw error")
     }
-    engine.state.pop(engine.aux,engine.mouth)
+    engine.state.pop(engine.aux,engine.mouth);
 }
 
 #[inline(always)]

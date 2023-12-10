@@ -274,6 +274,10 @@ impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
                         }
                         while let Some(b' ') = s.last() {
                             s.pop();
+                            if s.last() == Some(&b'\\') {
+                                s.push(b' ');
+                                break;
+                            }
                         }
                         Some(C::convert(s))
                     }

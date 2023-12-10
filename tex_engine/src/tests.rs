@@ -62,16 +62,18 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use std::fmt::Formatter;
+    use std::panic::panic_any;
     use ansi_term::Colour::*;
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
+    use crate::commands::{Command, Unexpandable};
     use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainPDFTeXEngine, PlainTeXEngine, TeXEngine};
     use crate::engine::gullet::DefaultGullet;
-    use crate::engine::mouth::DefaultMouth;
+    use crate::engine::mouth::{DefaultMouth, Mouth};
     use crate::engine::mouth::pretokenized::ExpansionContainer;
     use crate::engine::state::{CustomStateChange, State};
-    use crate::engine::utils::memory::PRIMITIVES;
+    use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::{Character, StringLineSource};
     use crate::tex::nodes::PreShipoutNodeTrait;
@@ -80,6 +82,7 @@ mod tests {
     use crate::engine::PDFTeXEngine;
     use crate::engine::state::tex_state::TeXState;
     use crate::engine::stomach::StomachWithShipout;
+    use crate::tex::control_sequences::ControlSequenceNameHandler;
     use crate::tex::nodes::NodeTrait;
 
     #[test]
@@ -174,6 +177,14 @@ mod tests {
     fn thesis() {
         debug();
         let mut engine = PlainPDFTeXEngine::new();
+        engine.register_primitive(Command::Unexpandable(
+            Unexpandable {
+                name:PRIMITIVES.get("rustexBREAK"),
+                apply:|_,_| {
+                    println!("HERE!")
+                }
+            }
+        ),"rustexBREAK");
         engine.initialize_pdflatex().unwrap();
         {
             let refs = engine.get_engine_refs();
@@ -186,7 +197,11 @@ mod tests {
         engine.do_file_pdf("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",|b| {
             info!("{}",b.readable());
             println!("HERE");
-        }).unwrap();
+        }).unwrap_or_else(|e| {
+            let pos = engine.mouth.display_position().to_string();
+            error!("{}:\n{}",pos,engine.get_engine_refs().preview());
+            panic!("{}",e.msg);
+        });
     }
 
     #[test]

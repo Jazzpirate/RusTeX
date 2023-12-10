@@ -229,7 +229,9 @@ pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
 }
 
 pub fn iffontchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    todo!()
+    let font = engine.read_font();
+    let char = engine.read_charcode(false);
+    font.has_char(char)
 }
 
 pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {

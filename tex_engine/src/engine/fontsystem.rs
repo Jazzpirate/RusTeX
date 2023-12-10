@@ -39,6 +39,7 @@ pub trait Font:Clone+std::fmt::Debug {
     fn set_hyphenchar(&mut self,c:Self::Int);
     fn get_skewchar(&self) -> Self::Int;
     fn set_skewchar(&mut self,c:Self::Int);
+    fn has_char(&self,c:Self::Char) -> bool;
     fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<Self::Char>>::Handler,w:W) -> std::fmt::Result;
     fn get_wd(&self,c:Self::Char) -> Self::D;
     fn get_ht(&self,c:Self::Char) -> Self::D;
@@ -149,6 +150,10 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
     type CS = CS;
     type Int = I;
     type D = D;
+    fn has_char(&self, c: Self::Char) -> bool {
+        let f = &self.file;
+        f.heights[c as usize] != 0.0 || f.depths[c as usize] != 0.0 || f.widths[c as usize] != 0.0
+    }
     fn get_hyphenchar(&self) -> I {
         match self.muts.read().unwrap().hyphenchar {
             Some(c) => c,
