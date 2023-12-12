@@ -27,7 +27,7 @@ pub trait ResolvedCSName<'a,C:Character>:Display {
 }
 
 /** Handles control sequence names - conversion from/to strings, displaying etc. */
-pub trait ControlSequenceNameHandler<C:Character,CS: ControlSequenceName<C>>:Default {
+pub trait ControlSequenceNameHandler<C:Character,CS: ControlSequenceName<C>>:Default+Clone {
     type Resolved<'a>:ResolvedCSName<'a,C> where Self:'a;
     /// Creates a new control sequence name from a string.
     fn new(&mut self,s: &str) -> CS;

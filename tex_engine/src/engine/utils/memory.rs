@@ -58,6 +58,7 @@ impl<T:Token> DefaultMemoryManager<T> {
 }
 
 /// A memory manager that reuses allocated memory for token lists.
+#[derive(Clone)]
 pub struct ReuseTokenLists<T:Token> {
     factory:ReusableVectorFactory<T>,
     handler:<T::CS as ControlSequenceName<T::Char>>::Handler,
@@ -263,6 +264,7 @@ pub type InternedString = string_interner::symbol::SymbolU32;
 type Backend = string_interner::backend::StringBackend<InternedString>;
 
 /// A string interner for control sequence names. Implements [`ControlSequenceNameHandler`].
+#[derive(Clone)]
 pub struct StringInterner {
     interner:string_interner::StringInterner<Backend,ahash::RandomState>,
     empty_str:InternedString,
@@ -330,6 +332,7 @@ impl<C:Character> ControlSequenceName<C> for InternedCSName<C> {
         self.0 as usize
     }
 }
+#[derive(Clone)]
 pub struct CharacterVecInterner<C:Character> {
     map:HMap<Box<[C]>,u32>,
     ls:Vec<C>,

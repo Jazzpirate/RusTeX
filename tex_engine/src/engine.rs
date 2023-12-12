@@ -259,7 +259,7 @@ pub struct DefaultPDFTeXEngineTypes;
 impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Char = u8;
     type CSName = utils::memory::InternedCSName<u8>;//InternedString;
-    type Token = super::tex::token::CompactToken;//::StandardToken<Self::CSName,u8>;//
+    type Token = super::tex::token::CompactToken;//::StandardToken<u8,Self::CSName>;//
     type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = MinimalPDFExtension<Self>;
     type Int = i32;
@@ -281,7 +281,11 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
 }
 
 pub type PlainPDFTeXEngine = DefaultEngine<DefaultPDFTeXEngineTypes>;
-impl PDFTeXEngine for PlainPDFTeXEngine {}
+//impl PDFTeXEngine for PlainPDFTeXEngine {}
+impl<A> PDFTeXEngine for A where
+    A:TeXEngine,
+    <A::Types as EngineTypes>::Extension : PDFExtension<A::Types>,
+    <A::Types as EngineTypes>::PreCustomNode : PDFNodeTrait<A::Types> {}
 
 /** Additional components we want to add to a [`EngineReferences`] can be implemented here.
     Notably, `()` extends this trait if we don't need any additional components.

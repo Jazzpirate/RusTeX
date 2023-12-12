@@ -19,6 +19,7 @@ lazy_static! {
 
 /// Provides [`Vec`]s of some type for reuse, avoiding unnecessary allocations.
 /// Primarily used for reusing [`Vec`]`<`[`Token`](crate::tex::token::Token)`>`s.
+#[derive(Clone)]
 pub struct ReusableVectorFactory<T> {
     size:usize,
     vecs:Vec<Vec<T>>
