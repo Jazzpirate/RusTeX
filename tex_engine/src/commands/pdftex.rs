@@ -399,7 +399,7 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     if engine.read_keyword(b"resources") {
         engine.read_braced_string(true,&mut attr);
     }
-    let idx = super::tex::read_register(engine);
+    let idx = super::utils::read_register(engine);
     let bx = engine.state.take_box_register(idx);
     engine.aux.extension.pdfxforms().push(PDFXForm {
         attr,resources,bx

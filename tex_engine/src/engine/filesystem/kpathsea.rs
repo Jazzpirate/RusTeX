@@ -99,7 +99,7 @@ impl Kpathsea {
 }
 
 lazy_static! {
-    static ref KPATHSEA : Arc<KpathseaBase> = Arc::new(KpathseaBase::new());
+    pub static ref KPATHSEA : Arc<KpathseaBase> = Arc::new(KpathseaBase::new());
 }
 
 /// The result of a [`Kpathsea`] search.
@@ -118,6 +118,21 @@ pub struct KpathseaBase {
 }
 
 impl KpathseaBase {
+    pub fn which<S:AsRef<str>>(&self,filestr:S) -> Option<PathBuf> {
+        let pb = PathBuf::from(filestr.as_ref());
+        let filestr = filestr.as_ref();
+        if pb.is_absolute() {
+            if pb.is_file() {return Some(pb) }
+            else {return Some(pb) }
+        }
+        for l in self.set.iter() {
+            let mut p = l.join(filestr);
+            if p.is_file() { return Some(p) }
+            p = l.join(format!("{}.tex",filestr));
+            if p.is_file() { return Some(p) }
+        }
+        None
+    }
     /*pub fn get(&self,filestr:&str) -> Option<KpseResult> {
         for l in &*self.set {
             let mut p = l.join(filestr);
@@ -186,6 +201,8 @@ impl KpathseaBase {
             vars.get("VARTEXFONTS").map(|x| x.clone()),
             vars.get("VFFONTS").map(|x| x.clone()),
             vars.get("TFMFONTS").map(|x| x.clone()),
+            vars.get("T1FONTS").map(|x| x.clone()),
+            vars.get("ENCFONTS").map(|x| x.clone()),
         ).into_iter().flatten().collect();
         vars.insert("progname".to_string(),"pdflatex".to_string());
         let home = if cfg!(target_os = "windows") {

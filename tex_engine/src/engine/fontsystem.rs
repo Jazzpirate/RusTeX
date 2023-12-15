@@ -21,7 +21,7 @@ pub trait FontSystem:Clone+std::fmt::Debug {
     type Font:Font<Char=Self::Char,CS=Self::CS,D=Self::Dim,Int=Self::Int>;
     type Dim:TeXDimen;
     fn null(&self) -> Self::Font;
-    fn new<ET:EngineTypes<FontSystem=Self,Char=Self::Char,CSName=Self::CS>>(aux:&mut EngineAux<ET>) -> Self;
+    fn new<ET:EngineTypes<Char=Self::Char,CSName=Self::CS>>(aux:&mut EngineAux<ET>) -> Self;
     fn new_font<S:AsRef<str>,F:FileSystem>(&mut self,path:S,macroname:<Self::Font as Font>::CS,fs:&mut F) -> Self::Font;
 }
 
@@ -65,7 +65,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
     type Dim = D;
     type CS=CS;
 
-    fn new<ET: EngineTypes<FontSystem=Self,Char=Self::Char,CSName=Self::CS>>(aux: &mut EngineAux<ET>) -> Self {
+    fn new<ET: EngineTypes<Char=Self::Char,CSName=Self::CS>>(aux: &mut EngineAux<ET>) -> Self {
         use crate::tex::control_sequences::ControlSequenceNameHandler;
         let null_file = TfmFile {
             hyphenchar:45,

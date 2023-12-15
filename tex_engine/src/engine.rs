@@ -71,7 +71,7 @@ pub struct Colon<'c,ET:EngineTypes> {
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
     #[inline(always)]
-    pub fn new<F:FnMut(ShipoutNode<ET>)+'c>(f:F) -> Self {
+    pub fn new<F:FnMut(ShipoutNode<ET>) + 'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
     #[inline(always)]

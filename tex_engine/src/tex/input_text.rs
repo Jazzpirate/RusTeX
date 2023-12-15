@@ -83,24 +83,6 @@ impl Character for u8 {
             target.write_str(format!("^^{:x}",*self).as_str());
         }
     }
-/*
-    #[inline(always)]
-    fn single_char(string: &str) -> Option<Self> {
-        if string.len()==1 {
-            Some(string.as_bytes()[0])
-        } else if string.len() == 3 && string.starts_with("^^") {
-            let b = string.as_bytes()[2];
-            if b <= 255-64 {
-                Some(b + 64)
-            } else { None }
-        } else if string.len() == 4 && string.starts_with("^^"){
-            if let Ok(b) = u8::from_str_radix(&string[2..],16) {
-                Some(b)
-            } else { None }
-        } else { None }
-    }
-
- */
 
     fn starting_catcode_scheme() -> [CategoryCode;256] {
         super::catcodes::STARTING_SCHEME_U8.clone()
@@ -200,7 +182,7 @@ pub trait TextLineSource<C:Character> {
 }
 /// A source of lines of characters generated from a string.
 pub struct StringLineSource<C:Character> {
-    lines:Vec<Box<[C]>>
+    pub lines:Vec<TextLine<C>>
 }
 impl<C:Character> From<Vec<Box<[C]>>> for StringLineSource<C> {
     fn from(lines: Vec<Box<[C]>>) -> Self { Self { lines } }

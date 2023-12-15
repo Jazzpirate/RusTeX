@@ -33,7 +33,7 @@ pub trait FileSystem:Clone {
     fn close_in(&mut self,idx:u8);
     fn close_out(&mut self,idx:u8);
     fn eof(&self,idx:u8) -> bool;
-    fn write<ET:EngineTypes<FileSystem=Self>,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
+    fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
     fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
                                                   idx:u8,eh:&E,
                                                   handler:&mut <T::CS as ControlSequenceName<T::Char>>::Handler,
@@ -70,11 +70,11 @@ pub trait FileLineSource<C:Character>:TextLineSource<C> {
 /// If a file is modified, its contents are kept in memory.
 ///
 pub struct NoOutputFileSystem<C:Character> {
-    kpse:Kpathsea,
+    pub kpse:Kpathsea,
     files:HMap<PathBuf,VirtualFile<C>>,
     write_files:Vec<Option<WritableVirtualFile<C>>>,
     read_files:Vec<Option<StringTokenizer<C,VirtualFileLineSource<C>>>>,
-    interner:string_interner::StringInterner<string_interner::DefaultBackend<string_interner::symbol::SymbolU32>,ahash::RandomState>
+    pub interner:string_interner::StringInterner<string_interner::DefaultBackend<string_interner::symbol::SymbolU32>,ahash::RandomState>
 }
 impl<C:Character> Clone for NoOutputFileSystem<C> {
     fn clone(&self) -> Self { Self {
@@ -194,7 +194,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             _ => ()
         }
     }
-    fn write<ET:EngineTypes<FileSystem=Self>,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
+    fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
         if idx < 0 {
             aux.outputs.write_neg1(string)
         } else if idx == 16 {
@@ -290,8 +290,9 @@ impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
 
 #[derive(Clone,Debug)]
 pub struct VirtualFile<C:Character> {
-    path:PathBuf,id:string_interner::symbol::SymbolU32,
-    source:Option<VirtualFileContents<C>>
+    pub path:PathBuf,
+    pub id:string_interner::symbol::SymbolU32,
+    pub source:Option<VirtualFileContents<C>>
 }
 impl<C:Character> std::fmt::Display for VirtualFile<C> {
     #[inline(always)]
@@ -303,6 +304,10 @@ impl<C:Character> File for VirtualFile<C> {
     type Char = C;
     type LineSource = VirtualFileLineSource<C>;
     type SourceRefID = string_interner::symbol::SymbolU32;
+    #[inline(always)]
+    fn exists(&self) -> bool {
+        self.source.is_some() || self.path().exists()
+    }
     #[inline(always)]
     fn sourceref(&self) -> Self::SourceRefID { self.id }
     #[inline(always)]

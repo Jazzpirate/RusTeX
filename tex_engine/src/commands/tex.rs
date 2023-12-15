@@ -1,26 +1,26 @@
 use chrono::{Datelike, Timelike};
-use crate::{cmstodo, cmstodos, cmtodo, cmtodos, debug_log, expand_loop};
-use crate::commands::{Assignment, Command, DimCommand, Expandable, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, NodeCommandScope, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
-use crate::engine::{EngineAux, EngineReferences, EngineTypes, TeXEngine};
+use crate::{cmstodo, cmstodos, cmtodo, cmtodos, expand_loop};
+use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, NodeCommandScope, SkipCommand, Whatsit};
+use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{ExpansionContainer, TLVecMeaning, Tokenizer, TokenList};
+use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
 use super::primitives::*;
 use crate::engine::state::State;
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES, PrintableIdentifier};
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
+use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
-use crate::engine::stomach::{SplitResult, Stomach, StomachData};
+use crate::engine::stomach::{SplitResult, Stomach};
 use crate::tex::types::{BoxType, GroupType, TeXMode};
-use std::fmt::{Display, Write};
+use std::fmt::Write;
+use crate::commands::utils::IfxCmd;
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
-use crate::utils::{HMap, Ptr};
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, NodeList, NodeListType, PreShipoutNodeTrait, SimpleNode, SkipNode, TeXBox, PreShipoutNode, ToOrSpread, ShipoutNode};use crate::tex::nodes::NodeTrait;
@@ -29,13 +29,6 @@ type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
 type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
 
-pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
-    let idx = engine.read_int(false).into();
-    if idx < 0 || idx > u16::MAX.into() {
-        todo!("register out of range")
-    }
-    idx as u16
-}
 
 pub fn afterassignment<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     let next = match engine.get_next() {
@@ -200,68 +193,54 @@ pub fn chardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,gl
 }
 
 pub fn csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    let name = do_csname(engine);
+    let name = super::utils::do_csname(engine);
     if engine.state.get_command(&name).is_none() {
         engine.state.set_command(engine.aux,name.clone(),Some(Command::Relax),false)
     }
     engine.mouth.requeue(ET::Token::from_cs(name))
 }
-pub fn do_csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ET::CSName {
-    *engine.gullet.csnames() += 1;
-    let mut name = vec!();
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,..} => name.push(char),
-        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(e)),..} if e.name == PRIMITIVES.endcsname => {
-            *engine.gullet.csnames() -= 1;
-            let id = engine.aux.memory.cs_interner_mut().from_chars(&name);
-            //engine.aux.memory.return_string(name);
-            return id
-        }
-        o => todo!("csname: {:?}",o)
-    );
-    todo!("file end")
-}
+
 pub fn endcsname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     todo!("throw error")
 }
 
 
 pub fn count_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     engine.state.get_int_register(idx)
 }
 pub fn count_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let val = engine.read_int(true);
     engine.state.set_int_register(engine.aux,idx,val,globally)
 }
 
 pub fn dimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     engine.state.get_dim_register(idx)
 }
 pub fn dimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let val = engine.read_dim(true);
     engine.state.set_dim_register(engine.aux,idx,val,globally)
 }
 
 pub fn skip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> ET::Skip {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     engine.state.get_skip_register(idx)
 }
 pub fn skip_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let val = engine.read_skip(true);
     engine.state.set_skip_register(engine.aux,idx,val,globally)
 }
 
 pub fn muskip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> ET::MuSkip {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     engine.state.get_muskip_register(idx)
 }
 pub fn muskip_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let val = engine.read_muskip(true);
     engine.state.set_muskip_register(engine.aux,idx,val,globally)
 }
@@ -326,30 +305,11 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
         }
         None => todo!("file end error")
     };
-    let (sig,end) = parse_signature(engine,&cm);
+    let (sig,end) = super::utils::parse_signature(engine,&cm);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     engine.read_until_endgroup(|_,_,t| {
-        if inparam {
-            inparam = false;
-            if t.is_param() {
-                exp.push(t);
-            } else {
-                match t.char_value() {
-                    Some(c) => match c.try_into() {
-                        Ok(u) if u > 48 && u - 49 < sig.arity => exp.push(ET::Token::argument_marker(u-49)),
-                        _ => todo!("error")
-                    }
-                    None => todo!("error")
-                }
-            }
-        } else {
-            if t.is_param() {
-                inparam = true;
-            } else {
-                exp.push(t);
-            }
-        }
+        super::utils::parse_exp_i::<ET>(sig.arity,&mut inparam,&mut exp,t)
     });
     if inparam {todo!("error")}
     if let Some(e) = end {
@@ -373,31 +333,11 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
         }
         None => todo!("file end error")
     };
-    let (sig,end) = parse_signature(engine,&cm);
+    let (sig,end) = super::utils::parse_signature(engine,&cm);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,_,t| {
-        if inparam {
-            inparam = false;
-            if t.is_param() {
-                exp.push(t);
-            }
-            else {
-                match t.char_value() {
-                    Some(c) => match c.try_into() {
-                        Ok(u) if u > 48 && u - 49 < sig.arity => exp.push(ET::Token::argument_marker(u-49)),
-                        _ => todo!("error")
-                    }
-                    None => todo!("error")
-                }
-            }
-        } else {
-            if t.is_param() {
-                inparam = true;
-            } else {
-                exp.push(t);
-            }
-        }
+        super::utils::parse_exp_i::<ET>(sig.arity,&mut inparam,&mut exp,t)
     });
     if inparam {todo!("error")}
     if let Some(e) = end {
@@ -422,14 +362,14 @@ pub fn gdef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
 }
 
 pub fn dp_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     match engine.state.get_box_register(idx) {
         None => ET::Dim::default(),
         Some(b) => b.depth()
     }
 }
 pub fn dp_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
         b.info.assigned_depth = Some(dim)
@@ -437,14 +377,14 @@ pub fn dp_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
 }
 
 pub fn ht_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     match engine.state.get_box_register(idx) {
         None => ET::Dim::default(),
         Some(b) => b.height()
     }
 }
 pub fn ht_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
         b.info.assigned_height = Some(dim)
@@ -452,14 +392,14 @@ pub fn ht_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
 }
 
 pub fn wd_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     match engine.state.get_box_register(idx) {
         None => ET::Dim::default(),
         Some(b) => b.width()
     }
 }
 pub fn wd_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
         b.info.assigned_width = Some(dim)
@@ -548,124 +488,15 @@ pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
     )
 }
 
-pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cm:&ACOrCS<ET::Token>)
-    -> (MacroSignature<ET::Token>,Option<ET::Token>) {
-    let mut arity = 0;
-    let mut params = shared_vector::Vector::new();
-    let mut inparam = false;
-    let mut ends_with_brace = None;
-    engine.mouth.iterate(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
-        if t.is_begin_group() {
-            if inparam {
-                params.push(t.clone());
-                ends_with_brace = Some(t);
-            }
-            return false
-        }
-        if inparam {
-            inparam = false;
-            if t.is_param() {
-                params.push(t);
-            }
-            else {
-                match t.char_value() {
-                    Some(c) => match c.try_into() {
-                        Ok(u) if u > 48 && u == 49 + arity => params.push(ET::Token::argument_marker(arity)),
-                        _ => todo!("error")
-                    }
-                    None => todo!("error")
-                }
-                arity += 1
-            }
-        } else {
-            if t.is_param() {
-                inparam = true;
-            } else {
-                params.push(t);
-            }
-        }
-        true
-    });
-    (MacroSignature{
-        arity,params:params.into()
-    },ends_with_brace)
-}
-
-fn modify_int_register<ET:EngineTypes,O:FnOnce(Int<ET>,&mut EngineReferences<ET>) -> Int<ET>>(engine: &mut EngineReferences<ET>,idx:u16,globally:bool,op:O) {
-    engine.read_keyword(b"by");
-    let old = engine.state.get_int_register(idx);
-    let new = op(old,engine);
-    engine.state.set_int_register(engine.aux,idx,new,globally);
-}
-
-fn modify_dim_register<ET:EngineTypes,O:FnOnce(Dim<ET>,&mut EngineReferences<ET>) -> Dim<ET>>(engine: &mut EngineReferences<ET>,idx:u16,globally:bool,op:O) {
-    engine.read_keyword(b"by");
-    let old = engine.state.get_dim_register(idx);
-    let new = op(old,engine);
-    engine.state.set_dim_register(engine.aux,idx,new,globally);
-}
-
-fn modify_skip_register<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>,idx:u16,globally:bool,op:O) {
-    engine.read_keyword(b"by");
-    let old = engine.state.get_skip_register(idx);
-    let new = op(old,engine);
-    engine.state.set_skip_register(engine.aux,idx,new,globally);
-}
-
-macro_rules! modify_num {
-    ($engine:ident,$globally:ident,$int:expr,$dim:expr,$skip:expr) => {
-        crate::expand_loop!($engine,
-            ResolvedToken::Cmd {cmd:Some(cm),token} => match cm {
-                Command::Int(IntCommand{name,..}) if *name == PRIMITIVES.count => {
-                    let idx = $engine.read_int(false);
-                    let idx = match idx.try_into() {
-                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
-                        _ => todo!("throw error")
-                    };
-                    return modify_int_register($engine,idx,$globally,$int)
-                }
-                Command::IntRegister(idx) => {
-                    return modify_int_register($engine,*idx,$globally,$int)
-                }
-                Command::Dim(DimCommand{name,..}) if *name == PRIMITIVES.dimen => {
-                    let idx = $engine.read_int(false);
-                    let idx = match idx.try_into() {
-                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
-                        _ => todo!("throw error")
-                    };
-                    return modify_dim_register($engine,idx,$globally,$dim)
-                }
-                Command::DimRegister(idx) => {
-                    return modify_dim_register($engine,*idx,$globally,$dim)
-                }
-                Command::Skip(SkipCommand{name,..}) if *name == PRIMITIVES.skip => {
-                    let idx = $engine.read_int(false);
-                    let idx = match idx.try_into() {
-                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
-                        _ => todo!("throw error")
-                    };
-                    return modify_skip_register($engine,idx,$globally,$skip)
-                }
-                Command::SkipRegister(idx) => {
-                    return modify_skip_register($engine,*idx,$globally,$skip)
-                }
-                o => todo!("{:?} in \\advance",o)
-            }
-            _ => todo!("throw error")
-        );
-        todo!("file end")
-    };
-}
-
 pub fn advance<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    modify_num!(engine,globally,
+    crate::modify_num!(engine,globally,
         |a,e| a + e.read_int(false),
         |a,e| a + e.read_dim(false),
         |a,e| a + e.read_skip(false)
     );
 }
 pub fn divide<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    modify_num!(engine,globally,|a,e| {
+    crate::modify_num!(engine,globally,|a,e| {
         let b = e.read_int(false);
         if b == Int::<ET>::default() {
             todo!("divide by zero")
@@ -687,7 +518,7 @@ pub fn divide<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
     );
 }
 pub fn multiply<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    modify_num!(engine,globally,
+    crate::modify_num!(engine,globally,
         |a,e| a * e.read_int(false),
         |a,e| {
             let b = e.read_int(false);
@@ -851,45 +682,18 @@ pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
     font.set_dim(idx,dim);
 }
 
-fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,every:PrimitiveIdentifier) -> ToOrSpread<ET::Dim> {
-    let scaled = match engine.read_keywords(&[b"to",b"spread"]) {
-        Some(b"to") => {
-            let to = engine.read_dim(false);
-            ToOrSpread::To(to)
-        }
-        Some(b"spread") => {
-            let spread = engine.read_dim(false);
-            ToOrSpread::Spread(spread)
-        }
-        _ => ToOrSpread::None
-    };
-    let mut ate_relax = scaled == ToOrSpread::None;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Relax),..} if !ate_relax => ate_relax = true,
-        ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
-        ResolvedToken::Cmd {cmd:Some(Command::Char{code:CommandCode::BeginGroup,..}),..} => {
-            engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
-            engine.mouth.insert_every::<ET>(&engine.state,every);
-            return scaled
-        }
-        o => todo!("throw error: {:?}",o)
-    );
-    todo!("file end")
-}
-
 pub fn box_<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     Ok(engine.state.take_box_register(idx))
 }
 pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     Ok(engine.state.get_box_register(idx).cloned())
 }
 
 pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,scope:NodeCommandScope,tp:BoxType,copy:bool) {
     if ET::Stomach::maybe_switch_mode(engine,scope,tk) {
-        let idx = read_register(engine);
+        let idx = super::utils::read_register(engine);
         let bx = if copy {engine.state.get_box_register(idx).cloned()} else {engine.state.take_box_register(idx)};
         match bx {
             None => (),
@@ -917,7 +721,7 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
-    let scaled = do_box_start(engine,BoxType::Horizontal,PRIMITIVES.everyhbox);
+    let scaled = super::utils::do_box_start(engine,BoxType::Horizontal,PRIMITIVES.everyhbox);
     Err(BoxInfo {
         tp: BoxType::Horizontal,
         kind: "hbox",
@@ -930,7 +734,7 @@ pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
 }
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
-    let scaled = do_box_start(engine,BoxType::Vertical,PRIMITIVES.everyvbox);
+    let scaled = super::utils::do_box_start(engine,BoxType::Vertical,PRIMITIVES.everyvbox);
     Err(BoxInfo {
         tp: BoxType::Vertical,
         kind: "vbox",
@@ -967,8 +771,8 @@ pub fn skewchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Tok
 }
 
 pub fn if_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let first = get_if_token(engine);
-    let second = get_if_token(engine);
+    let first = super::utils::get_if_token(engine);
+    let second = super::utils::get_if_token(engine);
     first.0 == second.0
 }
 
@@ -980,36 +784,9 @@ pub fn ifcase<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 }
 
 pub fn ifcat<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let first = get_if_token(engine);
-    let second = get_if_token(engine);
+    let first = super::utils::get_if_token(engine);
+    let second = super::utils::get_if_token(engine);
     first.1 == second.1
-}
-fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
-    let mut exp = true;
-    while let Some(t) = engine.get_next() {
-        if t.is_noexpand_marker() {
-            exp = false;
-            continue
-        }
-        match ET::Gullet::resolve(engine.state,t) {
-            ResolvedToken::Tk {char,code,..} => return (Some(char),code),
-            ResolvedToken::Cmd {cmd,token} => match cmd {
-                Some(Command::Macro(m)) if exp =>
-                    ET::Gullet::do_macro(engine,m.clone(),token),
-                Some(Command::Conditional(cond)) if exp =>
-                    ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
-                Some(Command::Expandable(e)) if exp =>
-                    ET::Gullet::do_expandable(engine,e.name,token,e.expand),
-                Some(Command::SimpleExpandable(e)) if exp =>
-                    ET::Gullet::do_simple_expandable(engine,e.name,token,e.expand),
-                Some(Command::Char {char,code},..) => {
-                    return (Some(*char),*code)
-                }
-                _ => return (None,CommandCode::Escape)
-            },
-        }
-    }
-    todo!("throw error")
 }
 
 pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
@@ -1029,7 +806,7 @@ pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
 }
 
 pub fn ifeof<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = read_file_index(engine);
+    let idx = super::utils::read_file_index(engine);
     engine.filesystem.eof(idx)
 }
 
@@ -1094,114 +871,21 @@ pub fn ifvmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
     }
 }
 pub fn ifvbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     match engine.state.get_box_register(idx) {
         Some(TeXBox {info:BoxInfo{tp:BoxType::Vertical,..},..}) => true,
         _ => false
     }
 }
 pub fn ifvoid<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     engine.state.get_box_register(idx).is_none()
 }
 pub fn ifhbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     match engine.state.get_box_register(idx) {
         Some(TeXBox {info:BoxInfo{tp:BoxType::Horizontal,..},..}) => true,
         _ => false
-    }
-}
-
-enum IfxCmd<ET:EngineTypes> {
-    Char(ET::Char,CommandCode),
-    Undefined,
-    Primitive(PrimitiveIdentifier),
-    Noexpand(ET::Token),
-    Chardef(ET::Char),
-    Font(<ET::FontSystem as FontSystem>::Font),
-    MathChar(u32),
-    Macro(Macro<ET::Token>),
-    IntRegister(u16),
-    DimRegister(u16),
-    SkipRegister(u16),
-    MuSkipRegister(u16),
-    ToksRegister(u16),
-    BoxRegister(u16),
-}
-impl<ET:EngineTypes> IfxCmd<ET> {
-    fn read(engine:&mut EngineReferences<ET>) -> Self {
-        match engine.get_next() {
-            Some(t) if t.is_noexpand_marker() =>
-                IfxCmd::Noexpand(engine.get_next().unwrap()),
-            Some(t) => Self::resolve(engine.resolve(t)),
-            _ => todo!("throw error")
-        }
-    }
-    fn resolve<'a>(r:ResolvedToken<'a,ET>) -> Self {
-        match r {
-            ResolvedToken::Tk {char,code,..} => Self::Char(char,code),
-            ResolvedToken::Cmd {cmd,..} => match cmd {
-                Some(Command::Char {char,code}) => Self::Char(*char,*code),
-                None => Self::Undefined,
-                Some(Command::Expandable(Expandable{name,..}) |
-                     Command::SimpleExpandable(SimpleExpandable{name,..})
-                ) => Self::Primitive(*name),
-                Some(Command::Macro(m)) => Self::Macro(m.clone()),
-                Some(Command::Relax) => Self::Primitive(PRIMITIVES.relax),
-                Some(Command::CharDef(c)) => Self::Chardef(*c),
-                Some(Command::Int(i)) => Self::Primitive(i.name),
-                Some(Command::Dim(i)) => Self::Primitive(i.name),
-                Some(Command::Skip(i)) => Self::Primitive(i.name),
-                Some(Command::MuSkip(i)) => Self::Primitive(i.name),
-                Some(Command::Assignment(a)) => Self::Primitive(a.name),
-                Some(Command::Unexpandable(a)) => Self::Primitive(a.name),
-                Some(Command::Conditional(i)) => Self::Primitive(i.name),
-                Some(Command::Box(i)) => Self::Primitive(i.name),
-                Some(Command::Node(n)) => Self::Primitive(n.name),
-                Some(Command::Whatsit(n)) => Self::Primitive(n.name),
-                Some(Command::Font(f)) => Self::Font(f.clone()),
-                Some(Command::MathChar(u)) => Self::MathChar(*u),
-                Some(Command::IntRegister(u)) => Self::IntRegister(*u),
-                Some(Command::DimRegister(u)) => Self::DimRegister(*u),
-                Some(Command::SkipRegister(u)) => Self::SkipRegister(*u),
-                Some(Command::MuSkipRegister(u)) => Self::MuSkipRegister(*u),
-                Some(Command::ToksRegister(u)) => Self::ToksRegister(*u),
-                Some(Command::PrimitiveInt(id)) => Self::Primitive(*id),
-                Some(Command::PrimitiveDim(id)) => Self::Primitive(*id),
-                Some(Command::PrimitiveSkip(id)) => Self::Primitive(*id),
-                Some(Command::PrimitiveMuSkip(id)) => Self::Primitive(*id),
-                Some(Command::PrimitiveToks(id)) => Self::Primitive(*id),
-                //Some(Command::BoxRegister(u)) => Self::BoxRegister(*u),
-                o => todo!("{:?}",o)
-            },
-        }
-    }
-}
-
-impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self,other) {
-            (Self::Char(_,CommandCode::Space),Self::Char(_,CommandCode::Space)) => true,
-            (Self::Char(c1,cc1),Self::Char(c2,cc2)) => c1 == c2 && cc1 == cc2,
-            (Self::Undefined,Self::Undefined) => true,
-            (Self::Primitive(id),Self::Primitive(id2)) => id == id2,
-            (Self::Noexpand(t1),Self::Noexpand(t2)) => t1 == t2,
-            (Self::Chardef(c),Self::Chardef(c2)) => c == c2,
-            (Self::Font(f1),Self::Font(f2)) => f1.name() == f2.name(),
-            (Self::MathChar(u1),Self::MathChar(u2)) => u1 == u2,
-            (Self::IntRegister(u1),Self::IntRegister(u2)) => u1 == u2,
-            (Self::DimRegister(u1),Self::DimRegister(u2)) => u1 == u2,
-            (Self::SkipRegister(u1),Self::SkipRegister(u2)) => u1 == u2,
-            (Self::MuSkipRegister(u1),Self::MuSkipRegister(u2)) => u1 == u2,
-            (Self::ToksRegister(u1),Self::ToksRegister(u2)) => u1 == u2,
-            (Self::BoxRegister(u1),Self::BoxRegister(u2)) => u1 == u2,
-            (Self::Macro(m1),Self::Macro(m2)) =>
-                m1.long == m2.long && m1.outer == m2.outer && m1.protected == m2.protected &&
-                    m1.signature.params == m2.signature.params &&
-                    m1.expansion == m2.expansion
-            ,
-            _ => false
-        }
     }
 }
 
@@ -1503,11 +1187,11 @@ pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
-    let (idx,file) = read_index_and_file(engine);
+    let (idx,file) = super::utils::read_index_and_file(engine);
     Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file);None}))
 }
 pub fn openout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let (idx,file) = read_index_and_file(engine);
+    let (idx,file) = super::utils::read_index_and_file(engine);
     engine.filesystem.open_out(idx,file)
 }
 
@@ -1520,7 +1204,7 @@ pub fn prevdepth_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
 }
 
 pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,globally:bool) {
-    let idx = read_file_index(engine);
+    let idx = super::utils::read_file_index(engine);
     if !engine.read_keyword("to".as_bytes()) {
         todo!("throw error")
     }
@@ -1528,19 +1212,6 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,glo
     let mut ret = shared_vector::Vector::new();
     engine.filesystem.read(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),
     engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|t| ret.push(t));
-
-/*
-    let mut str = format!("{}",TLVecMeaning::new(&ret,engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()));
-    //debug_log!(debug => "Here: {}",str);
-    if str.starts_with("102A0;CARIAN") {
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.tracingassigns,1.into(),true);
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.tracingifs,1.into(),true);
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.tracingcommands,1.into(),true);
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.tracinggroups,1.into(),true);
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.tracingrestores,1.into(),true);
-    }
-*/
-
 
     let m = Macro {
         long:false,outer:false,protected:false,
@@ -1582,7 +1253,7 @@ pub fn romannumeral<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
 }
 
 pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let index = read_register(engine);
+    let index = super::utils::read_register(engine);
     match engine.read_box(true) {
         Ok(bx) =>
             engine.state.set_box_register(engine.aux,index,bx,globally),
@@ -1714,22 +1385,22 @@ pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 }
 
 pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let (idx,file) = read_index_and_file(engine);
+    let (idx,file) = super::utils::read_index_and_file(engine);
     engine.filesystem.open_in(idx,file)
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
-    let idx = read_file_index(engine);
+    let idx = super::utils::read_file_index(engine);
     Some(Box::new(move |engine| {engine.filesystem.close_out(idx);None}))
 }
 pub fn closeout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let idx = read_file_index(engine);
+    let idx = super::utils::read_file_index(engine);
     engine.filesystem.close_out(idx)
 }
 
 pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let idx = read_file_index(engine);
+    let idx = super::utils::read_file_index(engine);
     engine.filesystem.close_in(idx)
 }
 
@@ -1771,24 +1442,6 @@ pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET:
     engine.filesystem.write(i,&out,engine.state.get_newline_char(),engine.aux);
 }
 
-pub fn read_file_index<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> u8 {
-    let idx = engine.read_int(false);
-    if idx < Int::<ET>::default() || idx.into() > 255 {
-        todo!("throw error")
-    }
-    idx.into() as u8
-}
-fn read_index_and_file<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (u8,ET::File) {
-    let idx = read_file_index(engine);
-    let mut filename = engine.aux.memory.get_string();
-    engine.read_string(true,&mut filename);
-    if filename.is_empty() {
-        todo!("throw error")
-    }
-    let file = engine.filesystem.get(&filename);
-    engine.aux.memory.return_string(filename);
-    (idx,file)
-}
 
 pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     let mode = engine.state.get_mode();
@@ -1799,120 +1452,9 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     todo!("throw error?")
 }
 
-pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(engine: &mut EngineReferences<ET>,mut cont:F) {
-    expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(c),token} => match c {
-            Command::Int(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::Dim(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::Skip(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::MuSkip(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::IntRegister(u) => {
-                let val = engine.state.get_int_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::DimRegister(u) => {
-                let val = engine.state.get_dim_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::SkipRegister(u) => {
-                let val = engine.state.get_skip_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::MuSkipRegister(u) => {
-                let val = engine.state.get_muskip_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveInt(u) => {
-                let val = engine.state.get_primitive_int(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveDim(u) => {
-                let val = engine.state.get_primitive_dim(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveSkip(u) => {
-                let val = engine.state.get_primitive_skip(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveMuSkip(u) => {
-                let val = engine.state.get_primitive_muskip(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::CharDef(c) => {
-                let val : u64 = (*c).into();
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::MathChar(u) => {
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",*u).unwrap();
-                return ()
-            }
-            Command::ToksRegister(u) => {
-                for t in engine.state.get_toks_register(*u).inner() {
-                    cont(engine.aux,engine.state,engine.gullet,t.clone())
-                }
-                return ()
-            }
-            Command::Assignment(a) if a.name == PRIMITIVES.toks => {
-                let u = engine.read_int(false);
-                if u < Int::<ET>::default() || u.into() > u16::MAX.into() {
-                    todo!("throw error")
-                }
-                for t in engine.state.get_toks_register(u.into() as u16).inner() {
-                    cont(engine.aux,engine.state,engine.gullet,t.clone())
-                }
-                return ()
-            }
-            Command::PrimitiveToks(n) => {
-                for t in engine.state.get_primitive_tokens(*n).inner() {
-                    cont(engine.aux,engine.state,engine.gullet,t.clone())
-                }
-                return ()
-            }
-            Command::Font(fnt) => {
-                let t = fnt.name();
-                cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
-                return ()
-            }
-            Command::FontCmd(fnt) => {
-                let fnt = (fnt.read)(engine,token);
-                let t = fnt.name();
-                cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
-                return ()
-            }
-            o => todo!("Here: {:?} in \\the - {}",o,engine.mouth.display_position())
-        }
-        o => todo!("{:?} in \\the",o)
-    );
-}
-
 #[inline(always)]
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    do_the(engine,|_,_,_,t|exp.push(t))
+    super::utils::do_the(engine,|_,_,_,t|exp.push(t))
 }
 
 pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
@@ -1922,7 +1464,7 @@ pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> I
 }
 
 pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global:bool) {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let mut had_eq = false;
     crate::expand_loop!(engine,
         ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
@@ -2162,7 +1704,7 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
 }
 
 pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
-    let idx = read_register(engine);
+    let idx = super::utils::read_register(engine);
     let (kind,ls,wd,start,end) = match engine.state.get_box_register_mut(idx) {
         Some(TeXBox{info:BoxInfo{tp:BoxType::Vertical,kind,assigned_width,assigned_depth,assigned_height,..},children,start,end}) => {
             *assigned_depth = None;
@@ -2219,51 +1761,28 @@ pub fn inputlineno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
 }
 
 pub fn mark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    do_marks(engine,0)
-}
-pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
-    let mut v = shared_vector::Vector::new();
-    engine.expand_until_bgroup(false);
-    engine.expand_until_endgroup(true,true,|_,_,_,t| v.push(t));
-    let data = engine.stomach.data_mut();
-    for NodeList {children,tp } in data.open_lists.iter_mut().rev() {
-        match tp {
-            NodeListType::Box(BoxInfo {tp:BoxType::Horizontal|BoxType::InlineMath|BoxType::DisplayMath,..},_,_) => (),
-            _ => {
-                children.push(PreShipoutNode::Mark(idx, v.into()));
-                return
-            }
-        }
-    }
-    data.page.push(PreShipoutNode::Mark(idx, v.into()));
-}
-
-pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
-    match f(engine.stomach.data_mut()).get(&idx) {
-        Some(v) => exp.extend(v.0.iter().cloned()),
-        _ => ()
-    }
+    super::utils::do_marks(engine,0)
 }
 
 #[inline(always)]
 pub fn topmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    get_marks(engine,exp,|d| &mut d.topmarks,0)
+    super::utils::get_marks(engine,exp,|d| &mut d.topmarks,0)
 }
 #[inline(always)]
 pub fn firstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    get_marks(engine,exp,|d| &mut d.firstmarks,0)
+    super::utils::get_marks(engine,exp,|d| &mut d.firstmarks,0)
 }
 #[inline(always)]
 pub fn botmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    get_marks(engine,exp,|d| &mut d.botmarks,0)
+    super::utils::get_marks(engine,exp,|d| &mut d.botmarks,0)
 }
 #[inline(always)]
 pub fn splitfirstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    get_marks(engine,exp,|d| &mut d.splitfirstmarks,0)
+    super::utils::get_marks(engine,exp,|d| &mut d.splitfirstmarks,0)
 }
 #[inline(always)]
 pub fn splitbotmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    get_marks(engine,exp,|d| &mut d.splitbotmarks,0)
+    super::utils::get_marks(engine,exp,|d| &mut d.splitbotmarks,0)
 }
 
 pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {

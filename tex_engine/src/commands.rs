@@ -21,6 +21,7 @@ pub mod primitives;
 pub mod tex;
 pub mod etex;
 pub mod pdftex;
+pub mod utils;
 
 /// A command.
 #[derive(Clone,Debug)]
