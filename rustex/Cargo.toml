@@ -11,13 +11,28 @@ path = "src/lib.rs"
 name = "RusTeX"
 path = "src/main.rs"
 
+[profile.dev]
+#opt-level = 3
+#lto = true
+#debug = 1
+
+#split-debuginfo = "off"
+#strip = "none"
+
 [profile.release]
 opt-level = 3
 lto = true
-debug = true
+codegen-units = 1
 
 [dependencies]
 tex_engine = { path = "../tex_engine" }
-env_logger = "0.10.0"
-log={version="0.4.19",features=["kv_unstable"]}
+tex_tfm = { path = "../tex_tfm" }
+env_logger = "0.10.1"
+log={version="0.4.20",features=["kv_unstable"]}
 ansi_term = "0.12.1"
+chrono = "0.4.31"
+clap = { version = "4.4.11", features = ["derive"] }
+lazy_static = "1.4.0"
+
+mimalloc = "0.1.39"
+#rpmalloc = "0.2.0"
