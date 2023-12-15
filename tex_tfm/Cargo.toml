@@ -1,0 +1,16 @@
+[package]
+name = "tex_tfm"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[build-dependencies]
+phf = { version = "0.11.2", default-features = false }
+phf_codegen = "0.11.2"
+array-init = "2.1.0"
+log={version="0.4.20",features=["kv_unstable"]}
+env_logger = "0.10.1"
+
+[dependencies]
+phf = { version = "0.11.2", features = ["macros"] }
+ahash = "0.8.6"
