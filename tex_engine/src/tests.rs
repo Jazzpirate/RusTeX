@@ -194,7 +194,7 @@ mod tests {
             //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracinggroups,1,true);
             //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingrestores,1,true);
         }
-        engine.do_file_pdf("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",|b,_| {
+        engine.do_file_pdf("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",|_,b| {
             info!("{}",b.readable());
             println!("HERE");
         }).unwrap_or_else(|e| {

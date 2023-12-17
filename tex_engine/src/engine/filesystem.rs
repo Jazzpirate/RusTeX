@@ -15,6 +15,13 @@ use crate::utils::errors::ErrorHandler;
 
 pub mod kpathsea;
 
+#[derive(Debug,Copy,Clone)]
+pub struct SourceReference<FileId:Copy> {
+    pub file: FileId,
+    pub line: usize,
+    pub column: usize
+}
+
 /// A [`FileSystem`] provides access to files.
 pub trait FileSystem:Clone {
     /// The type of files provided by this [`FileSystem`].

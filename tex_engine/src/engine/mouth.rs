@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
-use crate::engine::filesystem::kpathsea::SourceReference;
+use crate::engine::filesystem::SourceReference;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::mouth::pretokenized::{MacroExpansion, TokenListIterator, TokenVecIterator};
 use crate::engine::mouth::strings::StringTokenizer;

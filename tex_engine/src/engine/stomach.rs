@@ -16,7 +16,7 @@ use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::tex::token::Token;
 use crate::commands::Command;
 use crate::engine::filesystem::File;
-use crate::engine::filesystem::kpathsea::SourceReference;
+use crate::engine::filesystem::SourceReference;
 use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
 use crate::tex::control_sequences::ControlSequenceNameHandler;

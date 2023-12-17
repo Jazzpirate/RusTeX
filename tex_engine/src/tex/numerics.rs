@@ -71,7 +71,7 @@ impl TeXInt for i32 {
 
 /// A plain TeX dimension, represented as a 32-bit integer in *scaled points (sp)*, where 65536sp = 1pt.
 #[derive(Clone,Copy,Eq,PartialEq,Ord,PartialOrd,Debug,Default)]
-pub struct Dim32(i32);
+pub struct Dim32(pub i32);
 impl Numeric<i32> for Dim32 {
     #[inline(always)]
     fn scale(&self, times: i32, div: i32) -> Self {
@@ -200,7 +200,7 @@ pub enum Fill<D:TeXDimen> {
 }
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug,Default)]
-pub struct Skip32<D:TeXDimen>{base:D,stretch:Option<Fill<D>>,shrink:Option<Fill<D>>}
+pub struct Skip32<D:TeXDimen>{pub base:D,pub stretch:Option<Fill<D>>,pub shrink:Option<Fill<D>>}
 impl<D:TeXDimen+Numeric<i32>> Numeric<i32> for Skip32<D> {
     fn scale(&self, times: i32, div: i32) -> Self {
         Self{

@@ -67,22 +67,30 @@ pub struct EngineAux<ET:EngineTypes> {
 }
 
 pub struct Colon<'c,ET:EngineTypes> {
-    out:Box<dyn FnMut(ShipoutNode<ET>) + 'c>
+    out:Box<dyn FnMut(&mut EngineReferences<ET>,PreShipoutNode<ET>) + 'c>
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
     #[inline(always)]
-    pub fn new<F:FnMut(ShipoutNode<ET>) + 'c>(f:F) -> Self {
+    pub fn new<F:FnMut(&mut EngineReferences<ET>,PreShipoutNode<ET>) + 'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
     #[inline(always)]
-    pub fn out(&mut self, n: ShipoutNode<ET>) {
-        (self.out)(n)
+    pub fn out(&mut self,engine:&mut EngineReferences<ET>, n: PreShipoutNode<ET>) {
+        (self.out)(engine,n)
     }
 }
 impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
     #[inline(always)]
     fn default() -> Self {
-        Colon { out:Box::new(|_|{}) }
+        Colon { out:Box::new(|_,_|{}) }
+    }
+}
+
+impl <ET:EngineTypes> EngineReferences<'_,ET> {
+    pub fn shipout(&mut self,n:PreShipoutNode<ET>) {
+        let mut colon = std::mem::take(&mut self.colon);
+        colon.out(self,n);
+        self.colon = colon;
     }
 }
 
@@ -143,7 +151,7 @@ pub trait TeXEngine:Sized {
         comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
-    fn do_file_default<F:FnMut(ShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {catch( ||{
+    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>,PreShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {catch( ||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
@@ -239,7 +247,7 @@ pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 pub trait PDFTeXEngine: TeXEngine
     where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension<Self::Types>,
           <<Self as TeXEngine>::Types as EngineTypes>::PreCustomNode : PDFNodeTrait<Self::Types> {
-    fn do_file_pdf<F:FnMut(ShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
+    fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>,PreShipoutNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
     }

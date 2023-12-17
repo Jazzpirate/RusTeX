@@ -1,6 +1,7 @@
 /*! The [`State`] of a TeX engine. */
 pub mod tex_state;
 
+use std::sync::Mutex;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
@@ -179,15 +180,15 @@ pub enum StateChange<S:State> {
     Command{name:CS<S>,old:Option<Command<S::ET>>},
     AcCommand{ char:Ch<S>,old:Option<Command<S::ET>>},
     // /// A custom state change, to be implemented by the engine, if additional state change types are needed
-    //Custom{ change:Ptr<Box<dyn CustomStateChange<S>>>},
+    Custom{ change:Ptr<Mutex<Option<Box<dyn CustomStateChange<S>>>>>},
 }
 
 /// A custom state change, to be implemented by the engine, if additional state change types are needed.
-pub trait CustomStateChange<S:State>:'static {
+pub trait CustomStateChange<S:State> {
     /// Check if this state change is equivalent to another one, i.e. if it needs to be rolled back
     /// when a group ends, or is superseded by a previous change
     fn equiv(&self,other:&dyn CustomStateChange<S>) -> bool;
-    fn restore(self:Box<Self>,aux:&EngineAux<S::ET>,state:&mut S,trace:bool);
+    fn restore(&mut self,aux:&EngineAux<S::ET>,state:&mut S,trace:bool);
 }
 
 impl<S:State> StateChange<S> {

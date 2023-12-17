@@ -1789,9 +1789,10 @@ pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     engine.stomach.data_mut().deadcycles = 0;
     match engine.read_box(false) {
         Ok(Some(bx)) => {
-            if let Some(n) = bx.as_node().shipout_top(engine) {
+            engine.shipout(bx.as_node());
+            /*if let Some(n) = bx.as_node().shipout_top(engine) {
                 engine.colon.out(n)
-            }
+            }*/
         },
         Ok(None) => (),
         Err(bi) => {

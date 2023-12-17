@@ -21,12 +21,6 @@ use lazy_static::lazy_static;
 use crate::debug_log;
 use crate::utils::HMap;
 
-#[derive(Debug,Copy,Clone)]
-pub struct SourceReference<FileId:Copy> {
-    pub file: FileId,
-    pub line: usize,
-    pub column: usize
-}
 
 /** A "database" of paths to search for files. Notably, the "global" part (e.g. the system-wide
 `TEXINPUTS`, `TEXMF`, etc.) is shared between all instances of [`Kpathsea`].

@@ -1,4 +1,5 @@
 /*! Implementation of a plain TeX [`State`]. */
+use std::ops::DerefMut;
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::state::{Ch, CS, Dim, State, StateChange, StateChangeTracker, StateStack, T};
@@ -13,7 +14,7 @@ use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
 use crate::tex::input_text::CharacterMap;
 use crate::tex::types::{GroupType, TeXMode};
-use crate::utils::HMap;
+use crate::utils::{HMap, Ptr};
 use crate::engine::FontSystem;
 use crate::tex::nodes::{PreShipoutNode, TeXBox};
 
@@ -435,6 +436,12 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
                         }
                     }
                     *self.ac_commands.get_mut(char) = old;
+                }
+                StateChange::Custom {change:c} => {
+                    let mut m = c.lock().unwrap().take();
+                    if let Some(ref mut c) = m {
+                        c.restore(aux,self,trace);
+                    }
                 }
             }
         }
