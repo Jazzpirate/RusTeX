@@ -1,5 +1,5 @@
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
-use crate::tex::nodes::{NodeTrait, PreShipoutNode, PreShipoutNodeTrait, ShipoutNode, TeXBox, TopNodeTrait};
+use crate::tex::nodes::{NodeTrait, TeXNode, TeXBox};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::types::NodeType;
 
@@ -171,16 +171,16 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
 
 pub trait PDFNodeTrait<ET:EngineTypes> {
     fn from_pdfobj(o:PDFObj) -> Self;
-    fn from_pdfxform(x:PDFXForm<ET,PreShipoutNode<ET>>) -> Self;
+    fn from_pdfxform(x:PDFXForm<ET>) -> Self;
     fn from_pdfximage(x:PDFXImage) -> Self;
     fn from_pdfliteral(s:String,o:PDFLiteralOption) -> Self;
     fn from_pdfoutline(o:PDFOutline) -> Self;
     fn from_pdfcatalog(c:PDFCatalog) -> Self;
     fn from_pdfdest(structnum:Option<i64>,id:NumOrName,dest:PDFDestType<ET::Dim>) -> Self;
 }
-pub enum PDFNode<ET:EngineTypes,T:TopNodeTrait<ET>> {
+pub enum PDFNode<ET:EngineTypes> {
     Obj(PDFObj),
-    XForm(PDFXForm<ET,T>),
+    XForm(PDFXForm<ET>),
     XImage(PDFXImage),
     PDFLiteral{
         option:PDFLiteralOption,
@@ -194,7 +194,7 @@ pub enum PDFNode<ET:EngineTypes,T:TopNodeTrait<ET>> {
         dest:PDFDestType<ET::Dim>
     }
 }
-impl<ET:EngineTypes,T:TopNodeTrait<ET>> std::fmt::Debug for PDFNode<ET,T> {
+impl<ET:EngineTypes> std::fmt::Debug for PDFNode<ET> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PDFNode::Obj(o) => write!(f,"PDFNode::Obj({:?})",o),
@@ -208,7 +208,7 @@ impl<ET:EngineTypes,T:TopNodeTrait<ET>> std::fmt::Debug for PDFNode<ET,T> {
     }
 
 }
-impl<ET:EngineTypes,T:TopNodeTrait<ET>> Clone for PDFNode<ET,T> {
+impl<ET:EngineTypes> Clone for PDFNode<ET> {
     fn clone(&self) -> Self {
         match self {
             PDFNode::Obj(o) => PDFNode::Obj(o.clone()),
@@ -221,39 +221,10 @@ impl<ET:EngineTypes,T:TopNodeTrait<ET>> Clone for PDFNode<ET,T> {
         }
     }
 }
-impl<ET:EngineTypes<PreCustomNode=Self,ShipoutCustomNode=PDFNode<ET,ShipoutNode<ET>>>> PreShipoutNodeTrait<ET> for PDFNode<ET,PreShipoutNode<ET>> {
-    fn as_node(self) -> PreShipoutNode<ET> {
-        PreShipoutNode::Custom(self)
-    }
-    fn shipout(self, list: &mut Vec<ShipoutNode<ET>>, engine: &mut EngineReferences<ET>) {
-        match self {
-            PDFNode::XForm(x) => {
-                let mut v = Vec::with_capacity(1);
-                for b in x.bx {
-                    b.shipout(&mut v,engine);
-                }
-                list.push(ShipoutNode::Custom(PDFNode::XForm(PDFXForm{
-                    attr:x.attr,
-                    resources:x.resources,
-                    bx:if let Some(ShipoutNode::Box(bx)) = v.into_iter().next() {
-                        Some(bx)
-                    } else {
-                        None
-                    }
-                })));
-            },
-            PDFNode::Obj(o) => list.push(ShipoutNode::Custom(PDFNode::Obj(o))),
-            PDFNode::PDFLiteral{option,literal} => list.push(ShipoutNode::Custom(PDFNode::PDFLiteral{option,literal})),
-            PDFNode::XImage(x) => list.push(ShipoutNode::Custom(PDFNode::XImage(x))),
-            PDFNode::PDFOutline(o) => list.push(ShipoutNode::Custom(PDFNode::PDFOutline(o))),
-            PDFNode::PDFCatalog(c) => list.push(ShipoutNode::Custom(PDFNode::PDFCatalog(c))),
-            PDFNode::PDFDest { structnum, id, dest } => list.push(ShipoutNode::Custom(PDFNode::PDFDest{structnum,id,dest})),
-        }
-    }
-}
-impl<ET:EngineTypes> PDFNodeTrait<ET> for PDFNode<ET,PreShipoutNode<ET>> {
+
+impl<ET:EngineTypes> PDFNodeTrait<ET> for PDFNode<ET> {
     fn from_pdfobj(o: PDFObj) -> Self { PDFNode::Obj(o) }
-    fn from_pdfxform(x: PDFXForm<ET,PreShipoutNode<ET>>) -> Self { PDFNode::XForm(x) }
+    fn from_pdfxform(x: PDFXForm<ET>) -> Self { PDFNode::XForm(x) }
     fn from_pdfximage(x: PDFXImage) -> Self { PDFNode::XImage(x) }
     fn from_pdfliteral(s: String,o:PDFLiteralOption) -> Self { PDFNode::PDFLiteral{option:o,literal:s} }
     fn from_pdfoutline(o: PDFOutline) -> Self { PDFNode::PDFOutline(o) }
@@ -262,7 +233,11 @@ impl<ET:EngineTypes> PDFNodeTrait<ET> for PDFNode<ET,PreShipoutNode<ET>> {
         PDFNode::PDFDest{structnum,id,dest}
     }
 }
-impl<ET:EngineTypes,T:TopNodeTrait<ET>> NodeTrait<ET> for PDFNode<ET,T> {
+impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
+    where ET::CustomNode : From<PDFNode<ET>>{
+    fn as_node(self) -> TeXNode<ET> {
+        TeXNode::Custom(self.into())
+    }
     fn height(&self) -> ET::Dim { ET::Dim::default() }
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn width(&self) -> ET::Dim { ET::Dim::default() }
@@ -308,7 +283,7 @@ pub trait PDFExtension<ET:EngineTypes>: EngineExtension {
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>>;
     fn current_colorstack(&mut self) -> &mut usize;
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
-    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET,PreShipoutNode<ET>>>;
+    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage>;
 }
 
@@ -318,7 +293,7 @@ pub struct MinimalPDFExtension<ET:EngineTypes> {
     colorstacks:Vec<Vec<PDFColor>>,
     current_colorstack:usize,
     pdfobjs:Vec<PDFObj>,
-    pdfxforms:Vec<PDFXForm<ET,PreShipoutNode<ET>>>,
+    pdfxforms:Vec<PDFXForm<ET>>,
     pdfximages:Vec<PDFXImage>,
 }
 impl<ET:EngineTypes> EngineExtension for MinimalPDFExtension<ET> {
@@ -350,7 +325,7 @@ impl<ET:EngineTypes> PDFExtension<ET> for MinimalPDFExtension<ET> {
     #[inline(always)]
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
     #[inline(always)]
-    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET,PreShipoutNode<ET>>> { &mut self.pdfxforms }
+    fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
     #[inline(always)]
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage> { &mut self.pdfximages }
 }
@@ -359,10 +334,10 @@ impl<ET:EngineTypes> PDFExtension<ET> for MinimalPDFExtension<ET> {
 pub struct PDFObj(pub String);
 
 #[derive(Debug,Clone)]
-pub struct PDFXForm<ET:EngineTypes,T:TopNodeTrait<ET>> {
+pub struct PDFXForm<ET:EngineTypes> {
     pub attr:String,
     pub resources:String,
-    pub bx:Option<TeXBox<ET,T>>
+    pub bx:Option<TeXBox<ET>>
 }
 
 #[derive(Debug,Clone)]

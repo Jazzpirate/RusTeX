@@ -15,7 +15,7 @@ use crate::tex::token::Token;
 use crate::utils::Ptr;
 use crate::tex::input_text::Character;
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, PreShipoutNode, ShipoutNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, TeXNode};
 
 pub mod primitives;
 pub mod tex;
@@ -269,7 +269,7 @@ pub struct FontCommand<ET:EngineTypes> {
 #[derive(Clone,Debug)]
 pub struct BoxCommand<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>>,
+    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>,
 }
 
 #[derive(Clone,Debug,Copy)]
@@ -281,13 +281,13 @@ pub enum NodeCommandScope {
 pub struct NodeCommand<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
     pub scope:NodeCommandScope,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> PreShipoutNode<ET>,
+    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXNode<ET>,
 }
 
 #[derive(Clone,Debug)]
 pub struct Whatsit<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
     pub get:fn(&mut EngineReferences<ET>, ET::Token)
-               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>,
+               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>>,
     pub immediate:fn(&mut EngineReferences<ET>,ET::Token)
 }

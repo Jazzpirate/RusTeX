@@ -11,7 +11,7 @@ use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, PreShipoutNode, ToOrSpread};
+use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, TeXNode, ToOrSpread};
 use crate::tex::token::Token;
 use crate::tex::types::{BoxType, GroupType};
 use crate::utils::HMap;
@@ -504,12 +504,12 @@ pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
         match tp {
             NodeListType::Box(BoxInfo {tp:BoxType::Horizontal|BoxType::InlineMath|BoxType::DisplayMath,..},_,_) => (),
             _ => {
-                children.push(PreShipoutNode::Mark(idx, v.into()));
+                children.push(TeXNode::Mark(idx, v.into()));
                 return
             }
         }
     }
-    data.page.push(PreShipoutNode::Mark(idx, v.into()));
+    data.page.push(TeXNode::Mark(idx, v.into()));
 }
 
 pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {

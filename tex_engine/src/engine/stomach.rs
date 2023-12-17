@@ -7,12 +7,11 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, PreShipoutNode, ToOrSpread, WhatsitNode, ShipoutNode, SkipNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
 use crate::tex::numerics::TeXDimen;
-use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::tex::token::Token;
 use crate::commands::Command;
 use crate::engine::filesystem::File;
@@ -170,11 +169,11 @@ pub trait Stomach {
         if sf > 1000 && data.spacefactor < 1000 {
             data.spacefactor = 1000;
         } else { data.spacefactor = sf as i32; }
-        data.open_lists.last_mut().unwrap().children.push(PreShipoutNode::Char {
+        data.open_lists.last_mut().unwrap().children.push(TeXNode::Char {
             char,font,width,height,depth
         });
     }
-    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET,PreShipoutNode<Self::ET>>>,BoxInfo<Self::ET>>) {
+    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
         match bx(engine,token) {
             Ok(Some(bx)) => Self::add_node(engine,bx.as_node()),
             Ok(None) => (),
@@ -200,7 +199,7 @@ pub trait Stomach {
             (a,b) => todo!("switch modes maybe: {:?} in {:?}",a,b)
         }
     }
-    fn do_node(engine:&mut EngineReferences<Self::ET>, name:PrimitiveIdentifier, token:Tk<Self>, read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> PreShipoutNode<Self::ET>, scope:NodeCommandScope) {
+    fn do_node(engine:&mut EngineReferences<Self::ET>, name:PrimitiveIdentifier, token:Tk<Self>, read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> TeXNode<Self::ET>, scope:NodeCommandScope) {
         engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
         if Self::maybe_switch_mode(engine,scope,token.clone()) {
             let node = read(engine, token);
@@ -304,7 +303,7 @@ pub trait Stomach {
         )
     }
     fn do_whatsit(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
-                                                                                -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>) -> Option<ShipoutNode<Self::ET>>>>) {
+                                                                                -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>) -> Option<TeXNode<Self::ET>>>>) {
         if let Some(ret) = read(engine,token) {
             let wi = WhatsitNode::new(ret, name);
             Self::add_node(engine, wi.as_node());
@@ -312,12 +311,12 @@ pub trait Stomach {
     }
 
 
-    fn add_node(engine:&mut EngineReferences<Self::ET>,node: PreShipoutNode<Self::ET>) {
+    fn add_node(engine:&mut EngineReferences<Self::ET>,node: TeXNode<Self::ET>) {
         let data = engine.stomach.data_mut();
         match data.open_lists.last_mut() {
             Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
                 match node {
-                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
+                    TeXNode::Simple(SimpleNode::VRule {..}) =>
                         data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
                     _ => ()
                 }
@@ -330,7 +329,7 @@ pub trait Stomach {
             None => {
                 if !data.page_contains_boxes && !data.in_output /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
                     match &node {
-                        PreShipoutNode::Box(_) | PreShipoutNode::Insert => {
+                        TeXNode::Box(_) | TeXNode::Insert => {
                             //crate::debug_log!(debug => "Here: {} \n\n {}",node.readable(),engine.mouth.display_position());
                             data.page_contains_boxes = true;
                             data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
@@ -341,9 +340,9 @@ pub trait Stomach {
                 }
                 data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
                 match node {
-                    PreShipoutNode::Simple(SimpleNode::VRule {..}) =>
+                    TeXNode::Simple(SimpleNode::VRule {..}) =>
                         data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
-                    PreShipoutNode::Penalty(i) if i <= -10000 => {
+                    TeXNode::Penalty(i) if i <= -10000 => {
                         if data.page_contains_boxes {
                             return Self::do_shipout_output(engine, Some(i))
                         } else { return }
@@ -383,7 +382,7 @@ pub trait Stomach {
         data.deadcycles += 1;
 
         for (i,b) in first.iter_mut().enumerate() { match b {
-            PreShipoutNode::Insert => todo!(),
+            TeXNode::Insert => todo!(),
             _ => ()
         }}
 
@@ -437,7 +436,7 @@ pub trait Stomach {
         todo!("file end")
     }
 
-    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
+    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
 
     fn open_paragraph(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>) {
         let sref = engine.mouth.start_ref();
@@ -480,14 +479,14 @@ pub trait Stomach {
     }
 
     #[inline(always)]
-    fn split_paragraph(engine:&mut EngineReferences<Self::ET>,specs:Vec<ParLineSpec<Self::ET>>,children:Vec<PreShipoutNode<Self::ET>>,sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
+    fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<TeXNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         split_paragraph_roughly(engine,specs,children,sourceref)
     }
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>, BoxInfo<ET>> {
+    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, BoxInfo<ET>> {
         let mut read_eq = !skip_eq;
         crate::expand_loop!(self,
             ResolvedToken::Tk {char,code:CommandCode::Other,..} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
@@ -554,14 +553,14 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
 }
 
 pub struct SplitResult<ET:EngineTypes> {
-    pub first:Vec<PreShipoutNode<ET>>,
-    pub rest:Vec<PreShipoutNode<ET>>,
+    pub first:Vec<TeXNode<ET>>,
+    pub rest:Vec<TeXNode<ET>>,
     pub split_penalty:Option<i32>
 }
 
 #[derive(Clone,Debug)]
 pub struct StomachData<ET:EngineTypes> {
-    pub page:Vec<PreShipoutNode<ET>>,
+    pub page:Vec<TeXNode<ET>>,
     pub open_lists:Vec<NodeList<ET>>,
     pub pagegoal:ET::Dim,
     pub pagetotal:ET::Dim,
@@ -583,7 +582,7 @@ pub struct StomachData<ET:EngineTypes> {
     pub deadcycles:usize,
 }
 impl <ET:EngineTypes> StomachData<ET> {
-    pub fn get_list(&mut self) -> &mut Vec<PreShipoutNode<ET>> {
+    pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
         match self.open_lists.last_mut() {
             Some(ls) => &mut ls.children,
             None => &mut self.page
@@ -637,12 +636,12 @@ impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
     }
 
     #[inline(always)]
-    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<PreShipoutNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
+    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
         vsplit_roughly(engine, nodes, target)
     }
 }
 
-pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<PreShipoutNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
+pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
     let data = engine.stomach.data_mut();
     data.topmarks.clear();
     std::mem::swap(&mut data.botmarks,&mut data.topmarks);
@@ -653,7 +652,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     let iter = nodes.iter().enumerate();
     for (i,n) in iter {
         match n {
-            PreShipoutNode::Mark(i, v) => {
+            TeXNode::Mark(i, v) => {
                 if !data.firstmarks.contains_key(&i) {
                     data.firstmarks.insert(*i,v.clone());
                 }
@@ -670,7 +669,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     };
     let mut rest = nodes.split_off(split);
     let split_penalty = match rest.first() {
-        Some(PreShipoutNode::Penalty(p)) => {
+        Some(TeXNode::Penalty(p)) => {
             let p = *p;
             rest.remove(0);
             Some(p)
@@ -680,7 +679,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
 
     for n in &rest {
         match n {
-            PreShipoutNode::Mark(i, v) => {
+            TeXNode::Mark(i, v) => {
                 if !data.splitfirstmarks.contains_key(&i) {
                     data.splitfirstmarks.insert(*i,v.clone());
                 }
@@ -693,10 +692,10 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
 }
 
 pub enum ParLine<ET:EngineTypes> {
-    Line(Vec<PreShipoutNode<ET>>),
-    Adjust(PreShipoutNode<ET>)
+    Line(Vec<TeXNode<ET>>),
+    Adjust(TeXNode<ET>)
 }
-fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<PreShipoutNode<ET>>,sourceref:SourceReference<<ET::File as File>::SourceRefID>) {
+fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>, sourceref:SourceReference<<ET::File as File>::SourceRefID>) {
     let mut ret : Vec<ParLine<ET>> = Vec::new();
     let mut hgoals = specs.into_iter();
     let mut nodes = children.into_iter();
@@ -733,14 +732,14 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
                     }
                     break 'A
                 }
-                Some(n@(PreShipoutNode::Mark(_,_) | PreShipoutNode::Insert | PreShipoutNode::VAdjust)) =>
+                Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert | TeXNode::VAdjust)) =>
                     reinserts.push(n),
-                Some(m@PreShipoutNode::Math) => todo!(),
-                Some(PreShipoutNode::Penalty(i)) if i <= -10000 => {
+                Some(m@ TeXNode::Math) => todo!(),
+                Some(TeXNode::Penalty(i)) if i <= -10000 => {
                     next_line!(); // TODO mark somehow
                     continue 'A
                 }
-                Some(PreShipoutNode::Penalty(_)) => (),
+                Some(TeXNode::Penalty(_)) => (),
                 Some(node) => {
                     target = target + (-node.width());
                     line.push(node);

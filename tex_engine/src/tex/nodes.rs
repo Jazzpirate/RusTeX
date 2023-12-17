@@ -16,7 +16,7 @@ type SR<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
 
 #[derive(Debug,Clone)]
 pub struct NodeList<ET:EngineTypes> {
-    pub children:Vec<PreShipoutNode<ET>>,
+    pub children:Vec<TeXNode<ET>>,
     pub tp:NodeListType<ET>
 }
 
@@ -34,6 +34,7 @@ pub enum NodeListType<ET:EngineTypes> {
 }
 
 pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
+    fn as_node(self) -> TeXNode<ET>;
     fn height(&self) -> ET::Dim;
     fn depth(&self) -> ET::Dim;
     fn width(&self) -> ET::Dim;
@@ -50,25 +51,14 @@ pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
     }
     fn opaque(&self) -> bool { false }
 }
-impl<ET:EngineTypes> NodeTrait<ET> for () {
+impl<ET:EngineTypes<CustomNode = ()>> NodeTrait<ET> for () {
     fn height(&self) -> ET::Dim { ET::Dim::default() }
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn width(&self) -> ET::Dim { ET::Dim::default() }
     fn nodetype(&self) -> NodeType { NodeType::WhatsIt }
     fn readable_fmt(&self, _indent:usize, _f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result { Ok(()) }
     fn opaque(&self) -> bool { true }
-}
-
-pub trait PreShipoutNodeTrait<ET:EngineTypes>:NodeTrait<ET> {
-    fn as_node(self) -> PreShipoutNode<ET>;
-    fn shipout(self,list:&mut Vec<ShipoutNode<ET>>,engine:&mut EngineReferences<ET>);
-}
-
-impl<ET:EngineTypes<PreCustomNode=()>> PreShipoutNodeTrait<ET> for () {
-    #[inline(always)]
-    fn as_node(self) -> PreShipoutNode<ET> { PreShipoutNode::Custom(self) }
-    #[inline(always)]
-    fn shipout(self, _list: &mut Vec<ShipoutNode<ET>>, _engine: &mut EngineReferences<ET>) {}
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Custom(self) }
 }
 
 pub struct ReadableNode<'a,ET:EngineTypes,N: NodeTrait<ET>>(&'a N, PhantomData<ET>);
@@ -78,7 +68,7 @@ impl<'a,ET:EngineTypes,N: NodeTrait<ET>> Display for ReadableNode<'a,ET,N> {
     }
 }
 
-pub type WhatsitFunction<ET> = Ptr<RefCell<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>>>;
+pub type WhatsitFunction<ET> = Ptr<RefCell<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>>>>;
 #[derive(Clone)]
 pub struct WhatsitNode<ET:EngineTypes>(String,WhatsitFunction<ET>);
 impl<ET:EngineTypes> std::fmt::Debug for WhatsitNode<ET> {
@@ -87,17 +77,17 @@ impl<ET:EngineTypes> std::fmt::Debug for WhatsitNode<ET> {
     }
 }
 impl<ET:EngineTypes> WhatsitNode<ET> {
-    pub fn new(f:Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>, name:PrimitiveIdentifier) -> PreShipoutNode<ET> {
-        PreShipoutNode::Whatsit(WhatsitNode(PRIMITIVES.printable::<ET::Char>(name, None).to_string(),
-                                            Ptr::new(RefCell::new(Some(f)))
+    pub fn new(f:Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>, name:PrimitiveIdentifier) -> TeXNode<ET> {
+        TeXNode::Whatsit(WhatsitNode(PRIMITIVES.printable::<ET::Char>(name, None).to_string(),
+                                     Ptr::new(RefCell::new(Some(f)))
         ))
     }
-    pub fn call(self,engine: &mut EngineReferences<ET>) -> Option<ShipoutNode<ET>> {
+    pub fn call(self,engine: &mut EngineReferences<ET>) -> Option<TeXNode<ET>> {
         let f = self.1.replace(None);
         f.map(|f| f(engine)).flatten()
     }
 }
-
+/*
 #[derive(Clone,Debug)]
 pub enum ShipoutNode<ET:EngineTypes> {
     Penalty(i32),
@@ -112,6 +102,8 @@ pub enum ShipoutNode<ET:EngineTypes> {
 pub trait TopNodeTrait<ET:EngineTypes>: NodeTrait<ET> {}
 impl<ET:EngineTypes> TopNodeTrait<ET> for ShipoutNode<ET> {}
 impl<ET:EngineTypes> TopNodeTrait<ET> for PreShipoutNode<ET> {}
+
+
 
 impl<ET:EngineTypes> NodeTrait<ET> for ShipoutNode<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -182,168 +174,129 @@ impl<ET:EngineTypes> NodeTrait<ET> for ShipoutNode<ET> {
     }
 }
 
+ */
+
 #[derive(Clone,Debug)]
-pub enum PreShipoutNode<ET:EngineTypes> {
+pub enum TeXNode<ET:EngineTypes> {
     Penalty(i32),
     Mark(usize,TokenList<ET::Token>),
     Whatsit(WhatsitNode<ET>),
     Skip(SkipNode<ET>),
     Kern(KernNode<ET>),
-    Box(TeXBox<ET,Self>),
+    Box(TeXBox<ET>),
     Insert,
     VAdjust,
     Math,
     Simple(SimpleNode<ET>),
-    Custom(ET::PreCustomNode),
+    Custom(ET::CustomNode),
     Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
 }
-impl<ET:EngineTypes> PreShipoutNode<ET> {
+impl<ET:EngineTypes> TeXNode<ET> {
     pub fn discardable(&self) -> bool {
         match self {
-            PreShipoutNode::Penalty(_) => true,
-            PreShipoutNode::Skip(_) => true,
-            PreShipoutNode::Kern(_) => true,
+            TeXNode::Penalty(_) => true,
+            TeXNode::Skip(_) => true,
+            TeXNode::Kern(_) => true,
             _ => false
         }
     }
-
-    pub fn shipout_top(self,engine:&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>> {
-        match self {
-            PreShipoutNode::Penalty(p) => return Some(ShipoutNode::Penalty(p)),
-            PreShipoutNode::Mark(i, t) => return Some(ShipoutNode::Mark(i, t)),
-            PreShipoutNode::Char { char, font, width, height, depth } => {
-                return Some(ShipoutNode::Char { char, font, width, height, depth })
-            },
-            PreShipoutNode::Whatsit(w) => {
-                if let Some(n) = w.call(engine) {
-                    return Some(n)
-                } else { return None }
-            }
-            _ => ()
-        }
-        let mut v = vec!();
-        self.shipout(&mut v,engine);
-        v.into_iter().next()
-    }
 }
 
-impl<ET:EngineTypes> NodeTrait<ET> for PreShipoutNode<ET> {
+impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PreShipoutNode::Penalty(p) => {
+            TeXNode::Penalty(p) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
-            PreShipoutNode::Skip(s) => s.readable_fmt(indent, f),
-            PreShipoutNode::Kern(k) => k.readable_fmt(indent, f),
-            PreShipoutNode::Box(b) => b.readable_fmt(indent, f),
-            PreShipoutNode::Mark(i, _) => {
+            TeXNode::Skip(s) => s.readable_fmt(indent, f),
+            TeXNode::Kern(k) => k.readable_fmt(indent, f),
+            TeXNode::Box(b) => b.readable_fmt(indent, f),
+            TeXNode::Mark(i, _) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
             },
-            PreShipoutNode::Insert => {
+            TeXNode::Insert => {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<insert>")
             },
-            PreShipoutNode::VAdjust => {
+            TeXNode::VAdjust => {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<vadjust>")
             },
-            PreShipoutNode::Math => {
+            TeXNode::Math => {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<math>")
             },
-            PreShipoutNode::Simple(s) => s.readable_fmt(indent, f),
-            PreShipoutNode::Char { char, font, .. } =>
+            TeXNode::Simple(s) => s.readable_fmt(indent, f),
+            TeXNode::Char { char, font, .. } =>
                 Ok(char.display(f)),
-            PreShipoutNode::Whatsit(w) => {
+            TeXNode::Whatsit(w) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "{:?}",w)
             }
-            PreShipoutNode::Custom(n) => n.readable_fmt(indent,f)
+            TeXNode::Custom(n) => n.readable_fmt(indent, f)
         }
     }
     fn height(&self) -> ET::Dim {
         match self {
-            PreShipoutNode::Penalty(_) => ET::Dim::default(),
-            PreShipoutNode::Skip(s) => s.height(),
-            PreShipoutNode::Box(b) => b.height(),
-            PreShipoutNode::Simple(s) => s.height(),
-            PreShipoutNode::Char { height, .. } => *height,
-            PreShipoutNode::Kern(k) => k.height(),
-            PreShipoutNode::Mark(_, _) => ET::Dim::default(),
-            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
-            PreShipoutNode::Whatsit(_) => ET::Dim::default(),
-            PreShipoutNode::Custom(n) => n.height()
+            TeXNode::Penalty(_) => ET::Dim::default(),
+            TeXNode::Skip(s) => s.height(),
+            TeXNode::Box(b) => b.height(),
+            TeXNode::Simple(s) => s.height(),
+            TeXNode::Char { height, .. } => *height,
+            TeXNode::Kern(k) => k.height(),
+            TeXNode::Mark(_, _) => ET::Dim::default(),
+            TeXNode::Insert | TeXNode::VAdjust | TeXNode::Math => todo!(),
+            TeXNode::Whatsit(_) => ET::Dim::default(),
+            TeXNode::Custom(n) => n.height()
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
-            PreShipoutNode::Penalty(_) => ET::Dim::default(),
-            PreShipoutNode::Skip(s) => s.width(),
-            PreShipoutNode::Box(b) => b.width(),
-            PreShipoutNode::Simple(s) => s.width(),
-            PreShipoutNode::Char { width, .. } => *width,
-            PreShipoutNode::Kern(k) => k.width(),
-            PreShipoutNode::Mark(_, _) => ET::Dim::default(),
-            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
-            PreShipoutNode::Whatsit(_) => ET::Dim::default(),
-            PreShipoutNode::Custom(n) => n.width(),
+            TeXNode::Penalty(_) => ET::Dim::default(),
+            TeXNode::Skip(s) => s.width(),
+            TeXNode::Box(b) => b.width(),
+            TeXNode::Simple(s) => s.width(),
+            TeXNode::Char { width, .. } => *width,
+            TeXNode::Kern(k) => k.width(),
+            TeXNode::Mark(_, _) => ET::Dim::default(),
+            TeXNode::Insert | TeXNode::VAdjust | TeXNode::Math => todo!(),
+            TeXNode::Whatsit(_) => ET::Dim::default(),
+            TeXNode::Custom(n) => n.width(),
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
-            PreShipoutNode::Penalty(_) | PreShipoutNode::Skip(_) => ET::Dim::default(),
-            PreShipoutNode::Box(b) => b.depth(),
-            PreShipoutNode::Simple(s) => s.depth(),
-            PreShipoutNode::Char { depth, .. } => *depth,
-            PreShipoutNode::Kern(k) => k.depth(),
-            PreShipoutNode::Mark(_, _) => ET::Dim::default(),
-            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
-            PreShipoutNode::Whatsit(_) => ET::Dim::default(),
-            PreShipoutNode::Custom(n) => n.depth(),
+            TeXNode::Penalty(_) | TeXNode::Skip(_) => ET::Dim::default(),
+            TeXNode::Box(b) => b.depth(),
+            TeXNode::Simple(s) => s.depth(),
+            TeXNode::Char { depth, .. } => *depth,
+            TeXNode::Kern(k) => k.depth(),
+            TeXNode::Mark(_, _) => ET::Dim::default(),
+            TeXNode::Insert | TeXNode::VAdjust | TeXNode::Math => todo!(),
+            TeXNode::Whatsit(_) => ET::Dim::default(),
+            TeXNode::Custom(n) => n.depth(),
         }
     }
     fn nodetype(&self) -> NodeType {
         match self {
-            PreShipoutNode::Penalty(_) => NodeType::Penalty,
-            PreShipoutNode::Skip(_) => NodeType::Glue,
-            PreShipoutNode::Box(b) => b.nodetype(),
-            PreShipoutNode::Simple(s) => s.nodetype(),
-            PreShipoutNode::Char { .. } => NodeType::Char,
-            PreShipoutNode::Kern(_) => NodeType::Kern,
-            PreShipoutNode::Insert => NodeType::Insertion,
-            PreShipoutNode::VAdjust => NodeType::Adjust,
-            PreShipoutNode::Math => NodeType::Math,
-            PreShipoutNode::Mark(_, _) => NodeType::Mark,
-            PreShipoutNode::Whatsit(_) => NodeType::WhatsIt,
-            PreShipoutNode::Custom(n) => n.nodetype(),
+            TeXNode::Penalty(_) => NodeType::Penalty,
+            TeXNode::Skip(_) => NodeType::Glue,
+            TeXNode::Box(b) => b.nodetype(),
+            TeXNode::Simple(s) => s.nodetype(),
+            TeXNode::Char { .. } => NodeType::Char,
+            TeXNode::Kern(_) => NodeType::Kern,
+            TeXNode::Insert => NodeType::Insertion,
+            TeXNode::VAdjust => NodeType::Adjust,
+            TeXNode::Math => NodeType::Math,
+            TeXNode::Mark(_, _) => NodeType::Mark,
+            TeXNode::Whatsit(_) => NodeType::WhatsIt,
+            TeXNode::Custom(n) => n.nodetype(),
         }
     }
-}
-impl<ET:EngineTypes> PreShipoutNodeTrait<ET> for PreShipoutNode<ET> {
     #[inline(always)]
-    fn as_node(self) -> PreShipoutNode<ET> { self }
-    fn shipout(self, list: &mut Vec<ShipoutNode<ET>>, engine: &mut EngineReferences<ET>) {
-        match self {
-            PreShipoutNode::Penalty(p) => list.push(ShipoutNode::Penalty(p)),
-            PreShipoutNode::Skip(s) => s.shipout(list,engine),
-            PreShipoutNode::Kern(k) => k.shipout(list,engine),
-            PreShipoutNode::Box(b) => b.shipout(list,engine),
-            PreShipoutNode::Custom(n) => n.shipout(list,engine),
-            PreShipoutNode::Mark(i, t) => list.push(ShipoutNode::Mark(i, t)),
-            PreShipoutNode::Char { char, font, width, height, depth } => {
-                list.push(ShipoutNode::Char { char, font, width, height, depth })
-            },
-            PreShipoutNode::Insert | PreShipoutNode::VAdjust | PreShipoutNode::Math => todo!(),
-            PreShipoutNode::Simple(s) => s.shipout(list,engine),
-            PreShipoutNode::Whatsit(w) => {
-                if let Some(n) = w.call(engine) {
-                    list.push(n)
-                }
-            }
-        }
-    }
+    fn as_node(self) -> TeXNode<ET> { self }
 }
 
 #[derive(Debug,Clone)]
@@ -418,14 +371,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::VRule {..} | SimpleNode::HRule {..} => NodeType::Rule
         }
     }
-}
-impl<ET:EngineTypes> PreShipoutNodeTrait<ET> for SimpleNode<ET> {
     #[inline(always)]
-    fn as_node(self) -> PreShipoutNode<ET> { PreShipoutNode::Simple(self) }
-    #[inline(always)]
-    fn shipout(self, list: &mut Vec<ShipoutNode<ET>>, engine: &mut EngineReferences<ET>) {
-        list.push(ShipoutNode::Simple(self))
-    }
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(self) }
 }
 
 #[derive(Debug,Clone)]
@@ -458,14 +405,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
     }}
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn nodetype(&self) -> NodeType { NodeType::Kern }
-}
-impl<ET:EngineTypes> PreShipoutNodeTrait<ET> for KernNode<ET> {
     #[inline(always)]
-    fn as_node(self) -> PreShipoutNode<ET> { PreShipoutNode::Kern(self) }
-    #[inline(always)]
-    fn shipout(self, list: &mut Vec<ShipoutNode<ET>>, engine: &mut EngineReferences<ET>) {
-        list.push(ShipoutNode::Kern(self))
-    }
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Kern(self) }
 }
 
 #[derive(Debug,Clone)]
@@ -509,15 +450,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
     #[inline(always)]
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn nodetype(&self) -> NodeType { NodeType::Glue }
-
-}
-impl<ET:EngineTypes> PreShipoutNodeTrait<ET> for SkipNode<ET> {
     #[inline(always)]
-    fn as_node(self) -> PreShipoutNode<ET> { PreShipoutNode::Skip(self) }
-    #[inline(always)]
-    fn shipout(self, list: &mut Vec<ShipoutNode<ET>>, engine: &mut EngineReferences<ET>) {
-        list.push(ShipoutNode::Skip(self))
-    }
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Skip(self) }
 }
 
 #[derive(Debug,Clone,PartialEq,Eq)]
@@ -538,14 +472,14 @@ pub struct BoxInfo<ET:EngineTypes> {
 }
 
 #[derive(Debug,Clone)]
-pub struct TeXBox<ET:EngineTypes,T:TopNodeTrait<ET>> {
-    pub children:Vec<T>,
+pub struct TeXBox<ET:EngineTypes> {
+    pub children:Vec<TeXNode<ET>>,
     pub info:BoxInfo<ET>,
     pub start:SR<ET>,
     pub end:SR<ET>
 }
 
-impl <ET:EngineTypes,T:TopNodeTrait<ET>> NodeTrait<ET> for TeXBox<ET,T> {
+impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent, f)?;
         write!(f,"<{}>",self.info.kind)?;
@@ -585,22 +519,6 @@ impl <ET:EngineTypes,T:TopNodeTrait<ET>> NodeTrait<ET> for TeXBox<ET,T> {
         BoxType::InlineMath => NodeType::Math,
         BoxType::DisplayMath => NodeType::Math
     }}
-}
-
-impl <ET:EngineTypes> PreShipoutNodeTrait<ET> for TeXBox<ET,PreShipoutNode<ET>> {
     #[inline(always)]
-    fn as_node(self) -> PreShipoutNode<ET> { PreShipoutNode::Box(self) }
-    #[inline(always)]
-    fn shipout(self, list: &mut Vec<ShipoutNode<ET>>, engine: &mut EngineReferences<ET>) {
-        let mut nls = vec!();
-        for c in self.children {
-            c.shipout(&mut nls,engine);
-        }
-        list.push(ShipoutNode::Box(TeXBox {
-            children: nls,
-            info: self.info,
-            start: self.start,
-            end: self.end
-        }))
-    }
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Box(self) }
 }

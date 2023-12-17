@@ -17,7 +17,6 @@ use crate::engine::gullet::Gullet;
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::utils::outputs::Outputs;
-use crate::tex::nodes::PreShipoutNodeTrait;
 use crate::commands::NodeList;
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;

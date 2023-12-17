@@ -16,7 +16,7 @@ use crate::tex::input_text::CharacterMap;
 use crate::tex::types::{GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
 use crate::engine::FontSystem;
-use crate::tex::nodes::{PreShipoutNode, TeXBox};
+use crate::tex::nodes::{TeXNode, TeXBox};
 
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::tex::control_sequences::ControlSequenceName;
@@ -43,7 +43,7 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     skip_register:Vec<ET::Skip>,
     muskip_register:Vec<ET::MuSkip>,
     toks_register:Vec<TokenList<ET::Token>>,
-    box_register:Vec<Option<TeXBox<ET,PreShipoutNode<ET>>>>,
+    box_register:Vec<Option<TeXBox<ET>>>,
     commands:Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
     ac_commands:<ET::Char as Character>::CharMap<Option<Command<ET>>>,
     endline_char:Option<ET::Char>,
@@ -829,7 +829,7 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_box_register(&self, idx: u16) -> Option<&TeXBox<ET,PreShipoutNode<ET>>> {
+    fn get_box_register(&self, idx: u16) -> Option<&TeXBox<ET>> {
         match self.box_register.get(idx as usize) {
             None => None,
             Some(i) => i.as_ref()
@@ -837,20 +837,20 @@ impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn get_box_register_mut(&mut self, idx: u16) -> Option<&mut TeXBox<ET,PreShipoutNode<ET>>> {
+    fn get_box_register_mut(&mut self, idx: u16) -> Option<&mut TeXBox<ET>> {
         match self.box_register.get_mut(idx as usize) {
             None => None,
             Some(i) => i.as_mut()
         }
     }
     #[inline(always)]
-    fn take_box_register(&mut self, idx: u16) -> Option<TeXBox<ET,PreShipoutNode<ET>>> {
+    fn take_box_register(&mut self, idx: u16) -> Option<TeXBox<ET>> {
         match self.box_register.get_mut(idx as usize) {
             None => None,
             Some(i) => std::mem::take(i)
         }
     }
-    fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Option<TeXBox<ET,PreShipoutNode<ET>>>, globally: bool) {
+    fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Option<TeXBox<ET>>, globally: bool) {
         self.change_field(globally,|s,g| {
             let idx = idx as usize;
             if s.box_register.len() <= idx {

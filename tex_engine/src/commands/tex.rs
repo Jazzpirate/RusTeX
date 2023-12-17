@@ -23,7 +23,8 @@ use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, NodeList, NodeListType, PreShipoutNodeTrait, SimpleNode, SkipNode, TeXBox, PreShipoutNode, ToOrSpread, ShipoutNode};use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, NodeList, NodeListType, SimpleNode, SkipNode, TeXBox, TeXNode, ToOrSpread};
+use crate::tex::nodes::NodeTrait;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -682,11 +683,11 @@ pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
     font.set_dim(idx,dim);
 }
 
-pub fn box_<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
+pub fn box_<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let idx = super::utils::read_register(engine);
     Ok(engine.state.take_box_register(idx))
 }
-pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
+pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let idx = super::utils::read_register(engine);
     Ok(engine.state.get_box_register(idx).cloned())
 }
@@ -720,7 +721,7 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     unbox(engine,tk,NodeCommandScope::SwitchesToVertical,BoxType::Vertical,true)
 }
 
-pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
+pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::utils::do_box_start(engine,BoxType::Horizontal,PRIMITIVES.everyhbox);
     Err(BoxInfo {
         tp: BoxType::Horizontal,
@@ -733,7 +734,7 @@ pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
     })
 }
 
-pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
+pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::utils::do_box_start(engine,BoxType::Vertical,PRIMITIVES.everyvbox);
     Err(BoxInfo {
         tp: BoxType::Vertical,
@@ -1186,7 +1187,7 @@ pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 }
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
+               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
     let (idx,file) = super::utils::read_index_and_file(engine);
     Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file);None}))
 }
@@ -1390,7 +1391,7 @@ pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) 
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
+                               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
     let idx = super::utils::read_file_index(engine);
     Some(Box::new(move |engine| {engine.filesystem.close_out(idx);None}))
 }
@@ -1405,7 +1406,7 @@ pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
 }
 
 pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>> {
+                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
     let idx = engine.read_int(false).into();
     let mut tks = engine.aux.memory.get_token_vec();
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
@@ -1487,23 +1488,23 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
     )
 }
 
-pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
-    PreShipoutNode::Penalty(match engine.read_int(false).try_into() {
+pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    TeXNode::Penalty(match engine.read_int(false).try_into() {
         Ok(i) => i,
         _ => todo!("error: penalty out of range")
     })
 }
 
-pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     let dim = engine.read_dim(false);
     match engine.state.get_mode() {
         TeXMode::Vertical | TeXMode::InternalVertical =>
-            PreShipoutNode::Kern(KernNode::VKern(dim)),
-        _ => PreShipoutNode::Kern(KernNode::HKern(dim))
+            TeXNode::Kern(KernNode::VKern(dim)),
+        _ => TeXNode::Kern(KernNode::HKern(dim))
     }
 }
 
-pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     let start = engine.mouth.start_ref();
     let mut width = None;
     let mut height = None;
@@ -1526,7 +1527,7 @@ pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> P
     SimpleNode::VRule {width,height,depth,start,end}.as_node()
 }
 
-pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     let start = engine.mouth.start_ref();
     let mut width = None;
     let mut height = None;
@@ -1549,38 +1550,38 @@ pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> P
     SimpleNode::HRule {width,height,depth,start,end}.as_node()
 }
 
-pub fn vskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn vskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     let sk = engine.read_skip(false);
     SkipNode::VSkip(sk).as_node()
 }
 
-pub fn vfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn vfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::VFil.as_node()
 }
-pub fn vfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn vfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::VFill.as_node()
 }
-pub fn vfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn vfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::VFilneg.as_node()
 }
-pub fn vss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn vss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::Vss.as_node()
 }
 
-pub fn hskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn hskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     let sk = engine.read_skip(false);
     SkipNode::HSkip(sk).as_node()
 }
-pub fn hfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn hfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::HFil.as_node()
 }
-pub fn hfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn hfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::HFill.as_node()
 }
-pub fn hfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn hfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::HFilneg.as_node()
 }
-pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
+pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     SkipNode::Hss.as_node()
 }
 
@@ -1588,10 +1589,10 @@ pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
 
-    let mut readd = arrayvec::ArrayVec::<PreShipoutNode<ET>,10>::new();
+    let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
     loop {
         match ls.last_mut() {
-            Some(PreShipoutNode::Skip(_)) => { ls.pop(); }
+            Some(TeXNode::Skip(_)) => { ls.pop(); }
             Some(n) if n.opaque() => {
                 readd.push(ls.pop().unwrap());
             }
@@ -1607,10 +1608,10 @@ pub fn unkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
 
-    let mut readd = arrayvec::ArrayVec::<PreShipoutNode<ET>,10>::new();
+    let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
     loop {
         match ls.last_mut() {
-            Some(PreShipoutNode::Kern(_)) => { ls.pop(); }
+            Some(TeXNode::Kern(_)) => { ls.pop(); }
             Some(n) if n.opaque() => {
                 readd.push(ls.pop().unwrap());
             }
@@ -1625,10 +1626,10 @@ pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
 
-    let mut readd = arrayvec::ArrayVec::<PreShipoutNode<ET>,10>::new();
+    let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
     loop {
         match ls.last_mut() {
-            Some(PreShipoutNode::Penalty(_)) => { ls.pop(); }
+            Some(TeXNode::Penalty(_)) => { ls.pop(); }
             Some(n) if n.opaque() => {
                 readd.push(ls.pop().unwrap());
             }
@@ -1640,7 +1641,7 @@ pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
     }
 }
 
-pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
+pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     if engine.state.get_mode() == TeXMode::Vertical {
         todo!("throw error")
     }
@@ -1649,8 +1650,8 @@ pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) ->
     for (i,n) in ls.iter().enumerate().rev() {
         if n.opaque() {continue }
         match n {
-            PreShipoutNode::Box(_) => {
-                if let PreShipoutNode::Box(bi) = ls.remove(i) {
+            TeXNode::Box(_) => {
+                if let TeXNode::Box(bi) = ls.remove(i) {
                     return Ok(Some(bi))
                 } else {
                     unreachable!()
@@ -1669,7 +1670,7 @@ pub fn lastkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -
     for n in ls.iter().rev() {
         if n.opaque() {continue }
         match n {
-            PreShipoutNode::Kern(k) => return k.dim(),
+            TeXNode::Kern(k) => return k.dim(),
             _ => return ET::Dim::default()
         }
     }
@@ -1682,7 +1683,7 @@ pub fn lastskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -
     for n in ls.iter().rev() {
         if n.opaque() {continue }
         match n {
-            PreShipoutNode::Skip(k) => return k.skip(),
+            TeXNode::Skip(k) => return k.skip(),
             _ => return ET::Skip::default()
         }
     }
@@ -1696,14 +1697,14 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
     for n in ls.iter().rev() {
         if n.opaque() {continue }
         match n {
-            PreShipoutNode::Penalty(k) => return (*k).into(),
+            TeXNode::Penalty(k) => return (*k).into(),
             _ => return ET::Int::default()
         }
     }
     ET::Int::default()
 }
 
-pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET,PreShipoutNode<ET>>>,BoxInfo<ET>> {
+pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let idx = super::utils::read_register(engine);
     let (kind,ls,wd,start,end) = match engine.state.get_box_register_mut(idx) {
         Some(TeXBox{info:BoxInfo{tp:BoxType::Vertical,kind,assigned_width,assigned_depth,assigned_height,..},children,start,end}) => {
@@ -1925,8 +1926,8 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     engine.read_until_endgroup(|_,_,_| {});
 }
 
-pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> PreShipoutNode<ET> {
-    PreShipoutNode::Skip(SkipNode::Space)
+pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    TeXNode::Skip(SkipNode::Space)
 }
 pub fn char_slash<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     // TODO

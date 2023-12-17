@@ -13,7 +13,7 @@ use crate::tex::token::Token;
 use crate::tex::types::{GroupType, TeXMode};
 use crate::utils::{Ptr, ReusableVectorFactory};
 use crate::engine::FontSystem;
-use crate::tex::nodes::{PreShipoutNode, TeXBox};
+use crate::tex::nodes::{TeXNode, TeXBox};
 
 type Ch<S> = <<S as State>::ET as EngineTypes>::Char;
 type Int<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::Int;
@@ -98,10 +98,10 @@ pub trait State:Sized+Clone {
     /// set a token register value
     fn set_toks_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:TokenList<T<Self>>,globally:bool);
 
-    fn get_box_register(&self,idx:u16) -> Option<&TeXBox<Self::ET,PreShipoutNode<Self::ET>>>;
-    fn get_box_register_mut(&mut self,idx:u16) -> Option<&mut TeXBox<Self::ET,PreShipoutNode<Self::ET>>>;
-    fn take_box_register(&mut self,idx:u16) -> Option<TeXBox<Self::ET,PreShipoutNode<Self::ET>>>;
-    fn set_box_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:Option<TeXBox<Self::ET,PreShipoutNode<Self::ET>>>,globally:bool);
+    fn get_box_register(&self,idx:u16) -> Option<&TeXBox<Self::ET>>;
+    fn get_box_register_mut(&mut self,idx:u16) -> Option<&mut TeXBox<Self::ET>>;
+    fn take_box_register(&mut self,idx:u16) -> Option<TeXBox<Self::ET>>;
+    fn set_box_register(&mut self, aux:&EngineAux<Self::ET>, idx:u16, v:Option<TeXBox<Self::ET>>, globally:bool);
 
     /// get a primitive dimension value
     fn get_primitive_dim(&self,name:PrimitiveIdentifier) -> Dim<Self>;
@@ -167,7 +167,7 @@ pub enum StateChange<S:State> {
     DimRegister{idx:u16,old:Dim<S>},
     SkipRegister{idx:u16,old:Skip<S>},
     MuSkipRegister{idx:u16,old:MuSkip<S>},
-    BoxRegister{idx:u16,old:Option<TeXBox<S::ET,PreShipoutNode<S::ET>>>},
+    BoxRegister{idx:u16,old:Option<TeXBox<S::ET>>},
     ToksRegister{idx:u16,old:TokenList<T<S>>},
     /// A change to a primitive integer value
     PrimitiveInt{name:PrimitiveIdentifier,old:Int<S>},

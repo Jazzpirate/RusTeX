@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, PreShipoutNode, ShipoutNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, TeXNode};
 use crate::tex::numerics::NumSet;
 use crate::utils::Ptr;
 
@@ -63,7 +63,7 @@ macro_rules! cmstodo {
 }
 
 pub fn register_node<E:TeXEngine>(engine:&mut E,name:&'static str, scope:NodeCommandScope,
-                                  f:fn(&mut EngineReferences<E::Types>,Tk<E>) -> PreShipoutNode<E::Types>
+                                  f:fn(&mut EngineReferences<E::Types>,Tk<E>) -> TeXNode<E::Types>
 ){
     let id = PRIMITIVES.get(name);
     let command = Command::Node(NodeCommand{
@@ -222,7 +222,7 @@ pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields a
 /// box and registers it with the engine.
 pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,Tk<E>) -> Result<Option<TeXBox<E::Types,PreShipoutNode<E::Types>>>,BoxInfo<E::Types>>
+                                  read:fn(&mut EngineReferences<E::Types>,Tk<E>) -> Result<Option<TeXBox<E::Types>>,BoxInfo<E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
@@ -291,7 +291,7 @@ pub fn register_whatsit<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
     get:fn(&mut EngineReferences<E::Types>, Tk<E>)
-             -> Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>) -> Option<ShipoutNode<E::Types>>>>,
+             -> Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>) -> Option<TeXNode<E::Types>>>>,
     immediate:fn(&mut EngineReferences<E::Types>,Tk<E>)) {
     let id = PRIMITIVES.get(name);
     let command = Command::Whatsit(Whatsit{

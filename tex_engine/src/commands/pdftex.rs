@@ -14,7 +14,7 @@ use std::fmt::{Display, Formatter, Write};
 use crate::commands::pdftex::pdftexnodes::{PDFCatalog, PDFColor, PDFExtension, PDFLiteralOption, PDFNodeTrait, PDFObj, PDFOutline, PDFXForm};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
-use crate::tex::nodes::{NodeTrait, PreShipoutNode, PreShipoutNodeTrait, ReadableNode, ShipoutNode, TeXBox, TopNodeTrait};
+use crate::tex::nodes::{NodeTrait, TeXNode, ReadableNode, TeXBox};
 use crate::tex::types::NodeType;
 use crate::utils::Ptr;
 use crate::engine::stomach::Stomach;
@@ -37,16 +37,16 @@ pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
 
 pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::PreCustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:PDFNodeTrait<ET> {
     let mut literal = String::new();
     engine.read_braced_string(true,&mut literal);
     let action = if engine.read_keyword(b"openaction") {
         Some(pdftexnodes::action_spec(engine))
     } else { None };
-    let node = ET::PreCustomNode::from_pdfcatalog(PDFCatalog{
+    let node = ET::CustomNode::from_pdfcatalog(PDFCatalog{
         literal,action
     });
-    ET::Stomach::add_node(engine,PreShipoutNode::Custom(node));
+    ET::Stomach::add_node(engine, TeXNode::Custom(node));
 }
 
 pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
@@ -96,7 +96,7 @@ pub fn pdfcolorstackinit<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET
 
 pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::PreCustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:PDFNodeTrait<ET> {
     let structnum = if engine.read_keyword(b"struct") {
         Some(engine.read_int(false).into())
     } else { None };
@@ -105,8 +105,8 @@ pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
         _ => todo!("throw error")
     };
     let desttp = pdftexnodes::pdfdest_type(engine);
-    let node = ET::PreCustomNode::from_pdfdest(structnum,id,desttp);
-    ET::Stomach::add_node(engine,PreShipoutNode::Custom(node));
+    let node = ET::CustomNode::from_pdfdest(structnum, id, desttp);
+    ET::Stomach::add_node(engine, TeXNode::Custom(node));
 }
 
 pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -337,29 +337,29 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     }
 }
 pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>
+                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>>
     where ET::Extension : PDFExtension<ET> {
     parse_pdfobj(engine);
     None
 }
 pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::PreCustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:PDFNodeTrait<ET> {
     let num = parse_pdfobj(engine);
     let obj = engine.aux.extension.pdfobjs()[num].clone();
-    ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfobj(obj)));
+    ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfobj(obj)));
 }
 
 pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::PreCustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:PDFNodeTrait<ET> {
     let num = engine.read_int(false).into();
     if num < 0 {todo!("throw error")}
     match engine.aux.extension.pdfobjs().get(num as usize) {
         None => todo!("throw error"),
         Some(o) => {
             let o = o.clone();
-            ET::Stomach::add_node(engine, PreShipoutNode::Custom(ET::PreCustomNode::from_pdfobj(o)))
+            ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfobj(o)))
         }
     }
 }
@@ -372,7 +372,7 @@ pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 
 pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::PreCustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:PDFNodeTrait<ET> {
     let mut attr = String::new();
     if engine.read_keyword(b"attr") {
         engine.read_braced_string(true,&mut attr);
@@ -383,10 +383,10 @@ pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     } else { None };
     let mut content = String::new();
     engine.read_braced_string(true,&mut content);
-    let node = ET::PreCustomNode::from_pdfoutline(PDFOutline{
+    let node = ET::CustomNode::from_pdfoutline(PDFOutline{
         attr,action,count,content
     });
-    ET::Stomach::add_node(engine,PreShipoutNode::Custom(node));
+    ET::Stomach::add_node(engine, TeXNode::Custom(node));
 }
 
 pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
@@ -407,29 +407,29 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     engine.aux.extension.pdfxforms().len() - 1
 }
 pub fn pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<ShipoutNode<ET>>>>
+                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>>
     where ET::Extension : PDFExtension<ET> {
     parse_pdfxform(engine);
     None
 }
 pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-      ET::PreCustomNode:PDFNodeTrait<ET> {
+      ET::CustomNode:PDFNodeTrait<ET> {
     let num = parse_pdfxform(engine);
     let form = engine.aux.extension.pdfxforms()[num].clone();
-    ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfxform(form)));
+    ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfxform(form)));
 }
 
 pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::PreCustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:PDFNodeTrait<ET> {
     let num = engine.read_int(false).into();
     if num < 0 {todo!("throw error")}
     match engine.aux.extension.pdfxforms().get(num as usize) {
         None => todo!("throw error"),
         Some(n) => {
             let n = n.clone();
-            ET::Stomach::add_node(engine, PreShipoutNode::Custom(ET::PreCustomNode::from_pdfxform(n)))
+            ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfxform(n)))
         }
     }
 }
@@ -441,7 +441,7 @@ pub fn pdflastxform<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Tok
 }
 
 pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension<ET>, ET::PreCustomNode:PDFNodeTrait<ET> {
+    where ET::Extension : PDFExtension<ET>, ET::CustomNode:PDFNodeTrait<ET> {
     let shipout = engine.read_keyword(b"shipout");
     let opt = match engine.read_keywords(&[b"direct",b"page"]) {
         Some(b"direct") => PDFLiteralOption::Direct,
@@ -453,7 +453,7 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     } else {
         let mut str = String::new();
         engine.read_braced_string(false,&mut str);
-        ET::Stomach::add_node(engine,PreShipoutNode::Custom(ET::PreCustomNode::from_pdfliteral(str,opt)));
+        ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfliteral(str, opt)));
     }
 }
 
@@ -519,7 +519,7 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
 
 pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     where <E::Types as EngineTypes>::Extension : PDFExtension<E::Types>,
-    <E::Types as EngineTypes>::PreCustomNode : PDFNodeTrait<E::Types> {
+    <E::Types as EngineTypes>::CustomNode: PDFNodeTrait<E::Types> {
 
     register_expandable(engine,"leftmarginkern",leftmarginkern);
     register_expandable(engine,"rightmarginkern",rightmarginkern);
