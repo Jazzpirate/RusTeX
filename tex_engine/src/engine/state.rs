@@ -22,11 +22,11 @@ type Skip<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::Skip;
 type MuSkip<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::MuSkip;
 type CS<S> = <<<S as State>::ET as EngineTypes>::Token as Token>::CS;
 type T<S> = <<S as State>::ET as EngineTypes>::Token;
-type Fnt<S> = <<<S as State>::ET as EngineTypes>::FontSystem as FontSystem>::Font;
+type Fnt<S> = <<S as State>::ET as EngineTypes>::Font;
 
 /// A TeX state; holds all the different parameters, equivalents, registers etc.
 pub trait State:Sized+Clone {
-    type ET:EngineTypes<State=Self>;
+    type ET:EngineTypes;
     fn new(nullfont:Fnt<Self>,aux:&mut EngineAux<Self::ET>) -> Self;
 
     fn aftergroup(&mut self,token:T<Self>);
@@ -36,8 +36,8 @@ pub trait State:Sized+Clone {
     fn get_group_type(&self) -> Option<GroupType>;
     fn get_group_level(&self) -> usize;
 
-    fn get_current_font(&self) -> &Fnt<Self>;
-    fn set_current_font(&mut self,aux:&EngineAux<Self::ET>,fnt:Fnt<Self>,globally:bool);
+    fn get_current_font(&self) -> &<Self::ET as EngineTypes>::Font;
+    fn set_current_font(&mut self,aux:&EngineAux<Self::ET>,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<Ch<Self>>;
@@ -129,11 +129,11 @@ pub trait State:Sized+Clone {
 
 /// Convenience trait for tracking state changes in a [`StateStack`] and rolling them back
 /// if necessary at the end of a group.
-pub trait StateChangeTracker:State {
+pub trait StateChangeTracker<S:State<ET=Self::ET>>:State {
     /// get the current [`StateStack`]
-    fn stack(&mut self) -> &mut StateStack<Self>;
+    fn stack(&mut self) -> &mut StateStack<Self::ET,S>;
     /// change a field of the state, and add the change to the [`StateStack`]
-    fn change_field<F:FnOnce(&mut Self,bool) -> StateChange<Self>>(&mut self,globally:bool,f:F) {
+    fn change_field<F:FnOnce(&mut Self,bool) -> StateChange<Self::ET,S>>(&mut self,globally:bool,f:F) {
         let globaldefs = self.get_primitive_int(PRIMITIVES.globaldefs);
         let zero = Int::<Self>::default();
         let global = if globaldefs == zero { globally } else { globaldefs > zero };
@@ -148,53 +148,53 @@ pub trait StateChangeTracker:State {
 
 /// A change to a [`State`], to be potentially rolled back when a group ends.
 #[derive(Clone)]
-pub enum StateChange<S:State> {
+pub enum StateChange<ET:EngineTypes,S:State<ET=ET>> {
     /// A change to a [`CategoryCode`]
-    Catcode{char:Ch<S>,old:CategoryCode},
-    SfCode{char:Ch<S>,old:u16},
-    DelCode{char:Ch<S>,old:Int<S>},
-    LcCode{char:Ch<S>,old:Ch<S>},
-    UcCode{char:Ch<S>,old:Ch<S>},
-    MathCode{char:Ch<S>,old:u32},
-    ParShape{old:Vec<(Dim<S>,Dim<S>)>},
+    Catcode{char:ET::Char,old:CategoryCode},
+    SfCode{char:ET::Char,old:u16},
+    DelCode{char:ET::Char,old:ET::Int},
+    LcCode{char:ET::Char,old:ET::Char},
+    UcCode{char:ET::Char,old:ET::Char},
+    MathCode{char:ET::Char,old:u32},
+    ParShape{old:Vec<(ET::Dim,ET::Dim)>},
     /// A change to the [`TeXMode`], rolled back when a box group ends
     TeXMode{old:TeXMode},
-    CurrentFont(Fnt<S>),
-    EndlineChar{old:Option<Ch<S>>},
-    EscapeChar{old:Option<Ch<S>>},
-    NewlineChar{old:Option<Ch<S>>},
-    IntRegister{idx:u16,old:Int<S>},
-    DimRegister{idx:u16,old:Dim<S>},
-    SkipRegister{idx:u16,old:Skip<S>},
-    MuSkipRegister{idx:u16,old:MuSkip<S>},
-    BoxRegister{idx:u16,old:Option<TeXBox<S::ET>>},
-    ToksRegister{idx:u16,old:TokenList<T<S>>},
+    CurrentFont(ET::Font),
+    EndlineChar{old:Option<ET::Char>},
+    EscapeChar{old:Option<ET::Char>},
+    NewlineChar{old:Option<ET::Char>},
+    IntRegister{idx:u16,old:ET::Int},
+    DimRegister{idx:u16,old:ET::Dim},
+    SkipRegister{idx:u16,old:ET::Skip},
+    MuSkipRegister{idx:u16,old:ET::MuSkip},
+    BoxRegister{idx:u16,old:Option<TeXBox<ET>>},
+    ToksRegister{idx:u16,old:TokenList<ET::Token>},
     /// A change to a primitive integer value
-    PrimitiveInt{name:PrimitiveIdentifier,old:Int<S>},
+    PrimitiveInt{name:PrimitiveIdentifier,old:ET::Int},
     /// A change to a primitive dimension value
-    PrimitiveDim{name:PrimitiveIdentifier,old:Dim<S>},
+    PrimitiveDim{name:PrimitiveIdentifier,old:ET::Dim},
     /// A change to a primitive token list
-    PrimitiveToks{name:PrimitiveIdentifier,old:TokenList<T<S>>},
-    PrimitiveSkip{name:PrimitiveIdentifier,old:Skip<S>},
-    PrimitiveMuSkip{name:PrimitiveIdentifier,old:MuSkip<S>},
-    Command{name:CS<S>,old:Option<Command<S::ET>>},
-    AcCommand{ char:Ch<S>,old:Option<Command<S::ET>>},
+    PrimitiveToks{name:PrimitiveIdentifier,old:TokenList<ET::Token>},
+    PrimitiveSkip{name:PrimitiveIdentifier,old:ET::Skip},
+    PrimitiveMuSkip{name:PrimitiveIdentifier,old:ET::MuSkip},
+    Command{name:ET::CSName,old:Option<Command<ET>>},
+    AcCommand{ char:ET::Char,old:Option<Command<ET>>},
     // /// A custom state change, to be implemented by the engine, if additional state change types are needed
-    Custom{ change:Ptr<Mutex<Option<Box<dyn CustomStateChange<S>>>>>},
+    Custom{ change:Ptr<Mutex<Option<Box<dyn CustomStateChange<ET,S>>>>>},
 }
 
 /// A custom state change, to be implemented by the engine, if additional state change types are needed.
-pub trait CustomStateChange<S:State> {
+pub trait CustomStateChange<ET:EngineTypes,S:State<ET=ET>> {
     /// Check if this state change is equivalent to another one, i.e. if it needs to be rolled back
     /// when a group ends, or is superseded by a previous change
-    fn equiv(&self,other:&dyn CustomStateChange<S>) -> bool;
-    fn restore(&mut self,aux:&EngineAux<S::ET>,state:&mut S,trace:bool);
+    fn equiv(&self,other:&dyn CustomStateChange<ET,S>) -> bool;
+    fn restore(&mut self,aux:&EngineAux<ET>,state:&mut S,trace:bool);
 }
 
-impl<S:State> StateChange<S> {
+impl<ET:EngineTypes,S:State<ET=ET>> StateChange<ET,S> {
     /// Check if this state change is equivalent to another one, i.e. if it needs to be rolled back
     /// when a group ends, or is superseded by a previous change
-    pub fn equiv(&self,other:&StateChange<S>) -> bool {
+    pub fn equiv(&self,other:&Self) -> bool {
         match (self,other) {
             (StateChange::Catcode{char:c1,..},StateChange::Catcode{char:c2,..}) => c1 == c2,
             (StateChange::SfCode {char:c1,..},StateChange::SfCode{char:c2,..}) => c1 == c2,
@@ -238,19 +238,19 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 
 #[derive(Clone)]
-pub struct StackLevel<S:State> {
+pub struct StackLevel<ET:EngineTypes,S:State<ET=ET>> {
     pub group_type:GroupType,
-    pub aftergroup:Vec<<S::ET as EngineTypes>::Token>,
-    pub changes:Vec<StateChange<S>>,
+    pub aftergroup:Vec<ET::Token>,
+    pub changes:Vec<StateChange<ET,S>>,
     //keep_track:Vec<C>
 }
 
 /// A stack of [`StateChange`]s, to be rolled back when a group ends
-pub struct StateStack<S:State> {
-    pub stack:Vec<StackLevel<S>>,
-    factory:ReusableVectorFactory<StateChange<S>>
+pub struct StateStack<ET:EngineTypes,S:State<ET=ET>> {
+    pub stack:Vec<StackLevel<ET,S>>,
+    factory:ReusableVectorFactory<StateChange<ET,S>>
 }
-impl<S:State> Clone for StateStack<S> {
+impl<ET:EngineTypes,S:State<ET=ET>> Clone for StateStack<ET,S> {
     fn clone(&self) -> Self {
         Self {
             stack:self.stack.clone(),
@@ -259,8 +259,8 @@ impl<S:State> Clone for StateStack<S> {
     }
 
 }
-impl<S:State> StateStack<S> {
-    pub fn give_back(&mut self,lvl:StackLevel<S>) {
+impl<ET:EngineTypes,S:State<ET=ET>> StateStack<ET,S> {
+    pub fn give_back(&mut self,lvl:StackLevel<ET,S>) {
         self.factory.give_back(lvl.changes);
     }
     /// Create a new [`StateStack`]
@@ -283,14 +283,14 @@ impl<S:State> StateStack<S> {
     }
     /// register a global state change, never to be rolled back;
     /// if there is a stack level, remove any equivalent previous changes
-    pub fn add_change_globally(&mut self,change:StateChange<S>) {
+    pub fn add_change_globally(&mut self,change:StateChange<ET,S>) {
         if self.stack.is_empty() { return; }
         for lvl in &mut self.stack {
             lvl.changes.retain(|c| !c.equiv(&change));
         }
     }
     /// register a local state change, to be rolled back when the current group ends
-    pub fn add_change_locally(&mut self,change:StateChange<S>) {
+    pub fn add_change_locally(&mut self,change:StateChange<ET,S>) {
         match self.stack.last_mut() {
             Some(lvl) => {
                 if lvl.changes.iter().all(|c| !c.equiv(&change)) {

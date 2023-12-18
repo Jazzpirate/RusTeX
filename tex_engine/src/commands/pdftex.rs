@@ -11,7 +11,7 @@ use crate::tex::token::{StandardToken, Token};
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
 use std::fmt::{Display, Formatter, Write};
-use crate::commands::pdftex::pdftexnodes::{PDFCatalog, PDFColor, PDFExtension, PDFLiteralOption, PDFNodeTrait, PDFObj, PDFOutline, PDFXForm};
+use crate::commands::pdftex::pdftexnodes::{ColorStackAction, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFXForm};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
 use crate::tex::nodes::{NodeTrait, TeXNode, ReadableNode, TeXBox};
@@ -37,46 +37,47 @@ pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
 
 pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:From<PDFNode<ET>> {
     let mut literal = String::new();
     engine.read_braced_string(true,&mut literal);
     let action = if engine.read_keyword(b"openaction") {
         Some(pdftexnodes::action_spec(engine))
     } else { None };
-    let node = ET::CustomNode::from_pdfcatalog(PDFCatalog{
+    let node = PDFNode::PDFCatalog(PDFCatalog{
         literal,action
     });
-    ET::Stomach::add_node(engine, TeXNode::Custom(node));
+    ET::Stomach::add_node(engine, TeXNode::Custom(node.into()));
 }
 
 pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
-    where ET::Extension : PDFExtension<ET> {
+    where ET::Extension : PDFExtension<ET>,
+          ET::CustomNode:From<PDFNode<ET>> {
     let index = engine.read_int(false).into();
     if index < 0 {todo!("throw error")}
     let index = index as usize;
     let kw = engine.read_keywords(&[b"push",b"pop",b"set",b"current"]);
     match kw {
-        Some(b"current") => *engine.aux.extension.current_colorstack() = index,
+        Some(b"current") => ET::Stomach::add_node(engine,TeXNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into())),
         Some(b"pop") => {
             let stack = engine.aux.extension.colorstacks();
             if index >= stack.len() {
                 todo!("throw error")
             }
-            stack[index].pop();
+            ET::Stomach::add_node(engine,TeXNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into()));
         }
         Some(b"set") => {
             let mut color = String::new();
             engine.read_braced_string(false,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
-            *stack[index].last_mut().unwrap() = color;
+            ET::Stomach::add_node(engine,TeXNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into()));
         }
         Some(b"push") => {
             let mut color = String::new();
             engine.read_braced_string(false,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
-            stack[index].push(color);
+            ET::Stomach::add_node(engine,TeXNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into()));
         }
         _ => todo!("error")
     }
@@ -96,7 +97,7 @@ pub fn pdfcolorstackinit<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET
 
 pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:From<PDFNode<ET>> {
     let structnum = if engine.read_keyword(b"struct") {
         Some(engine.read_int(false).into())
     } else { None };
@@ -104,9 +105,9 @@ pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
         Some(n) => n,
         _ => todo!("throw error")
     };
-    let desttp = pdftexnodes::pdfdest_type(engine);
-    let node = ET::CustomNode::from_pdfdest(structnum, id, desttp);
-    ET::Stomach::add_node(engine, TeXNode::Custom(node));
+    let dest = pdftexnodes::pdfdest_type(engine);
+    let node = PDFNode::PDFDest(PDFDest{structnum, id, dest});
+    ET::Stomach::add_node(engine, TeXNode::Custom(node.into()));
 }
 
 pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -344,22 +345,22 @@ pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
 }
 pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:From<PDFNode<ET>> {
     let num = parse_pdfobj(engine);
     let obj = engine.aux.extension.pdfobjs()[num].clone();
-    ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfobj(obj)));
+    ET::Stomach::add_node(engine, TeXNode::Custom(PDFNode::Obj(obj).into()));
 }
 
 pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:From<PDFNode<ET>> {
     let num = engine.read_int(false).into();
     if num < 0 {todo!("throw error")}
     match engine.aux.extension.pdfobjs().get(num as usize) {
         None => todo!("throw error"),
         Some(o) => {
             let o = o.clone();
-            ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfobj(o)))
+            ET::Stomach::add_node(engine, TeXNode::Custom(PDFNode::Obj(o).into()))
         }
     }
 }
@@ -372,7 +373,7 @@ pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 
 pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:From<PDFNode<ET>> {
     let mut attr = String::new();
     if engine.read_keyword(b"attr") {
         engine.read_braced_string(true,&mut attr);
@@ -383,10 +384,10 @@ pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     } else { None };
     let mut content = String::new();
     engine.read_braced_string(true,&mut content);
-    let node = ET::CustomNode::from_pdfoutline(PDFOutline{
+    let node = PDFNode::PDFOutline(PDFOutline{
         attr,action,count,content
     });
-    ET::Stomach::add_node(engine, TeXNode::Custom(node));
+    ET::Stomach::add_node(engine, TeXNode::Custom(node.into()));
 }
 
 pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
@@ -414,22 +415,22 @@ pub fn pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Toke
 }
 pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-      ET::CustomNode:PDFNodeTrait<ET> {
+      ET::CustomNode:From<PDFNode<ET>> {
     let num = parse_pdfxform(engine);
     let form = engine.aux.extension.pdfxforms()[num].clone();
-    ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfxform(form)));
+    ET::Stomach::add_node(engine, TeXNode::Custom(PDFNode::XForm(form).into()));
 }
 
 pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:PDFNodeTrait<ET> {
+          ET::CustomNode:From<PDFNode<ET>> {
     let num = engine.read_int(false).into();
     if num < 0 {todo!("throw error")}
     match engine.aux.extension.pdfxforms().get(num as usize) {
         None => todo!("throw error"),
         Some(n) => {
             let n = n.clone();
-            ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfxform(n)))
+            ET::Stomach::add_node(engine, TeXNode::Custom(PDFNode::XForm(n).into()))
         }
     }
 }
@@ -441,9 +442,9 @@ pub fn pdflastxform<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Tok
 }
 
 pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
-    where ET::Extension : PDFExtension<ET>, ET::CustomNode:PDFNodeTrait<ET> {
+    where ET::Extension : PDFExtension<ET>, ET::CustomNode:From<PDFNode<ET>> {
     let shipout = engine.read_keyword(b"shipout");
-    let opt = match engine.read_keywords(&[b"direct",b"page"]) {
+    let option = match engine.read_keywords(&[b"direct",b"page"]) {
         Some(b"direct") => PDFLiteralOption::Direct,
         Some(b"page") => PDFLiteralOption::Page,
         _ => PDFLiteralOption::None
@@ -451,9 +452,9 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     if shipout {
         todo!("shipout pdfliteral")
     } else {
-        let mut str = String::new();
-        engine.read_braced_string(false,&mut str);
-        ET::Stomach::add_node(engine, TeXNode::Custom(ET::CustomNode::from_pdfliteral(str, opt)));
+        let mut literal = String::new();
+        engine.read_braced_string(false,&mut literal);
+        ET::Stomach::add_node(engine, TeXNode::Custom(PDFNode::PDFLiteral(PDFLiteral{ literal, option}).into()));
     }
 }
 
@@ -519,7 +520,7 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
 
 pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     where <E::Types as EngineTypes>::Extension : PDFExtension<E::Types>,
-    <E::Types as EngineTypes>::CustomNode: PDFNodeTrait<E::Types> {
+    <E::Types as EngineTypes>::CustomNode: From<PDFNode<E::Types>> {
 
     register_expandable(engine,"leftmarginkern",leftmarginkern);
     register_expandable(engine,"rightmarginkern",rightmarginkern);

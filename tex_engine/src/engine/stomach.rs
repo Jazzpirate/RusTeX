@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode, MarkerNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
@@ -736,6 +736,7 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
                     reinserts.push(n),
                 Some(m@ TeXNode::Math) => todo!(),
                 Some(TeXNode::Penalty(i)) if i <= -10000 => {
+                    line.push(TeXNode::Marker(MarkerNode::ForceBreak));
                     next_line!(); // TODO mark somehow
                     continue 'A
                 }
@@ -748,6 +749,7 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
         }
         next_line!();
     }
+    ET::Stomach::add_node(engine,TeXNode::Marker(MarkerNode::ParagraphBegin));
     for line in ret {
         match line {
             ParLine::Adjust(n) => ET::Stomach::add_node(engine,n),
@@ -769,4 +771,5 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
             )
         }
     }
+    ET::Stomach::add_node(engine,TeXNode::Marker(MarkerNode::ParagraphEnd));
 }

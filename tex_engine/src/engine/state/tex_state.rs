@@ -24,8 +24,8 @@ use crate::engine::fontsystem::Font;
 
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
-pub struct TeXState<ET:EngineTypes<State=Self>> {
-    stack:StateStack<Self>,
+pub struct TeXState<ET:EngineTypes> {
+    stack:StateStack<ET,Self>,
     current_mode:TeXMode,
     catcodes: CategoryCodeScheme<ET::Char>,
     sfcodes: <ET::Char as Character>::CharMap<u16>,
@@ -53,7 +53,7 @@ pub struct TeXState<ET:EngineTypes<State=Self>> {
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
 }
-impl<ET:EngineTypes<State=Self>> TeXState<ET> {
+impl<ET:EngineTypes> TeXState<ET> {
 
     fn tracing_assigns(&self) -> bool {
         match self.primitive_ints.get(&PRIMITIVES.tracingassigns) {
@@ -69,13 +69,13 @@ impl<ET:EngineTypes<State=Self>> TeXState<ET> {
     }
 }
 
-impl<ET:EngineTypes<State=Self>> StateChangeTracker for TeXState<ET> {
+impl<ET:EngineTypes> StateChangeTracker<Self> for TeXState<ET> {
     #[inline(always)]
-    fn stack(&mut self) -> &mut StateStack<Self> { &mut self.stack }
+    fn stack(&mut self) -> &mut StateStack<ET,Self> { &mut self.stack }
 }
 
 
-impl<ET:EngineTypes<State=Self>> State for TeXState<ET>  {
+impl<ET:EngineTypes> State for TeXState<ET>  {
     type ET = ET;
     fn new(nullfont:Fnt<ET>,aux:&mut EngineAux<ET>) -> Self {
         let mem = &aux.memory;

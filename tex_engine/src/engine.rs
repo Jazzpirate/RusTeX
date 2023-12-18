@@ -11,9 +11,9 @@ use crate::engine::stomach::{Stomach, StomachWithShipout};
 use crate::{debug_log, tex};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::{Assignment, Command, DimCommand, FontCommand, IntCommand, MuSkipCommand, SkipCommand, Unexpandable, Whatsit};
-use crate::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFExtension, PDFNode, PDFNodeTrait};
+use crate::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFExtension, PDFNode};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
-use crate::engine::fontsystem::{FontSystem, TfmFontSystem};
+use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
 use crate::tex::control_sequences::ControlSequenceName;
@@ -54,7 +54,8 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug {
     type Gullet:Gullet<ET=Self>;
     type Stomach:Stomach<ET=Self>;
     type CustomNode:NodeTrait<Self>+NodeTrait<Self>;
-    type FontSystem: FontSystem<Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
+    type Font:Font<Char=Self::Char,Int=Self::Int, Dim=Self::Dim,CS=Self::CSName>;
+    type FontSystem: FontSystem<Font=Self::Font,Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
 }
 pub struct EngineAux<ET:EngineTypes> {
     pub memory:ET::Memory,
@@ -133,6 +134,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Gullet = DefaultGullet<Self>;
     type CustomNode = ();
     type Stomach = StomachWithShipout<Self>;
+    type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }
 
@@ -244,7 +246,7 @@ pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 
 pub trait PDFTeXEngine: TeXEngine
     where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension<Self::Types>,
-          <<Self as TeXEngine>::Types as EngineTypes>::CustomNode: PDFNodeTrait<Self::Types> {
+          <<Self as TeXEngine>::Types as EngineTypes>::CustomNode: From<PDFNode<Self::Types>> {
     fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>, TeXNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
@@ -282,6 +284,7 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Gullet = DefaultGullet<Self>;
     type CustomNode = PDFNode<Self>;
     type Stomach = StomachWithShipout<Self>;
+    type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }
 
@@ -290,7 +293,7 @@ pub type PlainPDFTeXEngine = DefaultEngine<DefaultPDFTeXEngineTypes>;
 impl<A> PDFTeXEngine for A where
     A:TeXEngine,
     <A::Types as EngineTypes>::Extension : PDFExtension<A::Types>,
-    <A::Types as EngineTypes>::CustomNode: PDFNodeTrait<A::Types> {}
+    <A::Types as EngineTypes>::CustomNode: From<PDFNode<A::Types>> {}
 
 /** Additional components we want to add to a [`EngineReferences`] can be implemented here.
     Notably, `()` extends this trait if we don't need any additional components.

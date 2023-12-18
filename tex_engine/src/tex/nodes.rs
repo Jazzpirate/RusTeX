@@ -1,5 +1,5 @@
 use std::cell::{OnceCell, RefCell};
-use std::fmt::{Debug, Display, Write};
+use std::fmt::{Debug, Display, Formatter, Write};
 use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::SourceReference;
@@ -87,98 +87,11 @@ impl<ET:EngineTypes> WhatsitNode<ET> {
         f.map(|f| f(engine)).flatten()
     }
 }
-/*
-#[derive(Clone,Debug)]
-pub enum ShipoutNode<ET:EngineTypes> {
-    Penalty(i32),
-    Mark(usize,TokenList<ET::Token>),
-    Skip(SkipNode<ET>),
-    Kern(KernNode<ET>),
-    Box(TeXBox<ET,Self>),
-    Simple(SimpleNode<ET>),
-    Custom(ET::ShipoutCustomNode),
-    Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
-}
-pub trait TopNodeTrait<ET:EngineTypes>: NodeTrait<ET> {}
-impl<ET:EngineTypes> TopNodeTrait<ET> for ShipoutNode<ET> {}
-impl<ET:EngineTypes> TopNodeTrait<ET> for PreShipoutNode<ET> {}
-
-
-
-impl<ET:EngineTypes> NodeTrait<ET> for ShipoutNode<ET> {
-    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShipoutNode::Penalty(p) => {
-                Self::readable_do_indent(indent,f)?;
-                write!(f, "<penalty:{}>",p)
-            },
-            ShipoutNode::Skip(s) => s.readable_fmt(indent, f),
-            ShipoutNode::Kern(k) => k.readable_fmt(indent, f),
-            ShipoutNode::Box(b) => b.readable_fmt(indent, f),
-            ShipoutNode::Mark(i, _) => {
-                Self::readable_do_indent(indent,f)?;
-                write!(f, "<mark:{}>",i)
-            },
-            ShipoutNode::Simple(s) => s.readable_fmt(indent, f),
-            ShipoutNode::Char { char, font, .. } =>
-                Ok(char.display(f)),
-            ShipoutNode::Custom(n) => n.readable_fmt(indent,f)
-        }
-    }
-    fn height(&self) -> ET::Dim {
-        match self {
-            ShipoutNode::Penalty(_) => ET::Dim::default(),
-            ShipoutNode::Skip(s) => s.height(),
-            ShipoutNode::Box(b) => b.height(),
-            ShipoutNode::Simple(s) => s.height(),
-            ShipoutNode::Char { height, .. } => *height,
-            ShipoutNode::Kern(k) => k.height(),
-            ShipoutNode::Mark(_, _) => ET::Dim::default(),
-            ShipoutNode::Custom(n) => n.height()
-        }
-    }
-    fn width(&self) -> ET::Dim {
-        match self {
-            ShipoutNode::Penalty(_) => ET::Dim::default(),
-            ShipoutNode::Skip(s) => s.width(),
-            ShipoutNode::Box(b) => b.width(),
-            ShipoutNode::Simple(s) => s.width(),
-            ShipoutNode::Char { width, .. } => *width,
-            ShipoutNode::Kern(k) => k.width(),
-            ShipoutNode::Mark(_, _) => ET::Dim::default(),
-            ShipoutNode::Custom(n) => n.width(),
-        }
-    }
-    fn depth(&self) -> ET::Dim {
-        match self {
-            ShipoutNode::Penalty(_) | ShipoutNode::Skip(_) => ET::Dim::default(),
-            ShipoutNode::Box(b) => b.depth(),
-            ShipoutNode::Simple(s) => s.depth(),
-            ShipoutNode::Char { depth, .. } => *depth,
-            ShipoutNode::Kern(k) => k.depth(),
-            ShipoutNode::Mark(_, _) => ET::Dim::default(),
-            ShipoutNode::Custom(n) => n.depth(),
-        }
-    }
-    fn nodetype(&self) -> NodeType {
-        match self {
-            ShipoutNode::Penalty(_) => NodeType::Penalty,
-            ShipoutNode::Skip(_) => NodeType::Glue,
-            ShipoutNode::Box(b) => b.nodetype(),
-            ShipoutNode::Simple(s) => s.nodetype(),
-            ShipoutNode::Char { .. } => NodeType::Char,
-            ShipoutNode::Kern(_) => NodeType::Kern,
-            ShipoutNode::Mark(_, _) => NodeType::Mark,
-            ShipoutNode::Custom(n) => n.nodetype(),
-        }
-    }
-}
-
- */
 
 #[derive(Clone,Debug)]
 pub enum TeXNode<ET:EngineTypes> {
     Penalty(i32),
+    Marker(MarkerNode),
     Mark(usize,TokenList<ET::Token>),
     Whatsit(WhatsitNode<ET>),
     Skip(SkipNode<ET>),
@@ -209,6 +122,10 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
+            TeXNode::Marker(m) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "<{:?}>",m)
+            }
             TeXNode::Skip(s) => s.readable_fmt(indent, f),
             TeXNode::Kern(k) => k.readable_fmt(indent, f),
             TeXNode::Box(b) => b.readable_fmt(indent, f),
@@ -240,7 +157,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     }
     fn height(&self) -> ET::Dim {
         match self {
-            TeXNode::Penalty(_) => ET::Dim::default(),
+            TeXNode::Penalty(_) | TeXNode::Marker(_) => ET::Dim::default(),
             TeXNode::Skip(s) => s.height(),
             TeXNode::Box(b) => b.height(),
             TeXNode::Simple(s) => s.height(),
@@ -254,7 +171,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     }
     fn width(&self) -> ET::Dim {
         match self {
-            TeXNode::Penalty(_) => ET::Dim::default(),
+            TeXNode::Penalty(_) | TeXNode::Marker(_) => ET::Dim::default(),
             TeXNode::Skip(s) => s.width(),
             TeXNode::Box(b) => b.width(),
             TeXNode::Simple(s) => s.width(),
@@ -268,7 +185,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     }
     fn depth(&self) -> ET::Dim {
         match self {
-            TeXNode::Penalty(_) | TeXNode::Skip(_) => ET::Dim::default(),
+            TeXNode::Penalty(_) | TeXNode::Skip(_) | TeXNode::Marker(_) => ET::Dim::default(),
             TeXNode::Box(b) => b.depth(),
             TeXNode::Simple(s) => s.depth(),
             TeXNode::Char { depth, .. } => *depth,
@@ -291,12 +208,34 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::VAdjust => NodeType::Adjust,
             TeXNode::Math => NodeType::Math,
             TeXNode::Mark(_, _) => NodeType::Mark,
-            TeXNode::Whatsit(_) => NodeType::WhatsIt,
+            TeXNode::Whatsit(_) | TeXNode::Marker(_) => NodeType::WhatsIt,
             TeXNode::Custom(n) => n.nodetype(),
+        }
+    }
+    fn opaque(&self) -> bool {
+        match self {
+            TeXNode::Penalty(_) => false,
+            TeXNode::Skip(_) => false,
+            TeXNode::Kern(_) => false,
+            TeXNode::Box(b) => false,
+            TeXNode::Simple(s) => s.opaque(),
+            TeXNode::Char { .. } => false,
+            TeXNode::Mark(_, _) => true,
+            TeXNode::Insert => false,
+            TeXNode::VAdjust => true,
+            TeXNode::Math => false,
+            TeXNode::Whatsit(_) => false,
+            TeXNode::Marker(_) => true,
+            TeXNode::Custom(n) => n.opaque(),
         }
     }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { self }
+}
+
+#[derive(Debug,Copy,Clone)]
+pub enum MarkerNode {
+    ParagraphBegin,ParagraphEnd,ForceBreak
 }
 
 #[derive(Debug,Clone)]

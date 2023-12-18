@@ -169,72 +169,41 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
 
 // ----------------------------------------------------------------------------------------
 
-pub trait PDFNodeTrait<ET:EngineTypes> {
-    fn from_pdfobj(o:PDFObj) -> Self;
-    fn from_pdfxform(x:PDFXForm<ET>) -> Self;
-    fn from_pdfximage(x:PDFXImage) -> Self;
-    fn from_pdfliteral(s:String,o:PDFLiteralOption) -> Self;
-    fn from_pdfoutline(o:PDFOutline) -> Self;
-    fn from_pdfcatalog(c:PDFCatalog) -> Self;
-    fn from_pdfdest(structnum:Option<i64>,id:NumOrName,dest:PDFDestType<ET::Dim>) -> Self;
-}
+#[derive(Clone,Debug)]
 pub enum PDFNode<ET:EngineTypes> {
     Obj(PDFObj),
     XForm(PDFXForm<ET>),
     XImage(PDFXImage),
-    PDFLiteral{
-        option:PDFLiteralOption,
-        literal:String
-    },
+    PDFLiteral(PDFLiteral),
     PDFOutline(PDFOutline),
     PDFCatalog(PDFCatalog),
-    PDFDest {
-        structnum:Option<i64>,
-        id:NumOrName,
-        dest:PDFDestType<ET::Dim>
-    }
-}
-impl<ET:EngineTypes> std::fmt::Debug for PDFNode<ET> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PDFNode::Obj(o) => write!(f,"PDFNode::Obj({:?})",o),
-            PDFNode::XForm(x) => write!(f,"PDFNode::XForm({:?})",x),
-            PDFNode::XImage(x) => write!(f,"PDFNode::XImage({:?})",x),
-            PDFNode::PDFLiteral{option,literal} => write!(f,"PDFNode::PDFLiteral{{option:{:?},literal:{:?}}}",option,literal),
-            PDFNode::PDFOutline(o) => write!(f,"PDFNode::PDFOutline({:?})",o),
-            PDFNode::PDFCatalog(c) => write!(f,"PDFNode::PDFCatalog({:?})",c),
-            PDFNode::PDFDest { structnum, id, dest } => write!(f,"PDFNode::PDFDest{{structnum:{:?},id:{:?},dest:{:?}}}",structnum,id,dest),
-        }
-    }
-
-}
-impl<ET:EngineTypes> Clone for PDFNode<ET> {
-    fn clone(&self) -> Self {
-        match self {
-            PDFNode::Obj(o) => PDFNode::Obj(o.clone()),
-            PDFNode::XForm(x) => PDFNode::XForm(x.clone()),
-            PDFNode::XImage(x) => PDFNode::XImage(x.clone()),
-            PDFNode::PDFLiteral{option,literal} => PDFNode::PDFLiteral{option:*option,literal:literal.clone()},
-            PDFNode::PDFOutline(o) => PDFNode::PDFOutline(o.clone()),
-            PDFNode::PDFCatalog(c) => PDFNode::PDFCatalog(c.clone()),
-            PDFNode::PDFDest { structnum, id, dest } => PDFNode::PDFDest{structnum:*structnum,id:id.clone(),dest:dest.clone()},
-        }
-    }
+    PDFDest(PDFDest<ET::Dim>),
+    Color(ColorStackAction)
 }
 
-impl<ET:EngineTypes> PDFNodeTrait<ET> for PDFNode<ET> {
-    fn from_pdfobj(o: PDFObj) -> Self { PDFNode::Obj(o) }
-    fn from_pdfxform(x: PDFXForm<ET>) -> Self { PDFNode::XForm(x) }
-    fn from_pdfximage(x: PDFXImage) -> Self { PDFNode::XImage(x) }
-    fn from_pdfliteral(s: String,o:PDFLiteralOption) -> Self { PDFNode::PDFLiteral{option:o,literal:s} }
-    fn from_pdfoutline(o: PDFOutline) -> Self { PDFNode::PDFOutline(o) }
-    fn from_pdfcatalog(c: PDFCatalog) -> Self { PDFNode::PDFCatalog(c) }
-    fn from_pdfdest(structnum: Option<i64>, id: NumOrName, dest: PDFDestType<ET::Dim>) -> Self {
-        PDFNode::PDFDest{structnum,id,dest}
-    }
+#[derive(Copy,Clone,Debug)]
+pub enum ColorStackAction {
+    Current(usize),
+    Push(usize,PDFColor),
+    Pop(usize),
+    Set(usize,PDFColor)
 }
+
+#[derive(Clone,Debug)]
+pub struct PDFDest<D:TeXDimen> {
+    pub structnum:Option<i64>,
+    pub id:NumOrName,
+    pub dest:PDFDestType<D>
+}
+
+#[derive(Clone,Debug)]
+pub struct PDFLiteral {
+    pub option:PDFLiteralOption,
+    pub literal:String
+}
+
 impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
-    where ET::CustomNode : From<PDFNode<ET>>{
+    where ET::CustomNode : From<PDFNode<ET>> {
     fn as_node(self) -> TeXNode<ET> {
         TeXNode::Custom(self.into())
     }
@@ -242,11 +211,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn width(&self) -> ET::Dim { ET::Dim::default() }
     fn nodetype(&self) -> NodeType { NodeType::WhatsIt }
-    fn opaque(&self) -> bool { false }
+    fn opaque(&self) -> bool { match self {
+        PDFNode::Color(_) => true,
+        _ => false
+    } }
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent,f);
         match self {
-            PDFNode::PDFDest {structnum,id,dest} =>
+            PDFNode::PDFDest(PDFDest {structnum,id,dest}) =>
                 write!(f,"<pdfdest structnum=\"{:?}\", id=\"{:?}\", dest=\"{:?}\">",structnum,id,dest),
             PDFNode::PDFCatalog(c) =>
                 write!(f,"<pdfcatalog literal=\"{}\", action=\"{:?}\">",c.literal,c.action),
@@ -264,8 +236,16 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
             }
             PDFNode::XImage(x) =>
                 write!(f,"<pdfximage>"),
-            PDFNode::PDFLiteral{option,literal} =>
+            PDFNode::PDFLiteral(PDFLiteral {option,literal}) =>
                 write!(f,"<pdfliteral option=\"{:?}\", literal=\"{:?}\">",option,literal),
+            PDFNode::Color(c) => {
+                match c {
+                    ColorStackAction::Current(i) => write!(f,"<pdfcolorstack current=\"{}\">",i),
+                    ColorStackAction::Push(i,c) => write!(f,"<pdfcolorstack push=\"{}\", color=\"{:?}\">",i,c),
+                    ColorStackAction::Pop(i) => write!(f,"<pdfcolorstack pop=\"{}\">",i),
+                    ColorStackAction::Set(i,c) => write!(f,"<pdfcolorstack set=\"{}\", color=\"{:?}\">",i,c),
+                }
+            }
         }
     }
 }
@@ -357,9 +337,10 @@ pub struct PDFCatalog {
     pub action:Option<ActionSpec>
 }
 
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
 impl PDFColor {
+    #[inline(always)]
     pub fn black() -> Self { PDFColor{R:0,G:0,B:0} }
     pub fn parse<S:AsRef<str>+std::fmt::Display>(s:S) -> Self {
         macro_rules! parse {
@@ -399,4 +380,8 @@ impl PDFColor {
             todo!("Invalid color specification: {}",s);
         }
     }
+}
+impl Default for PDFColor {
+    #[inline(always)]
+    fn default() -> Self { PDFColor::black() }
 }

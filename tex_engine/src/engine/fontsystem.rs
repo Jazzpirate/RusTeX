@@ -18,7 +18,7 @@ pub trait FontSystem:Clone+std::fmt::Debug {
     type Char:Character;
     type CS:ControlSequenceName<Self::Char>;
     type Int:TeXInt;
-    type Font:Font<Char=Self::Char,CS=Self::CS,D=Self::Dim,Int=Self::Int>;
+    type Font:Font<Char=Self::Char,CS=Self::CS, Dim=Self::Dim,Int=Self::Int>;
     type Dim:TeXDimen;
     fn null(&self) -> Self::Font;
     fn new<ET:EngineTypes<Char=Self::Char,CSName=Self::CS>>(aux:&mut EngineAux<ET>) -> Self;
@@ -27,25 +27,26 @@ pub trait FontSystem:Clone+std::fmt::Debug {
 
 pub trait Font:Clone+std::fmt::Debug {
     type Char:Character;
-    type D:TeXDimen;
+    type Dim:TeXDimen;
     type Int:TeXInt;
     type CS:ControlSequenceName<Self::Char>;
-    fn get_at(&self) -> Self::D;
-    fn set_at(&mut self,d:Self::D);
+    fn get_at(&self) -> Self::Dim;
+    fn set_at(&mut self,d:Self::Dim);
     fn name(&self) -> &Self::CS;
-    fn get_dim(&self,idx:u16) -> Self::D;
-    fn set_dim(&mut self,idx:u16,d:Self::D);
+    fn filename(&self) -> &str;
+    fn get_dim(&self,idx:u16) -> Self::Dim;
+    fn set_dim(&mut self,idx:u16,d:Self::Dim);
     fn get_hyphenchar(&self) -> Self::Int;
     fn set_hyphenchar(&mut self,c:Self::Int);
     fn get_skewchar(&self) -> Self::Int;
     fn set_skewchar(&mut self,c:Self::Int);
     fn has_char(&self,c:Self::Char) -> bool;
     fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<Self::Char>>::Handler,w:W) -> std::fmt::Result;
-    fn get_wd(&self,c:Self::Char) -> Self::D;
-    fn get_ht(&self,c:Self::Char) -> Self::D;
-    fn get_dp(&self,c:Self::Char) -> Self::D;
-    fn get_ic(&self,c:Self::Char) -> Self::D;
-    fn set_ic(&mut self,c:Self::Char,d:Self::D);
+    fn get_wd(&self,c:Self::Char) -> Self::Dim;
+    fn get_ht(&self,c:Self::Char) -> Self::Dim;
+    fn get_dp(&self,c:Self::Char) -> Self::Dim;
+    fn get_ic(&self,c:Self::Char) -> Self::Dim;
+    fn set_ic(&mut self,c:Self::Char,d:Self::Dim);
     fn get_lp(&self,c:Self::Char) -> Self::Int;
     fn set_lp(&mut self,c:Self::Char,d:Self::Int);
     fn get_rp(&self,c:Self::Char) -> Self::Int;
@@ -149,7 +150,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
     type Char = u8;
     type CS = CS;
     type Int = I;
-    type D = D;
+    type Dim = D;
     fn has_char(&self, c: Self::Char) -> bool {
         let f = &self.file;
         f.heights[c as usize] != 0.0 || f.depths[c as usize] != 0.0 || f.widths[c as usize] != 0.0
@@ -172,14 +173,14 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
     fn set_skewchar(&mut self, c: I) {
         self.muts.write().unwrap().skewchar = Some(c);
     }
-    fn get_at(&self) -> Self::D {
+    fn get_at(&self) -> Self::Dim {
         let at = self.muts.read().unwrap().at;
         match at {
             Some(d) => d,
             None => D::from_sp(self.file.size as i32)
         }
     }
-    fn get_dim(&self, idx: u16) -> Self::D {
+    fn get_dim(&self, idx: u16) -> Self::Dim {
         match self.muts.read().unwrap().dimens.get(idx as usize) {
             Some(d) => *d,
             None => match self.file.dimen.get(idx as usize) {
@@ -188,7 +189,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
             }
         }
     }
-    fn set_dim(&mut self, idx: u16, d: Self::D) {
+    fn set_dim(&mut self, idx: u16, d: Self::Dim) {
         let v = &mut self.muts.write().unwrap().dimens;
         if idx as usize >= v.len() {
             v.resize(idx as usize + 1,D::default());
@@ -196,12 +197,16 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
         v[idx as usize] = d;
     }
     #[inline(always)]
-    fn set_at(&mut self, d: Self::D) {
+    fn set_at(&mut self, d: Self::Dim) {
         self.muts.write().unwrap().at = Some(d);
     }
     #[inline(always)]
     fn name(&self) -> &Self::CS {
         &self.name
+    }
+    #[inline(always)]
+    fn filename(&self) -> &str {
+        self.file.name()
     }
     fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<u8>>::Handler,mut w:W) -> std::fmt::Result {
         let at = self.muts.read().unwrap().at;
@@ -211,7 +216,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
         }
     }
 
-    fn get_ic(&self, c: Self::Char) -> Self::D {
+    fn get_ic(&self, c: Self::Char) -> Self::Dim {
         let v = &mut self.muts.write().unwrap().ics;
         match v.get(&c) {
             Some(d) => *d,
@@ -221,7 +226,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
             }
         }
     }
-    fn set_ic(&mut self, c: Self::Char, d: Self::D) {
+    fn set_ic(&mut self, c: Self::Char, d: Self::Dim) {
         let v = &mut self.muts.write().unwrap().ics;
         v.insert(c,d);
     }
@@ -250,17 +255,17 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
         v.insert(c,d);
     }
     #[inline(always)]
-    fn get_wd(&self, c: Self::Char) -> Self::D {
+    fn get_wd(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.widths[c as usize];
         self.get_at().scale_float(d)
     }
     #[inline(always)]
-    fn get_ht(&self, c: Self::Char) -> Self::D {
+    fn get_ht(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.heights[c as usize];
         self.get_at().scale_float(d)
     }
     #[inline(always)]
-    fn get_dp(&self, c: Self::Char) -> Self::D {
+    fn get_dp(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.depths[c as usize];
         self.get_at().scale_float(d)
     }

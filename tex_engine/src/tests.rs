@@ -76,7 +76,6 @@ mod tests {
     use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::{Character, StringLineSource};
-    use crate::tex::nodes::PreShipoutNodeTrait;
     use crate::tex::token::Token;
     use crate::utils::Ptr;
     use crate::engine::PDFTeXEngine;
@@ -209,7 +208,8 @@ mod tests {
         debug();
         type Tk = crate::tex::token::CompactToken;
         type CS = <Tk as Token>::CS;
-        type Change = crate::engine::state::StateChange<crate::engine::state::tex_state::TeXState<DefaultPlainTeXEngineTypes>>;
+        type State = crate::engine::state::tex_state::TeXState<DefaultPlainTeXEngineTypes>;
+        type Change = crate::engine::state::StateChange<DefaultPlainTeXEngineTypes,State>;
         info!("primitive id: {}b",std::mem::size_of::<crate::engine::utils::memory::PrimitiveIdentifier>());
         info!("control sequence name: {}b",std::mem::size_of::<CS>());
         info!("compact token: {}b",std::mem::size_of::<Tk>());
@@ -218,7 +218,7 @@ mod tests {
         info!("macro: {}b",std::mem::size_of::<crate::commands::Macro<Tk>>());
         info!("fn: {}b",std::mem::size_of::<fn(&mut EngineReferences<DefaultPlainTeXEngineTypes>,&mut ExpansionContainer<Tk>,Tk)>());
         info!("state change: {}b",std::mem::size_of::<Change>());
-        info!("custom state change: {}b",std::mem::size_of::<Ptr<dyn CustomStateChange<crate::engine::state::tex_state::TeXState<DefaultPlainTeXEngineTypes>>>>());
+        info!("custom state change: {}b",std::mem::size_of::<Ptr<dyn CustomStateChange<DefaultPlainTeXEngineTypes,State>>>());
         info!("primitive id + int: {}b",std::mem::size_of::<(crate::engine::utils::memory::PrimitiveIdentifier,i32)>());
         info!("--------------------------------------------------------------");
         info!("static string: {}b",std::mem::size_of::<&'static str>());
