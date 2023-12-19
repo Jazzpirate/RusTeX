@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode, MarkerNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::{HMap, Ptr};
@@ -28,7 +28,7 @@ type St<S> = <<S as Stomach>::ET as EngineTypes>::State;
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
 
-fn afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     match std::mem::take(engine.stomach.afterassignment()) {
         Some(t) => engine.requeue(t),
         _ => ()
@@ -61,7 +61,7 @@ pub trait Stomach {
     ) {
         engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
         assign(engine,token,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
         match engine.stomach.data_mut().open_lists.last() {
@@ -109,13 +109,28 @@ pub trait Stomach {
             }
             CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_horizontal() =>
                 Self::do_word(engine,char),
-            CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_vertical() =>
+            CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.state.get_mode().is_vertical() =>
                 Self::open_paragraph(engine,token),
+            CommandCode::MathShift if engine.state.get_mode().is_math() =>
+                todo!("Close math"),
+            CommandCode::MathShift => {
+                let (display,every) = match engine.state.get_mode() {
+                    TeXMode::Horizontal => {
+                        match engine.get_next() {
+                            Some(tk) if tk.command_code() == CommandCode::MathShift => (BoxType::DisplayMath,PRIMITIVES.everydisplay),
+                            Some(o) => {engine.requeue(o);(BoxType::InlineMath,PRIMITIVES.everymath)}
+                            _ => todo!("file end")
+                        }
+                    }
+                    _ => (BoxType::InlineMath,PRIMITIVES.everymath)
+                };
+                engine.state.push(engine.aux,GroupType::Box(display),engine.mouth.line_number());
+                engine.mouth.insert_every::<Self::ET>(engine.state,every);
+            }
             CommandCode::Other | CommandCode::Letter => {
                 todo!("Char in math mode")
             }
             _ => todo!("{} > {:?}",char,code)
-            // todo!("check ligatures, do spacefactor")
         }
     }
     fn do_word(engine:&mut EngineReferences<Self::ET>,char:Ch<Self>) {
@@ -208,27 +223,27 @@ pub trait Stomach {
     }
     fn do_font(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
         engine.state.set_current_font(engine.aux,f,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_int_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
         let val = engine.read_int(true);
         engine.state.set_int_register(engine.aux,register,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_dim_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
         let val = engine.read_dim(true);
         engine.state.set_dim_register(engine.aux,register,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_skip_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
         let val = engine.read_skip(true);
         engine.state.set_skip_register(engine.aux,register,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_muskip_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
         let val = engine.read_muskip(true);
         engine.state.set_muskip_register(engine.aux,register,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_toks_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
         let mut had_eq = false;
@@ -243,7 +258,7 @@ pub trait Stomach {
                     let mut tks = shared_vector::Vector::new();
                     engine.read_until_endgroup(|_,_,t| tks.push(t));
                     engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
-                    afterassignment(engine);
+                    insert_afterassignment(engine);
                     return ()
                 }
                 _ => todo!("throw error")
@@ -255,25 +270,25 @@ pub trait Stomach {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         let val = engine.read_int(true);
         engine.state.set_primitive_int(engine.aux,name,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_primitive_dim(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         let val = engine.read_dim(true);
         engine.state.set_primitive_dim(engine.aux,name,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_primitive_skip(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         let val = engine.read_skip(true);
         engine.state.set_primitive_skip(engine.aux,name,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_primitive_muskip(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         let val = engine.read_muskip(true);
         engine.state.set_primitive_muskip(engine.aux,name,val,global);
-        afterassignment(engine);
+        insert_afterassignment(engine);
     }
     fn assign_primitive_toks(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
         let mut had_eq = false;
@@ -294,7 +309,7 @@ pub trait Stomach {
                         engine.read_until_endgroup(|_,_,t| tks.push(t));
                     }
                     engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
-                    afterassignment(engine);
+                    insert_afterassignment(engine);
                     return ()
                 }
                 _ => todo!("throw error")
@@ -478,10 +493,30 @@ pub trait Stomach {
         }
     }
 
-    #[inline(always)]
     fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<TeXNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
-        split_paragraph_roughly(engine,specs,children,sourceref)
+        let ret = split_paragraph_roughly(engine,specs,children,sourceref);
+        for line in ret {
+            match line {
+                ParLine::Adjust(n) => Self::add_node(engine,n),
+                ParLine::Line{contents,..} => Self::add_node(engine,
+                  TeXBox {
+                      children:contents,
+                      info:BoxInfo {
+                          tp:BoxType::Horizontal,
+                          kind: "parline",
+                          scaled:ToOrSpread::None,
+                          assigned_width: None,
+                          assigned_height: None,
+                          assigned_depth: None,
+                          moved_left: None,raised:None
+                      },
+                      start:sourceref,
+                      end:engine.mouth.current_sourceref(),
+                  }.as_node()
+                )
+            }
+        }
     }
 }
 
@@ -498,7 +533,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         todo!("file end")
     }
 }
-
+#[derive(Debug,Clone,Hash,Eq,PartialEq)]
 pub struct ParLineSpec<ET:EngineTypes> {
     pub leftskip:ET::Skip,
     pub rightskip:ET::Skip,
@@ -512,7 +547,7 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
         state.set_primitive_int(aux,PRIMITIVES.hangafter,ET::Int::default(),false);
         state.set_primitive_dim(aux,PRIMITIVES.hangindent,ET::Dim::default(),false);
         let leftskip = state.get_primitive_skip(PRIMITIVES.leftskip);
-        let rightskip = state.get_primitive_skip(PRIMITIVES.leftskip);
+        let rightskip = state.get_primitive_skip(PRIMITIVES.rightskip);
         let hsize = state.get_primitive_dim(PRIMITIVES.hsize);
         if parshape.is_empty() {
             if hangindent == ET::Dim::default() || hangafter == 0 {
@@ -692,10 +727,11 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
 }
 
 pub enum ParLine<ET:EngineTypes> {
-    Line(Vec<TeXNode<ET>>),
+    Line{contents:Vec<TeXNode<ET>>, broken_early:bool },
     Adjust(TeXNode<ET>)
 }
-fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>, sourceref:SourceReference<<ET::File as File>::SourceRefID>) {
+
+pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>, sourceref:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
     let mut ret : Vec<ParLine<ET>> = Vec::new();
     let mut hgoals = specs.into_iter();
     let mut nodes = children.into_iter();
@@ -706,9 +742,9 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
         let mut reinserts = vec!();
 
         macro_rules! next_line {
-            () => {
+            ($b:literal) => {
                 if !line.is_empty() {
-                    ret.push(ParLine::Line(line));
+                    ret.push(ParLine::Line{contents:line,broken_early:$b});
                 }
                 for c in reinserts {
                     ret.push(ParLine::Adjust(c));
@@ -725,7 +761,7 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
             match nodes.next() {
                 None => {
                     if !line.is_empty() {
-                        ret.push(ParLine::Line(line));
+                        ret.push(ParLine::Line{contents:line,broken_early:false});
                     }
                     for c in reinserts {
                         ret.push(ParLine::Adjust(c));
@@ -736,8 +772,7 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
                     reinserts.push(n),
                 Some(m@ TeXNode::Math) => todo!(),
                 Some(TeXNode::Penalty(i)) if i <= -10000 => {
-                    line.push(TeXNode::Marker(MarkerNode::ForceBreak));
-                    next_line!(); // TODO mark somehow
+                    next_line!(true); // TODO mark somehow
                     continue 'A
                 }
                 Some(TeXNode::Penalty(_)) => (),
@@ -747,29 +782,7 @@ fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, spe
                 }
             }
         }
-        next_line!();
+        next_line!(false);
     }
-    ET::Stomach::add_node(engine,TeXNode::Marker(MarkerNode::ParagraphBegin));
-    for line in ret {
-        match line {
-            ParLine::Adjust(n) => ET::Stomach::add_node(engine,n),
-            ParLine::Line(v) => ET::Stomach::add_node(engine,
-                TeXBox {
-                    children:v,
-                    info:BoxInfo {
-                        tp:BoxType::Horizontal,
-                        kind: "parline",
-                        scaled:ToOrSpread::None,
-                        assigned_width: None,
-                        assigned_height: None,
-                        assigned_depth: None,
-                        moved_left: None,raised:None
-                    },
-                    start:sourceref,
-                    end:engine.mouth.current_sourceref(),
-                }.as_node()
-            )
-        }
-    }
-    ET::Stomach::add_node(engine,TeXNode::Marker(MarkerNode::ParagraphEnd));
+    ret
 }

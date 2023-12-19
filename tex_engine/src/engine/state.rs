@@ -31,13 +31,13 @@ pub trait State:Sized+Clone {
 
     fn aftergroup(&mut self,token:T<Self>);
 
-    fn push(&mut self,aux:&EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
-    fn pop(&mut self,aux:&EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);
+    fn push(&mut self,aux:&mut EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
+    fn pop(&mut self,aux:&mut EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);
     fn get_group_type(&self) -> Option<GroupType>;
     fn get_group_level(&self) -> usize;
 
     fn get_current_font(&self) -> &<Self::ET as EngineTypes>::Font;
-    fn set_current_font(&mut self,aux:&EngineAux<Self::ET>,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+    fn set_current_font(&mut self,aux:&mut EngineAux<Self::ET>,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<Ch<Self>>;

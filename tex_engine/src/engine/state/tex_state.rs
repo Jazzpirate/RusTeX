@@ -144,7 +144,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
     #[inline(always)]
-    fn push(&mut self,aux:&EngineAux<ET>, group_type: GroupType,line_number:usize) {
+    fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize) {
         self.stack.push(group_type,&mut self.current_mode);
         let tracing = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
             Some(v) if *v > ET::Int::default() => true,
@@ -171,7 +171,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             }
         }
     }
-    fn pop(&mut self,aux:&EngineAux<ET>,mouth: &mut ET::Mouth) {
+    fn pop(&mut self,aux:&mut EngineAux<ET>,mouth: &mut ET::Mouth) {
         let mut lvl = match self.stack.stack.pop() {
             Some(lvl) => lvl,
             _ => todo!("throw error")
@@ -483,7 +483,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         &self.current_font
     }
     #[inline(always)]
-    fn set_current_font(&mut self, aux: &EngineAux<Self::ET>, fnt: crate::engine::state::Fnt<Self>, globally: bool) {
+    fn set_current_font(&mut self, aux: &mut EngineAux<Self::ET>, fnt: crate::engine::state::Fnt<Self>, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(

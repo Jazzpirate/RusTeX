@@ -91,7 +91,6 @@ impl<ET:EngineTypes> WhatsitNode<ET> {
 #[derive(Clone,Debug)]
 pub enum TeXNode<ET:EngineTypes> {
     Penalty(i32),
-    Marker(MarkerNode),
     Mark(usize,TokenList<ET::Token>),
     Whatsit(WhatsitNode<ET>),
     Skip(SkipNode<ET>),
@@ -122,10 +121,6 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
-            TeXNode::Marker(m) => {
-                Self::readable_do_indent(indent,f)?;
-                write!(f, "<{:?}>",m)
-            }
             TeXNode::Skip(s) => s.readable_fmt(indent, f),
             TeXNode::Kern(k) => k.readable_fmt(indent, f),
             TeXNode::Box(b) => b.readable_fmt(indent, f),
@@ -157,7 +152,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     }
     fn height(&self) -> ET::Dim {
         match self {
-            TeXNode::Penalty(_) | TeXNode::Marker(_) => ET::Dim::default(),
+            TeXNode::Penalty(_) => ET::Dim::default(),
             TeXNode::Skip(s) => s.height(),
             TeXNode::Box(b) => b.height(),
             TeXNode::Simple(s) => s.height(),
@@ -171,7 +166,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     }
     fn width(&self) -> ET::Dim {
         match self {
-            TeXNode::Penalty(_) | TeXNode::Marker(_) => ET::Dim::default(),
+            TeXNode::Penalty(_) => ET::Dim::default(),
             TeXNode::Skip(s) => s.width(),
             TeXNode::Box(b) => b.width(),
             TeXNode::Simple(s) => s.width(),
@@ -185,7 +180,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
     }
     fn depth(&self) -> ET::Dim {
         match self {
-            TeXNode::Penalty(_) | TeXNode::Skip(_) | TeXNode::Marker(_) => ET::Dim::default(),
+            TeXNode::Penalty(_) | TeXNode::Skip(_) => ET::Dim::default(),
             TeXNode::Box(b) => b.depth(),
             TeXNode::Simple(s) => s.depth(),
             TeXNode::Char { depth, .. } => *depth,
@@ -208,7 +203,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::VAdjust => NodeType::Adjust,
             TeXNode::Math => NodeType::Math,
             TeXNode::Mark(_, _) => NodeType::Mark,
-            TeXNode::Whatsit(_) | TeXNode::Marker(_) => NodeType::WhatsIt,
+            TeXNode::Whatsit(_) => NodeType::WhatsIt,
             TeXNode::Custom(n) => n.nodetype(),
         }
     }
@@ -225,17 +220,11 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::VAdjust => true,
             TeXNode::Math => false,
             TeXNode::Whatsit(_) => false,
-            TeXNode::Marker(_) => true,
             TeXNode::Custom(n) => n.opaque(),
         }
     }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { self }
-}
-
-#[derive(Debug,Copy,Clone)]
-pub enum MarkerNode {
-    ParagraphBegin,ParagraphEnd,ForceBreak
 }
 
 #[derive(Debug,Clone)]

@@ -1,3 +1,4 @@
+use std::fmt::Formatter;
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
 use crate::tex::nodes::{NodeTrait, TeXNode, TeXBox};
 use crate::tex::numerics::TeXDimen;
@@ -384,4 +385,9 @@ impl PDFColor {
 impl Default for PDFColor {
     #[inline(always)]
     fn default() -> Self { PDFColor::black() }
+}
+impl std::fmt::Display for PDFColor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"#{:02x}{:02x}{:02x}",self.R,self.G,self.B)
+    }
 }

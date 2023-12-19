@@ -160,6 +160,9 @@ pub struct PrimitiveInterner {
     pub leftskip:PrimitiveIdentifier,
     pub rightskip:PrimitiveIdentifier,
     pub hsize:PrimitiveIdentifier,
+    pub pdfpagewidth:PrimitiveIdentifier,
+    pub everymath:PrimitiveIdentifier,
+    pub everydisplay:PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -209,13 +212,17 @@ impl PrimitiveInterner {
         let leftskip = PrimitiveIdentifier(interner.get_or_intern_static("leftskip"));
         let rightskip = PrimitiveIdentifier(interner.get_or_intern_static("rightskip"));
         let hsize = PrimitiveIdentifier(interner.get_or_intern_static("hsize"));
+        let pdfpagewidth = PrimitiveIdentifier(interner.get_or_intern_static("pdfpagewidth"));
+        let everymath = PrimitiveIdentifier(interner.get_or_intern_static("everymath"));
+        let everydisplay = PrimitiveIdentifier(interner.get_or_intern_static("everydisplay"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
             tracinggroups, else_, fi, or, global, long, outer, protected, def, edef, xdef,
             gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
             everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
-            everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize
+            everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
+            pdfpagewidth,everymath,everydisplay
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.
