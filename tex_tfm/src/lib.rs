@@ -12,6 +12,7 @@ include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 #[cfg(test)]
 mod tests {
+    use crate::encodings::EncodingStore;
     use super::*;
     use super::fontstyles::{FontModifiable, FontModifier};
     #[test]
@@ -25,14 +26,28 @@ mod tests {
         assert_eq!("test".make_bold().make_sans().to_string(), "𝘁𝗲𝘀𝘁");
         assert_eq!("test".apply_modifiers(&[FontModifier::SansSerif,FontModifier::Bold]).to_string(), "𝘁𝗲𝘀𝘁");
     }
-    #[test]
-    fn test_encodings() {
-        let mut es = encodings::EncodingStore::new(|s| {
+    fn get_store() -> EncodingStore<String,fn(&str) -> String> {
+        encodings::EncodingStore::new(|s| {
             std::str::from_utf8(std::process::Command::new("kpsewhich")
                 .args(vec!(s)).output().expect("kpsewhich not found!")
                 .stdout.as_slice()).unwrap().trim().to_string()
-        });
+        })
+    }
+    #[test]
+    fn test_encodings() {
+        let mut es = get_store();
         let names = es.all_encs().take(50).map(|e| e.tfm_name.clone()).collect::<Vec<_>>();
         for n in names { es.get_glyphlist(n); }
+    }
+    #[test]
+    fn print_table() {
+        env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().unwrap();
+        let mut es = get_store();
+        log::info!("cmbx10:\n{}",es.display_encoding("cmbx10").unwrap());
+        log::info!("jkpbitc:\n{}",es.display_encoding("jkpbitc").unwrap());
+        log::info!("ot1-stix2textsc:\n{}",es.display_encoding("ot1-stix2textsc").unwrap());
+        log::info!("stix-mathbbit-bold:\n{}",es.display_encoding("stix-mathbbit-bold").unwrap());
+        log::info!("cmr10:\n{}",es.display_encoding("cmr10").unwrap());
+        log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());
     }
 }

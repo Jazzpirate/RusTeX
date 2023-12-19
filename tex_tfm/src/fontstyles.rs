@@ -16,15 +16,15 @@ pub enum FontModifier {
 
 #[derive(Copy,Clone,Debug,PartialEq,Eq,Default)]
 pub struct ModifierSeq {
-    pub(crate) blackboard:bool,
-    pub(crate) fraktur:bool,
-    pub(crate) script:bool,
-    pub(crate) bold:bool,
-    pub(crate) capitals:bool,
-    pub(crate) monospaced:bool,
-    pub(crate) italic:bool,
-    pub(crate) oblique:bool,
-    pub(crate) sans_serif:bool,
+    pub blackboard:bool,
+    pub fraktur:bool,
+    pub script:bool,
+    pub bold:bool,
+    pub capitals:bool,
+    pub monospaced:bool,
+    pub italic:bool,
+    pub oblique:bool,
+    pub sans_serif:bool,
 }
 impl ModifierSeq {
     #[inline(always)]

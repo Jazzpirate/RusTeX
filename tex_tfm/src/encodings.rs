@@ -1,6 +1,7 @@
 mod enc_files;
 mod pfx_files;
 
+use std::fmt::{Display, Write};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -19,9 +20,9 @@ pub struct FontEnc {
     //special: Vec<Box<str>>,
     enc_file: Box<str>,
     pfx_file: Box<str>,
-    styles: ModifierSeq,
+    pub styles: ModifierSeq,
     glyphlist:Option<usize>,
-    weblink:Option<(&'static str,&'static str)>
+    pub weblink:Option<(&'static str,&'static str)>
 }
 #[derive(Debug,Clone)]
 pub struct EncodingStore<S:AsRef<str>,F:FnMut(&str) -> S> {
@@ -30,6 +31,50 @@ pub struct EncodingStore<S:AsRef<str>,F:FnMut(&str) -> S> {
     pfb_files: HMap<Box<str>,GlyphList>,
     get:F
 }
+
+pub struct DisplayEncoding<'a> {
+    enc:&'a FontEnc,
+    list:&'a GlyphList
+}
+impl<'a> Display for DisplayEncoding<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("| `.tfm` name                          | Modifiers | Table (Optional)  | External Font (Optional)                                             |\n")?;
+        f.write_str("|--------------------------------------|-----------|-------------------|----------------------------------------------------------------------|\n")?;
+        write!(f,"| {} | ",self.enc.tfm_name)?;
+        if self.enc.styles.bold { f.write_char('b')?; }
+        if self.enc.styles.italic { f.write_char('i')?; }
+        if self.enc.styles.oblique { f.write_char('o')?; }
+        if self.enc.styles.sans_serif { f.write_char('s')?; }
+        if self.enc.styles.monospaced { f.write_char('m')?; }
+        if self.enc.styles.capitals { f.write_char('c')?; }
+        if self.enc.styles.script { f.write_char('S')?; }
+        if self.enc.styles.blackboard { f.write_char('B')?; }
+        if self.enc.styles.fraktur { f.write_char('f')?; }
+        write!(f, " | {}_table | ", self.enc.tfm_name)?;
+        match self.enc.weblink {
+            None => f.write_char('|')?,
+            Some((url,name)) => write!(f,"{} {} |",name,url)?
+        }
+        write!(f,"\n\n- {}_table\n\n",self.enc.tfm_name)?;
+        f.write_str("| \\_x\\_  | 0   | 1   | 2    | 3   | 4   | 5   | 6   | 7   | 8   | 9   | A   | B    | C    | D    | E     | F     |\n")?;
+        f.write_str("|--------|-----|-----|------|-----|-----|-----|-----|-----|-----|-----|-----|------|------|------|-------|-------|\n")?;
+        for i in 0..16 {
+            write!(f,"| **{:X}x** | ",i)?;
+            for j in 0..16 {
+                match &self.list.0[i*16+j].0 {
+                    crate::GlyphI::S(0) => f.write_char('|')?,
+                    crate::GlyphI::S(g) => write!(f,"/{} | ",crate::GLYPH_NAMES[*g as usize])?,
+                    crate::GlyphI::Unicode(c) => write!(f,"\\u{:04X} | ",*c as u32)?,
+                    g@crate::GlyphI::Ls(_) => write!(f,"`{}` | ",g.to_string().replace("`","\\`").replace("|","\\|"))?,
+                    crate::GlyphI::Undefined(_) => f.write_char('|')?,
+                }
+            }
+            f.write_char('\n')?;
+        }
+        Ok(())
+    }
+}
+
 impl<S:AsRef<str>,F:FnMut(&str) -> S> EncodingStore<S,F> {
     pub fn new(get:F) -> Self {
         let mut map = HMap::default();
@@ -38,27 +83,41 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> EncodingStore<S,F> {
 
         EncodingStore { pdftex_map: map, enc_files: HMap::default(),pfb_files: HMap::default(),get }
     }
+    pub fn display_encoding<'a,S2:AsRef<str>>(&'a mut self,name:S2) -> Option<impl Display + 'a> {
+        if let Some((enc,list)) = self.get_glyphlist_i(name) {
+            Some(DisplayEncoding { enc, list })
+        } else { None }
+    }
+    pub fn get_info<S2:AsRef<str>>(&self,s:S2) -> Option<&FontEnc> {
+        self.pdftex_map.get(s.as_ref())
+    }
     pub fn all_encs(&self) -> impl Iterator<Item=&FontEnc> {
         self.pdftex_map.values()
     }
     pub fn get_glyphlist<S2:AsRef<str>>(&mut self,name:S2) -> &GlyphList {
-        match self.pdftex_map.get_mut(name.as_ref()) {
+        match self.get_glyphlist_i(name) {
             None => &UNDEFINED_LIST,
+            Some((_,l)) => l
+        }
+    }
+    fn get_glyphlist_i<S2:AsRef<str>>(&mut self,name:S2) -> Option<(&FontEnc,&GlyphList)> {
+        match self.pdftex_map.get_mut(name.as_ref()) {
+            None => None,
             Some(enc) if enc.glyphlist.is_some() => {
-                &crate::PATCHED_TABLES[enc.glyphlist.unwrap()]
+                Some((&*enc,&crate::PATCHED_TABLES[enc.glyphlist.unwrap()]))
             }
             Some(enc) if !enc.enc_file.is_empty() => {
                 match get_from_enc(&mut self.get,&mut self.enc_files, enc) {
-                    Ok(r) => r,
+                    Ok(r) => Some(r),
                     Err(enc) => match get_from_pfx(&mut self.get,&mut self.pfb_files, enc) {
-                        Some(r) => r,
-                        _ => &UNDEFINED_LIST
+                        (e,Some(r)) => Some((e,r)),
+                        (e,_) => Some((e,&UNDEFINED_LIST))
                     }
                 }
             }
             Some(enc) => match get_from_pfx(&mut self.get,&mut self.pfb_files, enc) {
-                Some(r) => r,
-                _ => &UNDEFINED_LIST
+                (e,Some(r)) => Some((e,r)),
+                (e,_) => Some((e,&UNDEFINED_LIST))
             }
         }
     }
@@ -66,18 +125,18 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> EncodingStore<S,F> {
 
 fn patch(map:&mut HMap<Box<str>,FontEnc>,name:&'static str,modifiers:ModifierSeq,table:Option<usize>,link:Option<(&'static str,&'static str)>) {
     match map.get_mut(name) {
-        None => panic!("{} not found!",name),
         Some(enc) => {
             enc.styles = modifiers;
             enc.glyphlist = table;
             enc.weblink = link;
         }
+        _ => ()
     }
 }
 
-fn get_from_pfx<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F, map:&'a mut HMap<Box<str>,GlyphList>, enc:&'a mut FontEnc) -> Option<&'a GlyphList> {
+fn get_from_pfx<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F, map:&'a mut HMap<Box<str>,GlyphList>, enc:&'a mut FontEnc) -> (&'a FontEnc,Option<&'a GlyphList>) {
     if enc.pfx_file.is_empty() {
-        return None
+        return (&*enc,None)
     }
     match map.get(&enc.pfx_file) {
         Some(_) => (),
@@ -89,17 +148,17 @@ fn get_from_pfx<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F, map:&'a mut HMap
                     map.insert(enc.pfx_file.clone(),ls);
                 } else {
                     enc.pfx_file = "".into();
-                    return None
+                    return (&*enc,None)
                 }
             } else {
                 todo!("File ending: {}",enc.pfx_file)
             }
         }
     }
-    map.get(&enc.pfx_file)
+    (&*enc,map.get(&enc.pfx_file))
 }
 
-fn get_from_enc<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F,map:&'a mut HMap<Box<str>,Vec<(Box<str>,GlyphList)>>,enc:&'a mut FontEnc) -> Result<&'a GlyphList,&'a mut FontEnc> {
+fn get_from_enc<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F,map:&'a mut HMap<Box<str>,Vec<(Box<str>,GlyphList)>>,enc:&'a mut FontEnc) -> Result<(&'a FontEnc,&'a GlyphList),&'a mut FontEnc> {
     match map.get(&enc.enc_file) {
         None => {
             let f = get(enc.enc_file.as_ref());
@@ -115,7 +174,7 @@ fn get_from_enc<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F,map:&'a mut HMap<
     }
     let e = map.get(&enc.enc_file).unwrap();
     if e.len() == 1 {
-        Ok(&e[0].1)
+        Ok((&*enc,&e[0].1))
     } else {
         todo!("Length: {}; names: {:?}",e.len(),e.iter().map(|(n,_)| n.as_ref()).collect::<Vec<_>>())
     }
@@ -164,6 +223,9 @@ fn parse_pdftex_map_line(st:String) -> FontEnc {
             }
             if lc.contains("-sc") {
                 styles.add(FontModifier::Capitals);
+            }
+            if lc.contains("blackboard") {
+                styles.add(FontModifier::Blackboard);
             }
         }
     }
