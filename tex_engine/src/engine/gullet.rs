@@ -126,7 +126,7 @@ pub trait Gullet {
     }
 
     #[inline(always)]
-    fn get_expansion_container(engine:&mut EngineReferences<Self::ET>) -> ExpansionContainer<T<Self>> {
+    fn get_expansion_container(_engine:&mut EngineReferences<Self::ET>) -> ExpansionContainer<T<Self>> {
         ExpansionContainer::new()
     }
 
@@ -204,7 +204,7 @@ pub trait Gullet {
         }
     }
     fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,&mut Self,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
-        let mut ret = match engine.gullet.get_align_data() {
+        match engine.gullet.get_align_data() {
             None => methods::expand_until_endgroup(engine,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t)),
             Some(_) => methods::expand_until_endgroup::<Self::ET,_>(engine,expand_protected,edef_like,|a,s,g,t| {
                 if t.is_begin_group() { g.get_align_data().unwrap().ingroups += 1 }
@@ -216,7 +216,7 @@ pub trait Gullet {
                 }
                 cont(a,s,g,t)
             })
-        };
+        }
     }
 }
 
@@ -355,7 +355,7 @@ impl Display for Dots {
 impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     type ET = ET;
 
-    fn new(aux: &mut EngineAux<Self::ET>, state: &mut S<Self>, mouth: &mut M<Self>) -> Self {
+    fn new(_aux: &mut EngineAux<Self::ET>, _state: &mut S<Self>, _mouth: &mut M<Self>) -> Self {
         DefaultGullet {
             align_data:Vec::new(),
             phantom:PhantomData::default(),

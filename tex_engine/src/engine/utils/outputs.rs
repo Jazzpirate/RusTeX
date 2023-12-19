@@ -16,7 +16,7 @@ pub trait Outputs {
         log::info!(target:"file","({}",text);
     }
     #[inline(always)]
-    fn file_close<D:Display>(&self,text:D) {
+    fn file_close<D:Display>(&self,_text:D) {
         log::info!(target:"file",")");
     }
     #[inline(always)]

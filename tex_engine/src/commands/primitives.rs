@@ -3,13 +3,11 @@ use crate::commands::{Assignment, BoxCommand, Command, Conditional, DimCommand, 
 use crate::engine::utils::memory::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
-use crate::engine::mouth::pretokenized::ExpansionContainer;
 use crate::engine::state::State;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, TeXNode};
+use crate::tex::nodes::{BoxInfo, TeXBox, TeXNode};
 use crate::tex::numerics::NumSet;
-use crate::utils::Ptr;
 
 type Tk<E> = <<E as TeXEngine>::Types as EngineTypes>::Token;
 type Int<E> = <<<E as TeXEngine>::Types as EngineTypes>::Num as NumSet>::Int;

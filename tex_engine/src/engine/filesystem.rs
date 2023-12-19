@@ -1,7 +1,6 @@
 /*! Accessing files on `\input`, `\open`/`\write` etc. */
 
 use std::path::{Path, PathBuf};
-use crate::debug_log;
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::filesystem::kpathsea::Kpathsea;
 use crate::engine::mouth::strings::StringTokenizer;

@@ -104,7 +104,7 @@ impl TfmFile {
         if np > 0 {
             dimen.push(state.read_float());
         }
-        for i in 2..(np+1) {
+        for _ in 2..(np+1) {
             dimen.push(state.read_float());
         }
 

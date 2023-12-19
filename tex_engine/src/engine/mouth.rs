@@ -91,34 +91,29 @@ pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
     start_ref:Option<SourceReference<F::SourceRefID>>
 }
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
-    fn clean(&mut self) {
+    /*
+fn clean(&mut self) {
+    loop {
         match self.inputs.last_mut() {
-            Some(TokenSource::Vec(v)) if v.is_empty() => {self.inputs.pop();}
-            _ => ()
+            Some(TokenSource::Expansion(e)) =>
+                if !e.has_next() {
+                    self.inputs.pop();
+                    continue
+                } else {
+                    break
+                }
+            Some(TokenSource::TokenList(e)) =>
+                if !e.has_next() {
+                    self.inputs.pop();
+                    continue
+                } else {
+                    break
+                }
+            _ => break
         }
-        /*
-        loop {
-            match self.inputs.last_mut() {
-                Some(TokenSource::Expansion(e)) =>
-                    if !e.has_next() {
-                        self.inputs.pop();
-                        continue
-                    } else {
-                        break
-                    }
-                Some(TokenSource::TokenList(e)) =>
-                    if !e.has_next() {
-                        self.inputs.pop();
-                        continue
-                    } else {
-                        break
-                    }
-                _ => break
-            }
-        }
-
-         */
     }
+}
+     */
     fn with_list<Fn:FnOnce(&mut Vec<T>)>(&mut self,f:Fn) {
         match self.inputs.last_mut() {
             Some(TokenSource::Vec(v)) => f(v),
@@ -134,7 +129,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     type Token = T;
     type File = F;
 
-    fn new<ET: EngineTypes<Mouth=Self>>(aux: &mut EngineAux<ET>, state: &mut ET::State) -> Self {
+    fn new<ET: EngineTypes<Mouth=Self>>(_aux: &mut EngineAux<ET>, _state: &mut ET::State) -> Self {
         Self {
             inputs:Vec::new(),args:Some(array_init::array_init(|_| Vec::new())),
             start_ref:None
@@ -202,7 +197,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     }
 
     fn num_exps(&self) -> usize {
-        let mut ret = 0;
+        let ret = 0;
         /*for s in self.inputs.iter().rev() {
             match s {
                 TokenSource::Expansion(_) => ret += 1,
@@ -385,7 +380,6 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 /*TokenSource::Requeued(t) => {
                     t.display_fmt(int,cc,esc,&mut str).unwrap()
                 }*/
-                _ => ()
             }
         }
         str
@@ -404,7 +398,7 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
             Some(TokenSource::File(f,_)) => {
                 aux.outputs.file_close(f.source.path().display());
             }
-            Some(TokenSource::String(s)) => (),
+            Some(TokenSource::String(_)) => (),
             _ => unreachable!()
         };
         let everyeof = state.get_primitive_tokens(PRIMITIVES.everyeof);

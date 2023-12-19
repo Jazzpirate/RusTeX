@@ -1,35 +1,33 @@
 pub mod pdftexnodes;
 
 use crate::{cmtodo, cmtodos};
-use crate::engine::{EngineExtension, EngineReferences, EngineTypes, TeXEngine};
+use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::mouth::pretokenized::{ExpansionContainer, Tokenizer, WriteChars};
+use crate::engine::mouth::pretokenized::{Tokenizer, WriteChars};
 use crate::tex::catcodes::CommandCode;
 use super::primitives::*;
 use crate::engine::utils::memory::MemoryManager;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::Write;
 use crate::commands::pdftex::pdftexnodes::{ColorStackAction, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFXForm};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
-use crate::tex::nodes::{NodeTrait, TeXNode, ReadableNode, TeXBox};
-use crate::tex::types::NodeType;
-use crate::utils::Ptr;
+use crate::tex::nodes::TeXNode;
 use crate::engine::stomach::Stomach;
 
 
 #[inline(always)]
-pub fn pdftexversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
+pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)
 }
 #[inline(always)]
-pub fn pdfmajorversion<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
+pub fn pdfmajorversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(1)
 }
 
-pub fn pdftexrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdftexrevision<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     exp.push(ET::Token::from_char_cat(b'2'.into(),CommandCode::Other));
     exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
 }
@@ -483,6 +481,13 @@ pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<
     engine.aux.memory.return_string(second);
 }
 
+pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    let dim = engine.read_font().get_at();
+    let mut f = |t| exp.push(t);
+    let mut t = Tokenizer::new(&mut f);
+    write!(t,"{}",dim).unwrap();
+}
+
 pub fn pdffontexpand<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     // TODO
     let _ = engine.read_font();
@@ -491,6 +496,7 @@ pub fn pdffontexpand<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
     let _ = engine.read_int(false);
     engine.read_keyword(b"autoexpand");
 }
+
 
 const PRIMITIVE_INTS:&[&'static str] = &[
     "pdfadjustspacing",
@@ -531,6 +537,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_expandable(engine,"pdfstrcmp",pdfstrcmp);
     register_expandable(engine,"pdftexrevision",pdftexrevision);
     register_expandable(engine,"pdfmdfivesum",pdfmdfivesum);
+    register_expandable(engine,"pdffontsize",pdffontsize);
 
     register_int(engine,"pdftexversion",pdftexversion,None);
     register_int(engine,"pdfmajorversion",pdfmajorversion,None);
@@ -564,8 +571,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_primitive_toks(engine,PRIMITIVE_TOKS);
 
     cmtodos!(engine,
-        pdfelapsedtime,pdfendlink,
-        pdffontsize,pdflastximage,
+        pdfelapsedtime,pdfendlink,pdflastximage,
         pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
         pdfximage
     );

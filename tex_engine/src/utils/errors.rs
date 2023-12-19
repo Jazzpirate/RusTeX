@@ -55,10 +55,11 @@ pub trait ErrorHandler {
     }
 }
 
+/*
 struct MyPanicHook{
     old:Box<dyn Fn(&std::panic::PanicInfo<'_>) + Sync + Send>
 }
-
+*/
 
 fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),info:&std::panic::PanicInfo<'_>) {
     match info.payload().downcast_ref::<TeXError>() {

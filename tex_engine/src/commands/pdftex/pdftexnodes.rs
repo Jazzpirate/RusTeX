@@ -105,7 +105,6 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
                     Some(NumOrName::Name(s)) => {
                         Some(PDFStruct::Name(s))
                     },
-                    _ => unreachable!()
                 }
             } else {None};
             match file {
@@ -217,7 +216,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
         _ => false
     } }
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Self::readable_do_indent(indent,f);
+        Self::readable_do_indent(indent,f)?;
         match self {
             PDFNode::PDFDest(PDFDest {structnum,id,dest}) =>
                 write!(f,"<pdfdest structnum=\"{:?}\", id=\"{:?}\", dest=\"{:?}\">",structnum,id,dest),
@@ -228,14 +227,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
             PDFNode::Obj(o) =>
                 write!(f,"<pdfobj literal=\"{}\">",o.0),
             PDFNode::XForm(x) => {
-                write!(f, "<pdfxform attr=\"{}\", resources=\"{}\">", x.attr, x.resources);
+                write!(f, "<pdfxform attr=\"{}\", resources=\"{}\">", x.attr, x.resources)?;
                 if let Some(bx) = &x.bx {
                     bx.readable_fmt(indent+2,f)?;
                 }
-                Self::readable_do_indent(indent,f);
+                Self::readable_do_indent(indent,f)?;
                 write!(f,"</pdfxform>")
             }
-            PDFNode::XImage(x) =>
+            PDFNode::XImage(_) =>
                 write!(f,"<pdfximage>"),
             PDFNode::PDFLiteral(PDFLiteral {option,literal}) =>
                 write!(f,"<pdfliteral option=\"{:?}\", literal=\"{:?}\">",option,literal),
@@ -339,6 +338,7 @@ pub struct PDFCatalog {
 }
 
 #[derive(Debug,Clone,Copy,PartialEq,Eq)]
+#[allow(non_snake_case)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
 impl PDFColor {
     #[inline(always)]

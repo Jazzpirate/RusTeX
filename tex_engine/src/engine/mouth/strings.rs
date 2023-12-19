@@ -148,7 +148,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
 
     pub fn read<T:Token<Char=C>,E:ErrorHandler,F:FnMut(T)>(&mut self,eh:&E,handler:&mut CSHandler<T> ,cc: &CategoryCodeScheme<C>, endline: Option<C>,mut f:F) {
         let mut ingroups = 0;
-        let mut line = self.line;
+        let line = self.line;
         while self.line == line || ingroups > 0 {
             match self.get_char() {
                 None => {

@@ -2,15 +2,12 @@
 or a pair of a [character](Character) and a [category code](super::catcodes::CategoryCode).
  */
 
-use std::cell::RefCell;
 use std::fmt::Write;
 use std::marker::PhantomData;
-use string_interner::Symbol;
-use crate::engine::utils::memory::{InternedCSName, InternedString};
+use crate::engine::utils::memory::InternedCSName;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
 use crate::tex::input_text::Character;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
-use crate::utils::ReusableVectorFactory;
 use crate::tex::input_text::CharacterMap;
 
 /// Trait for Tokens, to be implemented for an engine.

@@ -1,11 +1,9 @@
 use std::fmt::{Arguments, Display, Write};
 use std::marker::PhantomData;
-use log::kv::Source;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::token::{StandardToken, Token};
-use crate::utils::Ptr;
 use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::input_text::Character;
 use crate::tex::input_text::CharacterMap;
@@ -20,7 +18,7 @@ impl<T:Token> PartialEq for TokenList<T> {
 impl<T:Token> TokenList<T> {
     #[inline(always)]
     pub fn inner(&self) -> &[T] { &*self.0 }
-    pub fn give_back_maybe<M:MemoryManager<T>>(self,memory:&mut M) {
+    pub fn give_back_maybe<M:MemoryManager<T>>(self,_memory:&mut M) {
         /*match std::rc::Rc::try_unwrap(self.0) {
             Ok(sl) => memory.return_token_vec(sl.into_vec()),
             _ => ()
@@ -290,7 +288,7 @@ impl<T:Token> MacroExpansion<T> {
         loop {
             match currarg {
                 Some((i,j)) if j < self.args[i].len() => {
-                    self.args[i][j].display_fmt(int,cc,escapechar,&mut w);
+                    self.args[i][j].display_fmt(int,cc,escapechar,&mut w).unwrap();
                     currarg = Some((i,j+1));
                 }
                 Some(_) => currarg = None,

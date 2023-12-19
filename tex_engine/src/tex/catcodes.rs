@@ -4,7 +4,6 @@ Category codes
 
 use std::fmt::Formatter;
 use lazy_static::lazy_static;
-use crate::commands::Command;
 use crate::engine::mouth::pretokenized::WriteChars;
 use crate::tex::control_sequences::ControlSequenceName;
 use crate::tex::input_text::Character;

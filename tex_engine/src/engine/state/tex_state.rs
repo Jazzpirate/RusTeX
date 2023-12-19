@@ -1,5 +1,4 @@
 /*! Implementation of a plain TeX [`State`]. */
-use std::ops::DerefMut;
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::state::{Ch, CS, Dim, State, StateChange, StateChangeTracker, StateStack, T};
@@ -10,13 +9,11 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::input_text::Character;
-use crate::tex::numerics::NumSet;
-use crate::tex::token::Token;
 use crate::tex::input_text::CharacterMap;
 use crate::tex::types::{GroupType, TeXMode};
-use crate::utils::{HMap, Ptr};
+use crate::utils::HMap;
 use crate::engine::FontSystem;
-use crate::tex::nodes::{TeXNode, TeXBox};
+use crate::tex::nodes::TeXBox;
 
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::tex::control_sequences::ControlSequenceName;
@@ -167,7 +164,6 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         "{{entering {} group (level {}) at line {}}}",bt,
                         self.stack.stack.len(), line_number
                     )),
-                _ => todo!()
             }
         }
     }
@@ -197,7 +193,6 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         "{{leaving {} group (level {}) at line {}}}",bt,
                         self.stack.stack.len() + 1, mouth.line_number()
                     )),
-                _ => todo!()
             }
         }
         let trace = self.tracing_restores();
@@ -851,7 +846,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
     fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Option<TeXBox<ET>>, globally: bool) {
-        self.change_field(globally,|s,g| {
+        self.change_field(globally,|s,_| {
             let idx = idx as usize;
             if s.box_register.len() <= idx {
                 s.box_register.resize(idx + 1, None);
@@ -1060,7 +1055,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     fn get_ac_command(&self, c: Ch<Self>) -> Option<&Command<Self::ET>> {
         self.ac_commands.get(c).as_ref()
     }
-    fn set_ac_command(&mut self, aux: &EngineAux<Self::ET>, c: Ch<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
+    fn set_ac_command(&mut self, _aux: &EngineAux<Self::ET>, c: Ch<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
         self.change_field(globally,|s,_| {
             let old = std::mem::replace(s.ac_commands.get_mut(c), cmd);
             StateChange::AcCommand { char: c, old }

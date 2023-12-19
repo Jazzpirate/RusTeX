@@ -306,7 +306,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
         }
         None => todo!("file end error")
     };
-    let (sig,end) = super::utils::parse_signature(engine,&cm);
+    let (sig,end) = super::utils::parse_signature(engine);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     engine.read_until_endgroup(|_,_,t| {
@@ -334,7 +334,7 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
         }
         None => todo!("file end error")
     };
-    let (sig,end) = super::utils::parse_signature(engine,&cm);
+    let (sig,end) = super::utils::parse_signature(engine);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,_,t| {

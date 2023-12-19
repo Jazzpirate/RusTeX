@@ -45,7 +45,7 @@ impl NumSet for DefaultNumSet {
     type Dim = Dim32;
     type Skip = Skip32<Dim32>;
     type MuSkip = MuSkip32;
-    fn muskip_to_dim(muskip: Self::MuSkip, em: Self::Dim) -> Self::Dim {
+    fn muskip_to_dim(_muskip: Self::MuSkip, _em: Self::Dim) -> Self::Dim {
         todo!()
     }
     #[inline(always)]
@@ -265,12 +265,12 @@ impl<D:TeXDimen> Skip for Skip32<D> {
         Self::stretch_from_float(engine,float,dim)
     }
     #[inline(always)]
-    fn stretch_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
+    fn stretch_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
         let d = dimen.scale_float(float);
         Fill::pt(d)
     }
     #[inline(always)]
-    fn shrink_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
+    fn shrink_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
         let d = dimen.scale_float(float);
         Fill::pt(d)
     }
@@ -344,7 +344,7 @@ impl MuSkip for MuSkip32 {
     type Stretch = MuFill;
     type Shrink = MuFill;
     #[inline(always)]
-    fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Base {
+    fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Base {
         match dim {
             b"mu" => (float*65536.0).round() as i32,
             _ => unreachable!()

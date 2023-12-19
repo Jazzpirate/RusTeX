@@ -12,8 +12,7 @@ use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
 use crate::tex::types::{GroupType, TeXMode};
 use crate::utils::{Ptr, ReusableVectorFactory};
-use crate::engine::FontSystem;
-use crate::tex::nodes::{TeXNode, TeXBox};
+use crate::tex::nodes::TeXBox;
 
 type Ch<S> = <<S as State>::ET as EngineTypes>::Char;
 type Int<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::Int;

@@ -141,7 +141,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
         }
     }
     let mut ingroups = 0;
-    'A: while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+    while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
         if t.is_end_group()  {
             if ingroups == 0 { return }
             ingroups -= 1;
@@ -163,7 +163,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
             continue
         }
         match engine.resolve(t) {
-            ResolvedToken::Tk{token,char,code} => {
+            ResolvedToken::Tk{token,..} => {
                 cont(engine.aux,engine.state,engine.gullet, token)
             }
             ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
@@ -172,7 +172,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 ET::Gullet::do_macro(engine,m.clone(),token),
             ResolvedToken::Cmd{cmd: Some(Command::Conditional(cond)),token} =>
                 ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
-            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token}
+            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.unexpanded => {
                 engine.expand_until_bgroup(false);
                 engine.mouth.read_until_endgroup(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|a,t|{
@@ -182,7 +182,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     cont(a,engine.state,engine.gullet,t)
                 });
             }
-            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token}
+            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.the => {
                 crate::commands::utils::do_the(engine,|a,s,g,t| {
                     if edef_like && t.is_param() {
@@ -191,7 +191,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     cont(a,s,g,t)
                 })
             }
-            ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),token}
+            ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),..}
                 if e.name == PRIMITIVES.noexpand => {
                 match engine.mouth.get_next_opt(engine.aux,engine.state) {
                     Some(t) if !t.is_end_group() =>
@@ -215,7 +215,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let (mut incond,cond) = {
         let conds = engine.gullet.get_conditionals();
         let ic = conds.len() - idx;
-        for i in 0..ic { conds.pop();}
+        for _ in 0..ic { conds.pop();}
         (ic,match conds.pop() {
             Some(ActiveConditional::Case(c)) => c,
             _ => unreachable!()
@@ -230,7 +230,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::resolve(state,t) {
-            ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
+            ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>
                 {incond += 1;true},
             ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
             if *name == PRIMITIVES.else_ && incond == 0 => {
@@ -264,7 +264,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
     let (mut incond,cond) = {
         let conds = engine.gullet.get_conditionals();
         let ic = conds.len() - idx;
-        for i in 0..ic { conds.pop();}
+        for _ in 0..ic { conds.pop();}
         (ic,conds.pop().unwrap().name())
     };
     let state = &*engine.state;
@@ -274,7 +274,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
     engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::resolve(state,t) {
-            ResolvedToken::Cmd {cmd:Some(Command::Conditional(c)),..} =>
+            ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>
                 {incond += 1;true},
             ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
                 if *name == PRIMITIVES.else_ && incond == 0 => {
@@ -377,7 +377,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
     let mut is_negative = false;
     let mut had_eq = !skip_eq;
     crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+        ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) => {
                 if had_eq { todo!("throw error") }
@@ -390,7 +390,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
             _ => todo!("number expected; got: {} {:?} -- l. {}",(char.try_into().ok().unwrap() as char),code,engine.mouth.line_number())
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),token} => match ((*char).try_into(),code) {
+        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),..} => match ((*char).try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) => {
                 if had_eq { todo!("throw error") }
@@ -430,7 +430,7 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 pub fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
     let next = engine.mouth.get_next_opt(engine.aux, engine.state);
     crate::expand_loop!(engine,
-        ResolvedToken::Tk{char,code,token} => {
+        ResolvedToken::Tk{code,token,..} => {
             if code != CommandCode::Space {
                 engine.requeue(token);
             }
@@ -568,7 +568,6 @@ pub fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
             engine.mouth.requeue(token);
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
-        o => todo!("{:?}; current: {:?}",o,ret)
     );
     file_end!()
 }
@@ -621,7 +620,6 @@ pub fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
             engine.mouth.requeue(token);
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
-        o => todo!("{:?}; current: {:?}",o,ret)
     );
     file_end!()
 }
@@ -747,11 +745,11 @@ pub fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f
             }
         }
         ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Char{char,code:(CommandCode::Other | CommandCode::Letter)}),token} => match (*char).try_into() {
+        ResolvedToken::Cmd {cmd:Some(Command::Char{char,code:CommandCode::Other | CommandCode::Letter}),token} => match (*char).try_into() {
             Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
             _ => todo!("throw error")
         }
-        ResolvedToken::Cmd {cmd:Some(cmd),token} => match cmd {
+        ResolvedToken::Cmd {cmd:Some(cmd),..} => match cmd {
             Command::DimRegister(u) => {
                 let base = engine.state.get_dim_register(*u);
                 let scale = (float * 65536.0).round() as i32;
@@ -772,7 +770,7 @@ pub fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f
 
 pub fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64, mut first:Option<(u8, ET::Token)>) -> <ET::Num as NumSet>::Dim {
     let is_true = match &first {
-        Some((b't'|b'T',t)) => {
+        Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
         },
         Some(_) => false,
@@ -938,7 +936,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_stretch_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_stretch_float(engine,is_negative,b'.'),
-            o => todo!("error?")
+            _ => todo!("error?")
         }
         ResolvedToken::Cmd {cmd,..} => match cmd {
             Some(Command::DimRegister(u)) => {
@@ -947,7 +945,6 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
             }
             o => todo!("command in read_stretch: {:?}",o)
         }
-        o => todo!("command in read_stretch: {:?}",o)
     );
     crate::file_end!()
 }
@@ -988,7 +985,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
 }
 fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> Str<ET> {
     let is_true = match &first {
-        Some((b't'|b'T',t)) => {
+        Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
         },
         Some(_) => false,
@@ -1016,7 +1013,7 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_shrink_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_shrink_float(engine,is_negative,b'.'),
-            o => todo!("error?")
+            _ => todo!("error?")
         }
         ResolvedToken::Cmd {cmd,..} => match cmd {
             Some(Command::DimRegister(u)) => {
@@ -1025,7 +1022,6 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
             }
             o => todo!("command in read_stretch: {:?}",o)
         }
-        o => todo!("command in read_shrink: {:?}",o)
     );
     crate::file_end!()
 }
@@ -1066,7 +1062,7 @@ fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 }
 fn read_shrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> Shr<ET> {
     let is_true = match &first {
-        Some((b't'|b'T',t)) => {
+        Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
         },
         Some(_) => false,
@@ -1106,7 +1102,7 @@ pub fn read_muskip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     }
 }
 
-pub fn read_muskip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token) -> MS<ET> {
+pub fn read_muskip_command<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, _is_negative:bool,cmd:Command<ET>,_token:ET::Token) -> MS<ET> {
     match cmd {
         _ => todo!("read skip command: {:?}",cmd)
     }
@@ -1149,7 +1145,7 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
     todo!("read_dim_inner")
 }
 
-pub fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64, mut first:Option<(u8, ET::Token)>) -> MB<ET> {
+pub fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64, first:Option<(u8, ET::Token)>) -> MB<ET> {
     let units = MS::<ET>::units();
     match read_keywords(engine,units,first) {
         Some(d) => MS::<ET>::from_float(engine,float,d),
@@ -1190,9 +1186,9 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mustretch_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_mustretch_float(engine,is_negative,b'.'),
-            o => todo!("error?")
+            _ => todo!("error?")
         }
-        o => todo!("command in read_skip")
+        _ => todo!("command in read_skip")
     );
     crate::file_end!()
 }
@@ -1226,7 +1222,7 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     );
     todo!("read_dim_inner")
 }
-fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> MSt<ET> {
+fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64,first:Option<(u8,ET::Token)>) -> MSt<ET> {
     let units = MS::<ET>::stretch_units();
     match read_keywords(engine,units,first) {
         Some(d) => MS::<ET>::stretch_from_float(engine,float,d),
@@ -1245,9 +1241,9 @@ fn read_mushrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSh<ET> {
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mushrink_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_mushrink_float(engine,is_negative,b'.'),
-            o => todo!("error?")
+            _ => todo!("error?")
         }
-        o => todo!("command in read_skip")
+        _ => todo!("command in read_skip")
     );
     crate::file_end!()
 }
@@ -1283,7 +1279,7 @@ fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_nega
     todo!("read_dim_inner")
 }
 
-fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> MSh<ET> {
+fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64,first:Option<(u8,ET::Token)>) -> MSh<ET> {
     let units = MS::<ET>::shrink_units();
     match read_keywords(engine,units,first) {
         Some(d) => MS::<ET>::shrink_from_float(engine,float,d),

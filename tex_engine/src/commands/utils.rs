@@ -3,7 +3,6 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::engine::gullet::{Gullet, ResolvedToken};
-use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
 use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
 use crate::engine::state::State;
@@ -136,7 +135,7 @@ pub fn parse_sig_i<ET:EngineTypes>(arity:&mut u8,inparam:&mut bool,ends_with_bra
     true
 }
 
-pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cm:&ACOrCS<ET::Token>)
+pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>)
                                        -> (MacroSignature<ET::Token>,Option<ET::Token>) {
     let mut arity = 0;
     let mut params = shared_vector::Vector::new();

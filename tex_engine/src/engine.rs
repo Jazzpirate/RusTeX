@@ -2,15 +2,14 @@
     some output format.
 */
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use crate::engine::gullet::{DefaultGullet, Gullet, ResolvedToken};
-use crate::engine::utils::memory::{InternedCSName, InternedString, MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::{InternedCSName, MemoryManager, PRIMITIVES};
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
 use crate::{debug_log, tex};
 use crate::tex::catcodes::CommandCode;
-use crate::commands::{Assignment, Command, DimCommand, FontCommand, IntCommand, MuSkipCommand, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::Command;
 use crate::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFExtension, PDFNode};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
@@ -19,7 +18,7 @@ use crate::tex::input_text::Character;
 use crate::tex::control_sequences::ControlSequenceName;
 use crate::tex::nodes::{NodeTrait, TeXNode};
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
-use crate::tex::token::{CompactToken, Token};
+use crate::tex::token::Token;
 use crate::utils::errors::{catch, ErrorHandler, TeXError};
 
 pub mod filesystem;
@@ -315,9 +314,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     pub fn top_loop(&mut self) {
-        use crate::tex::control_sequences::ControlSequenceNameHandler;
         crate::expand_loop!(self.mouth.update_start_ref() => self,
-            ResolvedToken::Tk { char, code:CommandCode::Noexpand, token } => {self.get_next();},
+            ResolvedToken::Tk { code:CommandCode::Noexpand,.. } => {self.get_next();},
             ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),
             ResolvedToken::Cmd{cmd: None,token} => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
@@ -432,11 +430,11 @@ macro_rules! do_cmd {
                 <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,*name,false),
             crate::commands::Command::MathChar(_) => todo!("mathchar"),
             crate::commands::Command::Relax => (),
-            crate::commands::Command::Int(crate::commands::IntCommand { name, .. }) |
-            crate::commands::Command::Dim(crate::commands::DimCommand { name, .. }) |
-            crate::commands::Command::Skip(crate::commands::SkipCommand { name, .. }) |
-            crate::commands::Command::MuSkip(crate::commands::MuSkipCommand { name, .. }) |
-            crate::commands::Command::FontCmd(crate::commands::FontCommand { name, .. }) =>
+            crate::commands::Command::Int(crate::commands::IntCommand { .. }) |
+            crate::commands::Command::Dim(crate::commands::DimCommand { .. }) |
+            crate::commands::Command::Skip(crate::commands::SkipCommand { .. }) |
+            crate::commands::Command::MuSkip(crate::commands::MuSkipCommand { .. }) |
+            crate::commands::Command::FontCmd(crate::commands::FontCommand { .. }) =>
                 todo!("Not allowed in X mode"),
             crate::commands::Command::Macro(_) | Command::Conditional(_) | Command::Expandable(_)  | Command::SimpleExpandable(_) | Command::Char {..} => unreachable!(),
         }

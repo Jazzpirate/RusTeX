@@ -67,7 +67,6 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
     type CS=CS;
 
     fn new<ET: EngineTypes<Char=Self::Char,CSName=Self::CS>>(aux: &mut EngineAux<ET>) -> Self {
-        use crate::tex::control_sequences::ControlSequenceNameHandler;
         let null_file = TfmFile {
             hyphenchar:45,
             skewchar:255,
@@ -81,7 +80,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
             ligs:HMap::default(),
             filepath:std::path::PathBuf::from("/nullfont")
         };
-        let mut muts = Mutables::default();
+        let muts = Mutables::default();
         let null = Ptr::new(TfmFontI{
             file:Ptr::new(null_file),
             muts:RwLock::new(muts),
@@ -108,8 +107,8 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
                 ff
             }
         };
-        let mut muts = Mutables::default();
-        let mut font = TfmFontI {
+        let muts = Mutables::default();
+        let font = TfmFontI {
             file:ff,
             muts:RwLock::new(muts),
             name:macroname
@@ -208,7 +207,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
     fn filename(&self) -> &str {
         self.file.name()
     }
-    fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<u8>>::Handler,mut w:W) -> std::fmt::Result {
+    fn display<W:std::fmt::Write>(&self,_i:&<Self::CS as ControlSequenceName<u8>>::Handler,mut w:W) -> std::fmt::Result {
         let at = self.muts.read().unwrap().at;
         match at {
             Some(d) => write!(w,"{} at {}",self.file.name(),d),

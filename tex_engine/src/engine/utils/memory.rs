@@ -4,13 +4,12 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
-use shared_vector::SharedVector;
 use string_interner::Symbol;
 use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::input_text::Character;
 use crate::tex::token::Token;
-use crate::utils::{HMap, ReusableVectorFactory};
+use crate::utils::HMap;
 
 /// Utility component for managing memory allocation, string interning and similar
 /// tasks one might want to do.
@@ -46,13 +45,13 @@ impl<CS:ControlSequenceName<T::Char,Handler=()>,T:Token<CS=CS>> MemoryManager<T>
 }
 
 /// The default memory manager, which does not do any memory management.
-pub struct DefaultMemoryManager<T:Token> {
-    handler:<T::CS as ControlSequenceName<T::Char>>::Handler
+pub struct DefaultMemoryManager<T:Token> { phantom:PhantomData<T>
+    //handler:<T::CS as ControlSequenceName<T::Char>>::Handler
 }
 impl<T:Token> DefaultMemoryManager<T> {
     pub fn new() -> Self {
-        DefaultMemoryManager {
-            handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default()
+        DefaultMemoryManager { phantom:PhantomData::default()
+            //handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default()
         }
     }
 }
@@ -60,19 +59,19 @@ impl<T:Token> DefaultMemoryManager<T> {
 /// A memory manager that reuses allocated memory for token lists.
 #[derive(Clone)]
 pub struct ReuseTokenLists<T:Token> {
-    factory:ReusableVectorFactory<T>,
+    //factory:ReusableVectorFactory<T>,
     handler:<T::CS as ControlSequenceName<T::Char>>::Handler,
-    strings:Vec<String>,
-    bytes:Vec<Vec<u8>>,
+    //strings:Vec<String>,
+    //bytes:Vec<Vec<u8>>,
     empty:shared_vector::SharedVector<T>
 }
 impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
     fn new() -> Self {
         ReuseTokenLists {
-            factory:ReusableVectorFactory::new(32,32),
+            //factory:ReusableVectorFactory::new(32,32),
             handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default(),
-            strings:Vec::new(),
-            bytes:Vec::new(),
+            //strings:Vec::new(),
+            //bytes:Vec::new(),
             empty:shared_vector::SharedVector::new()
         }
     }
@@ -87,7 +86,7 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
         String::new()
     }
     #[inline(always)]
-    fn return_string(&mut self,mut s:String) {
+    fn return_string(&mut self,_s:String) {
         /*s.clear();
         self.strings.push(s)*/
     }
@@ -96,7 +95,7 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
         Vec::new()//self.bytes.pop().unwrap_or_default()
     }
     #[inline(always)]
-    fn return_bytes(&mut self,mut b:Vec<u8>) {
+    fn return_bytes(&mut self,_b:Vec<u8>) {
         //b.clear();
         //self.bytes.push(b)
     }
@@ -105,7 +104,7 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
         Vec::new()//self.factory.get()
     }
     #[inline(always)]
-    fn return_token_vec(&mut self, mut v: Vec<T>) {
+    fn return_token_vec(&mut self, _v: Vec<T>) {
         //self.factory.give_back(v)
     }
     #[inline(always)]
@@ -307,7 +306,7 @@ impl StringInterner {
     }
 }
 impl<C:Character> ControlSequenceNameHandler<C,InternedString> for StringInterner {
-    type Resolved<'a> where Self: 'a = &'a str;
+    type Resolved<'a> = &'a str;
     #[inline(always)]
     fn empty_str(&self) -> InternedString { self.empty_str }
     #[inline(always)]

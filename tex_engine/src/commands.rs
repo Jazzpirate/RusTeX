@@ -3,19 +3,16 @@
 */
 
 use std::fmt::Display;
-use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::mouth::pretokenized::{ExpansionContainer, Stringify, TokenList, WriteChars};
+use crate::engine::mouth::pretokenized::{Stringify, TokenList, WriteChars};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
+use crate::tex::control_sequences::ControlSequenceName;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
-use crate::utils::Ptr;
-use crate::tex::input_text::Character;
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, TeXBox, TeXNode};
+use crate::tex::nodes::{BoxInfo, TeXBox, TeXNode};
 
 pub mod primitives;
 pub mod tex;

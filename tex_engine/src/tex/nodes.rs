@@ -1,9 +1,9 @@
-use std::cell::{OnceCell, RefCell};
-use std::fmt::{Debug, Display, Formatter, Write};
+use std::cell::RefCell;
+use std::fmt::{Debug, Display, Write};
 use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::SourceReference;
-use crate::tex::types::{BoxType, NodeType, TeXMode};
+use crate::tex::types::{BoxType, NodeType};
 use crate::engine::filesystem::File;
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::pretokenized::TokenList;
@@ -41,7 +41,7 @@ pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
     fn nodetype(&self) -> NodeType;
     fn readable_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result;
     #[inline(always)]
-    fn readable_do_indent(indent:usize,mut f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn readable_do_indent(indent:usize,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
         for _ in 0..indent {f.write_char(' ')?;}
         Ok(())
@@ -141,7 +141,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
                 f.write_str("<math>")
             },
             TeXNode::Simple(s) => s.readable_fmt(indent, f),
-            TeXNode::Char { char, font, .. } =>
+            TeXNode::Char { char, .. } =>
                 Ok(char.display(f)),
             TeXNode::Whatsit(w) => {
                 Self::readable_do_indent(indent,f)?;
@@ -212,7 +212,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Penalty(_) => false,
             TeXNode::Skip(_) => false,
             TeXNode::Kern(_) => false,
-            TeXNode::Box(b) => false,
+            TeXNode::Box(_) => false,
             TeXNode::Simple(s) => s.opaque(),
             TeXNode::Char { .. } => false,
             TeXNode::Mark(_, _) => true,

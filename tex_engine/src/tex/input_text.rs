@@ -1,7 +1,6 @@
 /*! Data structures for reading input text. */
-use std::fmt::{Debug, Display, Write};
+use std::fmt::{Debug, Display};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::tex::control_sequences::ResolvedCSName;
 
 /** A single character in a `.tex` file; in plain TeX, this is a `u8`,
     but in e.g. XeTeX, it is a UTF-8 character. */
@@ -146,7 +145,7 @@ impl <A:Clone+Default> CharacterMap<u8,A> for [A;256] {
     #[inline(always)]
     fn get_mut(&mut self,c: u8) -> &mut A { &mut self[c as usize] }
     fn default() -> Self {
-        let mut v = array_init::array_init(|_| A::default());
+        let v = array_init::array_init(|_| A::default());
         v
     }
 }

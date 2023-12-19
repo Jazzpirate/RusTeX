@@ -1,4 +1,4 @@
-use crate::commands::{NodeCommandScope, Unexpandable};
+use crate::commands::NodeCommandScope;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
@@ -10,7 +10,7 @@ use crate::tex::catcodes::CommandCode;
 use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
-use crate::utils::{HMap, Ptr};
+use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::token::Token;
 use crate::commands::Command;
@@ -18,7 +18,6 @@ use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
-use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::nodes::NodeTrait;
 use crate::tex::numerics::Skip;
 
@@ -188,7 +187,7 @@ pub trait Stomach {
             char,font,width,height,depth
         });
     }
-    fn do_box(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
+    fn do_box(engine:&mut EngineReferences<Self::ET>,_name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
         match bx(engine,token) {
             Ok(Some(bx)) => Self::add_node(engine,bx.as_node()),
             Ok(None) => (),
@@ -221,7 +220,7 @@ pub trait Stomach {
             Self::add_node(engine, node)
         }
     }
-    fn do_font(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
+    fn do_font(engine:&mut EngineReferences<Self::ET>,_token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
         engine.state.set_current_font(engine.aux,f,global);
         insert_afterassignment(engine);
     }
@@ -396,7 +395,7 @@ pub trait Stomach {
         data.in_output = true;
         data.deadcycles += 1;
 
-        for (i,b) in first.iter_mut().enumerate() { match b {
+        for (_,b) in first.iter_mut().enumerate() { match b {
             TeXNode::Insert => todo!(),
             _ => ()
         }}
@@ -425,7 +424,6 @@ pub trait Stomach {
         engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
         for r in rest{ Self::add_node(engine,r) }
-        let mode = engine.state.get_mode();
         engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.output);
         engine.get_next(); // '{':BeginGroup
         engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
@@ -441,7 +439,7 @@ pub trait Stomach {
                 return
             }
             crate::expand!(Self::ET;engine,next;
-                ResolvedToken::Tk { char, code:CommandCode::Noexpand, token } => {engine.get_next();},
+                ResolvedToken::Tk { code:CommandCode::Noexpand, .. } => {engine.get_next();},
                 ResolvedToken::Tk { char, code, token } => Self::do_char(engine, token, char, code),
                 ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, *char, *code),
                 ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
@@ -481,7 +479,7 @@ pub trait Stomach {
                     engine.state.set_mode(TeXMode::InternalVertical)
                 }
                 if children.is_empty() {
-                    let parshape = engine.state.take_parshape();
+                    let _ = engine.state.take_parshape();
                     engine.state.set_primitive_int(engine.aux,PRIMITIVES.hangafter,Int::<Self::ET>::default(),false);
                     engine.state.set_primitive_dim(engine.aux,PRIMITIVES.hangindent,<Self::ET as EngineTypes>::Dim::default(),false);
                     return
@@ -495,7 +493,7 @@ pub trait Stomach {
 
     fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<TeXNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
-        let ret = split_paragraph_roughly(engine,specs,children,sourceref);
+        let ret = split_paragraph_roughly(engine,specs,children);
         for line in ret {
             match line {
                 ParLine::Adjust(n) => Self::add_node(engine,n),
@@ -525,7 +523,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         let mut read_eq = !skip_eq;
         crate::expand_loop!(self,
             ResolvedToken::Tk {char,code:CommandCode::Other,..} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
-            ResolvedToken::Tk {char,code:CommandCode::Space,..} => (),
+            ResolvedToken::Tk { code:CommandCode::Space,..} => (),
             ResolvedToken::Cmd {cmd:Some(Command::Box(b)),token} =>
                 return (b.read)(self,token),
             _ => todo!("error")
@@ -543,7 +541,7 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
     pub fn make(state:&mut ET::State,aux:&mut EngineAux<ET>) -> Vec<ParLineSpec<ET>> {
         let parshape = state.take_parshape();
         let hangindent = state.get_primitive_dim(PRIMITIVES.hangindent);
-        let mut hangafter = state.get_primitive_int(PRIMITIVES.hangafter).into();
+        let hangafter = state.get_primitive_int(PRIMITIVES.hangafter).into();
         state.set_primitive_int(aux,PRIMITIVES.hangafter,ET::Int::default(),false);
         state.set_primitive_dim(aux,PRIMITIVES.hangindent,ET::Dim::default(),false);
         let leftskip = state.get_primitive_skip(PRIMITIVES.leftskip);
@@ -557,7 +555,7 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
                 })
             } else {
                 if hangafter < 0 {
-                    let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|x| ParLineSpec {
+                    let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|_| ParLineSpec {
                         target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
                         leftskip,rightskip
                     }).collect();
@@ -567,7 +565,7 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
                     });
                     r
                 } else {
-                    let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|x| ParLineSpec {
+                    let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|_| ParLineSpec {
                         target:hsize + -(leftskip.base() + rightskip.base()),
                         leftskip,rightskip
                     }).collect();
@@ -655,7 +653,7 @@ pub struct StomachWithShipout<ET:EngineTypes<Stomach=Self>> {
 }
 impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
     type ET = ET;
-    fn new(aux: &mut EngineAux<Self::ET>, state: &mut St<Self>) -> Self {
+    fn new(_aux: &mut EngineAux<Self::ET>, _state: &mut St<Self>) -> Self {
         StomachWithShipout {
             afterassignment:None,
             data:StomachData::new()
@@ -731,7 +729,7 @@ pub enum ParLine<ET:EngineTypes> {
     Adjust(TeXNode<ET>)
 }
 
-pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>, sourceref:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
+pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>) -> Vec<ParLine<ET>> {
     let mut ret : Vec<ParLine<ET>> = Vec::new();
     let mut hgoals = specs.into_iter();
     let mut nodes = children.into_iter();
@@ -770,7 +768,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>,
                 }
                 Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert | TeXNode::VAdjust)) =>
                     reinserts.push(n),
-                Some(m@ TeXNode::Math) => todo!(),
+                Some(TeXNode::Math) => todo!(),
                 Some(TeXNode::Penalty(i)) if i <= -10000 => {
                     next_line!(true); // TODO mark somehow
                     continue 'A
