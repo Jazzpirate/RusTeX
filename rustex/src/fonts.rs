@@ -4,6 +4,8 @@ use tex_engine::engine::utils::memory::InternedCSName;
 use tex_engine::tex::numerics::Dim32;
 use tex_engine::engine::fontsystem::{Font, FontSystem as FontSystemT};
 
+pub(crate) type FontStore = tex_tfm::encodings::EncodingStore<String,fn(&str) -> String>;
+
 fn get(s:&str) -> String {
     match tex_engine::engine::filesystem::kpathsea::KPATHSEA.which(s) {
         Some(p) => p.display().to_string(),
@@ -13,7 +15,7 @@ fn get(s:&str) -> String {
 #[derive(Clone,Debug)]
 pub struct Fontsystem {
     fs:tex_engine::engine::fontsystem::TfmFontSystem<i32,Dim32,InternedCSName<u8>>,
-    glyphmaps:tex_tfm::encodings::EncodingStore<String,fn(&str) -> String>
+    pub glyphmaps:FontStore
 }
 impl FontSystemT for Fontsystem {
     type Char = u8;
@@ -24,7 +26,7 @@ impl FontSystemT for Fontsystem {
     fn new<ET: EngineTypes<Char=Self::Char, CSName=Self::CS>>(aux: &mut EngineAux<ET>) -> Self {
         Fontsystem {
             fs: tex_engine::engine::fontsystem::TfmFontSystem::new(aux),
-            glyphmaps: tex_tfm::encodings::EncodingStore::new(get)
+            glyphmaps: FontStore::new(get)
         }
     }
     #[inline(always)]

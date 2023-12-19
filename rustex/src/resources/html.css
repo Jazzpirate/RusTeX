@@ -1,115 +1,4 @@
 @import url('https://fonts.cdnfonts.com/css/latin-modern-math');
-@font-face {
-    font-family: 'Latin Modern SmallCaps';
-    font-style: normal;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/266/lmromancaps10-regular.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern SmallCaps';
-    font-style: italic;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/266/lmromancaps10-oblique.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: normal;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/266/lmroman10-regular.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: italic;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/266/lmroman10-italic.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: normal;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/266/lmroman10-bold.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: italic;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/266/lmroman10-bolditalic.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Mono';
-    font-style: normal;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/265/lmmono10-regular.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Mono';
-    font-style: italic;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/265/lmmono10-italic.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Mono';
-    font-style: normal;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/265/lmmonolt10-bold.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Mono';
-    font-style: italic;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/265/lmmonolt10-boldoblique.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Sans';
-    font-style: normal;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/267/lmsans10-regular.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Sans';
-    font-style: italic;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/267/lmsans10-oblique.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Sans';
-    font-style: normal;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/267/lmsans10-bold.otf');
-}
-
-@font-face {
-    font-family: 'Latin Modern Sans';
-    font-style: italic;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://fonts.cdnfonts.com/s/267/lmsans10-boldoblique.otf');
-}
 
 /* ------------------------------------------------------------------------------------------------------------------ */
 /* ----------------------------------------------------- CSS -------------------------------------------------------- */
@@ -120,10 +9,15 @@ a { color: inherit; text-decoration: inherit; }
 
 .rustex-contents {display:contents}
 
+.rustex-page {
+    display:flex;
+    flex-direction: column;
+}
+
 /* ---------------------------------------------------- Fonts ------------------------------------------------------- */
 
 .rustex-reset-font, .rustex-body {
-    font-family: Latin Modern, STIXgeneral, Times, Times New Roman,Symbol, cmr10, CMSY10, CMEX10, serif;
+    /*font-family: Latin Modern, STIXgeneral, Times, Times New Roman,Symbol, cmr10, CMSY10, CMEX10, serif;*/
     font-style: normal;
     font-weight: 400;
     font-variant: normal;
@@ -245,7 +139,7 @@ a { color: inherit; text-decoration: inherit; }
     text-align:justify;
     white-space:normal;
     display: inline-block;
-    margin-top: auto;
+    /* margin-top: auto; */
 }
 .rustex-paragraph > .rustex-text, .rustex-paragraph > span > .rustex-text, .rustex-paragraph > span > span > .rustex-text, .rustex-paragraph > span > span > span > .rustex-text  { display:contents; }
 
@@ -359,9 +253,11 @@ tbody {display:table-row-group}
 
 .rustex-raise {
     display: inline-flex;
+    flex-direction: inherit;
 }
 .rustex-moveright {
     display: inline-flex;
+    flex-direction: inherit;
 }
 hr {width: 100%;}
 .rustex-foreign {

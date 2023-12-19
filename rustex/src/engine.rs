@@ -2,15 +2,16 @@ use std::sync::Mutex;
 use lazy_static::lazy_static;
 use tex_engine::commands::Command;
 use tex_engine::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFNode};
-use tex_engine::engine::{DefaultEngine, EngineAux, EngineTypes, filesystem, state, utils};
-use tex_engine::engine::filesystem::VirtualFile;
+use tex_engine::commands::primitives::register_unexpandable;
+use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, filesystem, state, utils};
+use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::engine::stomach::StomachWithShipout;
 use tex_engine::engine::utils::memory::InternedCSName;
 use tex_engine::engine::utils::outputs::LogOutputs;
 use tex_engine::tex;
-use tex_engine::tex::nodes::{PreShipoutNode, ShipoutNode};
+use tex_engine::tex::nodes::{BoxInfo, TeXNode, TeXBox};
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::token::CompactToken;
 use tex_engine::utils::errors::{ErrorThrower};
@@ -20,64 +21,66 @@ use tex_engine::utils::errors::ErrorHandler;
 use tex_engine::engine::EngineExtension;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::engine::gullet::Gullet;
-use tex_engine::engine::stomach::Stomach;
+use tex_engine::engine::stomach::Stomach as StomachT;
 use tex_engine::engine::filesystem::FileSystem;
 use tex_engine::engine::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
 use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::catcodes::CategoryCode;
+use tex_engine::tex::types::BoxType;
+use crate::nodes::RusTeXNode;
+use crate::state::RusTeXState;
+use crate::stomach::{CLOSE_FONT, close_font, RusTeXStomach};
 
-type Fontsystem = tex_engine::engine::fontsystem::TfmFontSystem<i32,Dim32,InternedCSName<u8>>;
+pub(crate) type Extension = super::extension::RusTeXExtension;
+pub(crate) type Memory = utils::memory::ReuseTokenLists<CompactToken>;
+pub(crate) type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
+pub(crate) type Bx = TeXBox<Types>;
+pub(crate) type SRef = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
+pub(crate) type Refs<'a,'b> = &'a mut EngineReferences<'b,Types>;
+pub(crate) type CSName = InternedCSName<u8>;
 
 #[derive(Clone,Debug,Copy)]
 pub struct Types;
 impl EngineTypes for Types {
     type Char = u8;
-    type CSName = InternedCSName<u8>;
+    type CSName = CSName;
     type Token = CompactToken;
     type ErrorHandler = ErrorThrower;
-    type Extension = MinimalPDFExtension<Self>;
+    type Extension = Extension;
     type Int = i32;
     type Dim = Dim32;
     type Skip = Skip32<Dim32>;
     type MuSkip = MuSkip32;
     type Num = tex::numerics::DefaultNumSet;
-    type State = state::tex_state::TeXState<Self>;
+    type State = RusTeXState;
     type Memory = utils::memory::ReuseTokenLists<Self::Token>;
     type File = VirtualFile<u8>;
     type FileSystem = crate::files::Files;
     type Outputs = LogOutputs;
     type Mouth = DefaultMouth<Self::Token,Self::File>;
     type Gullet = DefaultGullet<Self>;
-    type PreCustomNode = PDFNode<Self,PreShipoutNode<Self>>;
-    type ShipoutCustomNode = PDFNode<Self,ShipoutNode<Self>>;
-    type Stomach = StomachWithShipout<Self>;
-    type FontSystem = Fontsystem;
+    type CustomNode = RusTeXNode;
+    type Stomach = RusTeXStomach;
+    type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
+    type FontSystem = super::fonts::Fontsystem;
 }
 
-type State = state::tex_state::TeXState<Types>;
-type Memory = utils::memory::ReuseTokenLists<CompactToken>;
-type Encodings = tex_tfm::encodings::EncodingStore<String,fn(&str) -> String>;
+
 
 thread_local! {
-static MAIN_STATE : Mutex<Option<(State,Memory)>> = Mutex::new(None);
-static FONT_SYSTEM : Mutex<Option<Fontsystem>> = Mutex::new(None);
-static ENCODINGS: Mutex<Option<Encodings>> = Mutex::new(None);
-}
-fn get_file(s:&str) -> String {
-    match tex_engine::engine::filesystem::kpathsea::KPATHSEA.which(s) {
-        Some(p) => p.display().to_string(),
-        None => s.to_string()
-    }
+    static MAIN_STATE : Mutex<Option<(RusTeXState,Memory)>> = Mutex::new(None);
+    static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = Mutex::new(None);
 }
 
-fn get_state() -> (State,Memory) {
+fn get_state() -> (RusTeXState,Memory) {
     MAIN_STATE.with(|state| {
         let mut guard = state.lock().unwrap();
         match &mut *guard {
             Some((s, m)) =>return  (s.clone(), m.clone()),
             n => {
                 let mut engine = DefaultEngine::<Types>::new();
+                register_unexpandable(&mut engine,CLOSE_FONT,close_font);
                 engine.initialize_pdflatex();
                 register_command(&mut engine, true, "LaTeX", "",
                                  "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",
@@ -89,7 +92,6 @@ fn get_state() -> (State,Memory) {
                 );
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
-                ENCODINGS.with(|g| g.lock().unwrap().replace(tex_tfm::encodings::EncodingStore::new(get_file)));
                 return (engine.state, engine.aux.memory)
             }
         }
@@ -104,12 +106,12 @@ fn get_engine() -> DefaultEngine<Types> {
         outputs: LogOutputs::new(),
         error_handler: ErrorThrower::new(),
         start_time:chrono::Local::now(),
-        extension: MinimalPDFExtension::<Types>::new(),
+        extension: Extension::new(),
         jobname: String::new()
     };
     let mut mouth = DefaultMouth::new(&mut aux,&mut state);
     let gullet = DefaultGullet::new(&mut aux,&mut state,&mut mouth);
-    let stomach = StomachWithShipout::new(&mut aux,&mut state);
+    let stomach = RusTeXStomach::new(&mut aux,&mut state);
     DefaultEngine {
         state,
         aux,
@@ -168,19 +170,8 @@ impl RusTeXEngineT for RusTeXEngine {
     fn get() -> Self { get_engine() }
     fn do_file<S:AsRef<str>>(file:S) {
         let mut engine = Self::get();
-        let mut html = String::new();
-        ENCODINGS.with(|e| {
-            let mut enc = e.lock().unwrap();
-            let enc = enc.as_mut().unwrap();
-            engine.do_file_pdf(file.as_ref(),|n| shipout(enc,&mut html,n)).unwrap();
-        });
+        engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout_paginated(e,n)).unwrap();
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));
     }
 
-}
-
-fn shipout(enc:&mut Encodings,target:&mut String,n:ShipoutNode<Types>) {
-    match n {
-        _ => panic!("Here: {:?}",n)
-    }
 }

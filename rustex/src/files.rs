@@ -11,7 +11,7 @@ use tex_engine::utils::errors::ErrorHandler;
 static PGFSYS: &str = include_str!("resources/pgfsys.def");
 
 #[derive(Clone)]
-pub struct Files(tex_engine::engine::filesystem::NoOutputFileSystem<u8>);
+pub struct Files(pub(crate) tex_engine::engine::filesystem::NoOutputFileSystem<u8>);
 
 
 impl FileSystem for Files {
