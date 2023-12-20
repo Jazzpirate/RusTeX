@@ -370,10 +370,10 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 TokenSource::String(s) => s.preview(&mut 500,&mut str).unwrap(),
                 //TokenSource::Expansion(s) => s.preview(int,cc,esc,&mut str),
                 TokenSource::File(s,_) => {
-                    s.preview(&mut 50,&mut str).unwrap();break
+                    s.preview(&mut 500,&mut str).unwrap();break
                 },
                 TokenSource::Vec(v) => {
-                    for t in v.iter().rev().take(50) {
+                    for t in v.iter().rev().take(500) {
                         t.display_fmt(int,cc,esc,&mut str).unwrap()
                     }
                 }

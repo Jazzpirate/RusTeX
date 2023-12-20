@@ -1,4 +1,4 @@
-use crate::commands::NodeCommandScope;
+use crate::commands::{NodeCommandScope, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
@@ -103,27 +103,39 @@ pub trait Stomach {
                         engine.state.pop(engine.aux,engine.mouth),
                     Some(GroupType::Box(bt)) =>
                         Self::end_box(engine,bt),
-                    _ => todo!("throw error")
+                    o => todo!("throw error; group type {:?}",o)
                 }
             }
             CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_horizontal() =>
                 Self::do_word(engine,char),
             CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.state.get_mode().is_vertical() =>
                 Self::open_paragraph(engine,token),
-            CommandCode::MathShift if engine.state.get_mode().is_math() =>
-                todo!("Close math"),
+            CommandCode::MathShift if engine.state.get_mode().is_math() => match engine.stomach.data_mut().open_lists.pop() {
+                Some(NodeList{children,tp:NodeListType::Math{start,top_display}}) => {
+                    if top_display {match engine.get_next() {
+                        Some(tk) if tk.command_code() == CommandCode::MathShift => (),
+                        _ => todo!("throw error")
+                    }}
+                    engine.state.pop(engine.aux,engine.mouth);
+                    todo!("math node")
+                }
+                _ => todo!("error")
+            }
             CommandCode::MathShift => {
                 let (display,every) = match engine.state.get_mode() {
                     TeXMode::Horizontal => {
                         match engine.get_next() {
-                            Some(tk) if tk.command_code() == CommandCode::MathShift => (BoxType::DisplayMath,PRIMITIVES.everydisplay),
-                            Some(o) => {engine.requeue(o);(BoxType::InlineMath,PRIMITIVES.everymath)}
+                            Some(tk) if tk.command_code() == CommandCode::MathShift => (true,PRIMITIVES.everydisplay),
+                            Some(o) => {
+                                engine.requeue(o);(false,PRIMITIVES.everymath)
+                            }
                             _ => todo!("file end")
                         }
                     }
-                    _ => (BoxType::InlineMath,PRIMITIVES.everymath)
+                    _ => (false,PRIMITIVES.everymath)
                 };
-                engine.state.push(engine.aux,GroupType::Box(display),engine.mouth.line_number());
+                engine.stomach.data_mut().open_lists.push(NodeList {children:vec!(),tp:NodeListType::Math{start:engine.mouth.start_ref(),top_display:display}});
+                engine.state.push(engine.aux,GroupType::Math{display},engine.mouth.line_number());
                 engine.mouth.insert_every::<Self::ET>(engine.state,every);
             }
             CommandCode::Other | CommandCode::Letter => {
@@ -160,6 +172,10 @@ pub trait Stomach {
             ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } => char!(char),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
                 char!(*char),
+            ResolvedToken::Cmd{ cmd:Some(Command::Unexpandable (Unexpandable{name,..})),.. } if *name == PRIMITIVES.char => {
+                let char = engine.read_charcode(false);
+                char!(char)
+            }
             ResolvedToken::Tk { code:CommandCode::Space, .. } |
             ResolvedToken::Cmd{ cmd:Some(Command::Char {code:CommandCode::Space,..}),.. } =>
                 end!(Self::add_node(engine,SkipNode::Space.as_node())),

@@ -47,6 +47,9 @@ pub struct TeXState<ET:EngineTypes> {
     escape_char:Option<ET::Char>,
     newline_char:Option<ET::Char>,
     current_font:Fnt<ET>,
+    textfonts:[Fnt<ET>;16],
+    scriptfonts:[Fnt<ET>;16],
+    scriptscriptfonts:[Fnt<ET>;16],
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
 }
@@ -94,6 +97,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 (0 * 16 * 16) +
                 (7 * 16 * 16 * 16);
         }
+        let mathfonts = array_init::array_init(|_| nullfont.clone());
         Self {
             stack: StateStack::new(),
             current_mode: TeXMode::Vertical,
@@ -120,6 +124,9 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             newline_char:Some(ET::Char::from(b'\n')),
             empty_list:mem.empty(),
             parshape:Vec::new(),
+            textfonts:mathfonts.clone(),
+            scriptfonts:mathfonts.clone(),
+            scriptscriptfonts:mathfonts,
         }
     }
 
@@ -164,6 +171,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         "{{entering {} group (level {}) at line {}}}",bt,
                         self.stack.stack.len(), line_number
                     )),
+                GroupType::Math { ..} =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{entering math shift group (level {}) at line {}}}",
+                        self.stack.stack.len(), line_number
+                    )),
             }
         }
     }
@@ -193,6 +205,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         "{{leaving {} group (level {}) at line {}}}",bt,
                         self.stack.stack.len() + 1, mouth.line_number()
                     )),
+                GroupType::Math { ..} =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{leaving math shift group (level {}) at line {}}}",
+                        self.stack.stack.len() + 1, mouth.line_number()
+                    )),
             }
         }
         let trace = self.tracing_restores();
@@ -215,6 +232,33 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         ));
                     }
                     self.current_font = font;
+                }
+                StateChange::TextFont{idx,old:font} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring textfont{} ={}{}}}",idx,
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            aux.memory.cs_interner().resolve(font.name())
+                        ));
+                    }
+                    self.textfonts[idx] = font;
+                }
+                StateChange::ScriptFont{idx,old:font} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring scriptfont{} ={}{}}}",idx,
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            aux.memory.cs_interner().resolve(font.name())
+                        ));
+                    }
+                    self.scriptfonts[idx] = font;
+                }
+                StateChange::ScriptScriptFont{idx,old:font} => {
+                    if trace {
+                        aux.outputs.write_neg1(format_args!("{{restoring scriptscriptfont{} ={}{}}}",idx,
+                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            aux.memory.cs_interner().resolve(font.name())
+                        ));
+                    }
+                    self.scriptscriptfonts[idx] = font;
                 }
                 StateChange::ParShape {old} => {
                     if trace {
@@ -495,6 +539,80 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             }
             let old = std::mem::replace(&mut s.current_font, fnt);
             StateChange::CurrentFont(old)
+        })
+    }
+    #[inline(always)]
+    fn get_textfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+        &self.textfonts[i]
+    }
+    #[inline(always)]
+    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing textfont{}={}{}}}",
+                                 if g {"globally "} else {""},idx,
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(s.textfonts[idx].name())
+                    ));
+                aux.outputs.write_neg1(
+                    format_args!("{{into textfont{}={}{}}}",idx,
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(fnt.name())
+                    ));
+            }
+            let old = std::mem::replace(&mut s.textfonts[idx], fnt);
+            StateChange::TextFont{idx,old}
+        })
+    }
+
+    #[inline(always)]
+    fn get_scriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+        &self.scriptfonts[i]
+    }
+    #[inline(always)]
+    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing scriptfont{}={}{}}}",
+                                 if g {"globally "} else {""},idx,
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(s.scriptfonts[idx].name())
+                    ));
+                aux.outputs.write_neg1(
+                    format_args!("{{into scriptfont{}={}{}}}",idx,
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(fnt.name())
+                    ));
+            }
+            let old = std::mem::replace(&mut s.scriptfonts[idx], fnt);
+            StateChange::ScriptFont{idx,old}
+        })
+    }
+
+    #[inline(always)]
+    fn get_scriptscriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+        &self.scriptscriptfonts[i]
+    }
+    #[inline(always)]
+    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+        self.change_field(globally, |s,g| {
+            if s.tracing_assigns() {
+                aux.outputs.write_neg1(
+                    format_args!("{{{}changing scriptscriptfont{}={}{}}}",
+                                 if g {"globally "} else {""},idx,
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(s.scriptscriptfonts[idx].name())
+                    ));
+                aux.outputs.write_neg1(
+                    format_args!("{{into scriptscriptfont{}={}{}}}",idx,
+                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(fnt.name())
+                    ));
+            }
+            let old = std::mem::replace(&mut s.scriptscriptfonts[idx], fnt);
+            StateChange::ScriptScriptFont{idx,old}
         })
     }
 

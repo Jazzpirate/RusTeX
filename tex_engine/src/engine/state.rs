@@ -38,6 +38,15 @@ pub trait State:Sized+Clone {
     fn get_current_font(&self) -> &<Self::ET as EngineTypes>::Font;
     fn set_current_font(&mut self,aux:&mut EngineAux<Self::ET>,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
+    fn get_textfont(&self, i:usize) -> &<Self::ET as EngineTypes>::Font;
+    fn set_textfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:usize,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+
+    fn get_scriptfont(&self, i:usize) -> &<Self::ET as EngineTypes>::Font;
+    fn set_scriptfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:usize,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+
+    fn get_scriptscriptfont(&self, i:usize) -> &<Self::ET as EngineTypes>::Font;
+    fn set_scriptscriptfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:usize,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<Ch<Self>>;
     /// set the current [`CategoryCode`] for a character
@@ -159,6 +168,9 @@ pub enum StateChange<ET:EngineTypes,S:State<ET=ET>> {
     /// A change to the [`TeXMode`], rolled back when a box group ends
     TeXMode{old:TeXMode},
     CurrentFont(ET::Font),
+    TextFont{idx:usize,old:ET::Font},
+    ScriptFont{idx:usize,old:ET::Font},
+    ScriptScriptFont{idx:usize,old:ET::Font},
     EndlineChar{old:Option<ET::Char>},
     EscapeChar{old:Option<ET::Char>},
     NewlineChar{old:Option<ET::Char>},
@@ -202,6 +214,9 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateChange<ET,S> {
             (StateChange::MathCode {char:c1,..},StateChange::MathCode{char:c2,..}) => c1 == c2,
             (StateChange::TeXMode{..},StateChange::TeXMode{..}) => true,
             (StateChange::CurrentFont(_),StateChange::CurrentFont(_)) => true,
+            (StateChange::TextFont{idx:i1,..},StateChange::TextFont{idx:i2,..}) => i1 == i2,
+            (StateChange::ScriptFont{idx:i1,..},StateChange::ScriptFont{idx:i2,..}) => i1 == i2,
+            (StateChange::ScriptScriptFont{idx:i1,..},StateChange::ScriptScriptFont{idx:i2,..}) => i1 == i2,
             (StateChange::EndlineChar{..},StateChange::EndlineChar{..}) => true,
             (StateChange::EscapeChar{..},StateChange::EscapeChar{..}) => true,
             (StateChange::NewlineChar{..},StateChange::NewlineChar{..}) => true,
@@ -275,6 +290,10 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateStack<ET,S> {
             GroupType::Box(bt) => {
                 lvl.changes.push(StateChange::TeXMode{old:*current_mode});
                 *current_mode = bt.into();
+            },
+            GroupType::Math{display} => {
+                lvl.changes.push(StateChange::TeXMode{old:*current_mode});
+                *current_mode = if display {TeXMode::DisplayMath} else {TeXMode::InlineMath};
             },
             _ => ()
         }

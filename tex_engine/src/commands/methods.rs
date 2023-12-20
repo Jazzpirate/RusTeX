@@ -1,16 +1,16 @@
-use crate::commands::{Command, Expandable, Macro, MacroSignature, SimpleExpandable};
+use crate::commands::{Command, Expandable, Macro, MacroSignature, SimpleExpandable, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
-use crate::engine::gullet::{Gullet, ResolvedToken};
+use crate::engine::gullet::{AlignColumn, AlignData, Gullet, ResolvedToken};
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
+use crate::engine::mouth::pretokenized::{Tokenizer, TokenList, TokenListIterator};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, TeXNode, ToOrSpread};
+use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, NodeTrait, TeXBox, TeXNode, ToOrSpread};
 use crate::tex::token::Token;
 use crate::tex::types::{BoxType, GroupType};
 use crate::utils::HMap;
@@ -144,6 +144,10 @@ pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>)
     engine.mouth.iterate(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
         parse_sig_i::<ET>(&mut arity,&mut inparam,&mut ends_with_brace,&mut params,t)
     });
+    match engine.gullet.get_align_data() {
+        Some(data) => data.ingroups += 1,
+        _ => ()
+    }
     (MacroSignature{
         arity,params:params.into()
     },ends_with_brace)
@@ -181,10 +185,10 @@ macro_rules! modify_num {
                         Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
                         _ => todo!("throw error")
                     };
-                    return crate::commands::utils::modify_int_register($engine,idx,$globally,$int)
+                    return crate::commands::methods::modify_int_register($engine,idx,$globally,$int)
                 }
                 Command::IntRegister(idx) => {
-                    return crate::commands::utils::modify_int_register($engine,*idx,$globally,$int)
+                    return crate::commands::methods::modify_int_register($engine,*idx,$globally,$int)
                 }
                 Command::Dim(DimCommand{name,..}) if *name == PRIMITIVES.dimen => {
                     let idx = $engine.read_int(false);
@@ -192,10 +196,10 @@ macro_rules! modify_num {
                         Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
                         _ => todo!("throw error")
                     };
-                    return crate::commands::utils::modify_dim_register($engine,idx,$globally,$dim)
+                    return crate::commands::methods::modify_dim_register($engine,idx,$globally,$dim)
                 }
                 Command::DimRegister(idx) => {
-                    return crate::commands::utils::modify_dim_register($engine,*idx,$globally,$dim)
+                    return crate::commands::methods::modify_dim_register($engine,*idx,$globally,$dim)
                 }
                 Command::Skip(SkipCommand{name,..}) if *name == PRIMITIVES.skip => {
                     let idx = $engine.read_int(false);
@@ -203,10 +207,10 @@ macro_rules! modify_num {
                         Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
                         _ => todo!("throw error")
                     };
-                    return crate::commands::utils::modify_skip_register($engine,idx,$globally,$skip)
+                    return crate::commands::methods::modify_skip_register($engine,idx,$globally,$skip)
                 }
                 Command::SkipRegister(idx) => {
-                    return crate::commands::utils::modify_skip_register($engine,*idx,$globally,$skip)
+                    return crate::commands::methods::modify_skip_register($engine,*idx,$globally,$skip)
                 }
                 o => todo!("{:?} in \\advance",o)
             }
@@ -501,11 +505,12 @@ pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let data = engine.stomach.data_mut();
     for NodeList {children,tp } in data.open_lists.iter_mut().rev() {
         match tp {
-            NodeListType::Box(BoxInfo {tp:BoxType::Horizontal|BoxType::InlineMath|BoxType::DisplayMath,..},_,_) => (),
-            _ => {
+            NodeListType::Paragraph(_) |
+            NodeListType::Box(BoxInfo {tp:BoxType::Vertical,..},_,_) => {
                 children.push(TeXNode::Mark(idx, v.into()));
                 return
             }
+            _ => ()
         }
     }
     data.page.push(TeXNode::Mark(idx, v.into()));
@@ -517,3 +522,230 @@ pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<E
         _ => ()
     }
 }
+
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    pub fn expand(&mut self,t:ET::Token) {
+        match ET::Gullet::resolve(self.state,t) {
+            ResolvedToken::Cmd{cmd: Some(cmd),token} => match cmd {
+                Command::Macro(m) => ET::Gullet::do_macro(self,m.clone(),token),
+                Command::Conditional(cond) => ET::Gullet::do_conditional(self,cond.name,token,cond.expand,false),
+                Command::Expandable(e) => ET::Gullet::do_expandable(self,e.name,token,e.expand),
+                Command::SimpleExpandable(e) => ET::Gullet::do_simple_expandable(self,e.name,token,e.expand),
+                _ => self.requeue(token)
+            }
+            ResolvedToken::Cmd{token,..} | ResolvedToken::Tk {token,..} =>
+                self.requeue(token)
+        }
+    }
+}
+
+
+pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,to:Option<ET::Dim>) {
+    engine.expand_until_bgroup(true);
+    engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
+    let data = read_align_preamble(engine,inner,between);
+    engine.gullet.push_align(data);
+    engine.stomach.data_mut().open_lists.push(NodeList {
+        tp:NodeListType::Align,
+        children:vec!(),
+    });
+    start_align_row(engine,inner);
+}
+
+pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType) -> AlignData<ET::Token,ET::Skip> {
+    struct AlignmentDataBuilder<ET:EngineTypes> {
+        columns: shared_vector::Vector<AlignColumn<ET::Token,ET::Skip>>,
+        recindex:Option<usize>,
+        current_u: shared_vector::Vector<ET::Token>,
+        current_v: shared_vector::Vector<ET::Token>,
+        in_v:bool,
+        tabskip:ET::Skip,
+        inner_mode:BoxType,
+        between_mode:BoxType
+    }
+    impl<ET:EngineTypes> AlignmentDataBuilder<ET> {
+        fn push(&mut self,tk:ET::Token) {
+            if self.in_v {
+                self.current_v.push(tk)
+            } else {
+                self.current_u.push(tk)
+            }
+        }
+    }
+    impl<ET:EngineTypes> Into<AlignData<ET::Token,ET::Skip>> for AlignmentDataBuilder<ET> {
+        fn into(mut self) -> AlignData<ET::Token, ET::Skip> {
+            self.columns.push(AlignColumn::new(self.current_u,self.current_v,self.tabskip));
+            AlignData {
+                columns: self.columns.into(),
+                ingroups: 0,
+                currindex: 0,
+                recindex: self.recindex,
+                omit:false,
+                span:false,
+                inner_mode:self.inner_mode,outer_mode:self.between_mode
+            }
+        }
+    }
+
+    let tabskip = engine.state.get_primitive_skip(PRIMITIVES.tabskip);
+    let mut cols = AlignmentDataBuilder::<ET> {
+        columns:shared_vector::Vector::new(),
+        recindex: None,
+        current_u:shared_vector::Vector::new(),
+        current_v:shared_vector::Vector::new(),
+        in_v:false,
+        tabskip:tabskip,
+        inner_mode,between_mode
+    };
+
+    while let Some(next) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        match ET::Gullet::resolve(engine.state,next) {
+            ResolvedToken::Tk {code:CommandCode::Parameter,..} |
+            ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Parameter,..}),..} => {
+                if cols.in_v { todo!("throw error") }
+                cols.in_v = true;
+            }
+            ResolvedToken::Tk {code:CommandCode::AlignmentTab,..} |
+            ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::AlignmentTab,..}),..} => {
+                if !cols.in_v && cols.current_u.is_empty() {
+                    cols.recindex = Some(cols.columns.len() - 1);
+                } else {
+                    let (u,v) = (std::mem::take(&mut cols.current_u),std::mem::take(&mut cols.current_v));
+                    cols.columns.push(AlignColumn::new(u,v,cols.tabskip));
+                    cols.tabskip = tabskip;
+                    cols.in_v = false;
+                }
+            }
+            ResolvedToken::Tk {code:CommandCode::Noexpand,..} => {
+                if let Some(n) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+                    cols.push(n);
+                } else { unreachable!() }
+            },
+            ResolvedToken::Cmd {cmd:Some(Command::PrimitiveSkip(id)),..}
+                if *id == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true),
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
+                engine.mouth.insert_every::<ET>(engine.state,PRIMITIVES.everycr);
+                return cols.into()
+            },
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+            if *name == PRIMITIVES.span => {
+                if let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+                    engine.expand(t);
+                } else {
+                    todo!("File end error")
+                }
+            }
+            ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..}
+                => cols.push(token)
+        }
+        // engine.gullet.push_align(AlignData { ingroups: 0 });
+    }
+    todo!("throw file end error")
+}
+
+pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
+    if let Some(d) = engine.gullet.get_align_data() {
+        d.currindex = 0
+    } else { todo!("throw error") }
+    crate::expand_loop!(engine,
+        ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
+        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
+            let children = match engine.stomach.data_mut().open_lists.pop() {
+                Some(NodeList{children,tp:NodeListType::Align}) => children,
+                _ => todo!("throw error")
+            };
+            engine.gullet.pop_align();
+            engine.state.pop(engine.aux,&mut engine.mouth);
+            for c in children {
+                ET::Stomach::add_node(engine,c);
+            }
+            return ()
+        }
+        ResolvedToken::Tk{code:CommandCode::Space,..} => (),
+        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+            if *name == PRIMITIVES.crcr => (),
+        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+            if *name == PRIMITIVES.noalign => todo!(),
+        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+            if *name == PRIMITIVES.omit => todo!(),
+        ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
+            engine.stomach.data_mut().open_lists.push(NodeList {
+                tp:NodeListType::AlignRow(engine.mouth.start_ref()),
+                children:vec!(),
+            });
+            engine.requeue(token);
+            return open_align_cell(engine,mode)
+        }
+    );
+    todo!("file end")
+}
+
+pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
+    match engine.gullet.get_align_data() {
+        None => todo!("throw error"),
+        Some(data) => {
+            if data.columns.len() <= data.currindex {
+                match data.recindex {
+                    Some(i) => data.currindex = i,
+                    _ =>
+                        todo!("throw error")
+                }
+            }
+            if !data.omit { engine.mouth.push_exp(TokenListIterator::new(None,data.columns[data.currindex].left.clone())); }
+            engine.state.push(engine.aux,GroupType::Box(mode),engine.mouth.line_number());
+            engine.stomach.data_mut().open_lists.push(NodeList {
+                tp:NodeListType::AlignCell(engine.mouth.start_ref()),
+                children:vec!(),
+            });
+        }
+    }
+}
+
+pub fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
+    let (children,start) = match stomach.data_mut().open_lists.pop() {
+        Some(NodeList{children,tp:NodeListType::AlignCell(start)}) => (children,start),
+        _ => todo!("throw error")
+    };
+    state.pop(aux,mouth);
+    let bx = TeXBox {
+        children,start,
+        info: BoxInfo {
+            tp: inner_mode,
+            kind: "aligncell",
+            scaled: ToOrSpread::None,
+            assigned_width: None,
+            assigned_height: None,
+            assigned_depth: None,
+            moved_left: None,
+            raised: None,
+        },
+        end: mouth.current_sourceref(),
+    };
+    stomach.data_mut().open_lists.last_mut().unwrap().children.push(bx.as_node());
+}
+
+pub fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
+    let (children,start) = match stomach.data_mut().open_lists.pop() {
+        Some(NodeList{children,tp:NodeListType::AlignRow(start)}) => (children,start),
+        _ => todo!("throw error")
+    };
+    let bx = TeXBox {
+        children,start,
+        info: BoxInfo {
+            tp: inner_mode,
+            kind: "alignrow",
+            scaled: ToOrSpread::None,
+            assigned_width: None,
+            assigned_height: None,
+            assigned_depth: None,
+            moved_left: None,
+            raised: None,
+        },
+        end: mouth.current_sourceref(),
+    };
+    stomach.data_mut().open_lists.last_mut().unwrap().children.push(bx.as_node());
+}
+
+pub const END_TEMPLATE: &str = "!\"$%&/(endtemplate)\\&%$\"!";
+pub const END_TEMPLATE_ROW: &str = "!\"$%&/(endtemplate_row)\\&%$\"!";

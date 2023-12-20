@@ -3,10 +3,10 @@ pub mod methods;
 
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
-use crate::commands::{Command, Macro};
+use crate::commands::{Command, Macro, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{ExpansionContainer, MacroExpansion, TLVecMeaning, TokenListIterator};
+use crate::engine::mouth::pretokenized::{ExpansionContainer, MacroExpansion, TLVecMeaning, TokenList, TokenListIterator};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
@@ -15,6 +15,7 @@ use crate::tex::input_text::Character;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::{StandardToken, Token};
 use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::types::BoxType;
 
 type M<G> = <<G as Gullet>::ET as EngineTypes>::Mouth;
 type A<G> = EngineAux<<G as Gullet>::ET>;
@@ -31,11 +32,46 @@ pub trait Gullet {
 
     fn new(aux:&mut EngineAux<Self::ET>,state:&mut S<Self>,mouth:&mut M<Self>) -> Self;
 
-    fn push_align(&mut self,ad:AlignData);
-    fn get_align_data(&mut self) -> Option<&mut AlignData>;
+    fn push_align(&mut self,ad:AlignData<T<Self>,Skip<Self>>);
+    fn pop_align(&mut self) -> Option<AlignData<T<Self>,Skip<Self>>>;
+    fn get_align_data(&mut self) -> Option<&mut AlignData<T<Self>,Skip<Self>>>;
     fn get_conditional(&self) -> Option<ActiveConditional<Self::ET>>;
     fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<Self::ET>>;
     fn csnames(&mut self) -> &mut usize;
+
+    fn iterate<Fn:FnMut(&mut A<Self>,&S<Self>,&mut Self,T<Self>) -> bool>(&mut self,mouth:&mut M<Self>,aux:&mut A<Self>,state:&S<Self>,mut f:Fn) {
+        match self.get_align_data() {
+            None => mouth.iterate(aux,state.get_catcode_scheme(),state.get_endline_char(),|a,t|f(a,state,self,t)),
+            Some(_) => {
+                let cc = state.get_catcode_scheme();
+                let elc = state.get_endline_char();
+                mouth.iterate(aux,cc,elc,|aux,t| {
+                    let data = self.get_align_data().unwrap();
+                    if t.is_begin_group() {
+                        data.ingroups += 1;
+                        f(aux, state, self, t)
+                    } else if t.is_end_group() {
+                        if data.ingroups == 0 { todo!() }
+                        data.ingroups -= 1;
+                        f(aux, state, self, t)
+                    } else if data.ingroups == 0 && t.is_align_tab() {
+                        todo!()
+                    } else if data.ingroups == 0 && t.is_cs_or_active() {
+                        match Self::resolve(state, t) {
+                            ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
+                            if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
+                                todo!()
+                            }
+                            ResolvedToken::Tk { token, .. } | ResolvedToken::Cmd { token, .. } =>
+                                f(aux, state, self, token)
+                        }
+                    } else {
+                        f(aux, state, self, t)
+                    }
+                });
+            }
+        }
+    }
 
     fn get_next_opt(&mut self,
         mouth:&mut M<Self>,
@@ -45,12 +81,26 @@ pub trait Gullet {
             None => mouth.get_next_opt(aux,state),
             Some(a) => match mouth.get_next_opt(aux,state) {
                 Some(t) if t.is_begin_group()  => { a.ingroups += 1; Some(t) },
-                Some(t) if a.ingroups == 0 && t.is_align_tab() => todo!(),
+                Some(t) if a.ingroups == 0 && t.is_align_tab() => {
+                    methods::do_align(mouth,aux,a);
+                    self.get_next_opt(mouth,aux,state)
+                }
                 Some(t) if t.is_end_group() => {
-                    if a.ingroups == 0 { todo!() }
+                    if a.ingroups == 0 { todo!("throw error") }
                     a.ingroups -= 1;
                     Some(t)
                 },
+                Some(t) if a.ingroups == 0 && t.is_cs_or_active() => {
+                    match Self::resolve(state,t) {
+                        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                            if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
+                            methods::do_cr(mouth,aux,state,a);
+                            return self.get_next_opt(mouth,aux,state)
+                        }
+                        ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} =>
+                            Some(token)
+                    }
+                }
                 o => o
             }
         }
@@ -70,15 +120,13 @@ pub trait Gullet {
         mouth.read_until_endgroup(aux,state.get_catcode_scheme(),state.get_endline_char(),|a,t|cont(a,state,t))
     }
     fn requeue(&mut self,mouth:&mut M<Self>,t:T<Self>) {
-        if t.is_begin_group() || t.is_end_group() {
-            match self.get_align_data() {
-                None => (),
-                Some(d) => {
-                    if t.is_begin_group() { d.ingroups -= 1 }
-                    if t.is_end_group() {
-                        d.ingroups += 1;
-                    }
-                }
+        if let Some(data) = self.get_align_data() {
+            if t.is_begin_group() {
+                if data.ingroups == 0 { todo!() }
+                data.ingroups -= 1;
+            }
+            else if t.is_end_group() {
+                data.ingroups += 1;
             }
         }
         mouth.requeue(t)
@@ -113,16 +161,6 @@ pub trait Gullet {
             StandardToken::ControlSequence(cs) =>
                 ResolvedToken::Cmd{token,cmd:state.get_command(&cs)}
         }
-        /*
-        match cm {
-            Some(Command::Expandable(e)) if e.name == PRIMITIVES.else_ || e.name == PRIMITIVES.fi => {
-                match self.get_conditional() {
-                    Some(ActiveConditional::Unfinished(_)) => todo!("\\else/\\fi in unfinished conditional"),
-                    _ => ResolvedToken::Cmd{token,cmd:cm}
-                }
-            }
-            _ => ResolvedToken::Cmd{token,cmd:cm}
-        }*/
     }
 
     #[inline(always)]
@@ -203,21 +241,7 @@ pub trait Gullet {
             }
         }
     }
-    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,&mut Self,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
-        match engine.gullet.get_align_data() {
-            None => methods::expand_until_endgroup(engine,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t)),
-            Some(_) => methods::expand_until_endgroup::<Self::ET,_>(engine,expand_protected,edef_like,|a,s,g,t| {
-                if t.is_begin_group() { g.get_align_data().unwrap().ingroups += 1 }
-                if t.is_align_tab() && g.get_align_data().unwrap().ingroups == 0 { todo!()}
-                if t.is_end_group() {
-                    let ig = &mut g.get_align_data().unwrap().ingroups;
-                    if *ig == 0 { todo!() }
-                    *ig -= 1;
-                }
-                cont(a,s,g,t)
-            })
-        }
-    }
+    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,&mut Self,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,cont:Fn);
 }
 
 #[derive(Copy,Clone,Eq,PartialEq,Debug)]
@@ -244,8 +268,29 @@ pub enum ResolvedToken<'a,ET:EngineTypes> {
     Cmd{token:ET::Token,cmd:Option<&'a Command<ET>>},
 }
 
-pub struct AlignData {
-    pub(crate) ingroups:u8
+
+#[derive(Clone,Debug)]
+pub struct AlignColumn<T:Token,Sk: crate::tex::numerics::Skip> {
+    pub left: TokenList<T>,
+    pub right: TokenList<T>,
+    pub tabskip: Sk,
+}
+impl <T:Token,Sk: crate::tex::numerics::Skip> AlignColumn<T,Sk> {
+    #[inline(always)]
+    pub fn new(left:shared_vector::Vector<T>,right:shared_vector::Vector<T>,tabskip:Sk) -> Self {
+        Self { left:left.into(),right:right.into(),tabskip }
+    }
+}
+
+pub struct AlignData<T:Token,Sk: crate::tex::numerics::Skip> {
+    pub ingroups:u8,
+    pub currindex:usize,
+    pub recindex:Option<usize>,
+    pub columns:shared_vector::SharedVector<AlignColumn<T,Sk>>,
+    pub omit:bool,
+    pub span:bool,
+    pub inner_mode:BoxType,
+    pub outer_mode:BoxType
 }
 
 
@@ -338,7 +383,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 
 pub struct DefaultGullet<ET:EngineTypes> {
-    align_data:Vec<AlignData>,
+    align_data:Vec<AlignData<ET::Token,ET::Skip>>,
     conditionals:Vec<ActiveConditional<ET>>,
     csnames:usize,
     phantom:PhantomData<ET>
@@ -368,8 +413,25 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     fn csnames(&mut self) -> &mut usize { &mut self.csnames }
 
     #[inline(always)]
-    fn push_align(&mut self, ad: AlignData) {
+    fn push_align(&mut self, ad: AlignData<T<Self>,Skip<Self>>) {
         self.align_data.push(ad)
+    }
+
+    #[inline(always)]
+    fn pop_align(&mut self) -> Option<AlignData<T<Self>, Skip<Self>>> {
+        self.align_data.pop()
+    }
+    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<Self::ET>, &S<Self>, &mut Self, T<Self>)>(engine: &mut EngineReferences<Self::ET>, expand_protected: bool, edef_like: bool, mut cont: Fn) {
+        let ad = std::mem::take(&mut engine.gullet.align_data);
+        methods::expand_until_endgroup(engine,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t));
+        engine.gullet.align_data = ad;
+        match engine.gullet.align_data.last_mut() {
+            None => (),
+            Some(d) => {
+                if d.ingroups == 0 { todo!() }
+                d.ingroups -= 1;
+            }
+        }
     }
 
     fn do_macro(engine: &mut EngineReferences<Self::ET>, m: Macro<T<Self>>, token: T<Self>) {
@@ -416,7 +478,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
         }
     }
     #[inline(always)]
-    fn get_align_data(&mut self) -> Option<&mut AlignData> {
+    fn get_align_data(&mut self) -> Option<&mut AlignData<T<Self>,Skip<Self>>> {
         self.align_data.last_mut()
     }
     #[inline(always)]

@@ -162,6 +162,14 @@ pub struct PrimitiveInterner {
     pub pdfpagewidth:PrimitiveIdentifier,
     pub everymath:PrimitiveIdentifier,
     pub everydisplay:PrimitiveIdentifier,
+    pub char:PrimitiveIdentifier,
+    pub tabskip:PrimitiveIdentifier,
+    pub cr:PrimitiveIdentifier,
+    pub crcr:PrimitiveIdentifier,
+    pub everycr:PrimitiveIdentifier,
+    pub span:PrimitiveIdentifier,
+    pub noalign:PrimitiveIdentifier,
+    pub omit:PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -214,6 +222,14 @@ impl PrimitiveInterner {
         let pdfpagewidth = PrimitiveIdentifier(interner.get_or_intern_static("pdfpagewidth"));
         let everymath = PrimitiveIdentifier(interner.get_or_intern_static("everymath"));
         let everydisplay = PrimitiveIdentifier(interner.get_or_intern_static("everydisplay"));
+        let char = PrimitiveIdentifier(interner.get_or_intern_static("char"));
+        let tabskip = PrimitiveIdentifier(interner.get_or_intern_static("tabskip"));
+        let cr = PrimitiveIdentifier(interner.get_or_intern_static("cr"));
+        let crcr = PrimitiveIdentifier(interner.get_or_intern_static("crcr"));
+        let everycr = PrimitiveIdentifier(interner.get_or_intern_static("everycr"));
+        let span = PrimitiveIdentifier(interner.get_or_intern_static("span"));
+        let noalign = PrimitiveIdentifier(interner.get_or_intern_static("noalign"));
+        let omit = PrimitiveIdentifier(interner.get_or_intern_static("omit"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
@@ -221,7 +237,8 @@ impl PrimitiveInterner {
             gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
             everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
             everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
-            pdfpagewidth,everymath,everydisplay
+            pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
+            noalign,omit
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.

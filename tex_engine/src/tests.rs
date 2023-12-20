@@ -62,26 +62,21 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use std::fmt::Formatter;
-    use std::panic::panic_any;
     use ansi_term::Colour::*;
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
     use crate::commands::{Command, Unexpandable};
-    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainPDFTeXEngine, PlainTeXEngine, TeXEngine};
-    use crate::engine::gullet::DefaultGullet;
-    use crate::engine::mouth::{DefaultMouth, Mouth};
+    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainPDFTeXEngine, TeXEngine};
+    use crate::engine::mouth::Mouth;
     use crate::engine::mouth::pretokenized::ExpansionContainer;
-    use crate::engine::state::{CustomStateChange, State};
-    use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+    use crate::engine::state::CustomStateChange;
+    use crate::engine::utils::memory::PRIMITIVES;
     use crate::tex::catcodes::CommandCode;
-    use crate::tex::input_text::{Character, StringLineSource};
+    use crate::tex::input_text::StringLineSource;
     use crate::tex::token::Token;
     use crate::utils::Ptr;
     use crate::engine::PDFTeXEngine;
-    use crate::engine::state::tex_state::TeXState;
-    use crate::engine::stomach::StomachWithShipout;
-    use crate::tex::control_sequences::ControlSequenceNameHandler;
     use crate::tex::nodes::NodeTrait;
 
     #[test]
@@ -157,7 +152,7 @@ mod tests {
         debug();
         let mut engine = PlainPDFTeXEngine::new();
         {
-            let refs = engine.get_engine_refs();
+           // let refs = engine.get_engine_refs();
            // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
            // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingifs,1,true);
            // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingcommands,1,true);
@@ -186,7 +181,7 @@ mod tests {
         ),"rustexBREAK");
         engine.initialize_pdflatex().unwrap();
         {
-            let refs = engine.get_engine_refs();
+            //let refs = engine.get_engine_refs();
             //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
             //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingifs,1,true);
             //refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingcommands,1,true);

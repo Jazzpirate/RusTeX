@@ -1,6 +1,6 @@
 use chrono::{Datelike, Timelike};
 use crate::{cmstodo, cmstodos, cmtodo, cmtodos, expand_loop};
-use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, NodeCommandScope, SkipCommand, Whatsit};
+use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, NodeCommandScope, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
@@ -11,14 +11,14 @@ use super::primitives::*;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::numerics::{Numeric, NumSet};
+use crate::tex::numerics::{Numeric, NumSet, Skip};
 use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use std::fmt::Write;
-use crate::commands::utils::IfxCmd;
+use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
@@ -75,17 +75,7 @@ pub fn expandafter<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
         None => todo!("throw error"),
         Some(t) => t
     };
-    match ET::Gullet::resolve(engine.state,second) {
-        ResolvedToken::Cmd{cmd: Some(cmd),token} => match cmd {
-            Command::Macro(m) => ET::Gullet::do_macro(engine,m.clone(),token),
-            Command::Conditional(cond) => ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
-            Command::Expandable(e) => ET::Gullet::do_expandable(engine,e.name,token,e.expand),
-            Command::SimpleExpandable(e) => ET::Gullet::do_simple_expandable(engine,e.name,token,e.expand),
-            _ => engine.requeue(token)
-        }
-        ResolvedToken::Cmd{token,..} | ResolvedToken::Tk {token,..} =>
-            engine.requeue(token)
-    }
+    engine.expand(second);
     engine.requeue(first)
 }
 
@@ -193,8 +183,14 @@ pub fn chardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,gl
     engine.set_command(&name,Some(cmd),globally)
 }
 
+pub fn char_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let char = engine.read_charcode(false);
+    let tk = <ET::Token as Token>::from_char_cat(char,CommandCode::Other);
+    ET::Stomach::do_char(engine,tk,char,CommandCode::Other)
+}
+
 pub fn csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    let name = super::utils::do_csname(engine);
+    let name = super::methods::do_csname(engine);
     if engine.state.get_command(&name).is_none() {
         engine.state.set_command(engine.aux,name.clone(),Some(Command::Relax),false)
     }
@@ -207,41 +203,41 @@ pub fn endcsname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
 
 
 pub fn count_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     engine.state.get_int_register(idx)
 }
 pub fn count_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let val = engine.read_int(true);
     engine.state.set_int_register(engine.aux,idx,val,globally)
 }
 
 pub fn dimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     engine.state.get_dim_register(idx)
 }
 pub fn dimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let val = engine.read_dim(true);
     engine.state.set_dim_register(engine.aux,idx,val,globally)
 }
 
 pub fn skip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> ET::Skip {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     engine.state.get_skip_register(idx)
 }
 pub fn skip_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let val = engine.read_skip(true);
     engine.state.set_skip_register(engine.aux,idx,val,globally)
 }
 
 pub fn muskip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> ET::MuSkip {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     engine.state.get_muskip_register(idx)
 }
 pub fn muskip_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let val = engine.read_muskip(true);
     engine.state.set_muskip_register(engine.aux,idx,val,globally)
 }
@@ -306,11 +302,11 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
         }
         None => todo!("file end error")
     };
-    let (sig,end) = super::utils::parse_signature(engine);
+    let (sig,end) = super::methods::parse_signature(engine);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     engine.read_until_endgroup(|_,_,t| {
-        super::utils::parse_exp_i::<ET>(sig.arity,&mut inparam,&mut exp,t)
+        super::methods::parse_exp_i::<ET>(sig.arity, &mut inparam, &mut exp, t)
     });
     if inparam {todo!("error")}
     if let Some(e) = end {
@@ -334,11 +330,11 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
         }
         None => todo!("file end error")
     };
-    let (sig,end) = super::utils::parse_signature(engine);
+    let (sig,end) = super::methods::parse_signature(engine);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,_,t| {
-        super::utils::parse_exp_i::<ET>(sig.arity,&mut inparam,&mut exp,t)
+        super::methods::parse_exp_i::<ET>(sig.arity, &mut inparam, &mut exp, t)
     });
     if inparam {todo!("error")}
     if let Some(e) = end {
@@ -363,14 +359,14 @@ pub fn gdef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
 }
 
 pub fn dp_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
         None => ET::Dim::default(),
         Some(b) => b.depth()
     }
 }
 pub fn dp_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
         b.info.assigned_depth = Some(dim)
@@ -378,14 +374,14 @@ pub fn dp_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
 }
 
 pub fn ht_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
         None => ET::Dim::default(),
         Some(b) => b.height()
     }
 }
 pub fn ht_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
         b.info.assigned_height = Some(dim)
@@ -393,14 +389,14 @@ pub fn ht_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
 }
 
 pub fn wd_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
         None => ET::Dim::default(),
         Some(b) => b.width()
     }
 }
 pub fn wd_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
         b.info.assigned_width = Some(dim)
@@ -663,6 +659,59 @@ pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,g
     engine.state.set_command(engine.aux,cs,Some(Command::Font(font)),global)
 }
 
+#[inline(always)]
+pub fn textfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Fnt<ET> {
+    let num = engine.read_int(false).into();
+    if num < 0 || num > 15 {
+        todo!("throw error")
+    }
+    engine.state.get_textfont(num as usize).clone()
+}
+
+pub fn textfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
+    let num = engine.read_int(false).into();
+    if num < 0 || num > 15 {
+        todo!("throw error")
+    }
+    let fnt = engine.read_font();
+    engine.state.set_textfont(engine.aux,num as usize,fnt,global)
+}
+
+#[inline(always)]
+pub fn scriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Fnt<ET> {
+    let num = engine.read_int(false).into();
+    if num < 0 || num > 15 {
+        todo!("throw error")
+    }
+    engine.state.get_scriptfont(num as usize).clone()
+}
+
+pub fn scriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
+    let num = engine.read_int(false).into();
+    if num < 0 || num > 15 {
+        todo!("throw error")
+    }
+    let fnt = engine.read_font();
+    engine.state.set_scriptfont(engine.aux,num as usize,fnt,global)
+}
+
+#[inline(always)]
+pub fn scriptscriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Fnt<ET> {
+    let num = engine.read_int(false).into();
+    if num < 0 || num > 15 {
+        todo!("throw error")
+    }
+    engine.state.get_scriptscriptfont(num as usize).clone()
+}
+
+pub fn scriptscriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
+    let num = engine.read_int(false).into();
+    if num < 0 || num > 15 {
+        todo!("throw error")
+    }
+    let fnt = engine.read_font();
+    engine.state.set_scriptscriptfont(engine.aux,num as usize,fnt,global)
+}
 
 pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
     let idx = match engine.read_int(false).try_into() {
@@ -684,17 +733,17 @@ pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
 }
 
 pub fn box_<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     Ok(engine.state.take_box_register(idx))
 }
 pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     Ok(engine.state.get_box_register(idx).cloned())
 }
 
 pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,scope:NodeCommandScope,tp:BoxType,copy:bool) {
     if ET::Stomach::maybe_switch_mode(engine,scope,tk) {
-        let idx = super::utils::read_register(engine);
+        let idx = super::methods::read_register(engine);
         let bx = if copy {engine.state.get_box_register(idx).cloned()} else {engine.state.take_box_register(idx)};
         match bx {
             None => (),
@@ -722,7 +771,7 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let scaled = super::utils::do_box_start(engine,BoxType::Horizontal,PRIMITIVES.everyhbox);
+    let scaled = super::methods::do_box_start(engine, BoxType::Horizontal, PRIMITIVES.everyhbox);
     Err(BoxInfo {
         tp: BoxType::Horizontal,
         kind: "hbox",
@@ -735,7 +784,7 @@ pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
 }
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let scaled = super::utils::do_box_start(engine,BoxType::Vertical,PRIMITIVES.everyvbox);
+    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
     Err(BoxInfo {
         tp: BoxType::Vertical,
         kind: "vbox",
@@ -747,9 +796,45 @@ pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
     })
 }
 
-pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    engine.gullet.push_align(AlignData { ingroups: 0 })
+pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+    match engine.state.get_mode() {
+        TeXMode::DisplayMath | TeXMode::InlineMath => (),// TODO check that the current mathbox is (basically) empty
+        o => todo!("vcenter throw error; mode: {:?}",o)
+    }
+    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
+    Err(BoxInfo {
+        tp: BoxType::Vertical,
+        kind: "vcenter",
+        scaled,
+        assigned_width: None,
+        assigned_height: None,
+        assigned_depth: None,
+        moved_left:None,raised:None
+    })
 }
+
+pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToVertical,token) {
+        let wd = if engine.read_keyword(b"to") {
+            Some(engine.read_dim(false))
+        } else {
+            None
+        };
+        super::methods::do_align(engine, BoxType::Horizontal, BoxType::Vertical, wd)
+    }
+}
+
+pub fn valign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,token) {
+        let wd = if engine.read_keyword(b"to") {
+            Some(engine.read_dim(false))
+        } else {
+            None
+        };
+        super::methods::do_align(engine, BoxType::Vertical, BoxType::Horizontal, wd)
+    }
+}
+
 
 pub fn hyphenchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     let font = engine.read_font();
@@ -772,8 +857,8 @@ pub fn skewchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Tok
 }
 
 pub fn if_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let first = super::utils::get_if_token(engine);
-    let second = super::utils::get_if_token(engine);
+    let first = super::methods::get_if_token(engine);
+    let second = super::methods::get_if_token(engine);
     first.0 == second.0
 }
 
@@ -785,8 +870,8 @@ pub fn ifcase<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 }
 
 pub fn ifcat<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let first = super::utils::get_if_token(engine);
-    let second = super::utils::get_if_token(engine);
+    let first = super::methods::get_if_token(engine);
+    let second = super::methods::get_if_token(engine);
     first.1 == second.1
 }
 
@@ -807,7 +892,7 @@ pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
 }
 
 pub fn ifeof<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = super::utils::read_file_index(engine);
+    let idx = super::methods::read_file_index(engine);
     engine.filesystem.eof(idx)
 }
 
@@ -872,18 +957,18 @@ pub fn ifvmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
     }
 }
 pub fn ifvbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
         Some(TeXBox {info:BoxInfo{tp:BoxType::Vertical,..},..}) => true,
         _ => false
     }
 }
 pub fn ifvoid<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     engine.state.get_box_register(idx).is_none()
 }
 pub fn ifhbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
         Some(TeXBox {info:BoxInfo{tp:BoxType::Horizontal,..},..}) => true,
         _ => false
@@ -1188,11 +1273,11 @@ pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
-    let (idx,file) = super::utils::read_index_and_file(engine);
+    let (idx,file) = super::methods::read_index_and_file(engine);
     Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file);None}))
 }
 pub fn openout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let (idx,file) = super::utils::read_index_and_file(engine);
+    let (idx,file) = super::methods::read_index_and_file(engine);
     engine.filesystem.open_out(idx,file)
 }
 
@@ -1205,7 +1290,7 @@ pub fn prevdepth_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
 }
 
 pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,globally:bool) {
-    let idx = super::utils::read_file_index(engine);
+    let idx = super::methods::read_file_index(engine);
     if !engine.read_keyword("to".as_bytes()) {
         todo!("throw error")
     }
@@ -1254,7 +1339,7 @@ pub fn romannumeral<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
 }
 
 pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
-    let index = super::utils::read_register(engine);
+    let index = super::methods::read_register(engine);
     match engine.read_box(true) {
         Ok(bx) =>
             engine.state.set_box_register(engine.aux,index,bx,globally),
@@ -1386,22 +1471,22 @@ pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 }
 
 pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let (idx,file) = super::utils::read_index_and_file(engine);
+    let (idx,file) = super::methods::read_index_and_file(engine);
     engine.filesystem.open_in(idx,file)
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
-    let idx = super::utils::read_file_index(engine);
+    let idx = super::methods::read_file_index(engine);
     Some(Box::new(move |engine| {engine.filesystem.close_out(idx);None}))
 }
 pub fn closeout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let idx = super::utils::read_file_index(engine);
+    let idx = super::methods::read_file_index(engine);
     engine.filesystem.close_out(idx)
 }
 
 pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    let idx = super::utils::read_file_index(engine);
+    let idx = super::methods::read_file_index(engine);
     engine.filesystem.close_in(idx)
 }
 
@@ -1455,7 +1540,7 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
 
 #[inline(always)]
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    super::utils::do_the(engine,|_,_,_,t|exp.push(t))
+    super::methods::do_the(engine, |_, _, _, t|exp.push(t))
 }
 
 pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
@@ -1465,7 +1550,7 @@ pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> I
 }
 
 pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global:bool) {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let mut had_eq = false;
     crate::expand_loop!(engine,
         ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
@@ -1705,7 +1790,7 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
 }
 
 pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let idx = super::utils::read_register(engine);
+    let idx = super::methods::read_register(engine);
     let (kind,ls,wd,start,end) = match engine.state.get_box_register_mut(idx) {
         Some(TeXBox{info:BoxInfo{tp:BoxType::Vertical,kind,assigned_width,assigned_depth,assigned_height,..},children,start,end}) => {
             *assigned_depth = None;
@@ -1762,28 +1847,28 @@ pub fn inputlineno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
 }
 
 pub fn mark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    super::utils::do_marks(engine,0)
+    super::methods::do_marks(engine, 0)
 }
 
 #[inline(always)]
 pub fn topmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    super::utils::get_marks(engine,exp,|d| &mut d.topmarks,0)
+    super::methods::get_marks(engine, exp, |d| &mut d.topmarks, 0)
 }
 #[inline(always)]
 pub fn firstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    super::utils::get_marks(engine,exp,|d| &mut d.firstmarks,0)
+    super::methods::get_marks(engine, exp, |d| &mut d.firstmarks, 0)
 }
 #[inline(always)]
 pub fn botmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    super::utils::get_marks(engine,exp,|d| &mut d.botmarks,0)
+    super::methods::get_marks(engine, exp, |d| &mut d.botmarks, 0)
 }
 #[inline(always)]
 pub fn splitfirstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    super::utils::get_marks(engine,exp,|d| &mut d.splitfirstmarks,0)
+    super::methods::get_marks(engine, exp, |d| &mut d.splitfirstmarks, 0)
 }
 #[inline(always)]
 pub fn splitbotmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
-    super::utils::get_marks(engine,exp,|d| &mut d.splitbotmarks,0)
+    super::methods::get_marks(engine, exp, |d| &mut d.splitbotmarks, 0)
 }
 
 pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
@@ -1929,11 +2014,55 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
 pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
     TeXNode::Skip(SkipNode::Space)
 }
-pub fn char_slash<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+pub fn char_slash<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     // TODO
 }
-pub fn char_dash<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+pub fn char_dash<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     // TODO
+}
+
+pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+    match engine.gullet.get_align_data() {
+        None => unreachable!(),
+        Some(data) => {
+            data.omit = false;
+            data.currindex += 1;
+            if data.span {
+                todo!()
+            } else {
+                super::methods::pop_align_cell(engine.state, engine.aux, engine.stomach, engine.mouth, data.inner_mode);
+            }
+            let mode = data.inner_mode;
+            crate::expand_loop!(engine,
+                ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
+                ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
+                    todo!("close align")
+                }
+                ResolvedToken::Tk{code:CommandCode::Space,..} => (),
+                ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                    if *name == PRIMITIVES.crcr => (),
+                ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                    if *name == PRIMITIVES.omit => todo!(),
+                ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
+                    return super::methods::open_align_cell(engine,mode)
+                }
+            );
+            todo!("file end")
+        }
+    }
+}
+
+pub fn end_template_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+    match engine.gullet.get_align_data() {
+        None => unreachable!(),
+        Some(data) => {
+            data.omit = false;
+            let mode = data.inner_mode;
+            super::methods::pop_align_cell(engine.state, engine.aux, engine.stomach, engine.mouth, mode);
+            super::methods::pop_align_row::<ET>(engine.stomach, engine.mouth, mode);
+            super::methods::start_align_row(engine, mode);
+        }
+    }
 }
 
 pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
@@ -1971,6 +2100,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_muskip(engine,"muskip",muskip_get,Some(muskip_set));
 
     register_font(engine,"font",font_get,Some(font_set));
+    register_font(engine,"textfont",textfont_get,Some(textfont_set));
+    register_font(engine,"scriptfont",scriptfont_get,Some(scriptfont_set));
+    register_font(engine,"scriptscriptfont",scriptscriptfont_get,Some(scriptscriptfont_set));
 
     register_assignment(engine,"advance",advance);
     register_assignment(engine,"chardef",chardef);
@@ -2038,10 +2170,13 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"aftergroup",aftergroup);
     register_unexpandable(engine,"begingroup",begingroup);
     register_unexpandable(engine,"closein",closein);
+    register_unexpandable(engine,"char",char_);
     register_unexpandable(engine,"dump",|_,_|());
     register_unexpandable(engine,"endcsname",endcsname);
     register_unexpandable(engine,"endgroup",endgroup);
     register_unexpandable(engine,"errorstopmode",errorstopmode);
+    register_unexpandable(engine,"halign",halign);
+    register_unexpandable(engine,"valign",valign);
     register_unexpandable(engine, "hyphenation", |e,_|skip_argument(e));
     register_unexpandable(engine,"ignorespaces",ignorespaces);
     register_unexpandable(engine,"immediate",immediate);
@@ -2076,6 +2211,12 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"/",char_slash);
     register_unexpandable(engine,"-",char_dash);
     register_unexpandable(engine,"showlists",|_,_| {}); // TODO
+    register_unexpandable(engine,"crcr",|_,_| {
+        print!("")
+    });
+    register_unexpandable(engine,"cr",|_,_| {todo!("throw error")});
+    register_unexpandable(engine,END_TEMPLATE,end_template);
+    register_unexpandable(engine,END_TEMPLATE_ROW,end_template_row);
 
     register_whatsit(engine,"closeout",closeout,closeout_immediate);
     register_whatsit(engine,"openout",openout,openout_immediate);
@@ -2083,6 +2224,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     register_box(engine,"hbox",hbox);
     register_box(engine,"vbox",vbox);
+    register_box(engine,"vcenter",vcenter);
     register_box(engine,"box",box_);
     register_box(engine,"copy",copy);
     register_box(engine,"lastbox",lastbox);
@@ -2104,21 +2246,15 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_node(engine,"hss",NodeCommandScope::SwitchesToHorizontal,hss);
     register_node(engine," ",NodeCommandScope::SwitchesToHorizontal,char_space);
 
-
-    // TODO test to make sure this is callable from the POV of the compiler
-    register_unexpandable(engine,"halign",halign);
-
     cmstodos!(engine,
         mathclose,mathbin,mathord,mathop,mathrel,mathopen,
         mathpunct,mathinner,mathaccent,delimiter,mathchar,
         mkern,mskip,
-        indent,insert,leaders,cleaders,xleaders,left,right,valign,
-        vtop,vcenter,char,
-        cr,crcr,discretionary,displaylimits,end,
+        indent,insert,leaders,cleaders,xleaders,left,right,
+        vtop,discretionary,displaylimits,end,
         mathchoice,noalign,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
-        pagedepth,pageshrink,parshape,
-        scriptfont,scriptscriptfont,span,textfont,underline,vadjust
+        pagedepth,pageshrink,parshape,span,underline,vadjust
     );
 
     register_primitive_int(engine,PRIMITIVE_INTS);

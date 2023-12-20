@@ -12,6 +12,7 @@ pub enum GroupType {
     ControlSequence,
     /// A box (e.g. `\hbox` or `\vbox`), or a math group.
     Box(BoxType),
+    Math{display:bool}
 }
 
 /// The type of a box, e.g. `\hbox` or `\vbox`.
@@ -21,17 +22,13 @@ pub enum BoxType {
     Horizontal,
     /// A vertical box, e.g. `\vbox`.
     Vertical,
-    /// An inline math box, e.g. `$...$`.
-    InlineMath,
-    /// A display math box, e.g. `$$...$$`.
-    DisplayMath
 }
 impl Display for BoxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BoxType::Horizontal => write!(f, "hbox"),
             BoxType::Vertical => write!(f, "vbox"),
-            BoxType::InlineMath | BoxType::DisplayMath => write!(f, "math shift")
+            //BoxType::InlineMath | BoxType::DisplayMath => write!(f, "math shift")
         }
     }
 }
@@ -109,8 +106,8 @@ impl From<BoxType> for TeXMode {
         match bt {
             BoxType::Horizontal => TeXMode::RestrictedHorizontal,
             BoxType::Vertical => TeXMode::InternalVertical,
-            BoxType::InlineMath => TeXMode::InlineMath,
-            BoxType::DisplayMath => TeXMode::DisplayMath
+            //BoxType::InlineMath => TeXMode::InlineMath,
+            //BoxType::DisplayMath => TeXMode::DisplayMath
         }
     }
 }

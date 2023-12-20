@@ -30,7 +30,11 @@ pub enum BoxTarget {
 #[derive(Clone,Debug)]
 pub enum NodeListType<ET:EngineTypes> {
     Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
-    Box(BoxInfo<ET>,SR<ET>,BoxTarget)
+    Box(BoxInfo<ET>,SR<ET>,BoxTarget),
+    Align,
+    AlignRow(SourceReference<<ET::File as File>::SourceRefID>),
+    AlignCell(SourceReference<<ET::File as File>::SourceRefID>),
+    Math{start:SourceReference<<ET::File as File>::SourceRefID>,top_display:bool}
 }
 
 pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
@@ -444,8 +448,6 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
     fn nodetype(&self) -> NodeType { match self.info.tp {
         BoxType::Horizontal => NodeType::HList,
         BoxType::Vertical => NodeType::VList,
-        BoxType::InlineMath => NodeType::Math,
-        BoxType::DisplayMath => NodeType::Math
     }}
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Box(self) }

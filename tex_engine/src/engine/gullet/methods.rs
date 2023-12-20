@@ -7,8 +7,9 @@ use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::file_end;
 use std::str::FromStr;
-use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
-use crate::engine::mouth::pretokenized::TokenList;
+use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
+use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
+use crate::engine::mouth::pretokenized::{TokenList, TokenListIterator};
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::token::{StandardToken, Token};
@@ -16,6 +17,23 @@ use crate::utils::errors::ErrorHandler;
 use crate::tex::input_text::Character;
 use crate::engine::EngineAux;
 use crate::tex::numerics::TeXInt;
+
+pub fn do_align<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,a:&AlignData<ET::Token,ET::Skip>) {
+    let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
+    mouth.requeue(end_align);
+    if !a.omit {
+        mouth.push_exp(TokenListIterator::new(None, a.columns[a.currindex].right.clone()));
+    }
+}
+
+pub fn do_cr<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,a:&AlignData<ET::Token,ET::Skip>) {
+    mouth.insert_every::<ET>(state, PRIMITIVES.everycr);
+    let end = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE_ROW));
+    mouth.requeue(end);
+    if !a.omit {
+        mouth.push_exp(TokenListIterator::new(None, a.columns[a.currindex].right.clone()));
+    }
+}
 
 pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut [Vec<ET::Token>;9],params:TokenList<ET::Token>,long:bool) {
     let mut i = 1usize;
@@ -47,7 +65,7 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                     }
                 }
             },
-            _ => match engine.mouth.get_next_opt(engine.aux,engine.state) {
+            _ => match engine.get_next() {
                 Some(o) if o == *next =>
                     match inner.get(i) {
                         Some(n) => {next = n; i += 1},
@@ -133,13 +151,6 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
 }
 
 pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
-    match engine.gullet.get_align_data() {
-        None => (),
-        Some(d) => {
-            if d.ingroups == 0 { todo!() }
-            d.ingroups -= 1
-        }
-    }
     let mut ingroups = 0;
     while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
         if t.is_end_group()  {
@@ -184,7 +195,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
             }
             ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.the => {
-                crate::commands::utils::do_the(engine,|a,s,g,t| {
+                crate::commands::methods::do_the(engine, |a, s, g, t| {
                     if edef_like && t.is_param() {
                         cont(a,s,g,t.clone());
                     }
@@ -223,11 +234,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     };
     let mut curr_int = <ET::Num as NumSet>::Int::default();
     let one = <ET::Num as NumSet>::Int::from(1);
-    let state = &*engine.state;
-    let endline = state.get_endline_char();
-    let cc = state.get_catcode_scheme();
-    let gullet = &mut *engine.gullet;
-    engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
+    engine.gullet.iterate(engine.mouth,engine.aux,engine.state,move |_,state,gullet,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>
@@ -267,11 +274,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
         for _ in 0..ic { conds.pop();}
         (ic,conds.pop().unwrap().name())
     };
-    let state = &*engine.state;
-    let endline = state.get_endline_char();
-    let cc = state.get_catcode_scheme();
-    let gullet = &mut *engine.gullet;
-    engine.mouth.iterate(engine.aux,cc,endline,move |_,t| {
+    engine.gullet.iterate(engine.mouth,engine.aux,engine.state,move |_,state,gullet,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>

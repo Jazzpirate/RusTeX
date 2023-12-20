@@ -207,7 +207,7 @@ pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 }
 
 pub fn ifcsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let name = super::utils::do_csname(engine);
+    let name = super::methods::do_csname(engine);
     engine.state.get_command(&name).is_some()
 }
 
@@ -326,7 +326,7 @@ pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,o
 }
 
 pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,globally:bool) {
-    let idx = super::utils::read_file_index(engine);
+    let idx = super::methods::read_file_index(engine);
     if !engine.read_keyword("to".as_bytes()) {
         todo!("throw error")
     }
@@ -408,7 +408,7 @@ pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     if i < 0 {
         todo!("throw error")
     }
-    super::utils::do_marks(engine,i as usize)
+    super::methods::do_marks(engine, i as usize)
 }
 
 pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
@@ -416,35 +416,35 @@ pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET
     if i < 0 {
         todo!("throw error")
     }
-    super::utils::get_marks(engine,exp,|d| &mut d.topmarks,i as usize)
+    super::methods::get_marks(engine, exp, |d| &mut d.topmarks, i as usize)
 }
 pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
-    super::utils::get_marks(engine,exp,|d| &mut d.firstmarks,i as usize)
+    super::methods::get_marks(engine, exp, |d| &mut d.firstmarks, i as usize)
 }
 pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
-    super::utils::get_marks(engine,exp,|d| &mut d.botmarks,i as usize)
+    super::methods::get_marks(engine, exp, |d| &mut d.botmarks, i as usize)
 }
 pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
-    super::utils::get_marks(engine,exp,|d| &mut d.splitfirstmarks,i as usize)
+    super::methods::get_marks(engine, exp, |d| &mut d.splitfirstmarks, i as usize)
 }
 pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
-    super::utils::get_marks(engine,exp,|d| &mut d.splitbotmarks,i as usize)
+    super::methods::get_marks(engine, exp, |d| &mut d.splitbotmarks, i as usize)
 }
 
 const PRIMITIVE_INTS:&[&'static str] = &[
