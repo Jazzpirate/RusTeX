@@ -1671,13 +1671,16 @@ pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeX
 }
 
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    if engine.state.get_mode() == TeXMode::Vertical {
+        todo!("throw error")
+    }
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
 
     let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
     loop {
         match ls.last_mut() {
-            Some(TeXNode::Skip(_)) => { ls.pop(); }
+            Some(TeXNode::Skip(_)) => { ls.pop();break }
             Some(n) if n.opaque() => {
                 readd.push(ls.pop().unwrap());
             }
@@ -1690,13 +1693,16 @@ pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 
 }
 pub fn unkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    if engine.state.get_mode() == TeXMode::Vertical {
+        todo!("throw error")
+    }
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
 
     let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
     loop {
         match ls.last_mut() {
-            Some(TeXNode::Kern(_)) => { ls.pop(); }
+            Some(TeXNode::Kern(_)) => { ls.pop();break }
             Some(n) if n.opaque() => {
                 readd.push(ls.pop().unwrap());
             }
@@ -1708,13 +1714,16 @@ pub fn unkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     }
 }
 pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    if engine.state.get_mode() == TeXMode::Vertical {
+        todo!("throw error")
+    }
     let data = engine.stomach.data_mut();
     let ls = data.get_list();
 
     let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
     loop {
         match ls.last_mut() {
-            Some(TeXNode::Penalty(_)) => { ls.pop(); }
+            Some(TeXNode::Penalty(_)) => { ls.pop();break }
             Some(n) if n.opaque() => {
                 readd.push(ls.pop().unwrap());
             }

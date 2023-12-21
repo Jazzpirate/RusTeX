@@ -542,13 +542,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,to:Option<ET::Dim>) {
     engine.expand_until_bgroup(true);
-    engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
     let data = read_align_preamble(engine,inner,between);
     engine.gullet.push_align(data);
-    engine.stomach.data_mut().open_lists.push(NodeList {
-        tp:NodeListType::Align,
-        children:vec!(),
-    });
+    ET::Stomach::open_align(engine,inner,between);
     start_align_row(engine,inner);
 }
 
@@ -651,16 +647,8 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     crate::expand_loop!(engine,
         ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
         ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
-            let children = match engine.stomach.data_mut().open_lists.pop() {
-                Some(NodeList{children,tp:NodeListType::Align}) => children,
-                _ => todo!("throw error")
-            };
             engine.gullet.pop_align();
-            engine.state.pop(engine.aux,&mut engine.mouth);
-            for c in children {
-                ET::Stomach::add_node(engine,c);
-            }
-            return ()
+            return ET::Stomach::close_align(engine)
         }
         ResolvedToken::Tk{code:CommandCode::Space,..} => (),
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}

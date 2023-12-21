@@ -342,6 +342,24 @@ pub trait Stomach {
         }
     }
 
+    fn open_align(engine:&mut EngineReferences<Self::ET>,_inner:BoxType,between:BoxType) {
+        engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
+        engine.stomach.data_mut().open_lists.push(NodeList {
+            tp:NodeListType::Align,
+            children:vec!(),
+        });
+    }
+
+    fn close_align(engine:&mut EngineReferences<Self::ET>) {
+        let children = match engine.stomach.data_mut().open_lists.pop() {
+            Some(NodeList{children,tp:NodeListType::Align}) => children,
+            _ => todo!("throw error")
+        };
+        engine.state.pop(engine.aux,&mut engine.mouth);
+        for c in children {
+            Self::add_node(engine,c);
+        }
+    }
 
     fn add_node(engine:&mut EngineReferences<Self::ET>,node: TeXNode<Self::ET>) {
         let data = engine.stomach.data_mut();

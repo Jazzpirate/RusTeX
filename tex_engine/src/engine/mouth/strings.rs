@@ -97,34 +97,6 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
         self.eof
     }
 
-    /// Convert the [`StringTokenizer`] into an iterator over [`Token`]s for a fixed
-    /// [`ErrorHandler`], [`CategoryCodeScheme`] and endline [`Character`].
-    pub fn to_iter<'a, T:Token<Char = C>, E: ErrorHandler>(&'a mut self, eh:&'a E, handler:&'a mut <T::CS as ControlSequenceName<C>>::Handler, catcodes:&'a CategoryCodeScheme<C>, endline:Option<C>) -> StringTokenizerIterator<'a,T,E,S> {
-        StringTokenizerIterator {
-            tokenizer:self,
-            handler,
-            eh,
-            catcodes,
-            endline
-        }
-    }
-/*
-    /// Like [`to_iter`](Self::to_iter), but throws errors if `\par` is encountered or
-    /// the file ends before the iterator is dropped.
-    pub fn to_iter_no_par<'a, T:Token<Char = C>, E: ErrorHandler>(&'a mut self, eh:&'a E, handler:&'a mut <T::CS as ControlSequenceName>::Handler, catcodes:&'a CategoryCodeScheme<C>, endline:Option<C>, cs_name:T::CS) -> StringTokenizerIteratorNoPar<'a,T, E,S> {
-        StringTokenizerIteratorNoPar {
-            start:(self.line,self.col),
-            tokenizer:self,
-            handler,
-            ec: eh,
-            catcodes,
-            endline,
-            cs_name
-        }
-    }
-
- */
-
     #[inline(always)]
     fn get_char(&mut self) -> Option<C> {
         if self.col >= self.current_line.len() {None} else {
@@ -435,52 +407,3 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
     }
 
 }
-
-/// Iterator over the [`Token`]s in a [`StringTokenizer`].
-pub struct StringTokenizerIterator<'a, T:Token, EC: ErrorHandler,S:TextLineSource<T::Char>> {
-    tokenizer: &'a mut StringTokenizer<T::Char,S>,
-    handler:&'a mut <T::CS as ControlSequenceName<T::Char>>::Handler,
-    eh: &'a EC,
-    catcodes:&'a CategoryCodeScheme<T::Char>,
-    endline:Option<T::Char>
-}
-
-impl<'a, T:Token, EC: ErrorHandler,S:TextLineSource<T::Char>> Iterator for StringTokenizerIterator<'a,T,EC,S> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.tokenizer.get_next::<T,EC>(self.eh, self.handler, self.catcodes, self.endline)
-    }
-}
-
-/*
-/// Iterator over the [`Token`]s in a [`StringTokenizer`] that throws
-/// errors on encountering `\par`, or if input stream is empty.
-pub struct StringTokenizerIteratorNoPar<'a, T:Token, EC: ErrorHandler,S:TextLineSource> {
-    tokenizer: &'a mut StringTokenizer<T::Char,S>,
-    handler:&'a mut <T::CS as ControlSequenceName>::Handler,
-    ec: &'a EC,
-    catcodes:&'a CategoryCodeScheme<T::Char>,
-    endline:Option<T::Char>,
-    cs_name:T::CS,
-    start:(usize,usize)
-}
-impl<'a, T:Token, EC: ErrorHandler,S:TextLineSource> StringTokenizerIteratorNoPar<'a,T,EC,S> {
-    /// Get the next [`Token`] from the [`StringTokenizer`]; throws error if `\par` is encountered
-    /// or the file ends before the iterator is dropped.
-    pub fn get_next(&mut self) -> T {
-        match self.tokenizer.get_next::<T,EC>(self.ec, self.handler, self.catcodes, self.endline) {
-            Some(t) if t.is_par(&self.handler) => self.ec.no_par(self.tokenizer,self.handler.resolve(self.cs_name.clone()),self.start),
-            Some(t) => t,
-            None => self.ec.file_end(self.tokenizer,self.handler.resolve(self.cs_name.clone()),self.start)
-        }
-    }
-}
-impl<'a, T:Token, EC: ErrorHandler,S:TextLineSource> Iterator for StringTokenizerIteratorNoPar<'a,T,EC,S> {
-    type Item = T;
-    #[inline(always)]
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.get_next())
-    }
-}
-
- */
