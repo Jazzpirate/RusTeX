@@ -151,7 +151,7 @@ fn register_command(e: &mut DefaultEngine<Types>,globally:bool,name:&'static str
     use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
     let e = e.get_engine_refs();
     let name = e.aux.memory.cs_interner_mut().new(name);
-    let mut cmd = tex_engine::commands::utils::make_macro::<Types,_,_>(
+    let mut cmd = tex_engine::commands::methods::make_macro::<Types,_,_>(
         e.aux.memory.cs_interner_mut(),
         &AT_LETTER_SCHEME,sig,exp);
     if protect { cmd.protected = true }

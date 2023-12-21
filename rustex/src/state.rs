@@ -65,6 +65,31 @@ impl State for RusTeXState {
     }
 
     #[inline(always)]
+    fn get_textfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+        self.0.get_textfont(i)
+    }
+    #[inline(always)]
+    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+        self.0.set_textfont(aux,idx,fnt,globally)
+    }
+    #[inline(always)]
+    fn get_scriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+        self.0.get_scriptfont(i)
+    }
+    #[inline(always)]
+    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+        self.0.set_scriptfont(aux,idx,fnt,globally)
+    }
+    #[inline(always)]
+    fn get_scriptscriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+        self.0.get_scriptscriptfont(i)
+    }
+    #[inline(always)]
+    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+        self.0.set_scriptscriptfont(aux,idx,fnt,globally)
+    }
+
+    #[inline(always)]
     fn set_current_font(&mut self, aux: &mut EngineAux<Types>, fnt: Font, globally: bool) {
         self.0.set_current_font(aux,fnt,globally)
     }

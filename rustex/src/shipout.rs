@@ -16,7 +16,7 @@ use tex_engine::engine::state::State;
 use crate::html::{dim_to_string, HTMLChild, HTMLNode, Tag};
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_tfm::glyphs::Glyph;
-use crate::nodes::RusTeXNode;
+use crate::nodes::{LineSkip, RusTeXNode};
 
 pub(crate) struct NodeIter {
     curr:IntoIter<TeXNode<Types>>,
@@ -56,6 +56,7 @@ pub(crate) struct ShipoutState {
     pub(crate) widths: Vec<Dim32>,
     pub(crate) color:PDFColor,
     pub(crate) fontlinks:BTreeSet<String>,
+    pub(crate) lineskip:LineSkip,
     pub(crate) in_content:bool
 }
 impl ShipoutState {
@@ -90,6 +91,10 @@ impl ShipoutState {
     #[inline(always)]
     fn push_space(&mut self) {
         self.nodes.last_mut().unwrap().push_space()
+    }
+    #[inline(always)]
+    fn push_escaped_space(&mut self) {
+        self.nodes.last_mut().unwrap().children.push(HTMLChild::EscapedSpace)
     }
     fn curr_width(&self) -> Dim32 {
         *self.widths.last().unwrap()
@@ -126,6 +131,7 @@ pub(crate) fn shipout_paginated(engine:Refs, n: TeXNode<Types>) {
                 Some(HTMLChild::Node(page)) if !page.styles.contains_key("font-family") && !page.styles.contains_key("font-size") => {
                     let pagewidth = engine.state.get_primitive_dim(PRIMITIVES.pdfpagewidth);
                     page.style("max-width",dim_to_string(pagewidth));
+                    let font = state.fonts.first().unwrap();
 
                     let children = std::mem::take(&mut page.children);
                     let mut inner = HTMLNode::new(crate::html::labels::INNER_PAGE, true);
@@ -137,9 +143,9 @@ pub(crate) fn shipout_paginated(engine:Refs, n: TeXNode<Types>) {
                     let margin = (pagewidth.0 as f64 - (textwidth.0 as f64)) / (2.0 * pagewidth.0 as f64) * 100.0;
                     inner.style("padding-left",format!("{:.2}%",margin));
                     inner.style("padding-right",format!("{:.2}%",margin));
+                    inner.style("line-height",format!("{:.2}",state.lineskip.factor(font) / (font.get_at().0 as f64)));
                     page.children.push(HTMLChild::Node(inner));
 
-                    let font = state.fonts.first().unwrap();
                     page.style("font-size",dim_to_string(font.get_at()));
                     let store = &mut engine.fontsystem.glyphmaps;
                     let fi = store.get_info(font.filename());
@@ -183,16 +189,42 @@ pub(crate) fn shipout(engine:Refs, n: TeXNode<Types>) {
 pub(crate) const ZERO: Dim32 = Dim32(0);
 pub(crate) const ZERO_SKIP: Skip32<Dim32> = Skip32 {base:ZERO,stretch:None,shrink:None};
 
+fn merge_skip(sk1:&mut Skip32<Dim32>,sk2:Skip32<Dim32>) {
+    let base = sk1.base + sk2.base;
+    let stretch = match (sk1.stretch,sk2.stretch) {
+        (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => None,
+        (Some(s1),None|Some(Fill::pt(_))) => Some(s1),
+        (None|Some(Fill::pt(_)),Some(s2)) => Some(s2),
+        (Some(Fill::fil(a)),Some(Fill::fil(b))) => Some(Fill::fil(a+b)),
+        (Some(Fill::fill(a)),Some(Fill::fill(b))) => Some(Fill::fill(a+b)),
+        (Some(Fill::fill(a)),_)|(_,Some(Fill::fill(a))) => Some(Fill::fill(a)),
+        (Some(Fill::fil(a)),_)|(_,Some(Fill::fil(a))) => Some(Fill::fil(a))
+    };
+    *sk1 = Skip32 { base,stretch,shrink:None };
+}
+fn merge_skip_node(sk:&mut Skip32<Dim32>,n:SkipNode<Types>) {
+    match n {
+        SkipNode::HSkip(sk2) | SkipNode::VSkip(sk2) => merge_skip(sk,sk2),
+        SkipNode::HFil | SkipNode::VFil => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fil(1)),shrink:None }),
+        SkipNode::HFill | SkipNode::VFill => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
+        SkipNode::Hss | SkipNode::Vss => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
+        SkipNode::Space | SkipNode::HFilneg | SkipNode::VFilneg => (),
+    }
+}
 
 fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, top:bool) {
     let mut currskip = ZERO_SKIP;
     while let Some(c) = children.next() {
         match c {
             TeXNode::Kern(kn) => { currskip.base = currskip.base + kn.dim(); }
-            TeXNode::Skip(sk) => { currskip = currskip + sk.skip() }
-            TeXNode::Custom(RusTeXNode::ParagraphBegin(spec)) => {
+            TeXNode::Skip(sk) => { merge_skip_node(&mut currskip,sk) }
+            TeXNode::Custom(RusTeXNode::ParagraphBegin{specs,start,end,lineskip}) => {
                 nodes::vskip(state,std::mem::take(&mut currskip));
-                nodes::do_paragraph(engine,state,children,spec);
+                nodes::do_paragraph(engine,state,children,specs,start,end,lineskip);
+            }
+            TeXNode::Custom(RusTeXNode::HAlignBegin) => {
+                nodes::vskip(state,std::mem::take(&mut currskip));
+                nodes::do_halign(engine,state,children);
             }
             n => common_list(state,engine,n,|state,engine,c| {
                     nodes::vskip(state,std::mem::take(&mut currskip));
@@ -204,17 +236,15 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, top:bo
     nodes::vskip(state,currskip);
 }
 
-fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, inpar:bool) {
+fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, inpar:bool,escape_space:bool) {
     // todo merge hskips and such, annotations
     let mut currskip = ZERO_SKIP;
     while let Some(c) = children.next() {
         match c {
             TeXNode::Kern(kn) => { currskip.base = currskip.base + kn.dim(); }
-            TeXNode::Skip(SkipNode::Space) if inpar => state.push_space(),
-            TeXNode::Skip(SkipNode::Space) => {
-                todo!()
-            }
-            TeXNode::Skip(sk) => { currskip = currskip + sk.skip() }
+            TeXNode::Skip(SkipNode::Space) if !escape_space => state.push_space(),
+            TeXNode::Skip(SkipNode::Space) => state.push_escaped_space(),
+            TeXNode::Skip(sk) => { merge_skip_node(&mut currskip,sk) }
             c => common_list(state,engine,c,|state,engine,c| {
                 nodes::hskip(state,std::mem::take(&mut currskip));
                 do_h(engine,state,c,inpar)
@@ -287,6 +317,10 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
             kind:"vbox",..
         },.. }) => nodes::do_vbox(bx,state,engine,false,false),
         TeXNode::Box(bx@ TeXBox { info: BoxInfo {
+            tp:BoxType::Vertical,
+            kind:"vcenter",..
+        },.. }) => nodes::do_vcenter(bx,state,engine),
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo {
             tp:BoxType::Horizontal,
             kind:"hbox",..
         },.. }) => nodes::do_hbox(bx,state,engine,false,!par),
@@ -310,6 +344,17 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
             let SimpleNode::VRule {start,end,..} = v else {unreachable!()};
             nodes::vrule(start,end,width,height,depth,state,par)
         }
+        TeXNode::Math(mut mg) if mg.children.iter().any(|n| matches!(n,
+            TeXNode::Box(TeXBox { info: BoxInfo {kind:"vcenter",..},.. })
+        )) && !mg.display => {
+            if mg.children.len() == 1 {
+                if let Some(TeXNode::Box(bx)) = mg.children.pop() {
+                    nodes::do_vcenter(bx, state, engine)
+                } else { unreachable!() }
+            } else {
+                do_hlist(engine, state, &mut mg.children.into(), par,!par)
+            }
+        },
         _ => todo!("{:?}",n)
     }
 }

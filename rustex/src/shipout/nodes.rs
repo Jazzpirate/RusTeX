@@ -10,7 +10,7 @@ use crate::shipout::{do_hlist, do_vlist, get_box_dims, NodeIter, nodes, ShipoutS
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::types::BoxType;
 use crate::fonts::FontStore;
-use crate::nodes::RusTeXNode;
+use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::engine::stomach::ParLineSpec;
 
@@ -153,11 +153,50 @@ fn vbox_inner(has_wd:bool, to:Option<Dim32>, state:&mut ShipoutState, children:V
     })
 }
 
+pub(crate) fn do_vcenter(mut bx:Bx, state:&mut ShipoutState, engine:Refs) {
+    let mut node = HTMLNode::new(VCENTER_CONTAINER, true);
+    if let Some(ht) = bx.info.assigned_height {
+        if ht < ZERO {
+            node.style_str("height","0");
+            let dp = if let Some(d) = std::mem::take(&mut bx.info.assigned_depth) {
+                ht + d
+            } else { ht };
+            node.style("margin-bottom",dim_to_string(dp));
+        } else {
+            node.style("height",dim_to_string(ht));
+        }
+    }
+    if let Some(dp) = bx.info.assigned_depth {
+        node.style("margin-bottom",dim_to_string(dp));
+    }
+    let do_wd = if let Some(wd) = bx.info.assigned_width {
+        node.width(wd);
+        true
+    } else if bx.width() == ZERO {
+        node.width(ZERO);
+        true
+    } else { false };
+    state.do_in(node,|state| {
+        let mut node = HTMLNode::new(VCENTER_INNER, true);
+        if do_wd {
+            node.style_str("width", "100%");
+        }
+        state.do_in(node,|state| {
+            do_vlist(engine,state,&mut bx.children.into(),false);
+        },|_,node| if node.label == VCENTER_INNER {Some(node)} else {
+            todo!()
+        })
+    },|_,node| if node.label == VCENTER_CONTAINER {Some(node)} else {
+        todo!()
+    })
+
+}
+
 
 pub(crate) fn do_hbox(bx:Bx, state:&mut ShipoutState, engine:Refs, top:bool, in_h:bool) {
     let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.width(),top);
     if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && in_h {
-        return do_hlist(engine,state,&mut bx.children.into(),false);
+        return do_hlist(engine,state,&mut bx.children.into(),false,false);
     }
     if wd.is_none() && ht.is_none() && bottom.is_none() {
         return hbox_inner(to,state,bx.children,bx.start,bx.end,engine);
@@ -178,23 +217,23 @@ fn hbox_inner(to:Option<Dim32>, state:&mut ShipoutState, children:Vec<TeXNode<Ty
     let mut node = HTMLNode::new(HBOX_INNER, false);
     node.sourceref(start,end);
     if let Some(wd) = to { node.width(wd); }
-    match a {
+    let esc = match a {
         Alignment::L => {
             node.style_str("justify-content","start");
-            node.class("rustex-hbox-no-space");
+            false
         },
         Alignment::R => {
             node.style_str("justify-content","end");
-            node.class("rustex-hbox-no-space");
+            false
         },
         Alignment::C => {
             node.style_str("justify-content","center");
-            node.class("rustex-hbox-no-space");
+            false
         },
-        _ => ()
-    }
+        _ => true
+    };
     state.do_in(node,|state| {
-        do_hlist(engine,state,&mut children.into(),false);
+        do_hlist(engine,state,&mut children.into(),false,esc);
     },|_,node| if node.label == HBOX_INNER {Some(node)} else {
         todo!()
     })
@@ -303,7 +342,6 @@ pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
 pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     if skip == ZERO_SKIP { return }
     let mut node = HTMLNode::new(VSKIP, false);
-    node.class("rustex-vskip");
     match skip.stretch {
         Some(Fill::fil(_) | Fill::fill(_)) => node.style_str("margin-top","auto"),
         _ => ()
@@ -338,9 +376,13 @@ pub(crate) fn do_color(state:&mut ShipoutState,engine:Refs, color:ColorStackActi
     }
 }
 
-pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut NodeIter,mut spec:Vec<ParLineSpec<Types>>) {
+pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut NodeIter,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip) {
     let mut children = paragraph_list(children);
+    if state.lineskip == LineSkip::default() {
+        state.lineskip = lineskip;
+    }
     let mut node = HTMLNode::new(PARAGRAPH, false);
+    node.sourceref(start,end);
     let spec = spec.pop().unwrap();
     if spec.leftskip.base != ZERO {
         node.style("margin-left",dim_to_string(spec.leftskip.base));
@@ -361,7 +403,7 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut No
 
     // TODO: alignment
     state.do_in(node,|state| {
-        do_hlist(engine,state,&mut children.into(),true);
+        do_hlist(engine,state,&mut children.into(),true,false);
     },|_,node| if node.label == PARAGRAPH {Some(node)} else {
         todo!()
     })
@@ -386,6 +428,64 @@ pub(crate) fn paragraph_list(children:&mut NodeIter) -> Vec<TeXNode<Types>> {
     }
     if !success { todo!("ERROR!") }
     ret
+}
+
+pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut NodeIter) {
+    let mut num_cols= 0;
+    let mut rows = Vec::new();
+    while let Some(row) = children.next() {
+        match row {
+            TeXNode::Custom(RusTeXNode::HAlignEnd) => break,
+            TeXNode::Box(bx@ TeXBox { info: BoxInfo {
+                tp:BoxType::Horizontal,
+                kind:"alignrow",..
+            },.. }) => {
+                num_cols = num_cols.max(bx.children.len());
+                rows.push(TeXNode::Box(bx));
+            }
+            _ => todo!()
+        }
+    }
+    let mut node = HTMLNode::new(HALIGN, true);
+    node.style("grid-template-columns",format!("repeat({},1fr)",num_cols));
+    state.do_in(node,|state| {
+        for row in rows {
+            match row {
+                TeXNode::Box(bx@ TeXBox { info: BoxInfo {
+                    tp:BoxType::Horizontal,
+                    kind:"alignrow",..
+                },.. }) => {
+                    let mut cols = 0;
+                    let node = HTMLNode::new(HALIGN_ROW, true);
+                    state.do_in(node,|state| {
+                        for c in bx.children {
+                            cols += 1;
+                            match c {
+                                TeXNode::Box(bx@ TeXBox { info: BoxInfo {
+                                    tp:BoxType::Horizontal,
+                                    kind:"aligncell",..
+                                },.. }) => {
+                                    let node = HTMLNode::new(HALIGN_CELL, true);
+                                    state.do_in(node,|state| {
+                                        // TODO do moar smart stuff
+                                        do_hbox(bx,state,engine,false,false)
+                                    },|_,node| if node.label == HALIGN_CELL {Some(node)} else {
+                                        todo!()
+                                    })
+                                }
+                                _ => todo!()
+                            }
+                        }
+                    },|_,node| if node.label == HALIGN_ROW {Some(node)} else {
+                        todo!()
+                    })
+                }
+                _ => todo!()
+            }
+        }
+    },|_,node| if node.label == HALIGN {Some(node)} else {
+        todo!()
+    })
 }
 
 pub(crate) fn close_font(state:&mut ShipoutState) {

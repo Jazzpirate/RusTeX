@@ -28,6 +28,9 @@ pub enum Tag {
     Span,
     Section,
     Article,
+    Table,
+    Tr,
+    Td,
     A,
     B,
     I,
@@ -67,13 +70,19 @@ pub(crate) mod labels {
     pub(crate) const FONT_CHANGE: Label = Label { id: 16, cls: None, tag: Tag::None };
     pub(crate) const PAGE: Label = Label { id: 17, cls: Some("rustex-page"), tag: Tag::Article };
     pub(crate) const INNER_PAGE: Label = Label { id: 18, cls: Some("rustex-body"), tag: Tag::Section };
+    pub(crate) const VCENTER_CONTAINER: Label = Label { id: 19, cls: Some("rustex-vcenter-container"), tag: Tag::Div };
+    pub(crate) const VCENTER_INNER: Label = Label { id: 20, cls: Some("rustex-vcenter"), tag: Tag::Div };
+    pub(crate) const HALIGN: Label = Label { id: 21, cls: Some("rustex-halign"), tag: Tag::Table };
+    pub(crate) const HALIGN_ROW: Label = Label { id: 21, cls: Some("rustex-halign-row"), tag: Tag::Tr };
+    pub(crate) const HALIGN_CELL: Label = Label { id: 21, cls: Some("rustex-halign-cell"), tag: Tag::Td };
+    pub(crate) const SPACE: Label = Label { id: 22, cls: Some("rustex-space-in-hbox"), tag: Tag::Span };
 }
 
 #[derive(Debug)]
 pub enum HTMLChild {
     Node(HTMLNode),
     Text(String),
-    Glyph(Glyph),Space
+    Glyph(Glyph),Space,EscapedSpace
 }
 
 #[derive(Debug)]
@@ -188,6 +197,9 @@ impl HTMLNode {
             Tag::A => f.write_str("<a")?,
             Tag::B => f.write_str("<b")?,
             Tag::I => f.write_str("<i")?,
+            Tag::Table => f.write_str("<table")?,
+            Tag::Tr => f.write_str("<tr")?,
+            Tag::Td => f.write_str("<td")?,
             Tag::None => f.write_str("<span")?
         }
         if !self.classes.is_empty() {
@@ -237,6 +249,7 @@ impl HTMLNode {
                 HTMLChild::Text(s) => f.write_str(&s)?,
                 HTMLChild::Glyph(g) => write!(f,"{}",g)?,
                 HTMLChild::Space => f.write_char(' ')?,
+                HTMLChild::EscapedSpace => f.write_str("<span class=\"rustex-space-in-hbox\">&#160;</span>")?
             }
         }
         if self.allow_newline {
@@ -259,6 +272,9 @@ impl HTMLNode {
             Tag::A => f.write_str("</a>")?,
             Tag::B => f.write_str("</b>")?,
             Tag::I => f.write_str("</i>")?,
+            Tag::Table => f.write_str("</table>")?,
+            Tag::Tr => f.write_str("</tr>")?,
+            Tag::Td => f.write_str("</td>")?,
             Tag::None => f.write_str("</span>")?
         }
         Ok(())

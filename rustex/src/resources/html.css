@@ -229,14 +229,20 @@ tbody {display:table-row-group}
     grid-auto-rows: auto;
     align-content: baseline;
 }
-.rustex-cell {
+.rustex-halign > tbody {
+    display:contents;
+}
+.rustex-halign-row {
+    display:contents;
+}
+.rustex-halign-cell {
     display:inline-flex;
     white-space: pre;
     align-items: baseline;
     width: 100%;
     height: 100%;
 }
-.rustex-noalign {
+.rustex-halign-noalign {
     display:inline-flex;
     flex-direction: column;
     overflow: visible;
@@ -245,7 +251,7 @@ tbody {display:table-row-group}
     flex-wrap: nowrap;
     justify-content: flex-start;
 }
-.rustex-cell > .rustex-space-in-hbox, .rustex-cell > span > .rustex-space-in-hbox, .rustex-cell > span > span > .rustex-space-in-hbox {
+.rustex-halign-cell > .rustex-space-in-hbox, .rustex-halign-cell > span > .rustex-space-in-hbox, .rustex-halign-cell > span > span > .rustex-space-in-hbox {
     margin:0;
 }
 
