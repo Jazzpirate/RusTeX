@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode, MathGroup};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::HMap;
@@ -90,9 +90,9 @@ pub trait Stomach {
     fn do_char(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,char:Ch<Self>,code:CommandCode) {
         match code {
             CommandCode::EOF => (),
-            CommandCode::Space if engine.state.get_mode().is_vertical() => (),
-            CommandCode::Space =>
+            CommandCode::Space if engine.state.get_mode().is_horizontal() =>
                 Self::add_node(engine,SkipNode::Space.as_node()),
+            CommandCode::Space => (),
             CommandCode::BeginGroup if engine.state.get_mode().is_math() => todo!(),
             CommandCode::EndGroup if engine.state.get_mode().is_math() => todo!(),
             CommandCode::BeginGroup =>
@@ -117,7 +117,9 @@ pub trait Stomach {
                         _ => todo!("throw error")
                     }}
                     engine.state.pop(engine.aux,engine.mouth);
-                    todo!("math node")
+                    Self::add_node(engine,TeXNode::Math(MathGroup {
+                        children,display:top_display,start,end:engine.mouth.current_sourceref()
+                    }));
                 }
                 _ => todo!("error")
             }
@@ -784,7 +786,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 }
                 Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert | TeXNode::VAdjust)) =>
                     reinserts.push(n),
-                Some(TeXNode::Math) => todo!(),
+                Some(TeXNode::Math(MathGroup {display:true,..})) => todo!(),
                 Some(TeXNode::Penalty(i)) if i <= -10000 => {
                     next_line!(true); // TODO mark somehow
                     continue 'A
