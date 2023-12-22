@@ -173,6 +173,7 @@ pub struct PrimitiveInterner {
     pub baselineskip:PrimitiveIdentifier,
     pub lineskip:PrimitiveIdentifier,
     pub lineskiplimit:PrimitiveIdentifier,
+    pub parindent:PrimitiveIdentifier
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -236,6 +237,7 @@ impl PrimitiveInterner {
         let baselineskip = PrimitiveIdentifier(interner.get_or_intern_static("baselineskip"));
         let lineskip = PrimitiveIdentifier(interner.get_or_intern_static("lineskip"));
         let lineskiplimit = PrimitiveIdentifier(interner.get_or_intern_static("lineskiplimit"));
+        let parindent = PrimitiveIdentifier(interner.get_or_intern_static("parindent"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
@@ -244,7 +246,7 @@ impl PrimitiveInterner {
             everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
             everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
             pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
-            noalign,omit,baselineskip,lineskip,lineskiplimit
+            noalign,omit,baselineskip,lineskip,lineskiplimit,parindent
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.

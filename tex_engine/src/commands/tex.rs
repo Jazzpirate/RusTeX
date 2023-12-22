@@ -388,7 +388,7 @@ pub fn dp_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
     let idx = super::methods::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
-        b.info.assigned_depth = Some(dim)
+        b.assign_depth(dim)
     }
 }
 
@@ -403,7 +403,7 @@ pub fn ht_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
     let idx = super::methods::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
-        b.info.assigned_height = Some(dim)
+        b.assign_height(dim)
     }
 }
 
@@ -418,7 +418,7 @@ pub fn wd_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
     let idx = super::methods::read_register(engine);
     let dim = engine.read_dim(true);
     if let Some(b) = engine.state.get_box_register_mut(idx) {
-        b.info.assigned_width = Some(dim)
+        b.assign_width(dim)
     }
 }
 
@@ -766,7 +766,7 @@ pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,scope
         let bx = if copy {engine.state.get_box_register(idx).cloned()} else {engine.state.take_box_register(idx)};
         match bx {
             None => (),
-            Some(TeXBox {info:BoxInfo{tp:btp,..},children,..}) if btp == tp => {
+            Some(TeXBox {info,children,..}) if info.tp() == tp => {
                 for c in children {
                     ET::Stomach::add_node(engine,c)
                 }
@@ -791,9 +791,7 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Horizontal, PRIMITIVES.everyhbox);
-    Err(BoxInfo {
-        tp: BoxType::Horizontal,
-        kind: "hbox",
+    Err(BoxInfo::HBox {
         scaled,
         assigned_width: None,
         assigned_height: None,
@@ -804,9 +802,7 @@ pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    Err(BoxInfo {
-        tp: BoxType::Vertical,
-        kind: "vbox",
+    Err(BoxInfo::VBox {
         scaled,
         assigned_width: None,
         assigned_height: None,
@@ -820,16 +816,11 @@ pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) ->
         TeXMode::DisplayMath | TeXMode::InlineMath => (),// TODO check that the current mathbox is (basically) empty
         o => todo!("vcenter throw error; mode: {:?}",o)
     }
-    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    Err(BoxInfo {
-        tp: BoxType::Vertical,
-        kind: "vcenter",
-        scaled,
-        assigned_width: None,
-        assigned_height: None,
-        assigned_depth: None,
-        moved_left:None,raised:None
-    })
+    engine.expand_until_bgroup(true);
+    //let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
+    engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
+    engine.mouth.insert_every::<ET>(&engine.state,PRIMITIVES.everyvbox);
+    Err(BoxInfo::VCenter)
 }
 
 pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -978,7 +969,7 @@ pub fn ifvmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
 pub fn ifvbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
     let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
-        Some(TeXBox {info:BoxInfo{tp:BoxType::Vertical,..},..}) => true,
+        Some(TeXBox {info,..}) => info.tp() == BoxType::Vertical,
         _ => false
     }
 }
@@ -989,7 +980,7 @@ pub fn ifvoid<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 pub fn ifhbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
     let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
-        Some(TeXBox {info:BoxInfo{tp:BoxType::Horizontal,..},..}) => true,
+        Some(TeXBox {info,..}) => info.tp() == BoxType::Horizontal,
         _ => false
     }
 }
@@ -1026,6 +1017,7 @@ pub fn immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
             crate::do_cmd!(engine,token,c)
     );
 }
+
 
 pub fn input<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let mut filename = engine.aux.memory.get_string();
@@ -1286,7 +1278,11 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 
 pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,tk) {
-        // TODO maybe
+        let mut ls = &mut engine.stomach.data_mut().open_lists.last_mut().unwrap().children;
+        match ls.last_mut() {
+            Some(TeXNode::Box(TeXBox{info:BoxInfo::ParIndent {..},..})) => {ls.pop();}
+            _ => ()
+        }
     }
 }
 
@@ -1378,12 +1374,12 @@ pub fn moveright<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
         let dim = engine.read_dim(false);
         match engine.read_box(false) {
             Ok(Some(mut bx)) => {
-                bx.info.moved_left = Some(-dim);
+                bx.info.move_left(-dim);
                 ET::Stomach::add_node(engine,bx.as_node());
             }
             Ok(None) => (),
             Err(mut bi) => {
-                bi.moved_left = Some(-dim);
+                bi.move_left(-dim);
                 engine.stomach.data_mut().open_lists.push(
                     NodeList {
                         children:vec!(),
@@ -1400,12 +1396,12 @@ pub fn moveleft<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
         let dim = engine.read_dim(false);
         match engine.read_box(false) {
             Ok(Some(mut bx)) => {
-                bx.info.moved_left = Some(dim);
+                bx.info.move_left(dim);
                 ET::Stomach::add_node(engine,bx.as_node());
             }
             Ok(None) => (),
             Err(mut bi) => {
-                bi.moved_left = Some(dim);
+                bi.move_left(dim);
                 engine.stomach.data_mut().open_lists.push(
                     NodeList {
                         children:vec!(),
@@ -1422,12 +1418,12 @@ pub fn raise<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
         let dim = engine.read_dim(false);
         match engine.read_box(false) {
             Ok(Some(mut bx)) => {
-                bx.info.raised = Some(dim);
+                bx.info.raise(dim);
                 ET::Stomach::add_node(engine,bx.as_node());
             }
             Ok(None) => (),
             Err(mut bi) => {
-                bi.raised = Some(dim);
+                bi.raise(dim);
                 engine.stomach.data_mut().open_lists.push(
                     NodeList {
                         children:vec!(),
@@ -1444,12 +1440,12 @@ pub fn lower<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
         let dim = engine.read_dim(false);
         match engine.read_box(false) {
             Ok(Some(mut bx)) => {
-                bx.info.raised = Some(-dim);
+                bx.info.raise(-dim);
                 ET::Stomach::add_node(engine,bx.as_node());
             }
             Ok(None) => (),
             Err(mut bi) => {
-                bi.raised = Some(-dim);
+                bi.raise(-dim);
                 engine.stomach.data_mut().open_lists.push(
                     NodeList {
                         children:vec!(),
@@ -1689,6 +1685,11 @@ pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeX
     SkipNode::Hss.as_node()
 }
 
+pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    let dim = engine.state.get_primitive_dim(PRIMITIVES.parindent);
+    TeXBox {children:vec!(),info:BoxInfo::ParIndent(dim),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()}.as_node()
+}
+
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     if engine.state.get_mode() == TeXMode::Vertical {
         todo!("throw error")
@@ -1819,11 +1820,9 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
 
 pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let idx = super::methods::read_register(engine);
-    let (kind,ls,wd,start,end) = match engine.state.get_box_register_mut(idx) {
-        Some(TeXBox{info:BoxInfo{tp:BoxType::Vertical,kind,assigned_width,assigned_depth,assigned_height,..},children,start,end}) => {
-            *assigned_depth = None;
-            *assigned_height = None;
-            (*kind, std::mem::take(children), *assigned_width,*start,*end)
+    let (mut info,ls,start,end) = match engine.state.get_box_register_mut(idx) {
+        Some(TeXBox{info,children,start,end}) if info.tp() == BoxType::Vertical => {
+            (info.clone_for_split(), std::mem::take(children),*start,*end)
         }
         _ => todo!("throw error")
     };
@@ -1831,18 +1830,17 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
         todo!("throw error")
     }
     let target = engine.read_dim(false);
+    match &mut info {
+        BoxInfo::VBox {scaled,..} => {
+            *scaled = ToOrSpread::To(target);
+        }
+        BoxInfo::VTop {scaled,..} => {
+            *scaled = ToOrSpread::To(target);
+        }
+        _ => unreachable!()
+    }
     let mut ret = TeXBox{
-        children:vec!(),
-        info:BoxInfo {
-            tp:BoxType::Vertical,
-            kind,
-            scaled:ToOrSpread::To(target),
-            assigned_width:wd,
-            assigned_height: None,
-            assigned_depth: None,
-            moved_left:None,raised:None
-        },
-        start, end
+        children:vec!(), info, start, end
     };
     let SplitResult {first,rest,..} = ET::Stomach::split_vertical(engine,ls,target);
     ret.children = first;
@@ -2274,13 +2272,14 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_node(engine,"hfill",NodeCommandScope::SwitchesToHorizontal,hfill);
     register_node(engine,"hfilneg",NodeCommandScope::SwitchesToHorizontal,hfilneg);
     register_node(engine,"hss",NodeCommandScope::SwitchesToHorizontal,hss);
+    register_node(engine,"indent",NodeCommandScope::SwitchesToHorizontal,indent);
     register_node(engine," ",NodeCommandScope::SwitchesToHorizontal,char_space);
 
     cmstodos!(engine,
         mathclose,mathbin,mathord,mathop,mathrel,mathopen,
         mathpunct,mathinner,mathaccent,delimiter,mathchar,
         mkern,mskip,
-        indent,insert,leaders,cleaders,xleaders,left,right,
+        insert,leaders,cleaders,xleaders,left,right,
         vtop,discretionary,displaylimits,end,
         mathchoice,noalign,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,

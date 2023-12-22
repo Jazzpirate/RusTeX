@@ -70,7 +70,7 @@ pub trait Stomach {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(ls) => match ls.tp {
                 NodeListType::Paragraph(_) => { unreachable!() }
-                NodeListType::Box(bi,start,reg) if bi.tp == bt => {
+                NodeListType::Box(bi,start,reg) if bi.tp() == bt => {
                     engine.state.pop(engine.aux,engine.mouth);
                     let bx = TeXBox {
                         children:ls.children,info:bi,start,end:engine.mouth.current_sourceref(),
@@ -416,7 +416,7 @@ pub trait Stomach {
     fn add_node(engine:&mut EngineReferences<Self::ET>,node: TeXNode<Self::ET>) {
         let data = engine.stomach.data_mut();
         match data.open_lists.last_mut() {
-            Some(NodeList{tp:NodeListType::Box(BoxInfo{tp:BoxType::Vertical,..},..),children}) => {
+            Some(NodeList{tp:NodeListType::Box(bi,..),children}) if bi.tp() == BoxType::Vertical => {
                 match node {
                     TeXNode::Simple(SimpleNode::VRule {..}) =>
                         data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000),
@@ -496,15 +496,7 @@ pub trait Stomach {
 
         let bx = TeXBox {
             children:first,
-            info:BoxInfo {
-                tp:BoxType::Vertical,
-                kind: "output",
-                scaled:ToOrSpread::None,
-                assigned_width: None,
-                assigned_height: None,
-                assigned_depth: None,
-                moved_left: None,raised:None
-            },
+            info:BoxInfo::Output,
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
         };
@@ -550,11 +542,15 @@ pub trait Stomach {
         engine.state.set_mode(TeXMode::Horizontal);
         match engine.resolve(token) {
             ResolvedToken::Cmd{cmd:Some(Command::Node(u)),..}
-                if u.name == PRIMITIVES.indent => todo!(),
+                if u.name == PRIMITIVES.indent => {
+                Self::add_node(engine,TeXBox {children:vec!(),info:BoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}.as_node())
+            },
             ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
                 if u.name == PRIMITIVES.noindent => (),
-            ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} =>
-                engine.mouth.requeue(token),
+            ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} => {
+                engine.mouth.requeue(token);
+                Self::add_node(engine,TeXBox {children:vec!(),info:BoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}.as_node())
+            }
         }
         engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.everypar)
     }
@@ -583,26 +579,11 @@ pub trait Stomach {
 
     fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<TeXNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
-        let ret = split_paragraph_roughly(engine,specs,children);
+        let ret = split_paragraph_roughly(engine,specs,children,sourceref);
         for line in ret {
             match line {
                 ParLine::Adjust(n) => Self::add_node(engine,n),
-                ParLine::Line{contents,..} => Self::add_node(engine,
-                  TeXBox {
-                      children:contents,
-                      info:BoxInfo {
-                          tp:BoxType::Horizontal,
-                          kind: "parline",
-                          scaled:ToOrSpread::None,
-                          assigned_width: None,
-                          assigned_height: None,
-                          assigned_depth: None,
-                          moved_left: None,raised:None
-                      },
-                      start:sourceref,
-                      end:engine.mouth.current_sourceref(),
-                  }.as_node()
-                )
+                ParLine::Line(bx) => Self::add_node(engine,bx.as_node())
             }
         }
     }
@@ -819,16 +800,18 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
 }
 
 pub enum ParLine<ET:EngineTypes> {
-    Line{contents:Vec<TeXNode<ET>>, broken_early:bool },
+    Line(TeXBox<ET>),//{contents:Vec<TeXNode<ET>>, broken_early:bool },
     Adjust(TeXNode<ET>)
 }
 
-pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>) -> Vec<ParLine<ET>> {
+pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>,start:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
     let mut ret : Vec<ParLine<ET>> = Vec::new();
     let mut hgoals = specs.into_iter();
     let mut nodes = children.into_iter();
     let mut line_spec = hgoals.next().unwrap();
     let mut target = line_spec.target;
+    let mut currstart = start;
+    let mut currend = currstart.clone();
     'A:loop {
         let mut line = vec!();
         let mut reinserts = vec!();
@@ -836,7 +819,9 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
         macro_rules! next_line {
             ($b:literal) => {
                 if !line.is_empty() {
-                    ret.push(ParLine::Line{contents:line,broken_early:$b});
+                    let start = currstart.clone();
+                    currstart = currend.clone();
+                    ret.push(ParLine::Line(TeXBox {children:line,start,end:currend.clone(),info:BoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:$b}}));
                 }
                 for c in reinserts {
                     ret.push(ParLine::Adjust(c));
@@ -853,7 +838,9 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
             match nodes.next() {
                 None => {
                     if !line.is_empty() {
-                        ret.push(ParLine::Line{contents:line,broken_early:false});
+                        let start = currstart.clone();
+                        currstart = currend.clone();
+                        ret.push(ParLine::Line(TeXBox {children:line,start,end:currend.clone(),info:BoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:false}}));
                     }
                     for c in reinserts {
                         ret.push(ParLine::Adjust(c));

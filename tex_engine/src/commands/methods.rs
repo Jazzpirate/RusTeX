@@ -505,8 +505,11 @@ pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let data = engine.stomach.data_mut();
     for NodeList {children,tp } in data.open_lists.iter_mut().rev() {
         match tp {
-            NodeListType::Paragraph(_) |
-            NodeListType::Box(BoxInfo {tp:BoxType::Vertical,..},_,_) => {
+            NodeListType::Paragraph(_) => {
+                children.push(TeXNode::Mark(idx, v.into()));
+                return
+            }
+            NodeListType::Box(info,_,_) if info.tp() == BoxType::Vertical => {
                 children.push(TeXNode::Mark(idx, v.into()));
                 return
             }
@@ -698,16 +701,7 @@ pub fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET
     state.pop(aux,mouth);
     let bx = TeXBox {
         children,start,
-        info: BoxInfo {
-            tp: inner_mode,
-            kind: "aligncell",
-            scaled: ToOrSpread::None,
-            assigned_width: None,
-            assigned_height: None,
-            assigned_depth: None,
-            moved_left: None,
-            raised: None,
-        },
+        info: BoxInfo::new_cell(inner_mode),
         end: mouth.current_sourceref(),
     };
     stomach.data_mut().open_lists.last_mut().unwrap().children.push(bx.as_node());
@@ -720,16 +714,7 @@ pub fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mou
     };
     let bx = TeXBox {
         children,start,
-        info: BoxInfo {
-            tp: inner_mode,
-            kind: "alignrow",
-            scaled: ToOrSpread::None,
-            assigned_width: None,
-            assigned_height: None,
-            assigned_depth: None,
-            moved_left: None,
-            raised: None,
-        },
+        info: BoxInfo::new_row(inner_mode),
         end: mouth.current_sourceref(),
     };
     stomach.data_mut().open_lists.last_mut().unwrap().children.push(bx.as_node());

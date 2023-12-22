@@ -7,6 +7,7 @@ use crate::tex::types::{BoxType, MathClass, NodeType};
 use crate::engine::filesystem::File;
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::pretokenized::TokenList;
+use crate::engine::stomach::ParLineSpec;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::input_text::Character;
 use crate::tex::numerics::{Skip, TeXDimen};
@@ -455,6 +456,199 @@ pub enum ToOrSpread<D:TeXDimen> {
 }
 
 #[derive(Debug,Clone)]
+pub enum BoxInfo<ET:EngineTypes> {
+    HBox {
+        scaled:ToOrSpread<ET::Dim>,
+        assigned_width:Option<ET::Dim>,
+        assigned_height:Option<ET::Dim>,
+        assigned_depth:Option<ET::Dim>,
+        moved_left:Option<ET::Dim>,
+        raised:Option<ET::Dim>,
+    },
+    ParLine {
+        spec:ParLineSpec<ET>,
+        ends_with_line_break:bool,
+    },
+    HAlignRow, HAlignCell {
+        to: Option<ET::Dim>,
+    },
+    ParIndent(ET::Dim),
+    VAlignRow,VAlignCell {
+        to: Option<ET::Dim>,
+    },
+    VBox {
+        scaled:ToOrSpread<ET::Dim>,
+        assigned_width:Option<ET::Dim>,
+        assigned_height:Option<ET::Dim>,
+        assigned_depth:Option<ET::Dim>,
+        moved_left:Option<ET::Dim>,
+        raised:Option<ET::Dim>,
+    },
+    VTop {
+        scaled:ToOrSpread<ET::Dim>,
+        assigned_width:Option<ET::Dim>,
+        assigned_height:Option<ET::Dim>,
+        assigned_depth:Option<ET::Dim>,
+        moved_left:Option<ET::Dim>,
+        raised:Option<ET::Dim>,
+    },
+    VCenter,Output
+}
+impl<ET:EngineTypes> Display for BoxInfo<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use BoxInfo::*;
+        match self {
+            HBox => write!(f, "hbox"),
+            ParLine { .. } => write!(f, "parline"),
+            HAlignRow => write!(f, "halignrow"),
+            HAlignCell { .. } => write!(f, "haligncell"),
+            VBox { .. } => write!(f, "vbox"),
+            VTop { .. } => write!(f, "vtop"),
+            VAlignRow => write!(f, "valignrow"),
+            VAlignCell { .. } => write!(f, "valigncell"),
+            VCenter => write!(f, "vcenter"),
+            Output => write!(f, "output"),
+        }
+    }
+}
+impl<ET:EngineTypes> BoxInfo<ET> {
+    #[inline(always)]
+    pub fn tp(&self) -> BoxType { match self {
+        BoxInfo::HBox { .. } | BoxInfo::ParLine { .. } | BoxInfo::HAlignRow | BoxInfo::HAlignCell { .. } => BoxType::Horizontal,
+        _ => BoxType::Vertical
+    } }
+    #[inline(always)]
+    pub fn new_cell(tp:BoxType) -> Self {match tp {
+        BoxType::Horizontal => BoxInfo::HAlignCell { to: None },
+        _ => BoxInfo::HAlignCell { to: None }
+    }}
+    #[inline(always)]
+    pub fn new_row(tp:BoxType) -> Self {match tp {
+        BoxType::Horizontal => BoxInfo::HAlignRow,
+        _ => BoxInfo::VAlignRow
+    }}
+    pub fn clone_for_split(&mut self) -> Self {
+        match self {
+            BoxInfo::VBox { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised } => {
+                *assigned_height = None;
+                *assigned_depth = None;
+                *scaled = ToOrSpread::None;
+                BoxInfo::VBox {
+                    scaled: ToOrSpread::None,
+                    assigned_width: assigned_width.clone(),
+                    assigned_height: None,
+                    assigned_depth: None,
+                    moved_left: moved_left.clone(),
+                    raised: raised.clone(),
+                }
+            },
+            BoxInfo::VTop { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised } => {
+                *assigned_height = None;
+                *assigned_depth = None;
+                *scaled = ToOrSpread::None;
+                BoxInfo::VTop {
+                    scaled: ToOrSpread::None,
+                    assigned_width: assigned_width.clone(),
+                    assigned_height: None,
+                    assigned_depth: None,
+                    moved_left: moved_left.clone(),
+                    raised: raised.clone(),
+                }
+            },
+            BoxInfo::Output => {
+                BoxInfo::VBox {
+                    scaled: ToOrSpread::None,
+                    assigned_width: None,
+                    assigned_height: None,
+                    assigned_depth: None,
+                    moved_left: None,
+                    raised: None,
+                }
+            },
+            _ => unreachable!()
+        }
+    }
+    #[inline(always)]
+    fn v_height_inner(v:&Vec<TeXNode<ET>>) -> ET::Dim { v.iter().map(|c| c.height()).sum() }
+    #[inline(always)]
+    fn v_depth_inner(v:&Vec<TeXNode<ET>>) -> ET::Dim { for c in v.iter().rev() {
+        if !c.opaque() { return c.depth() }
+    } ET::Dim::default() }
+    #[inline(always)]
+    fn v_width_inner(v:&Vec<TeXNode<ET>>) -> ET::Dim { v.iter().map(|c| c.width()).max().unwrap_or_default() }
+    #[inline(always)]
+    fn h_height_inner(v:&Vec<TeXNode<ET>>) -> ET::Dim { v.iter().map(|c| c.height()).max().unwrap_or_default() }
+    #[inline(always)]
+    fn h_depth_inner(v:&Vec<TeXNode<ET>>) -> ET::Dim { v.iter().map(|c| c.depth()).max().unwrap_or_default() }
+    #[inline(always)]
+    fn h_width_inner(v:&Vec<TeXNode<ET>>) -> ET::Dim { v.iter().map(|c| c.width()).sum() }
+
+    fn get_height(&self,v:&Vec<TeXNode<ET>>) -> ET::Dim {
+        match self {
+            BoxInfo::HBox { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::h_height_inner(v)),
+            BoxInfo::ParLine { spec,.. } => Self::h_height_inner(v),
+            BoxInfo::HAlignRow => Self::h_height_inner(v),
+            BoxInfo::HAlignCell { .. } => Self::h_height_inner(v),
+            BoxInfo::ParIndent(_) => ET::Dim::default(),
+            BoxInfo::VAlignRow => Self::v_height_inner(v),
+            BoxInfo::VAlignCell { to } => to.unwrap_or_else(||  Self::v_height_inner(v)),
+            BoxInfo::VBox { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::v_height_inner(v)),
+            BoxInfo::VTop { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::v_height_inner(v)), // TODO
+            BoxInfo::VCenter => Self::v_height_inner(v), // TODO
+            BoxInfo::Output => Self::v_height_inner(v),
+        }
+    }
+    fn get_width(&self,v:&Vec<TeXNode<ET>>) -> ET::Dim {
+        match self {
+            BoxInfo::HBox { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::h_width_inner(v)),
+            BoxInfo::ParLine { spec,.. } => spec.leftskip.base() + spec.rightskip.base() + spec.target,
+            BoxInfo::HAlignRow => Self::h_width_inner(v),
+            BoxInfo::HAlignCell { to } => to.unwrap_or_else(|| Self::h_width_inner(v)),
+            BoxInfo::ParIndent(d) => *d,
+            BoxInfo::VAlignRow => Self::v_width_inner(v),
+            BoxInfo::VAlignCell { .. } => Self::v_width_inner(v),
+            BoxInfo::VBox { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::v_width_inner(v)),
+            BoxInfo::VTop { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::v_width_inner(v)), // TODO
+            BoxInfo::VCenter => Self::v_width_inner(v),
+            BoxInfo::Output => Self::v_width_inner(v),
+        }
+    }
+    fn get_depth(&self,v:&Vec<TeXNode<ET>>) -> ET::Dim {
+        match self {
+            BoxInfo::HBox { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::h_depth_inner(v)),
+            BoxInfo::ParLine { spec,.. } => Self::h_depth_inner(v),
+            BoxInfo::HAlignRow => Self::h_depth_inner(v),
+            BoxInfo::HAlignCell { .. } => Self::h_depth_inner(v),
+            BoxInfo::ParIndent(_) => ET::Dim::default(),
+            BoxInfo::VAlignRow => Self::v_depth_inner(v),
+            BoxInfo::VAlignCell { .. } => Self::v_depth_inner(v),
+            BoxInfo::VBox { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::v_depth_inner(v)),
+            BoxInfo::VTop { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::v_depth_inner(v)), // TODO
+            BoxInfo::VCenter => Self::v_depth_inner(v), // TODO
+            BoxInfo::Output => Self::v_depth_inner(v),
+        }
+    }
+
+    pub fn raise(&mut self,d:ET::Dim) {
+        match self {
+            BoxInfo::HBox { ref mut raised, .. } => *raised = Some(d),
+            BoxInfo::VBox { ref mut raised, .. } => *raised = Some(d),
+            BoxInfo::VTop { ref mut raised, .. } => *raised = Some(d),
+            _ => todo!()
+        }
+    }
+    pub fn move_left(&mut self,d:ET::Dim) {
+        match self {
+            BoxInfo::HBox { ref mut moved_left, .. } => *moved_left = Some(d),
+            BoxInfo::VBox { ref mut moved_left, .. } => *moved_left = Some(d),
+            BoxInfo::VTop { ref mut moved_left, .. } => *moved_left = Some(d),
+            _ => todo!()
+        }
+    }
+}
+
+/*
+#[derive(Debug,Clone)]
 pub struct BoxInfo<ET:EngineTypes> {
     pub tp:BoxType,
     pub kind:&'static str,
@@ -466,6 +660,8 @@ pub struct BoxInfo<ET:EngineTypes> {
     pub raised:Option<ET::Dim>,
 }
 
+ */
+
 #[derive(Debug,Clone)]
 pub struct TeXBox<ET:EngineTypes> {
     pub children:Vec<TeXNode<ET>>,
@@ -474,41 +670,56 @@ pub struct TeXBox<ET:EngineTypes> {
     pub end:SR<ET>
 }
 
+impl<ET:EngineTypes> TeXBox<ET> {
+    pub fn assign_height(&mut self, h:ET::Dim) {
+        match self.info {
+            BoxInfo::HBox { ref mut assigned_height, .. } => *assigned_height = Some(h),
+            BoxInfo::VBox { ref mut assigned_height, .. } => *assigned_height = Some(h),
+            BoxInfo::VTop { ref mut assigned_height, .. } => *assigned_height = Some(h),
+            _ => todo!()
+        }
+    }
+    pub fn assign_width(&mut self, w:ET::Dim) {
+        match self.info {
+            BoxInfo::HBox { ref mut assigned_width, .. } => *assigned_width = Some(w),
+            BoxInfo::VBox { ref mut assigned_width, .. } => *assigned_width = Some(w),
+            BoxInfo::VTop { ref mut assigned_width, .. } => *assigned_width = Some(w),
+            _ => todo!()
+        }
+    }
+    pub fn assign_depth(&mut self, d:ET::Dim) {
+        match self.info {
+            BoxInfo::HBox { ref mut assigned_depth, .. } => *assigned_depth = Some(d),
+            BoxInfo::VBox { ref mut assigned_depth, .. } => *assigned_depth = Some(d),
+            BoxInfo::VTop { ref mut assigned_depth, .. } => *assigned_depth = Some(d),
+            _ => todo!()
+        }
+    }
+}
+
 impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent, f)?;
-        write!(f,"<{}>",self.info.kind)?;
+        write!(f,"<{}>",self.info)?;
         for c in &self.children {
             c.readable_fmt(indent+2, f)?;
         }
         Self::readable_do_indent(indent, f)?;
-        write!(f,"</{}>",self.info.kind)
+        write!(f,"</{}>",self.info)
     }
+    #[inline(always)]
     fn height(&self) -> ET::Dim {
-        self.info.assigned_height.unwrap_or_else(||
-            match self.info.tp {
-                BoxType::Vertical => self.children.iter().map(|c| c.height()).sum(),
-                _ => self.children.iter().map(|c| c.height()).max().unwrap_or_default(),
-            }
-        )
+        self.info.get_height(&self.children)
     }
+    #[inline(always)]
     fn width(&self) -> ET::Dim {
-        self.info.assigned_width.unwrap_or_else(||
-            match self.info.tp {
-                BoxType::Vertical => self.children.iter().map(|c| c.width()).max().unwrap_or_default(),
-                _ => self.children.iter().map(|c| c.width()).sum(),
-            }
-        )
+        self.info.get_width(&self.children)
     }
+    #[inline(always)]
     fn depth(&self) -> ET::Dim {
-        self.info.assigned_depth.unwrap_or_else(||
-            match self.info.tp {
-                BoxType::Vertical => self.children.last().map(|c| c.depth()).unwrap_or_default(),
-                _ => self.children.iter().map(|c| c.depth()).max().unwrap_or_default()
-            }
-        )
+        self.info.get_depth(&self.children)
     }
-    fn nodetype(&self) -> NodeType { match self.info.tp {
+    fn nodetype(&self) -> NodeType { match self.info.tp() {
         BoxType::Horizontal => NodeType::HList,
         BoxType::Vertical => NodeType::VList,
     }}
