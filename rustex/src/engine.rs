@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
-use tex_engine::commands::Command;
+use tex_engine::commands::{Command, Unexpandable};
 use tex_engine::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFNode};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, filesystem, state, utils};
@@ -8,7 +8,7 @@ use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::engine::stomach::StomachWithShipout;
-use tex_engine::engine::utils::memory::InternedCSName;
+use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
 use tex_engine::engine::utils::outputs::LogOutputs;
 use tex_engine::tex;
 use tex_engine::tex::nodes::{BoxInfo, TeXNode, TeXBox};
@@ -81,6 +81,14 @@ fn get_state() -> (RusTeXState,Memory) {
             n => {
                 let mut engine = DefaultEngine::<Types>::new();
                 register_unexpandable(&mut engine,CLOSE_FONT,close_font);
+                engine.register_primitive(Command::Unexpandable(
+                    Unexpandable {
+                        name:PRIMITIVES.get("rustexBREAK"),
+                        apply:|_,_| {
+                            println!("HERE!")
+                        }
+                    }
+                ),"rustexBREAK");
                 engine.initialize_pdflatex();
                 register_command(&mut engine, true, "LaTeX", "",
                                  "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",

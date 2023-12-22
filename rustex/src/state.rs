@@ -7,7 +7,7 @@ use tex_engine::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use tex_engine::tex::nodes::TeXBox;
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::token::CompactToken;
-use tex_engine::tex::types::{GroupType, TeXMode};
+use tex_engine::tex::types::{GroupType, MathStyle, TeXMode};
 use crate::engine::{CSName, Font, Types};
 use crate::stomach::CLOSE_FONT;
 use tex_engine::tex::token::Token;
@@ -37,6 +37,16 @@ impl State for RusTeXState {
         self.0.push(aux,group_type,line_number);
         aux.extension.push();
     }
+
+    #[inline(always)]
+    fn get_mathstyle(&self) -> MathStyle {
+        self.0.get_mathstyle()
+    }
+    #[inline(always)]
+    fn set_mathstyle(&mut self, style: MathStyle) {
+        self.0.set_mathstyle(style)
+    }
+
 
     #[inline(always)]
     fn pop(&mut self, aux: &mut EngineAux<Self::ET>, mouth: &mut <Self::ET as EngineTypes>::Mouth) {

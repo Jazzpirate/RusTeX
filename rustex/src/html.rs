@@ -34,8 +34,20 @@ pub enum Tag {
     A,
     B,
     I,
-    None
+    None,
+    Math,Mrow,Mi,Mo
 }
+impl Tag {
+    fn ismath(&self) -> bool {
+        use Tag::*;
+        match self {
+            Math | Mrow | Mi | Mo => true,
+            _ => false
+        }
+    }
+}
+
+
 pub(crate) mod labels {
     use super::Tag;
     #[derive(Copy, Clone, Debug, Eq)]
@@ -76,6 +88,15 @@ pub(crate) mod labels {
     pub(crate) const HALIGN_ROW: Label = Label { id: 21, cls: Some("rustex-halign-row"), tag: Tag::Tr };
     pub(crate) const HALIGN_CELL: Label = Label { id: 21, cls: Some("rustex-halign-cell"), tag: Tag::Td };
     pub(crate) const SPACE: Label = Label { id: 22, cls: Some("rustex-space-in-hbox"), tag: Tag::Span };
+    pub(crate) const MATH: Label = Label { id: 23, cls: Some("rustex-math"), tag: Tag::Math };
+    pub(crate) const MATH_ROW: Label = Label { id: 23, cls: None, tag: Tag::Mrow };
+    pub(crate) const MATH_ORD: Label = Label { id: 23, cls: Some("rustex-math-ord"), tag: Tag::Mi };
+    pub(crate) const MATH_OP: Label = Label { id: 23, cls: Some("rustex-math-op"), tag: Tag::Mo };
+    pub(crate) const MATH_BIN: Label = Label { id: 23, cls: Some("rustex-math-bin"), tag: Tag::Mo };
+    pub(crate) const MATH_REL: Label = Label { id: 23, cls: Some("rustex-math-rel"), tag: Tag::Mo };
+    pub(crate) const MATH_PUNCT: Label = Label { id: 23, cls: Some("rustex-math-punct"), tag: Tag::Mo };
+    pub(crate) const MATH_OPEN: Label = Label { id: 23, cls: Some("rustex-math-open"), tag: Tag::Mo };
+    pub(crate) const MATH_CLOSE: Label = Label { id: 23, cls: Some("rustex-math-close"), tag: Tag::Mo };
 }
 
 #[derive(Debug)]
@@ -132,6 +153,7 @@ impl HTMLNode {
             Some(w) if w != top_width => {
                 let pctg = w.0 as f64 / (top_width.0 as f64);
                 self.style("--temp-width",format!("calc({:.2} * var(--document-width))",pctg));
+                self.class("rustex-withwidth");
                 Some(w)
             }
             _ => None
@@ -200,7 +222,11 @@ impl HTMLNode {
             Tag::Table => f.write_str("<table")?,
             Tag::Tr => f.write_str("<tr")?,
             Tag::Td => f.write_str("<td")?,
-            Tag::None => f.write_str("<span")?
+            Tag::None => f.write_str("<span")?,
+            Tag::Math => f.write_str("<math")?,
+            Tag::Mrow => f.write_str("<mrow")?,
+            Tag::Mi => f.write_str("<mi")?,
+            Tag::Mo => f.write_str("<mo")?,
         }
         if !self.classes.is_empty() {
             f.write_str(" class=\"")?;
@@ -233,7 +259,7 @@ impl HTMLNode {
             f.write_str(&format!("<span style=\"display:contents;--temp-width:calc({:.2} * var(--document-width))\">",pctg))?;
         }
         if wd.is_some() {
-            f.write_str("<span class=\"rustex-withwidth\">")?;
+            f.write_str("<span class=\"rustex-contents\">")?;
         }
         for c in self.children.into_iter() {
             match c {
@@ -275,32 +301,42 @@ impl HTMLNode {
             Tag::Table => f.write_str("</table>")?,
             Tag::Tr => f.write_str("</tr>")?,
             Tag::Td => f.write_str("</td>")?,
-            Tag::None => f.write_str("</span>")?
+            Tag::None => f.write_str("</span>")?,
+            Tag::Math => f.write_str("</math>")?,
+            Tag::Mrow => f.write_str("</mrow>")?,
+            Tag::Mi => f.write_str("</mi>")?,
+            Tag::Mo => f.write_str("</mo>")?,
         }
         Ok(())
     }
     pub fn push_node(&mut self,mut n:HTMLNode) {
-        n.close();
+        n.close(self.tag.ismath());
         self.children.push(HTMLChild::Node(n));
     }
 
-    pub fn close(&mut self) {
+    pub fn close(&mut self,in_math:bool) {
         match self.tag {
             Tag::None => {
                 if self.children.len() == 1 {
                     match self.children.pop() {
                         Some(HTMLChild::Node(n)) => {
-                            let label = n.tag;
+                            let tag = n.tag;
                             if self.merge(n) {
-                                self.tag = label;
+                                self.tag = tag;
                             } else {
-                                self.style_str("display","contents");
-                                self.tag = Tag::Span; // TODO math
+                                if in_math {
+                                    self.tag = Tag::Mrow
+                                } else {
+                                    self.style_str("display", "contents");
+                                    self.tag = Tag::Span; // TODO math
+                                }
                             }
                         }
                         Some(o) => self.children.push(o),
                         _ => unreachable!()
                     }
+                } else if in_math {
+                    self.tag = Tag::Mrow
                 } else {
                     self.style_str("display","contents");
                     self.tag = Tag::Span; // TODO math

@@ -3,7 +3,7 @@ use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::State;
-use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData, vsplit_roughly};
+use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData};
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, TeXBox, TeXNode, ToOrSpread};
 use tex_engine::tex::numerics::Dim32;
@@ -15,16 +15,18 @@ use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::tex::nodes::NodeTrait;
+use crate::shipout::ZERO;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,
     data:StomachData<Types>,
+    prevent_shipout:bool
 }
 impl Stomach for RusTeXStomach {
     type ET = Types;
     #[inline(always)]
     fn new(_aux: &mut EngineAux<Types>, _state: &mut RusTeXState) -> Self {
-        Self { afterassignment:None, data:StomachData::new() }
+        Self { afterassignment:None, data:StomachData::new(), prevent_shipout:false }
     }
     #[inline(always)]
     fn afterassignment(&mut self) -> &mut Option<CompactToken> {
@@ -36,7 +38,7 @@ impl Stomach for RusTeXStomach {
     }
     #[inline(always)]
     fn split_vertical(engine: Refs, nodes: Vec<TeXNode<Types>>, target: Dim32) -> SplitResult<Types> {
-        vsplit_roughly(engine, nodes, target)
+        vsplit(engine, nodes, target)
     }
 
     fn do_font(engine: Refs, _token: CompactToken, f: Font, global: bool) {
@@ -78,9 +80,10 @@ impl Stomach for RusTeXStomach {
         }
     }
 
-    fn split_paragraph(engine: &mut EngineReferences<Types>, specs: Vec<ParLineSpec<Types>>, children: Vec<TeXNode<Types>>, sourceref: SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
+    fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<TeXNode<Types>>, sourceref: SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         let ret = split_paragraph_roughly(engine,specs.clone(),children);
+        engine.stomach.prevent_shipout = true;
         Self::add_node(engine,TeXNode::Custom(RusTeXNode::ParagraphBegin{specs,start:sourceref,end:engine.mouth.current_sourceref(),lineskip:LineSkip::get(engine.state)}));
         for line in ret {
             match line {
@@ -110,7 +113,16 @@ impl Stomach for RusTeXStomach {
                 }
             }
         }
+        engine.stomach.prevent_shipout = false;
         Self::add_node(engine,TeXNode::Custom(RusTeXNode::ParagraphEnd));
+    }
+
+    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
+        if engine.stomach.prevent_shipout { return }
+        let data = engine.stomach.data_mut();
+        if !data.in_output && data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
+            Self::do_shipout_output(engine, None)
+        }
     }
 
     fn open_align(engine: Refs, _inner: BoxType, between: BoxType) {
@@ -147,4 +159,63 @@ pub(crate) fn close_font(engine: Refs, _token: CompactToken) {
         },
         _ => engine.stomach.data.page.push(TeXNode::Custom(RusTeXNode::FontChangeEnd))
     }
+}
+
+
+pub fn vsplit(engine: Refs, mut nodes: Vec<TeXNode<Types>>, mut target: Dim32) -> SplitResult<Types> {
+    let data = engine.stomach.data_mut();
+    data.topmarks.clear();
+    std::mem::swap(&mut data.botmarks,&mut data.topmarks);
+    data.firstmarks.clear();
+    data.splitfirstmarks.clear();
+    data.splitbotmarks.clear();
+    let mut in_par = None;
+    let mut split = nodes.len();
+    let iter = nodes.iter().enumerate();
+    for (i,n) in iter {
+        match n {
+            TeXNode::Custom(r@RusTeXNode::ParagraphBegin{..}) => {
+                in_par = Some(r.clone());
+            }
+            TeXNode::Mark(i, v) => {
+                if !data.firstmarks.contains_key(&i) {
+                    data.firstmarks.insert(*i,v.clone());
+                }
+                data.botmarks.insert(*i,v.clone());
+            }
+            _ => {
+                target = target + (-n.height()); // - n.depth() ?
+                if target < ZERO {
+                    split = i;
+                    break
+                }
+            }
+        }
+    };
+    let mut rest = nodes.split_off(split);
+    if let Some(b) = in_par {
+        rest.insert(0,TeXNode::Custom(b));
+        nodes.push(TeXNode::Custom(RusTeXNode::ParagraphEnd));
+    }
+    let split_penalty = match rest.first() {
+        Some(TeXNode::Penalty(p)) => {
+            let p = *p;
+            rest.remove(0);
+            Some(p)
+        }
+        _ => None
+    };
+
+    for n in &rest {
+        match n {
+            TeXNode::Mark(i, v) => {
+                if !data.splitfirstmarks.contains_key(&i) {
+                    data.splitfirstmarks.insert(*i,v.clone());
+                }
+                data.splitbotmarks.insert(*i,v.clone());
+            }
+            _ => ()
+        }
+    }
+    SplitResult{first:nodes,rest,split_penalty}
 }

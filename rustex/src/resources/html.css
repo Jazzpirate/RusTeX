@@ -12,6 +12,7 @@ a { color: inherit; text-decoration: inherit; }
 .rustex-page {
     display:flex;
     flex-direction: column;
+    border: 1px solid #232323;
 }
 
 /* ---------------------------------------------------- Fonts ------------------------------------------------------- */
@@ -160,10 +161,27 @@ a { color: inherit; text-decoration: inherit; }
 
 /* ----------------------------------------------------- Math ------------------------------------------------------- */
 
-math {
+.rustex-math {
     line-height: inherit;
     font-size: inherit;
     font-family: Latin Modern Math, math;
+}
+
+.rustex-math-ord, .rustex-math-open, .rustex-math-close {
+    padding-left: 0;
+    padding-right: 0;
+}
+.rustex-math-op, .rustex-math-bin {
+    padding-left: 0.15em;
+    padding-right: 0.15em;
+}
+.rustex-math-rel {
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+}
+.rustex-math-punct {
+    padding-left: 0.15em;
+    padding-right: 0.15em;
 }
 
 /* inline-flex avoids weird vertical gaps in e.g. footnote markers */

@@ -2,7 +2,7 @@ mod nodes;
 
 use std::collections::BTreeSet;
 use tex_engine::tex::nodes::{BoxInfo, KernNode, TeXNode, SkipNode, TeXBox, ToOrSpread, SimpleNode};
-use tex_engine::tex::types::BoxType;
+use tex_engine::tex::types::{BoxType, MathClass};
 use crate::engine::{Bx, Font, Refs, Types};
 use std::fmt::Write;
 use std::vec::IntoIter;
@@ -15,6 +15,7 @@ use tex_engine::tex::numerics::{Dim32, Fill, Skip32};
 use tex_engine::engine::state::State;
 use crate::html::{dim_to_string, HTMLChild, HTMLNode, Tag};
 use tex_engine::engine::fontsystem::Font as FontT;
+use tex_tfm::fontstyles::ModifierSeq;
 use tex_tfm::glyphs::Glyph;
 use crate::nodes::{LineSkip, RusTeXNode};
 
@@ -79,7 +80,7 @@ impl ShipoutState {
         match self.nodes.last_mut() {
             Some(parent) => parent.push_node(node),
             None => {
-                node.close();
+                node.close(false);
                 self.output.push(HTMLChild::Node(node))
             }
         }
@@ -189,35 +190,12 @@ pub(crate) fn shipout(engine:Refs, n: TeXNode<Types>) {
 pub(crate) const ZERO: Dim32 = Dim32(0);
 pub(crate) const ZERO_SKIP: Skip32<Dim32> = Skip32 {base:ZERO,stretch:None,shrink:None};
 
-fn merge_skip(sk1:&mut Skip32<Dim32>,sk2:Skip32<Dim32>) {
-    let base = sk1.base + sk2.base;
-    let stretch = match (sk1.stretch,sk2.stretch) {
-        (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => None,
-        (Some(s1),None|Some(Fill::pt(_))) => Some(s1),
-        (None|Some(Fill::pt(_)),Some(s2)) => Some(s2),
-        (Some(Fill::fil(a)),Some(Fill::fil(b))) => Some(Fill::fil(a+b)),
-        (Some(Fill::fill(a)),Some(Fill::fill(b))) => Some(Fill::fill(a+b)),
-        (Some(Fill::fill(a)),_)|(_,Some(Fill::fill(a))) => Some(Fill::fill(a)),
-        (Some(Fill::fil(a)),_)|(_,Some(Fill::fil(a))) => Some(Fill::fil(a))
-    };
-    *sk1 = Skip32 { base,stretch,shrink:None };
-}
-fn merge_skip_node(sk:&mut Skip32<Dim32>,n:SkipNode<Types>) {
-    match n {
-        SkipNode::HSkip(sk2) | SkipNode::VSkip(sk2) => merge_skip(sk,sk2),
-        SkipNode::HFil | SkipNode::VFil => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fil(1)),shrink:None }),
-        SkipNode::HFill | SkipNode::VFill => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
-        SkipNode::Hss | SkipNode::Vss => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
-        SkipNode::Space | SkipNode::HFilneg | SkipNode::VFilneg => (),
-    }
-}
-
 fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, top:bool) {
     let mut currskip = ZERO_SKIP;
     while let Some(c) = children.next() {
         match c {
             TeXNode::Kern(kn) => { currskip.base = currskip.base + kn.dim(); }
-            TeXNode::Skip(sk) => { merge_skip_node(&mut currskip,sk) }
+            TeXNode::Skip(sk) => { nodes::merge_skip_node(&mut currskip,sk) }
             TeXNode::Custom(RusTeXNode::ParagraphBegin{specs,start,end,lineskip}) => {
                 nodes::vskip(state,std::mem::take(&mut currskip));
                 nodes::do_paragraph(engine,state,children,specs,start,end,lineskip);
@@ -237,14 +215,13 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, top:bo
 }
 
 fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter, inpar:bool,escape_space:bool) {
-    // todo merge hskips and such, annotations
     let mut currskip = ZERO_SKIP;
     while let Some(c) = children.next() {
         match c {
             TeXNode::Kern(kn) => { currskip.base = currskip.base + kn.dim(); }
             TeXNode::Skip(SkipNode::Space) if !escape_space => state.push_space(),
             TeXNode::Skip(SkipNode::Space) => state.push_escaped_space(),
-            TeXNode::Skip(sk) => { merge_skip_node(&mut currskip,sk) }
+            TeXNode::Skip(sk) => { nodes::merge_skip_node(&mut currskip,sk) }
             c => common_list(state,engine,c,|state,engine,c| {
                 nodes::hskip(state,std::mem::take(&mut currskip));
                 do_h(engine,state,c,inpar)
@@ -275,6 +252,75 @@ fn common_list<F:FnOnce(&mut ShipoutState,Refs,TeXNode<Types>)>(state:&mut Shipo
         TeXNode::Custom(RusTeXNode::FontChangeEnd) => nodes::close_font(state),
         TeXNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_))) | TeXNode::Penalty(_) => (),
         _ => cont(state,engine,n)
+    }
+}
+
+fn node_from_class(cls:MathClass) -> HTMLNode {
+    use MathClass::*;
+    match cls {
+        Ord => HTMLNode::new(crate::html::labels::MATH_ORD,true),
+        Op => HTMLNode::new(crate::html::labels::MATH_OP,true),
+        Bin => HTMLNode::new(crate::html::labels::MATH_BIN,true),
+        Rel => HTMLNode::new(crate::html::labels::MATH_REL,true),
+        Open => HTMLNode::new(crate::html::labels::MATH_OPEN,true),
+        Close => HTMLNode::new(crate::html::labels::MATH_CLOSE,true),
+        Punct => HTMLNode::new(crate::html::labels::MATH_PUNCT,true)
+    }
+}
+fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter) {
+    use tex_tfm::fontstyles::FontModifiable;
+    let mut currskip = ZERO_SKIP;
+    let mut currclass : Option<(MathClass,HTMLNode)> = None;
+    while let Some(c) = children.next() {
+        match c {
+            TeXNode::Simple(SimpleNode::MathChar(mc)) => {
+                nodes::mskip(state,std::mem::take(&mut currskip));
+                state.in_content = true;
+                let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(mc.font.filename());
+                let glyph = glyphtable.get(mc.char);
+                if !glyph.is_defined() {
+                    todo!("Undefined Glyph")
+                }
+                let modifiers = match engine.fontsystem.glyphmaps.get_info(mc.font.filename()) {
+                    Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
+                    _ => None
+                };
+                match currclass {
+                    Some((mc2,ref mut node)) if mc2 == mc.cls => {
+                        if let Some(m) = modifiers {
+                            node.push_text(glyph.to_string().apply(m).to_string());
+                        } else {
+                            node.push_glyph(glyph)
+                        }
+                    },
+                    Some((ref mut c,ref mut n)) => {
+                        *c = mc.cls;
+                        let mut node = node_from_class(mc.cls);
+                        if let Some(m) = modifiers {
+                            node.push_text(glyph.to_string().apply(m).to_string());
+                        } else {
+                            node.push_glyph(glyph)
+                        }
+                        let old = std::mem::replace(n,node);
+                        state.push(old)
+                    }
+                    None => {
+                        let mut node = node_from_class(mc.cls);
+                        if let Some(m) = modifiers {
+                            node.push_text(glyph.to_string().apply(m).to_string());
+                        } else {
+                            node.push_glyph(glyph)
+                        }
+                        currclass = Some((mc.cls,node))
+                    }
+                }
+            }
+            o => todo!(" {:?}",o)
+        }
+    }
+    nodes::mskip(state,currskip);
+    if let Some((_,node)) = currclass {
+        state.push(node)
     }
 }
 
@@ -344,7 +390,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
             let SimpleNode::VRule {start,end,..} = v else {unreachable!()};
             nodes::vrule(start,end,width,height,depth,state,par)
         }
-        TeXNode::Math(mut mg) if mg.children.iter().any(|n| matches!(n,
+        TeXNode::MathGroup(mut mg) if mg.children.iter().any(|n| matches!(n,
             TeXNode::Box(TeXBox { info: BoxInfo {kind:"vcenter",..},.. })
         )) && !mg.display => {
             if mg.children.len() == 1 {
@@ -355,6 +401,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
                 do_hlist(engine, state, &mut mg.children.into(), par,!par)
             }
         },
+        TeXNode::MathGroup(mut mg) => nodes::do_math(mg,state,engine),
         _ => todo!("{:?}",n)
     }
 }

@@ -2,8 +2,8 @@ use std::vec::IntoIter;
 use tex_engine::commands::pdftex::pdftexnodes::{ColorStackAction, NumOrName, PDFColor, PDFExtension, PDFNode};
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::{File, SourceReference};
-use tex_engine::tex::nodes::{BoxInfo, KernNode, TeXBox, TeXNode, ToOrSpread};
-use tex_engine::tex::numerics::{Dim32, Fill, Skip32};
+use tex_engine::tex::nodes::{BoxInfo, KernNode, MathGroup, SkipNode, TeXBox, TeXNode, ToOrSpread};
+use tex_engine::tex::numerics::{Dim32, Fill, Skip, Skip32};
 use crate::engine::{Bx, Extension, Font, Refs, SRef, Types};
 use crate::html::{dim_to_string, HTMLChild, HTMLNode, Tag};
 use crate::shipout::{do_hlist, do_vlist, get_box_dims, NodeIter, nodes, ShipoutState, ZERO, ZERO_SKIP};
@@ -13,7 +13,7 @@ use crate::fonts::FontStore;
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::engine::stomach::ParLineSpec;
-
+/*
 #[derive(PartialEq,Copy,Clone)]
 enum FilLevel {
     None,Fil,Fill,Filll
@@ -50,10 +50,27 @@ impl FilLevel {
         }
     }
 }
+
+ */
 #[derive(PartialEq,Copy,Clone)]
 pub(crate) enum Alignment {
     L,R,C,S
 }
+impl Alignment {
+    pub fn from(skip1:Skip32<Dim32>,skip2:Skip32<Dim32>) -> Self {
+        use Alignment::*;
+        match (skip1.stretch,skip2.stretch) {
+            (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => S,
+            (Some(Fill::fil(_)),Some(Fill::fil(_))) => C,
+            (Some(Fill::fill(_)),Some(Fill::fill(_))) => C,
+            (Some(Fill::fill(_)),_) => R,
+            (_,Some(Fill::fill(_))) => L,
+            (Some(Fill::fil(_)),_) => R,
+            (_,Some(Fill::fil(_))) => L,
+        }
+    }
+}
+/*
 impl From<(FilLevel,FilLevel)> for Alignment {
     #[inline(always)]
     fn from((a,b):(FilLevel,FilLevel)) -> Self {
@@ -69,17 +86,38 @@ impl From<(Skip32<Dim32>,Skip32<Dim32>)> for Alignment {
     }
 }
 
+ */
+
+fn merge_skip(sk1:&mut Skip32<Dim32>,sk2:Skip32<Dim32>) {
+    let base = sk1.base + sk2.base;
+    let stretch = match (sk1.stretch,sk2.stretch) {
+        (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => None,
+        (Some(s1),None|Some(Fill::pt(_))) => Some(s1),
+        (None|Some(Fill::pt(_)),Some(s2)) => Some(s2),
+        (Some(Fill::fil(a)),Some(Fill::fil(b))) => Some(Fill::fil(a+b)),
+        (Some(Fill::fill(a)),Some(Fill::fill(b))) => Some(Fill::fill(a+b)),
+        (Some(Fill::fill(a)),_)|(_,Some(Fill::fill(a))) => Some(Fill::fill(a)),
+        (Some(Fill::fil(a)),_)|(_,Some(Fill::fil(a))) => Some(Fill::fil(a))
+    };
+    *sk1 = Skip32 { base,stretch,shrink:None };
+}
+pub fn merge_skip_node(sk:&mut Skip32<Dim32>,n:SkipNode<Types>) {
+    match n {
+        SkipNode::HSkip(sk2) | SkipNode::VSkip(sk2) => merge_skip(sk,sk2),
+        SkipNode::HFil | SkipNode::VFil => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fil(1)),shrink:None }),
+        SkipNode::HFill | SkipNode::VFill => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
+        SkipNode::Hss | SkipNode::Vss => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
+        SkipNode::Space | SkipNode::HFilneg | SkipNode::VFilneg => (),
+    }
+}
+
 pub(crate) fn alignment(mut v:Vec<TeXNode<Types>>) -> (Alignment, Vec<TeXNode<Types>>) {
-    let (mut left,mut right) = (FilLevel::None,FilLevel::None);
+    let (mut left,mut right) = (ZERO_SKIP,ZERO_SKIP);
     let mut repush = Vec::new();
     while let Some(n) = v.pop() {
         match n {
-            TeXNode::Kern(_) => repush.push(n),
-            TeXNode::Skip(sk) => {
-                let isk: Skip32<Dim32> = sk.skip();
-                right.add(isk.stretch.into());
-                repush.push(TeXNode::Kern(KernNode::HKern(isk.base)));
-            }
+            TeXNode::Kern(n) => right.base = right.base + n.dim(),
+            TeXNode::Skip(sk) => merge_skip_node(&mut right,sk),
             TeXNode::Penalty(_) => (),
             TeXNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest {..})) => repush.push(n),
             _ => {v.push(n);break}
@@ -90,19 +128,21 @@ pub(crate) fn alignment(mut v:Vec<TeXNode<Types>>) -> (Alignment, Vec<TeXNode<Ty
     let mut it = v.into_iter();
     while let Some(n) = it.next() {
         match n {
-            TeXNode::Kern(_) => nv.push(n),
-            TeXNode::Skip(sk) => {
-                let isk: Skip32<Dim32> = sk.skip();
-                left.add(isk.stretch.into());
-                nv.push(TeXNode::Kern(KernNode::HKern(isk.base)));
-            }
+            TeXNode::Kern(n) => left.base = left.base + n.dim(),
+            TeXNode::Skip(sk) => merge_skip_node(&mut left,sk),
             TeXNode::Penalty(_) => (),
             TeXNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest {..})) => nv.push(n),
             _ => {nv.push(n);break}
         }
     }
+    if left.base != ZERO {
+        nv.insert(0,TeXNode::Kern(KernNode::HKern(left.base)))
+    }
     nv.extend(it);
-    ((left,right).into(),nv)
+    if right.base != ZERO {
+        nv.push(TeXNode::Kern(KernNode::HKern(right.base)))
+    }
+    (Alignment::from(left,right),nv)
 }
 
 use crate::html::labels::*;
@@ -239,6 +279,25 @@ fn hbox_inner(to:Option<Dim32>, state:&mut ShipoutState, children:Vec<TeXNode<Ty
     })
 }
 
+pub(crate) fn do_math(mut bx:MathGroup<Types>, state:&mut ShipoutState, engine:Refs) {
+    if bx.display {
+        todo!()
+    } else {
+        let mut node = HTMLNode::new(MATH, true);
+        node.sourceref(bx.start,bx.end);
+        state.do_in(node,|state| {
+            let node = HTMLNode::new(MATH_ROW, true);
+            state.do_in(node,|state| {
+                super::do_mathlist(engine,state,&mut bx.children.into());
+            },|_,node| if node.label == MATH_ROW {Some(node)} else {
+                todo!()
+            });
+        },|_,node| if node.label == MATH {Some(node)} else {
+            todo!()
+        })
+
+    }
+}
 
 pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
     let mut node = HTMLNode::new(DEST, false);
@@ -350,6 +409,11 @@ pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     state.push(node)
 }
 
+pub(crate) fn mskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
+    if skip == ZERO_SKIP { return }
+    todo!()
+}
+
 pub(crate) fn do_color(state:&mut ShipoutState,engine:Refs, color:ColorStackAction) -> Option<PDFColor> {
     let stack = engine.aux.extension.colorstacks();
     match color {
@@ -390,16 +454,16 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut No
     if spec.rightskip.base != ZERO {
         node.style("margin-right",dim_to_string(spec.rightskip.base));
     }
-    let wd = spec.target + spec.leftskip.base + spec.rightskip.base;
+    let wd = spec.target; //+ spec.leftskip.base + spec.rightskip.base;
     node.width(wd);
-    let align: Alignment = (spec.leftskip,spec.rightskip).into();
+    let align: Alignment = Alignment::from(spec.leftskip,spec.rightskip);
     match align {
         Alignment::L => node.style_str("text-align","left"),
         Alignment::R => node.style_str("text-align","right"),
         Alignment::C => node.style_str("text-align","center"),
         _ => ()
     }
-    if spec.target != wd { node.inner_width = Some(spec.target); }
+    //if spec.target != wd { node.inner_width = Some(spec.target); }
 
     // TODO: alignment
     state.do_in(node,|state| {
