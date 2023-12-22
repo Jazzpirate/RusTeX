@@ -85,18 +85,19 @@ pub(crate) mod labels {
     pub(crate) const VCENTER_CONTAINER: Label = Label { id: 19, cls: Some("rustex-vcenter-container"), tag: Tag::Div };
     pub(crate) const VCENTER_INNER: Label = Label { id: 20, cls: Some("rustex-vcenter"), tag: Tag::Div };
     pub(crate) const HALIGN: Label = Label { id: 21, cls: Some("rustex-halign"), tag: Tag::Table };
-    pub(crate) const HALIGN_ROW: Label = Label { id: 21, cls: Some("rustex-halign-row"), tag: Tag::Tr };
-    pub(crate) const HALIGN_CELL: Label = Label { id: 21, cls: Some("rustex-halign-cell"), tag: Tag::Td };
-    pub(crate) const SPACE: Label = Label { id: 22, cls: Some("rustex-space-in-hbox"), tag: Tag::Span };
-    pub(crate) const MATH: Label = Label { id: 23, cls: Some("rustex-math"), tag: Tag::Math };
-    pub(crate) const MATH_ROW: Label = Label { id: 23, cls: None, tag: Tag::Mrow };
-    pub(crate) const MATH_ORD: Label = Label { id: 23, cls: Some("rustex-math-ord"), tag: Tag::Mi };
-    pub(crate) const MATH_OP: Label = Label { id: 23, cls: Some("rustex-math-op"), tag: Tag::Mo };
-    pub(crate) const MATH_BIN: Label = Label { id: 23, cls: Some("rustex-math-bin"), tag: Tag::Mo };
-    pub(crate) const MATH_REL: Label = Label { id: 23, cls: Some("rustex-math-rel"), tag: Tag::Mo };
-    pub(crate) const MATH_PUNCT: Label = Label { id: 23, cls: Some("rustex-math-punct"), tag: Tag::Mo };
-    pub(crate) const MATH_OPEN: Label = Label { id: 23, cls: Some("rustex-math-open"), tag: Tag::Mo };
-    pub(crate) const MATH_CLOSE: Label = Label { id: 23, cls: Some("rustex-math-close"), tag: Tag::Mo };
+    pub(crate) const HALIGN_ROW: Label = Label { id: 22, cls: Some("rustex-halign-row"), tag: Tag::Tr };
+    pub(crate) const HALIGN_CELL: Label = Label { id: 23, cls: Some("rustex-halign-cell"), tag: Tag::Td };
+    pub(crate) const SPACE: Label = Label { id: 24, cls: Some("rustex-space-in-hbox"), tag: Tag::Span };
+    pub(crate) const MATH: Label = Label { id: 25, cls: Some("rustex-math"), tag: Tag::Math };
+    pub(crate) const MATH_ROW: Label = Label { id: 26, cls: None, tag: Tag::Mrow };
+    pub(crate) const MATH_ORD: Label = Label { id: 27, cls: Some("rustex-math-ord"), tag: Tag::Mi };
+    pub(crate) const MATH_OP: Label = Label { id: 28, cls: Some("rustex-math-op"), tag: Tag::Mo };
+    pub(crate) const MATH_BIN: Label = Label { id: 29, cls: Some("rustex-math-bin"), tag: Tag::Mo };
+    pub(crate) const MATH_REL: Label = Label { id: 30, cls: Some("rustex-math-rel"), tag: Tag::Mo };
+    pub(crate) const MATH_PUNCT: Label = Label { id: 31, cls: Some("rustex-math-punct"), tag: Tag::Mo };
+    pub(crate) const MATH_OPEN: Label = Label { id: 32, cls: Some("rustex-math-open"), tag: Tag::Mo };
+    pub(crate) const MATH_CLOSE: Label = Label { id: 33, cls: Some("rustex-math-close"), tag: Tag::Mo };
+    pub(crate) const PARINDENT: Label = Label { id: 34, cls: Some("rustex-parindent"), tag: Tag::Div };
 }
 
 #[derive(Debug)]

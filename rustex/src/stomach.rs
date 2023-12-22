@@ -59,7 +59,7 @@ impl Stomach for RusTeXStomach {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(mut ls) => match ls.tp {
                 NodeListType::Paragraph(_) => { unreachable!() }
-                NodeListType::Box(bi,start,reg) if bi.tp == bt => {
+                NodeListType::Box(bi,start,reg) if bi.tp() == bt => {
                     for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
                         ls.children.push(TeXNode::Custom(RusTeXNode::FontChangeEnd));
                     }
@@ -82,35 +82,13 @@ impl Stomach for RusTeXStomach {
 
     fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<TeXNode<Types>>, sourceref: SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
-        let ret = split_paragraph_roughly(engine,specs.clone(),children);
+        let ret = split_paragraph_roughly(engine,specs.clone(),children,sourceref.clone());
         engine.stomach.prevent_shipout = true;
         Self::add_node(engine,TeXNode::Custom(RusTeXNode::ParagraphBegin{specs,start:sourceref,end:engine.mouth.current_sourceref(),lineskip:LineSkip::get(engine.state)}));
         for line in ret {
             match line {
-                ParLine::Adjust(n) => {
-                    todo!()
-                }
-                ParLine::Line{mut contents,broken_early} => {
-                    if broken_early {
-                        contents.push(TeXNode::Custom(RusTeXNode::Br));
-                    }
-                    Self::add_node(engine, TeXBox {
-                           children: contents,
-                           info: BoxInfo {
-                               tp: BoxType::Horizontal,
-                               kind: "parline",
-                               scaled: ToOrSpread::None,
-                               assigned_width: None,
-                               assigned_height: None,
-                               assigned_depth: None,
-                               moved_left: None,
-                               raised: None
-                           },
-                           start: sourceref,
-                           end: engine.mouth.current_sourceref(),
-                       }.as_node()
-                    )
-                }
+                ParLine::Adjust(n) => Self::add_node(engine,n),
+                ParLine::Line(bx) => Self::add_node(engine,bx.as_node())
             }
         }
         engine.stomach.prevent_shipout = false;

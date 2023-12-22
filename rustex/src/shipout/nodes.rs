@@ -195,24 +195,7 @@ fn vbox_inner(has_wd:bool, to:Option<Dim32>, state:&mut ShipoutState, children:V
 
 pub(crate) fn do_vcenter(mut bx:Bx, state:&mut ShipoutState, engine:Refs) {
     let mut node = HTMLNode::new(VCENTER_CONTAINER, true);
-    if let Some(ht) = bx.info.assigned_height {
-        if ht < ZERO {
-            node.style_str("height","0");
-            let dp = if let Some(d) = std::mem::take(&mut bx.info.assigned_depth) {
-                ht + d
-            } else { ht };
-            node.style("margin-bottom",dim_to_string(dp));
-        } else {
-            node.style("height",dim_to_string(ht));
-        }
-    }
-    if let Some(dp) = bx.info.assigned_depth {
-        node.style("margin-bottom",dim_to_string(dp));
-    }
-    let do_wd = if let Some(wd) = bx.info.assigned_width {
-        node.width(wd);
-        true
-    } else if bx.width() == ZERO {
+    let do_wd = if bx.width() == ZERO {
         node.width(ZERO);
         true
     } else { false };
@@ -311,7 +294,12 @@ pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
 }
 
 pub(crate) fn do_raise<F:FnOnce(TeXNode<Types>,&mut ShipoutState)>(mut bx:Bx, state:&mut ShipoutState,inv:bool, f:F) {
-    let d = std::mem::take(&mut bx.info.raised).unwrap();
+    let d = match bx.info {
+        BoxInfo::VBox {ref mut raised,..} => std::mem::take(raised).unwrap(),
+        BoxInfo::VTop {ref mut raised,..} => std::mem::take(raised).unwrap(),
+        BoxInfo::HBox {ref mut raised,..} => std::mem::take(raised).unwrap(),
+        _ => unreachable!()
+    };
     let mut node = HTMLNode::new(RAISE, inv);
     node.style("bottom",dim_to_string(d));
     state.do_in(node,|state| {
@@ -322,7 +310,12 @@ pub(crate) fn do_raise<F:FnOnce(TeXNode<Types>,&mut ShipoutState)>(mut bx:Bx, st
 }
 
 pub(crate) fn do_moveleft<F:FnOnce(TeXNode<Types>,&mut ShipoutState)>(mut bx:Bx, state:&mut ShipoutState,inv:bool, f:F) {
-    let d = std::mem::take(&mut bx.info.moved_left).unwrap();
+    let d = match bx.info {
+        BoxInfo::VBox {ref mut moved_left,..} => std::mem::take(moved_left).unwrap(),
+        BoxInfo::VTop {ref mut moved_left,..} => std::mem::take(moved_left).unwrap(),
+        BoxInfo::HBox {ref mut moved_left,..} => std::mem::take(moved_left).unwrap(),
+        _ => unreachable!()
+    };
     let mut node = HTMLNode::new(MOVE_RIGHT, inv);
     node.style("margin-left",dim_to_string(-d));
     state.do_in(node,|state| {
@@ -391,22 +384,40 @@ pub(crate) fn vrule(start:SRef, end:SRef, width:Dim32, height:Dim32, depth:Dim32
 pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     if skip == ZERO_SKIP { return }
     let mut node = HTMLNode::new(HSKIP, false);
-    match skip.stretch {
-        Some(Fill::fil(_) | Fill::fill(_)) => node.style_str("margin-right","auto"),
-        _ => ()
-    }
     node.style("margin-left",dim_to_string(skip.base));
-    state.push(node)
+    match skip.stretch {
+        Some(Fill::fil(_)) => {
+            node.style_str("margin-right","auto");
+            state.push(node)
+        }
+        Some(Fill::fill(_)) => {
+            node.style_str("margin-right","auto");
+            state.push(node);
+            let mut node = HTMLNode::new(HSKIP, false);
+            node.style_str("margin-right","auto");
+            state.push(node);
+        }
+        _ => state.push(node)
+    }
 }
 pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     if skip == ZERO_SKIP { return }
     let mut node = HTMLNode::new(VSKIP, false);
-    match skip.stretch {
-        Some(Fill::fil(_) | Fill::fill(_)) => node.style_str("margin-top","auto"),
-        _ => ()
-    }
     node.style("margin-bottom",dim_to_string(skip.base));
-    state.push(node)
+    match skip.stretch {
+        Some(Fill::fil(_)) => {
+            node.style_str("margin-top","auto");
+            state.push(node)
+        }
+        Some(Fill::fill(_)) => {
+            node.style_str("margin-top","auto");
+            state.push(node);
+            let mut node = HTMLNode::new(VSKIP, false);
+            node.style_str("margin-top","auto");
+            state.push(node);
+        },
+        _ => state.push(node)
+    }
 }
 
 pub(crate) fn mskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
@@ -482,10 +493,7 @@ pub(crate) fn paragraph_list(children:&mut NodeIter) -> Vec<TeXNode<Types>> {
                 success = true;
                 break;
             }
-            TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-                tp:BoxType::Horizontal,
-                kind:"parline",..
-            },.. }) => ret.extend(bx.children.into_iter()),
+            TeXNode::Box(bx@ TeXBox { info: BoxInfo::ParLine { .. },..}) => ret.extend(bx.children.into_iter()),
             o =>
                 todo!("{:?}",o)
         }
@@ -500,10 +508,7 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut NodeI
     while let Some(row) = children.next() {
         match row {
             TeXNode::Custom(RusTeXNode::HAlignEnd) => break,
-            TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-                tp:BoxType::Horizontal,
-                kind:"alignrow",..
-            },.. }) => {
+            TeXNode::Box(bx@ TeXBox { info: BoxInfo::HAlignRow,.. }) => {
                 num_cols = num_cols.max(bx.children.len());
                 rows.push(TeXNode::Box(bx));
             }
@@ -515,20 +520,14 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut NodeI
     state.do_in(node,|state| {
         for row in rows {
             match row {
-                TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-                    tp:BoxType::Horizontal,
-                    kind:"alignrow",..
-                },.. }) => {
+                TeXNode::Box(bx@ TeXBox { info: BoxInfo::HAlignRow,.. }) => {
                     let mut cols = 0;
                     let node = HTMLNode::new(HALIGN_ROW, true);
                     state.do_in(node,|state| {
                         for c in bx.children {
                             cols += 1;
                             match c {
-                                TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-                                    tp:BoxType::Horizontal,
-                                    kind:"aligncell",..
-                                },.. }) => {
+                                TeXNode::Box(bx@ TeXBox { info: BoxInfo::HAlignCell {.. },.. }) => {
                                     let node = HTMLNode::new(HALIGN_CELL, true);
                                     state.do_in(node,|state| {
                                         // TODO do moar smart stuff

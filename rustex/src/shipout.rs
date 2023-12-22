@@ -118,8 +118,7 @@ fn split_state<R,F:FnOnce(Refs,&mut ShipoutState) -> R>(engine:Refs,f:F) -> R {
 
 pub(crate) fn shipout_paginated(engine:Refs, n: TeXNode<Types>) {
     match n {
-        TeXNode::Box(TeXBox { children, info: BoxInfo {
-            tp:BoxType::Vertical,..}, start,end }) => split_state(engine,|engine,state|{
+        TeXNode::Box(TeXBox { children, info: BoxInfo::VBox {..}, start,end }) => split_state(engine,|engine,state|{
             let mut node = HTMLNode::new(crate::html::labels::PAGE, true);
             node.sourceref(start,end);
             state.do_in(node,|state| {
@@ -326,18 +325,12 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter) {
 
 fn do_v(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, top:bool) {
     match n {
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {raised:Some(_),..},..}) =>
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VBox {raised:Some(_),..} | BoxInfo::HBox {raised:Some(_),..}| BoxInfo::VTop {raised:Some(_),..},..}) =>
             nodes::do_raise(bx,state,true,|n,state| do_v(engine,state,n,false)),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {moved_left:Some(_),..},..}) =>
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VBox {moved_left:Some(_),..} | BoxInfo::HBox{moved_left:Some(_),..}| BoxInfo::VTop{moved_left:Some(_),..},..}) =>
             nodes::do_moveleft(bx,state,true,|n,state| do_v(engine,state,n,false)),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-            tp:BoxType::Vertical,
-            kind:"vbox",..
-        },.. }) => nodes::do_vbox(bx,state,engine,top,true),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-            tp:BoxType::Horizontal,
-            kind:"hbox",..
-        },.. }) => nodes::do_hbox(bx,state,engine,top,false),
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VBox { .. },.. }) => nodes::do_vbox(bx,state,engine,top,true),
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::HBox { .. },.. }) => nodes::do_hbox(bx,state,engine,top,false),
         TeXNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
         TeXNode::Whatsit(wi) =>
             if let Some(n) = wi.call(engine) { do_v(engine,state,n,top) }
@@ -354,22 +347,18 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, top:bool) {
 
 fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
     match n {
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {raised:Some(_),..},..}) =>
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VBox {raised:Some(_),..} | BoxInfo::HBox {raised:Some(_),..}| BoxInfo::VTop {raised:Some(_),..},..}) =>
             nodes::do_raise(bx,state,false,|n,state| do_h(engine,state,n,false)),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {moved_left:Some(_),..},..}) =>
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VBox {moved_left:Some(_),..} | BoxInfo::HBox {moved_left:Some(_),..} | BoxInfo::VTop {moved_left:Some(_),..},..}) =>
             nodes::do_moveleft(bx,state,false,|n,state| do_h(engine,state,n,false)),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-            tp:BoxType::Vertical,
-            kind:"vbox",..
-        },.. }) => nodes::do_vbox(bx,state,engine,false,false),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-            tp:BoxType::Vertical,
-            kind:"vcenter",..
-        },.. }) => nodes::do_vcenter(bx,state,engine),
-        TeXNode::Box(bx@ TeXBox { info: BoxInfo {
-            tp:BoxType::Horizontal,
-            kind:"hbox",..
-        },.. }) => nodes::do_hbox(bx,state,engine,false,!par),
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VBox { .. },.. }) => nodes::do_vbox(bx,state,engine,false,false),
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::VCenter,.. }) => nodes::do_vcenter(bx,state,engine),
+        TeXNode::Box(bx@ TeXBox { info: BoxInfo::HBox { .. },.. }) => nodes::do_hbox(bx,state,engine,false,!par),
+        TeXNode::Box(TeXBox{info:BoxInfo::ParIndent(d),..}) => {
+            let mut node = HTMLNode::new(crate::html::labels::PARINDENT,false);
+            node.style("margin-left",dim_to_string(d));
+            state.push(node);
+        }
         TeXNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
         TeXNode::Whatsit(wi) =>
             if let Some(n) = wi.call(engine) { do_h(engine,state,n,par) }
@@ -391,7 +380,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
             nodes::vrule(start,end,width,height,depth,state,par)
         }
         TeXNode::MathGroup(mut mg) if mg.children.iter().any(|n| matches!(n,
-            TeXNode::Box(TeXBox { info: BoxInfo {kind:"vcenter",..},.. })
+            TeXNode::Box(TeXBox { info: BoxInfo::VCenter,.. })
         )) && !mg.display => {
             if mg.children.len() == 1 {
                 if let Some(TeXNode::Box(bx)) = mg.children.pop() {
@@ -401,38 +390,47 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, par:bool) {
                 do_hlist(engine, state, &mut mg.children.into(), par,!par)
             }
         },
-        TeXNode::MathGroup(mut mg) => nodes::do_math(mg,state,engine),
+        TeXNode::MathGroup(mg) => nodes::do_math(mg,state,engine),
         _ => todo!("{:?}",n)
     }
 }
 
 fn get_box_dims(bx: &Bx,state:&ShipoutState,scale:fn(&Bx) -> Dim32,top:bool) -> (Option<Dim32>,Option<Dim32>,Option<Dim32>,Option<Dim32>) {
-    let wd = match bx.info.assigned_width {
-        Some(w) if w != state.curr_width() => Some(w),
-        None if top => match bx.width() {
+    let wd = match bx.info {
+        BoxInfo::HBox { assigned_width: Some(w),..} | BoxInfo::VBox { assigned_width: Some(w),..} | BoxInfo::VTop { assigned_width: Some(w),..}
+        if w == state.curr_width() => None,
+        BoxInfo::HBox { assigned_width: Some(w),..} | BoxInfo::VBox { assigned_width: Some(w),..} | BoxInfo::VTop { assigned_width: Some(w),..}
+            => Some(w),
+        _ if top => match bx.width() {
             w if w < ZERO => Some(ZERO),
             _ => None
         }
         _ => None
     };
-    let (ht,mut bottom) = match bx.info.assigned_height {
-        Some(h) if h < ZERO => (Some(ZERO),Some(h)),
-        Some(h) => (Some(h),None),
-        None if top && bx.height() < ZERO => (Some(ZERO),None),
+    let (ht,mut bottom) = match bx.info {
+        BoxInfo::HBox { assigned_height: Some(h),..} | BoxInfo::VBox { assigned_height: Some(h),..} | BoxInfo::VTop { assigned_height: Some(h),..}
+        if h < ZERO => (Some(ZERO),Some(h)),
+        BoxInfo::HBox { assigned_height: Some(h),..} | BoxInfo::VBox { assigned_height: Some(h),..} | BoxInfo::VTop { assigned_height: Some(h),..}
+            => (Some(h),None),
+        _ if top && bx.height() < ZERO => (Some(ZERO),None),
         _ => (None,None)
     };
-    match (bottom,bx.info.assigned_depth) {
-        (Some(b),Some(d)) => {
-            let s = b + d;
+    match (bottom,&bx.info) {
+        (Some(b),BoxInfo::HBox { assigned_depth: Some(d),..} | BoxInfo::VBox { assigned_depth: Some(d),..} | BoxInfo::VTop { assigned_depth: Some(d),..})
+            => {
+            let s = b + *d;
             if s != ZERO { bottom = Some(b);
             } else { bottom = None; }
         }
-        (_,Some(d)) if d != ZERO => bottom = Some(d),
+        (_,BoxInfo::HBox { assigned_depth: Some(d),..} | BoxInfo::VBox { assigned_depth: Some(d),..} | BoxInfo::VTop { assigned_depth: Some(d),..})
+            if *d != ZERO => bottom = Some(*d),
         _ => ()
     }
-    let to = match bx.info.scaled {
-        ToOrSpread::To(d) => Some(d),
-        ToOrSpread::Spread(s) => Some(s + scale(bx)),
+    let to = match bx.info {
+        BoxInfo::HBox { scaled: ToOrSpread::To(d),..} | BoxInfo::VBox { scaled: ToOrSpread::To(d),..} | BoxInfo::VTop { scaled: ToOrSpread::To(d),..}
+            => Some(d),
+        BoxInfo::HBox { scaled: ToOrSpread::Spread(s),..} | BoxInfo::VBox { scaled: ToOrSpread::Spread(s),..} | BoxInfo::VTop { scaled: ToOrSpread::Spread(s),..}
+            => Some(s + scale(bx)),
         _ => None
     };
     (wd,ht,bottom,to)
