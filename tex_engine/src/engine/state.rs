@@ -10,7 +10,7 @@ use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
-use crate::tex::types::{GroupType, TeXMode};
+use crate::tex::types::{GroupType, MathStyle, TeXMode};
 use crate::utils::{Ptr, ReusableVectorFactory};
 use crate::tex::nodes::TeXBox;
 
@@ -29,6 +29,9 @@ pub trait State:Sized+Clone {
     fn new(nullfont:Fnt<Self>,aux:&mut EngineAux<Self::ET>) -> Self;
 
     fn aftergroup(&mut self,token:T<Self>);
+
+    fn get_mathstyle(&self) -> MathStyle;
+    fn set_mathstyle(&mut self,style:MathStyle);
 
     fn push(&mut self,aux:&mut EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
     fn pop(&mut self,aux:&mut EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);

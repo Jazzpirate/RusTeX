@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter, Write};
 use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::SourceReference;
-use crate::tex::types::{BoxType, NodeType};
+use crate::tex::types::{BoxType, MathClass, NodeType};
 use crate::engine::filesystem::File;
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::pretokenized::TokenList;
@@ -102,7 +102,7 @@ pub enum TeXNode<ET:EngineTypes> {
     Box(TeXBox<ET>),
     Insert,
     VAdjust,
-    Math(MathGroup<ET>),
+    MathGroup(MathGroup<ET>),
     Simple(SimpleNode<ET>),
     Custom(ET::CustomNode),
     Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  }
@@ -140,7 +140,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<vadjust>")
             },
-            TeXNode::Math(group) => {
+            TeXNode::MathGroup(group) => {
                 group.readable_fmt(indent, f)
             },
             TeXNode::Simple(s) => s.readable_fmt(indent, f),
@@ -163,7 +163,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Kern(k) => k.height(),
             TeXNode::Mark(_, _) => ET::Dim::default(),
             TeXNode::Insert | TeXNode::VAdjust => todo!(),
-            TeXNode::Math(gr) => gr.height(),
+            TeXNode::MathGroup(gr) => gr.height(),
             TeXNode::Whatsit(_) => ET::Dim::default(),
             TeXNode::Custom(n) => n.height()
         }
@@ -178,7 +178,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Kern(k) => k.width(),
             TeXNode::Mark(_, _) => ET::Dim::default(),
             TeXNode::Insert | TeXNode::VAdjust => todo!(),
-            TeXNode::Math(gr) => gr.width(),
+            TeXNode::MathGroup(gr) => gr.width(),
             TeXNode::Whatsit(_) => ET::Dim::default(),
             TeXNode::Custom(n) => n.width(),
         }
@@ -192,7 +192,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Kern(k) => k.depth(),
             TeXNode::Mark(_, _) => ET::Dim::default(),
             TeXNode::Insert | TeXNode::VAdjust => todo!(),
-            TeXNode::Math(gr) => gr.depth(),
+            TeXNode::MathGroup(gr) => gr.depth(),
             TeXNode::Whatsit(_) => ET::Dim::default(),
             TeXNode::Custom(n) => n.depth(),
         }
@@ -207,7 +207,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Kern(_) => NodeType::Kern,
             TeXNode::Insert => NodeType::Insertion,
             TeXNode::VAdjust => NodeType::Adjust,
-            TeXNode::Math(_) => NodeType::Math,
+            TeXNode::MathGroup(_) => NodeType::Math,
             TeXNode::Mark(_, _) => NodeType::Mark,
             TeXNode::Whatsit(_) => NodeType::WhatsIt,
             TeXNode::Custom(n) => n.nodetype(),
@@ -224,7 +224,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Mark(_, _) => true,
             TeXNode::Insert => false,
             TeXNode::VAdjust => true,
-            TeXNode::Math(_) => false,
+            TeXNode::MathGroup(_) => false,
             TeXNode::Whatsit(_) => false,
             TeXNode::Custom(n) => n.opaque(),
         }
@@ -242,7 +242,7 @@ pub struct MathGroup<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> NodeTrait<ET> for MathGroup<ET> {
     #[inline(always)]
-    fn as_node(self) -> TeXNode<ET> { TeXNode::Math(self) }
+    fn as_node(self) -> TeXNode<ET> { TeXNode::MathGroup(self) }
     fn depth(&self) -> ET::Dim {
         self.children.iter().map(|c| c.depth()).max().unwrap_or_default()
     }
@@ -266,53 +266,29 @@ impl<ET:EngineTypes> NodeTrait<ET> for MathGroup<ET> {
         write!(f, "</math>")
     }
 }
-/*
+
 #[derive(Debug,Clone)]
-pub enum MathNode<ET:EngineTypes> {
-    Box(TeXBox<ET>),
-    Group(MathGroup<ET>),
+pub struct MathChar<ET:EngineTypes> {
+    pub char:ET::Char,
+    pub font:<ET::FontSystem as FontSystem>::Font,
+    pub width:ET::Dim,
+    pub height:ET::Dim,
+    pub depth:ET::Dim,
+    pub cls:MathClass
 }
-impl<ET:EngineTypes> NodeTrait<ET> for MathNode<ET> {
-    #[inline(always)]
-    fn as_node(self) -> TeXNode<ET> { match self {
-        MathNode::Box(b) => TeXNode::Box(b),
-        MathNode::Group(g) => TeXNode::Math(g)
-    } }
-    fn depth(&self) -> ET::Dim {
-        match self {
-            MathNode::Box(b) => b.depth(),
-            MathNode::Group(g) => g.depth()
-        }
-    }
-    fn height(&self) -> ET::Dim {
-        match self {
-            MathNode::Box(b) => b.height(),
-            MathNode::Group(g) => g.height()
-        }
-    }
-    fn width(&self) -> ET::Dim {
-        match self {
-            MathNode::Box(b) => b.width(),
-            MathNode::Group(g) => g.width()
-        }
-    }
-    #[inline(always)]
-    fn nodetype(&self) -> NodeType {
-        match self {
-            MathNode::Box(b) => b.nodetype(),
-            MathNode::Group(g) => g.nodetype()
-        }
-    }
-    #[inline(always)]
-    fn opaque(&self) -> bool { false }
+impl<ET:EngineTypes> NodeTrait<ET> for MathChar<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MathNode::Box(b) => b.readable_fmt(indent, f),
-            MathNode::Group(g) => g.readable_fmt(indent, f)
-        }
+        Self::readable_do_indent(indent,f)?;
+        write!(f, "<mathchar:{}>",self.char)
     }
+    fn height(&self) -> ET::Dim { self.height }
+    fn width(&self) -> ET::Dim { self.width }
+    fn depth(&self) -> ET::Dim { self.depth }
+    fn nodetype(&self) -> NodeType { NodeType::MathChar }
+    #[inline(always)]
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(SimpleNode::MathChar(self)) }
 }
-*/
+
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineTypes> {
     VRule{
@@ -326,11 +302,11 @@ pub enum SimpleNode<ET:EngineTypes> {
         height:Option<ET::Dim>,
         depth:Option<ET::Dim>,
         start:SR<ET>,end:SR<ET>
-    }
+    },
+    MathChar(MathChar<ET>)
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
-
     fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent,f)?;
         match self {
@@ -360,29 +336,34 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
                 }
                 write!(f, ">")
             }
+            SimpleNode::MathChar(mc) => mc.readable_fmt(indent, f)
         }
     }
     fn height(&self) -> ET::Dim {
         match self {
             SimpleNode::VRule { height, .. } => height.unwrap_or_default(),
             SimpleNode::HRule { height, .. } => height.unwrap_or(ET::Dim::from_sp(26214)),
+            SimpleNode::MathChar(mc) => mc.height(),
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
             SimpleNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
             SimpleNode::HRule { width, .. } => width.unwrap_or_default(),
+            SimpleNode::MathChar(mc) => mc.width(),
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
             SimpleNode::VRule { depth, .. } => depth.unwrap_or_default(),
             SimpleNode::HRule { depth, .. } => depth.unwrap_or_default(),
+            SimpleNode::MathChar(mc) => mc.depth(),
         }
     }
     fn nodetype(&self) -> NodeType {
         match self {
-            SimpleNode::VRule {..} | SimpleNode::HRule {..} => NodeType::Rule
+            SimpleNode::VRule {..} | SimpleNode::HRule {..} => NodeType::Rule,
+            SimpleNode::MathChar(_) => NodeType::MathChar
         }
     }
     #[inline(always)]

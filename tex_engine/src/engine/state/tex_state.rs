@@ -10,7 +10,7 @@ use crate::engine::utils::outputs::Outputs;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::input_text::Character;
 use crate::tex::input_text::CharacterMap;
-use crate::tex::types::{GroupType, TeXMode};
+use crate::tex::types::{GroupType, MathStyle, TeXMode};
 use crate::utils::HMap;
 use crate::engine::FontSystem;
 use crate::tex::nodes::TeXBox;
@@ -52,6 +52,7 @@ pub struct TeXState<ET:EngineTypes> {
     scriptscriptfonts:[Fnt<ET>;16],
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
+    mathstyle:MathStyle
 }
 impl<ET:EngineTypes> TeXState<ET> {
 
@@ -127,7 +128,18 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             textfonts:mathfonts.clone(),
             scriptfonts:mathfonts.clone(),
             scriptscriptfonts:mathfonts,
+            mathstyle:MathStyle::Text,
         }
+    }
+
+    #[inline(always)]
+    fn get_mathstyle(&self) -> MathStyle {
+        self.mathstyle
+    }
+
+    #[inline(always)]
+    fn set_mathstyle(&mut self, style: MathStyle) {
+        self.mathstyle = style
     }
 
     #[inline(always)]
@@ -503,9 +515,10 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     fn get_parshape(&self) -> &Vec<(Dim<Self>,Dim<Self>)> {
         &self.parshape
     }
-    #[inline(always)]
     fn take_parshape(&mut self) -> Vec<(Dim<Self>,Dim<Self>)> {
-        std::mem::take(&mut self.parshape)
+        let sh = std::mem::take(&mut self.parshape);
+        self.stack.add_change_locally(StateChange::ParShape { old: sh.clone() });
+        sh
     }
     fn set_parshape(&mut self, aux: &EngineAux<Self::ET>, parshape: Vec<(Dim<Self>,Dim<Self>)>, globally: bool) {
         self.change_field(globally, |s,g| {

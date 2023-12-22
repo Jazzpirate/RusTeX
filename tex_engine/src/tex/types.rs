@@ -3,6 +3,30 @@
 
 use std::fmt::Display;
 
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum MathStyle {
+    Text,
+    Script,
+    ScriptScript
+}
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+pub enum MathClass { Ord = 0, Op = 1, Bin = 2, Rel = 3, Open = 4, Close = 5, Punct = 6 }
+impl From<u8> for MathClass {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => MathClass::Ord,
+            1 => MathClass::Op,
+            2 => MathClass::Bin,
+            3 => MathClass::Rel,
+            4 => MathClass::Open,
+            5 => MathClass::Close,
+            6 => MathClass::Punct,
+            _ => panic!("Invalid math class {}",v)
+        }
+    }
+}
+
 /// The type of a group, e.g. `{...}`, `\begingroup...\endgroup`, `$...$`.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub enum GroupType {

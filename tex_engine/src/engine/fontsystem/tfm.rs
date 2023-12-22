@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::PathBuf;
 use crate::utils::HMap;
@@ -13,7 +14,7 @@ pub struct TfmFile {
     pub heights: [f64;256],
     pub depths: [f64;256],
     pub ics:[f64;256],
-    pub ligs:HMap<(u8,u8),u8>,
+    pub ligs:BTreeMap<(u8,u8),u8>,
     pub filepath:PathBuf,
 }
 
@@ -42,7 +43,7 @@ impl TfmFile {
         let mut heights: [f64;256] = [0.0;256];
         let mut depths: [f64;256] = [0.0;256];
         let mut ics: [f64;256] = [0.0;256];
-        let mut ligs:HMap<(u8,u8),u8> = HMap::default();
+        let mut ligs:BTreeMap<(u8,u8),u8> = BTreeMap::new();
 
         let (lf,lh) = state.read_int();
         let (bc,ec) = state.read_int();
@@ -92,12 +93,10 @@ impl TfmFile {
         let depthls: Vec<f64> = (0..nd).map(|_| state.read_float()).collect();
         let italicls: Vec<f64> = (0..ni).map(|_| state.read_float()).collect();
 
-        let mut ligatures : Vec<(bool,u16,bool,u16)> = vec!();
+        let mut lig_kerns: Vec<(u8, u8, u8, u8)> = vec!();
         for _ in 0..nl {
             let (a,b,c,d) = state.pop();
-            let stop = a >= 128;
-            let tag = c >= 128;
-            ligatures.push((stop,b as u16,tag,d as u16))
+            lig_kerns.push((a, b, c, d));
         }
         state.skip(nk + ne);
         assert_eq!(state.i,lh + 6 + (ec-bc+1) + nw + nh + nd + ni + nl + nk + ne);
@@ -135,9 +134,7 @@ impl TfmFile {
                 None => (),
                 Some(f) => {ics[t.char as usize] = factor * f;}
             }
-            for (nc,rep) in t.ligature(&ligatures) {
-                ligs.insert((t.char,nc),rep);
-            }
+            t.ligature(&lig_kerns, &mut ligs)
         }
         assert_eq!(state.i,lf);
 
@@ -190,20 +187,20 @@ impl FontState {
     }
     fn read_fifo(&mut self,char:u8) -> FInfoEntry {
         self.read_word();
-        let width_index = 0x000000FF & self.buf[0];
+        let width_index = self.buf[0];
         let (height_index,depth_index) = {
-            let byte = 0x000000FF & self.buf[1];
-            let second = byte % 16;
-            let first = (byte - second) / 16;
+            let byte = self.buf[1];
+            let first = (0b11110000 & byte) >> 4;
+            let second = 0b00001111 & byte;
             (first,second)
         };
         let (char_ic_index,tag_field) = {
-            let full = 0x000000FF & self.buf[2];
-            let second = full % 4;
-            let first = (full - second) / 4;
+            let byte = self.buf[2];
+            let first = (0b11111100 & byte) >> 2;
+            let second = 0b00000011 & byte;
             (first,second)
         };
-        let remainder = 0x000000FF & self.buf[3];
+        let remainder = self.buf[3];
 
         FInfoEntry {
             char,width_index,height_index,depth_index,char_ic_index,tag_field,remainder
@@ -221,26 +218,51 @@ struct FInfoEntry {
     remainder: u8
 }
 impl FInfoEntry {
-    pub fn ligature(&self,ligs:&Vec<(bool,u16,bool,u16)>) -> Vec<(u8,u8)> {
-        match self.tag_field {
-            1 => {
-                let mut i = self.remainder as usize;
-                let mut ret : Vec<(u8,u8)> = vec!();
-                loop {
-                    let e = ligs.get(i);
-                    match e {
-                        Some((stop, nc, false, rep)) => {
-                            ret.push((*nc as u8,*rep as u8));
-                            if *stop {return ret} else {i += 1}
+    pub fn ligature(&self,ligs:&Vec<(u8,u8,u8,u8)>,map: &mut BTreeMap<(u8,u8),u8>) {
+        if self.tag_field == 1 {
+            let mut i = self.remainder as usize;
+            match ligs.get(i).copied() {
+                Some((mut skip,mut next,mut op,mut rem)) => {
+                    if skip > 128 {
+                        i = (256 * (op as usize)) + (rem as usize);
+                        match ligs.get(i).copied() {
+                            Some((s,n,o,r)) => {
+                                skip = s;next = n;op = o;rem = r;
+                            }
+                            None => todo!("should not be able to happen")
                         }
-                        Some((false,_,_,_)) => i += 1,
-                        _ => return ret
+                    }
+                    if op < 128 {
+                        loop {
+                            map.insert((self.char, next), rem);
+                            if skip >= 128 { return } else {
+                                i += 1 + (skip as usize);
+                                match ligs.get(i).copied() {
+                                    Some((s,n,o,r)) => {
+                                        skip = s;next = n;op = o;rem = r;
+                                    }
+                                    None => todo!("should not be able to happen")
+                                }
+                            }
+                        }
                     }
                 }
+                None => todo!("should not be able to happen")
             }
-            2 => vec!(),
-            3 => vec!(),
-            _ => vec!()
+
+            //let mut i = self.remainder as usize;
+            /*
+            loop {
+                match ligs.get(i) {
+                    Some(Some((stop, next, res))) => {
+                        map.insert((self.char, *next), *res);
+                        if *stop { break }
+                        i += 1;
+                    }
+                    _ => break
+                }
+            }
+             */
         }
     }
 }

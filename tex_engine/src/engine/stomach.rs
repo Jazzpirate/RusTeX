@@ -7,9 +7,9 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode, MathGroup};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode, MathGroup, MathChar};
 use crate::tex::numerics::NumSet;
-use crate::tex::types::{BoxType, GroupType, TeXMode};
+use crate::tex::types::{BoxType, GroupType, MathClass, MathStyle, TeXMode};
 use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::token::Token;
@@ -117,7 +117,7 @@ pub trait Stomach {
                         _ => todo!("throw error")
                     }}
                     engine.state.pop(engine.aux,engine.mouth);
-                    Self::add_node(engine,TeXNode::Math(MathGroup {
+                    Self::add_node(engine,TeXNode::MathGroup(MathGroup {
                         children,display:top_display,start,end:engine.mouth.current_sourceref()
                     }));
                 }
@@ -141,11 +141,62 @@ pub trait Stomach {
                 engine.mouth.insert_every::<Self::ET>(engine.state,every);
             }
             CommandCode::Other | CommandCode::Letter => {
-                todo!("Char in math mode")
+                let code = engine.state.get_mathcode(char);
+                if code == 32768 {
+                    engine.mouth.requeue(Tk::<Self>::from_char_cat(char,CommandCode::Active));
+                } else {
+                    let ret = Self::do_mathchar(engine,code,Some(char));
+                    Self::add_node(engine,TeXNode::Simple(SimpleNode::MathChar(ret)));
+                }
             }
             _ => todo!("{} > {:?}",char,code)
         }
     }
+
+    fn do_mathchar(engine:&mut EngineReferences<Self::ET>,mathcode:u32,char:Option<Ch<Self>>) -> MathChar<Self::ET> {
+        let (mut cls,mut fam,pos) = {
+            if mathcode == 0 {
+                (0,0,match char {
+                    Some(c) => c.try_into().ok().unwrap(),
+                    _ => 0
+                })
+            } else {
+                let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
+                let fam = ((mathcode >> 8) & 0xF) as usize;      // (rest % 16)
+                let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
+                (rest_fam_shifted as u8, fam, char)
+            }
+        };
+        if cls == 7 {
+            let i = engine.state.get_primitive_int(PRIMITIVES.fam).into();
+            match i {
+                i if i < 0 || i > 15 => {
+                    cls = 0;
+                }
+                i => {
+                    cls = 0;
+                    fam = i as usize;
+                }
+            }
+        }
+        let mode = engine.state.get_mathstyle();
+        let font = match mode {
+            MathStyle::Text => engine.state.get_textfont(fam),
+            MathStyle::Script => engine.state.get_scriptfont(fam),
+            MathStyle::ScriptScript => engine.state.get_scriptscriptfont(fam),
+        }.clone();
+        let cls = MathClass::from(cls);
+        let char = Ch::<Self>::from(pos);
+        MathChar {
+            width:font.get_wd(char),
+            height:font.get_ht(char),
+            depth:font.get_dp(char),
+            char,
+            font,
+            cls,
+        }
+    }
+
     fn do_word(engine:&mut EngineReferences<Self::ET>,char:Ch<Self>) {
         // TODO trace
         let mut current = char;
@@ -171,7 +222,8 @@ pub trait Stomach {
         }
         crate::expand_loop!(Self::ET;engine,
             ResolvedToken::Tk { code:CommandCode::Noexpand, .. } => {engine.get_next();},
-            ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } => char!(char),
+            ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } =>
+                char!(char),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
                 char!(*char),
             ResolvedToken::Cmd{ cmd:Some(Command::Unexpandable (Unexpandable{name,..})),.. } if *name == PRIMITIVES.char => {
@@ -407,7 +459,7 @@ pub trait Stomach {
 
     fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
         let data = engine.stomach.data_mut();
-        if data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
+        if !data.in_output && data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
             Self::do_shipout_output(engine, None)
         }
     }
@@ -415,6 +467,8 @@ pub trait Stomach {
     fn do_shipout_output(engine:&mut EngineReferences<Self::ET>, forced:Option<i32>) {
         let data = engine.stomach.data_mut();
         let page = std::mem::take(&mut data.page);
+        data.pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX);
+        data.pagetotal = <Self::ET as EngineTypes>::Dim::default();
         data.page_contains_boxes = false;
         // TODO more precisely
         engine.state.set_primitive_int(engine.aux,PRIMITIVES.badness,(10).into(),true);
@@ -575,8 +629,8 @@ pub struct ParLineSpec<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> ParLineSpec<ET> {
     pub fn make(state:&mut ET::State,aux:&mut EngineAux<ET>) -> Vec<ParLineSpec<ET>> {
-        let parshape = state.take_parshape();
-        let hangindent = state.get_primitive_dim(PRIMITIVES.hangindent);
+        let parshape = state.take_parshape(); // (left-indent,width)*
+        let hangindent = state.get_primitive_dim(PRIMITIVES.hangindent); // left-indent
         let hangafter = state.get_primitive_int(PRIMITIVES.hangafter).into();
         state.set_primitive_int(aux,PRIMITIVES.hangafter,ET::Int::default(),false);
         state.set_primitive_dim(aux,PRIMITIVES.hangindent,ET::Dim::default(),false);
@@ -593,7 +647,7 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
                 if hangafter < 0 {
                     let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|_| ParLineSpec {
                         target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
-                        leftskip,rightskip
+                        leftskip:leftskip.add(hangindent),rightskip
                     }).collect();
                     r.push(ParLineSpec {
                         target:hsize + -(leftskip.base() + rightskip.base()),
@@ -607,15 +661,19 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
                     }).collect();
                     r.push(ParLineSpec {
                         target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
-                        leftskip,rightskip
+                        leftskip:leftskip.add(hangindent),rightskip
                     });
                     r
                 }
             }
         } else {
-            parshape.into_iter().map(|(_,l)| ParLineSpec {
-                leftskip,rightskip,
-                target:l + -(leftskip.base() + rightskip.base())
+            parshape.into_iter().map(|(i,l)| {
+                let left = leftskip.add(i);
+                let target = l + -(leftskip.base() + rightskip.base());
+                let right = rightskip.add(hsize + -(l + i));
+                ParLineSpec {
+                    leftskip:left,rightskip:right,target
+                }
             }).collect()
         }
     }
@@ -804,7 +862,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 }
                 Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert | TeXNode::VAdjust)) =>
                     reinserts.push(n),
-                Some(TeXNode::Math(MathGroup {display:true,..})) => todo!(),
+                Some(TeXNode::MathGroup(MathGroup {display:true,..})) => todo!(),
                 Some(TeXNode::Penalty(i)) if i <= -10000 => {
                     next_line!(true); // TODO mark somehow
                     continue 'A

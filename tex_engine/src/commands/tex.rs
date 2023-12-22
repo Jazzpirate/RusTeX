@@ -121,6 +121,25 @@ pub fn spacefactor_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::
     engine.stomach.data_mut().spacefactor = val;
 }
 
+
+#[inline(always)]
+pub fn parshape_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
+    Int::<ET>::from(engine.state.get_parshape().len() as i32)
+}
+pub fn parshape_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
+    let len = engine.read_int(false).into();
+    if len < 0 {
+        todo!("throw error")
+    }
+    let mut shape = Vec::with_capacity(len as usize);
+    for _ in 0..len {
+        let a = engine.read_dim(false);
+        let b = engine.read_dim(false);
+        shape.push((a,b))
+    }
+    engine.state.set_parshape(engine.aux,shape,globally);
+}
+
 pub fn lccode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     let char = engine.read_charcode(false);
     let u = engine.state.get_lccode(char).into();
@@ -2095,6 +2114,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"month",month,None);
     register_int(engine,"year",year,None);
     register_int(engine,"lastpenalty",lastpenalty,None);
+    register_int(engine,"parshape",parshape_get,Some(parshape_set));
 
     register_dim(engine,"fontdimen",fontdimen_get,Some(fontdimen_set));
     register_dim(engine,"dimen",dimen_get,Some(dimen_set));
@@ -2264,7 +2284,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         vtop,discretionary,displaylimits,end,
         mathchoice,noalign,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
-        pagedepth,pageshrink,parshape,span,underline,vadjust
+        pagedepth,pageshrink,span,underline,vadjust
     );
 
     register_primitive_int(engine,PRIMITIVE_INTS);
