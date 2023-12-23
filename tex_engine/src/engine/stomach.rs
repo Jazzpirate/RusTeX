@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, ToOrSpread, WhatsitNode, SkipNode, MathGroup, MathChar};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, WhatsitNode, SkipNode, MathGroup, MathChar};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, MathClass, MathStyle, TeXMode};
 use crate::utils::HMap;
@@ -70,6 +70,10 @@ pub trait Stomach {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(ls) => match ls.tp {
                 NodeListType::Paragraph(_) => { unreachable!() }
+                NodeListType::VAdjust => {
+                    engine.state.pop(engine.aux,engine.mouth);
+                    Self::add_node(engine,TeXNode::VAdjust(ls.children))
+                }
                 NodeListType::Box(bi,start,reg) if bi.tp() == bt => {
                     engine.state.pop(engine.aux,engine.mouth);
                     let bx = TeXBox {
@@ -847,8 +851,9 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     }
                     break 'A
                 }
-                Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert | TeXNode::VAdjust)) =>
+                Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert)) =>
                     reinserts.push(n),
+                Some(TeXNode::VAdjust(ls)) => reinserts.extend(ls.into_iter()),
                 Some(TeXNode::MathGroup(MathGroup {display:true,..})) => todo!(),
                 Some(TeXNode::Penalty(i)) if i <= -10000 => {
                     next_line!(true); // TODO mark somehow

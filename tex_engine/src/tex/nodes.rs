@@ -33,6 +33,7 @@ pub enum NodeListType<ET:EngineTypes> {
     Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
     Box(BoxInfo<ET>,SR<ET>,BoxTarget),
     Align,
+    VAdjust,
     AlignRow(SourceReference<<ET::File as File>::SourceRefID>),
     AlignCell(SourceReference<<ET::File as File>::SourceRefID>),
     Math{start:SourceReference<<ET::File as File>::SourceRefID>,top_display:bool}
@@ -102,7 +103,7 @@ pub enum TeXNode<ET:EngineTypes> {
     Kern(KernNode<ET>),
     Box(TeXBox<ET>),
     Insert,
-    VAdjust,
+    VAdjust(Vec<TeXNode<ET>>),
     MathGroup(MathGroup<ET>),
     Simple(SimpleNode<ET>),
     Custom(ET::CustomNode),
@@ -137,9 +138,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<insert>")
             },
-            TeXNode::VAdjust => {
+            TeXNode::VAdjust(ls) => {
                 Self::readable_do_indent(indent,f)?;
-                f.write_str("<vadjust>")
+                f.write_str("<vadjust>");
+                for c in ls {
+                    c.readable_fmt(indent+2, f)?;
+                }
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("</vadjust>")
             },
             TeXNode::MathGroup(group) => {
                 group.readable_fmt(indent, f)
@@ -163,7 +169,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { height, .. } => *height,
             TeXNode::Kern(k) => k.height(),
             TeXNode::Mark(_, _) => ET::Dim::default(),
-            TeXNode::Insert | TeXNode::VAdjust => todo!(),
+            TeXNode::Insert  => todo!(),
+            TeXNode::VAdjust(ls) => ls.iter().map(|c| c.height()).sum(),
             TeXNode::MathGroup(gr) => gr.height(),
             TeXNode::Whatsit(_) => ET::Dim::default(),
             TeXNode::Custom(n) => n.height()
@@ -178,7 +185,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { width, .. } => *width,
             TeXNode::Kern(k) => k.width(),
             TeXNode::Mark(_, _) => ET::Dim::default(),
-            TeXNode::Insert | TeXNode::VAdjust => todo!(),
+            TeXNode::Insert => todo!(),
+            TeXNode::VAdjust(ls) => ls.iter().map(|c| c.width()).max().unwrap_or_default(),
             TeXNode::MathGroup(gr) => gr.width(),
             TeXNode::Whatsit(_) => ET::Dim::default(),
             TeXNode::Custom(n) => n.width(),
@@ -192,7 +200,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { depth, .. } => *depth,
             TeXNode::Kern(k) => k.depth(),
             TeXNode::Mark(_, _) => ET::Dim::default(),
-            TeXNode::Insert | TeXNode::VAdjust => todo!(),
+            TeXNode::Insert => todo!(),
+            TeXNode::VAdjust(ls) => ls.last().map(|c| c.depth()).unwrap_or_default(),
             TeXNode::MathGroup(gr) => gr.depth(),
             TeXNode::Whatsit(_) => ET::Dim::default(),
             TeXNode::Custom(n) => n.depth(),
@@ -207,7 +216,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { .. } => NodeType::Char,
             TeXNode::Kern(_) => NodeType::Kern,
             TeXNode::Insert => NodeType::Insertion,
-            TeXNode::VAdjust => NodeType::Adjust,
+            TeXNode::VAdjust(_) => NodeType::Adjust,
             TeXNode::MathGroup(_) => NodeType::Math,
             TeXNode::Mark(_, _) => NodeType::Mark,
             TeXNode::Whatsit(_) => NodeType::WhatsIt,
@@ -224,7 +233,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for TeXNode<ET> {
             TeXNode::Char { .. } => false,
             TeXNode::Mark(_, _) => true,
             TeXNode::Insert => false,
-            TeXNode::VAdjust => true,
+            TeXNode::VAdjust(_) => false,
             TeXNode::MathGroup(_) => false,
             TeXNode::Whatsit(_) => false,
             TeXNode::Custom(n) => n.opaque(),

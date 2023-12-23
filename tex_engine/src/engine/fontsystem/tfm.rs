@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::PathBuf;
-use crate::utils::HMap;
 
 #[derive(Debug)]
 pub struct TfmFile {
@@ -238,8 +237,8 @@ impl FInfoEntry {
                             if skip >= 128 { return } else {
                                 i += 1 + (skip as usize);
                                 match ligs.get(i).copied() {
-                                    Some((s,n,o,r)) => {
-                                        skip = s;next = n;op = o;rem = r;
+                                    Some((s,n,_,r)) => {
+                                        skip = s;next = n;rem = r;//op = o;
                                     }
                                     None => todo!("should not be able to happen")
                                 }

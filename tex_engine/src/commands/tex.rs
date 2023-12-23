@@ -1852,6 +1852,19 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
     Ok(Some(ret))
 }
 
+pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    match engine.state.get_mode() {
+        TeXMode::Vertical | TeXMode::InternalVertical => todo!("throw error"),
+        _ => ()
+    }
+    engine.expand_until_bgroup(true);
+    engine.stomach.data_mut().open_lists.push(NodeList {
+        children:vec!(),
+        tp:NodeListType::VAdjust
+    });
+    engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
+}
+
 #[inline(always)]
 pub fn year<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.aux.start_time.year())
@@ -2228,6 +2241,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"lower",lower);
     register_unexpandable(engine,"shipout",shipout);
     register_unexpandable(engine, "patterns", |e,_|skip_argument(e));
+    register_unexpandable(engine,"vadjust",vadjust);
     {
         let refs = engine.get_engine_refs();
         let relax = refs.aux.memory.cs_interner_mut().new("relax");
@@ -2283,16 +2297,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         vtop,discretionary,displaylimits,end,
         mathchoice,noalign,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
-        pagedepth,pageshrink,span,underline,vadjust
+        pagedepth,pageshrink,span,underline
     );
-
-    register_primitive_int(engine,PRIMITIVE_INTS);
-    register_primitive_dim(engine,PRIMITIVE_DIMS);
-    register_primitive_skip(engine,PRIMITIVE_SKIPS);
-    register_primitive_muskip(engine,PRIMITIVE_MUSKIPS);
-    register_primitive_toks(engine,PRIMITIVE_TOKS);
-
-    // TODOS ---------------------------------------------------------------------
 
     cmstodo!(engine,radical);
     cmstodo!(engine,displaystyle);
@@ -2305,6 +2311,15 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         limits,nolimits,over,atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
         leqno,bigskip,bye,fontname,italiccorr,medskip,smallskip
     );
+
+    register_primitive_int(engine,PRIMITIVE_INTS);
+    register_primitive_dim(engine,PRIMITIVE_DIMS);
+    register_primitive_skip(engine,PRIMITIVE_SKIPS);
+    register_primitive_muskip(engine,PRIMITIVE_MUSKIPS);
+    register_primitive_toks(engine,PRIMITIVE_TOKS);
+
+    // TODOS ---------------------------------------------------------------------
+
 
 /*
     register_assign!(advance,engine,(e,cmd,global) =>advance::<ET>(e,&cmd,global));
