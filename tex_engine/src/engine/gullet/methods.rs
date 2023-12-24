@@ -1090,31 +1090,55 @@ type MSh<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Shrink;
 pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> MS<ET> {
     let (is_negative,r) = read_numeric(engine, skip_eq);
     match r {
-        Ok(b) => read_muskip_byte(engine,is_negative,b),
-        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token)
+        Ok(b) => read_muskip_byte(engine,is_negative,b,|d,e| read_muskip_ii(e,d)),
+        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|s| s,|d,e| read_muskip_ii(e,d))
     }
 }
 
-pub fn read_muskip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> MS<ET> {
+
+pub fn read_mukern<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> MB<ET> {
+    let (is_negative,r) = read_numeric(engine, skip_eq);
+    match r {
+        Ok(b) => read_muskip_byte(engine,is_negative,b,|d,_| d),
+        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|s| s.base(),|d,_| d)
+    }
+}
+
+pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
     if b == b',' || b == b'.' {
-        read_muskip_dim(engine,is_negative,b'.')
+        read_muskip_dim(engine,is_negative,b'.',kern)
     } else if is_ascii_digit(b) {
-        read_muskip_dim(engine,is_negative,b)
+        read_muskip_dim(engine,is_negative,b,kern)
     } else {
         todo!("error?")
     }
 }
 
-pub fn read_muskip_command<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, _is_negative:bool,cmd:Command<ET>,_token:ET::Token) -> MS<ET> {
+pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token,skip:fn(MS<ET>) -> R,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
     match cmd {
+        Command::MuSkipRegister(u) => {
+            let base = engine.state.get_muskip_register(u);
+            let base = if is_negative {-base} else {base};
+            skip(base)
+        }
+        Command::PrimitiveMuSkip(name)=> {
+            let base = engine.state.get_primitive_muskip(name);
+            let base = if is_negative {-base} else {base};
+            skip(base)
+        }
+        Command::MuSkip(cmd) => {
+            let base = (cmd.read)(engine,token);
+            let base = if is_negative {-base} else {base};
+            skip(base)
+        }
         _ => todo!("read skip command: {:?}",cmd)
     }
 }
 
 #[inline(always)]
-fn read_muskip_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> MS<ET> {
+fn read_muskip_dim<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
     let base = read_mudim_float(engine,is_negative,first);
-    read_muskip_ii(engine,base)
+    kern(base,engine)
 }
 
 fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MB<ET> {
@@ -1156,7 +1180,7 @@ pub fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f
     }
 }
 
-fn read_muskip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:MB<ET>) -> MS<ET> {
+pub(crate) fn read_muskip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:MB<ET>) -> MS<ET> {
     match read_keywords(engine,&[PLUS,MINUS],None) {
         Some(b) if b == PLUS => {
             let stretch = read_mustretch(engine);

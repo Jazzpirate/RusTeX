@@ -282,9 +282,20 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 }
 
 pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
+    fn muskip_byte<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,b:u8) -> <ET::Num as NumSet>::MuSkip {
+        crate::engine::gullet::methods::read_muskip_byte(
+            engine,is_negative,b,
+            |d,e| crate::engine::gullet::methods::read_muskip_ii(e, d)
+        )
+    }
+    fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,cmd:Command<ET>,tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
+        crate::engine::gullet::methods::read_muskip_command(
+            engine,is_negative,cmd,tk,|s| s,
+            |d,e| crate::engine::gullet::methods::read_muskip_ii(e, d)
+        )
+    }
     let (i,r) = expr_loop(engine,
-                          crate::engine::gullet::methods::read_muskip_byte,
-                          crate::engine::gullet::methods::read_muskip_command
+                          muskip_byte,muskip_cmd
     );
     if !r.is_cs_or_active() {
         engine.requeue(r)

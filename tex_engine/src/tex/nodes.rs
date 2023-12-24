@@ -10,8 +10,9 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::stomach::ParLineSpec;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::input_text::Character;
-use crate::tex::numerics::{Skip, TeXDimen};
+use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
 use crate::utils::Ptr;
+use crate::tex::numerics::NumSet;
 
 type SR<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
 
@@ -299,6 +300,24 @@ impl<ET:EngineTypes> NodeTrait<ET> for MathChar<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(SimpleNode::MathChar(self)) }
 }
 
+#[derive(Clone,Debug)]
+pub struct Delimiter<ET:EngineTypes> {
+    pub small:MathChar<ET>,
+    pub large:MathChar<ET>,
+}
+impl<ET:EngineTypes> NodeTrait<ET> for Delimiter<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Self::readable_do_indent(indent,f)?;
+        write!(f, "<delimiter:{}>",self.small.char)
+    }
+    fn height(&self) -> ET::Dim { self.small.height }
+    fn width(&self) -> ET::Dim { self.small.width }
+    fn depth(&self) -> ET::Dim { self.small.depth }
+    fn nodetype(&self) -> NodeType { NodeType::Math }
+    #[inline(always)]
+    fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(SimpleNode::Delim(self)) }
+}
+
 #[derive(Debug,Clone)]
 pub enum SimpleNode<ET:EngineTypes> {
     VRule{
@@ -313,7 +332,8 @@ pub enum SimpleNode<ET:EngineTypes> {
         depth:Option<ET::Dim>,
         start:SR<ET>,end:SR<ET>
     },
-    MathChar(MathChar<ET>)
+    MathChar(MathChar<ET>),
+    Delim(Delimiter<ET>)
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
@@ -346,7 +366,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
                 }
                 write!(f, ">")
             }
-            SimpleNode::MathChar(mc) => mc.readable_fmt(indent, f)
+            SimpleNode::MathChar(mc) => mc.readable_fmt(indent, f),
+            SimpleNode::Delim(d) => d.readable_fmt(indent, f),
         }
     }
     fn height(&self) -> ET::Dim {
@@ -354,6 +375,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::VRule { height, .. } => height.unwrap_or_default(),
             SimpleNode::HRule { height, .. } => height.unwrap_or(ET::Dim::from_sp(26214)),
             SimpleNode::MathChar(mc) => mc.height(),
+            SimpleNode::Delim(d) => d.height(),
         }
     }
     fn width(&self) -> ET::Dim {
@@ -361,6 +383,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
             SimpleNode::HRule { width, .. } => width.unwrap_or_default(),
             SimpleNode::MathChar(mc) => mc.width(),
+            SimpleNode::Delim(d) => d.width(),
         }
     }
     fn depth(&self) -> ET::Dim {
@@ -368,12 +391,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
             SimpleNode::VRule { depth, .. } => depth.unwrap_or_default(),
             SimpleNode::HRule { depth, .. } => depth.unwrap_or_default(),
             SimpleNode::MathChar(mc) => mc.depth(),
+            SimpleNode::Delim(d) => d.depth(),
         }
     }
     fn nodetype(&self) -> NodeType {
         match self {
             SimpleNode::VRule {..} | SimpleNode::HRule {..} => NodeType::Rule,
-            SimpleNode::MathChar(_) => NodeType::MathChar
+            SimpleNode::MathChar(_) => NodeType::MathChar,
+            SimpleNode::Delim(_) => NodeType::Math,
         }
     }
     #[inline(always)]
@@ -382,13 +407,13 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
 
 #[derive(Debug,Clone)]
 pub enum KernNode<ET:EngineTypes> {
-    VKern(ET::Dim),HKern(ET::Dim),MKern(ET::Dim)
+    VKern(ET::Dim),HKern(ET::Dim),MKern(<ET::MuSkip as MuSkip>::Base,ET::Dim)
 }
 impl <ET:EngineTypes> KernNode<ET> {
     pub fn dim(&self) -> ET::Dim { match self {
         KernNode::VKern(d) => *d,
         KernNode::HKern(d) => *d,
-        KernNode::MKern(d) => *d
+        KernNode::MKern(b,d) => ET::Num::mudim_to_dim(*b,*d)
     } }
 }
 impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
@@ -397,7 +422,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
         match self {
             KernNode::VKern(d) => write!(f, "<vkern:{}>",d),
             KernNode::HKern(d) => write!(f, "<hkern:{}>",d),
-            KernNode::MKern(d) => write!(f, "<mkern:{}>",d),
+            KernNode::MKern(b,d) => write!(f, "<mkern:{}>",b),
         }
     }
     fn height(&self) -> ET::Dim { match self {
@@ -406,6 +431,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
     } }
     fn width(&self) -> ET::Dim { match self {
         KernNode::HKern(d) => *d,
+        KernNode::MKern(b,d) => ET::Num::mudim_to_dim(*b,*d),
         _ => ET::Dim::default()
     }}
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
@@ -417,12 +443,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
 #[derive(Debug,Clone)]
 pub enum SkipNode<ET:EngineTypes> {
     VSkip(ET::Skip),Space,VFil,VFill,VFilneg,Vss,
-    HSkip(ET::Skip),HFil,HFill,HFilneg,Hss
+    HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,
+    MSkip(ET::MuSkip,ET::Dim)
 }
 impl <ET:EngineTypes> SkipNode<ET> {
     pub fn skip(&self) -> ET::Skip { match self {
         SkipNode::VSkip(s) => *s,
         SkipNode::HSkip(s) => *s,
+        SkipNode::MSkip(s,f) => ET::Num::muskip_to_skip(*s,*f),
         _ => ET::Skip::default() // TODO
     } }
 }
@@ -437,6 +465,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
             SkipNode::VFilneg => write!(f, "<vfilneg>"),
             SkipNode::Vss => write!(f, "<vss>"),
             SkipNode::HSkip(s) => write!(f, "<hskip:{}>",s),
+            SkipNode::MSkip(s,_) => write!(f, "<mskip:{}>",s),
             SkipNode::HFil => write!(f, "<hfil>"),
             SkipNode::HFill => write!(f, "<hfill>"),
             SkipNode::HFilneg => write!(f, "<hfilneg>"),
@@ -450,6 +479,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
     fn width(&self) -> ET::Dim { match self {
         SkipNode::HSkip(s) => s.base(),
         SkipNode::Space => ET::Dim::from_sp(65536),
+        SkipNode::MSkip(s,f) => ET::Num::mudim_to_dim(s.base(),*f),
         _ => ET::Dim::default()
     } }
     #[inline(always)]

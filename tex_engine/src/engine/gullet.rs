@@ -12,7 +12,7 @@ use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVE
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::input_text::Character;
-use crate::tex::numerics::NumSet;
+use crate::tex::numerics::{MuSkip, NumSet};
 use crate::tex::token::{StandardToken, Token};
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::types::BoxType;
@@ -25,7 +25,7 @@ type C<G> = <<G as Gullet>::ET as EngineTypes>::Char;
 type Int<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Int;
 type Dim<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Dim;
 type Skip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Skip;
-type MuSkip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::MuSkip;
+type MSkip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::MuSkip;
 
 pub trait Gullet {
     type ET:EngineTypes<Gullet=Self>;
@@ -145,8 +145,12 @@ pub trait Gullet {
         methods::read_skip(engine,skip_eq)
     }
     #[inline(always)]
-    fn read_muskip(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> MuSkip<Self> {
+    fn read_muskip(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> MSkip<Self> {
         methods::read_muskip(engine,skip_eq)
+    }
+    #[inline(always)]
+    fn read_mudim(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> <MSkip<Self> as MuSkip>::Base {
+        methods::read_mukern(engine,skip_eq)
     }
 
     #[inline(always)]
@@ -370,6 +374,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     #[inline(always)]
     pub fn read_muskip(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::MuSkip {
         ET::Gullet::read_muskip(self,skip_eq)
+    }
+    #[inline(always)]
+    pub fn read_mudim(&mut self,skip_eq:bool) -> <<ET::Num as NumSet>::MuSkip as MuSkip>::Base {
+        ET::Gullet::read_mudim(self,skip_eq)
     }
     #[inline(always)]
     pub fn read_chars(&mut self,kws:&[u8]) -> Result<u8,ET::Token> {

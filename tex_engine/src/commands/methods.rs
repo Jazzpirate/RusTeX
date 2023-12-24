@@ -10,9 +10,9 @@ use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::nodes::{BoxInfo, NodeList, NodeListType, NodeTrait, TeXBox, TeXNode, ToOrSpread};
+use crate::tex::nodes::{BoxInfo, Delimiter, MathChar, NodeList, NodeListType, NodeTrait, TeXBox, TeXNode, ToOrSpread};
 use crate::tex::token::Token;
-use crate::tex::types::{BoxType, GroupType};
+use crate::tex::types::{BoxType, GroupType, MathClass, MathStyle};
 use crate::utils::HMap;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
 use std::fmt::Write;
@@ -722,3 +722,61 @@ pub fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mou
 
 pub const END_TEMPLATE: &str = "!\"$%&/(endtemplate)\\&%$\"!";
 pub const END_TEMPLATE_ROW: &str = "!\"$%&/(endtemplate_row)\\&%$\"!";
+
+pub fn get_delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,num:ET::Int) -> Delimiter<ET> {
+    let num = num.into();
+    if num < 0 || num > u32::MAX.into() {
+        todo!("throw error")
+    }
+    let num = num as u32;
+    let large = num & 0xFFF;
+    let small = num >> 12;
+    Delimiter {
+        small:get_mathchar(engine, small, None),
+        large:get_mathchar(engine, large, None)
+    }
+}
+
+pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u32, char:Option<ET::Char>) -> MathChar<ET> {
+    let (mut cls,mut fam,pos) = {
+        if mathcode == 0 {
+            (0,0,match char {
+                Some(c) => c.try_into().ok().unwrap(),
+                _ => 0
+            })
+        } else {
+            let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
+            let fam = ((mathcode >> 8) & 0xF) as usize;      // (rest % 16)
+            let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
+            (rest_fam_shifted as u8, fam, char)
+        }
+    };
+    if cls == 7 {
+        let i = engine.state.get_primitive_int(PRIMITIVES.fam).into();
+        match i {
+            i if i < 0 || i > 15 => {
+                cls = 0;
+            }
+            i => {
+                cls = 0;
+                fam = i as usize;
+            }
+        }
+    }
+    let mode = engine.state.get_mathstyle();
+    let font = match mode {
+        MathStyle::Text => engine.state.get_textfont(fam),
+        MathStyle::Script => engine.state.get_scriptfont(fam),
+        MathStyle::ScriptScript => engine.state.get_scriptscriptfont(fam),
+    }.clone();
+    let cls = MathClass::from(cls);
+    let char = ET::Char::from(pos);
+    MathChar {
+        width:font.get_wd(char),
+        height:font.get_ht(char),
+        depth:font.get_dp(char),
+        char,
+        font,
+        cls,
+    }
+}

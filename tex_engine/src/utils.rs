@@ -8,6 +8,7 @@ pub mod errors;
 
 /// A [`HashMap`](std::collections::HashMap) with [`ahash::RandomState`] as hasher.
 pub type HMap<A,B> = ahash::HashMap<A,B>;
+pub type HSet<A> = ahash::HashSet<A>;
 /// The reference counting pointer type used throughout the engine.
 pub type Ptr<A> = Rc<A>;
 

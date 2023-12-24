@@ -71,12 +71,13 @@ mod tests {
     use crate::engine::mouth::Mouth;
     use crate::engine::mouth::pretokenized::ExpansionContainer;
     use crate::engine::state::CustomStateChange;
-    use crate::engine::utils::memory::PRIMITIVES;
+    use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::StringLineSource;
     use crate::tex::token::Token;
     use crate::utils::Ptr;
     use crate::engine::PDFTeXEngine;
+    use crate::tex::control_sequences::ControlSequenceNameHandler;
     use crate::tex::nodes::NodeTrait;
 
     #[test]
@@ -193,7 +194,8 @@ mod tests {
             println!("HERE");
         }).unwrap_or_else(|e| {
             let pos = engine.mouth.display_position().to_string();
-            error!("{}:\n{}",pos,engine.get_engine_refs().preview());
+            let cap = engine.aux.memory.cs_interner().cap();
+            error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
             panic!("{}",e.msg);
         });
     }

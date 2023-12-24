@@ -370,6 +370,7 @@ pub struct CharacterVecInterner<C:Character> {
     idx:Vec<usize>
 }
 impl<C:Character> CharacterVecInterner<C> {
+    pub fn cap(&self) -> usize { self.idx.len() }
     fn new() -> Self {
         let mut map: HMap<Box<[C]>,u32> = HMap::default();
         map.insert(Box::new([]),0);

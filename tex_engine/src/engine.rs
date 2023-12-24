@@ -428,7 +428,8 @@ macro_rules! do_cmd {
                 <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false),
             crate::commands::Command::PrimitiveToks(name) =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,*name,false),
-            crate::commands::Command::MathChar(_) => todo!("mathchar"),
+            crate::commands::Command::MathChar(u) =>
+                <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,$token),
             crate::commands::Command::Relax => (),
             crate::commands::Command::Int(crate::commands::IntCommand { .. }) |
             crate::commands::Command::Dim(crate::commands::DimCommand { .. }) |

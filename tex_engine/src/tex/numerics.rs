@@ -14,7 +14,8 @@ pub trait NumSet: Clone+Debug {
     type Dim:TeXDimen+Numeric<Self::Int>;
     type Skip:Skip<Base=Self::Dim>+Numeric<Self::Int>;
     type MuSkip:MuSkip+Numeric<Self::Int>;
-    fn muskip_to_dim(muskip:Self::MuSkip,em:Self::Dim) -> Self::Dim;
+    fn muskip_to_skip(muskip: Self::MuSkip, em: Self::Dim) -> Self::Skip;
+    fn mudim_to_dim(mudim:<Self::MuSkip as MuSkip>::Base,em:Self::Dim) -> Self::Dim;
     fn dim_to_int(dim:Self::Dim) -> Self::Int;
 }
 
@@ -45,8 +46,22 @@ impl NumSet for DefaultNumSet {
     type Dim = Dim32;
     type Skip = Skip32<Dim32>;
     type MuSkip = MuSkip32;
-    fn muskip_to_dim(_muskip: Self::MuSkip, _em: Self::Dim) -> Self::Dim {
-        todo!()
+    fn muskip_to_skip(muskip: Self::MuSkip, em: Self::Dim) -> Self::Skip {
+        let base = Self::mudim_to_dim(muskip.base(),em);
+        let stretch = muskip.stretch.map(|s| match s {
+            MuFill::mu(i) => Fill::pt(Self::mudim_to_dim(Mu(i),em)),
+            MuFill::fil(i) => Fill::fil(i),
+            MuFill::fill(i) => Fill::fill(i),
+        });
+        let shrink = muskip.shrink.map(|s| match s {
+            MuFill::mu(i) => Fill::pt(Self::mudim_to_dim(Mu(i),em)),
+            MuFill::fil(i) => Fill::fil(i),
+            MuFill::fill(i) => Fill::fill(i),
+        });
+        Self::Skip::new(base,stretch,shrink)
+    }
+    fn mudim_to_dim(mudim: <Self::MuSkip as MuSkip>::Base, em: Self::Dim) -> Self::Dim {
+        Dim32(((mudim.0 as f64 / 65536.0) * (em.0 as f64) / 18.0).round() as i32)
     }
     #[inline(always)]
     fn dim_to_int(dim: Self::Dim) -> Self::Int {
@@ -324,9 +339,10 @@ impl<D:TeXDimen> Neg for Skip32<D> {
 }
 
 pub trait MuSkip:Copy + Eq + Ord + Default + Debug + Display + Neg<Output=Self> {
-    type Base;
+    type Base: Display+Debug+Clone+Copy;
     type Stretch;
     type Shrink;
+    fn base(self) -> Self::Base;
     fn units() -> &'static[&'static [u8]];
     fn stretch_units() -> &'static[&'static [u8]];
     fn shrink_units() -> &'static[&'static [u8]];
@@ -343,18 +359,28 @@ pub enum MuFill {
 }
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug,Default)]
-pub struct MuSkip32{base:i32,stretch:Option<MuFill>,shrink:Option<MuFill>}
+pub struct Mu(pub i32);
+impl Display for Mu {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Dim32::display_num(self.0,"mu",f)
+    }
+}
+
+#[derive(Clone,Copy,Eq,PartialEq,Debug,Default)]
+pub struct MuSkip32{pub base:Mu,pub stretch:Option<MuFill>,pub shrink:Option<MuFill>}
 impl MuSkip for MuSkip32 {
-    type Base = i32;
+    type Base = Mu;
     type Stretch = MuFill;
     type Shrink = MuFill;
     #[inline(always)]
     fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Base {
         match dim {
-            b"mu" => (float*65536.0).round() as i32,
+            b"mu" => Mu((float*65536.0).round() as i32),
             _ => unreachable!()
         }
     }
+    #[inline(always)]
+    fn base(self) -> Self::Base { self.base }
     #[inline(always)]
     fn units() -> &'static [&'static [u8]] { &[b"mu"]}
     #[inline(always)]
@@ -369,7 +395,7 @@ impl MuSkip for MuSkip32 {
         match dim {
             b"fil" => MuFill::fil((float * 65536.0).round() as i32),
             b"fill" => MuFill::fill((float * 65536.0).round() as i32),
-            _ => MuFill::mu(Self::from_float(engine,float,dim))
+            _ => MuFill::mu(Self::from_float(engine,float,dim).0)
         }
     }
     #[inline(always)]
@@ -379,17 +405,17 @@ impl MuSkip for MuSkip32 {
 }
 impl PartialOrd for MuSkip32 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.base.partial_cmp(&other.base)
+        self.base.0.partial_cmp(&other.base.0)
     }
 }
 impl Ord for MuSkip32 {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.base.cmp(&other.base)
+        self.base.0.cmp(&other.base.0)
     }
 }
 impl Display for MuSkip32  {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Dim32::display_num(self.base,"mu",f)
+        Dim32::display_num(self.base.0,"mu",f)
     }
 }
 impl Neg for MuSkip32 {
@@ -401,14 +427,14 @@ impl Neg for MuSkip32 {
 }
 impl Numeric<i32> for MuSkip32 {
     fn scale(&self, times: i32, div: i32) -> Self {
-        Self{base:self.base.scale(times,div),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+        Self{base:Mu(self.base.0.scale(times,div)),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
     }
 }
 
 impl Add<Self> for MuSkip32 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        Self{base:self.base+rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+        Self{base:Mu(self.base.0+rhs.base.0),stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
     }
 }
 impl Div<i32> for MuSkip32 {
@@ -420,6 +446,6 @@ impl Div<i32> for MuSkip32 {
 impl Mul<i32> for MuSkip32 {
     type Output = Self;
     fn mul(self, rhs: i32) -> Self::Output {
-        self.scale(rhs,1)
+        self.scale(rhs, 1)
     }
 }

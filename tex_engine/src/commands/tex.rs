@@ -16,7 +16,7 @@ use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
-use crate::tex::types::{BoxType, GroupType, TeXMode};
+use crate::tex::types::{BoxType, GroupType, MathStyle, TeXMode};
 use std::fmt::Write;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd};
 use crate::engine::fontsystem::FontSystem;
@@ -1690,6 +1690,31 @@ pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> 
     TeXBox {children:vec!(),info:BoxInfo::ParIndent(dim),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()}.as_node()
 }
 
+pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    let num = engine.read_int(false);
+    let delim = super::methods::get_delimiter(engine,num);
+    delim.as_node()
+}
+
+pub fn mskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    let sk = engine.read_muskip(false);
+    SkipNode::MSkip(sk,match engine.state.get_mathstyle() {
+        MathStyle::Text => engine.state.get_textfont(2),
+        MathStyle::Script => engine.state.get_scriptfont(2),
+        MathStyle::ScriptScript => engine.state.get_scriptscriptfont(2)
+    }.get_dim(5)).as_node()
+}
+
+pub fn mkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+    let dim = engine.read_mudim(false);
+    let em = match engine.state.get_mathstyle() {
+        MathStyle::Text => engine.state.get_textfont(2),
+        MathStyle::Script => engine.state.get_scriptfont(2),
+        MathStyle::ScriptScript => engine.state.get_scriptscriptfont(2)
+    }.get_dim(5);
+    KernNode::MKern(dim,em).as_node()
+}
+
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     if engine.state.get_mode() == TeXMode::Vertical {
         todo!("throw error")
@@ -2272,6 +2297,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine,"lastbox",lastbox);
     register_box(engine, "vsplit", vsplit);
 
+    register_node(engine,"delimiter",NodeCommandScope::MathOnly,delimiter);
+    register_node(engine,"mskip",NodeCommandScope::MathOnly,mskip);
+    register_node(engine,"mkern",NodeCommandScope::MathOnly,mkern);
     register_node(engine,"penalty",NodeCommandScope::Any,penalty);
     register_node(engine,"kern",NodeCommandScope::Any,kern);
     register_node(engine,"vrule",NodeCommandScope::SwitchesToHorizontal,vrule);
@@ -2291,8 +2319,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     cmstodos!(engine,
         mathclose,mathbin,mathord,mathop,mathrel,mathopen,
-        mathpunct,mathinner,mathaccent,delimiter,mathchar,
-        mkern,mskip,
+        mathpunct,mathinner,mathaccent,mathchar,
         insert,leaders,cleaders,xleaders,left,right,
         vtop,discretionary,displaylimits,end,
         mathchoice,noalign,omit,overline,

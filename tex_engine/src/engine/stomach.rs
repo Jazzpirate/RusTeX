@@ -7,13 +7,14 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, WhatsitNode, SkipNode, MathGroup, MathChar};
+use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, WhatsitNode, SkipNode, MathGroup};
 use crate::tex::numerics::NumSet;
-use crate::tex::types::{BoxType, GroupType, MathClass, MathStyle, TeXMode};
+use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::token::Token;
 use crate::commands::Command;
+use crate::commands::methods::get_mathchar;
 use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::utils::errors::ErrorHandler;
@@ -62,6 +63,14 @@ pub trait Stomach {
         assign(engine,token,global);
         insert_afterassignment(engine);
     }
+
+    fn do_mathchar(engine:&mut EngineReferences<Self::ET>,code:u32,_token:Tk<Self>) {
+        if !engine.state.get_mode().is_math() { todo!("throw error") }
+        let ret = get_mathchar(engine, code, None);
+        Self::add_node(engine,TeXNode::Simple(SimpleNode::MathChar(ret)));
+    }
+
+
     fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
         match engine.stomach.data_mut().open_lists.last() {
             Some(NodeList{tp:NodeListType::Paragraph(_),..}) => Self::close_paragraph(engine),
@@ -97,8 +106,25 @@ pub trait Stomach {
             CommandCode::Space if engine.state.get_mode().is_horizontal() =>
                 Self::add_node(engine,SkipNode::Space.as_node()),
             CommandCode::Space => (),
-            CommandCode::BeginGroup if engine.state.get_mode().is_math() => todo!(),
-            CommandCode::EndGroup if engine.state.get_mode().is_math() => todo!(),
+            CommandCode::BeginGroup if engine.state.get_mode().is_math() => {
+                engine.state.push(engine.aux,GroupType::Math {display:engine.state.get_mode() == TeXMode::DisplayMath},engine.mouth.line_number());
+                engine.stomach.data_mut().open_lists.push(NodeList {
+                    tp:NodeListType::Math {start:engine.mouth.start_ref(),top_display:false},
+                    children:vec!()
+                });
+            },
+            CommandCode::EndGroup if engine.state.get_mode().is_math() => {
+                match engine.stomach.data_mut().open_lists.pop() {
+                    Some(NodeList{children,tp:NodeListType::Math{start,top_display:false}}) => {
+                        let display = engine.state.get_mode() == TeXMode::DisplayMath;
+                        engine.state.pop(engine.aux,engine.mouth);
+                        Self::add_node(engine,TeXNode::MathGroup(MathGroup {
+                            children,display,start,end:engine.mouth.current_sourceref()
+                        }));
+                    }
+                    _ => todo!("error")
+                }
+            },
             CommandCode::BeginGroup =>
                 engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number()),
             CommandCode::EndGroup => {
@@ -149,55 +175,11 @@ pub trait Stomach {
                 if code == 32768 {
                     engine.mouth.requeue(Tk::<Self>::from_char_cat(char,CommandCode::Active));
                 } else {
-                    let ret = Self::do_mathchar(engine,code,Some(char));
+                    let ret = get_mathchar(engine, code, Some(char));
                     Self::add_node(engine,TeXNode::Simple(SimpleNode::MathChar(ret)));
                 }
             }
             _ => todo!("{} > {:?}",char,code)
-        }
-    }
-
-    fn do_mathchar(engine:&mut EngineReferences<Self::ET>,mathcode:u32,char:Option<Ch<Self>>) -> MathChar<Self::ET> {
-        let (mut cls,mut fam,pos) = {
-            if mathcode == 0 {
-                (0,0,match char {
-                    Some(c) => c.try_into().ok().unwrap(),
-                    _ => 0
-                })
-            } else {
-                let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
-                let fam = ((mathcode >> 8) & 0xF) as usize;      // (rest % 16)
-                let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
-                (rest_fam_shifted as u8, fam, char)
-            }
-        };
-        if cls == 7 {
-            let i = engine.state.get_primitive_int(PRIMITIVES.fam).into();
-            match i {
-                i if i < 0 || i > 15 => {
-                    cls = 0;
-                }
-                i => {
-                    cls = 0;
-                    fam = i as usize;
-                }
-            }
-        }
-        let mode = engine.state.get_mathstyle();
-        let font = match mode {
-            MathStyle::Text => engine.state.get_textfont(fam),
-            MathStyle::Script => engine.state.get_scriptfont(fam),
-            MathStyle::ScriptScript => engine.state.get_scriptscriptfont(fam),
-        }.clone();
-        let cls = MathClass::from(cls);
-        let char = Ch::<Self>::from(pos);
-        MathChar {
-            width:font.get_wd(char),
-            height:font.get_ht(char),
-            depth:font.get_dp(char),
-            char,
-            font,
-            cls,
         }
     }
 

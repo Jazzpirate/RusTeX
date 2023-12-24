@@ -108,6 +108,17 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         match self.files.get(&path.path) {
             Some(f) => f.clone(),
             None => {
+                /*
+                let string = if path.path.starts_with(&self.kpse.pwd) {
+                    format!("./{}",path.path.strip_prefix(&self.kpse.pwd).unwrap().display())
+                } else if self.kpse.global.pre.iter().any(|p| path.path.starts_with(p)) {
+                    format!("<TEXINPUTS>/{}",path.path.file_name().unwrap().to_str().unwrap())
+                } else if self.kpse.global.post.iter().any(|p| path.path.starts_with(p)) {
+                    format!("<TEXINPUTS>/{}",path.path.file_name().unwrap().to_str().unwrap())
+                } else {
+                    path.path.display().to_string()
+                };
+                 */
                 let string = if path.path.starts_with(&self.kpse.pwd) {
                     format!("./{}",path.path.strip_prefix(&self.kpse.pwd).unwrap().display())
                 } else if self.kpse.global.set.iter().any(|p| path.path.starts_with(p)) {
