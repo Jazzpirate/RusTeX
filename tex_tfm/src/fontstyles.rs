@@ -136,6 +136,7 @@ impl<'a,S:AsRef<str>> Display for CharConverter<'a,S> {
 
 pub trait FontModifiable {
     type R:AsRef<str>;
+    fn apply<'a>(self,mods:ModifierSeq) -> CharConverter<'a,Self::R> where Self:'a;
     fn apply_modifiers<'a>(self,mods:&'a [FontModifier]) -> CharConverter<'a,Self::R> where Self:'a;
     fn make_blackboard<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
     fn make_fraktur<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
@@ -150,6 +151,12 @@ pub trait FontModifiable {
 
 impl<'a,S:AsRef<str>> FontModifiable for &'a S {
     type R=S;
+    fn apply<'b>(self,mods:ModifierSeq) -> CharConverter<'b,S> where Self:'b {
+        CharConverter {
+            maps: mods,
+            iter:self
+        }
+    }
     fn apply_modifiers<'b>(self,mods:&'b [FontModifier]) -> CharConverter<'b,S> where Self:'b {
         CharConverter {
             maps: ModifierSeq::from(mods),
@@ -214,6 +221,10 @@ impl<'a,S:AsRef<str>> FontModifiable for &'a S {
 
 impl<'a,S:AsRef<str>> FontModifiable for CharConverter<'a,S> {
     type R=S;
+    fn apply<'b>(mut self, mods: ModifierSeq) -> CharConverter<'b, Self::R> where Self: 'b {
+        self.maps = mods;
+        self
+    }
     fn apply_modifiers<'b>(mut self,mods:&'b [FontModifier]) -> CharConverter<'b,S> where Self:'b {
         for m in mods {
             self.maps.add(*m);
