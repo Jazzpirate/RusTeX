@@ -59,6 +59,13 @@ impl Stomach for RusTeXStomach {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(mut ls) => match ls.tp {
                 NodeListType::Paragraph(_) => { unreachable!() }
+                NodeListType::VAdjust => {
+                    for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
+                        ls.children.push(TeXNode::Custom(RusTeXNode::FontChangeEnd));
+                    }
+                    engine.state.pop(engine.aux,engine.mouth);
+                    Self::add_node(engine,TeXNode::VAdjust(ls.children))
+                }
                 NodeListType::Box(bi,start,reg) if bi.tp() == bt => {
                     for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
                         ls.children.push(TeXNode::Custom(RusTeXNode::FontChangeEnd));

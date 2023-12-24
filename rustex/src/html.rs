@@ -4,20 +4,25 @@ use std::fmt::Formatter;
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::File;
 use tex_engine::engine::filesystem::SourceReference;
-use tex_engine::tex::numerics::Dim32;
+use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_tfm::glyphs::Glyph;
 use crate::engine::{Font, Types};
 use crate::fonts::FontStore;
 use crate::shipout::{ShipoutState, ZERO};
 
 #[inline(always)]
-fn dim_to_px(d:Dim32) -> f64{
-    d.0 as f64 / 65536.0 * 1.5
+fn dim_to_px(d:i32) -> f64{
+    d as f64 / 65536.0 * 1.5
 }
 
 #[inline(always)]
 pub(crate) fn dim_to_string(d:Dim32) -> String {
-    format!("{:.5}",dim_to_px(d)).trim_end_matches('0').trim_end_matches('.').to_string() + "px"
+    format!("{:.5}",dim_to_px(d.0)).trim_end_matches('0').trim_end_matches('.').to_string() + "px"
+}
+
+#[inline(always)]
+pub(crate) fn mudim_to_string(d:Mu) -> String {
+    format!("{:.5}",dim_to_px(d.0) / 18.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
 }
 
 type Ref = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
@@ -35,13 +40,13 @@ pub enum Tag {
     B,
     I,
     None,
-    Math,Mrow,Mi,Mo
+    Math,Mrow,Mi,Mo,Mspace
 }
 impl Tag {
     fn ismath(&self) -> bool {
         use Tag::*;
         match self {
-            Math | Mrow | Mi | Mo => true,
+            Math | Mrow | Mi | Mo | Mspace => true,
             _ => false
         }
     }
@@ -98,6 +103,7 @@ pub(crate) mod labels {
     pub(crate) const MATH_OPEN: Label = Label { id: 32, cls: Some("rustex-math-open"), tag: Tag::Mo };
     pub(crate) const MATH_CLOSE: Label = Label { id: 33, cls: Some("rustex-math-close"), tag: Tag::Mo };
     pub(crate) const PARINDENT: Label = Label { id: 34, cls: Some("rustex-parindent"), tag: Tag::Div };
+    pub(crate) const MSKIP: Label = Label { id: 35, cls: Some("rustex-mskip"), tag: Tag::Mspace };
 }
 
 #[derive(Debug)]
@@ -228,6 +234,7 @@ impl HTMLNode {
             Tag::Mrow => f.write_str("<mrow")?,
             Tag::Mi => f.write_str("<mi")?,
             Tag::Mo => f.write_str("<mo")?,
+            Tag::Mspace => f.write_str("<mspace")?,
         }
         if !self.classes.is_empty() {
             f.write_str(" class=\"")?;
@@ -307,6 +314,7 @@ impl HTMLNode {
             Tag::Mrow => f.write_str("</mrow>")?,
             Tag::Mi => f.write_str("</mi>")?,
             Tag::Mo => f.write_str("</mo>")?,
+            Tag::Mspace => f.write_str("</mspace>")?,
         }
         Ok(())
     }

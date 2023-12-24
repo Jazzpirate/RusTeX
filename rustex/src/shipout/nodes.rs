@@ -2,17 +2,18 @@ use std::vec::IntoIter;
 use tex_engine::commands::pdftex::pdftexnodes::{ColorStackAction, NumOrName, PDFColor, PDFExtension, PDFNode};
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::{File, SourceReference};
-use tex_engine::tex::nodes::{BoxInfo, KernNode, MathGroup, SkipNode, TeXBox, TeXNode, ToOrSpread};
-use tex_engine::tex::numerics::{Dim32, Fill, Skip, Skip32};
+use tex_engine::tex::nodes::{BoxInfo, KernNode, MathChar, MathGroup, SkipNode, TeXBox, TeXNode, ToOrSpread};
+use tex_engine::tex::numerics::{DefaultNumSet, Dim32, Fill, Mu, MuSkip32, Skip, Skip32};
 use crate::engine::{Bx, Extension, Font, Refs, SRef, Types};
-use crate::html::{dim_to_string, HTMLChild, HTMLNode, Tag};
-use crate::shipout::{do_hlist, do_vlist, get_box_dims, NodeIter, nodes, ShipoutState, ZERO, ZERO_SKIP};
+use crate::html::{dim_to_string, HTMLChild, HTMLNode, mudim_to_string, Tag};
+use crate::shipout::{do_hlist, do_vlist, get_box_dims, node_from_class, NodeIter, nodes, ShipoutState, ZERO, ZERO_MATH, ZERO_SKIP};
 use tex_engine::tex::nodes::NodeTrait;
-use tex_engine::tex::types::BoxType;
+use tex_engine::tex::types::{BoxType, MathClass};
 use crate::fonts::FontStore;
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::engine::stomach::ParLineSpec;
+use tex_tfm::fontstyles::ModifierSeq;
 /*
 #[derive(PartialEq,Copy,Clone)]
 enum FilLevel {
@@ -91,22 +92,20 @@ impl From<(Skip32<Dim32>,Skip32<Dim32>)> for Alignment {
 fn merge_skip(sk1:&mut Skip32<Dim32>,sk2:Skip32<Dim32>) {
     let base = sk1.base + sk2.base;
     let stretch = match (sk1.stretch,sk2.stretch) {
-        (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => None,
-        (Some(s1),None|Some(Fill::pt(_))) => Some(s1),
-        (None|Some(Fill::pt(_)),Some(s2)) => Some(s2),
-        (Some(Fill::fil(a)),Some(Fill::fil(b))) => Some(Fill::fil(a+b)),
-        (Some(Fill::fill(a)),Some(Fill::fill(b))) => Some(Fill::fill(a+b)),
         (Some(Fill::fill(a)),_)|(_,Some(Fill::fill(a))) => Some(Fill::fill(a)),
-        (Some(Fill::fil(a)),_)|(_,Some(Fill::fil(a))) => Some(Fill::fil(a))
+        (Some(Fill::fil(a)),_)|(_,Some(Fill::fil(a))) => Some(Fill::fil(a)),
+        _ => None,
     };
     *sk1 = Skip32 { base,stretch,shrink:None };
 }
 pub fn merge_skip_node(sk:&mut Skip32<Dim32>,n:SkipNode<Types>) {
+    use tex_engine::tex::numerics::NumSet;
     match n {
         SkipNode::HSkip(sk2) | SkipNode::VSkip(sk2) => merge_skip(sk,sk2),
         SkipNode::HFil | SkipNode::VFil => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fil(1)),shrink:None }),
         SkipNode::HFill | SkipNode::VFill => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
         SkipNode::Hss | SkipNode::Vss => merge_skip(sk,Skip32 { base:ZERO,stretch:Some(Fill::fill(1)),shrink:None }),
+        SkipNode::MSkip(ms,em) => merge_skip(sk,DefaultNumSet::muskip_to_skip(ms,em)),
         SkipNode::Space | SkipNode::HFilneg | SkipNode::VFilneg => (),
     }
 }
@@ -381,25 +380,6 @@ pub(crate) fn vrule(start:SRef, end:SRef, width:Dim32, height:Dim32, depth:Dim32
     }
 }
 
-pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
-    if skip == ZERO_SKIP { return }
-    let mut node = HTMLNode::new(HSKIP, false);
-    node.style("margin-left",dim_to_string(skip.base));
-    match skip.stretch {
-        Some(Fill::fil(_)) => {
-            node.style_str("margin-right","auto");
-            state.push(node)
-        }
-        Some(Fill::fill(_)) => {
-            node.style_str("margin-right","auto");
-            state.push(node);
-            let mut node = HTMLNode::new(HSKIP, false);
-            node.style_str("margin-right","auto");
-            state.push(node);
-        }
-        _ => state.push(node)
-    }
-}
 pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     if skip == ZERO_SKIP { return }
     let mut node = HTMLNode::new(VSKIP, false);
@@ -420,9 +400,74 @@ pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     }
 }
 
-pub(crate) fn mskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
+pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     if skip == ZERO_SKIP { return }
-    todo!()
+    let mut node = HTMLNode::new(HSKIP, false);
+    node.style("margin-left",dim_to_string(skip.base));
+    match skip.stretch {
+        Some(Fill::fil(_)) => {
+            node.style_str("margin-right","auto");
+            state.push(node)
+        }
+        Some(Fill::fill(_)) => {
+            node.style_str("margin-right","auto");
+            state.push(node);
+            let mut node = HTMLNode::new(HSKIP, false);
+            node.style_str("margin-right","auto");
+            state.push(node);
+        }
+        _ => state.push(node)
+    }
+}
+
+pub(crate) fn mskip(state:&mut ShipoutState, mskip:Mu) {
+    if mskip == ZERO_MATH { return }
+    let mut node = HTMLNode::new(MSKIP, true);
+    node.attr("width",mudim_to_string(mskip));
+    state.push(node)
+}
+
+pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState,current_class: &mut Option<(MathClass,HTMLNode)>,mc:MathChar<Types>) {
+    use tex_tfm::fontstyles::FontModifiable;
+    state.in_content = true;
+    let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(mc.font.filename());
+    let glyph = glyphtable.get(mc.char);
+    if !glyph.is_defined() {
+        todo!("Undefined Glyph")
+    }
+    let modifiers = match engine.fontsystem.glyphmaps.get_info(mc.font.filename()) {
+        Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
+        _ => None
+    };
+    match current_class {
+        Some((mc2,ref mut node)) if *mc2 == mc.cls => {
+            if let Some(m) = modifiers {
+                node.push_text(glyph.to_string().apply(m).to_string());
+            } else {
+                node.push_glyph(glyph)
+            }
+        },
+        Some((ref mut c,ref mut n)) => {
+            *c = mc.cls;
+            let mut node = node_from_class(mc.cls);
+            if let Some(m) = modifiers {
+                node.push_text(glyph.to_string().apply(m).to_string());
+            } else {
+                node.push_glyph(glyph)
+            }
+            let old = std::mem::replace(n,node);
+            state.push(old)
+        }
+        r@None => {
+            let mut node = node_from_class(mc.cls);
+            if let Some(m) = modifiers {
+                node.push_text(glyph.to_string().apply(m).to_string());
+            } else {
+                node.push_glyph(glyph)
+            }
+            *r = Some((mc.cls,node))
+        }
+    }
 }
 
 pub(crate) fn do_color(state:&mut ShipoutState,engine:Refs, color:ColorStackAction) -> Option<PDFColor> {
@@ -494,6 +539,7 @@ pub(crate) fn paragraph_list(children:&mut NodeIter) -> Vec<TeXNode<Types>> {
                 break;
             }
             TeXNode::Box(bx@ TeXBox { info: BoxInfo::ParLine { .. },..}) => ret.extend(bx.children.into_iter()),
+            TeXNode::Skip(_) => (),
             o =>
                 todo!("{:?}",o)
         }

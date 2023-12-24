@@ -11,7 +11,7 @@ use tex_engine::engine::{EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
 use tex_engine::tex::nodes::NodeTrait;
-use tex_engine::tex::numerics::{Dim32, Fill, Skip32};
+use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuSkip, MuSkip32, Skip32};
 use tex_engine::engine::state::State;
 use crate::html::{dim_to_string, HTMLChild, HTMLNode, Tag};
 use tex_engine::engine::fontsystem::Font as FontT;
@@ -38,10 +38,10 @@ impl Iterator for NodeIter {
     type Item = TeXNode<Types>;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(n) = self.curr.next() { return Some(n) }
-        if let Some(mut it) = self.next.pop() {
+        while let Some(mut it) = self.next.pop() {
             if let Some(n) = it.next() {
                 self.curr = it;
-                return self.next()
+                return Some(n)
             }
         }
         None
@@ -266,61 +266,43 @@ fn node_from_class(cls:MathClass) -> HTMLNode {
         Punct => HTMLNode::new(crate::html::labels::MATH_PUNCT,true)
     }
 }
+const ZERO_MATH: Mu = Mu(0);
 fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut NodeIter) {
     use tex_tfm::fontstyles::FontModifiable;
-    let mut currskip = ZERO_SKIP;
+    let mut currskip = ZERO_MATH;
     let mut currclass : Option<(MathClass,HTMLNode)> = None;
     while let Some(c) = children.next() {
         match c {
             TeXNode::Simple(SimpleNode::MathChar(mc)) => {
                 nodes::mskip(state,std::mem::take(&mut currskip));
-                state.in_content = true;
-                let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(mc.font.filename());
-                let glyph = glyphtable.get(mc.char);
-                if !glyph.is_defined() {
-                    todo!("Undefined Glyph")
+                nodes::do_mathchar(engine,state,&mut currclass,mc);
+            }
+            TeXNode::Simple(SimpleNode::Delim(d)) => {
+                nodes::mskip(state,std::mem::take(&mut currskip));
+                nodes::do_mathchar(engine,state,&mut currclass,d.small);
+            }
+            TeXNode::MathGroup(mg) => {
+                children.prefix(mg.children);
+            }
+            TeXNode::Skip(SkipNode::MSkip(ms,_)) => {
+                if let Some((_,node)) = std::mem::take(&mut currclass) {
+                    nodes::mskip(state,currskip);
+                    state.push(node)
                 }
-                let modifiers = match engine.fontsystem.glyphmaps.get_info(mc.font.filename()) {
-                    Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
-                    _ => None
-                };
-                match currclass {
-                    Some((mc2,ref mut node)) if mc2 == mc.cls => {
-                        if let Some(m) = modifiers {
-                            node.push_text(glyph.to_string().apply(m).to_string());
-                        } else {
-                            node.push_glyph(glyph)
-                        }
-                    },
-                    Some((ref mut c,ref mut n)) => {
-                        *c = mc.cls;
-                        let mut node = node_from_class(mc.cls);
-                        if let Some(m) = modifiers {
-                            node.push_text(glyph.to_string().apply(m).to_string());
-                        } else {
-                            node.push_glyph(glyph)
-                        }
-                        let old = std::mem::replace(n,node);
-                        state.push(old)
-                    }
-                    None => {
-                        let mut node = node_from_class(mc.cls);
-                        if let Some(m) = modifiers {
-                            node.push_text(glyph.to_string().apply(m).to_string());
-                        } else {
-                            node.push_glyph(glyph)
-                        }
-                        currclass = Some((mc.cls,node))
-                    }
+                currskip = Mu(currskip.0 + ms.base.0);
+            }
+            TeXNode::Kern(KernNode::MKern(mu,_)) => {
+                if let Some((_,node)) = std::mem::take(&mut currclass) {
+                    nodes::mskip(state,currskip);
+                    state.push(node)
                 }
+                currskip = Mu(currskip.0 + mu.0);
             }
             o => todo!(" {:?}",o)
         }
     }
     nodes::mskip(state,currskip);
-    if let Some((_,node)) = currclass {
-        state.push(node)
-    }
+    if let Some((_,node)) = currclass { state.push(node) }
 }
 
 fn do_v(engine:Refs, state:&mut ShipoutState, n: TeXNode<Types>, top:bool) {
