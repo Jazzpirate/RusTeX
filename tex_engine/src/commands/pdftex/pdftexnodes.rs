@@ -178,7 +178,9 @@ pub enum PDFNode<ET:EngineTypes> {
     PDFOutline(PDFOutline),
     PDFCatalog(PDFCatalog),
     PDFDest(PDFDest<ET::Dim>),
-    Color(ColorStackAction)
+    Color(ColorStackAction),
+    PDFStartLink(PDFStartLink<ET>),
+    PDFEndLink
 }
 
 #[derive(Copy,Clone,Debug)]
@@ -187,6 +189,15 @@ pub enum ColorStackAction {
     Push(usize,PDFColor),
     Pop(usize),
     Set(usize,PDFColor)
+}
+
+#[derive(Clone,Debug)]
+pub struct PDFStartLink<ET:EngineTypes> {
+    pub width:Option<ET::Dim>,
+    pub height:Option<ET::Dim>,
+    pub depth:Option<ET::Dim>,
+    pub attr:Option<String>,
+    pub action:ActionSpec,
 }
 
 #[derive(Clone,Debug)]
@@ -246,6 +257,23 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
                     ColorStackAction::Set(i,c) => write!(f,"<pdfcolorstack set=\"{}\", color=\"{:?}\">",i,c),
                 }
             }
+            PDFNode::PDFStartLink(PDFStartLink {width,height,depth,attr,action}) => {
+                write!(f,"<pdfstartlink")?;
+                if let Some(w) = width {
+                    write!(f," width=\"{:?}\"",w)?;
+                }
+                if let Some(h) = height {
+                    write!(f," height=\"{:?}\"",h)?;
+                }
+                if let Some(d) = depth {
+                    write!(f," depth=\"{:?}\"",d)?;
+                }
+                if let Some(a) = attr {
+                    write!(f," attr=\"{:?}\"",a)?;
+                }
+                write!(f," action=\"{:?}\">",action)
+            }
+            PDFNode::PDFEndLink => write!(f,"<pdfendlink>"),
         }
     }
 }

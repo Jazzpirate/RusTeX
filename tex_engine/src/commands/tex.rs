@@ -16,14 +16,14 @@ use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
-use crate::tex::types::{BoxType, GroupType, MathStyle, TeXMode};
+use crate::tex::types::{BoxType, GroupType, MathStyle, MathStyleType, TeXMode};
 use std::fmt::Write;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, NodeList, NodeListType, SimpleNode, SkipNode, TeXBox, TeXNode, ToOrSpread};
+use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, MathFontStyle, NodeList, NodeListType, SimpleNode, SkipNode, TeXBox, TeXNode, ToOrSpread};
 use crate::tex::nodes::NodeTrait;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
@@ -1697,22 +1697,13 @@ pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
 }
 
 pub fn mskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    let sk = engine.read_muskip(false);
-    SkipNode::MSkip(sk,match engine.state.get_mathstyle() {
-        MathStyle::Text => engine.state.get_textfont(2),
-        MathStyle::Script => engine.state.get_scriptfont(2),
-        MathStyle::ScriptScript => engine.state.get_scriptscriptfont(2)
-    }.get_dim(5)).as_node()
+    let skip = engine.read_muskip(false);
+    SkipNode::MSkip{skip,style:engine.state.get_mathfonts()}.as_node()
 }
 
 pub fn mkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    let dim = engine.read_mudim(false);
-    let em = match engine.state.get_mathstyle() {
-        MathStyle::Text => engine.state.get_textfont(2),
-        MathStyle::Script => engine.state.get_scriptfont(2),
-        MathStyle::ScriptScript => engine.state.get_scriptscriptfont(2)
-    }.get_dim(5);
-    KernNode::MKern(dim,em).as_node()
+    let kern = engine.read_mudim(false);
+    KernNode::MKern{kern,style:engine.state.get_mathfonts()}.as_node()
 }
 
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {

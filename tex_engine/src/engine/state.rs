@@ -10,9 +10,9 @@ use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
-use crate::tex::types::{GroupType, MathStyle, TeXMode};
+use crate::tex::types::{GroupType, MathStyle, MathStyleType, TeXMode};
 use crate::utils::{Ptr, ReusableVectorFactory};
-use crate::tex::nodes::TeXBox;
+use crate::tex::nodes::{MathFontStyle, TeXBox};
 
 type Ch<S> = <<S as State>::ET as EngineTypes>::Char;
 type Int<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::Int;
@@ -32,6 +32,23 @@ pub trait State:Sized+Clone {
 
     fn get_mathstyle(&self) -> MathStyle;
     fn set_mathstyle(&mut self,style:MathStyle);
+
+    fn get_mathfonts(&self) -> MathFontStyle<Fnt<Self>> {
+        let style = self.get_mathstyle();
+        if style.forced {
+            MathFontStyle::Forced {style:style.style,cramped:style.cramped,font: match style.style {
+                MathStyleType::Script => self.get_scriptfont(2).clone(),
+                MathStyleType::ScriptScript => self.get_scriptscriptfont(2).clone(),
+                _ => self.get_textfont(2).clone(),
+            }}
+        } else {
+            MathFontStyle::Unforced {style:style.style,cramped:style.cramped,
+                text_font:self.get_textfont(2).clone(),
+                script_font:self.get_scriptfont(2).clone(),
+                script_script_font:self.get_scriptscriptfont(2).clone()
+            }
+        }
+    }
 
     fn push(&mut self,aux:&mut EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
     fn pop(&mut self,aux:&mut EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);

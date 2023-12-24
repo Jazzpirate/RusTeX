@@ -11,7 +11,7 @@ use crate::tex::token::{StandardToken, Token};
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
 use std::fmt::Write;
-use crate::commands::pdftex::pdftexnodes::{ColorStackAction, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFXForm};
+use crate::commands::pdftex::pdftexnodes::{ColorStackAction, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFStartLink, PDFXForm};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
 use crate::tex::nodes::TeXNode;
@@ -106,6 +106,36 @@ pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     let dest = pdftexnodes::pdfdest_type(engine);
     let node = PDFNode::PDFDest(PDFDest{structnum, id, dest});
     ET::Stomach::add_node(engine, TeXNode::Custom(node.into()));
+}
+
+pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension<ET>,
+          ET::CustomNode:From<PDFNode<ET>> {
+    let mut width = None;
+    let mut height = None;
+    let mut depth = None;
+    loop {
+        match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+            Some(b"width") => width = Some(engine.read_dim(false).into()),
+            Some(b"height") => height = Some(engine.read_dim(false).into()),
+            Some(b"depth") => depth = Some(engine.read_dim(false).into()),
+            _ => break
+        }
+    }
+    let attr = if engine.read_keyword(b"attr") {
+        let mut attr = String::new();
+        engine.read_braced_string(true,&mut attr);
+        Some(attr)
+    } else { None };
+    let action = pdftexnodes::action_spec(engine);
+    let node = PDFNode::PDFStartLink(PDFStartLink {width,height,depth,attr,action});
+    ET::Stomach::add_node(engine, TeXNode::Custom(node.into()));
+}
+
+pub fn pdfendlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
+    where ET::Extension : PDFExtension<ET>,
+          ET::CustomNode:From<PDFNode<ET>> {
+    ET::Stomach::add_node(engine,TeXNode::Custom(PDFNode::PDFEndLink.into()));
 }
 
 pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -562,6 +592,8 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_unexpandable(engine,"pdfrefxform",pdfrefxform);
     register_unexpandable(engine,"pdffontexpand",pdffontexpand);
     register_unexpandable(engine,"pdfoutline",pdfoutline);
+    register_unexpandable(engine,"pdfstartlink",pdfstartlink);
+    register_unexpandable(engine,"pdfendlink",pdfendlink);
 
     register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate);
     register_whatsit(engine,"pdfxform",pdfxform,pdfxform_immediate);
@@ -571,8 +603,8 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_primitive_toks(engine,PRIMITIVE_TOKS);
 
     cmtodos!(engine,
-        pdfelapsedtime,pdfendlink,pdflastximage,
-        pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,pdfstartlink,
+        pdfelapsedtime,pdflastximage,
+        pdfrefximage,pdfresettimer,pdfrestore,pdfsave,pdfsetmatrix,
         pdfximage
     );
 

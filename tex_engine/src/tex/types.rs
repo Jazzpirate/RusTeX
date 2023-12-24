@@ -4,10 +4,39 @@
 use std::fmt::Display;
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
-pub enum MathStyle {
-    Text,
-    Script,
-    ScriptScript
+pub struct MathStyle {
+    pub cramped: bool,
+    pub forced: bool,
+    pub style:MathStyleType
+}
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum MathStyleType { Display, Text, Script, ScriptScript }
+
+impl MathStyle {
+    pub fn sup(self) -> Self {
+        match self.style {
+            MathStyleType::Text | MathStyleType::Display => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::ScriptScript},
+        }
+    }
+    #[inline(always)]
+    pub fn cramp(mut self) -> Self {
+        self.cramped = true;
+        self
+    }
+    #[inline(always)]
+    pub fn sub(self) -> Self { self.sup().cramp() }
+    pub fn numerator(self) -> Self {
+        match self.style {
+            MathStyleType::Display => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::Text},
+            MathStyleType::Text => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::ScriptScript},
+        }
+    }
+    #[inline(always)]
+    pub fn denominator(self) -> Self {
+        self.numerator().cramp()
+    }
 }
 
 #[derive(Debug,Clone,Copy,PartialEq,Eq)]
@@ -130,8 +159,6 @@ impl From<BoxType> for TeXMode {
         match bt {
             BoxType::Horizontal => TeXMode::RestrictedHorizontal,
             BoxType::Vertical => TeXMode::InternalVertical,
-            //BoxType::InlineMath => TeXMode::InlineMath,
-            //BoxType::DisplayMath => TeXMode::DisplayMath
         }
     }
 }

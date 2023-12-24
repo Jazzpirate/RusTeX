@@ -3,9 +3,9 @@ use std::fmt::{Debug, Display, Formatter, Write};
 use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::SourceReference;
-use crate::tex::types::{BoxType, MathClass, NodeType};
+use crate::tex::types::{BoxType, MathClass, MathStyleType, NodeType};
 use crate::engine::filesystem::File;
-use crate::engine::fontsystem::FontSystem;
+use crate::engine::fontsystem::{Font, FontSystem};
 use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::stomach::ParLineSpec;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
@@ -281,20 +281,17 @@ impl<ET:EngineTypes> NodeTrait<ET> for MathGroup<ET> {
 #[derive(Debug,Clone)]
 pub struct MathChar<ET:EngineTypes> {
     pub char:ET::Char,
-    pub font:<ET::FontSystem as FontSystem>::Font,
-    pub width:ET::Dim,
-    pub height:ET::Dim,
-    pub depth:ET::Dim,
-    pub cls:MathClass
+    pub cls:MathClass,
+    pub style:MathFontStyle<ET::Font>
 }
 impl<ET:EngineTypes> NodeTrait<ET> for MathChar<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent,f)?;
         write!(f, "<mathchar:{}>",self.char)
     }
-    fn height(&self) -> ET::Dim { self.height }
-    fn width(&self) -> ET::Dim { self.width }
-    fn depth(&self) -> ET::Dim { self.depth }
+    fn height(&self) -> ET::Dim { self.style.get_font().get_ht(self.char) }
+    fn width(&self) -> ET::Dim { self.style.get_font().get_wd(self.char) }
+    fn depth(&self) -> ET::Dim { self.style.get_font().get_dp(self.char) }
     fn nodetype(&self) -> NodeType { NodeType::MathChar }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(SimpleNode::MathChar(self)) }
@@ -310,9 +307,9 @@ impl<ET:EngineTypes> NodeTrait<ET> for Delimiter<ET> {
         Self::readable_do_indent(indent,f)?;
         write!(f, "<delimiter:{}>",self.small.char)
     }
-    fn height(&self) -> ET::Dim { self.small.height }
-    fn width(&self) -> ET::Dim { self.small.width }
-    fn depth(&self) -> ET::Dim { self.small.depth }
+    fn height(&self) -> ET::Dim { self.small.height() }
+    fn width(&self) -> ET::Dim { self.small.width() }
+    fn depth(&self) -> ET::Dim { self.small.depth() }
     fn nodetype(&self) -> NodeType { NodeType::Math }
     #[inline(always)]
     fn as_node(self) -> TeXNode<ET> { TeXNode::Simple(SimpleNode::Delim(self)) }
@@ -407,13 +404,15 @@ impl<ET:EngineTypes> NodeTrait<ET> for SimpleNode<ET> {
 
 #[derive(Debug,Clone)]
 pub enum KernNode<ET:EngineTypes> {
-    VKern(ET::Dim),HKern(ET::Dim),MKern(<ET::MuSkip as MuSkip>::Base,ET::Dim)
+    VKern(ET::Dim),HKern(ET::Dim),MKern{
+        kern:<ET::MuSkip as MuSkip>::Base,style:MathFontStyle<ET::Font>
+    }
 }
 impl <ET:EngineTypes> KernNode<ET> {
     pub fn dim(&self) -> ET::Dim { match self {
         KernNode::VKern(d) => *d,
         KernNode::HKern(d) => *d,
-        KernNode::MKern(b,d) => ET::Num::mudim_to_dim(*b,*d)
+        KernNode::MKern{kern,style} => ET::Num::mudim_to_dim(*kern,style.get_em())
     } }
 }
 impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
@@ -422,7 +421,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
         match self {
             KernNode::VKern(d) => write!(f, "<vkern:{}>",d),
             KernNode::HKern(d) => write!(f, "<hkern:{}>",d),
-            KernNode::MKern(b,d) => write!(f, "<mkern:{}>",b),
+            KernNode::MKern{kern,..} => write!(f, "<mkern:{}>",kern),
         }
     }
     fn height(&self) -> ET::Dim { match self {
@@ -431,7 +430,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
     } }
     fn width(&self) -> ET::Dim { match self {
         KernNode::HKern(d) => *d,
-        KernNode::MKern(b,d) => ET::Num::mudim_to_dim(*b,*d),
+        KernNode::MKern{kern,style} => ET::Num::mudim_to_dim(*kern,style.get_em()),
         _ => ET::Dim::default()
     }}
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
@@ -440,17 +439,39 @@ impl<ET:EngineTypes> NodeTrait<ET> for KernNode<ET> {
     fn as_node(self) -> TeXNode<ET> { TeXNode::Kern(self) }
 }
 
+
+#[derive(Debug,Clone)]
+pub enum MathFontStyle<F:Font> {
+    Forced { style:MathStyleType, cramped:bool, font:F },
+    Unforced { style:MathStyleType, cramped:bool, text_font:F, script_font:F, script_script_font:F }
+}
+impl<F:Font> MathFontStyle<F> {
+    pub fn get_em(&self) -> F::Dim { self.get_font().get_dim(5) }
+    pub fn get_font(&self) -> &F {
+        match self {
+            MathFontStyle::Forced { font, .. } => font,
+            MathFontStyle::Unforced { style,text_font, script_font, script_script_font,.. } => match style {
+                MathStyleType::Script => script_font,
+                MathStyleType::ScriptScript => script_script_font,
+                _ => text_font
+            },
+        }
+    }
+}
+
 #[derive(Debug,Clone)]
 pub enum SkipNode<ET:EngineTypes> {
     VSkip(ET::Skip),Space,VFil,VFill,VFilneg,Vss,
     HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,
-    MSkip(ET::MuSkip,ET::Dim)
+    MSkip{
+        skip:ET::MuSkip,style:MathFontStyle<ET::Font>
+    }
 }
 impl <ET:EngineTypes> SkipNode<ET> {
     pub fn skip(&self) -> ET::Skip { match self {
         SkipNode::VSkip(s) => *s,
         SkipNode::HSkip(s) => *s,
-        SkipNode::MSkip(s,f) => ET::Num::muskip_to_skip(*s,*f),
+        SkipNode::MSkip{skip,style} => ET::Num::muskip_to_skip(*skip,style.get_em()),
         _ => ET::Skip::default() // TODO
     } }
 }
@@ -465,7 +486,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
             SkipNode::VFilneg => write!(f, "<vfilneg>"),
             SkipNode::Vss => write!(f, "<vss>"),
             SkipNode::HSkip(s) => write!(f, "<hskip:{}>",s),
-            SkipNode::MSkip(s,_) => write!(f, "<mskip:{}>",s),
+            SkipNode::MSkip{skip,..} => write!(f, "<mskip:{}>",skip),
             SkipNode::HFil => write!(f, "<hfil>"),
             SkipNode::HFill => write!(f, "<hfill>"),
             SkipNode::HFilneg => write!(f, "<hfilneg>"),
@@ -479,7 +500,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for SkipNode<ET> {
     fn width(&self) -> ET::Dim { match self {
         SkipNode::HSkip(s) => s.base(),
         SkipNode::Space => ET::Dim::from_sp(65536),
-        SkipNode::MSkip(s,f) => ET::Num::mudim_to_dim(s.base(),*f),
+        SkipNode::MSkip{skip,style} => ET::Num::mudim_to_dim(skip.base(),style.get_em()),
         _ => ET::Dim::default()
     } }
     #[inline(always)]

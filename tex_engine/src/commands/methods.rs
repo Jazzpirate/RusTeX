@@ -763,20 +763,11 @@ pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u
             }
         }
     }
-    let mode = engine.state.get_mathstyle();
-    let font = match mode {
-        MathStyle::Text => engine.state.get_textfont(fam),
-        MathStyle::Script => engine.state.get_scriptfont(fam),
-        MathStyle::ScriptScript => engine.state.get_scriptscriptfont(fam),
-    }.clone();
     let cls = MathClass::from(cls);
     let char = ET::Char::from(pos);
     MathChar {
-        width:font.get_wd(char),
-        height:font.get_ht(char),
-        depth:font.get_dp(char),
         char,
-        font,
         cls,
+        style:engine.state.get_mathfonts()
     }
 }

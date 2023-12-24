@@ -52,7 +52,7 @@ pub struct TeXState<ET:EngineTypes> {
     scriptscriptfonts:[Fnt<ET>;16],
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
-    mathstyle:MathStyle
+    mathstyle:MathStyle,
 }
 impl<ET:EngineTypes> TeXState<ET> {
 
@@ -128,7 +128,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             textfonts:mathfonts.clone(),
             scriptfonts:mathfonts.clone(),
             scriptscriptfonts:mathfonts,
-            mathstyle:MathStyle::Text,
+            mathstyle:MathStyle{cramped:false,forced:false,style:crate::tex::types::MathStyleType::Text},
         }
     }
 
