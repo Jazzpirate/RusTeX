@@ -66,7 +66,7 @@ mod tests {
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
-    use crate::commands::{Command, Unexpandable};
+    use crate::commands::{Command, CommandScope, Unexpandable};
     use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainPDFTeXEngine, TeXEngine};
     use crate::engine::mouth::Mouth;
     use crate::engine::mouth::pretokenized::ExpansionContainer;
@@ -77,7 +77,6 @@ mod tests {
     use crate::tex::token::Token;
     use crate::utils::Ptr;
     use crate::engine::PDFTeXEngine;
-    use crate::tex::control_sequences::ControlSequenceNameHandler;
     use crate::tex::nodes::NodeTrait;
 
     #[test]
@@ -175,6 +174,7 @@ mod tests {
         engine.register_primitive(Command::Unexpandable(
             Unexpandable {
                 name:PRIMITIVES.get("rustexBREAK"),
+                scope:CommandScope::Any,
                 apply:|_,_| {
                     println!("HERE!")
                 }

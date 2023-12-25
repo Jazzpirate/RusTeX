@@ -1,0 +1,159 @@
+use crate::engine::EngineTypes;
+use crate::engine::fontsystem::FontSystem;
+use crate::engine::mouth::pretokenized::TokenList;
+use crate::tex::nodes::{NodeTrait, SR, WhatsitNode};
+use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::math::{MathFontStyle, MathGroup};
+use crate::tex::nodes::vertical::VNode;
+use crate::tex::types::NodeType;
+use crate::tex::input_text::Character;
+use crate::tex::numerics::TeXDimen;
+use crate::tex::numerics::Skip;
+
+#[derive(Clone,Debug)]
+pub enum HNode<ET:EngineTypes> {
+    Penalty(i32),
+    Mark(usize,TokenList<ET::Token>),
+    Whatsit(WhatsitNode<ET>),
+    HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,Space,
+    HKern(ET::Dim),
+    Box(TeXBox<ET>),
+    VRule{
+        width:Option<ET::Dim>,
+        height:Option<ET::Dim>,
+        depth:Option<ET::Dim>,
+        start:SR<ET>,end:SR<ET>
+    },
+    Insert,
+    VAdjust(Box<[VNode<ET>]>),
+    MathGroup(MathGroup<ET,MathFontStyle<ET::Font>>),
+    Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  },
+    Custom(ET::CustomNode),
+}
+
+impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HNode::Penalty(p) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "<penalty:{}>",p)
+            },
+            HNode::Box(b) => b.readable_fmt(indent, f),
+            HNode::Mark(i, _) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "<mark:{}>",i)
+            },
+            HNode::VRule { width, height, depth, .. } => {
+                write!(f, "<vrule")?;
+                if let Some(w) = width {
+                    write!(f, " width={}",w)?;
+                }
+                if let Some(h) = height {
+                    write!(f, " height={}",h)?;
+                }
+                if let Some(d) = depth {
+                    write!(f, " depth={}",d)?;
+                }
+                write!(f, ">")
+            },
+            HNode::Insert => {
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("<insert>")
+            },
+            HNode::VAdjust(ls) => {
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("<vadjust>")?;
+                for c in ls.iter() {
+                    c.readable_fmt(indent+2, f)?;
+                }
+                Self::readable_do_indent(indent,f)?;
+                f.write_str("</vadjust>")
+            },
+            HNode::MathGroup(MathGroup{ children,display,..}) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "<{}math>",if *display {"display"} else {""})?;
+                for c in children.iter() {
+                    c.readable_fmt(indent+2, f)?;
+                }
+                Self::readable_do_indent(indent, f)?;
+                write!(f, "</{}math>",if *display {"display"} else {""})
+            }
+            HNode::Char { char, .. } =>
+                Ok(char.display(f)),
+            HNode::Whatsit(w) => {
+                Self::readable_do_indent(indent,f)?;
+                write!(f, "{:?}",w)
+            }
+            HNode::HSkip(s) => write!(f, "<hskip:{}>",s),
+            HNode::HFil => write!(f, "<hfil>"),
+            HNode::HFill => write!(f, "<hfill>"),
+            HNode::HFilneg => write!(f, "<hfilneg>"),
+            HNode::Hss => write!(f, "<hss>"),
+            HNode::Space => write!(f, "<space>"),
+            HNode::HKern(d) => write!(f, "<hkern:{}>",d),
+            HNode::Custom(n) => n.readable_fmt(indent, f)
+        }
+    }
+    fn height(&self) -> ET::Dim {
+        match self {
+            HNode::Box(b) => b.height(),
+            HNode::VRule { height, .. } => height.unwrap_or_default(),
+            HNode::Char { height, .. } => *height,
+            HNode::MathGroup(MathGroup {children,..}) => {
+                children.iter().map(|c| c.height()).max().unwrap_or_default()
+            }
+            HNode::Custom(n) => n.height(),
+            _ => ET::Dim::default(),
+        }
+    }
+    fn width(&self) -> ET::Dim {
+        match self {
+            HNode::Box(b) => b.width(),
+            HNode::Char { width, .. } => *width,
+            HNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
+            HNode::MathGroup(MathGroup{children,..}) =>  {
+                children.iter().map(|c| c.width()).sum()
+            }
+            HNode::Custom(n) => n.width(),
+            HNode::HKern(d) => *d,
+            HNode::HSkip(s) => s.base(),
+            HNode::Space => ET::Dim::from_sp(65536),
+            _=> ET::Dim::default(),
+        }
+    }
+    fn depth(&self) -> ET::Dim {
+        match self {
+            HNode::Box(b) => b.depth(),
+            HNode::Char { depth, .. } => *depth,
+            HNode::VRule { depth, .. } => depth.unwrap_or_default(),
+            HNode::MathGroup(MathGroup {children,..}) =>  {
+                children.iter().map(|c| c.depth()).max().unwrap_or_default()
+            }
+            HNode::Custom(n) => n.depth(),
+            _ => ET::Dim::default(),
+        }
+    }
+    fn nodetype(&self) -> NodeType {
+        match self {
+            HNode::Penalty(_) => NodeType::Penalty,
+            HNode::VRule {..} => NodeType::Rule,
+            HNode::Box(b) => b.nodetype(),
+            HNode::Char { .. } => NodeType::Char,
+            HNode::HKern(_) => NodeType::Kern,
+            HNode::Insert => NodeType::Insertion,
+            HNode::VAdjust(_) => NodeType::Adjust,
+            HNode::MathGroup{..} => NodeType::Math,
+            HNode::Mark(_, _) => NodeType::Mark,
+            HNode::Whatsit(_) => NodeType::WhatsIt,
+            HNode::HSkip(_) | HNode::Space | HNode::HFil | HNode::HFill | HNode::HFilneg | HNode::Hss => NodeType::Glue,
+            HNode::Custom(n) => n.nodetype(),
+        }
+    }
+    fn opaque(&self) -> bool {
+        match self {
+            HNode::Mark(_, _) => true,
+            HNode::Custom(n) => n.opaque(),
+            _ => false
+        }
+    }
+}

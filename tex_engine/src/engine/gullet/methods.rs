@@ -1091,7 +1091,7 @@ pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:boo
     let (is_negative,r) = read_numeric(engine, skip_eq);
     match r {
         Ok(b) => read_muskip_byte(engine,is_negative,b,|d,e| read_muskip_ii(e,d)),
-        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|s| s,|d,e| read_muskip_ii(e,d))
+        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|s| s)
     }
 }
 
@@ -1100,7 +1100,7 @@ pub fn read_mukern<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:boo
     let (is_negative,r) = read_numeric(engine, skip_eq);
     match r {
         Ok(b) => read_muskip_byte(engine,is_negative,b,|d,_| d),
-        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|s| s.base(),|d,_| d)
+        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|s| s.base())
     }
 }
 
@@ -1114,7 +1114,7 @@ pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_n
     }
 }
 
-pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token,skip:fn(MS<ET>) -> R,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
+pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,cmd:Command<ET>,token:ET::Token,skip:fn(MS<ET>) -> R) -> R {
     match cmd {
         Command::MuSkipRegister(u) => {
             let base = engine.state.get_muskip_register(u);

@@ -10,15 +10,20 @@ use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::nodes::{BoxInfo, Delimiter, MathChar, NodeList, NodeListType, NodeTrait, TeXBox, TeXNode, ToOrSpread};
 use crate::tex::token::Token;
-use crate::tex::types::{BoxType, GroupType, MathClass, MathStyle};
+use crate::tex::types::{BoxType, GroupType, MathClass};
 use crate::utils::HMap;
 use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
 use std::fmt::Write;
 use crate::engine::mouth::strings::StringTokenizer;
 use crate::tex::input_text::StringLineSource;
+use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
+use crate::tex::nodes::{HorizontalNodeListType, NodeList, VerticalNodeListType};
+use crate::tex::nodes::horizontal::HNode;
+use crate::tex::nodes::math::{Delimiter, MathChar, MathNode, UnresolvedMathFontStyle};
+use crate::tex::nodes::vertical::VNode;
 use crate::utils::errors::ErrorThrower;
+use crate::tex::nodes::NodeTrait;
 
 pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
     let idx = engine.read_int(false).into();
@@ -320,7 +325,6 @@ impl<ET:EngineTypes> IfxCmd<ET> {
                 Some(Command::Unexpandable(a)) => Self::Primitive(a.name),
                 Some(Command::Conditional(i)) => Self::Primitive(i.name),
                 Some(Command::Box(i)) => Self::Primitive(i.name),
-                Some(Command::Node(n)) => Self::Primitive(n.name),
                 Some(Command::Whatsit(n)) => Self::Primitive(n.name),
                 Some(Command::Font(f)) => Self::Font(f.clone()),
                 Some(Command::MathChar(u)) => Self::MathChar(*u),
@@ -503,20 +507,24 @@ pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     engine.expand_until_bgroup(false);
     engine.expand_until_endgroup(true,true,|_,_,_,t| v.push(t));
     let data = engine.stomach.data_mut();
-    for NodeList {children,tp } in data.open_lists.iter_mut().rev() {
-        match tp {
-            NodeListType::Paragraph(_) => {
-                children.push(TeXNode::Mark(idx, v.into()));
+    for list in data.open_lists.iter_mut().rev() {
+        match list {
+            NodeList::Horizontal {children,tp:HorizontalNodeListType::Paragraph(..)} => {
+                children.push(HNode::Mark(idx, v.into()));
                 return
             }
-            NodeListType::Box(info,_,_) if info.tp() == BoxType::Vertical => {
-                children.push(TeXNode::Mark(idx, v.into()));
+            NodeList::Vertical {children,..} => {
+                children.push(VNode::Mark(idx, v.into()));
+                return
+            }
+            NodeList::Math {children,..} => {
+                children.push(MathNode::Mark(idx, v.into()));
                 return
             }
             _ => ()
         }
     }
-    data.page.push(TeXNode::Mark(idx, v.into()));
+    data.page.push(VNode::Mark(idx, v.into()));
 }
 
 pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
@@ -661,10 +669,18 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
             if *name == PRIMITIVES.omit => todo!(),
         ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
-            engine.stomach.data_mut().open_lists.push(NodeList {
-                tp:NodeListType::AlignRow(engine.mouth.start_ref()),
-                children:vec!(),
-            });
+            engine.stomach.data_mut().open_lists.push(
+                match mode {
+                    BoxType::Vertical => NodeList::Vertical {
+                        children:vec!(),
+                        tp:VerticalNodeListType::VAlignRow(engine.mouth.start_ref())
+                    },
+                    _ => NodeList::Horizontal {
+                        children:vec!(),
+                        tp:HorizontalNodeListType::HAlignRow(engine.mouth.start_ref())
+                    }
+                }
+            );
             engine.requeue(token);
             return open_align_cell(engine,mode)
         }
@@ -685,39 +701,105 @@ pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
             }
             if !data.omit { engine.mouth.push_exp(TokenListIterator::new(None,data.columns[data.currindex].left.clone())); }
             engine.state.push(engine.aux,GroupType::Box(mode),engine.mouth.line_number());
-            engine.stomach.data_mut().open_lists.push(NodeList {
-                tp:NodeListType::AlignCell(engine.mouth.start_ref()),
-                children:vec!(),
-            });
+            engine.stomach.data_mut().open_lists.push(
+                match mode {
+                    BoxType::Vertical => NodeList::Vertical {
+                        children:vec!(),
+                        tp:VerticalNodeListType::VAlignCell(engine.mouth.start_ref())
+                    },
+                    _ => NodeList::Horizontal {
+                        children:vec!(),
+                        tp:HorizontalNodeListType::HAlignCell(engine.mouth.start_ref())
+                    }
+                }
+            );
         }
     }
 }
 
 pub fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
+    match inner_mode {
+        BoxType::Vertical => pop_align_cell_v(state,aux,stomach,mouth),
+        _ => pop_align_cell_h(state,aux,stomach,mouth)
+    }
+}
+
+pub fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
-        Some(NodeList{children,tp:NodeListType::AlignCell(start)}) => (children,start),
+        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignCell(start)}) => (children,start),
         _ => todo!("throw error")
     };
     state.pop(aux,mouth);
-    let bx = TeXBox {
-        children,start,
-        info: BoxInfo::new_cell(inner_mode),
+    let bx = TeXBox::V {
+        children:children.into(),start,
+        info: VBoxInfo::VAlignCell {to:None},
         end: mouth.current_sourceref(),
     };
-    stomach.data_mut().open_lists.last_mut().unwrap().children.push(bx.as_node());
+    match stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignRow(..)}) =>
+            children.push(VNode::Box(bx)),
+        _ => todo!("throw error")
+    }
+}
+pub fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
+    let (children,start) = match stomach.data_mut().open_lists.pop() {
+        Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignCell(start)}) => (children,start),
+        _ => todo!("throw error")
+    };
+    state.pop(aux,mouth);
+    let bx = TeXBox::H {
+        children:children.into(),start,
+        info: HBoxInfo::HAlignCell {to:None},
+        end: mouth.current_sourceref(),
+    };
+    match stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignRow(..)}) =>
+            children.push(HNode::Box(bx)),
+        _ => todo!("throw error")
+    }
 }
 
 pub fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
+    match inner_mode {
+        BoxType::Vertical => pop_align_row_v::<ET>(stomach,mouth),
+        _ => pop_align_row_h::<ET>(stomach,mouth)
+    }
+}
+
+pub fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
-        Some(NodeList{children,tp:NodeListType::AlignRow(start)}) => (children,start),
+        Some(NodeList::Vertical{children,tp:VerticalNodeListType::VAlignRow(start)}) => (children,start),
         _ => todo!("throw error")
     };
-    let bx = TeXBox {
-        children,start,
-        info: BoxInfo::new_row(inner_mode),
+    let bx = TeXBox::V {
+        children:children.into(),start,
+        info: VBoxInfo::VAlignRow,
         end: mouth.current_sourceref(),
     };
-    stomach.data_mut().open_lists.last_mut().unwrap().children.push(bx.as_node());
+    match stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::VAlign}) =>
+            children.push(HNode::Box(bx)),
+        _ => todo!("throw error")
+
+    }
+}
+
+pub fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
+    let (children,start) = match stomach.data_mut().open_lists.pop() {
+        Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::HAlignRow(start)}) => (children,start),
+        _ => todo!("throw error")
+    };
+    let bx = TeXBox::H {
+        children:children.into(),start,
+        info: HBoxInfo::HAlignRow,
+        end: mouth.current_sourceref(),
+    };
+    match stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Vertical {children,tp:VerticalNodeListType::HAlign}) =>
+            children.push(VNode::Box(bx)),
+        _ => todo!("throw error")
+
+    }
 }
 
 pub const END_TEMPLATE: &str = "!\"$%&/(endtemplate)\\&%$\"!";
@@ -768,6 +850,89 @@ pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u
     MathChar {
         char,
         cls,
-        style:engine.state.get_mathfonts()
+        style:engine.state.get_mathfonts(fam)
     }
+}
+
+
+pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> bool,h:fn(&HNode<ET>) -> bool,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET::Font>>) -> bool) {
+    let data = engine.stomach.data_mut();
+    match data.open_lists.last_mut() {
+        None => todo!("throw error: Not allowed in vertical"),
+        Some(NodeList::Vertical {children,..}) => {
+            let mut readd = arrayvec::ArrayVec::<VNode<ET>,10>::new();
+            loop {
+                match children.last_mut() {
+                    Some(n) if v(n) => { children.pop();break }
+                    Some(n) if n.opaque() => {
+                        readd.push(children.pop().unwrap());
+                    }
+                    _ => break
+                }
+            }
+            for n in readd.into_iter().rev() {
+                children.push(n);
+            }
+        }
+        Some(NodeList::Horizontal {children,..}) => {
+            let mut readd = arrayvec::ArrayVec::<HNode<ET>,10>::new();
+            loop {
+                match children.last_mut() {
+                    Some(n) if h(n) => { children.pop();break }
+                    Some(n) if n.opaque() => {
+                        readd.push(children.pop().unwrap());
+                    }
+                    _ => break
+                }
+            }
+            for n in readd.into_iter().rev() {
+                children.push(n);
+            }
+        }
+        Some(NodeList::Math {children,..}) => {
+            let mut readd = arrayvec::ArrayVec::<_,10>::new();
+            loop {
+                match children.last_mut() {
+                    Some(n) if m(n) => { children.pop();break }
+                    Some(n) if n.opaque() => {
+                        readd.push(children.pop().unwrap());
+                    }
+                    _ => break
+                }
+            }
+            for n in readd.into_iter().rev() {
+                children.push(n);
+            }
+        }
+    }
+}
+
+
+pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> Option<R>,h:fn(&HNode<ET>) -> Option<R>,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET::Font>>) -> Option<R>) -> Option<R> {
+    let data = engine.stomach.data_mut();
+    match data.open_lists.last_mut() {
+        None => for n in data.page.iter().rev() {
+            if n.opaque() {continue}
+            return v(n)
+        }
+        Some(NodeList::Vertical {children,..}) => {
+            for n in children.iter().rev() {
+                if n.opaque() {continue}
+                return v(n)
+            }
+        }
+        Some(NodeList::Horizontal {children,..}) => {
+            for n in children.iter().rev() {
+                if n.opaque() {continue}
+                return h(n)
+            }
+        }
+        Some(NodeList::Math {children,..}) => {
+            for n in children.iter().rev() {
+                if n.opaque() {continue}
+                return m(n)
+            }
+        }
+    }
+    None
 }

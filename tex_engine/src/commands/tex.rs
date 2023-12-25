@@ -1,9 +1,9 @@
 use chrono::{Datelike, Timelike};
 use crate::{cmstodo, cmstodos, cmtodo, cmtodos, expand_loop};
-use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, NodeCommandScope, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, CommandScope, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
+use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
 use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
@@ -11,20 +11,23 @@ use super::primitives::*;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::numerics::{Numeric, NumSet, Skip};
+use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
-use crate::tex::types::{BoxType, GroupType, MathStyle, MathStyleType, TeXMode};
+use crate::tex::types::{BoxType, GroupType, TeXMode};
 use std::fmt::Write;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, BoxTarget, KernNode, MathFontStyle, NodeList, NodeListType, SimpleNode, SkipNode, TeXBox, TeXNode, ToOrSpread};
-use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
+use crate::tex::nodes::horizontal::HNode;
+use crate::tex::nodes::math::{MathAtom, MathNode};
+use crate::tex::nodes::vertical::VNode;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -760,58 +763,63 @@ pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
     Ok(engine.state.get_box_register(idx).cloned())
 }
 
-pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,scope:NodeCommandScope,tp:BoxType,copy:bool) {
-    if ET::Stomach::maybe_switch_mode(engine,scope,tk) {
-        let idx = super::methods::read_register(engine);
-        let bx = if copy {engine.state.get_box_register(idx).cloned()} else {engine.state.take_box_register(idx)};
-        match bx {
-            None => (),
-            Some(TeXBox {info,children,..}) if info.tp() == tp => {
-                for c in children {
-                    ET::Stomach::add_node(engine,c)
-                }
+pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token, scope: CommandScope, tp:BoxType, copy:bool) {
+    let idx = super::methods::read_register(engine);
+    let bx = if copy {engine.state.get_box_register(idx).cloned()} else {engine.state.take_box_register(idx)};
+    match bx {
+        None => (),
+        Some(TeXBox::V {info,children,..}) if tp == BoxType::Vertical => {
+            for c in children.into_vec() {
+                ET::Stomach::add_node_v(engine,c)
             }
-            _ => todo!("error")
         }
+        Some(TeXBox::H {info,children,..}) if tp == BoxType::Horizontal => {
+            match engine.stomach.data_mut().open_lists.last_mut() {
+                Some(NodeList::Horizontal {children:ls,..}) =>
+                    ls.extend(children.into_vec().into_iter()),
+                _ => unreachable!()
+            }
+        }
+        _ => todo!("error")
     }
 }
 
 pub fn unhbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine,tk,NodeCommandScope::SwitchesToHorizontal,BoxType::Horizontal,false)
+    unbox(engine, tk, CommandScope::SwitchesToHorizontal, BoxType::Horizontal, false)
 }
 pub fn unhcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine,tk,NodeCommandScope::SwitchesToHorizontal,BoxType::Horizontal,true)
+    unbox(engine, tk, CommandScope::SwitchesToHorizontal, BoxType::Horizontal, true)
 }
 pub fn unvbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine,tk,NodeCommandScope::SwitchesToVertical,BoxType::Vertical,false)
+    unbox(engine, tk, CommandScope::SwitchesToVertical, BoxType::Vertical, false)
 }
 pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine,tk,NodeCommandScope::SwitchesToVertical,BoxType::Vertical,true)
+    unbox(engine, tk, CommandScope::SwitchesToVertical, BoxType::Vertical, true)
 }
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Horizontal, PRIMITIVES.everyhbox);
-    Err(BoxInfo::HBox {
+    Err(BoxInfo::H(HBoxInfo::HBox {
         scaled,
         assigned_width: None,
         assigned_height: None,
         assigned_depth: None,
         moved_left:None,raised:None
-    })
+    }))
 }
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    Err(BoxInfo::VBox {
+    Err(BoxInfo::V(VBoxInfo::VBox {
         scaled,
         assigned_width: None,
         assigned_height: None,
         assigned_depth: None,
         moved_left:None,raised:None
-    })
+    }))
 }
 
-pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     match engine.state.get_mode() {
         TeXMode::DisplayMath | TeXMode::InlineMath => (),// TODO check that the current mathbox is (basically) empty
         o => todo!("vcenter throw error; mode: {:?}",o)
@@ -820,29 +828,28 @@ pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) ->
     //let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
     engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
     engine.mouth.insert_every::<ET>(&engine.state,PRIMITIVES.everyvbox);
-    Err(BoxInfo::VCenter)
+    engine.stomach.data_mut().open_lists.push(NodeList::Vertical {
+        children: Vec::new(),
+        tp: VerticalNodeListType::VCenter(engine.mouth.start_ref())
+    });
 }
 
 pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToVertical,token) {
-        let wd = if engine.read_keyword(b"to") {
-            Some(engine.read_dim(false))
-        } else {
-            None
-        };
-        super::methods::do_align(engine, BoxType::Horizontal, BoxType::Vertical, wd)
-    }
+    let wd = if engine.read_keyword(b"to") {
+        Some(engine.read_dim(false))
+    } else {
+        None
+    };
+    super::methods::do_align(engine, BoxType::Horizontal, BoxType::Vertical, wd)
 }
 
 pub fn valign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,token) {
-        let wd = if engine.read_keyword(b"to") {
-            Some(engine.read_dim(false))
-        } else {
-            None
-        };
-        super::methods::do_align(engine, BoxType::Vertical, BoxType::Horizontal, wd)
-    }
+    let wd = if engine.read_keyword(b"to") {
+        Some(engine.read_dim(false))
+    } else {
+        None
+    };
+    super::methods::do_align(engine, BoxType::Vertical, BoxType::Horizontal, wd)
 }
 
 
@@ -969,7 +976,7 @@ pub fn ifvmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
 pub fn ifvbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
     let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
-        Some(TeXBox {info,..}) => info.tp() == BoxType::Vertical,
+        Some(TeXBox::V {..}) => true,
         _ => false
     }
 }
@@ -980,7 +987,7 @@ pub fn ifvoid<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 pub fn ifhbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
     let idx = super::methods::read_register(engine);
     match engine.state.get_box_register(idx) {
-        Some(TeXBox {info,..}) => info.tp() == BoxType::Horizontal,
+        Some(TeXBox::H {..}) => true,
         _ => false
     }
 }
@@ -1277,19 +1284,21 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,tk) {
-        let mut ls = &mut engine.stomach.data_mut().open_lists.last_mut().unwrap().children;
-        match ls.last_mut() {
-            Some(TeXNode::Box(TeXBox{info:BoxInfo::ParIndent {..},..})) => {ls.pop();}
-            _ => ()
+    if ET::Stomach::maybe_switch_mode(engine, CommandScope::SwitchesToHorizontal, tk) {
+        match engine.stomach.data_mut().open_lists.last_mut() {
+            Some(NodeList::Horizontal {children,..}) => match children.last_mut() {
+                Some(HNode::Box(TeXBox::H{info:HBoxInfo::ParIndent {..},..})) => {children.pop();}
+                _ => ()
+            }
+            _ => unreachable!()
         }
     }
 }
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
+               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
     let (idx,file) = super::methods::read_index_and_file(engine);
-    Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file);None}))
+    Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file)}))
 }
 pub fn openout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let (idx,file) = super::methods::read_index_and_file(engine);
@@ -1359,100 +1368,85 @@ pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
         Ok(bx) =>
             engine.state.set_box_register(engine.aux,index,bx,globally),
         Err(bi) => {
-            engine.stomach.data_mut().open_lists.push(
-                NodeList {
-                    children:vec!(),
-                    tp:NodeListType::Box(bi,engine.mouth.start_ref(), BoxTarget::Register{index,globally})
-                }
-            );
+            let mut ls = bi.open_list(engine.mouth.start_ref());
+            match ls {
+                NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Register {index,globally},
+                NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Register {index,globally},
+                _ => unreachable!()
+            }
+            engine.stomach.data_mut().open_lists.push(ls);
         }
     }
 }
 
 pub fn moveright<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToVertical,tk) {
-        let dim = engine.read_dim(false);
-        match engine.read_box(false) {
-            Ok(Some(mut bx)) => {
-                bx.info.move_left(-dim);
-                ET::Stomach::add_node(engine,bx.as_node());
+    let dim = engine.read_dim(false);
+    match engine.read_box(false) {
+        Ok(Some(mut bx)) => {
+            match bx {
+                TeXBox::H {ref mut info,..} => info.move_left(-dim),
+                TeXBox::V {ref mut info,..} => info.move_left(-dim),
             }
-            Ok(None) => (),
-            Err(mut bi) => {
-                bi.move_left(-dim);
-                engine.stomach.data_mut().open_lists.push(
-                    NodeList {
-                        children:vec!(),
-                        tp:NodeListType::Box(bi,engine.mouth.start_ref(), BoxTarget::List)
-                    }
-                );
-            }
+            ET::Stomach::add_node_v(engine,VNode::Box(bx));
+        }
+        Ok(None) => (),
+        Err(mut bi) => {
+            bi.move_left(-dim);
+            engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()));
         }
     }
 }
 
 pub fn moveleft<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToVertical,tk) {
-        let dim = engine.read_dim(false);
-        match engine.read_box(false) {
-            Ok(Some(mut bx)) => {
-                bx.info.move_left(dim);
-                ET::Stomach::add_node(engine,bx.as_node());
+    let dim = engine.read_dim(false);
+    match engine.read_box(false) {
+        Ok(Some(mut bx)) => {
+            match bx {
+                TeXBox::H {ref mut info,..} => info.move_left(dim),
+                TeXBox::V {ref mut info,..} => info.move_left(dim),
             }
-            Ok(None) => (),
-            Err(mut bi) => {
-                bi.move_left(dim);
-                engine.stomach.data_mut().open_lists.push(
-                    NodeList {
-                        children:vec!(),
-                        tp:NodeListType::Box(bi,engine.mouth.start_ref(), BoxTarget::List)
-                    }
-                );
-            }
+            ET::Stomach::add_node_v(engine,VNode::Box(bx));
+        }
+        Ok(None) => (),
+        Err(mut bi) => {
+            bi.move_left(dim);
+            engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()));
         }
     }
 }
 
 pub fn raise<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,tk) {
-        let dim = engine.read_dim(false);
-        match engine.read_box(false) {
-            Ok(Some(mut bx)) => {
-                bx.info.raise(dim);
-                ET::Stomach::add_node(engine,bx.as_node());
+    let dim = engine.read_dim(false);
+    match engine.read_box(false) {
+        Ok(Some(mut bx)) => {
+            match bx {
+                TeXBox::H {ref mut info,..} => info.raise(dim),
+                TeXBox::V {ref mut info,..} => info.raise(dim),
             }
-            Ok(None) => (),
-            Err(mut bi) => {
-                bi.raise(dim);
-                engine.stomach.data_mut().open_lists.push(
-                    NodeList {
-                        children:vec!(),
-                        tp:NodeListType::Box(bi,engine.mouth.start_ref(), BoxTarget::List)
-                    }
-                );
-            }
+            ET::Stomach::add_node_h(engine,HNode::Box(bx));
+        }
+        Ok(None) => (),
+        Err(mut bi) => {
+            bi.raise(dim);
+            engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()));
         }
     }
 }
 
 pub fn lower<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine,NodeCommandScope::SwitchesToHorizontal,tk) {
-        let dim = engine.read_dim(false);
-        match engine.read_box(false) {
-            Ok(Some(mut bx)) => {
-                bx.info.raise(-dim);
-                ET::Stomach::add_node(engine,bx.as_node());
+    let dim = engine.read_dim(false);
+    match engine.read_box(false) {
+        Ok(Some(mut bx)) => {
+            match bx {
+                TeXBox::H {ref mut info,..} => info.raise(-dim),
+                TeXBox::V {ref mut info,..} => info.raise(-dim),
             }
-            Ok(None) => (),
-            Err(mut bi) => {
-                bi.raise(-dim);
-                engine.stomach.data_mut().open_lists.push(
-                    NodeList {
-                        children:vec!(),
-                        tp:NodeListType::Box(bi,engine.mouth.start_ref(), BoxTarget::List)
-                    }
-                );
-            }
+            ET::Stomach::add_node_h(engine,HNode::Box(bx));
+        }
+        Ok(None) => (),
+        Err(mut bi) => {
+            bi.raise(-dim);
+            engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()));
         }
     }
 }
@@ -1491,9 +1485,9 @@ pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) 
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
+                               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
     let idx = super::methods::read_file_index(engine);
-    Some(Box::new(move |engine| {engine.filesystem.close_out(idx);None}))
+    Some(Box::new(move |engine| {engine.filesystem.close_out(idx)}))
 }
 pub fn closeout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let idx = super::methods::read_file_index(engine);
@@ -1506,7 +1500,7 @@ pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
 }
 
 pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
-                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>> {
+                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
     let idx = engine.read_int(false).into();
     let mut tks = engine.aux.memory.get_token_vec();
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
@@ -1519,7 +1513,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
         tks.push(t);
     });
     tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-    Some(Box::new(move |engine| {do_write(engine,idx,tks);None}))
+    Some(Box::new(move |engine| {do_write(engine,idx,tks)}))
 }
 pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let idx = engine.read_int(false).into();
@@ -1588,23 +1582,20 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
     )
 }
 
-pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    TeXNode::Penalty(match engine.read_int(false).try_into() {
+pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    let i = match engine.read_int(false).try_into() {
         Ok(i) => i,
-        _ => todo!("error: penalty out of range")
-    })
+        Err(_) => todo!("throw error")
+    };
+    ET::Stomach::add_node(engine,|| VNode::Penalty(i), || HNode::Penalty(i), || MathNode::Penalty(i));
 }
 
-pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let dim = engine.read_dim(false);
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical =>
-            TeXNode::Kern(KernNode::VKern(dim)),
-        _ => TeXNode::Kern(KernNode::HKern(dim))
-    }
+    ET::Stomach::add_node(engine,|| VNode::VKern(dim), || HNode::HKern(dim), || MathNode::HKern(dim));
 }
 
-pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let start = engine.mouth.start_ref();
     let mut width = None;
     let mut height = None;
@@ -1624,10 +1615,10 @@ pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> T
         }
     }
     let mut end = engine.mouth.current_sourceref();
-    SimpleNode::VRule {width,height,depth,start,end}.as_node()
+    ET::Stomach::add_node_h(engine,HNode::VRule {width,height,depth,start,end})
 }
 
-pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let start = engine.mouth.start_ref();
     let mut width = None;
     let mut height = None;
@@ -1647,128 +1638,87 @@ pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> T
         }
     }
     let mut end = engine.mouth.current_sourceref();
-    SimpleNode::HRule {width,height,depth,start,end}.as_node()
+    ET::Stomach::add_node_v(engine,VNode::HRule {width,height,depth,start,end})
 }
 
-pub fn vskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn vskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let sk = engine.read_skip(false);
-    SkipNode::VSkip(sk).as_node()
+    ET::Stomach::add_node_v(engine,VNode::VSkip(sk))
 }
 
-pub fn vfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::VFil.as_node()
+pub fn vfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_v(engine,VNode::VFil)
 }
-pub fn vfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::VFill.as_node()
+pub fn vfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_v(engine,VNode::VFill)
 }
-pub fn vfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::VFilneg.as_node()
+pub fn vfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_v(engine,VNode::VFilneg)
 }
-pub fn vss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::Vss.as_node()
+pub fn vss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_v(engine,VNode::Vss)
 }
 
-pub fn hskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn hskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let sk = engine.read_skip(false);
-    SkipNode::HSkip(sk).as_node()
+    ET::Stomach::add_node_h(engine,HNode::HSkip(sk))
 }
-pub fn hfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::HFil.as_node()
+pub fn hfil<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_h(engine,HNode::HFil)
 }
-pub fn hfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::HFill.as_node()
+pub fn hfill<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_h(engine,HNode::HFill)
 }
-pub fn hfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::HFilneg.as_node()
+pub fn hfilneg<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_h(engine,HNode::HFilneg)
 }
-pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    SkipNode::Hss.as_node()
+pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node_h(engine,HNode::Hss)
 }
 
-pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let dim = engine.state.get_primitive_dim(PRIMITIVES.parindent);
-    TeXBox {children:vec!(),info:BoxInfo::ParIndent(dim),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()}.as_node()
+    ET::Stomach::add_node_h(engine,
+                            HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(dim),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()})
+    )
 }
 
-pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let num = engine.read_int(false);
     let delim = super::methods::get_delimiter(engine,num);
-    delim.as_node()
+    ET::Stomach::add_node_m(engine,MathNode::Atom(delim.small.to_atom()))
 }
 
-pub fn mskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn mskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let skip = engine.read_muskip(false);
-    SkipNode::MSkip{skip,style:engine.state.get_mathfonts()}.as_node()
+    ET::Stomach::add_node_m(engine,MathNode::MSkip{skip,style:engine.state.get_mathfonts(2)})
 }
 
-pub fn mkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
+pub fn mkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let kern = engine.read_mudim(false);
-    KernNode::MKern{kern,style:engine.state.get_mathfonts()}.as_node()
+    ET::Stomach::add_node_m(engine,MathNode::MKern{kern,style:engine.state.get_mathfonts(2)})
 }
 
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    if engine.state.get_mode() == TeXMode::Vertical {
-        todo!("throw error")
-    }
-    let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-
-    let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
-    loop {
-        match ls.last_mut() {
-            Some(TeXNode::Skip(_)) => { ls.pop();break }
-            Some(n) if n.opaque() => {
-                readd.push(ls.pop().unwrap());
-            }
-            _ => break
-        }
-    }
-    for n in readd.into_iter().rev() {
-        ls.push(n);
-    }
-
+    super::methods::un_x(engine,
+        |v| matches!(v,VNode::VSkip(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss),
+        |h| matches!(h,HNode::HSkip(_) | HNode::HFil | HNode::HFill | HNode::HFilneg | HNode::Hss),
+        |m| matches!(m,MathNode::MSkip{..} | MathNode::HSkip(_) | MathNode::HFil | MathNode::HFill | MathNode::HFilneg | MathNode::Hss)
+    )
 }
 pub fn unkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    if engine.state.get_mode() == TeXMode::Vertical {
-        todo!("throw error")
-    }
-    let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-
-    let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
-    loop {
-        match ls.last_mut() {
-            Some(TeXNode::Kern(_)) => { ls.pop();break }
-            Some(n) if n.opaque() => {
-                readd.push(ls.pop().unwrap());
-            }
-            _ => break
-        }
-    }
-    for n in readd.into_iter().rev() {
-        ls.push(n);
-    }
+    super::methods::un_x(engine,
+                         |v| matches!(v,VNode::VKern(_)),
+                         |h| matches!(h,HNode::HKern(_)),
+                         |m| matches!(m,MathNode::MKern{..} | MathNode::HKern(_))
+    )
 }
 pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    if engine.state.get_mode() == TeXMode::Vertical {
-        todo!("throw error")
-    }
-    let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-
-    let mut readd = arrayvec::ArrayVec::<TeXNode<ET>,10>::new();
-    loop {
-        match ls.last_mut() {
-            Some(TeXNode::Penalty(_)) => { ls.pop();break }
-            Some(n) if n.opaque() => {
-                readd.push(ls.pop().unwrap());
-            }
-            _ => break
-        }
-    }
-    for n in readd.into_iter().rev() {
-        ls.push(n);
-    }
+    super::methods::un_x(engine,
+                         |v| matches!(v,VNode::Penalty(_)),
+                         |h| matches!(h,HNode::Penalty(_)),
+                         |m| matches!(m,MathNode::Penalty(_))
+    )
 }
 
 pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
@@ -1776,69 +1726,72 @@ pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) ->
         todo!("throw error")
     }
     let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-    for (i,n) in ls.iter().enumerate().rev() {
-        if n.opaque() {continue }
-        match n {
-            TeXNode::Box(_) => {
-                if let TeXNode::Box(bi) = ls.remove(i) {
-                    return Ok(Some(bi))
-                } else {
-                    unreachable!()
+    match data.open_lists.last_mut() {
+        None => todo!("throw error: Not allowed in vertical"),
+        Some(NodeList::Vertical {children,..}) => {
+            for (i,n) in children.iter().enumerate().rev() {
+                if n.opaque() {continue }
+                match n {
+                    VNode::Box(_) => {
+                        if let VNode::Box(bi) = children.remove(i) {
+                            return Ok(Some(bi))
+                        } else {
+                            unreachable!()
+                        }
+                    },
+                    _ => return Ok(None)
                 }
-            },
-            _ => return Ok(None)
+            }
         }
+        Some(NodeList::Horizontal {children,..}) => {
+            for (i,n) in children.iter().enumerate().rev() {
+                if n.opaque() {continue }
+                match n {
+                    HNode::Box(_) => {
+                        if let HNode::Box(bi) = children.remove(i) {
+                            return Ok(Some(bi))
+                        } else {
+                            unreachable!()
+                        }
+                    },
+                    _ => return Ok(None)
+                }
+            }
+        }
+        _ => ()
     }
     Ok(None)
 }
 
 pub fn lastkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
-    let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-
-    for n in ls.iter().rev() {
-        if n.opaque() {continue }
-        match n {
-            TeXNode::Kern(k) => return k.dim(),
-            _ => return ET::Dim::default()
-        }
-    }
-    ET::Dim::default()
+    super::methods::last_x(engine,
+        |v| match v {VNode::VKern(k) => Some(*k),_ => None },
+        |h| match h {HNode::HKern(k) => Some(*k),_ => None },
+        |m| match m {MathNode::HKern(k) => Some(*k),_ => None }
+    ).unwrap_or_default()
 }
 
 pub fn lastskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Skip {
-    let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-    for n in ls.iter().rev() {
-        if n.opaque() {continue }
-        match n {
-            TeXNode::Skip(k) => return k.skip(),
-            _ => return ET::Skip::default()
-        }
-    }
-    ET::Skip::default()
+    super::methods::last_x(engine,
+                           |v| match v {VNode::VSkip(k) => Some(*k),_ => None },
+                           |h| match h {HNode::HSkip(k) => Some(*k),_ => None },
+                           |m| match m {MathNode::HSkip(k) => Some(*k),_ => None }
+    ).unwrap_or_default()
 }
 
 pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
-    let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-
-    for n in ls.iter().rev() {
-        if n.opaque() {continue }
-        match n {
-            TeXNode::Penalty(k) => return (*k).into(),
-            _ => return ET::Int::default()
-        }
-    }
-    ET::Int::default()
+    super::methods::last_x(engine,
+                           |v| match v {VNode::Penalty(k) => Some(*k),_ => None },
+                           |h| match h {HNode::Penalty(k) => Some(*k),_ => None },
+                           |m| match m {MathNode::Penalty(k) => Some(*k),_ => None }
+    ).unwrap_or_default().into()
 }
 
 pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let idx = super::methods::read_register(engine);
     let (mut info,ls,start,end) = match engine.state.get_box_register_mut(idx) {
-        Some(TeXBox{info,children,start,end}) if info.tp() == BoxType::Vertical => {
-            (info.clone_for_split(), std::mem::take(children),*start,*end)
+        Some(TeXBox::V{info,children,start,end}) => {
+            (info.clone_for_split(), std::mem::take(children).into_vec(),*start,*end)
         }
         _ => todo!("throw error")
     };
@@ -1847,21 +1800,20 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
     }
     let target = engine.read_dim(false);
     match &mut info {
-        BoxInfo::VBox {scaled,..} => {
+        VBoxInfo::VBox {scaled,..} => {
             *scaled = ToOrSpread::To(target);
         }
-        BoxInfo::VTop {scaled,..} => {
+        VBoxInfo::VTop {scaled,..} => {
             *scaled = ToOrSpread::To(target);
         }
         _ => unreachable!()
     }
-    let mut ret = TeXBox{
-        children:vec!(), info, start, end
-    };
     let SplitResult {first,rest,..} = ET::Stomach::split_vertical(engine,ls,target);
-    ret.children = first;
-    if let Some(TeXBox{children,..}) = engine.state.get_box_register_mut(idx) {
-        *children = rest;
+    let mut ret = TeXBox::V{
+        children:first.into(), info, start, end
+    };
+    if let Some(TeXBox::V{children,..}) = engine.state.get_box_register_mut(idx) {
+        *children = rest.into();
     } else {
         unreachable!()
     }
@@ -1874,9 +1826,9 @@ pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
         _ => ()
     }
     engine.expand_until_bgroup(true);
-    engine.stomach.data_mut().open_lists.push(NodeList {
+    engine.stomach.data_mut().open_lists.push(NodeList::Vertical {
         children:vec!(),
-        tp:NodeListType::VAdjust
+        tp:VerticalNodeListType::VAdjust
     });
     engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
 }
@@ -1930,18 +1882,21 @@ pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     engine.stomach.data_mut().deadcycles = 0;
     match engine.read_box(false) {
         Ok(Some(bx)) => {
-            engine.shipout(bx.as_node());
+            engine.shipout(VNode::Box(bx));
             /*if let Some(n) = bx.as_node().shipout_top(engine) {
                 engine.colon.out(n)
             }*/
         },
         Ok(None) => (),
         Err(bi) => {
+            let mut list = bi.open_list(engine.mouth.start_ref());
+            match list {
+                NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Out,
+                NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Out,
+                _ => unreachable!()
+            }
             let mut data = engine.stomach.data_mut();
-            data.open_lists.push(NodeList {
-                children:vec!(),
-                tp:NodeListType::Box(bi,engine.mouth.start_ref(), BoxTarget::Out)
-            })
+            data.open_lists.push(list);
         }
     }
 }
@@ -2066,8 +2021,8 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     engine.read_until_endgroup(|_,_,_| {});
 }
 
-pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXNode<ET> {
-    TeXNode::Skip(SkipNode::Space)
+pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::add_node(engine,|| unreachable!(), || HNode::Space, || MathNode::Space)
 }
 pub fn char_slash<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     // TODO
@@ -2223,41 +2178,41 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_conditional(engine,"ifvmode",ifvmode);
     register_conditional(engine,"ifvoid",ifvoid);
 
-    register_unexpandable(engine,"afterassignment",afterassignment);
-    register_unexpandable(engine,"aftergroup",aftergroup);
-    register_unexpandable(engine,"begingroup",begingroup);
-    register_unexpandable(engine,"closein",closein);
-    register_unexpandable(engine,"char",char_);
-    register_unexpandable(engine,"dump",|_,_|());
-    register_unexpandable(engine,"endcsname",endcsname);
-    register_unexpandable(engine,"endgroup",endgroup);
-    register_unexpandable(engine,"errorstopmode",errorstopmode);
-    register_unexpandable(engine,"halign",halign);
-    register_unexpandable(engine,"valign",valign);
-    register_unexpandable(engine, "hyphenation", |e,_|skip_argument(e));
-    register_unexpandable(engine,"ignorespaces",ignorespaces);
-    register_unexpandable(engine,"immediate",immediate);
-    register_unexpandable(engine,"lowercase",lowercase);
-    register_unexpandable(engine,"uppercase",uppercase);
-    register_unexpandable(engine,"message",message);
-    register_unexpandable(engine,"errmessage",errmessage);
-    register_unexpandable(engine,"noindent",noindent);
-    register_unexpandable(engine,"openin",openin);
-    register_unexpandable(engine,"par",par);
-    register_unexpandable(engine,"unhbox",unhbox);
-    register_unexpandable(engine,"unvbox",unvbox);
-    register_unexpandable(engine,"unhcopy",unhcopy);
-    register_unexpandable(engine,"unvcopy",unvcopy);
-    register_unexpandable(engine,"unskip",unskip);
-    register_unexpandable(engine,"unkern",unkern);
-    register_unexpandable(engine,"unpenalty",unpenalty);
-    register_unexpandable(engine,"moveleft",moveleft);
-    register_unexpandable(engine,"moveright",moveright);
-    register_unexpandable(engine,"raise",raise);
-    register_unexpandable(engine,"lower",lower);
-    register_unexpandable(engine,"shipout",shipout);
-    register_unexpandable(engine, "patterns", |e,_|skip_argument(e));
-    register_unexpandable(engine,"vadjust",vadjust);
+    register_unexpandable(engine,"afterassignment",CommandScope::Any,afterassignment);
+    register_unexpandable(engine,"aftergroup",CommandScope::Any,aftergroup);
+    register_unexpandable(engine,"begingroup",CommandScope::Any,begingroup);
+    register_unexpandable(engine,"closein",CommandScope::Any,closein);
+    register_unexpandable(engine,"char",CommandScope::SwitchesToHorizontal,char_);
+    register_unexpandable(engine,"dump",CommandScope::Any,|_,_|());
+    register_unexpandable(engine,"endcsname",CommandScope::Any,endcsname);
+    register_unexpandable(engine,"endgroup",CommandScope::Any,endgroup);
+    register_unexpandable(engine,"errorstopmode",CommandScope::Any,errorstopmode);
+    register_unexpandable(engine,"halign",CommandScope::SwitchesToVertical,halign);
+    register_unexpandable(engine,"valign",CommandScope::SwitchesToHorizontal,valign);
+    register_unexpandable(engine, "hyphenation",CommandScope::Any, |e,_|skip_argument(e));
+    register_unexpandable(engine,"ignorespaces",CommandScope::Any,ignorespaces);
+    register_unexpandable(engine,"immediate",CommandScope::Any,immediate);
+    register_unexpandable(engine,"lowercase",CommandScope::Any,lowercase);
+    register_unexpandable(engine,"uppercase",CommandScope::Any,uppercase);
+    register_unexpandable(engine,"message",CommandScope::Any,message);
+    register_unexpandable(engine,"errmessage",CommandScope::Any,errmessage);
+    register_unexpandable(engine,"noindent",CommandScope::Any,noindent);
+    register_unexpandable(engine,"openin",CommandScope::Any,openin);
+    register_unexpandable(engine,"par",CommandScope::Any,par);
+    register_unexpandable(engine,"unhbox",CommandScope::SwitchesToHorizontal,unhbox);
+    register_unexpandable(engine,"unvbox",CommandScope::SwitchesToVertical,unvbox);
+    register_unexpandable(engine,"unhcopy",CommandScope::SwitchesToHorizontal,unhcopy);
+    register_unexpandable(engine,"unvcopy",CommandScope::SwitchesToVertical,unvcopy);
+    register_unexpandable(engine,"unskip",CommandScope::Any,unskip);
+    register_unexpandable(engine,"unkern",CommandScope::Any,unkern);
+    register_unexpandable(engine,"unpenalty",CommandScope::Any,unpenalty);
+    register_unexpandable(engine,"moveleft",CommandScope::SwitchesToVertical,moveleft);
+    register_unexpandable(engine,"moveright",CommandScope::SwitchesToVertical,moveright);
+    register_unexpandable(engine,"raise",CommandScope::SwitchesToHorizontal,raise);
+    register_unexpandable(engine,"lower",CommandScope::SwitchesToHorizontal,lower);
+    register_unexpandable(engine,"shipout",CommandScope::Any,shipout);
+    register_unexpandable(engine, "patterns", CommandScope::Any,|e,_|skip_argument(e));
+    register_unexpandable(engine,"vadjust",CommandScope::Any,vadjust);
     {
         let refs = engine.get_engine_refs();
         let relax = refs.aux.memory.cs_interner_mut().new("relax");
@@ -2265,16 +2220,37 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         refs.state.set_command(refs.aux,relax,Some(Command::Relax),true);
         refs.state.set_command(refs.aux,nullfont,Some(Command::Font(refs.fontsystem.null())),true)
     }
-    register_unexpandable(engine,"mark",mark);
-    register_unexpandable(engine,"/",char_slash);
-    register_unexpandable(engine,"-",char_dash);
-    register_unexpandable(engine,"showlists",|_,_| {}); // TODO
-    register_unexpandable(engine,"crcr",|_,_| {
+    register_unexpandable(engine,"mark",CommandScope::Any,mark);
+    register_unexpandable(engine,"/",CommandScope::Any,char_slash);
+    register_unexpandable(engine,"-",CommandScope::Any,char_dash);
+    register_unexpandable(engine,"showlists",CommandScope::Any,|_,_| {}); // TODO
+    register_unexpandable(engine,"crcr",CommandScope::Any,|_,_| {
         print!("")
     });
-    register_unexpandable(engine,"cr",|_,_| {todo!("throw error")});
-    register_unexpandable(engine,END_TEMPLATE,end_template);
-    register_unexpandable(engine,END_TEMPLATE_ROW,end_template_row);
+    register_unexpandable(engine,"cr",CommandScope::Any,|_,_| {todo!("throw error")});
+    register_unexpandable(engine,END_TEMPLATE,CommandScope::Any,end_template);
+    register_unexpandable(engine,END_TEMPLATE_ROW,CommandScope::Any,end_template_row);
+
+    register_unexpandable(engine, "delimiter", CommandScope::MathOnly, delimiter);
+    register_unexpandable(engine, "mskip", CommandScope::MathOnly, mskip);
+    register_unexpandable(engine, "mkern", CommandScope::MathOnly, mkern);
+    register_unexpandable(engine, "penalty", CommandScope::Any, penalty);
+    register_unexpandable(engine, "kern", CommandScope::Any, kern);
+    register_unexpandable(engine, "vrule", CommandScope::SwitchesToHorizontal, vrule);
+    register_unexpandable(engine, "vskip", CommandScope::SwitchesToVertical, vskip);
+    register_unexpandable(engine, "vfil", CommandScope::SwitchesToVertical, vfil);
+    register_unexpandable(engine, "vfill", CommandScope::SwitchesToVertical, vfill);
+    register_unexpandable(engine, "vfilneg", CommandScope::SwitchesToVertical, vfilneg);
+    register_unexpandable(engine, "vss", CommandScope::SwitchesToVertical, vss);
+    register_unexpandable(engine, "hrule", CommandScope::SwitchesToVertical, hrule);
+    register_unexpandable(engine, "hskip", CommandScope::SwitchesToHorizontal, hskip);
+    register_unexpandable(engine, "hfil", CommandScope::SwitchesToHorizontal, hfil);
+    register_unexpandable(engine, "hfill", CommandScope::SwitchesToHorizontal, hfill);
+    register_unexpandable(engine, "hfilneg", CommandScope::SwitchesToHorizontal, hfilneg);
+    register_unexpandable(engine, "hss", CommandScope::SwitchesToHorizontal, hss);
+    register_unexpandable(engine, "indent", CommandScope::SwitchesToHorizontal, indent);
+    register_unexpandable(engine, " ", CommandScope::SwitchesToHorizontal, char_space);
+    register_unexpandable(engine,"vcenter",CommandScope::MathOnly,vcenter);
 
     register_whatsit(engine,"closeout",closeout,closeout_immediate);
     register_whatsit(engine,"openout",openout,openout_immediate);
@@ -2282,31 +2258,10 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     register_box(engine,"hbox",hbox);
     register_box(engine,"vbox",vbox);
-    register_box(engine,"vcenter",vcenter);
     register_box(engine,"box",box_);
     register_box(engine,"copy",copy);
     register_box(engine,"lastbox",lastbox);
     register_box(engine, "vsplit", vsplit);
-
-    register_node(engine,"delimiter",NodeCommandScope::MathOnly,delimiter);
-    register_node(engine,"mskip",NodeCommandScope::MathOnly,mskip);
-    register_node(engine,"mkern",NodeCommandScope::MathOnly,mkern);
-    register_node(engine,"penalty",NodeCommandScope::Any,penalty);
-    register_node(engine,"kern",NodeCommandScope::Any,kern);
-    register_node(engine,"vrule",NodeCommandScope::SwitchesToHorizontal,vrule);
-    register_node(engine,"vskip",NodeCommandScope::SwitchesToVertical,vskip);
-    register_node(engine,"vfil",NodeCommandScope::SwitchesToVertical,vfil);
-    register_node(engine,"vfill",NodeCommandScope::SwitchesToVertical,vfill);
-    register_node(engine,"vfilneg",NodeCommandScope::SwitchesToVertical,vfilneg);
-    register_node(engine,"vss",NodeCommandScope::SwitchesToVertical,vss);
-    register_node(engine,"hrule",NodeCommandScope::SwitchesToVertical,hrule);
-    register_node(engine,"hskip",NodeCommandScope::SwitchesToHorizontal,hskip);
-    register_node(engine,"hfil",NodeCommandScope::SwitchesToHorizontal,hfil);
-    register_node(engine,"hfill",NodeCommandScope::SwitchesToHorizontal,hfill);
-    register_node(engine,"hfilneg",NodeCommandScope::SwitchesToHorizontal,hfilneg);
-    register_node(engine,"hss",NodeCommandScope::SwitchesToHorizontal,hss);
-    register_node(engine,"indent",NodeCommandScope::SwitchesToHorizontal,indent);
-    register_node(engine," ",NodeCommandScope::SwitchesToHorizontal,char_space);
 
     cmstodos!(engine,
         mathclose,mathbin,mathord,mathop,mathrel,mathopen,

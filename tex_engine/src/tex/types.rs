@@ -6,7 +6,7 @@ use std::fmt::Display;
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub struct MathStyle {
     pub cramped: bool,
-    pub forced: bool,
+    pub forced_from: Option<MathStyleType>,
     pub style:MathStyleType
 }
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -15,8 +15,8 @@ pub enum MathStyleType { Display, Text, Script, ScriptScript }
 impl MathStyle {
     pub fn sup(self) -> Self {
         match self.style {
-            MathStyleType::Text | MathStyleType::Display => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::Script},
-            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::ScriptScript},
+            MathStyleType::Text | MathStyleType::Display => MathStyle{cramped:self.cramped, forced_from:None,style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, forced_from:None,style:MathStyleType::ScriptScript},
         }
     }
     #[inline(always)]
@@ -28,9 +28,9 @@ impl MathStyle {
     pub fn sub(self) -> Self { self.sup().cramp() }
     pub fn numerator(self) -> Self {
         match self.style {
-            MathStyleType::Display => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::Text},
-            MathStyleType::Text => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::Script},
-            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped,forced:false,style:MathStyleType::ScriptScript},
+            MathStyleType::Display => MathStyle{cramped:self.cramped, forced_from:None,style:MathStyleType::Text},
+            MathStyleType::Text => MathStyle{cramped:self.cramped, forced_from:None,style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, forced_from:None,style:MathStyleType::ScriptScript},
         }
     }
     #[inline(always)]

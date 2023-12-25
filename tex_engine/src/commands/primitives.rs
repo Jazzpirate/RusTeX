@@ -1,12 +1,12 @@
 /*! Methods for registering primitives */
-use crate::commands::{Assignment, BoxCommand, Command, Conditional, DimCommand, Expandable, FontCommand, IntCommand, MuSkipCommand, NodeCommand, NodeCommandScope, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::{Assignment, BoxCommand, Command, Conditional, DimCommand, Expandable, FontCommand, IntCommand, MuSkipCommand, CommandScope, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
 use crate::engine::utils::memory::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::state::State;
 use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::nodes::{BoxInfo, TeXBox, TeXNode};
+use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 use crate::tex::numerics::NumSet;
 
 type Tk<E> = <<E as TeXEngine>::Types as EngineTypes>::Token;
@@ -51,6 +51,7 @@ macro_rules! cmstodo {
         let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
         let command = crate::commands::Command::Unexpandable(crate::commands::Unexpandable{
             name:id,
+            scope:crate::commands::CommandScope::Any,
             apply:|e,_| todo!("\\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::display_position(e.mouth)
@@ -58,18 +59,6 @@ macro_rules! cmstodo {
         });
         $engine.register_primitive(command,stringify!($name));
     }};
-}
-
-pub fn register_node<E:TeXEngine>(engine:&mut E,name:&'static str, scope:NodeCommandScope,
-                                  f:fn(&mut EngineReferences<E::Types>,Tk<E>) -> TeXNode<E::Types>
-){
-    let id = PRIMITIVES.get(name);
-    let command = Command::Node(NodeCommand{
-        name:id, scope, read:f
-    });
-    let refs = engine.get_engine_refs();
-    let name = refs.aux.memory.cs_interner_mut().new(name);
-    refs.state.set_command(refs.aux,name,Some(command),true);
 }
 
 /// Creates a new [`Expandable`] primitive and registers it with the engine.
@@ -121,10 +110,11 @@ pub fn register_conditional<E:TeXEngine>(
 pub fn register_unexpandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
+    scope: CommandScope,
     f:fn(&mut EngineReferences<E::Types>,Tk<E>)) {
     let id = PRIMITIVES.get(name);
     let command = Command::Unexpandable(Unexpandable{
-        name:id,
+        name:id,scope,
         apply:f
     });
     let refs = engine.get_engine_refs();
@@ -289,7 +279,7 @@ pub fn register_whatsit<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
     get:fn(&mut EngineReferences<E::Types>, Tk<E>)
-             -> Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>) -> Option<TeXNode<E::Types>>>>,
+             -> Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>)>>,
     immediate:fn(&mut EngineReferences<E::Types>,Tk<E>)) {
     let id = PRIMITIVES.get(name);
     let command = Command::Whatsit(Whatsit{

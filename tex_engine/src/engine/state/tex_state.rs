@@ -13,11 +13,11 @@ use crate::tex::input_text::CharacterMap;
 use crate::tex::types::{GroupType, MathStyle, TeXMode};
 use crate::utils::HMap;
 use crate::engine::FontSystem;
-use crate::tex::nodes::TeXBox;
 
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::tex::control_sequences::ControlSequenceName;
 use crate::engine::fontsystem::Font;
+use crate::tex::nodes::boxes::TeXBox;
 
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
@@ -128,7 +128,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             textfonts:mathfonts.clone(),
             scriptfonts:mathfonts.clone(),
             scriptscriptfonts:mathfonts,
-            mathstyle:MathStyle{cramped:false,forced:false,style:crate::tex::types::MathStyleType::Text},
+            mathstyle:MathStyle{cramped:false, forced_from:None,style:crate::tex::types::MathStyleType::Text},
         }
     }
 

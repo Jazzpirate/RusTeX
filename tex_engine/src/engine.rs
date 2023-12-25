@@ -16,7 +16,8 @@ use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
 use crate::tex::control_sequences::ControlSequenceName;
-use crate::tex::nodes::{NodeTrait, TeXNode};
+use crate::tex::nodes::CustomNodeTrait;
+use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
 use crate::tex::token::Token;
 use crate::utils::errors::{catch, ErrorHandler, TeXError};
@@ -52,7 +53,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug {
     type Memory:MemoryManager<Self::Token>;
     type Gullet:Gullet<ET=Self>;
     type Stomach:Stomach<ET=Self>;
-    type CustomNode:NodeTrait<Self>+NodeTrait<Self>;
+    type CustomNode:CustomNodeTrait<Self>;
     type Font:Font<Char=Self::Char,Int=Self::Int, Dim=Self::Dim,CS=Self::CSName>;
     type FontSystem: FontSystem<Font=Self::Font,Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
 }
@@ -66,15 +67,15 @@ pub struct EngineAux<ET:EngineTypes> {
 }
 
 pub struct Colon<'c,ET:EngineTypes> {
-    out:Box<dyn FnMut(&mut EngineReferences<ET>, TeXNode<ET>) + 'c>
+    out:Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
     #[inline(always)]
-    pub fn new<F:FnMut(&mut EngineReferences<ET>, TeXNode<ET>) + 'c>(f:F) -> Self {
+    pub fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
     #[inline(always)]
-    pub fn out(&mut self,engine:&mut EngineReferences<ET>, n: TeXNode<ET>) {
+    pub fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) {
         (self.out)(engine,n)
     }
 }
@@ -86,7 +87,7 @@ impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
 }
 
 impl <ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn shipout(&mut self,n: TeXNode<ET>) {
+    pub fn shipout(&mut self,n: VNode<ET>) {
         let mut colon = std::mem::take(&mut self.colon);
         colon.out(self,n);
         self.colon = colon;
@@ -150,7 +151,7 @@ pub trait TeXEngine:Sized {
         comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
-    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, TeXNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {catch( ||{
+    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {catch( ||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
@@ -246,7 +247,7 @@ pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 pub trait PDFTeXEngine: TeXEngine
     where <<Self as TeXEngine>::Types as EngineTypes>::Extension : PDFExtension<Self::Types>,
           <<Self as TeXEngine>::Types as EngineTypes>::CustomNode: From<PDFNode<Self::Types>> {
-    fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>, TeXNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
+    fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
     }
@@ -386,8 +387,8 @@ macro_rules! do_cmd {
     ($ET:ty;$engine:ident,$token:expr,$cmd:ident) => {
         match $cmd {
             crate::commands::Command::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other),
-            crate::commands::Command::Unexpandable(crate::commands::Unexpandable { name, apply }) =>
-                <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, $token, *apply),
+            crate::commands::Command::Unexpandable(crate::commands::Unexpandable { name,scope, apply }) =>
+                <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, *scope,$token, *apply),
             crate::commands::Command::Assignment(crate::commands::Assignment { name, assign }) =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Int(crate::commands::IntCommand { name, assign: Some(assign), .. }) =>
@@ -402,8 +403,6 @@ macro_rules! do_cmd {
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Box(crate::commands::BoxCommand { name, read }) =>
                 <$ET as EngineTypes>::Stomach::do_box($engine, *name, $token, *read),
-            crate::commands::Command::Node(crate::commands::NodeCommand { name, read, scope }) =>
-                <$ET as EngineTypes>::Stomach::do_node($engine, *name, $token, *read,*scope),
             crate::commands::Command::Font(f) =>
                 <$ET as EngineTypes>::Stomach::do_font($engine, $token, f.clone(),false),
             crate::commands::Command::IntRegister(u) =>

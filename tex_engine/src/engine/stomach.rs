@@ -1,4 +1,4 @@
-use crate::commands::{NodeCommandScope, Unexpandable};
+use crate::commands::{CommandScope, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxInfo, BoxTarget, NodeList, NodeListType, SimpleNode, TeXBox, TeXNode, WhatsitNode, SkipNode, MathGroup};
+use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, TeXMode};
 use crate::utils::HMap;
@@ -19,7 +19,11 @@ use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
+use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, VBoxInfo};
+use crate::tex::nodes::horizontal::HNode;
+use crate::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
 
 type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
@@ -45,11 +49,14 @@ pub trait Stomach {
     fn do_unexpandable(
         engine:&mut EngineReferences<Self::ET>,
         name:PrimitiveIdentifier,
+        scope: CommandScope,
         token:Tk<Self>,
         apply:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
     ) {
-        engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
-        apply(engine,token)
+        if Self::maybe_switch_mode(engine,scope,token.clone()) {
+            engine.trace_command(|engine| PRIMITIVES.printable(name, engine.state.get_escape_char()));
+            apply(engine, token)
+        }
     }
 
     fn do_assignment(
@@ -67,60 +74,81 @@ pub trait Stomach {
     fn do_mathchar(engine:&mut EngineReferences<Self::ET>,code:u32,_token:Tk<Self>) {
         if !engine.state.get_mode().is_math() { todo!("throw error") }
         let ret = get_mathchar(engine, code, None);
-        Self::add_node(engine,TeXNode::Simple(SimpleNode::MathChar(ret)));
+        Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
     }
 
+    fn add_box(engine:&mut EngineReferences<Self::ET>,bx:TeXBox<Self::ET>,target:BoxTarget) {
+        match target {
+            BoxTarget::Register { index, globally } =>
+                engine.state.set_box_register(engine.aux,index,Some(bx),globally),
+            BoxTarget::List => match engine.state.get_mode() {
+                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
+                    Self::add_node_h(engine,HNode::Box(bx))
+                }
+                TeXMode::Vertical | TeXMode::InternalVertical => {
+                    Self::add_node_v(engine,VNode::Box(bx))
+                }
+                _ => Self::add_node_m(engine,MathNode::Atom(MathAtom {
+                    nucleus: MathNucleus::Ord(MathKernel::Box(bx)),
+                    sub:None,sup:None
+                }))
+            }
+            BoxTarget::Out => todo!()
+        }
+    }
 
     fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
         match engine.stomach.data_mut().open_lists.last() {
-            Some(NodeList{tp:NodeListType::Paragraph(_),..}) => Self::close_paragraph(engine),
+            Some(NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(_),..}) => Self::close_paragraph(engine),
             _ => ()
         }
         match engine.stomach.data_mut().open_lists.pop() {
-            Some(ls) => match ls.tp {
-                NodeListType::Paragraph(_) => { unreachable!() }
-                NodeListType::VAdjust => {
-                    engine.state.pop(engine.aux,engine.mouth);
-                    Self::add_node(engine,TeXNode::VAdjust(ls.children))
-                }
-                NodeListType::Box(bi,start,reg) if bi.tp() == bt => {
-                    engine.state.pop(engine.aux,engine.mouth);
-                    let bx = TeXBox {
-                        children:ls.children,info:bi,start,end:engine.mouth.current_sourceref(),
-                    };
-                    match reg {
-                        BoxTarget::Register { index, globally } =>
-                            engine.state.set_box_register(engine.aux,index,Some(bx),globally),
-                        BoxTarget::List => Self::add_node(engine,bx.as_node()),
-                        BoxTarget::Out => todo!()
-                    }
-                }
-                _ => todo!("throw error")
+            Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAdjust}) if bt == BoxType::Vertical => {
+                engine.state.pop(engine.aux,engine.mouth);
+                Self::add_node_h(engine,HNode::VAdjust(children.into()))
             }
-            None => todo!("throw error"),
+            Some(NodeList::Vertical {children,tp:VerticalNodeListType::Box(info,start,target)})  if bt == BoxType::Vertical => {
+                engine.state.pop(engine.aux,engine.mouth);
+                let bx = TeXBox::V {
+                    children:children.into(),info,start,end:engine.mouth.current_sourceref(),
+                };
+                Self::add_box(engine,bx,target)
+            }
+            Some(NodeList::Vertical {children,tp:VerticalNodeListType::VCenter(start)}) if bt == BoxType::Vertical => {
+                engine.state.pop(engine.aux,engine.mouth);
+                Self::add_node_m(engine,MathNode::Atom(MathAtom {
+                    nucleus: MathNucleus::VCenter {children:children.into(),start,end:engine.mouth.current_sourceref()},
+                    sub:None,sup:None
+                }))
+            }
+            Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::Box(info,start,target)}) if bt == BoxType::Horizontal => {
+                engine.state.pop(engine.aux,engine.mouth);
+                let bx = TeXBox::H {
+                    children:children.into(),info,start,end:engine.mouth.current_sourceref(),
+                };
+                Self::add_box(engine,bx,target)
+            }
+            o => todo!("throw error: {:?}",o),
         }
     }
     fn do_char(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,char:Ch<Self>,code:CommandCode) {
         match code {
             CommandCode::EOF => (),
             CommandCode::Space if engine.state.get_mode().is_horizontal() =>
-                Self::add_node(engine,SkipNode::Space.as_node()),
+                Self::add_node_h(engine,HNode::Space),
             CommandCode::Space => (),
             CommandCode::BeginGroup if engine.state.get_mode().is_math() => {
                 engine.state.push(engine.aux,GroupType::Math {display:engine.state.get_mode() == TeXMode::DisplayMath},engine.mouth.line_number());
-                engine.stomach.data_mut().open_lists.push(NodeList {
-                    tp:NodeListType::Math {start:engine.mouth.start_ref(),top_display:false},
-                    children:vec!()
-                });
+                engine.stomach.data_mut().open_lists.push(NodeList::new_math(engine.mouth.start_ref()));
             },
             CommandCode::EndGroup if engine.state.get_mode().is_math() => {
                 match engine.stomach.data_mut().open_lists.pop() {
-                    Some(NodeList{children,tp:NodeListType::Math{start,top_display:false}}) => {
-                        let display = engine.state.get_mode() == TeXMode::DisplayMath;
+                    Some(NodeList::Math {children,start,top_display:None}) => {
                         engine.state.pop(engine.aux,engine.mouth);
-                        Self::add_node(engine,TeXNode::MathGroup(MathGroup {
-                            children,display,start,end:engine.mouth.current_sourceref()
-                        }));
+                        Self::add_node_m(engine,MathNode::Atom(MathAtom{
+                            nucleus:MathNucleus::Inner(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()}),
+                            sub:None,sup:None
+                        }))
                     }
                     _ => todo!("error")
                 }
@@ -141,15 +169,14 @@ pub trait Stomach {
             CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.state.get_mode().is_vertical() =>
                 Self::open_paragraph(engine,token),
             CommandCode::MathShift if engine.state.get_mode().is_math() => match engine.stomach.data_mut().open_lists.pop() {
-                Some(NodeList{children,tp:NodeListType::Math{start,top_display}}) => {
-                    if top_display {match engine.get_next() {
+                Some(NodeList::Math{children,start,top_display:Some(display)}) => {
+                    if display {match engine.get_next() {
                         Some(tk) if tk.command_code() == CommandCode::MathShift => (),
                         _ => todo!("throw error")
                     }}
                     engine.state.pop(engine.aux,engine.mouth);
-                    Self::add_node(engine,TeXNode::MathGroup(MathGroup {
-                        children,display:top_display,start,end:engine.mouth.current_sourceref()
-                    }));
+                    let group = MathGroup::<Self::ET,MathFontStyle<Fnt<Self::ET>>>::close(display,start,engine.mouth.current_sourceref(),children);
+                    Self::add_node_h(engine,HNode::MathGroup(group));
                 }
                 _ => todo!("error")
             }
@@ -166,8 +193,9 @@ pub trait Stomach {
                     }
                     _ => (false,PRIMITIVES.everymath)
                 };
-                engine.stomach.data_mut().open_lists.push(NodeList {children:vec!(),tp:NodeListType::Math{start:engine.mouth.start_ref(),top_display:display}});
+                engine.stomach.data_mut().open_lists.push(NodeList::Math {children:vec!(),start:engine.mouth.start_ref(),top_display:Some(display)});
                 engine.state.push(engine.aux,GroupType::Math{display},engine.mouth.line_number());
+                engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
                 engine.mouth.insert_every::<Self::ET>(engine.state,every);
             }
             CommandCode::Other | CommandCode::Letter => {
@@ -176,7 +204,7 @@ pub trait Stomach {
                     engine.mouth.requeue(Tk::<Self>::from_char_cat(char,CommandCode::Active));
                 } else {
                     let ret = get_mathchar(engine, code, Some(char));
-                    Self::add_node(engine,TeXNode::Simple(SimpleNode::MathChar(ret)));
+                    Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
                 }
             }
             _ => todo!("{} > {:?}",char,code)
@@ -218,7 +246,7 @@ pub trait Stomach {
             }
             ResolvedToken::Tk { code:CommandCode::Space, .. } |
             ResolvedToken::Cmd{ cmd:Some(Command::Char {code:CommandCode::Space,..}),.. } =>
-                end!(Self::add_node(engine,SkipNode::Space.as_node())),
+                end!(Self::add_node_h(engine,HNode::Space)),
             ResolvedToken::Tk { char, code, token } =>
                 end!(Self::do_char(engine,token,char,code)),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char, code}),token} =>
@@ -239,43 +267,38 @@ pub trait Stomach {
         if sf > 1000 && data.spacefactor < 1000 {
             data.spacefactor = 1000;
         } else { data.spacefactor = sf as i32; }
-        data.open_lists.last_mut().unwrap().children.push(TeXNode::Char {
-            char,font,width,height,depth
-        });
+        match self.data_mut().open_lists.last_mut() {
+            Some(NodeList::Horizontal {children,..}) => {
+                children.push(HNode::Char {
+                    char,font,width,height,depth
+                });
+            }
+            _ => todo!("throw error")
+        }
     }
     fn do_box(engine:&mut EngineReferences<Self::ET>,_name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
         match bx(engine,token) {
-            Ok(Some(bx)) => Self::add_node(engine,bx.as_node()),
+            Ok(Some(bx)) => Self::add_box(engine,bx,BoxTarget::List),
             Ok(None) => (),
-            Err(bi) => {
-                engine.stomach.data_mut().open_lists.push(NodeList {
-                    tp:NodeListType::Box(bi,engine.mouth.start_ref(),BoxTarget::List),
-                    children:vec!()
-                });
-            }
+            Err(bi) =>
+                engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()))
         }
     }
-    fn maybe_switch_mode(engine:&mut EngineReferences<Self::ET>,scope:NodeCommandScope,token:Tk<Self>) -> bool {
+    fn maybe_switch_mode(engine:&mut EngineReferences<Self::ET>, scope: CommandScope, token:Tk<Self>) -> bool {
         match (scope,engine.state.get_mode()) {
-            (NodeCommandScope::Any, _) => true,
-            (NodeCommandScope::SwitchesToHorizontal, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => true,
-            (NodeCommandScope::SwitchesToVertical, TeXMode::Vertical | TeXMode::InternalVertical) => true,
-            (NodeCommandScope::MathOnly, TeXMode::InlineMath | TeXMode::DisplayMath) => true,
-            (NodeCommandScope::MathOnly, _) => todo!("throw error"),
-            (NodeCommandScope::SwitchesToHorizontal,TeXMode::Vertical | TeXMode::InternalVertical) => {
+            (CommandScope::Any, _) => true,
+            (CommandScope::SwitchesToHorizontal, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => true,
+            (CommandScope::SwitchesToVertical, TeXMode::Vertical | TeXMode::InternalVertical) => true,
+            (CommandScope::MathOnly, TeXMode::InlineMath | TeXMode::DisplayMath) => true,
+            (CommandScope::MathOnly, _) => todo!("throw error"),
+            (CommandScope::SwitchesToHorizontal,TeXMode::Vertical | TeXMode::InternalVertical) => {
                 Self::open_paragraph(engine,token);
                 false
             }
             (a,b) => todo!("switch modes maybe: {:?} in {:?}",a,b)
         }
     }
-    fn do_node(engine:&mut EngineReferences<Self::ET>, name:PrimitiveIdentifier, token:Tk<Self>, read:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> TeXNode<Self::ET>, scope:NodeCommandScope) {
-        engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
-        if Self::maybe_switch_mode(engine,scope,token.clone()) {
-            let node = read(engine, token);
-            Self::add_node(engine, node)
-        }
-    }
+
     fn do_font(engine:&mut EngineReferences<Self::ET>,_token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
         engine.state.set_current_font(engine.aux,f,global);
         insert_afterassignment(engine);
@@ -373,32 +396,116 @@ pub trait Stomach {
         )
     }
     fn do_whatsit(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
-                                                                                -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>) -> Option<TeXNode<Self::ET>>>>) {
+                                                                                -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>)>>) {
         if let Some(ret) = read(engine,token) {
             let wi = WhatsitNode::new(ret, name);
-            Self::add_node(engine, wi.as_node());
+            match engine.state.get_mode() {
+                TeXMode::Vertical | TeXMode::InternalVertical => Self::add_node_v(engine,VNode::Whatsit(wi)),
+                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => Self::add_node_h(engine,HNode::Whatsit(wi)),
+                _ => Self::add_node_m(engine,MathNode::Whatsit(wi))
+            }
         }
     }
 
     fn open_align(engine:&mut EngineReferences<Self::ET>,_inner:BoxType,between:BoxType) {
         engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
-        engine.stomach.data_mut().open_lists.push(NodeList {
-            tp:NodeListType::Align,
-            children:vec!(),
+        engine.stomach.data_mut().open_lists.push(
+        if between == BoxType::Vertical {
+            NodeList::Vertical {
+                tp: VerticalNodeListType::HAlign,
+                children: vec!()
+            }} else {
+            NodeList::Horizontal {
+                tp: HorizontalNodeListType::VAlign,
+                children: vec!()
+            }
         });
     }
 
     fn close_align(engine:&mut EngineReferences<Self::ET>) {
-        let children = match engine.stomach.data_mut().open_lists.pop() {
-            Some(NodeList{children,tp:NodeListType::Align}) => children,
+        match engine.stomach.data_mut().open_lists.pop() {
+            Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
+                engine.state.pop(engine.aux,&mut engine.mouth);
+                for c in children {
+                    Self::add_node_v(engine, c);
+                }
+            }
+            Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::VAlign}) => {
+                engine.state.pop(engine.aux,&mut engine.mouth);
+                for c in children {
+                    Self::add_node_h(engine, c);
+                }
+            }
             _ => todo!("throw error")
         };
-        engine.state.pop(engine.aux,&mut engine.mouth);
-        for c in children {
-            Self::add_node(engine,c);
+    }
+
+    fn add_node<V:FnOnce() -> VNode<Self::ET>,H:FnOnce() -> HNode<Self::ET>,M:FnOnce() -> MathNode<Self::ET,UnresolvedMathFontStyle<Fnt<Self::ET>>>>(engine:&mut EngineReferences<Self::ET>,v:V,h:H,m:M) {
+        match engine.state.get_mode() {
+            TeXMode::Vertical | TeXMode::InternalVertical => Self::add_node_v(engine,v()),
+            TeXMode::Horizontal | TeXMode::RestrictedHorizontal => Self::add_node_h(engine,h()),
+            _ => Self::add_node_m(engine,m())
         }
     }
 
+    fn add_node_m(engine:&mut EngineReferences<Self::ET>,node: MathNode<Self::ET,UnresolvedMathFontStyle<Fnt<Self::ET>>>) {
+        match engine.stomach.data_mut().open_lists.last_mut() {
+            Some(NodeList::Math {children,..}) => {
+                children.push(node);
+                return
+            }
+            _ => todo!("throw error")
+        }
+    }
+
+    fn add_node_h(engine:&mut EngineReferences<Self::ET>,node: HNode<Self::ET>) {
+        match engine.stomach.data_mut().open_lists.last_mut() {
+            Some(NodeList::Horizontal {children,..}) => {
+                children.push(node);
+                return
+            }
+            _ => todo!("throw error")
+        }
+    }
+
+    fn add_node_v(engine:&mut EngineReferences<Self::ET>,node: VNode<Self::ET>) {
+        let data = engine.stomach.data_mut();
+        if let VNode::HRule {..} = node {
+            data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000);
+        } else {
+            data.prevdepth = node.depth();
+        }
+        match data.open_lists.last_mut() {
+            Some(NodeList::Vertical {children,..}) => {
+                children.push(node);
+                return
+            }
+            Some(_) => todo!("throw error"),
+            _ => ()
+        }
+        if !data.page_contains_boxes && !data.in_output /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
+            match &node {
+                VNode::Box(_) | VNode::Insert => {
+                    //crate::debug_log!(debug => "Here: {} \n\n {}",node.readable(),engine.mouth.display_position());
+                    data.page_contains_boxes = true;
+                    data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
+                }
+                n if n.discardable() => return,
+                _ => ()
+            }
+        }
+        data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
+        if let VNode::Penalty(i) = node {
+            if i <= -10000 {
+                if data.page_contains_boxes {
+                    return Self::do_shipout_output(engine, Some(i))
+                } else { return }
+            }
+        }
+        data.page.push(node);
+        Self::maybe_shipout(engine)
+    }
+/*
     fn add_node(engine:&mut EngineReferences<Self::ET>,node: TeXNode<Self::ET>) {
         let data = engine.stomach.data_mut();
         match data.open_lists.last_mut() {
@@ -443,6 +550,8 @@ pub trait Stomach {
         }
     }
 
+ */
+
     fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
         let data = engine.stomach.data_mut();
         if !data.in_output && data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
@@ -460,7 +569,7 @@ pub trait Stomach {
         engine.state.set_primitive_int(engine.aux,PRIMITIVES.badness,(10).into(),true);
 
         let SplitResult{mut first,rest,split_penalty} = match forced {
-            Some(p) => SplitResult{first:page,rest:vec!(),split_penalty:Some(p)},
+            Some(p) => SplitResult{first:page.into(),rest:vec!().into(),split_penalty:Some(p)},
             _ => {
                 let goal = data.pagegoal;
                 Self::split_vertical(engine,page,goal)
@@ -472,7 +581,7 @@ pub trait Stomach {
         data.deadcycles += 1;
 
         for (_,b) in first.iter_mut().enumerate() { match b {
-            TeXNode::Insert => todo!(),
+            VNode::Insert => todo!(),
             _ => ()
         }}
 
@@ -480,9 +589,9 @@ pub trait Stomach {
             engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,p.into(),true);
         }
 
-        let bx = TeXBox {
-            children:first,
-            info:BoxInfo::Output,
+        let bx = TeXBox::V {
+            children:first.into(),
+            info:VBoxInfo::Output,
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
         };
@@ -491,7 +600,7 @@ pub trait Stomach {
 
         engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
-        for r in rest{ Self::add_node(engine,r) }
+        for r in rest.into_iter() { Self::add_node_v(engine,r) }
         engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.output);
         engine.get_next(); // '{':BeginGroup
         engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
@@ -517,25 +626,25 @@ pub trait Stomach {
         todo!("file end")
     }
 
-    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
+    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<VNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
 
     fn open_paragraph(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>) {
         let sref = engine.mouth.start_ref();
-        engine.stomach.data_mut().open_lists.push(NodeList {
-            tp:NodeListType::Paragraph(sref),
+        engine.stomach.data_mut().open_lists.push(NodeList::Horizontal {
+            tp:HorizontalNodeListType::Paragraph(sref),
             children:vec!()
         });
         engine.state.set_mode(TeXMode::Horizontal);
         match engine.resolve(token) {
-            ResolvedToken::Cmd{cmd:Some(Command::Node(u)),..}
+            ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
                 if u.name == PRIMITIVES.indent => {
-                Self::add_node(engine,TeXBox {children:vec!(),info:BoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}.as_node())
+                Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}))
             },
             ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
                 if u.name == PRIMITIVES.noindent => (),
             ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} => {
                 engine.mouth.requeue(token);
-                Self::add_node(engine,TeXBox {children:vec!(),info:BoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}.as_node())
+                Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}))
             }
         }
         engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.everypar)
@@ -544,7 +653,7 @@ pub trait Stomach {
     fn close_paragraph(engine:&mut EngineReferences<Self::ET>) {
         let ls = &mut engine.stomach.data_mut().open_lists;
         match ls.pop() {
-            Some(NodeList{tp:NodeListType::Paragraph(sourceref),children}) => {
+            Some(NodeList::Horizontal{tp:HorizontalNodeListType::Paragraph(sourceref),children}) => {
                 if ls.is_empty() {
                     engine.state.set_mode(TeXMode::Vertical)
                 } else {
@@ -563,13 +672,13 @@ pub trait Stomach {
         }
     }
 
-    fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<TeXNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
+    fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<HNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         let ret = split_paragraph_roughly(engine,specs,children,sourceref);
         for line in ret {
             match line {
-                ParLine::Adjust(n) => Self::add_node(engine,n),
-                ParLine::Line(bx) => Self::add_node(engine,bx.as_node())
+                ParLine::Adjust(n) => Self::add_node_v(engine,n),
+                ParLine::Line(bx) => Self::add_node_v(engine,VNode::Box(bx))
             }
         }
     }
@@ -647,14 +756,14 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
 }
 
 pub struct SplitResult<ET:EngineTypes> {
-    pub first:Vec<TeXNode<ET>>,
-    pub rest:Vec<TeXNode<ET>>,
+    pub first:Vec<VNode<ET>>,
+    pub rest:Vec<VNode<ET>>,
     pub split_penalty:Option<i32>
 }
 
 #[derive(Clone,Debug)]
 pub struct StomachData<ET:EngineTypes> {
-    pub page:Vec<TeXNode<ET>>,
+    pub page:Vec<VNode<ET>>,
     pub open_lists:Vec<NodeList<ET>>,
     pub pagegoal:ET::Dim,
     pub pagetotal:ET::Dim,
@@ -676,12 +785,12 @@ pub struct StomachData<ET:EngineTypes> {
     pub deadcycles:usize,
 }
 impl <ET:EngineTypes> StomachData<ET> {
-    pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
+    /*pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
         match self.open_lists.last_mut() {
             Some(ls) => &mut ls.children,
             None => &mut self.page
         }
-    }
+    }*/
     pub fn new() -> Self {
         StomachData {
             page:vec!(),
@@ -730,12 +839,12 @@ impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
     }
 
     #[inline(always)]
-    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<TeXNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
+    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<VNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
         vsplit_roughly(engine, nodes, target)
     }
 }
 
-pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<TeXNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
+pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<VNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
     let data = engine.stomach.data_mut();
     data.topmarks.clear();
     std::mem::swap(&mut data.botmarks,&mut data.topmarks);
@@ -746,7 +855,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     let iter = nodes.iter().enumerate();
     for (i,n) in iter {
         match n {
-            TeXNode::Mark(i, v) => {
+            VNode::Mark(i, v) => {
                 if !data.firstmarks.contains_key(&i) {
                     data.firstmarks.insert(*i,v.clone());
                 }
@@ -763,7 +872,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     };
     let mut rest = nodes.split_off(split);
     let split_penalty = match rest.first() {
-        Some(TeXNode::Penalty(p)) => {
+        Some(VNode::Penalty(p)) => {
             let p = *p;
             rest.remove(0);
             Some(p)
@@ -773,7 +882,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
 
     for n in &rest {
         match n {
-            TeXNode::Mark(i, v) => {
+            VNode::Mark(i, v) => {
                 if !data.splitfirstmarks.contains_key(&i) {
                     data.splitfirstmarks.insert(*i,v.clone());
                 }
@@ -782,15 +891,15 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
             _ => ()
         }
     }
-    SplitResult{first:nodes,rest,split_penalty}
+    SplitResult{first:nodes,rest:rest,split_penalty}
 }
 
 pub enum ParLine<ET:EngineTypes> {
     Line(TeXBox<ET>),//{contents:Vec<TeXNode<ET>>, broken_early:bool },
-    Adjust(TeXNode<ET>)
+    Adjust(VNode<ET>)
 }
 
-pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<TeXNode<ET>>,start:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
+pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<HNode<ET>>,start:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
     let mut ret : Vec<ParLine<ET>> = Vec::new();
     let mut hgoals = specs.into_iter();
     let mut nodes = children.into_iter();
@@ -807,7 +916,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 if !line.is_empty() {
                     let start = currstart.clone();
                     currstart = currend.clone();
-                    ret.push(ParLine::Line(TeXBox {children:line,start,end:currend.clone(),info:BoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:$b}}));
+                    ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:$b}}));
                 }
                 for c in reinserts {
                     ret.push(ParLine::Adjust(c));
@@ -826,22 +935,24 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     if !line.is_empty() {
                         let start = currstart.clone();
                         currstart = currend.clone();
-                        ret.push(ParLine::Line(TeXBox {children:line,start,end:currend.clone(),info:BoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:false}}));
+                        ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:false}}));
                     }
                     for c in reinserts {
                         ret.push(ParLine::Adjust(c));
                     }
                     break 'A
                 }
-                Some(n@(TeXNode::Mark(_, _) | TeXNode::Insert)) =>
-                    reinserts.push(n),
-                Some(TeXNode::VAdjust(ls)) => reinserts.extend(ls.into_iter()),
-                Some(TeXNode::MathGroup(MathGroup {display:true,..})) => todo!(),
-                Some(TeXNode::Penalty(i)) if i <= -10000 => {
+                Some(HNode::Mark(i, m)) =>
+                    reinserts.push(VNode::Mark(i,m)),
+                Some(HNode::Insert) =>
+                    reinserts.push(VNode::Insert),
+                Some(HNode::VAdjust(ls)) => reinserts.extend(ls.into_vec().into_iter()),
+                Some(HNode::MathGroup(MathGroup {display:true,..})) => todo!(),
+                Some(HNode::Penalty(i)) if i <= -10000 => {
                     next_line!(true); // TODO mark somehow
                     continue 'A
                 }
-                Some(TeXNode::Penalty(_)) => (),
+                Some(HNode::Penalty(_)) => (),
                 Some(node) => {
                     target = target + (-node.width());
                     line.push(node);

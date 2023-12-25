@@ -1,5 +1,5 @@
 use crate::cmtodo;
-use crate::commands::{Command, Macro, MacroSignature};
+use crate::commands::{Command, CommandScope, Macro, MacroSignature};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
@@ -17,7 +17,7 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::utils::outputs::Outputs;
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;
-use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::{NodeList, NodeTrait};
 use crate::tex::control_sequences::ResolvedCSName;
 use crate::tex::input_text::CharacterMap;
 
@@ -290,8 +290,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
     }
     fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,cmd:Command<ET>,tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
         crate::engine::gullet::methods::read_muskip_command(
-            engine,is_negative,cmd,tk,|s| s,
-            |d,e| crate::engine::gullet::methods::read_muskip_ii(e, d)
+            engine,is_negative,cmd,tk,|s| s
         )
     }
     let (i,r) = expr_loop(engine,
@@ -311,12 +310,24 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 
 pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     let data = engine.stomach.data_mut();
-    let ls = data.get_list();
-    for n in ls.iter().rev() {
-        if n.opaque() { continue }
-        return (n.nodetype().to_u8() as i32).into()
+    match data.open_lists.last() {
+        None => match data.page.last() {
+            None => (-1).into(),
+            Some(n) => (n.nodetype().to_u8() as i32).into()
+        },
+        Some(NodeList::Vertical {children,..}) => match children.last() {
+            None => (-1).into(),
+            Some(n) => (n.nodetype().to_u8() as i32).into()
+        },
+        Some(NodeList::Horizontal {children,..}) => match children.last() {
+            None => (-1).into(),
+            Some(n) => (n.nodetype().to_u8() as i32).into()
+        },
+        Some(NodeList::Math {children,..}) => match children.last() {
+            None => (-1).into(),
+            Some(n) => (n.nodetype().to_u8() as i32).into()
+        }
     }
-    (-1).into()
 }
 
 pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
@@ -501,7 +512,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"unexpanded",unexpanded);
     register_expandable(engine,"eTeXrevision",eTeXrevision);
 
-    register_unexpandable(engine,"marks",marks);
+    register_unexpandable(engine,"marks",CommandScope::Any,marks);
 
     register_simple_expandable(engine,"unless",unless);
     register_simple_expandable(engine,"scantokens",scantokens);

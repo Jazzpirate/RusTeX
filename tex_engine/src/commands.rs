@@ -12,7 +12,7 @@ use crate::tex::control_sequences::ControlSequenceName;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::{BoxInfo, TeXBox, TeXNode};
+use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 
 pub mod primitives;
 pub mod tex;
@@ -53,7 +53,6 @@ pub enum Command<ET:EngineTypes> {
     PrimitiveSkip(PrimitiveIdentifier),
     PrimitiveMuSkip(PrimitiveIdentifier),
     PrimitiveToks(PrimitiveIdentifier),
-    Node(NodeCommand<ET>),
     Whatsit(Whatsit<ET>),
     Relax
 }
@@ -128,7 +127,6 @@ impl<'a,ET:EngineTypes> Meaning<'a,ET> {
             Command::PrimitiveSkip(name) |
             Command::PrimitiveMuSkip(name) |
             Command::PrimitiveToks(name) |
-            Command::Node(NodeCommand{name,..}) |
             Command::Whatsit(Whatsit{name,..}) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 PRIMITIVES.with(*name,|s| f.write_str(s).unwrap());
@@ -219,6 +217,7 @@ pub struct SimpleExpandable<ET:EngineTypes> {
 #[derive(Clone,Debug)]
 pub struct Unexpandable<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
+    pub scope: CommandScope,
     pub apply:fn(&mut EngineReferences<ET>,ET::Token)
 }
 
@@ -270,21 +269,15 @@ pub struct BoxCommand<ET:EngineTypes> {
 }
 
 #[derive(Clone,Debug,Copy)]
-pub enum NodeCommandScope {
+pub enum CommandScope {
     SwitchesToVertical,SwitchesToHorizontal,MathOnly,Any
 }
 
-#[derive(Clone,Debug)]
-pub struct NodeCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub scope:NodeCommandScope,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXNode<ET>,
-}
 
 #[derive(Clone,Debug)]
 pub struct Whatsit<ET:EngineTypes> {
     pub name:PrimitiveIdentifier,
     pub get:fn(&mut EngineReferences<ET>, ET::Token)
-               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> Option<TeXNode<ET>>>>,
+               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>,
     pub immediate:fn(&mut EngineReferences<ET>,ET::Token)
 }

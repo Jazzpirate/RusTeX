@@ -1,8 +1,10 @@
 use std::fmt::Formatter;
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
-use crate::tex::nodes::{NodeTrait, TeXNode, TeXBox};
+use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::NodeTrait;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::types::NodeType;
+use crate::tex::nodes::CustomNodeTrait;
 
 #[derive(Debug,Clone)]
 pub enum ActionSpec {
@@ -213,11 +215,11 @@ pub struct PDFLiteral {
     pub literal:String
 }
 
+impl<ET:EngineTypes> CustomNodeTrait<ET> for PDFNode<ET>
+    where ET::CustomNode : From<PDFNode<ET>> {}
+
 impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
     where ET::CustomNode : From<PDFNode<ET>> {
-    fn as_node(self) -> TeXNode<ET> {
-        TeXNode::Custom(self.into())
-    }
     fn height(&self) -> ET::Dim { ET::Dim::default() }
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn width(&self) -> ET::Dim { ET::Dim::default() }
