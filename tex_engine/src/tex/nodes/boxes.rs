@@ -282,6 +282,14 @@ impl<ET:EngineTypes> TeXBox<ET> {
             _ => todo!()
         }
     }
+    pub fn assigned_height(&self) -> Option<ET::Dim> {
+        match self {
+            TeXBox::H {info: HBoxInfo::HBox { assigned_height, .. },..} => *assigned_height,
+            TeXBox::V{ info: VBoxInfo::VBox { assigned_height, .. },..} => *assigned_height,
+            TeXBox::V{ info: VBoxInfo::VTop { assigned_height, .. },..} => *assigned_height,
+            _ => None
+        }
+    }
     pub fn assign_width(&mut self, w:ET::Dim) {
         match self {
             TeXBox::H{ info: HBoxInfo::HBox { ref mut assigned_width, .. },..} => *assigned_width = Some(w),
@@ -290,12 +298,36 @@ impl<ET:EngineTypes> TeXBox<ET> {
             _ => todo!()
         }
     }
+    pub fn assigned_width(&self) -> Option<ET::Dim> {
+        match self {
+            TeXBox::H {info: HBoxInfo::HBox { assigned_width, .. },..} => *assigned_width,
+            TeXBox::V{ info: VBoxInfo::VBox { assigned_width, .. },..} => *assigned_width,
+            TeXBox::V{ info: VBoxInfo::VTop { assigned_width, .. },..} => *assigned_width,
+            _ => None
+        }
+    }
     pub fn assign_depth(&mut self, d:ET::Dim) {
         match self {
             TeXBox::H{ info: HBoxInfo::HBox { ref mut assigned_depth, .. },..} => *assigned_depth = Some(d),
             TeXBox::V{ info: VBoxInfo::VBox { ref mut assigned_depth, .. },..} => *assigned_depth = Some(d),
             TeXBox::V{ info: VBoxInfo::VTop { ref mut assigned_depth, .. },..} => *assigned_depth = Some(d),
             _ => todo!()
+        }
+    }
+    pub fn assigned_depth(&self) -> Option<ET::Dim> {
+        match self {
+            TeXBox::H {info: HBoxInfo::HBox { assigned_depth, .. },..} => *assigned_depth,
+            TeXBox::V{ info: VBoxInfo::VBox { assigned_depth, .. },..} => *assigned_depth,
+            TeXBox::V{ info: VBoxInfo::VTop { assigned_depth, .. },..} => *assigned_depth,
+            _ => None
+        }
+    }
+    pub fn to_or_scaled(&self) -> ToOrSpread<ET::Dim> {
+        match self {
+            TeXBox::H {info: HBoxInfo::HBox { scaled, .. },..} => scaled.clone(),
+            TeXBox::V{ info: VBoxInfo::VBox { scaled, .. },..} => scaled.clone(),
+            TeXBox::V{ info: VBoxInfo::VTop { scaled, .. },..} => scaled.clone(),
+            _ => ToOrSpread::None
         }
     }
 }

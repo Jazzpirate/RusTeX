@@ -9,6 +9,7 @@ pub struct TfmFile {
     pub dimen:Vec<f64>,
     pub size : i64,
     pub typestr : String,
+    pub defined:[bool;256],
     pub widths:[f64;256],
     pub heights: [f64;256],
     pub depths: [f64;256],
@@ -42,6 +43,7 @@ impl TfmFile {
         let mut heights: [f64;256] = [0.0;256];
         let mut depths: [f64;256] = [0.0;256];
         let mut ics: [f64;256] = [0.0;256];
+        let mut defined = [false;256];
         let mut ligs:BTreeMap<(u8,u8),u8> = BTreeMap::new();
 
         let (lf,lh) = state.read_int();
@@ -113,6 +115,7 @@ impl TfmFile {
         };
 
         for t in finfo_table {
+            defined[t.char as usize] = true;
             match widthls.get(t.width_index as usize) {
                 Some(i) if *i == 0.0 => (),
                 None => (),
@@ -139,7 +142,7 @@ impl TfmFile {
 
         TfmFile {
             hyphenchar,skewchar,dimen,size,typestr,widths,
-            heights,depths,ics,ligs,filepath
+            heights,depths,ics,ligs,filepath,defined
         }
     }
 }

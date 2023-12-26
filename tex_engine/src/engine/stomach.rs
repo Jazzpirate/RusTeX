@@ -9,7 +9,7 @@ use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVE
 use crate::tex::catcodes::CommandCode;
 use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType};
 use crate::tex::numerics::NumSet;
-use crate::tex::types::{BoxType, GroupType, TeXMode};
+use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::token::Token;
@@ -89,7 +89,7 @@ pub trait Stomach {
                     Self::add_node_v(engine,VNode::Box(bx))
                 }
                 _ => Self::add_node_m(engine,MathNode::Atom(MathAtom {
-                    nucleus: MathNucleus::Ord(MathKernel::Box(bx)),
+                    nucleus: MathNucleus::Simple{kernel:MathKernel::Box(bx),limits:None,cls:MathClass::Ord},
                     sub:None,sup:None
                 }))
             }
@@ -128,7 +128,8 @@ pub trait Stomach {
                 };
                 Self::add_box(engine,bx,target)
             }
-            o => todo!("throw error: {:?}",o),
+            o =>
+                todo!("throw error: {:?}",o),
         }
     }
     fn do_char(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,char:Ch<Self>,code:CommandCode) {

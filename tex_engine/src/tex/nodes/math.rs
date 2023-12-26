@@ -217,7 +217,7 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S
         }
         let h = self.nucleus.height();
         let limits = match self.nucleus {
-            MathNucleus::Op(_,Some(true)) => true,
+            MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
             _ => false
         };
         let sup = self.sup.as_ref().unwrap().iter().map(|c| c.height()).max().unwrap_or_default();
@@ -236,7 +236,7 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S
         let sup = self.sup.as_ref().unwrap().iter().map(|c| c.width()).sum();
         let sub = self.sub.as_ref().unwrap().iter().map(|c| c.width()).sum();
         let limits = match self.nucleus {
-            MathNucleus::Op(_,Some(true)) => true,
+            MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
             _ => false
         };
         if limits {
@@ -251,7 +251,7 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S
         }
         let h = self.nucleus.depth();
         let limits = match self.nucleus {
-            MathNucleus::Op(_,Some(true)) => true,
+            MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
             _ => false
         };
         let sub = self.sub.as_ref().unwrap().iter().map(|c| c.depth()).max().unwrap_or_default();
@@ -268,13 +268,7 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S
 
 #[derive(Clone,Debug)]
 pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
-    Ord(MathKernel<ET,S>),
-    Op(MathKernel<ET,S>,Option<bool>),
-    Bin(MathKernel<ET,S>),
-    Rel(MathKernel<ET,S>),
-    Open(MathKernel<ET,S>),
-    Close(MathKernel<ET,S>),
-    Punct(MathKernel<ET,S>),
+    Simple{cls: MathClass,kernel:MathKernel<ET,S>,limits:Option<bool>},
     Inner(MathKernel<ET,S>),
     Overline(MathKernel<ET,S>),
     Underline(MathKernel<ET,S>),
@@ -289,47 +283,17 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent, f)?;
         match self {
-            MathNucleus::Ord(k) => {
-                write!(f, "<mathord>")?;
-                k.readable_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
-                f.write_str("</mathord>")
-            }
-            MathNucleus::Op(k, limits) => {
+            MathNucleus::Simple{cls:MathClass::Op,kernel,limits} => {
                 write!(f, "<mathop limits={:?}>",limits)?;
-                k.readable_fmt(indent + 2, f)?;
+                kernel.readable_fmt(indent + 2, f)?;
                 Self::readable_do_indent(indent, f)?;
                 f.write_str("</mathop>")
             }
-            MathNucleus::Bin(k) => {
-                write!(f, "<mathbin>")?;
-                k.readable_fmt(indent + 2, f)?;
+            MathNucleus::Simple{cls,kernel,limits} => {
+                write!(f, "<math{:?}>",cls)?;
+                kernel.readable_fmt(indent + 2, f)?;
                 Self::readable_do_indent(indent, f)?;
-                f.write_str("</mathbin>")
-            }
-            MathNucleus::Rel(k) => {
-                write!(f, "<mathrel>")?;
-                k.readable_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
-                f.write_str("</mathrel>")
-            }
-            MathNucleus::Open(k) => {
-                write!(f, "<mathopen>")?;
-                k.readable_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
-                f.write_str("</mathopen>")
-            }
-            MathNucleus::Close(k) => {
-                write!(f, "<mathclose>")?;
-                k.readable_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
-                f.write_str("</mathclose>")
-            }
-            MathNucleus::Punct(k) => {
-                write!(f, "<mathpunct>")?;
-                k.readable_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
-                f.write_str("</mathpunct>")
+                write!(f,"</math{:?}>",cls)
             }
             MathNucleus::Inner(k) => {
                 write!(f, "<mathinner>")?;
@@ -367,13 +331,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
     }
     fn height(&self) -> ET::Dim {
         match self {
-            MathNucleus::Ord(k) => k.height(),
-            MathNucleus::Op(k,_) => (k.height() + k.depth()).scale_float(0.5),
-            MathNucleus::Bin(k) => k.height(),
-            MathNucleus::Rel(k) => k.height(),
-            MathNucleus::Open(k) => k.height(),
-            MathNucleus::Close(k) => k.height(),
-            MathNucleus::Punct(k) => k.height(),
+            MathNucleus::Simple {cls:MathClass::Op,kernel,..} => (kernel.height() + kernel.depth()).scale_float(0.5),
+            MathNucleus::Simple {cls,kernel,..} => kernel.height(),
             MathNucleus::Inner(k) => k.height(),
             MathNucleus::Overline(k) => k.height(),
             MathNucleus::Underline(k) => k.height(),
@@ -385,13 +344,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
     }
     fn width(&self) -> ET::Dim {
         match self {
-            MathNucleus::Ord(k) => k.width(),
-            MathNucleus::Op(k,_) => k.width(),
-            MathNucleus::Bin(k) => k.width(),
-            MathNucleus::Rel(k) => k.width(),
-            MathNucleus::Open(k) => k.width(),
-            MathNucleus::Close(k) => k.width(),
-            MathNucleus::Punct(k) => k.width(),
+            MathNucleus::Simple{kernel,..} => kernel.width(),
             MathNucleus::Inner(k) => k.width(),
             MathNucleus::Overline(k) => k.width(),
             MathNucleus::Underline(k) => k.width(),
@@ -402,13 +355,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
     }
     fn depth(&self) -> ET::Dim {
         match self {
-            MathNucleus::Ord(k) => k.depth(),
-            MathNucleus::Op(k,_) => (k.height() + k.depth()).scale_float(0.5),
-            MathNucleus::Bin(k) => k.depth(),
-            MathNucleus::Rel(k) => k.depth(),
-            MathNucleus::Open(k) => k.depth(),
-            MathNucleus::Close(k) => k.depth(),
-            MathNucleus::Punct(k) => k.depth(),
+            MathNucleus::Simple {cls:MathClass::Op,kernel,..} => (kernel.height() + kernel.depth()).scale_float(0.5),
+            MathNucleus::Simple {cls,kernel,..} => kernel.depth(),
             MathNucleus::Inner(k) => k.depth(),
             MathNucleus::Overline(k) => k.depth(),
             MathNucleus::Underline(k) => k.depth(),
@@ -544,17 +492,13 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
     }
     fn resolve_nucleus(n:MathNucleus<ET,UnresolvedMathFontStyle<ET::Font>>,style:MathStyle) -> MathNucleus<ET,MathFontStyle<ET::Font>> {
         match n {
-            MathNucleus::Ord(k) => MathNucleus::Ord(Self::resolve_kernel(k,style)),
-            MathNucleus::Op(k,limits) =>
-                MathNucleus::Op(Self::resolve_kernel(k,style),match limits {
+            MathNucleus::Simple { cls:MathClass::Op, kernel, limits } =>
+                MathNucleus::Simple { cls:MathClass::Op, kernel:Self::resolve_kernel(kernel,style), limits:match limits {
                     Some(l) => Some(l),
                     None => if style.style == MathStyleType::Display { Some(true) } else { Some(false) }
-                }),
-            MathNucleus::Bin(k) => MathNucleus::Bin(Self::resolve_kernel(k,style)),
-            MathNucleus::Rel(k) => MathNucleus::Rel(Self::resolve_kernel(k,style)),
-            MathNucleus::Open(k) => MathNucleus::Open(Self::resolve_kernel(k,style)),
-            MathNucleus::Close(k) => MathNucleus::Close(Self::resolve_kernel(k,style)),
-            MathNucleus::Punct(k) => MathNucleus::Punct(Self::resolve_kernel(k,style)),
+                } },
+            MathNucleus::Simple { cls, kernel, limits } =>
+                MathNucleus::Simple { cls, kernel:Self::resolve_kernel(kernel,style), limits },
             MathNucleus::Inner(k) => MathNucleus::Inner(Self::resolve_kernel(k,style)),
             MathNucleus::Overline(k) => MathNucleus::Overline(Self::resolve_kernel(k,style)),
             MathNucleus::Underline(k) => MathNucleus::Underline(Self::resolve_kernel(k,style)),
@@ -591,15 +535,7 @@ pub struct MathChar<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> MathChar<ET> {
     pub fn to_atom(self) -> MathAtom<ET,UnresolvedMathFontStyle<ET::Font>> {
-        let kernel = match self.cls {
-            MathClass::Ord => MathNucleus::Ord(MathKernel::Char { char:self.char, style:self.style }),
-            MathClass::Op => MathNucleus::Op(MathKernel::Char { char:self.char, style:self.style },None),
-            MathClass::Bin => MathNucleus::Bin(MathKernel::Char { char:self.char, style:self.style }),
-            MathClass::Rel => MathNucleus::Rel(MathKernel::Char { char:self.char, style:self.style }),
-            MathClass::Open => MathNucleus::Open(MathKernel::Char { char:self.char, style:self.style }),
-            MathClass::Close => MathNucleus::Close(MathKernel::Char { char:self.char, style:self.style }),
-            MathClass::Punct => MathNucleus::Punct(MathKernel::Char { char:self.char, style:self.style }),
-        };
+        let kernel = MathNucleus::Simple { cls:self.cls, kernel:MathKernel::Char { char:self.char, style:self.style }, limits:None };
         MathAtom { nucleus: kernel,sup:None,sub:None }
     }
 }

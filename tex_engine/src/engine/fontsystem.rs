@@ -75,6 +75,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for
             size:0,
             typestr:"nullfont".to_string(),
             widths:[0.0;256],
+            defined:[false;256],
             heights:[0.0;256],
             depths:[0.0;256],
             ics:[0.0;256],
@@ -151,10 +152,8 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
     type CS = CS;
     type Int = I;
     type Dim = D;
-    fn has_char(&self, c: Self::Char) -> bool {
-        let f = &self.file;
-        f.heights[c as usize] != 0.0 || f.depths[c as usize] != 0.0 || f.widths[c as usize] != 0.0
-    }
+    #[inline(always)]
+    fn has_char(&self, c: Self::Char) -> bool { self.file.defined[c as usize] }
     fn get_hyphenchar(&self) -> I {
         match self.muts.read().unwrap().hyphenchar {
             Some(c) => c,
