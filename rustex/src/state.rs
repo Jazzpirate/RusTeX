@@ -4,7 +4,6 @@ use tex_engine::engine::mouth::pretokenized::TokenList;
 use tex_engine::engine::state::{State, StateChangeTracker, StateStack};
 use tex_engine::engine::utils::memory::PrimitiveIdentifier;
 use tex_engine::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use tex_engine::tex::nodes::TeXBox;
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::token::CompactToken;
 use tex_engine::tex::types::{GroupType, MathStyle, TeXMode};
@@ -14,6 +13,7 @@ use tex_engine::tex::token::Token;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
+use tex_engine::tex::nodes::boxes::TeXBox;
 
 #[derive(Clone)]
 pub struct RusTeXState(state::tex_state::TeXState<Types>);

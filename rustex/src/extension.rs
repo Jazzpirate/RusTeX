@@ -1,6 +1,5 @@
 use tex_engine::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
 use tex_engine::engine::{EngineExtension, EngineTypes};
-use tex_engine::tex::nodes::TeXNode;
 use crate::engine::{Font, Refs, Types};
 use crate::nodes::RusTeXNode;
 use crate::shipout::ShipoutState;

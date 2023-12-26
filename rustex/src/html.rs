@@ -104,6 +104,8 @@ pub(crate) mod labels {
     pub(crate) const MATH_CLOSE: Label = Label { id: 33, cls: Some("rustex-math-close"), tag: Tag::Mo };
     pub(crate) const PARINDENT: Label = Label { id: 34, cls: Some("rustex-parindent"), tag: Tag::Div };
     pub(crate) const MSKIP: Label = Label { id: 35, cls: Some("rustex-mskip"), tag: Tag::Mspace };
+    pub(crate) const HKERN_IN_M: Label = Label { id: 36, cls: None, tag: Tag::Mspace };
+    pub(crate) const MISSING_GLYPH: Label = Label { id: 37, cls: Some("rustex-missing-glyph"), tag: Tag::None };
 }
 
 #[derive(Debug)]

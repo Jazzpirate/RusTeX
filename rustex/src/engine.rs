@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
-use tex_engine::commands::{Command, Unexpandable};
+use tex_engine::commands::{Command, CommandScope, Unexpandable};
 use tex_engine::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFNode};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, filesystem, state, utils};
@@ -11,7 +11,6 @@ use tex_engine::engine::stomach::StomachWithShipout;
 use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
 use tex_engine::engine::utils::outputs::LogOutputs;
 use tex_engine::tex;
-use tex_engine::tex::nodes::{BoxInfo, TeXNode, TeXBox};
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::token::CompactToken;
 use tex_engine::utils::errors::{ErrorThrower};
@@ -27,6 +26,7 @@ use tex_engine::engine::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
 use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::catcodes::CategoryCode;
+use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::tex::types::BoxType;
 use crate::nodes::RusTeXNode;
 use crate::state::RusTeXState;
@@ -80,10 +80,11 @@ fn get_state() -> (RusTeXState,Memory) {
             Some((s, m)) =>return  (s.clone(), m.clone()),
             n => {
                 let mut engine = DefaultEngine::<Types>::new();
-                register_unexpandable(&mut engine,CLOSE_FONT,close_font);
+                register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
                 engine.register_primitive(Command::Unexpandable(
                     Unexpandable {
                         name:PRIMITIVES.get("rustexBREAK"),
+                        scope:CommandScope::Any,
                         apply:|_,_| {
                             println!("HERE!")
                         }

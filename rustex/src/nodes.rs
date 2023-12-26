@@ -4,7 +4,7 @@ use tex_engine::commands::pdftex::pdftexnodes::{NumOrName, PDFCatalog, PDFColor,
 use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::ParLineSpec;
 use tex_engine::engine::utils::memory::PRIMITIVES;
-use tex_engine::tex::nodes::{NodeTrait, ReadableNode, TeXNode};
+use tex_engine::tex::nodes::{CustomNodeTrait, NodeTrait};
 use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::types::NodeType;
 use crate::engine::{Font, SRef, Types};
@@ -49,10 +49,8 @@ pub enum RusTeXNode {
     HAlignBegin,HAlignEnd,
     Br
 }
+impl CustomNodeTrait<Types> for RusTeXNode {}
 impl NodeTrait<Types> for RusTeXNode {
-    fn as_node(self) -> TeXNode<Types> {
-        TeXNode::Custom(self)
-    }
     fn height(&self) -> Dim32 {
         match self {
             Self::PDFNode(n) => n.height(),
