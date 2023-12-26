@@ -49,5 +49,6 @@ mod tests {
         log::info!("stix-mathbbit-bold:\n{}",es.display_encoding("stix-mathbbit-bold").unwrap());
         log::info!("cmr10:\n{}",es.display_encoding("cmr10").unwrap());
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());
+        log::info!("ec-lmcsco10:\n{}",es.display_encoding("ec-lmcsco10").unwrap());
     }
 }
