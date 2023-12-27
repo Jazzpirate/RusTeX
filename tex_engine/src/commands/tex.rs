@@ -16,17 +16,17 @@ use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
-use crate::tex::types::{BoxType, GroupType, TeXMode};
+use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use std::fmt::Write;
-use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd};
+use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, get_mathchar, IfxCmd};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathAtom, MathNode};
+use crate::tex::nodes::math::{MathAtom, MathNode, MathNucleus, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
@@ -763,7 +763,7 @@ pub fn copy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
     Ok(engine.state.get_box_register(idx).cloned())
 }
 
-pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token, scope: CommandScope, tp:BoxType, copy:bool) {
+pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token, tp:BoxType, copy:bool) {
     let idx = super::methods::read_register(engine);
     let bx = if copy {engine.state.get_box_register(idx).cloned()} else {engine.state.take_box_register(idx)};
     match bx {
@@ -777,7 +777,7 @@ pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token, sco
             match engine.stomach.data_mut().open_lists.last_mut() {
                 Some(NodeList::Horizontal {children:ls,..}) =>
                     ls.extend(children.into_vec().into_iter()),
-                _ => unreachable!()
+                _ => todo!("error: incompatible list can't be unboxed")
             }
         }
         _ => todo!("error")
@@ -785,16 +785,16 @@ pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token, sco
 }
 
 pub fn unhbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine, tk, CommandScope::SwitchesToHorizontal, BoxType::Horizontal, false)
+    unbox(engine, tk, BoxType::Horizontal, false)
 }
 pub fn unhcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine, tk, CommandScope::SwitchesToHorizontal, BoxType::Horizontal, true)
+    unbox(engine, tk, BoxType::Horizontal, true)
 }
 pub fn unvbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine, tk, CommandScope::SwitchesToVertical, BoxType::Vertical, false)
+    unbox(engine, tk, BoxType::Vertical, false)
 }
 pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    unbox(engine, tk, CommandScope::SwitchesToVertical, BoxType::Vertical, true)
+    unbox(engine, tk, BoxType::Vertical, true)
 }
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
@@ -820,10 +820,6 @@ pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
 }
 
 pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    match engine.state.get_mode() {
-        TeXMode::DisplayMath | TeXMode::InlineMath => (),// TODO check that the current mathbox is (basically) empty
-        o => todo!("vcenter throw error; mode: {:?}",o)
-    }
     engine.expand_until_bgroup(true);
     //let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
     engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
@@ -1012,6 +1008,16 @@ pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
     }
 }
 
+pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    let n = engine.read_int(false).into();
+    if n < 0 { todo!("throw error")}
+    engine.expand_until_bgroup(false);
+    engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
+    engine.stomach.data_mut().open_lists.push(
+        NodeList::Vertical {children:vec!(),tp:VerticalNodeListType::Insert(n as usize)}
+    )
+}
+
 pub fn immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     expand_loop!(engine,
         ResolvedToken::Cmd{cmd:Some(Command::Whatsit(Whatsit { immediate,.. })),token} => {
@@ -1195,6 +1201,16 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
     engine.set_command(&cm,Some(Command::MathChar(i)),globally)
 }
 
+pub fn mathchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 || i > u32::MAX as i64 {
+        todo!("matchchardef out of range")
+    }
+    let i = i as u32;
+    let ret = super::methods::get_mathchar(engine, i, None);
+    ET::Stomach::add_node_m(engine, MathNode::Atom(ret.to_atom()));
+}
+
 pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Tokenizer::new(&mut fi);
@@ -1215,6 +1231,16 @@ pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET
                 code.meaning(char,f)
         }
     }
+}
+
+pub fn leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    super::methods::do_leaders(engine,LeaderType::Normal)
+}
+pub fn xleaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    super::methods::do_leaders(engine,LeaderType::X)
+}
+pub fn cleaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    super::methods::do_leaders(engine,LeaderType::C)
 }
 
 pub fn message<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -1368,10 +1394,11 @@ pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,glo
         Ok(bx) =>
             engine.state.set_box_register(engine.aux,index,bx,globally),
         Err(bi) => {
+            let target = BoxTarget::<ET>::new(move |e,b| e.state.set_box_register(e.aux,index,Some(b),globally));
             let mut ls = bi.open_list(engine.mouth.start_ref());
             match ls {
-                NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Register {index,globally},
-                NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Register {index,globally},
+                NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = target,
+                NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = target,
                 _ => unreachable!()
             }
             engine.stomach.data_mut().open_lists.push(ls);
@@ -1587,12 +1614,12 @@ pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
         Ok(i) => i,
         Err(_) => todo!("throw error")
     };
-    ET::Stomach::add_node(engine,|| VNode::Penalty(i), || HNode::Penalty(i), || MathNode::Penalty(i));
+    crate::add_node!(ET::Stomach;engine, VNode::Penalty(i), HNode::Penalty(i), MathNode::Penalty(i));
 }
 
 pub fn kern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let dim = engine.read_dim(false);
-    ET::Stomach::add_node(engine,|| VNode::VKern(dim), || HNode::HKern(dim), || MathNode::HKern(dim));
+    crate::add_node!(ET::Stomach;engine,VNode::VKern(dim), HNode::HKern(dim), MathNode::HKern(dim));
 }
 
 pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
@@ -1890,15 +1917,111 @@ pub fn shipout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
         Ok(None) => (),
         Err(bi) => {
             let mut list = bi.open_list(engine.mouth.start_ref());
+            let target = BoxTarget::new(|e,b| e.shipout(VNode::Box(b)));
             match list {
-                NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Out,
-                NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = BoxTarget::Out,
+                NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = target,
+                NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = target,
                 _ => unreachable!()
             }
             let mut data = engine.stomach.data_mut();
             data.open_lists.push(list);
         }
     }
+}
+
+pub fn displaylimits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let ls = engine.stomach.data_mut().open_lists.last_mut().unwrap();
+    match ls {
+        NodeList::Math {children,..} => {
+            match children.last_mut() {
+                Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {ref mut limits,..},..})) => {
+                    *limits = None;
+                }
+                _ => ()
+            }
+        }
+        _ => unreachable!()
+    }
+}
+pub fn limits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let ls = engine.stomach.data_mut().open_lists.last_mut().unwrap();
+    match ls {
+        NodeList::Math {children,..} => {
+            match children.last_mut() {
+                Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {cls:MathClass::Op,ref mut limits,..},..})) => {
+                    *limits = Some(true);
+                }
+                _ => ()
+            }
+        }
+        _ => unreachable!()
+    }
+}
+pub fn nolimits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let ls = engine.stomach.data_mut().open_lists.last_mut().unwrap();
+    match ls {
+        NodeList::Math {children,..} => {
+            match children.last_mut() {
+                Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {cls:MathClass::Op,ref mut limits,..},..})) => {
+                    *limits = Some(false);
+                }
+                _ => ()
+            }
+        }
+        _ => unreachable!()
+    }
+}
+
+pub fn mathord<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Ord))
+}
+pub fn mathop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Op))
+}
+pub fn mathbin<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Bin))
+}
+pub fn mathrel<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Rel))
+}
+pub fn mathopen<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Open))
+}
+pub fn mathclose<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Close))
+}
+pub fn mathpunct<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,Some(MathClass::Punct))
+}
+pub fn mathinner<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_math_class(engine,None)
+}
+pub fn mathchoice<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+        |engine,children,_| mathchoice_i(engine,children.into())
+    ))
+}
+type ML<ET> = Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>;
+pub fn mathchoice_i<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>) {
+    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+        move |engine,children,_| mathchoice_ii(engine,d,children.into())
+    ))
+}
+pub fn mathchoice_ii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>) {
+    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+        |engine,children,_| mathchoice_iii(engine,d,t,children.into())
+    ))
+}
+pub fn mathchoice_iii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>,s:ML<ET>) {
+    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+        |engine,children,_|
+            ET::Stomach::add_node_m(engine,MathNode::Choice(UnresolvedMathChoice {
+                display: d,
+                text: t,
+                script: s,
+                scriptscript: children.into()
+            }))
+    ))
 }
 
 const PRIMITIVE_INTS:&[&'static str] = &[
@@ -2022,7 +2145,7 @@ pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
 }
 
 pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    ET::Stomach::add_node(engine,|| unreachable!(), || HNode::Space, || MathNode::Space)
+    crate::add_node!(ET::Stomach;engine,unreachable!(), HNode::Space, MathNode::Space)
 }
 pub fn char_slash<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     // TODO
@@ -2191,17 +2314,21 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"valign",CommandScope::SwitchesToHorizontal,valign);
     register_unexpandable(engine, "hyphenation",CommandScope::Any, |e,_|skip_argument(e));
     register_unexpandable(engine,"ignorespaces",CommandScope::Any,ignorespaces);
+    register_unexpandable(engine,"insert",CommandScope::Any,insert);
     register_unexpandable(engine,"immediate",CommandScope::Any,immediate);
     register_unexpandable(engine,"lowercase",CommandScope::Any,lowercase);
     register_unexpandable(engine,"uppercase",CommandScope::Any,uppercase);
+    register_unexpandable(engine,"leaders",CommandScope::Any,leaders);
+    register_unexpandable(engine,"xleaders",CommandScope::Any,xleaders);
+    register_unexpandable(engine,"cleaders",CommandScope::Any,cleaders);
     register_unexpandable(engine,"message",CommandScope::Any,message);
     register_unexpandable(engine,"errmessage",CommandScope::Any,errmessage);
     register_unexpandable(engine,"noindent",CommandScope::Any,noindent);
     register_unexpandable(engine,"openin",CommandScope::Any,openin);
     register_unexpandable(engine,"par",CommandScope::Any,par);
-    register_unexpandable(engine,"unhbox",CommandScope::SwitchesToHorizontal,unhbox);
+    register_unexpandable(engine,"unhbox",CommandScope::SwitchesToHorizontalOrMath,unhbox);
     register_unexpandable(engine,"unvbox",CommandScope::SwitchesToVertical,unvbox);
-    register_unexpandable(engine,"unhcopy",CommandScope::SwitchesToHorizontal,unhcopy);
+    register_unexpandable(engine,"unhcopy",CommandScope::SwitchesToHorizontalOrMath,unhcopy);
     register_unexpandable(engine,"unvcopy",CommandScope::SwitchesToVertical,unvcopy);
     register_unexpandable(engine,"unskip",CommandScope::Any,unskip);
     register_unexpandable(engine,"unkern",CommandScope::Any,unkern);
@@ -2234,6 +2361,10 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "delimiter", CommandScope::MathOnly, delimiter);
     register_unexpandable(engine, "mskip", CommandScope::MathOnly, mskip);
     register_unexpandable(engine, "mkern", CommandScope::MathOnly, mkern);
+    register_unexpandable(engine, "mathchar", CommandScope::MathOnly, mathchar);
+    register_unexpandable(engine, "displaylimits", CommandScope::MathOnly, displaylimits);
+    register_unexpandable(engine, "limits", CommandScope::MathOnly, limits);
+    register_unexpandable(engine, "nolimits", CommandScope::MathOnly, nolimits);
     register_unexpandable(engine, "penalty", CommandScope::Any, penalty);
     register_unexpandable(engine, "kern", CommandScope::Any, kern);
     register_unexpandable(engine, "vrule", CommandScope::SwitchesToHorizontal, vrule);
@@ -2252,6 +2383,16 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, " ", CommandScope::SwitchesToHorizontal, char_space);
     register_unexpandable(engine,"vcenter",CommandScope::MathOnly,vcenter);
 
+    register_unexpandable(engine, "mathord", CommandScope::MathOnly, mathord);
+    register_unexpandable(engine, "mathop", CommandScope::MathOnly, mathop);
+    register_unexpandable(engine, "mathbin", CommandScope::MathOnly, mathbin);
+    register_unexpandable(engine, "mathrel", CommandScope::MathOnly, mathrel);
+    register_unexpandable(engine, "mathopen", CommandScope::MathOnly, mathopen);
+    register_unexpandable(engine, "mathclose", CommandScope::MathOnly, mathclose);
+    register_unexpandable(engine, "mathpunct", CommandScope::MathOnly, mathpunct);
+    register_unexpandable(engine, "mathinner", CommandScope::MathOnly, mathinner);
+    register_unexpandable(engine, "mathchoice", CommandScope::MathOnly, mathchoice);
+
     register_whatsit(engine,"closeout",closeout,closeout_immediate);
     register_whatsit(engine,"openout",openout,openout_immediate);
     register_whatsit(engine,"write",write,write_immediate);
@@ -2264,11 +2405,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathclose,mathbin,mathord,mathop,mathrel,mathopen,
-        mathpunct,mathinner,mathaccent,mathchar,
-        insert,leaders,cleaders,xleaders,left,right,
-        vtop,discretionary,displaylimits,end,
-        mathchoice,noalign,omit,overline,
+        mathaccent,left,right,vtop,discretionary,end,noalign,omit,overline,
         pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
         pagedepth,pageshrink,span,underline
     );
@@ -2281,7 +2418,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     cmtodos!(engine,prevgraf,deadcycles,insertpenalties,scrollmode,nonstopmode,batchmode,
         show,showbox,showthe,special,noboundary,accent,setlanguage,nonscript,
-        limits,nolimits,over,atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
+        over,atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
         leqno,bigskip,bye,fontname,italiccorr,medskip,smallskip
     );
 

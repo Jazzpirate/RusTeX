@@ -270,7 +270,7 @@ pub struct BoxCommand<ET:EngineTypes> {
 
 #[derive(Clone,Debug,Copy)]
 pub enum CommandScope {
-    SwitchesToVertical,SwitchesToHorizontal,MathOnly,Any
+    SwitchesToVertical,SwitchesToHorizontal,MathOnly,Any,SwitchesToHorizontalOrMath
 }
 
 

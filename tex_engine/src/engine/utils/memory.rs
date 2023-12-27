@@ -173,7 +173,15 @@ pub struct PrimitiveInterner {
     pub baselineskip:PrimitiveIdentifier,
     pub lineskip:PrimitiveIdentifier,
     pub lineskiplimit:PrimitiveIdentifier,
-    pub parindent:PrimitiveIdentifier
+    pub parindent:PrimitiveIdentifier,
+    pub hrule:PrimitiveIdentifier,
+    pub vrule:PrimitiveIdentifier,
+    pub vskip:PrimitiveIdentifier,
+    pub hskip:PrimitiveIdentifier,
+    pub vfil:PrimitiveIdentifier,
+    pub hfil:PrimitiveIdentifier,
+    pub vfill:PrimitiveIdentifier,
+    pub hfill:PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -238,6 +246,14 @@ impl PrimitiveInterner {
         let lineskip = PrimitiveIdentifier(interner.get_or_intern_static("lineskip"));
         let lineskiplimit = PrimitiveIdentifier(interner.get_or_intern_static("lineskiplimit"));
         let parindent = PrimitiveIdentifier(interner.get_or_intern_static("parindent"));
+        let hrule = PrimitiveIdentifier(interner.get_or_intern_static("hrule"));
+        let vrule = PrimitiveIdentifier(interner.get_or_intern_static("vrule"));
+        let vskip = PrimitiveIdentifier(interner.get_or_intern_static("vskip"));
+        let hskip = PrimitiveIdentifier(interner.get_or_intern_static("hskip"));
+        let vfil = PrimitiveIdentifier(interner.get_or_intern_static("vfil"));
+        let hfil = PrimitiveIdentifier(interner.get_or_intern_static("hfil"));
+        let vfill = PrimitiveIdentifier(interner.get_or_intern_static("vfill"));
+        let hfill = PrimitiveIdentifier(interner.get_or_intern_static("hfill"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
@@ -246,7 +262,8 @@ impl PrimitiveInterner {
             everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
             everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
             pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
-            noalign,omit,baselineskip,lineskip,lineskiplimit,parindent
+            noalign,omit,baselineskip,lineskip,lineskiplimit,parindent,hrule,vrule,
+            vskip,hskip,vfil,hfil,vfill,hfill
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.

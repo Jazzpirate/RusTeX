@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
+use crate::engine::filesystem::SourceRef;
 use crate::engine::stomach::ParLineSpec;
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, SR, VerticalNodeListType};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
@@ -45,9 +46,9 @@ impl<ET:EngineTypes> Display for HBoxInfo<ET> {
     }
 }
 impl<ET:EngineTypes> HBoxInfo<ET> {
-    pub fn open_list(self,start:SR<ET>) -> NodeList<ET> {
+    pub fn open_list(self,start:SourceRef<ET>) -> NodeList<ET> {
         match self {
-            HBoxInfo::HBox {..} => NodeList::Horizontal {tp:HorizontalNodeListType::Box(self,start,BoxTarget::List),children:vec!()},
+            HBoxInfo::HBox {..} => NodeList::Horizontal {tp:HorizontalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             HBoxInfo::ParLine {..} => NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(start),children:vec!()},
             HBoxInfo::HAlignRow => NodeList::Horizontal {tp:HorizontalNodeListType::HAlignRow(start),children:vec!()},
             HBoxInfo::HAlignCell {..} => NodeList::Horizontal {tp:HorizontalNodeListType::HAlignCell(start),children:vec!()},
@@ -64,7 +65,7 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
     fn get_height(&self,v:&[HNode<ET>]) -> ET::Dim {
         match self {
             HBoxInfo::HBox { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::height_inner(v)),
-            HBoxInfo::ParLine { spec,.. } => Self::height_inner(v),
+            HBoxInfo::ParLine { .. } => Self::height_inner(v),
             HBoxInfo::HAlignRow => Self::height_inner(v),
             HBoxInfo::HAlignCell { .. } => Self::height_inner(v),
             HBoxInfo::ParIndent(_) => ET::Dim::default(),
@@ -82,7 +83,7 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
     fn get_depth(&self,v:&[HNode<ET>]) -> ET::Dim {
         match self {
             HBoxInfo::HBox { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::depth_inner(v)),
-            HBoxInfo::ParLine { spec,.. } => Self::depth_inner(v),
+            HBoxInfo::ParLine { .. } => Self::depth_inner(v),
             HBoxInfo::HAlignRow => Self::depth_inner(v),
             HBoxInfo::HAlignCell { .. } => Self::depth_inner(v),
             HBoxInfo::ParIndent(_) => ET::Dim::default(),
@@ -139,13 +140,13 @@ impl<ET:EngineTypes> Display for VBoxInfo<ET> {
 }
 
 impl<ET:EngineTypes> VBoxInfo<ET> {
-    pub fn open_list(self,start:SR<ET>) -> NodeList<ET> {
+    pub fn open_list(self,start:SourceRef<ET>) -> NodeList<ET> {
         match self {
-            VBoxInfo::VBox {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::List),children:vec!()},
-            VBoxInfo::VTop {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::List),children:vec!()},
+            VBoxInfo::VBox {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
+            VBoxInfo::VTop {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             VBoxInfo::VAlignRow => NodeList::Vertical {tp:VerticalNodeListType::VAlignRow(start),children:vec!()},
             VBoxInfo::VAlignCell {..} => NodeList::Vertical {tp:VerticalNodeListType::VAlignCell(start),children:vec!()},
-            VBoxInfo::Output => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::Out),children:vec!()},
+            VBoxInfo::Output => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
         }
     }
     pub fn clone_for_split(&mut self) -> Self {
@@ -247,7 +248,7 @@ pub enum BoxInfo<ET:EngineTypes> {
     H(HBoxInfo<ET>),V(VBoxInfo<ET>)
 }
 impl<ET:EngineTypes> BoxInfo<ET> {
-    pub fn open_list(self,start:SR<ET>) -> NodeList<ET> {
+    pub fn open_list(self,start:SourceRef<ET>) -> NodeList<ET> {
         match self {
             BoxInfo::H(h) => h.open_list(start),
             BoxInfo::V(v) => v.open_list(start),
@@ -269,11 +270,17 @@ impl<ET:EngineTypes> BoxInfo<ET> {
 
 #[derive(Debug,Clone)]
 pub enum TeXBox<ET:EngineTypes> {
-    V { info:VBoxInfo<ET>, children:Box<[VNode<ET>]>, start:SR<ET>,end:SR<ET> },
-    H { info:HBoxInfo<ET>, children:Box<[HNode<ET>]>, start:SR<ET>,end:SR<ET> },
+    V { info:VBoxInfo<ET>, children:Box<[VNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET> },
+    H { info:HBoxInfo<ET>, children:Box<[HNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET> },
 }
 
 impl<ET:EngineTypes> TeXBox<ET> {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            TeXBox::H { children, .. } => children.is_empty(),
+            TeXBox::V { children, .. } => children.is_empty(),
+        }
+    }
     pub fn assign_height(&mut self, h:ET::Dim) {
         match self {
             TeXBox::H {info: HBoxInfo::HBox { ref mut assigned_height, .. },..} => *assigned_height = Some(h),

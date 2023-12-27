@@ -33,6 +33,14 @@ pub enum PDFDestType<D:TeXDimen> {
 
 #[derive(Debug,Clone)]
 pub enum NumOrName { Num(i64),Name(String) }
+impl NumOrName {
+    pub fn as_name(self) -> String  {
+        match self {
+            NumOrName::Name(s) => s,
+            NumOrName::Num(i) => format!("NUM_{}",i)
+        }
+    }
+}
 
 #[derive(Debug,Clone)]
 pub enum PDFStruct { Num(i64),Name(String),Other(String) }

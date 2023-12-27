@@ -1,8 +1,9 @@
-use std::fmt::Formatter;
+use std::fmt::{Debug, Formatter};
 use crate::engine::EngineTypes;
+use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::Font;
 use crate::engine::mouth::pretokenized::TokenList;
-use crate::tex::nodes::{NodeTrait, SR, WhatsitNode};
+use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
@@ -10,26 +11,106 @@ use crate::tex::types::{MathClass, MathStyle, MathStyleType, NodeType};
 use crate::tex::numerics::NumSet;
 
 #[derive(Debug,Clone)]
-pub enum UnresolvedMathFontStyle<F:Font> {
-    Forced { style:MathStyleType, cramped:bool, font:F },
-    Unforced { style:MathStyleType, cramped:bool, text_font:F, script_font:F, script_script_font:F }
+pub enum UnresolvedMathFontStyle<ET:EngineTypes> {
+    Forced { style:MathStyleType, cramped:bool, font:ET::Font },
+    Unforced { style:MathStyleType, cramped:bool, text_font:ET::Font, script_font:ET::Font, script_script_font:ET::Font }
 }
 
-pub trait MathFontStyleT<F:Font>:Clone+std::fmt::Debug {
-    fn get_em(&self) -> F::Dim { self.get_font().get_dim(5) }
-    fn get_font(&self) -> &F;
+pub trait MathFontStyleT<ET:EngineTypes>:Clone+Debug {
+    type Choice:MathChoiceT<ET>;
+    fn get_em(&self) -> ET::Dim { self.get_font().get_dim(5) }
+    fn get_font(&self) -> &ET::Font;
 }
+
+pub trait MathChoiceT<ET:EngineTypes>:Clone+Debug {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result;
+    fn width(&self) -> ET::Dim;
+    fn height(&self) -> ET::Dim;
+    fn depth(&self) -> ET::Dim;
+}
+#[derive(Clone,Debug)]
+pub struct UnresolvedMathChoice<ET:EngineTypes> {
+    pub display:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+    pub text:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+    pub script:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+    pub scriptscript:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+}
+impl<ET:EngineTypes> MathChoiceT<ET> for UnresolvedMathChoice<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+        MathNode::<ET,MathFontStyle<ET>>::readable_do_indent(indent, f)?;
+        f.write_str("<unresolved_choice>")?;
+        for c in self.display.iter() {
+            c.readable_fmt(indent + 2, f)?;
+        }
+        for c in self.text.iter() {
+            c.readable_fmt(indent + 2, f)?;
+        }
+        for c in self.script.iter() {
+            c.readable_fmt(indent + 2, f)?;
+        }
+        for c in self.scriptscript.iter() {
+            c.readable_fmt(indent + 2, f)?;
+        }
+        MathNode::<ET,MathFontStyle<ET>>::readable_do_indent(indent, f)?;
+        f.write_str("</unresolved_choice>")
+    }
+    fn width(&self) -> ET::Dim {
+        self.display.iter().map(|c| c.width()).sum()
+    }
+    fn height(&self) -> ET::Dim {
+        self.display.iter().map(|c| c.height()).max().unwrap_or_default()
+    }
+    fn depth(&self) -> ET::Dim {
+        self.display.iter().map(|c| c.depth()).max().unwrap_or_default()
+    }
+}
+
+pub struct ResolvedChoice<ET:EngineTypes>(pub Box<[MathNode<ET,MathFontStyle<ET>>]>);
+impl<ET:EngineTypes> Debug for ResolvedChoice<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<resolved_choice>")?;
+        for c in self.0.iter() {
+            c.readable_fmt(2, f)?;
+        }
+        f.write_str("</resolved_choice>")
+    }
+}
+impl<ET:EngineTypes> Clone for ResolvedChoice<ET> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<ET:EngineTypes> MathChoiceT<ET> for ResolvedChoice<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for c in self.0.iter() {
+            c.readable_fmt(indent, f)?;
+        }
+        Ok(())
+    }
+    fn width(&self) -> ET::Dim {
+        self.0.iter().map(|c| c.width()).sum()
+    }
+    fn height(&self) -> ET::Dim {
+        self.0.iter().map(|c| c.height()).max().unwrap_or_default()
+    }
+    fn depth(&self) -> ET::Dim {
+        self.0.iter().map(|c| c.depth()).max().unwrap_or_default()
+    }
+}
+
 #[derive(Debug,Clone)]
-pub struct MathFontStyle<F:Font> {
-    pub style:MathStyleType, pub cramped:bool, pub font:F
+pub struct MathFontStyle<ET:EngineTypes> {
+    pub style:MathStyleType, pub cramped:bool, pub font:ET::Font
 }
-impl<F:Font> MathFontStyleT<F> for MathFontStyle<F> {
+impl<ET:EngineTypes> MathFontStyleT<ET> for MathFontStyle<ET> {
+    type Choice = ResolvedChoice<ET>;
     #[inline(always)]
-    fn get_font(&self) -> &F { &self.font }
+    fn get_font(&self) -> &ET::Font { &self.font }
 }
 
-impl<F:Font> MathFontStyleT<F> for UnresolvedMathFontStyle<F> {
-    fn get_font(&self) -> &F {
+impl<ET:EngineTypes> MathFontStyleT<ET> for UnresolvedMathFontStyle<ET> {
+    type Choice = UnresolvedMathChoice<ET>;
+    fn get_font(&self) -> &ET::Font {
         match self {
             UnresolvedMathFontStyle::Forced { font, .. } => font,
             UnresolvedMathFontStyle::Unforced { style,text_font, script_font, script_script_font,.. } => match style {
@@ -42,7 +123,7 @@ impl<F:Font> MathFontStyleT<F> for UnresolvedMathFontStyle<F> {
 }
 
 #[derive(Clone,Debug)]
-pub enum MathNode<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
+pub enum MathNode<ET:EngineTypes,S:MathFontStyleT<ET>> {
     Atom(MathAtom<ET,S>),
     HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,Space,
     MSkip{
@@ -51,20 +132,20 @@ pub enum MathNode<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
     MKern{
         kern: <ET::MuSkip as MuSkip>::Base,style: S
     },HKern(ET::Dim),
+    Leaders(Leaders<ET>),
     Penalty(i32),
     Mark(usize,TokenList<ET::Token>),
     VRule{
         width:Option<ET::Dim>,
         height:Option<ET::Dim>,
         depth:Option<ET::Dim>,
-        start:SR<ET>,end:SR<ET>
+        start:SourceRef<ET>,end:SourceRef<ET>
     },
-    Insert,
-    VAdjust(Box<[VNode<ET>]>),
+    Choice(S::Choice),
     Whatsit(WhatsitNode<ET>),
     Custom(ET::CustomNode),
 }
-impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNode<ET,S> {
+impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MathNode::Penalty(p) => {
@@ -75,6 +156,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNode<ET,S>
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
             },
+            MathNode::Choice(c) => c.readable_fmt(indent, f),
+            MathNode::Leaders(l) => l.readable_fmt(indent, f),
             MathNode::VRule { width, height, depth, .. } => {
                 write!(f, "<vrule")?;
                 if let Some(w) = width {
@@ -87,19 +170,6 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNode<ET,S>
                     write!(f, " depth={}",d)?;
                 }
                 write!(f, ">")
-            },
-            MathNode::Insert => {
-                Self::readable_do_indent(indent,f)?;
-                f.write_str("<insert>")
-            },
-            MathNode::VAdjust(ls) => {
-                Self::readable_do_indent(indent,f)?;
-                f.write_str("<vadjust>")?;
-                for c in ls.iter() {
-                    c.readable_fmt(indent+2, f)?;
-                }
-                Self::readable_do_indent(indent,f)?;
-                f.write_str("</vadjust>")
             },
             MathNode::Whatsit(w) => {
                 Self::readable_do_indent(indent,f)?;
@@ -121,33 +191,35 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNode<ET,S>
     fn height(&self) -> ET::Dim {
         match self {
             MathNode::VRule { height, .. } => height.unwrap_or_default(),
-            MathNode::Insert  => todo!(),
             MathNode::Custom(n) => n.height(),
             MathNode::Atom(a) => a.height(),
+            MathNode::Leaders(l) => l.height(),
+            MathNode::Choice(c) => c.height(),
             _ => ET::Dim::default(),
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
             MathNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
-            MathNode::Insert => todo!(),
-            MathNode::VAdjust(ls) => ls.iter().map(|c| c.width()).max().unwrap_or_default(),
             MathNode::Custom(n) => n.width(),
             MathNode::HKern(d) => *d,
             MathNode::MKern {kern,style} => ET::Num::mudim_to_dim(*kern,style.get_em()),
             MathNode::MSkip {skip,style} => ET::Num::mudim_to_dim(skip.base(),style.get_em()),
             MathNode::HSkip(s) => s.base(),
             MathNode::Space => ET::Dim::from_sp(65536),
+            MathNode::Leaders(l) => l.width(),
             MathNode::Atom(a) => a.width(),
+            MathNode::Choice(c) => c.width(),
             _=> ET::Dim::default(),
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
             MathNode::VRule { depth, .. } => depth.unwrap_or_default(),
-            MathNode::Insert => todo!(),
             MathNode::Custom(n) => n.depth(),
             MathNode::Atom(a) => a.depth(),
+            MathNode::Leaders(l) => l.depth(),
+            MathNode::Choice(c) => c.depth(),
             _ => ET::Dim::default(),
         }
 
@@ -157,13 +229,13 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNode<ET,S>
             MathNode::Penalty(_) => NodeType::Penalty,
             MathNode::VRule {..} => NodeType::Rule,
             MathNode::HKern(_) | MathNode::MKern {..} => NodeType::Kern,
-            MathNode::Insert => NodeType::Insertion,
-            MathNode::VAdjust(_) => NodeType::Adjust,
             MathNode::Mark(_, _) => NodeType::Mark,
+            MathNode::Choice(_) => NodeType::Math,
             MathNode::Atom(_) => NodeType::Math,
             MathNode::Whatsit(_) => NodeType::WhatsIt,
             MathNode::HSkip(_) | MathNode::MSkip {..} | MathNode::Space | MathNode::HFil |
             MathNode::HFill | MathNode::HFilneg | MathNode::Hss => NodeType::Glue,
+            MathNode::Leaders(_) => NodeType::Glue,
             MathNode::Custom(n) => n.nodetype(),
         }
     }
@@ -177,12 +249,17 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNode<ET,S>
 }
 
 #[derive(Clone,Debug)]
-pub struct MathAtom<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
+pub struct MathAtom<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub nucleus:MathNucleus<ET,S>,
     pub sup:Option<Box<[MathNode<ET,S>]>>,
     pub sub:Option<Box<[MathNode<ET,S>]>>,
 }
-impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S> {
+impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathAtom<ET,S> {
+    pub fn empty() -> Self {
+        Self { nucleus:MathNucleus::Simple { cls:MathClass::Ord, kernel:MathKernel::Empty, limits:None }, sup:None, sub:None }
+    }
+}
+impl <ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathAtom<ET,S> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent, f)?;
         if self.sub.is_none() || self.sup.is_none() {
@@ -233,8 +310,14 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S
             return self.nucleus.width();
         }
         let w = self.nucleus.width();
-        let sup = self.sup.as_ref().unwrap().iter().map(|c| c.width()).sum();
-        let sub = self.sub.as_ref().unwrap().iter().map(|c| c.width()).sum();
+        let sup = match self.sup {
+            Some(ref ls) => ls.iter().map(|c| c.width()).sum(),
+            _ => ET::Dim::default()
+        };
+        let sub = match self.sub {
+            Some(ref ls) => ls.iter().map(|c| c.width()).sum(),
+            _ => ET::Dim::default()
+        };
         let limits = match self.nucleus {
             MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
             _ => false
@@ -267,19 +350,19 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathAtom<ET,S
 }
 
 #[derive(Clone,Debug)]
-pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
+pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
     Simple{cls: MathClass,kernel:MathKernel<ET,S>,limits:Option<bool>},
     Inner(MathKernel<ET,S>),
     Overline(MathKernel<ET,S>),
     Underline(MathKernel<ET,S>),
     Accent,Radical,
     VCenter{
-        start:SR<ET>,
-        end:SR<ET>,
+        start:SourceRef<ET>,
+        end:SourceRef<ET>,
         children:Box<[VNode<ET>]>
     }
 }
-impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET,S> {
+impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent, f)?;
         match self {
@@ -289,7 +372,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
                 Self::readable_do_indent(indent, f)?;
                 f.write_str("</mathop>")
             }
-            MathNucleus::Simple{cls,kernel,limits} => {
+            MathNucleus::Simple{cls,kernel,..} => {
                 write!(f, "<math{:?}>",cls)?;
                 kernel.readable_fmt(indent + 2, f)?;
                 Self::readable_do_indent(indent, f)?;
@@ -332,7 +415,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
     fn height(&self) -> ET::Dim {
         match self {
             MathNucleus::Simple {cls:MathClass::Op,kernel,..} => (kernel.height() + kernel.depth()).scale_float(0.5),
-            MathNucleus::Simple {cls,kernel,..} => kernel.height(),
+            MathNucleus::Simple {kernel,..} => kernel.height(),
             MathNucleus::Inner(k) => k.height(),
             MathNucleus::Overline(k) => k.height(),
             MathNucleus::Underline(k) => k.height(),
@@ -356,7 +439,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
     fn depth(&self) -> ET::Dim {
         match self {
             MathNucleus::Simple {cls:MathClass::Op,kernel,..} => (kernel.height() + kernel.depth()).scale_float(0.5),
-            MathNucleus::Simple {cls,kernel,..} => kernel.depth(),
+            MathNucleus::Simple {kernel,..} => kernel.depth(),
             MathNucleus::Inner(k) => k.depth(),
             MathNucleus::Overline(k) => k.depth(),
             MathNucleus::Underline(k) => k.depth(),
@@ -370,7 +453,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathNucleus<ET
 }
 
 #[derive(Clone,Debug)]
-pub enum MathKernel<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
+pub enum MathKernel<ET:EngineTypes,S:MathFontStyleT<ET>> {
     Empty,
     Char {
         char:ET::Char,
@@ -378,15 +461,15 @@ pub enum MathKernel<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
     },
     Box(TeXBox<ET>),
     List{
-        start:SR<ET>,
+        start:SourceRef<ET>,
         children:Box<[MathNode<ET,S>]>,
-        end:SR<ET>
+        end:SourceRef<ET>
     }
 }
-impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> Default for MathKernel<ET,S> {
+impl<ET:EngineTypes,S:MathFontStyleT<ET>> Default for MathKernel<ET,S> {
     fn default() -> Self { MathKernel::Empty }
 }
-impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathKernel<ET,S> {
+impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathKernel<ET,S> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MathKernel::Empty => Ok(()),
@@ -438,15 +521,15 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> NodeTrait<ET> for MathKernel<ET,
 }
 
 #[derive(Debug,Clone)]
-pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET::Font>> {
+pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub display:bool,
     pub children:Box<[MathNode<ET,S>]>,
-    pub start:SR<ET>,
-    pub end:SR<ET>
+    pub start:SourceRef<ET>,
+    pub end:SourceRef<ET>
 }
 
-impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
-    pub fn close(display:bool,start:SR<ET>,end:SR<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET::Font>>>) -> MathGroup<ET,MathFontStyle<ET::Font>> {
+impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
+    pub fn close(display:bool,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>) -> MathGroup<ET,MathFontStyle<ET>> {
         let style = if display { MathStyle {
             style:MathStyleType::Display,
             cramped:false,
@@ -459,20 +542,25 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
         let nch = Self::close_i(children,style);
         MathGroup { display,children:nch.into(),start,end }
     }
-    fn close_i(mut ls: Vec<MathNode<ET,UnresolvedMathFontStyle<ET::Font>>>,style:MathStyle) -> Vec<MathNode<ET,MathFontStyle<ET::Font>>> {
+    fn close_i(ls: Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,style:MathStyle) -> Vec<MathNode<ET,MathFontStyle<ET>>> {
         ls.into_iter().map(|n| match n {
             MathNode::HSkip(s) => MathNode::HSkip(s),
             MathNode::HFil => MathNode::HFil,
             MathNode::HFill => MathNode::HFill,
             MathNode::HFilneg => MathNode::HFilneg,
             MathNode::Hss => MathNode::Hss,
+            MathNode::Choice(c) => match style {
+                MathStyle { style:MathStyleType::Display, .. } => MathNode::Choice(ResolvedChoice(Self::close_i(c.display.into_vec(),style).into())),
+                MathStyle { style:MathStyleType::Text, .. } => MathNode::Choice(ResolvedChoice(Self::close_i(c.text.into_vec(),style).into())),
+                MathStyle { style:MathStyleType::Script, .. } => MathNode::Choice(ResolvedChoice(Self::close_i(c.script.into_vec(),style).into())),
+                MathStyle { style:MathStyleType::ScriptScript, .. } => MathNode::Choice(ResolvedChoice(Self::close_i(c.scriptscript.into_vec(), style).into())),
+            }
             MathNode::Space => MathNode::Space,
+            MathNode::Leaders(l) => MathNode::Leaders(l),
             MathNode::HKern(d) => MathNode::HKern(d),
             MathNode::Penalty(p) => MathNode::Penalty(p),
             MathNode::Mark(i,tl) => MathNode::Mark(i,tl),
             MathNode::VRule{width,height,depth,start,end} => MathNode::VRule{width,height,depth,start,end},
-            MathNode::Insert => MathNode::Insert,
-            MathNode::VAdjust(ls) => MathNode::VAdjust(ls),
             MathNode::Whatsit(w) => MathNode::Whatsit(w),
             MathNode::Custom(n) => MathNode::Custom(n),
             MathNode::MSkip {skip,style:unresolved} => MathNode::MSkip {skip,style:Self::resolve_style(style, unresolved)},
@@ -490,7 +578,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
             })
         }).collect()
     }
-    fn resolve_nucleus(n:MathNucleus<ET,UnresolvedMathFontStyle<ET::Font>>,style:MathStyle) -> MathNucleus<ET,MathFontStyle<ET::Font>> {
+    fn resolve_nucleus(n:MathNucleus<ET,UnresolvedMathFontStyle<ET>>,style:MathStyle) -> MathNucleus<ET,MathFontStyle<ET>> {
         match n {
             MathNucleus::Simple { cls:MathClass::Op, kernel, limits } =>
                 MathNucleus::Simple { cls:MathClass::Op, kernel:Self::resolve_kernel(kernel,style), limits:match limits {
@@ -507,7 +595,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
             MathNucleus::VCenter{start,end,children} => MathNucleus::VCenter{start,end,children}
         }
     }
-    fn resolve_kernel(n:MathKernel<ET,UnresolvedMathFontStyle<ET::Font>>,style:MathStyle) -> MathKernel<ET,MathFontStyle<ET::Font>> {
+    fn resolve_kernel(n:MathKernel<ET,UnresolvedMathFontStyle<ET>>,style:MathStyle) -> MathKernel<ET,MathFontStyle<ET>> {
         match n {
             MathKernel::Empty => MathKernel::Empty,
             MathKernel::Char { char, style:unresolved } => MathKernel::Char { char, style:Self::resolve_style(style, unresolved) },
@@ -515,7 +603,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
             MathKernel::List{start,children,end} => MathKernel::List{start,children:Self::close_i(children.into_vec(),style).into(),end}
         }
     }
-    fn resolve_style(style:MathStyle, unresolved:UnresolvedMathFontStyle<ET::Font>) -> MathFontStyle<ET::Font> {
+    fn resolve_style(style:MathStyle, unresolved:UnresolvedMathFontStyle<ET>) -> MathFontStyle<ET> {
         match unresolved {
             UnresolvedMathFontStyle::Forced { style, cramped, font } => MathFontStyle { style, cramped, font },
             UnresolvedMathFontStyle::Unforced { text_font, script_font, script_script_font,.. } => match style.style {
@@ -531,10 +619,10 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET::Font>> MathGroup<ET,S> {
 pub struct MathChar<ET:EngineTypes> {
     pub char:ET::Char,
     pub cls:MathClass,
-    pub style: UnresolvedMathFontStyle<ET::Font>
+    pub style: UnresolvedMathFontStyle<ET>
 }
 impl<ET:EngineTypes> MathChar<ET> {
-    pub fn to_atom(self) -> MathAtom<ET,UnresolvedMathFontStyle<ET::Font>> {
+    pub fn to_atom(self) -> MathAtom<ET,UnresolvedMathFontStyle<ET>> {
         let kernel = MathNucleus::Simple { cls:self.cls, kernel:MathKernel::Char { char:self.char, style:self.style }, limits:None };
         MathAtom { nucleus: kernel,sup:None,sub:None }
     }

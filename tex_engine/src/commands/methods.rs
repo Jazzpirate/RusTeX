@@ -18,12 +18,13 @@ use std::fmt::Write;
 use crate::engine::mouth::strings::StringTokenizer;
 use crate::tex::input_text::StringLineSource;
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{HorizontalNodeListType, NodeList, VerticalNodeListType};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{Delimiter, MathChar, MathNode, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::utils::errors::ErrorThrower;
 use crate::tex::nodes::NodeTrait;
+use crate::tex::types::TeXMode;
 
 pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
     let idx = engine.read_int(false).into();
@@ -165,6 +166,13 @@ pub fn modify_int_register<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences
     engine.state.set_int_register(engine.aux,idx,new,globally);
 }
 
+pub fn modify_primitive_int<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+    engine.read_keyword(b"by");
+    let old = engine.state.get_primitive_int(name);
+    let new = op(old,engine);
+    engine.state.set_primitive_int(engine.aux,name,new,globally);
+}
+
 pub fn modify_dim_register<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, idx:u16, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_dim_register(idx);
@@ -172,11 +180,25 @@ pub fn modify_dim_register<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences
     engine.state.set_dim_register(engine.aux,idx,new,globally);
 }
 
+pub fn modify_primitive_dim<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+    engine.read_keyword(b"by");
+    let old = engine.state.get_primitive_dim(name);
+    let new = op(old,engine);
+    engine.state.set_primitive_dim(engine.aux,name,new,globally);
+}
+
 pub fn modify_skip_register<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>,idx:u16,globally:bool,op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_skip_register(idx);
     let new = op(old,engine);
     engine.state.set_skip_register(engine.aux,idx,new,globally);
+}
+
+pub fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+    engine.read_keyword(b"by");
+    let old = engine.state.get_primitive_skip(name);
+    let new = op(old,engine);
+    engine.state.set_primitive_skip(engine.aux,name,new,globally);
 }
 
 #[macro_export]
@@ -195,6 +217,9 @@ macro_rules! modify_num {
                 Command::IntRegister(idx) => {
                     return crate::commands::methods::modify_int_register($engine,*idx,$globally,$int)
                 }
+                Command::PrimitiveInt(name) => {
+                    return crate::commands::methods::modify_primitive_int($engine,*name,$globally,$int)
+                }
                 Command::Dim(DimCommand{name,..}) if *name == PRIMITIVES.dimen => {
                     let idx = $engine.read_int(false);
                     let idx = match idx.try_into() {
@@ -206,6 +231,9 @@ macro_rules! modify_num {
                 Command::DimRegister(idx) => {
                     return crate::commands::methods::modify_dim_register($engine,*idx,$globally,$dim)
                 }
+                Command::PrimitiveDim(name) => {
+                    return crate::commands::methods::modify_primitive_dim($engine,*name,$globally,$dim)
+                }
                 Command::Skip(SkipCommand{name,..}) if *name == PRIMITIVES.skip => {
                     let idx = $engine.read_int(false);
                     let idx = match idx.try_into() {
@@ -216,6 +244,9 @@ macro_rules! modify_num {
                 }
                 Command::SkipRegister(idx) => {
                     return crate::commands::methods::modify_skip_register($engine,*idx,$globally,$skip)
+                }
+                Command::PrimitiveSkip(name) => {
+                    return crate::commands::methods::modify_primitive_skip($engine,*name,$globally,$skip)
                 }
                 o => todo!("{:?} in \\advance",o)
             }
@@ -855,7 +886,7 @@ pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u
 }
 
 
-pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> bool,h:fn(&HNode<ET>) -> bool,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET::Font>>) -> bool) {
+pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> bool,h:fn(&HNode<ET>) -> bool,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> bool) {
     let data = engine.stomach.data_mut();
     match data.open_lists.last_mut() {
         None => todo!("throw error: Not allowed in vertical"),
@@ -908,7 +939,7 @@ pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) ->
 }
 
 
-pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> Option<R>,h:fn(&HNode<ET>) -> Option<R>,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET::Font>>) -> Option<R>) -> Option<R> {
+pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> Option<R>,h:fn(&HNode<ET>) -> Option<R>,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> Option<R>) -> Option<R> {
     let data = engine.stomach.data_mut();
     match data.open_lists.last_mut() {
         None => for n in data.page.iter().rev() {
@@ -935,4 +966,72 @@ pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>
         }
     }
     None
+}
+
+pub fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) {
+    match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+        Some(_) => todo!("leaders with dimensions"),
+        _ => crate::expand_loop!(engine,
+            ResolvedToken::Cmd {cmd:Some(Command::Box(bx)),token} => {
+                match (bx.read)(engine,token) {
+                    Ok(None) => todo!(),
+                    Ok(Some(bx)) => return leaders_skip(engine,bx,tp),
+                    Err(bi) => {
+                        let target = BoxTarget::<ET>::new(move |e,b| leaders_skip(e,b,tp));
+                        let mut ls = bi.open_list(engine.mouth.start_ref());
+                        match ls {
+                            NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = target,
+                            NodeList::Vertical {tp:VerticalNodeListType::Box(_,_,ref mut t),..} => *t = target,
+                            _ => unreachable!()
+                        }
+                        engine.stomach.data_mut().open_lists.push(ls);
+                        return ()
+                    }
+                }
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} if
+                *name == PRIMITIVES.hrule || *name == PRIMITIVES.vrule => {
+                todo!();
+                return ()
+            }
+            _ => todo!("throw error")
+        )
+    }
+    todo!("file end")
+}
+
+pub fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox<ET>,tp:LeaderType) {
+    crate::expand_loop!(engine,
+        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} => {
+            let skip = match *name {
+                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false)),
+                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false)),
+                n if n == PRIMITIVES.vfil => LeaderSkip::VFil,
+                n if n == PRIMITIVES.hfil => LeaderSkip::HFil,
+                n if n == PRIMITIVES.vfill => LeaderSkip::VFill,
+                n if n == PRIMITIVES.hfill => LeaderSkip::HFill,
+                _ => todo!("throw error")
+            };
+            let leaders = Leaders {skip,bx,tp};
+            crate::add_node!(ET::Stomach;engine,VNode::Leaders(leaders),HNode::Leaders(leaders),MathNode::Leaders(leaders));
+            return
+        }
+        _ => todo!("throw error")
+    );
+    todo!("file end")
+}
+
+pub fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>) {
+    engine.read_char_or_math_group(move || ListTarget::<ET,_>::new(move |engine,children,start| {
+        let node = MathNode::Atom(MathAtom {
+            sub:None, sup:None, nucleus:match cls {
+                None => MathNucleus::Inner(MathKernel::List {start,children:children.into(),end:engine.mouth.current_sourceref()}),
+                Some(cls) => MathNucleus::Simple{
+                    kernel:MathKernel::List {start,children:children.into(),end:engine.mouth.current_sourceref()},
+                    cls,limits:None
+                },
+            },
+        });
+        ET::Stomach::add_node_m(engine,node);
+    }))
 }

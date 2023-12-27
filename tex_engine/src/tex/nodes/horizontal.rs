@@ -1,7 +1,8 @@
 use crate::engine::EngineTypes;
+use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::pretokenized::TokenList;
-use crate::tex::nodes::{NodeTrait, SR, WhatsitNode};
+use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::math::{MathFontStyle, MathGroup};
 use crate::tex::nodes::vertical::VNode;
@@ -10,6 +11,7 @@ use crate::tex::input_text::Character;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 
+
 #[derive(Clone,Debug)]
 pub enum HNode<ET:EngineTypes> {
     Penalty(i32),
@@ -17,16 +19,17 @@ pub enum HNode<ET:EngineTypes> {
     Whatsit(WhatsitNode<ET>),
     HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,Space,
     HKern(ET::Dim),
+    Leaders(Leaders<ET>),
     Box(TeXBox<ET>),
     VRule{
         width:Option<ET::Dim>,
         height:Option<ET::Dim>,
         depth:Option<ET::Dim>,
-        start:SR<ET>,end:SR<ET>
+        start:SourceRef<ET>,end:SourceRef<ET>
     },
-    Insert,
+    Insert(usize,Box<[VNode<ET>]>),
     VAdjust(Box<[VNode<ET>]>),
-    MathGroup(MathGroup<ET,MathFontStyle<ET::Font>>),
+    MathGroup(MathGroup<ET,MathFontStyle<ET>>),
     Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  },
     Custom(ET::CustomNode),
 }
@@ -38,6 +41,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
+            HNode::Leaders(l) => l.readable_fmt(indent, f),
             HNode::Box(b) => b.readable_fmt(indent, f),
             HNode::Mark(i, _) => {
                 Self::readable_do_indent(indent,f)?;
@@ -56,9 +60,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 }
                 write!(f, ">")
             },
-            HNode::Insert => {
+            HNode::Insert(n,ch) => {
                 Self::readable_do_indent(indent,f)?;
-                f.write_str("<insert>")
+                write!(f,"<insert {}>",n)?;
+                for c in ch.iter() {
+                    c.readable_fmt(indent + 2,f)?;
+                }
+                Self::readable_do_indent(indent,f)?;
+                write!(f,"</insert>")
             },
             HNode::VAdjust(ls) => {
                 Self::readable_do_indent(indent,f)?;
@@ -99,6 +108,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Box(b) => b.height(),
             HNode::VRule { height, .. } => height.unwrap_or_default(),
             HNode::Char { height, .. } => *height,
+            HNode::Leaders(l) => l.height(),
             HNode::MathGroup(MathGroup {children,..}) => {
                 children.iter().map(|c| c.height()).max().unwrap_or_default()
             }
@@ -111,6 +121,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Box(b) => b.width(),
             HNode::Char { width, .. } => *width,
             HNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
+            HNode::Leaders(l) => l.width(),
             HNode::MathGroup(MathGroup{children,..}) =>  {
                 children.iter().map(|c| c.width()).sum()
             }
@@ -126,6 +137,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Box(b) => b.depth(),
             HNode::Char { depth, .. } => *depth,
             HNode::VRule { depth, .. } => depth.unwrap_or_default(),
+            HNode::Leaders(l) => l.depth(),
             HNode::MathGroup(MathGroup {children,..}) =>  {
                 children.iter().map(|c| c.depth()).max().unwrap_or_default()
             }
@@ -140,11 +152,12 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Box(b) => b.nodetype(),
             HNode::Char { .. } => NodeType::Char,
             HNode::HKern(_) => NodeType::Kern,
-            HNode::Insert => NodeType::Insertion,
+            HNode::Insert(..) => NodeType::Insertion,
             HNode::VAdjust(_) => NodeType::Adjust,
             HNode::MathGroup{..} => NodeType::Math,
             HNode::Mark(_, _) => NodeType::Mark,
             HNode::Whatsit(_) => NodeType::WhatsIt,
+            HNode::Leaders(_) => NodeType::Glue,
             HNode::HSkip(_) | HNode::Space | HNode::HFil | HNode::HFill | HNode::HFilneg | HNode::Hss => NodeType::Glue,
             HNode::Custom(n) => n.nodetype(),
         }

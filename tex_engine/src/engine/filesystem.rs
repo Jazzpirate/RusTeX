@@ -21,6 +21,8 @@ pub struct SourceReference<FileId:Copy> {
     pub column: usize
 }
 
+pub type SourceRef<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
+
 /// A [`FileSystem`] provides access to files.
 pub trait FileSystem:Clone {
     /// The type of files provided by this [`FileSystem`].

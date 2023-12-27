@@ -34,7 +34,7 @@ pub trait State:Sized+Clone {
     fn get_mathstyle(&self) -> MathStyle;
     fn set_mathstyle(&mut self,style:MathStyle);
 
-    fn get_mathfonts(&self,fam:usize) -> UnresolvedMathFontStyle<Fnt<Self>> {
+    fn get_mathfonts(&self,fam:usize) -> UnresolvedMathFontStyle<Self::ET> {
         let style = self.get_mathstyle();
         if style.forced_from.is_some() {
             UnresolvedMathFontStyle::Forced {style:style.style,cramped:style.cramped,font: match style.style {

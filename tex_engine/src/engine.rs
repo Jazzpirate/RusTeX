@@ -34,7 +34,7 @@ pub mod fontsystem;
     The types that an engine needs to implement. To reduce overhad in function signature,
     we bundle all of them into a single trait and pass that around.
 */
-pub trait EngineTypes:Sized+Copy+Clone+Debug {
+pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Char: Character;
     type CSName: ControlSequenceName<Self::Char>;
     type Token: Token<Char = Self::Char, CS = Self::CSName>;

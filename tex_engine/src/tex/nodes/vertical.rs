@@ -1,6 +1,7 @@
 use crate::engine::EngineTypes;
+use crate::engine::filesystem::SourceRef;
 use crate::engine::mouth::pretokenized::TokenList;
-use crate::tex::nodes::{NodeTrait, SR, WhatsitNode};
+use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::types::NodeType;
 use crate::tex::numerics::TeXDimen;
@@ -14,14 +15,15 @@ pub enum VNode<ET:EngineTypes> {
     VSkip(ET::Skip),
     VFil,VFill,VFilneg,Vss,
     VKern(ET::Dim),
+    Leaders(Leaders<ET>),
     Box(TeXBox<ET>),
     HRule{
         width:Option<ET::Dim>,
         height:Option<ET::Dim>,
         depth:Option<ET::Dim>,
-        start:SR<ET>,end:SR<ET>
+        start:SourceRef<ET>,end:SourceRef<ET>
     },
-    Insert,
+    Insert(usize,Box<[VNode<ET>]>),
     Custom(ET::CustomNode),
 }
 
@@ -42,6 +44,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
+            VNode::Leaders(l) => l.readable_fmt(indent, f),
             VNode::VSkip(s) => write!(f, "<vskip:{}>",s),
             VNode::VFil => write!(f, "<vfil>"),
             VNode::VFill => write!(f, "<vfill>"),
@@ -66,9 +69,14 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
             },
-            VNode::Insert => {
+            VNode::Insert(n,ch) => {
                 Self::readable_do_indent(indent,f)?;
-                f.write_str("<insert>")
+                write!(f,"<insert {}>",n)?;
+                for c in ch.iter() {
+                    c.readable_fmt(indent + 2,f)?;
+                }
+                Self::readable_do_indent(indent,f)?;
+                write!(f,"</insert>")
             },
             VNode::Whatsit(w) => {
                 Self::readable_do_indent(indent,f)?;
@@ -81,8 +89,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
         match self {
             VNode::VKern(d) => *d,
             VNode::Box(b) => b.height(),
+            VNode::Leaders(l) => l.height(),
             VNode::HRule { height, .. } => height.unwrap_or(ET::Dim::from_sp(26214)),
-            VNode::Insert  => todo!(),
             VNode::Custom(n) => n.height(),
             VNode::VSkip(s) => s.base(),
             _ => ET::Dim::default(),
@@ -92,8 +100,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
         match self {
             VNode::Box(b) => b.width(),
             VNode::HRule { width, .. } => width.unwrap_or_default(),
-            VNode::Insert => todo!(),
             VNode::Custom(n) => n.width(),
+            VNode::Leaders(l) => l.width(),
             _ => ET::Dim::default(),
         }
     }
@@ -101,8 +109,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
         match self {
             VNode::Box(b) => b.depth(),
             VNode::HRule { depth, .. } => depth.unwrap_or_default(),
-            VNode::Insert => todo!(),
             VNode::Custom(n) => n.depth(),
+            VNode::Leaders(l) => l.depth(),
             _ => ET::Dim::default(),
         }
     }
@@ -110,9 +118,10 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
         match self {
             VNode::Penalty(_) => NodeType::Penalty,
             VNode::HRule {..} => NodeType::Rule,
+            VNode::Leaders(_) => NodeType::Glue,
             VNode::Box(b) => b.nodetype(),
             VNode::VKern(_) => NodeType::Kern,
-            VNode::Insert => NodeType::Insertion,
+            VNode::Insert(..) => NodeType::Insertion,
             VNode::Mark(_, _) => NodeType::Mark,
             VNode::Whatsit(_) => NodeType::WhatsIt,
             VNode::Custom(n) => n.nodetype(),

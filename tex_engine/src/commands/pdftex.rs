@@ -48,11 +48,7 @@ pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     let node = PDFNode::PDFCatalog(PDFCatalog{
         literal,action
     });
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-        _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-    }
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
 
 pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
@@ -64,20 +60,20 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
     let kw = engine.read_keywords(&[b"push",b"pop",b"set",b"current"]);
     match kw {
         Some(b"current") =>
-            ET::Stomach::add_node(engine,
-                                     || VNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into()),
-                                     || HNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into()),
-                                     || MathNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into())
+            crate::add_node!(ET::Stomach;engine,
+                                     VNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into()),
+                                     HNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into()),
+                                     MathNode::Custom(PDFNode::Color(ColorStackAction::Current(index)).into())
             ),
         Some(b"pop") => {
             let stack = engine.aux.extension.colorstacks();
             if index >= stack.len() {
                 todo!("throw error")
             }
-            ET::Stomach::add_node(engine,
-                                     || VNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into()),
-                                     || HNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into()),
-                                     || MathNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into())
+            crate::add_node!(ET::Stomach;engine,
+                                     VNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into()),
+                                     HNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into()),
+                                     MathNode::Custom(PDFNode::Color(ColorStackAction::Pop(index)).into())
             )
         }
         Some(b"set") => {
@@ -85,10 +81,10 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
             engine.read_braced_string(false,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
-            ET::Stomach::add_node(engine,
-                                     || VNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into()),
-                                     || HNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into()),
-                                     || MathNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into())
+            crate::add_node!(ET::Stomach;engine,
+                                     VNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into()),
+                                     HNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into()),
+                                     MathNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into())
             )
         }
         Some(b"push") => {
@@ -96,10 +92,10 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
             engine.read_braced_string(false,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
-            ET::Stomach::add_node(engine,
-                                     || VNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into()),
-                                     || HNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into()),
-                                     || MathNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into())
+            crate::add_node!(ET::Stomach;engine,
+                                     VNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into()),
+                                     HNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into()),
+                                     MathNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into())
             )
         }
         _ => todo!("error")
@@ -130,11 +126,7 @@ pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     };
     let dest = pdftexnodes::pdfdest_type(engine);
     let node = PDFNode::PDFDest(PDFDest{structnum, id, dest});
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-        _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-    }
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
 
 pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
@@ -158,17 +150,13 @@ pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::T
     } else { None };
     let action = pdftexnodes::action_spec(engine);
     let node = PDFNode::PDFStartLink(PDFStartLink {width,height,depth,attr,action});
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-        _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-    }
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
 
 pub fn pdfendlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    ET::Stomach::add_node(engine,|| VNode::Custom(PDFNode::PDFEndLink.into()),|| HNode::Custom(PDFNode::PDFEndLink.into()),|| MathNode::Custom(PDFNode::PDFEndLink.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(PDFNode::PDFEndLink.into()),HNode::Custom(PDFNode::PDFEndLink.into()),MathNode::Custom(PDFNode::PDFEndLink.into()))
 }
 
 pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -409,11 +397,7 @@ pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:E
           ET::CustomNode:From<PDFNode<ET>> {
     let num = parse_pdfobj(engine);
     let node = PDFNode::Obj(engine.aux.extension.pdfobjs()[num].clone());
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-        _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-    }
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
 
 pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
@@ -425,11 +409,7 @@ pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Toke
         None => todo!("throw error"),
         Some(o) => {
             let node = PDFNode::Obj(o.clone());
-            match engine.state.get_mode() {
-                TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-                _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-            }
+            crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
         }
     }
 }
@@ -456,11 +436,7 @@ pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     let node = PDFNode::PDFOutline(PDFOutline{
         attr,action,count,content
     });
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-        _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-    }
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
 
 pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
@@ -492,11 +468,7 @@ pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token
     let num = parse_pdfxform(engine);
     let form = engine.aux.extension.pdfxforms()[num].clone();
     let node = PDFNode::XForm(form);
-    match engine.state.get_mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-        _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-    }
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
 
 pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
@@ -508,11 +480,7 @@ pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::To
         None => todo!("throw error"),
         Some(n) => {
             let node = PDFNode::XForm(n.clone());
-            match engine.state.get_mode() {
-                TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-                _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-            }
+            crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
         }
     }
 }
@@ -537,11 +505,7 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
         let mut literal = String::new();
         engine.read_braced_string(false,&mut literal);
         let node = PDFNode::PDFLiteral(PDFLiteral{ literal, option});
-        match engine.state.get_mode() {
-            TeXMode::Vertical | TeXMode::InternalVertical => ET::Stomach::add_node_v(engine, VNode::Custom(node.into())),
-            TeXMode::Horizontal | TeXMode::RestrictedHorizontal => ET::Stomach::add_node_h(engine, HNode::Custom(node.into())),
-            _ => ET::Stomach::add_node_m(engine, MathNode::Custom(node.into()))
-        }
+        crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
     }
 }
 
