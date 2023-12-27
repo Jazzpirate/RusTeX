@@ -696,7 +696,7 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let val = (sc.read)(engine,token).base();
             if is_negative {return -val} else {return val}
         }
-        o => todo!("command in read_dim: {:?}",o)
+        o => todo!("command in read_dim: {}",o.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
     }
 }
 

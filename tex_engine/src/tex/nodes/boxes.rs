@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
-use crate::engine::stomach::ParLineSpec;
+use crate::engine::stomach::{ParLineSpec, Stomach};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::vertical::VNode;
@@ -14,6 +14,7 @@ pub enum ToOrSpread<D:TeXDimen> {
     None,To(D),Spread(D)
 }
 
+
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub enum HBoxInfo<ET:EngineTypes> {
     HBox {
@@ -22,7 +23,7 @@ pub enum HBoxInfo<ET:EngineTypes> {
         assigned_height:Option<ET::Dim>,
         assigned_depth:Option<ET::Dim>,
         moved_left:Option<ET::Dim>,
-        raised:Option<ET::Dim>,
+        raised:Option<ET::Dim>
     },
     ParLine {
         spec:ParLineSpec<ET>,

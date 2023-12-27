@@ -282,6 +282,11 @@ pub trait Stomach {
             (CommandScope::Any, _) => true,
             (CommandScope::SwitchesToHorizontal | CommandScope::SwitchesToHorizontalOrMath, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => true,
             (CommandScope::SwitchesToVertical, TeXMode::Vertical | TeXMode::InternalVertical) => true,
+            (CommandScope::SwitchesToVertical, TeXMode::Horizontal) => {
+                engine.requeue(token);
+                Self::close_paragraph(engine);
+                false
+            }
             (CommandScope::MathOnly| CommandScope::SwitchesToHorizontalOrMath, TeXMode::InlineMath | TeXMode::DisplayMath) => true,
             (CommandScope::SwitchesToHorizontal| CommandScope::SwitchesToHorizontalOrMath,TeXMode::Vertical | TeXMode::InternalVertical) => {
                 Self::open_paragraph(engine,token);
@@ -459,6 +464,23 @@ pub trait Stomach {
 
     fn add_node_v(engine:&mut EngineReferences<Self::ET>,node: VNode<Self::ET>) {
         let data = engine.stomach.data_mut();
+        let pre = match node {
+            VNode::Box(ref b@TeXBox::H {..}) => {
+                if data.prevdepth > <Self::ET as EngineTypes>::Dim::from_sp(-65536000) {
+                    let baselineskip = engine.state.get_primitive_skip(PRIMITIVES.baselineskip);
+                    let lineskiplimit = engine.state.get_primitive_dim(PRIMITIVES.lineskiplimit);
+                    let b = <Self::ET as EngineTypes>::Skip::new(baselineskip.base() + -data.prevdepth + -b.height(),baselineskip.stretch(),baselineskip.shrink());
+                    let sk = if b.base() >= lineskiplimit { b }
+                    else {
+                        engine.state.get_primitive_skip(PRIMITIVES.lineskip)
+                    };
+                    if sk != <Self::ET as EngineTypes>::Skip::default() {Some(sk)} else {None}
+                } else {None}
+            }
+            _ => None
+        };
+
+
         if let VNode::HRule {..} = node {
             data.prevdepth = <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(-65536000);
         } else {
@@ -466,6 +488,9 @@ pub trait Stomach {
         }
         match data.open_lists.last_mut() {
             Some(NodeList::Vertical {children,..}) => {
+                if let Some(pre) = pre {
+                    children.push(VNode::VSkip(pre));
+                }
                 children.push(node);
                 return
             }
@@ -482,6 +507,11 @@ pub trait Stomach {
                 n if n.discardable() => return,
                 _ => ()
             }
+        }
+
+        if let Some(pre) = pre {
+            data.pagetotal = data.pagetotal + pre.base();
+            data.page.push(VNode::VSkip(pre));
         }
         data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
         if let VNode::Penalty(i) = node {
@@ -697,6 +727,11 @@ pub trait Stomach {
 
     fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<HNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
+        if let parskip = engine.state.get_primitive_skip(PRIMITIVES.parskip) {
+            if parskip != <Self::ET as EngineTypes>::Skip::default() {
+                Self::add_node_v(engine,VNode::VSkip(parskip));
+            }
+        }
         let ret = split_paragraph_roughly(engine,specs,children,sourceref);
         for line in ret {
             match line {
