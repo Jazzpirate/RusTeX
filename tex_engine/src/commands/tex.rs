@@ -63,7 +63,8 @@ pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 
 #[inline(always)]
 pub fn endinput<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    engine.mouth.endinput()
+    engine.mouth.endinput();
+    engine.aux.outputs.file_close("");
 }
 
 #[inline(always)]
@@ -1814,6 +1815,31 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
     ).unwrap_or_default().into()
 }
 
+pub fn pagegoal<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    engine.stomach.data_mut().pagegoal
+}
+pub fn pagetotal<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    engine.stomach.data_mut().pagetotal
+}
+pub fn pagestretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    ET::Dim::default() // TODO
+}
+pub fn pagefilstretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    ET::Dim::default() // TODO
+}
+pub fn pagefillstretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    ET::Dim::default() // TODO
+}
+pub fn pageshrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    ET::Dim::default() // TODO
+}
+pub fn pagefilshrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    ET::Dim::default() // TODO
+}
+pub fn pagefillshrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+    ET::Dim::default() // TODO
+}
+
 pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let idx = super::methods::read_register(engine);
     let (mut info,ls,start,end) = match engine.state.get_box_register_mut(idx) {
@@ -2228,6 +2254,14 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_dim(engine,"ht",ht_get,Some(ht_set));
     register_dim(engine,"wd",wd_get,Some(wd_set));
     register_dim(engine,"lastkern",lastkern,None);
+    register_dim(engine,"pagegoal",pagegoal,None);
+    register_dim(engine,"pagetotal",pagetotal,None);
+    register_dim(engine,"pagestretch",pagestretch,None);
+    register_dim(engine,"pagefilstretch",pagefilstretch,None);
+    register_dim(engine,"pagefillstretch",pagefillstretch,None);
+    register_dim(engine,"pageshrink",pageshrink,None);
+    register_dim(engine,"pagefilshrink",pagefilshrink,None);
+    register_dim(engine,"pagefillshrink",pagefillshrink,None);
 
     register_skip(engine,"skip",skip_get,Some(skip_set));
     register_skip(engine,"lastskip",lastskip,None);
@@ -2406,8 +2440,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     cmstodos!(engine,
         mathaccent,left,right,vtop,discretionary,end,noalign,omit,overline,
-        pagegoal,pagetotal,pagestretch,pagefilstretch,pagefillstretch,pagefilllstretch,
-        pagedepth,pageshrink,span,underline
+        pagedepth,span,underline
     );
 
     cmstodo!(engine,radical);

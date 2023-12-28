@@ -125,7 +125,7 @@ pub enum VBoxInfo<ET:EngineTypes> {
         assigned_depth:Option<ET::Dim>,
         moved_left:Option<ET::Dim>,
         raised:Option<ET::Dim>,
-    },Output
+    }
 }
 impl<ET:EngineTypes> Display for VBoxInfo<ET> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -147,7 +147,6 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             VBoxInfo::VTop {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             VBoxInfo::VAlignRow => NodeList::Vertical {tp:VerticalNodeListType::VAlignRow(start),children:vec!()},
             VBoxInfo::VAlignCell {..} => NodeList::Vertical {tp:VerticalNodeListType::VAlignCell(start),children:vec!()},
-            VBoxInfo::Output => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
         }
     }
     pub fn clone_for_split(&mut self) -> Self {
@@ -178,16 +177,6 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
                     raised: raised.clone(),
                 }
             },
-            VBoxInfo::Output => {
-                VBoxInfo::VBox {
-                    scaled: ToOrSpread::None,
-                    assigned_width: None,
-                    assigned_height: None,
-                    assigned_depth: None,
-                    moved_left: None,
-                    raised: None,
-                }
-            },
             _ => unreachable!()
         }
     }
@@ -206,7 +195,6 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             VBoxInfo::VAlignCell { to } => to.unwrap_or_else(||  Self::height_inner(v)),
             VBoxInfo::VBox { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::height_inner(v)),
             VBoxInfo::VTop { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::height_inner(v)), // TODO
-            VBoxInfo::Output => Self::height_inner(v),
         }
     }
     fn get_width(&self,v:&[VNode<ET>]) -> ET::Dim {
@@ -215,7 +203,6 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             VBoxInfo::VAlignCell { .. } => Self::width_inner(v),
             VBoxInfo::VBox { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::width_inner(v)),
             VBoxInfo::VTop { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::width_inner(v)), // TODO
-            VBoxInfo::Output => Self::width_inner(v),
         }
     }
     fn get_depth(&self,v:&[VNode<ET>]) -> ET::Dim {
@@ -224,7 +211,6 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             VBoxInfo::VAlignCell { .. } => Self::depth_inner(v),
             VBoxInfo::VBox { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::depth_inner(v)),
             VBoxInfo::VTop { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::depth_inner(v)), // TODO
-            VBoxInfo::Output => Self::depth_inner(v),
         }
     }
 

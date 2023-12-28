@@ -647,7 +647,14 @@ pub trait Stomach {
 
         let bx = TeXBox::V {
             children:first.into(),
-            info:VBoxInfo::Output,
+            info:VBoxInfo::VBox {
+                scaled: ToOrSpread::None,
+                assigned_width: None,
+                assigned_height: None,
+                assigned_depth: None,
+                moved_left: None,
+                raised: None,
+            },
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
         };

@@ -4,9 +4,11 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::num::ParseIntError;
 use std::ops::{Add, Div, Mul, Neg};
+use std::process::Output;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
+use std::ops::Sub;
 
 /// Bundles the various numerical types used in some engine, and converts between them.
 pub trait NumSet: Clone+Debug {
@@ -31,7 +33,7 @@ pub trait TeXInt:Numeric<Self> + From<i32> + TryFrom<i64> + Into<i64> + TryInto<
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, std::num::ParseIntError>;
 }
 /// A TeX dimension. By default [`Dim32`].
-pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output=Self> + Neg<Output=Self>+std::iter::Sum {
+pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output=Self> + Sub<Self,Output=Self> + Neg<Output=Self>+std::iter::Sum {
     fn units() -> &'static[&'static [u8]];
     fn scale_float(&self,times:f64) -> Self;
     fn from_sp(sp:i32) -> Self;
@@ -98,6 +100,13 @@ impl Add for Dim32 {
     #[inline(always)]
     fn add(self, rhs: Self) -> Self::Output {
         Dim32(self.0 + rhs.0)
+    }
+}
+impl Sub for Dim32 {
+    type Output = Self;
+    #[inline(always)]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Dim32(self.0 - rhs.0)
     }
 }
 impl Div<i32> for Dim32 {

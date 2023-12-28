@@ -398,7 +398,7 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
             Some(TokenSource::File(f,_)) => {
                 aux.outputs.file_close(f.source.path().display());
             }
-            Some(TokenSource::String(_)) => (),
+            Some(TokenSource::String(_)) => aux.outputs.file_close(""),
             _ => unreachable!()
         };
         let everyeof = state.get_primitive_tokens(PRIMITIVES.everyeof);

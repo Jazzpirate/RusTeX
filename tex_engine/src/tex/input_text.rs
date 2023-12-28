@@ -193,7 +193,29 @@ impl<C:Character> TextLineSource<C> for StringLineSource<C> {
     }
 }
 impl<C:Character> From<&str> for StringLineSource<C> {
-    fn from(value: &str) -> Self { value.to_string().into() }
+    fn from(s: &str) -> Self {
+        let mut lines = Vec::new();
+        let all = s.as_bytes().iter().copied();
+        let mut curr = Vec::new();
+        for b in all {
+            if b == b'\n' {
+                if let Some(b'\r') = curr.last() {
+                    curr.pop();
+                }
+                while let Some(b' ') = curr.last() {
+                    curr.pop();
+                }
+                lines.push(C::convert(std::mem::take(&mut curr)));
+            } else {
+                curr.push(b);
+            }
+        }
+        if !curr.is_empty() {
+            lines.push(C::convert(curr));
+        }
+        //lines.reverse();
+        Self { lines }
+    }
 }
 impl<C:Character> From<String> for StringLineSource<C> {
     fn from(s: String) -> Self {
@@ -216,7 +238,7 @@ impl<C:Character> From<String> for StringLineSource<C> {
         if !curr.is_empty() {
             lines.push(C::convert(curr));
         }
-        lines.reverse();
+        //lines.reverse();
         Self { lines }
     }
 }

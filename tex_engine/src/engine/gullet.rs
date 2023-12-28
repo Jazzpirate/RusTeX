@@ -353,7 +353,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             match self.get_next() {
                 Some(t) if t.is_begin_group() => break,
                 Some(t) if t.is_space() && skip_ws => (),
-                    Some(_) => todo!("should be begingroup"),
+                Some(o) => todo!("should be begingroup: {:?}",o.to_enum()),
                 None => todo!("file end")
             }
         }

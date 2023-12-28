@@ -78,7 +78,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"set") => {
             let mut color = String::new();
-            engine.read_braced_string(false,&mut color);
+            engine.read_braced_string(true,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
             crate::add_node!(ET::Stomach;engine,
@@ -89,7 +89,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"push") => {
             let mut color = String::new();
-            engine.read_braced_string(false,&mut color);
+            engine.read_braced_string(true,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
             crate::add_node!(ET::Stomach;engine,

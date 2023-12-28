@@ -139,6 +139,11 @@ pub struct TfmFontI<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>>
     name:CS,
     muts:RwLock<Mutables<I,D>>
 }
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> PartialEq for TfmFontI<I,D,CS> {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
 impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> std::fmt::Debug for TfmFontI<I,D,CS> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,"Font {:?}",self.name)

@@ -1316,8 +1316,8 @@ fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64
 
 
 pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],first:Option<(u8,ET::Token)>) -> bool {
-    let mut ret = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_bytes();
-    let mut read = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_token_vec();
+    let mut ret = arrayvec::ArrayVec::<_,20>::new();//engine.aux.memory.get_bytes();
+    let mut read = arrayvec::ArrayVec::<_,20>::new();//engine.aux.memory.get_token_vec();
     if let Some((b,t)) = first {
         ret.push(b.to_ascii_lowercase());
         read.push(t);
@@ -1361,8 +1361,8 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
 
 
 pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&'a[u8]],first:Option<(u8,ET::Token)>) -> Option<&'a[u8]> {
-    let mut ret = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_bytes();
-    let mut read = arrayvec::ArrayVec::<_,15>::new();//engine.aux.memory.get_token_vec();
+    let mut ret = arrayvec::ArrayVec::<_,20>::new();//engine.aux.memory.get_bytes();
+    let mut read = arrayvec::ArrayVec::<_,20>::new();//engine.aux.memory.get_token_vec();
     if let Some((b,t)) = first {
         ret.push(b.to_ascii_lowercase());
         read.push(t);
