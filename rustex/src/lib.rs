@@ -7,3 +7,4 @@ pub(crate) mod html;
 pub(crate) mod nodes;
 pub mod state;
 pub mod stomach;
+pub(crate) mod pgf;

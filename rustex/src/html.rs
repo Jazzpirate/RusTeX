@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
+use std::thread::current;
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::File;
 use tex_engine::engine::filesystem::SourceReference;
@@ -9,6 +10,8 @@ use tex_tfm::glyphs::Glyph;
 use crate::engine::{Font, Types};
 use crate::fonts::FontStore;
 use crate::shipout::{ShipoutState, ZERO};
+use std::fmt::Write;
+use tex_engine::engine::fontsystem::Font as FontT;
 
 #[inline(always)]
 fn dim_to_px(d:i32) -> f64{
@@ -16,8 +19,13 @@ fn dim_to_px(d:i32) -> f64{
 }
 
 #[inline(always)]
+pub(crate) fn dim_to_num(d:i32) -> String {
+    format!("{:.5}",dim_to_px(d)).trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+#[inline(always)]
 pub(crate) fn dim_to_string(d:Dim32) -> String {
-    format!("{:.5}",dim_to_px(d.0)).trim_end_matches('0').trim_end_matches('.').to_string() + "px"
+    dim_to_num(d.0) + "px"
 }
 
 #[inline(always)]
@@ -27,7 +35,7 @@ pub(crate) fn mudim_to_string(d:Mu) -> String {
 
 type Ref = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
 
-#[derive(Debug,Copy,Clone,PartialEq,Eq)]
+#[derive(Debug,Clone,PartialEq,Eq)]
 pub enum Tag {
     Div,
     Span,
@@ -40,13 +48,21 @@ pub enum Tag {
     B,
     I,
     None,
-    Math,Mrow,Mi,Mo,Mspace
+    Math,Mrow,Mi,Mo,Mspace,MUnderOver,MSubSup,MUnder,MOver,MSub,MSup,MText,
+    Svg,SVGForeign,G(String)
 }
 impl Tag {
     fn ismath(&self) -> bool {
         use Tag::*;
         match self {
-            Math | Mrow | Mi | Mo | Mspace => true,
+            Math | Mrow | Mi | Mo | Mspace | MUnderOver | MSubSup | MUnder | MOver | MSub | MSup | MText => true,
+            _ => false
+        }
+    }
+    fn is_svg(&self) -> bool {
+        use Tag::*;
+        match self {
+            Svg | SVGForeign | G(_) => true,
             _ => false
         }
     }
@@ -55,9 +71,9 @@ impl Tag {
 
 pub(crate) mod labels {
     use super::Tag;
-    #[derive(Copy, Clone, Debug, Eq)]
+    #[derive(Clone, Debug, Eq)]
     pub(crate) struct Label {
-        id: u8,
+        pub id: u8,
         pub(crate) cls: Option<&'static str>,
         pub(crate) tag: Tag
     }
@@ -106,6 +122,20 @@ pub(crate) mod labels {
     pub(crate) const MSKIP: Label = Label { id: 35, cls: Some("rustex-mskip"), tag: Tag::Mspace };
     pub(crate) const HKERN_IN_M: Label = Label { id: 36, cls: None, tag: Tag::Mspace };
     pub(crate) const MISSING_GLYPH: Label = Label { id: 37, cls: Some("rustex-missing-glyph"), tag: Tag::None };
+    pub(crate) const LINK: Label = Label {id: 38,cls:None,tag: Tag::None};
+    pub(crate) const COLOR_CHANGE: Label = Label { id: 39, cls: None, tag: Tag::None };
+    pub(crate) const MUNDEROVER: Label = Label { id: 40, cls: Some("rustex-munderover"), tag: Tag::MUnderOver };
+    pub(crate) const MSUBSUP: Label = Label { id: 41, cls: Some("rustex-subsup"), tag: Tag::MSubSup };
+    pub(crate) const MUNDER: Label = Label { id: 42, cls: Some("rustex-munder"), tag: Tag::MUnder };
+    pub(crate) const MOVER: Label = Label { id: 43, cls: Some("rustex-mover"), tag: Tag::MOver };
+    pub(crate) const MSUB: Label = Label { id: 44, cls: Some("rustex-msub"), tag: Tag::MSub };
+    pub(crate) const MSUP: Label = Label { id: 45, cls: Some("rustex-msup"), tag: Tag::MSup };
+    pub(crate) const MATH_ESCAPE: Label = Label { id: 46, cls: Some("rustex-math-escape"), tag: Tag::MText };
+    pub(crate) const SVG_WRAP: Label = Label { id: 47, cls: Some("rustex-svg"), tag: Tag::Div };
+    pub(crate) const SVG: Label = Label { id: 48, cls: None, tag: Tag::Svg };
+    pub(crate) fn svg_g(s:String) -> Label { Label { id: 49, cls: None, tag: Tag::G(s) } }
+    pub(crate) const SVG_FOREIGN: Label = Label { id: 50, cls: None, tag: Tag::SVGForeign };
+    pub(crate) const SVG_ESCAPE_DIV: Label = Label { id: 50, cls: Some("rustex-foreign"), tag: Tag::Div };
 }
 
 #[derive(Debug)]
@@ -118,18 +148,36 @@ pub enum HTMLChild {
 #[derive(Debug)]
 pub struct HTMLNode {
     tag: Tag,pub label:labels::Label,
-    classes:Vec<Cow<'static,str>>,
-    attrs:BTreeMap<Cow<'static,str>,String>,
+    pub classes:Vec<Cow<'static,str>>,
+    pub attrs:BTreeMap<Cow<'static,str>,String>,
     pub styles:BTreeMap<Cow<'static,str>,Cow<'static,str>>,
     pub children:Vec<HTMLChild>,
     sourceref:Option<(Ref,Ref)>,
     pub width:Option<Dim32>,
     pub(crate) font:Option<Font>,
+    pub(crate) force_font:bool,
     pub(crate) allow_newline:bool,
     pub(crate) inner_width:Option<Dim32>,
 }
 
 impl HTMLNode {
+    #[inline(always)]
+    pub(crate) fn reopened(&self) -> Self {
+        Self {
+            tag:self.tag.clone(),
+            label:self.label.clone(),
+            classes:self.classes.clone(),
+            attrs:self.attrs.clone(),
+            styles:self.styles.clone(),
+            children:Vec::new(),
+            sourceref:self.sourceref,
+            width:self.width,
+            font:self.font.clone(),
+            force_font:self.force_font,
+            allow_newline:self.allow_newline,
+            inner_width:self.inner_width,
+        }
+    }
     pub(crate) fn is_empty(&self) -> bool {
         self.children.is_empty()
     }
@@ -139,13 +187,85 @@ impl HTMLNode {
         let urls = &mut state.fontlinks;
         let fnt = state.fonts.first().unwrap();
         let wd = state.widths.first().copied().unwrap();
-        self.display_fmt(store,urls,fnt,wd,0,&mut f)
+        self.display_fmt(store,urls,fnt,wd,0,false,false,&mut f)
     }
 
-    fn display_fmt<W:std::fmt::Write>(mut self,store:&mut FontStore,links:&mut BTreeSet<String>,current_font:&Font,top_width:Dim32,indent:usize,mut f:&mut W) -> std::fmt::Result {
-        use std::fmt::Write;
-        use tex_engine::engine::fontsystem::Font;
-        let mut wd = match self.width {
+    fn display_fmt<W:std::fmt::Write>(mut self,store:&mut FontStore,links:&mut BTreeSet<String>,current_font:&Font,top_width:Dim32,indent:usize,mut in_math:bool,mut in_svg:bool,mut f:&mut W) -> std::fmt::Result {
+        let mut wd = self.do_width_fmt(top_width);
+        let fnt = self.do_font_fmt(store,links,current_font);
+        if self.tag != Tag::None {
+            in_math = self.tag.ismath();
+            in_svg = self.tag.is_svg();
+        }
+        self.tag_fmt(f,in_math,in_svg,|mut s,f| {
+            if !s.classes.is_empty() {
+                f.write_str(" class=\"")?;
+                let mut i = s.classes.iter();
+                write!(f,"{}",i.next().unwrap())?;
+                for c in i {
+                    write!(f," {}",c)?;
+                }
+                f.write_char('"')?;
+            }
+            if !s.attrs.is_empty() {
+                for (k,v) in s.attrs.iter() {
+                    write!(f," {}=\"{}\"",k,v)?;
+                }
+            }
+            if !s.styles.is_empty() || s.width.is_some() {
+                f.write_str(" style=\"")?;
+                for (k,v) in s.styles.iter() {
+                    write!(f,"{}:{};",k,v)?;
+                }
+                f.write_char('"')?;
+            }
+            /*if let Some((start,end)) = self.sourceref {
+                write!(f," data-start=\"{}\" data-end=\"{}\"",start,end)?;
+            }*/
+            f.write_char('>')?;
+            if let Some(w) = s.inner_width {
+                let pctg = w.0 as f64 / (top_width.0 as f64);
+                wd = Some(w);
+                f.write_str(&format!("<span style=\"display:contents;--temp-width:calc({:.2} * var(--document-width))\">",pctg))?;
+            }
+            if wd.is_some() {
+                f.write_str("<span class=\"rustex-contents\">")?;
+            }
+            for c in s.children.into_iter() {
+                match c {
+                    HTMLChild::Node(n) => {
+                        if s.allow_newline {
+                            f.write_char('\n')?;
+                            for _ in 0..=indent {
+                                f.write_str("  ")?;
+                            }
+                        }
+                        n.display_fmt(store,links,&fnt,wd.unwrap_or(top_width),indent+1,in_math,in_svg,f)?
+                    }
+                    HTMLChild::Text(s) => f.write_str(&s)?,
+                    HTMLChild::Glyph(g) => write!(f,"{}",g)?,
+                    HTMLChild::Space => f.write_char(' ')?,
+                    HTMLChild::EscapedSpace => f.write_str("<span class=\"rustex-space-in-hbox\">&#160;</span>")?
+                }
+            }
+            if s.allow_newline {
+                f.write_char('\n')?;
+                for _ in 0..indent {
+                    f.write_str("  ")?;
+                }
+            }
+            if wd.is_some() {
+                f.write_str("</span>")?;
+            }
+            if s.inner_width.is_some() {
+                f.write_str("</span>")?;
+            }
+            Ok(())
+        })
+    }
+
+    fn do_width_fmt(&mut self,top_width:Dim32) -> Option<Dim32> {
+        match self.width {
             Some(w) if w == ZERO => {
                 self.style_str("max-width","0px");
                 None
@@ -166,9 +286,36 @@ impl HTMLNode {
                 Some(w)
             }
             _ => None
-        };
-        let fnt = if let Some(ref font) = self.font {
-            if font.filename() != current_font.filename() {
+        }
+    }
+    fn do_font_fmt(&mut self,store:&mut FontStore,links:&mut BTreeSet<String>,current_font:&Font) -> Font {
+        if let Some(ref font) = self.font {
+            if self.force_font {
+                let new = store.get_info(font.filename());
+                match new.map(|f| f.weblink).flatten() {
+                    Some((name,link)) => {
+                        links.insert(link.to_string());
+                        self.styles.insert(Cow::Borrowed("font-family"),Cow::Owned(name.into()));
+                    }
+                    None if font.filename().ends_with("nullfont") => (),
+                    None => {
+                        self.children.insert(0,HTMLChild::Text(format!("<!-- Unknown web font for {} -->",font.filename())))
+                    }
+                }
+                if let Some(fi) = new {
+                    if fi.styles.capitals {
+                        self.styles.insert(Cow::Borrowed("font-variant"), Cow::Borrowed("small-caps"));
+                    }
+                    if fi.styles.bold {
+                        self.styles.insert(Cow::Borrowed("font-weight"), Cow::Borrowed("bold"));
+                    }
+                    if fi.styles.italic {
+                        self.styles.insert(Cow::Borrowed("font-style"), Cow::Borrowed("italic"));
+                    } else if fi.styles.oblique {
+                        self.styles.insert(Cow::Borrowed("font-style"), Cow::Borrowed("oblique"));
+                    }
+                }
+            } else if font.filename() != current_font.filename() {
                 let old = store.get_info(current_font.filename());
                 let new = store.get_info(font.filename());
                 match (old.map(|f| f.weblink).flatten(),new.map(|f| f.weblink).flatten()) {
@@ -177,6 +324,7 @@ impl HTMLNode {
                         links.insert(link.to_string());
                         self.styles.insert(Cow::Borrowed("font-family"),Cow::Owned(name.into()));
                     }
+                    (_,None) if font.filename().ends_with("nullfont") => (),
                     (_,None) =>
                         self.children.insert(0,HTMLChild::Text(format!("<!-- Unknown web font for {} -->",font.filename())))
                 }
@@ -214,129 +362,82 @@ impl HTMLNode {
                     }
                 }
             }
-            let rel = font.get_at().0 as f32 / (current_font.get_at().0 as f32);
-            if rel != 1.0 {
-                self.styles.insert(Cow::Borrowed("font-size"),Cow::Owned(format!("{:.2}%",(rel * 100.0).round())));
-            }
-            font
-        } else { current_font };
-        match self.tag {
-            Tag::Div => f.write_str("<div")?,
-            Tag::Span => f.write_str("<span")?,
-            Tag::Section => f.write_str("<section")?,
-            Tag::Article => f.write_str("<article")?,
-            Tag::A => f.write_str("<a")?,
-            Tag::B => f.write_str("<b")?,
-            Tag::I => f.write_str("<i")?,
-            Tag::Table => f.write_str("<table")?,
-            Tag::Tr => f.write_str("<tr")?,
-            Tag::Td => f.write_str("<td")?,
-            Tag::None => f.write_str("<span")?,
-            Tag::Math => f.write_str("<math")?,
-            Tag::Mrow => f.write_str("<mrow")?,
-            Tag::Mi => f.write_str("<mi")?,
-            Tag::Mo => f.write_str("<mo")?,
-            Tag::Mspace => f.write_str("<mspace")?,
-        }
-        if !self.classes.is_empty() {
-            f.write_str(" class=\"")?;
-            let mut i = self.classes.iter();
-            write!(f,"{}",i.next().unwrap())?;
-            for c in i {
-                write!(f," {}",c)?;
-            }
-            f.write_char('"')?;
-        }
-        if !self.attrs.is_empty() {
-            for (k,v) in self.attrs.iter() {
-                write!(f," {}=\"{}\"",k,v)?;
-            }
-        }
-        if !self.styles.is_empty() || self.width.is_some() {
-            f.write_str(" style=\"")?;
-            for (k,v) in self.styles.iter() {
-                write!(f,"{}:{};",k,v)?;
-            }
-            f.write_char('"')?;
-        }
-        /*if let Some((start,end)) = self.sourceref {
-            write!(f," data-start=\"{}\" data-end=\"{}\"",start,end)?;
-        }*/
-        f.write_char('>')?;
-        if let Some(w) = self.inner_width {
-            let pctg = w.0 as f64 / (top_width.0 as f64);
-            wd = Some(w);
-            f.write_str(&format!("<span style=\"display:contents;--temp-width:calc({:.2} * var(--document-width))\">",pctg))?;
-        }
-        if wd.is_some() {
-            f.write_str("<span class=\"rustex-contents\">")?;
-        }
-        for c in self.children.into_iter() {
-            match c {
-                HTMLChild::Node(n) => {
-                    if self.allow_newline {
-                        f.write_char('\n')?;
-                        for _ in 0..=indent {
-                            f.write_str("  ")?;
-                        }
-                    }
-                    n.display_fmt(store,links,fnt,wd.unwrap_or(top_width),indent+1,f)?
+            if !font.filename().ends_with("nullfont") {
+                let rel = font.get_at().0 as f32 / (current_font.get_at().0 as f32);
+                if rel != 1.0 {
+                    self.styles.insert(Cow::Borrowed("font-size"), Cow::Owned(format!("{:.2}%", (rel * 100.0).round())));
                 }
-                HTMLChild::Text(s) => f.write_str(&s)?,
-                HTMLChild::Glyph(g) => write!(f,"{}",g)?,
-                HTMLChild::Space => f.write_char(' ')?,
-                HTMLChild::EscapedSpace => f.write_str("<span class=\"rustex-space-in-hbox\">&#160;</span>")?
             }
-        }
-        if self.allow_newline {
-            f.write_char('\n')?;
-            for _ in 0..indent {
-                f.write_str("  ")?;
-            }
-        }
-        if wd.is_some() {
-            f.write_str("</span>")?;
-        }
-        if self.inner_width.is_some() {
-            f.write_str("</span>")?;
+            font.clone()
+        } else { current_font.clone() }
+    }
+    fn tag_fmt<W:std::fmt::Write,F:FnOnce(Self,&mut W) -> std::fmt::Result>(self,f:&mut W,in_math:bool,in_svg:bool,cont:F) -> std::fmt::Result {
+        macro_rules! go {
+            ($tag:ident) => {{
+                f.write_str("<")?;
+                f.write_str(stringify!($tag))?;
+                cont(self,f);
+                f.write_str("</")?;
+                f.write_str(stringify!($tag))?;
+                f.write_str(">")
+            }}
         }
         match self.tag {
-            Tag::Div => f.write_str("</div>")?,
-            Tag::Span => f.write_str("</span>")?,
-            Tag::Section => f.write_str("</section>")?,
-            Tag::Article => f.write_str("</article>")?,
-            Tag::A => f.write_str("</a>")?,
-            Tag::B => f.write_str("</b>")?,
-            Tag::I => f.write_str("</i>")?,
-            Tag::Table => f.write_str("</table>")?,
-            Tag::Tr => f.write_str("</tr>")?,
-            Tag::Td => f.write_str("</td>")?,
-            Tag::None => f.write_str("</span>")?,
-            Tag::Math => f.write_str("</math>")?,
-            Tag::Mrow => f.write_str("</mrow>")?,
-            Tag::Mi => f.write_str("</mi>")?,
-            Tag::Mo => f.write_str("</mo>")?,
-            Tag::Mspace => f.write_str("</mspace>")?,
+            Tag::Div => go!(div),
+            Tag::Span => go!(span),
+            Tag::Section => go!(section),
+            Tag::Article => go!(article),
+            Tag::A => go!(a),
+            Tag::B => go!(b),
+            Tag::I => go!(i),
+            Tag::Table => go!(table),
+            Tag::Tr => go!(tr),
+            Tag::Td => go!(td),
+            Tag::None if in_math => go!(mrow),
+            Tag::None if in_svg => go!(g),
+            Tag::None => go!(span),
+            Tag::Math => go!(math),
+            Tag::Mrow => go!(mrow),
+            Tag::Mi => go!(mi),
+            Tag::Mo => go!(mo),
+            Tag::Mspace => go!(mspace),
+            Tag::MUnderOver => go!(munderover),
+            Tag::MSubSup => go!(msubsup),
+            Tag::MUnder => go!(munder),
+            Tag::MOver => go!(mover),
+            Tag::MSub => go!(msub),
+            Tag::MSup => go!(msup),
+            Tag::MText => go!(mtext),
+            Tag::Svg => go!(svg),
+            Tag::SVGForeign => go!(foreignObject),
+            Tag::G(ref s) => {
+                let s = s.clone();
+                write!(f,"<{}",s)?;
+                cont(self,f);
+                write!(f,"</{}>",s)
+            },
         }
-        Ok(())
     }
+
     pub fn push_node(&mut self,mut n:HTMLNode) {
-        n.close(self.tag.ismath());
+        n.close(self.tag.ismath(),self.tag.is_svg());
         self.children.push(HTMLChild::Node(n));
     }
 
-    pub fn close(&mut self,in_math:bool) {
+    pub fn close(&mut self,in_math:bool,in_svg:bool) {
         match self.tag {
             Tag::None => {
                 if self.children.len() == 1 {
                     match self.children.pop() {
                         Some(HTMLChild::Node(n)) => {
-                            let tag = n.tag;
+                            let tag = n.tag.clone();
                             if self.merge(n) {
                                 self.tag = tag;
                             } else {
                                 if in_math {
                                     self.tag = Tag::Mrow
+                                } else if in_svg {
+                                    self.tag = Tag::G("g".into())
                                 } else {
                                     self.style_str("display", "contents");
                                     self.tag = Tag::Span; // TODO math
@@ -348,6 +449,8 @@ impl HTMLNode {
                     }
                 } else if in_math {
                     self.tag = Tag::Mrow
+                } else if in_svg {
+                    self.tag = Tag::G("g".into())
                 } else {
                     self.style_str("display","contents");
                     self.tag = Tag::Span; // TODO math
@@ -373,6 +476,9 @@ impl HTMLNode {
                 return false;
             }
         }
+        if let Some(w) = n.width {
+            self.width = Some(w);
+        }
         if let Some(f) = n.font {
             self.font = Some(f);
         }
@@ -384,6 +490,13 @@ impl HTMLNode {
         }
         for (k,v) in n.styles {
             self.styles.insert(k,v);
+        }
+        if let Some(sr) = n.sourceref {
+            self.sourceref = Some(sr);
+        }
+        self.force_font = self.force_font || n.force_font;
+        if let Some(iw) = n.inner_width {
+            self.inner_width = Some(iw);
         }
         self.children = n.children;
         true
@@ -437,10 +550,11 @@ impl HTMLNode {
     }
     #[inline(always)]
     pub fn new(label: labels::Label, allow_newline:bool) -> Self {
+        let cls = label.cls.clone();
         let mut r = HTMLNode {
-            tag:label.tag ,label,allow_newline,..Self::default()
+            tag:label.tag.clone() ,label,allow_newline,..Self::default()
         };
-        if let Some(cls) = label.cls { r.class(cls); }
+        if let Some(cls) = cls { r.class(cls); }
         r
     }
 }
@@ -456,6 +570,7 @@ impl Default for HTMLNode {
             sourceref:None,
             width:None,
             allow_newline:false,
+            force_font:false,
             font:None,
             inner_width:None,
         }

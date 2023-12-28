@@ -1,5 +1,7 @@
 mod nodes;
+mod annotations;
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use tex_engine::tex::types::{BoxType, MathClass};
 use crate::engine::{Bx, Font, Refs, Types};
@@ -13,7 +15,7 @@ use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuSkip, MuSkip32, Skip32};
 use tex_engine::engine::state::State;
 use crate::html::{dim_to_string, HTMLChild, HTMLNode, Tag};
-use tex_engine::engine::fontsystem::Font as FontT;
+use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathFontStyle, MathKernel, MathNode, MathNucleus};
@@ -56,18 +58,33 @@ impl<T> Iterator for ExtensibleIter<T> {
 pub(crate) type VNodes = ExtensibleIter<VNode<Types>>;
 pub(crate) type HNodes = ExtensibleIter<HNode<Types>>;
 pub(crate) type MNodes = ExtensibleIter<MNode>;
-pub(crate) type MNode = MathNode<Types,MathFontStyle<Font>>;
+pub(crate) type MNode = MathNode<Types,MathFontStyle<Types>>;
 
-#[derive(Default)]
 pub(crate) struct ShipoutState {
+    pub(crate) done:String,
     pub(crate) output:Vec<HTMLChild>,
     pub(crate) nodes:Vec<HTMLNode>,
     pub(crate) fonts: Vec<Font>,
     pub(crate) widths: Vec<Dim32>,
-    pub(crate) color:PDFColor,
+    pub(crate) colors:Vec<PDFColor>,
     pub(crate) fontlinks:BTreeSet<String>,
     pub(crate) lineskip:LineSkip,
     pub(crate) in_content:bool
+}
+impl Default for ShipoutState {
+    fn default() -> Self {
+        Self {
+            done:String::new(),
+            output:Vec::new(),
+            nodes:Vec::new(),
+            fonts:Vec::new(),
+            widths:Vec::new(),
+            colors:vec!(PDFColor::black()),
+            fontlinks:BTreeSet::new(),
+            lineskip:LineSkip::default(),
+            in_content:false
+        }
+    }
 }
 impl ShipoutState {
     fn do_in<F1:FnOnce(&mut Self),F2:FnOnce(&mut Self,HTMLNode) -> Option<HTMLNode>>(&mut self, node:HTMLNode,f1:F1,f2:F2) {
@@ -76,20 +93,20 @@ impl ShipoutState {
         }
         self.nodes.push(node);
         f1(self);
-        let node = self.nodes.pop().unwrap();
+        let node = annotations::close_all(&mut self.nodes);
         if let Some(_) = node.width {
             self.widths.pop().unwrap();
         }
         match f2(self,node) {
-            Some(node) => self.push(node),
+            Some(node) => self.push(node,false,false),
             None => ()
         }
     }
-    fn push(&mut self, mut node:HTMLNode) {
+    fn push(&mut self, mut node:HTMLNode,in_math:bool,in_svg:bool) {
         match self.nodes.last_mut() {
             Some(parent) => parent.push_node(node),
             None => {
-                node.close(false);
+                node.close(in_math,in_svg);
                 self.output.push(HTMLChild::Node(node))
             }
         }
@@ -125,7 +142,33 @@ fn split_state<R,F:FnOnce(Refs,&mut ShipoutState) -> R>(engine:Refs,f:F) -> R {
     r
 }
 
+
+const TEST_FILE: &str = "/home/jazzpirate/Downloads/example.html";
+const PREAMBLE: &str = r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>example</title>
+  <link rel="stylesheet" type="text/css" href="file:///home/jazzpirate/work/Software/sTeX/RusTeXNew/rustex/src/resources/html.css">
+
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif/cmun-serif.css">
+  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-roman">
+  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-mono">
+</head>
+<body>
+"#;
+const POSTAMBLE: &str = r#"
+</body>
+</html>
+"#;
+
 pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
+/*
+    println!("{}",n.readable());
+    println!("HERE");
+*/
+
     match n {
         VNode::Box(TeXBox::V {children,start,end,..}) => split_state(engine,|engine,state|{
             let mut node = HTMLNode::new(crate::html::labels::PAGE, true);
@@ -170,19 +213,19 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
                 }
                 _ => ()
             }
-
-            let mut out = String::new();
-
+            let mut done = std::mem::take(&mut state.done);
             for c in std::mem::take(&mut state.output) {
                 match c {
                     HTMLChild::Node(n) => {
-                        n.display(&mut engine.fontsystem.glyphmaps,state,&mut out).unwrap();
+                        n.display(&mut engine.fontsystem.glyphmaps,state,&mut done).unwrap();
                     },
                     _ => ()
                 }
 
             }
-            println!("{}",out);
+            state.done = done;
+
+            std::fs::write(TEST_FILE,&format!("{}{}{}",PREAMBLE,state.done,POSTAMBLE)).unwrap();
             println!("HERE")
         }),
         _ => unreachable!()
@@ -208,31 +251,27 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes, top:bool
             VNode::VFill => { currskip.set_fill() }
             VNode::Vss => { currskip.set_fil() }
             VNode::VFilneg => (),
-            VNode::Custom(RusTeXNode::ParagraphBegin{specs,start,end,lineskip}) => {
+            VNode::Custom(RusTeXNode::ParagraphBegin{specs,start,end,lineskip,parskip}) => {
                 nodes::vskip(state,std::mem::take(&mut currskip));
-                nodes::do_paragraph(engine,state,children,specs,start,end,lineskip);
+                nodes::do_paragraph(engine,state,children,specs,start,end,lineskip,parskip);
             }
             VNode::Custom(RusTeXNode::HAlignBegin) => {
                 nodes::vskip(state,std::mem::take(&mut currskip));
                 nodes::do_halign(engine,state,children);
             }
-            VNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => {
-                if let Some(c) = nodes::do_color(state,engine,act) {
-                    todo!()
-                }
-            }
+            VNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => annotations::do_color(state,engine,act,false,false),
             VNode::Custom(RusTeXNode::FontChange(font,true)) => {
                 if state.in_content {
                     todo!()
                 }
                 *state.fonts.last_mut().unwrap() = font;
             }
-            VNode::Custom(RusTeXNode::FontChange(font,false)) => {
-                let mut node = HTMLNode::new(crate::html::labels::FONT_CHANGE,false);
-                node.set_font(font);
-                state.nodes.push(node);
-            }
-            VNode::Custom(RusTeXNode::FontChangeEnd) => nodes::close_font(state),
+            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
+                annotations::do_link(link,state,true),
+            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
+                annotations::close_link(state,false,false),
+            VNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,font),
+            VNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state,false,false),
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_))) | VNode::Penalty(_) => (),
             c => {
                 nodes::vskip(state,std::mem::take(&mut currskip));
@@ -255,23 +294,20 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes, inpar:bo
             HNode::HFil | HNode::Hss => currskip.set_fil(),
             HNode::HFill => currskip.set_fill(),
             HNode::HFilneg => (),
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => {
-                if let Some(c) = nodes::do_color(state,engine,act) {
-                    todo!()
-                }
-            }
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => annotations::do_color(state,engine,act,false,false),
             HNode::Custom(RusTeXNode::FontChange(font,true)) => {
                 if state.in_content {
                     todo!()
                 }
                 *state.fonts.last_mut().unwrap() = font;
             }
-            HNode::Custom(RusTeXNode::FontChange(font,false)) => {
-                let mut node = HTMLNode::new(crate::html::labels::FONT_CHANGE,false);
-                node.set_font(font);
-                state.nodes.push(node);
-            }
-            HNode::Custom(RusTeXNode::FontChangeEnd) => nodes::close_font(state),
+            HNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,font),
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
+                annotations::do_link(link,state,false),
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
+                annotations::close_link(state,false,false),
+            HNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state,false,false),
+            HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_))) | HNode::Penalty(_) => (),
             c => {
                 nodes::hskip(state,std::mem::take(&mut currskip));
@@ -305,21 +341,21 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
             MathNode::MSkip {skip,..} => {
                 if let Some((_,node)) = std::mem::take(&mut currclass) {
                     nodes::mskip(state,currskip);
-                    state.push(node)
+                    state.push(node,true,false)
                 }
                 currskip = Mu(currskip.0 + skip.base.0);
             }
             MathNode::MKern{kern,..} => {
                 if let Some((_,node)) = std::mem::take(&mut currclass) {
                     nodes::mskip(state,currskip);
-                    state.push(node)
+                    state.push(node,true,false)
                 }
                 currskip = Mu(currskip.0 + kern.0);
             }
             MathNode::Space => {
                 if let Some((_,node)) = std::mem::take(&mut currclass) {
                     nodes::mskip(state,currskip);
-                    state.push(node)
+                    state.push(node,true,false)
                 }
                 currskip = Mu(currskip.0 + (65536 / 2));
             }
@@ -327,22 +363,22 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
                 if sk.base != ZERO {
                     if let Some((_,node)) = std::mem::take(&mut currclass) {
                         nodes::mskip(state,currskip);
-                        state.push(node)
+                        state.push(node,true,false)
                     }
                     let mut node = HTMLNode::new(crate::html::labels::HKERN_IN_M,true);
                     node.style("margin-left",dim_to_string(sk.base));
-                    state.push(node)
+                    state.push(node,true,false)
                 }
             },
             MathNode::HKern(d) => {
                 if d != ZERO {
                     if let Some((_,node)) = std::mem::take(&mut currclass) {
                         nodes::mskip(state,currskip);
-                        state.push(node)
+                        state.push(node,true,false)
                     }
                     let mut node = HTMLNode::new(crate::html::labels::HKERN_IN_M,true);
                     node.style("margin-left",dim_to_string(d));
-                    state.push(node)
+                    state.push(node,true,false)
                 }
             },
             MathNode::Atom(a) if a.sup.is_none() && a.sub.is_none() => match a.nucleus {
@@ -350,15 +386,54 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
                     nodes::mskip(state,std::mem::take(&mut currskip));
                     nodes::do_mathchar(engine,state,&mut currclass,char,cls,font);
                 }
+                MathNucleus::Simple{kernel:MathKernel::List {children,..},cls,..} => {
+                    nodes::mskip(state,currskip);
+                    if let Some((_,node)) = std::mem::take(&mut currclass) {
+                        state.push(node,true,false)
+                    }
+                    let mut node = HTMLNode::new(crate::html::labels::DUMMY,true);
+                    if let Some(Cow::Borrowed(s)) = node_from_class(cls).classes.pop() {
+                        node.class(s);
+                    }
+                    state.do_in(node,|state| {
+                        do_mathlist(engine,state,&mut children.into_vec().into())
+                    },|_,node| if node.label == crate::html::labels::DUMMY {Some(node)} else {
+                        todo!()
+                    });
+                }
                 MathNucleus::Inner(MathKernel::List{children:nc,..}) => children.prefix(nc.into_vec()),
+                MathNucleus::Inner(MathKernel::Box(bx)) | MathNucleus::Simple {kernel:MathKernel::Box(bx),cls:MathClass::Ord,..} => {
+                    if bx.is_empty() {
+                        todo!("empty box in math")
+                    } else {
+                        nodes::mskip(state,currskip);
+                        if let Some((_,node)) = std::mem::take(&mut currclass) {
+                            state.push(node,true,false)
+                        }
+                        nodes::box_in_math(engine,state,bx)
+                    }
+                }
                 o => todo!(" {:?}",o)
             }
+            MathNode::Atom(a) => {
+                nodes::mskip(state,currskip);
+                if let Some((_,node)) = std::mem::take(&mut currclass) {
+                    state.push(node,true,false)
+                }
+                nodes::do_sub_sup(engine,state,a)
+            }
+            MathNode::Choice(c) => children.prefix(c.0.into_vec()),
+            MathNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => annotations::do_color(state,engine,act,true,false),
+            MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
+                annotations::do_link(link,state,false),
+            MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
+                annotations::close_link(state,true,false),
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg => (),
             o => todo!(" {:?}",o)
         }
     }
     nodes::mskip(state,currskip);
-    if let Some((_,node)) = currclass { state.push(node) }
+    if let Some((_,node)) = currclass { state.push(node,true,false) }
 }
 
 fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>, top:bool) {
@@ -378,6 +453,7 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>, top:bool) {
             let VNode::HRule {start,end,..} = v else {unreachable!()};
             nodes::hrule(start,end,width,height,depth,state)
         }
+        VNode::Mark(..) => (),
         _ => panic!("Here: {:?}",n)
     }
 }
@@ -393,16 +469,17 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>, par:bool,escape_s
         HNode::Box(TeXBox::H {info:HBoxInfo::ParIndent(d),..}) => {
             let mut node = HTMLNode::new(crate::html::labels::PARINDENT,false);
             node.style("margin-left",dim_to_string(d));
-            state.push(node);
+            state.push(node,false,false);
         }
         HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
         HNode::Whatsit(wi) => wi.call(engine),
         HNode::Char {char,font,..} => {
+            if font == engine.fontsystem.null() { return }
             state.in_content = true;
             let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
             let glyph = glyphtable.get(char);
             if !glyph.is_defined() {
-                nodes::do_missing_glyph(char,&font,state);
+                nodes::do_missing_glyph(char,&font,state,false,false);
             } else {
                 state.push_glyph(glyph)
             }
@@ -416,6 +493,8 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>, par:bool,escape_s
         }
         HNode::MathGroup(mg) if mathlist_is_h(&mg.children) => nodes::do_math_in_h(mg,state,engine,par,escape_space),
         HNode::MathGroup(mg) => nodes::do_math(mg,state,engine),
+        HNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) => nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
+        HNode::Leaders(_) => (), // TODO?
         _ => todo!("{:?}",n)
     }
 }
@@ -431,14 +510,13 @@ fn mathlist_is_h(ls: &[MNode]) -> bool {
         }
         MathNode::HSkip(_) | MathNode::HFil | MathNode::HFill | MathNode::HFilneg | MathNode::Hss | MathNode::Space |
             MathNode::MSkip {..} | MathNode::MKern {..} | MathNode::HKern(_) | MathNode::Penalty(_) |
-            MathNode::Mark(..) | MathNode::VRule {..} | MathNode::Whatsit(_) | MathNode::Insert | MathNode::VAdjust(_) |
-            MathNode::Custom(_) => true,
+            MathNode::Mark(..) | MathNode::VRule {..} | MathNode::Whatsit(_) | MathNode::Custom(_) => true,
         _ => false
     })
 
 }
 
-fn kernel_is_h(k:&MathKernel<Types,MathFontStyle<Font>>) -> bool {
+fn kernel_is_h(k:&MathKernel<Types,MathFontStyle<Types>>) -> bool {
     match k {
         MathKernel::Empty => true,
         MathKernel::Box(_) => true,

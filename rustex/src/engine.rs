@@ -95,10 +95,7 @@ fn get_state() -> (RusTeXState,Memory) {
                                  "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",
                                  true, false
                 );
-                register_command(&mut engine, true, "pgfsysdriver", "",
-                                 "pgfsys-rustex.def",
-                                 false, false
-                );
+                crate::pgf::register_pgf(&mut engine);
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
                 return (engine.state, engine.aux.memory)
@@ -150,12 +147,12 @@ static ref AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
     catcodes[32] = CategoryCode::Space;
     catcodes[13] = CategoryCode::EOL;
     catcodes[37] = CategoryCode::Comment;
-    for i in 65..91 { catcodes[i] = CategoryCode::Letter}
+    for i in 64..91 { catcodes[i] = CategoryCode::Letter}
     for i in 97..123 { catcodes[i] = CategoryCode::Letter}
     catcodes
 };
 }
-fn register_command(e: &mut DefaultEngine<Types>,globally:bool,name:&'static str,sig:&'static str,exp:&'static str,protect:bool,long:bool) {
+pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     use tex_engine::engine::utils::memory::MemoryManager;
     use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
     let e = e.get_engine_refs();

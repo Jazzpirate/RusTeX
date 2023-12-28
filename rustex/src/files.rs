@@ -20,7 +20,7 @@ impl FileSystem for Files {
     fn new(pwd: PathBuf) -> Self {
         Self(tex_engine::engine::filesystem::NoOutputFileSystem::new(pwd))
     }
-    #[inline(always)]
+
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         use tex_engine::tex::input_text::*;
         let sr = path.as_ref();

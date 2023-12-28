@@ -301,6 +301,11 @@ svg, foreignObject {
     overflow: visible;
 }
 foreignObject {display: flex;}
+
+.rustex_svg {
+    display:inline-block;
+}
+
 .rustex-pdfmatrix {
     transform-origin: bottom left;
     display: inline-block;

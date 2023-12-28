@@ -4,7 +4,7 @@ use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData};
-use tex_engine::engine::utils::memory::MemoryManager;
+use tex_engine::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
 use tex_engine::tex::numerics::Dim32;
 use tex_engine::tex::token::CompactToken;
@@ -20,6 +20,7 @@ use tex_engine::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::nodes::vertical::VNode;
 use crate::shipout::ZERO;
+use tex_engine::tex::types::TeXMode;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,
@@ -47,10 +48,10 @@ impl Stomach for RusTeXStomach {
 
     fn do_font(engine: Refs, _token: CompactToken, f: Font, global: bool) {
         let g = global || engine.aux.extension.change_markers.len() == 0;
-        Self::add_node(engine,
-                       || VNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
-                       || HNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
-                       || MathNode::Custom(RusTeXNode::FontChange(f.clone(),g))
+        tex_engine::add_node!(Self;engine,
+                       VNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
+                       HNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
+                       MathNode::Custom(RusTeXNode::FontChange(f.clone(),g))
         );
         if !g {
             engine.aux.extension.change_markers.last_mut().unwrap().push(FontChange(f.clone()));
@@ -59,58 +60,28 @@ impl Stomach for RusTeXStomach {
         insert_afterassignment(engine);
     }
 
-    fn end_box(engine:&mut EngineReferences<Self::ET>,bt:BoxType) {
-        match engine.stomach.data_mut().open_lists.last() {
-            Some(NodeList::Horizontal{tp:HorizontalNodeListType::Paragraph(_),..}) => Self::close_paragraph(engine),
-            _ => ()
+    fn close_box(engine:&mut EngineReferences<Self::ET>, bt:BoxType) {
+        let markers = std::mem::take(engine.aux.extension.change_markers.last_mut().unwrap());
+        for _ in markers {
+            tex_engine::add_node!(Self;engine,
+                            VNode::Custom(RusTeXNode::FontChangeEnd),
+                            HNode::Custom(RusTeXNode::FontChangeEnd),
+                           MathNode::Custom(RusTeXNode::FontChangeEnd)
+            )
         }
-        match engine.stomach.data_mut().open_lists.pop() {
-            Some(NodeList::Vertical {mut children,tp:VerticalNodeListType::VAdjust}) if bt == BoxType::Vertical => {
-                for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
-                    children.push(VNode::Custom(RusTeXNode::FontChangeEnd));
-                }
-                engine.state.pop(engine.aux,engine.mouth);
-                Self::add_node_h(engine,HNode::VAdjust(children.into()))
-            }
-            Some(NodeList::Vertical {mut children,tp:VerticalNodeListType::Box(info,start,target)})  if bt == BoxType::Vertical => {
-                for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
-                    children.push(VNode::Custom(RusTeXNode::FontChangeEnd));
-                }
-                engine.state.pop(engine.aux,engine.mouth);
-                let bx = TeXBox::V {
-                    children:children.into(),info,start,end:engine.mouth.current_sourceref(),
-                };
-                Self::add_box(engine,bx,target)
-            }
-            Some(NodeList::Vertical {mut children,tp:VerticalNodeListType::VCenter(start)}) if bt == BoxType::Vertical => {
-                for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
-                    children.push(VNode::Custom(RusTeXNode::FontChangeEnd));
-                }
-                engine.state.pop(engine.aux,engine.mouth);
-                Self::add_node_m(engine,MathNode::Atom(MathAtom {
-                    nucleus: MathNucleus::VCenter {children:children.into(),start,end:engine.mouth.current_sourceref()},
-                    sub:None,sup:None
-                }))
-            }
-            Some(NodeList::Horizontal {mut children,tp:HorizontalNodeListType::Box(info,start,target)}) if bt == BoxType::Horizontal => {
-                for _ in engine.aux.extension.change_markers.last_mut().unwrap().drain(..) {
-                    children.push(HNode::Custom(RusTeXNode::FontChangeEnd));
-                }
-                engine.state.pop(engine.aux,engine.mouth);
-                let bx = TeXBox::H {
-                    children:children.into(),info,start,end:engine.mouth.current_sourceref(),
-                };
-                Self::add_box(engine,bx,target)
-            }
-            o => todo!("throw error: {:?}",o),
-        }
+        tex_engine::engine::stomach::methods::close_box(engine,bt)
     }
 
     fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<HNode<Types>>, sourceref: SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         let ret = split_paragraph_roughly(engine,specs.clone(),children,sourceref.clone());
         engine.stomach.prevent_shipout = true;
-        Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphBegin{specs,start:sourceref,end:engine.mouth.current_sourceref(),lineskip:LineSkip::get(engine.state)}));
+        Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphBegin{specs,
+            start:sourceref,
+            end:engine.mouth.current_sourceref(),
+            lineskip:LineSkip::get(engine.state),
+            parskip:engine.state.get_primitive_skip(PRIMITIVES.parskip)
+        }));
         for line in ret {
             match line {
                 ParLine::Adjust(n) => Self::add_node_v(engine,n),
@@ -130,7 +101,7 @@ impl Stomach for RusTeXStomach {
     }
 
     fn open_align(engine: Refs, _inner: BoxType, between: BoxType) {
-        Self::add_node(engine,|| VNode::Custom(RusTeXNode::HAlignBegin), || HNode::Custom(RusTeXNode::HAlignBegin), || unreachable!());
+        tex_engine::add_node!(Self;engine,VNode::Custom(RusTeXNode::HAlignBegin),HNode::Custom(RusTeXNode::HAlignBegin),unreachable!());
         engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
         engine.stomach.data_mut().open_lists.push(
             if between == BoxType::Vertical {
@@ -160,7 +131,7 @@ impl Stomach for RusTeXStomach {
             }
             _ => todo!("throw error")
         };
-        Self::add_node(engine,|| VNode::Custom(RusTeXNode::HAlignEnd), || HNode::Custom(RusTeXNode::HAlignEnd), || unreachable!());
+        tex_engine::add_node!(Self;engine,VNode::Custom(RusTeXNode::HAlignEnd),HNode::Custom(RusTeXNode::HAlignEnd),unreachable!());
     }
 }
 
@@ -210,6 +181,9 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
         match n {
             VNode::Custom(r@RusTeXNode::ParagraphBegin{..}) => {
                 in_par = Some(r.clone());
+            }
+            VNode::Custom(RusTeXNode::ParagraphEnd) => {
+                in_par = None;
             }
             VNode::Mark(i, v) => {
                 if !data.firstmarks.contains_key(&i) {

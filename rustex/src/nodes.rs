@@ -5,8 +5,10 @@ use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::ParLineSpec;
 use tex_engine::engine::utils::memory::PRIMITIVES;
 use tex_engine::tex::nodes::{CustomNodeTrait, NodeTrait};
+use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::types::NodeType;
+use tex_engine::utils::HMap;
 use crate::engine::{Font, SRef, Types};
 use crate::shipout::ZERO;
 use crate::state::RusTeXState;
@@ -42,18 +44,29 @@ pub enum RusTeXNode {
     ParagraphBegin{
         specs:Vec<ParLineSpec<Types>>,
         start:SRef,
+        parskip:Skip32<Dim32>,
         end:SRef,
         lineskip:LineSkip,
     },
     ParagraphEnd,
     HAlignBegin,HAlignEnd,
-    Br
+    Br,
+    PGFGBegin {
+        attrs : HMap<&'static str,String>,tag:String,
+    },
+    PGFGEnd,
+    PGFEscape(TeXBox<Types>),
+    PGFSvg {
+        bx:TeXBox<Types>,
+        minx:Dim32,miny:Dim32,maxx:Dim32,maxy:Dim32,
+    }
 }
 impl CustomNodeTrait<Types> for RusTeXNode {}
 impl NodeTrait<Types> for RusTeXNode {
     fn height(&self) -> Dim32 {
         match self {
             Self::PDFNode(n) => n.height(),
+            Self::PGFSvg { miny, maxy, .. } => *maxy + -*miny,
             _ => ZERO
         }
     }
@@ -66,6 +79,7 @@ impl NodeTrait<Types> for RusTeXNode {
     fn width(&self) -> Dim32 {
         match self {
             Self::PDFNode(n) => n.width(),
+            Self::PGFSvg { minx, maxx, .. } => *maxx + -*minx,
             _ => ZERO
         }
     }
@@ -73,6 +87,12 @@ impl NodeTrait<Types> for RusTeXNode {
     fn readable_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PDFNode(n) => n.readable_fmt(indent,f),
+            Self::PGFSvg {bx,..} => {
+                write!(f,"<svg>")?;
+                bx.readable_fmt(indent+2,f)?;
+                write!(f,"</svg>")?;
+                Ok(())
+            }
             _ => write!(f,"<{:?}>",self)
         }
     }
