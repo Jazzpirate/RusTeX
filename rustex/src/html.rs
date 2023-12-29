@@ -136,6 +136,7 @@ pub(crate) mod labels {
     pub(crate) fn svg_g(s:String) -> Label { Label { id: 49, cls: None, tag: Tag::G(s) } }
     pub(crate) const SVG_FOREIGN: Label = Label { id: 50, cls: None, tag: Tag::SVGForeign };
     pub(crate) const SVG_ESCAPE_DIV: Label = Label { id: 50, cls: Some("rustex-foreign"), tag: Tag::Div };
+    pub(crate) const PDF_MATRIX: Label = Label { id: 51, cls: Some("rustex-pdfmatrix"), tag: Tag::Span };
 }
 
 #[derive(Debug)]

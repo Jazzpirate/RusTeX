@@ -265,9 +265,9 @@ fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Ty
     let mut m = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(),&AT_LETTER_SCHEME,"#1#2","");
     m.long = true;
     engine.state.set_command(&engine.aux,mkboth,Some(Command::Macro(m)),true);
+    let empty = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(), &AT_LETTER_SCHEME, "", "");
     for s in undefineds.into_iter() {
-        let m = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(),&AT_LETTER_SCHEME,"","");
-        engine.state.set_command(&engine.aux,s,Some(Command::Macro(m)),true)
+        engine.state.set_command(&engine.aux, s, Some(Command::Macro(empty.clone())), true)
     }
     let data = engine.stomach.data_mut();
     data.page.insert(0,VNode::Custom(RusTeXNode::PageBegin));

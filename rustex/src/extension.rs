@@ -43,5 +43,5 @@ impl PDFExtension<Types> for RusTeXExtension {
     #[inline(always)]
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<Types>> { self.pdf.pdfxforms() }
     #[inline(always)]
-    fn pdfximages(&mut self) -> &mut Vec<PDFXImage> { self.pdf.pdfximages() }
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage<Types>> { self.pdf.pdfximages() }
 }

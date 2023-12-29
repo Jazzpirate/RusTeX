@@ -119,6 +119,11 @@ impl ShipoutState {
     fn push_space(&mut self) {
         self.nodes.last_mut().unwrap().push_space()
     }
+
+    #[inline(always)]
+    fn push_text(&mut self,text:String) {
+        self.nodes.last_mut().unwrap().push_text(text)
+    }
     #[inline(always)]
     fn push_escaped_space(&mut self) {
         self.nodes.last_mut().unwrap().children.push(HTMLChild::EscapedSpace)
@@ -394,7 +399,7 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes, top:bool
                 annotations::close_link(state,false,false),
             VNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,font),
             VNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state,false,false),
-            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_))) | VNode::Penalty(_) => (),
+            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_)| PDFNode::PDFSave)) | VNode::Penalty(_) => (),
             c => {
                 nodes::vskip(state,std::mem::take(&mut currskip));
                 do_v(engine,state,c,top)
@@ -430,7 +435,7 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes, inpar:bo
                 annotations::close_link(state,false,false),
             HNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state,false,false),
             HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_))) | HNode::Penalty(_) => (),
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave)) | HNode::Penalty(_) => (),
             c => {
                 nodes::hskip(state,std::mem::take(&mut currskip));
                 do_h(engine,state,c,inpar,escape_space)
@@ -575,6 +580,19 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>, top:bool) {
             let VNode::HRule {start,end,..} = v else {unreachable!()};
             nodes::hrule(start,end,width,height,depth,state)
         }
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFMatrix {scale, rotate,skewx,skewy})) =>
+            annotations::do_matrix(state,scale,rotate,skewx,skewy,false,false),
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => annotations::reset_matrix(state,false,false),
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::XImage(img))) => {
+            let mut attr = String::new();
+            if let Some(w) = img.width {
+                attr.push_str(&format!(" width=\"{}\"",dim_to_string(w)));
+            }
+            if let Some(h) = img.height {
+                attr.push_str(&format!(" height=\"{}\"",dim_to_string(h)));
+            }
+            state.push_text(format!("<img src=\"{}\"{}/>",img.filepath.display(),attr));
+        }
         VNode::Mark(..) => (),
         _ => panic!("Here: {:?}",n)
     }
@@ -613,10 +631,23 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>, par:bool,escape_s
             let HNode::VRule {start,end,..} = v else {unreachable!()};
             nodes::vrule(start,end,width,height,depth,state,par)
         }
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFMatrix {scale, rotate,skewx,skewy})) =>
+            annotations::do_matrix(state,scale,rotate,skewx,skewy,false,false),
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => annotations::reset_matrix(state,false,false),
         HNode::MathGroup(mg) if mathlist_is_h(&mg.children) => nodes::do_math_in_h(mg,state,engine,par,escape_space),
         HNode::MathGroup(mg) => nodes::do_math(mg,state,engine),
         HNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) => nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
         HNode::Leaders(_) => (), // TODO?
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::XImage(img))) => {
+            let mut attr = String::new();
+            if let Some(w) = img.width {
+                attr.push_str(&format!(" width=\"{}\"",dim_to_string(w)));
+            }
+            if let Some(h) = img.height {
+                attr.push_str(&format!(" height=\"{}\"",dim_to_string(h)));
+            }
+            state.push_text(format!("<img src=\"{}\"{}/>",img.filepath.display(),attr));
+        }
         _ => todo!("{:?}",n)
     }
 }
