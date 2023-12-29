@@ -1,6 +1,5 @@
 use std::fmt::Write;
-use std::marker::PhantomData;
-use tex_engine::commands::pdftex::pdftexnodes::{NumOrName, PDFCatalog, PDFColor, PDFDestType, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFXForm, PDFXImage};
+use tex_engine::pdflatex::nodes::PDFNode;
 use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::ParLineSpec;
 use tex_engine::engine::utils::memory::PRIMITIVES;

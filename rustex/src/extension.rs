@@ -1,4 +1,4 @@
-use tex_engine::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
+use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
 use tex_engine::engine::{EngineExtension, EngineTypes};
 use crate::engine::{Font, Refs, Types};
 use crate::nodes::RusTeXNode;

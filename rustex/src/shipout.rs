@@ -4,10 +4,10 @@ mod annotations;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use tex_engine::tex::types::{BoxType, MathClass};
-use crate::engine::{Bx, Font, Refs, Types};
+use crate::engine::{Bx, Font, Refs, SRef, Types};
 use std::fmt::Write;
 use std::vec::IntoIter;
-use tex_engine::commands::pdftex::pdftexnodes::{NumOrName, PDFColor, PDFDest, PDFNode};
+use tex_engine::pdflatex::nodes::{PDFColor, PDFDest, PDFNode};
 use tex_engine::engine::{EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
@@ -69,7 +69,7 @@ pub(crate) struct ShipoutState {
     pub(crate) colors:Vec<PDFColor>,
     pub(crate) fontlinks:BTreeSet<String>,
     pub(crate) lineskip:LineSkip,
-    pub(crate) in_content:bool
+    pub(crate) in_content:bool,
 }
 impl Default for ShipoutState {
     fn default() -> Self {
@@ -154,6 +154,7 @@ const PREAMBLE: &str = r#"
 
   <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif/cmun-serif.css">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-roman">
+  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-sans">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-mono">
 </head>
 <body>
@@ -163,6 +164,45 @@ const POSTAMBLE: &str = r#"
 </html>
 "#;
 
+pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut ShipoutState,f:F,start:SRef,end:SRef) -> HTMLNode {
+    let mut node = HTMLNode::new(crate::html::labels::PAGE, true);
+    node.sourceref(start,end);
+    state.do_in(node,|state| {
+        f(engine,state)
+    },|state,node| if node.label == crate::html::labels::PAGE {state.output.push(HTMLChild::Node(node));None} else {
+        todo!()
+    });
+    let mut page = if let Some(HTMLChild::Node(page)) = state.output.pop() {page} else {unreachable!()};
+    let mut inner = HTMLNode::new(crate::html::labels::INNER_PAGE, true);
+    inner.children = std::mem::take(&mut page.children);
+
+    let pagewidth = engine.state.get_primitive_dim(PRIMITIVES.pdfpagewidth);
+    page.style("max-width",dim_to_string(pagewidth));
+    let font = state.fonts.first().unwrap();
+    inner.style("max-width",dim_to_string(pagewidth));
+    let textwidth = state.widths.first().copied().unwrap();
+    let scale = (textwidth.0 as f64) / (pagewidth.0 as f64);
+    inner.style("--document-width",format!("calc({:.2} * min(100vw,{}))",scale,dim_to_string(pagewidth)));
+    let margin = (pagewidth.0 as f64 - (textwidth.0 as f64)) / (2.0 * pagewidth.0 as f64) * 100.0;
+    inner.style("padding-left",format!("{:.2}%",margin));
+    inner.style("padding-right",format!("{:.2}%",margin));
+    inner.style("line-height",format!("{:.2}",state.lineskip.factor(font) / (font.get_at().0 as f64)));
+    page.children.push(HTMLChild::Node(inner));
+
+    page.style("font-size",dim_to_string(font.get_at()));
+    let store = &mut engine.fontsystem.glyphmaps;
+    let fi = store.get_info(font.filename());
+    match fi.map(|f| f.weblink).flatten() {
+        Some((name,link)) => {
+            state.fontlinks.insert(link.to_string());
+            page.style("font-family",name.into());
+        }
+        _ => {
+            page.children.insert(0,HTMLChild::Text(format!("<!-- Unknown web font for {} -->",font.filename())));
+        }
+    }
+    page
+}
 pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
 /*
     println!("{}",n.readable());
@@ -171,6 +211,13 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
 
     match n {
         VNode::Box(TeXBox::V {children,start,end,..}) => split_state(engine,|engine,state|{
+            let vec = children.into_vec();
+            let page = make_page(engine,state,|engine,state| {
+                do_vlist(engine,state,&mut vec.into(),true)
+            },start,end);
+
+
+            /*
             let mut node = HTMLNode::new(crate::html::labels::PAGE, true);
             node.sourceref(start,end);
             state.do_in(node,|state| {
@@ -213,6 +260,7 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
                 }
                 _ => ()
             }
+
             let mut done = std::mem::take(&mut state.done);
             for c in std::mem::take(&mut state.output) {
                 match c {
@@ -223,6 +271,11 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
                 }
 
             }
+             */
+            let mut done = std::mem::take(&mut state.done);
+            page.display(&mut engine.fontsystem.glyphmaps,state,&mut done).unwrap();
+
+
             state.done = done;
 
             std::fs::write(TEST_FILE,&format!("{}{}{}",PREAMBLE,state.done,POSTAMBLE)).unwrap();
@@ -233,9 +286,40 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
 }
 #[inline(always)]
 pub(crate) fn shipout(engine:Refs, n: VNode<Types>) {
-    split_state(engine,|engine,state|{
-        do_v(engine,state,n,true);
-    });
+    match n {
+        VNode::Box(TeXBox::V { children, start, end, .. }) => {
+            split_state(engine, |engine, state| {
+                let node = HTMLNode::new(crate::html::labels::PAGE, true);
+                state.do_in(node, |state| {
+                    do_vlist(engine, state, &mut children.into_vec().into(), true)
+                }, |state, node| if node.label == crate::html::labels::PAGE { state.output.push(HTMLChild::Node(node));None } else {
+                    todo!()
+                });;
+                let mut done = std::mem::take(&mut state.done);
+                let nodes = if let Some(HTMLChild::Node(n)) = state.output.pop() { n.children } else { unreachable!() };
+                for c in nodes {
+                    match c {
+                        HTMLChild::Node(n) => {
+                            n.display(&mut engine.fontsystem.glyphmaps, state, &mut done).unwrap();
+                            done.write_char('\n').unwrap();
+                        },
+                        _ => ()
+                    }
+                }
+                state.done = done;
+                let page = make_page(engine,state,|engine,state| {
+                    state.nodes.last_mut().unwrap().push_text(state.done.clone())
+                },start,end);
+
+                let mut out = String::new();
+                page.display(&mut engine.fontsystem.glyphmaps,state,&mut out).unwrap();
+
+                std::fs::write(TEST_FILE,&format!("{}{}{}",PREAMBLE,out,POSTAMBLE)).unwrap();
+                println!("HERE")
+            });
+        }
+        _ => unreachable!()
+    }
 }
 
 pub(crate) const ZERO: Dim32 = Dim32(0);

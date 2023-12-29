@@ -14,24 +14,26 @@ use crate::extension::FontChange;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
-use tex_engine::tex::nodes::boxes::TeXBox;
+use tex_engine::tex::nodes::boxes::{TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::nodes::vertical::VNode;
 use crate::shipout::ZERO;
 use tex_engine::tex::types::TeXMode;
+use tex_engine::tex::numerics::TeXDimen;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,
     data:StomachData<Types>,
-    prevent_shipout:bool
+    prevent_shipout:bool,
+    pub continuous:bool
 }
 impl Stomach for RusTeXStomach {
     type ET = Types;
     #[inline(always)]
     fn new(_aux: &mut EngineAux<Types>, _state: &mut RusTeXState) -> Self {
-        Self { afterassignment:None, data:StomachData::new(), prevent_shipout:false }
+        Self { afterassignment:None, data:StomachData::new(), prevent_shipout:false,continuous:false }
     }
     #[inline(always)]
     fn afterassignment(&mut self) -> &mut Option<CompactToken> {
@@ -92,11 +94,17 @@ impl Stomach for RusTeXStomach {
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphEnd));
     }
 
-    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
+    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>,penalty:Option<i32>) {
         if engine.stomach.prevent_shipout { return }
+        let continuous = engine.stomach.continuous;
         let data = engine.stomach.data_mut();
-        if !data.in_output && data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
-            Self::do_shipout_output(engine, None)
+        if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() {
+            if continuous {
+                data.pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX / 3);
+                Self::do_shipout_output(engine,Some(-10000));
+            } else if data.pagetotal >= data.pagegoal || penalty.is_some() {
+                Self::do_shipout_output(engine, penalty)
+            }
         }
     }
 
@@ -192,7 +200,7 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
                 data.botmarks.insert(*i,v.clone());
             }
             _ => {
-                target = target + (-n.height()); // - n.depth() ?
+                target = target -(n.height() + n.depth()); // - n.depth() ?
                 if target < ZERO {
                     split = i;
                     break

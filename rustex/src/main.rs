@@ -10,6 +10,9 @@ use std::path::Path;
 use clap::Parser;
 use log::info;
 use tex_engine::engine::TeXEngine;
+use tex_engine::pdflatex::commands::register_pdftex_primitives;
+use tex_engine::pdflatex::PlainPDFTeXEngine;
+
 fn main() {
     //profile()
     thesis()
@@ -18,14 +21,15 @@ fn main() {
 
 fn thesis() {
     env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex")
+    //RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex")
+    RusTeXEngine::do_file("/home/jazzpirate/test.tex")
 }
 
 fn profile() {
     env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let mut engine = tex_engine::engine::PlainPDFTeXEngine::new();
+    let mut engine = PlainPDFTeXEngine::new();
     engine.initialize_etex();
-    tex_engine::commands::pdftex::register_pdftex_primitives(&mut engine);
+    register_pdftex_primitives(&mut engine);
     engine.init_file("pdftexconfig.tex").unwrap();
     let state = engine.state.clone();
     for _ in 0..30 {

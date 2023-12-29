@@ -1,13 +1,11 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 use tex_engine::commands::{Command, CommandScope, Unexpandable};
-use tex_engine::commands::pdftex::pdftexnodes::{MinimalPDFExtension, PDFNode};
 use tex_engine::commands::primitives::register_unexpandable;
-use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, filesystem, state, utils};
+use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
-use tex_engine::engine::stomach::StomachWithShipout;
 use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
 use tex_engine::engine::utils::outputs::LogOutputs;
 use tex_engine::tex;
@@ -22,12 +20,11 @@ use tex_engine::engine::mouth::Mouth;
 use tex_engine::engine::gullet::Gullet;
 use tex_engine::engine::stomach::Stomach as StomachT;
 use tex_engine::engine::filesystem::FileSystem;
-use tex_engine::engine::PDFTeXEngine;
+use tex_engine::pdflatex::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
 use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::catcodes::CategoryCode;
 use tex_engine::tex::nodes::boxes::TeXBox;
-use tex_engine::tex::types::BoxType;
 use crate::nodes::RusTeXNode;
 use crate::state::RusTeXState;
 use crate::stomach::{CLOSE_FONT, close_font, RusTeXStomach};
@@ -56,7 +53,7 @@ impl EngineTypes for Types {
     type State = RusTeXState;
     type Memory = utils::memory::ReuseTokenLists<Self::Token>;
     type File = VirtualFile<u8>;
-    type FileSystem = crate::files::Files;
+    type FileSystem = crate::files::RusTeXFileSystem;
     type Outputs = LogOutputs;
     type Mouth = DefaultMouth<Self::Token,Self::File>;
     type Gullet = DefaultGullet<Self>;
@@ -122,7 +119,7 @@ fn get_engine() -> DefaultEngine<Types> {
         state,
         aux,
         fontsystem,
-        filesystem: crate::files::Files::new(tex_engine::utils::PWD.to_path_buf()),
+        filesystem: crate::files::RusTeXFileSystem::new(tex_engine::utils::PWD.to_path_buf()),
         mouth,gullet,stomach
     }
 }
@@ -176,7 +173,15 @@ impl RusTeXEngineT for RusTeXEngine {
     fn get() -> Self { get_engine() }
     fn do_file<S:AsRef<str>>(file:S) {
         let mut engine = Self::get();
+
+
+        //engine.stomach.continuous = true;
+        //engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout(e,n)).unwrap();
+
+
         engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout_paginated(e,n)).unwrap();
+
+
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));
     }
 

@@ -1,69 +1,75 @@
 use std::path::PathBuf;
-use std::rc::Rc;
 use tex_engine::engine::{EngineAux, EngineTypes};
-use tex_engine::engine::filesystem::{File, FileSystem, VirtualFile};
+use tex_engine::engine::filesystem::{File, FileSystem, NoOutputFileSystem, VirtualFile};
 use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::control_sequences::ControlSequenceName;
-use tex_engine::tex::input_text::{Character, StringLineSource};
+use tex_engine::tex::input_text::{StringLineSource, TextLine};
 use tex_engine::tex::token::Token;
 use tex_engine::utils::errors::ErrorHandler;
+use tex_engine::utils::Ptr;
 
 static PGFSYS: &str = include_str!("resources/pgfsys.def");
 
 #[derive(Clone)]
-pub struct Files(pub(crate) tex_engine::engine::filesystem::NoOutputFileSystem<u8>);
+pub struct RusTeXFileSystem{
+    pub(crate) inner: NoOutputFileSystem<u8>,
+    pub(crate) svg: (<VirtualFile<u8> as File>::SourceRefID,Ptr<[TextLine<u8>]>)
+}
 
 
-impl FileSystem for Files {
-    type File = tex_engine::engine::filesystem::VirtualFile<u8>;
+impl FileSystem for RusTeXFileSystem {
+    type File = VirtualFile<u8>;
     #[inline(always)]
     fn new(pwd: PathBuf) -> Self {
-        Self(tex_engine::engine::filesystem::NoOutputFileSystem::new(pwd))
+        let mut inner = tex_engine::engine::filesystem::NoOutputFileSystem::new(pwd);
+        let id = inner.interner.get_or_intern("<TEXINPUTS>/pgfsys-rustex.def");
+        Self{
+            inner,
+            svg:(id,StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into())
+        }
     }
 
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         use tex_engine::tex::input_text::*;
         let sr = path.as_ref();
         if sr.ends_with("pgfsys-rustex.def") {
-            let id = self.0.interner.get_or_intern("<TEXINPUTS>/pgfsys-rustex.def");
-            let src: StringLineSource<u8> = PGFSYS.into();
             VirtualFile {
-                path:self.0.kpse.pwd.join("pgfsys-rustex.def"),
-                id,
-                source:Some(src.lines.into())
+                path:self.inner.kpse.pwd.join("pgfsys-rustex.def"),
+                id:self.svg.0,
+                source:Some(self.svg.1.clone())
             }
         } else {
-            self.0.get(sr)
+            self.inner.get(sr)
         }
     }
     #[inline(always)]
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf {
-        self.0.set_pwd(pwd)
+        self.inner.set_pwd(pwd)
     }
 
     #[inline(always)]
     fn open_out(&mut self,idx:u8,file:Self::File) {
-        self.0.open_out(idx,file)
+        self.inner.open_out(idx,file)
     }
     #[inline(always)]
     fn open_in(&mut self,idx:u8,file:Self::File) {
-        self.0.open_in(idx,file)
+        self.inner.open_in(idx,file)
     }
     #[inline(always)]
     fn close_in(&mut self,idx:u8) {
-        self.0.close_in(idx)
+        self.inner.close_in(idx)
     }
     #[inline(always)]
     fn close_out(&mut self,idx:u8) {
-        self.0.close_out(idx)
+        self.inner.close_out(idx)
     }
     #[inline(always)]
     fn eof(&self,idx:u8) -> bool {
-        self.0.eof(idx)
+        self.inner.eof(idx)
     }
     #[inline(always)]
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
-        self.0.write(idx,string,newlinechar,aux)
+        self.inner.write(idx,string,newlinechar,aux)
     }
     #[inline(always)]
     fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
@@ -71,9 +77,9 @@ impl FileSystem for Files {
                                                                                 handler:&mut <T::CS as ControlSequenceName<T::Char>>::Handler,
                                                                                 cc:&CategoryCodeScheme<<Self::File as File>::Char>,endline:Option<<Self::File as File>::Char>,cont:F
     ) {
-        self.0.read(idx,eh,handler,cc,endline,cont)
+        self.inner.read(idx,eh,handler,cc,endline,cont)
     }
     fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F) {
-        self.0.readline(idx,cont)
+        self.inner.readline(idx,cont)
     }
 }

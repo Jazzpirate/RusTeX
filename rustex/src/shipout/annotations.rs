@@ -1,9 +1,9 @@
-use tex_engine::commands::pdftex::pdftexnodes::{ActionSpec, ColorStackAction, GotoAction, PDFStartLink};
+use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFStartLink};
 use crate::engine::{Font, Refs, Types};
 use crate::html::{HTMLChild, HTMLNode};
 use crate::html::labels::{COLOR_CHANGE, FONT_CHANGE, LINK};
 use crate::shipout::ShipoutState;
-use tex_engine::commands::pdftex::pdftexnodes::PDFExtension;
+use tex_engine::pdflatex::nodes::PDFExtension;
 
 pub(crate) fn close_all(open: &mut Vec<HTMLNode>) -> HTMLNode {
     let mut reopen:Vec<HTMLNode> = vec!();
