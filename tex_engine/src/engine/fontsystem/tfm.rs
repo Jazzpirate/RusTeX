@@ -30,7 +30,7 @@ impl TfmFile {
         self.filepath.file_stem().unwrap().to_str().unwrap()
     }
     pub fn new(pb : PathBuf) -> TfmFile {
-        let filepath = pb;
+        let filepath = pb; // ec-lmr10: 102+41 = 5???
         let mut state = FontState::new(&filepath);
         //state.ret.reverse();
 
@@ -234,37 +234,21 @@ impl FInfoEntry {
                             None => todo!("should not be able to happen")
                         }
                     }
-                    if op < 128 {
-                        loop {
-                            map.insert((self.char, next), rem);
-                            if skip >= 128 { return } else {
-                                i += 1 + (skip as usize);
-                                match ligs.get(i).copied() {
-                                    Some((s,n,_,r)) => {
-                                        skip = s;next = n;rem = r;//op = o;
-                                    }
-                                    None => todo!("should not be able to happen")
+                    loop {
+                        if op < 128 { map.insert((self.char, next), rem); }
+                        if skip >= 128 { return } else {
+                            i += 1 + (skip as usize);
+                            match ligs.get(i).copied() {
+                                Some((s,n,o,r)) => {
+                                    skip = s;next = n;rem = r;op = o;
                                 }
+                                None => todo!("should not be able to happen")
                             }
                         }
                     }
                 }
                 None => todo!("should not be able to happen")
             }
-
-            //let mut i = self.remainder as usize;
-            /*
-            loop {
-                match ligs.get(i) {
-                    Some(Some((stop, next, res))) => {
-                        map.insert((self.char, *next), *res);
-                        if *stop { break }
-                        i += 1;
-                    }
-                    _ => break
-                }
-            }
-             */
         }
     }
 }

@@ -128,7 +128,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Custom(n) => n.width(),
             HNode::HKern(d) => *d,
             HNode::HSkip(s) => s.base(),
-            HNode::Space => ET::Dim::from_sp(65536),
+            HNode::Space => ET::Dim::from_sp(65536 * 5), // TODO heuristic; use spacefactor instead
             _=> ET::Dim::default(),
         }
     }

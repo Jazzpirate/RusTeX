@@ -8,3 +8,6 @@ pub mod commands;
 
 #[doc(hidden)]
 pub mod tests;
+
+#[cfg(feature="pdflatex")]
+pub mod pdflatex;

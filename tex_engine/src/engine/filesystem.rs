@@ -67,7 +67,6 @@ pub trait File:std::fmt::Display+Clone+std::fmt::Debug + 'static {
     }
     fn size(&self) -> usize;
     fn sourceref(&self) -> Self::SourceRefID;
-    fn md5(&self) -> md5::Digest;
 }
 
 pub trait FileLineSource<C:Character>:TextLineSource<C> {
@@ -331,18 +330,6 @@ impl<C:Character> File for VirtualFile<C> {
     fn sourceref(&self) -> Self::SourceRefID { self.id }
     #[inline(always)]
     fn path(&self) -> &Path { &self.path }
-    fn md5(&self) -> md5::Digest {
-        match &self.source {
-            None => match std::fs::read(&self.path) {
-                Ok(v) => md5::compute(v),
-                Err(_) => md5::compute("")
-            }
-            Some(s) => {
-                let v : Vec<u8> = s.iter().map(|v| v.iter().map(|c| c.to_char().to_string().into_bytes())).flatten().flatten().collect();
-                md5::compute(v)
-            }
-        }
-    }
     fn line_source(self) -> Option<Self::LineSource> {
         use std::io::BufRead;
         match self.source {

@@ -206,7 +206,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
             MathNode::MKern {kern,style} => ET::Num::mudim_to_dim(*kern,style.get_em()),
             MathNode::MSkip {skip,style} => ET::Num::mudim_to_dim(skip.base(),style.get_em()),
             MathNode::HSkip(s) => s.base(),
-            MathNode::Space => ET::Dim::from_sp(65536),
+            MathNode::Space => ET::Dim::from_sp(65536 * 5), // TODO heuristic; use spacefactor instead
             MathNode::Leaders(l) => l.width(),
             MathNode::Atom(a) => a.width(),
             MathNode::Choice(c) => c.width(),

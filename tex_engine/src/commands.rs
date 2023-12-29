@@ -17,7 +17,6 @@ use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 pub mod primitives;
 pub mod tex;
 pub mod etex;
-pub mod pdftex;
 pub mod methods;
 
 /// A command.

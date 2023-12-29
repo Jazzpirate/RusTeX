@@ -32,12 +32,14 @@ use tex_engine::tex::token::Token;
 use tex_engine::tex::catcodes::CommandCode;
 use tex_engine::tex::input_text::StringLineSource;
 
-type T = StandardToken<Ptr<str>,u8>;
+type T = StandardToken<u8,Ptr<str>>;
 let eh = ErrorThrower;
 let mut cs_handler = ();
 let cc = &*DEFAULT_SCHEME_U8;
 
-let mut tokenizer = StringTokenizer::<u8,StringLineSource>::new("\\foo   \n  \n   {a}{!}".into());
+let string = "\\foo   \n  \n   {a}{!}";
+let input: StringLineSource<u8> = string.into();
+let mut tokenizer = StringTokenizer::new(input);
 let eol = Some(b'\r');
 let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo
 assert!(matches!(next,Some(T::ControlSequence(s)) if &*s == "foo"));

@@ -17,6 +17,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::token::Token;
 use crate::commands::Command;
 use crate::commands::methods::get_mathchar;
+use crate::debug_log;
 use crate::engine::filesystem::{File, SourceRef};
 use crate::engine::filesystem::SourceReference;
 use crate::utils::errors::ErrorHandler;
@@ -211,7 +212,9 @@ pub trait Stomach {
             ($c:expr) => {{
                 let font = engine.state.get_current_font().clone();
                 match font.ligature(current,$c) {
-                    Some(c) => current = c,
+                    Some(c) => {
+                        current = c;
+                    }
                     None => {
                         engine.stomach.add_char(engine.state,current,font);
                         current = $c;
@@ -223,8 +226,9 @@ pub trait Stomach {
             ($e:expr) => {{
                 let font = engine.state.get_current_font().clone();
                 engine.stomach.add_char(engine.state,current,font);
+                $e;
                 engine.stomach.data_mut().spacefactor = 1000;
-                return $e
+                return
             }}
         }
         crate::expand_loop!(Self::ET;engine,
@@ -469,7 +473,8 @@ pub trait Stomach {
                 if data.prevdepth > <Self::ET as EngineTypes>::Dim::from_sp(-65536000) {
                     let baselineskip = engine.state.get_primitive_skip(PRIMITIVES.baselineskip);
                     let lineskiplimit = engine.state.get_primitive_dim(PRIMITIVES.lineskiplimit);
-                    let b = <Self::ET as EngineTypes>::Skip::new(baselineskip.base() + -data.prevdepth + -b.height(),baselineskip.stretch(),baselineskip.shrink());
+                    let ht = b.height();
+                    let b = <Self::ET as EngineTypes>::Skip::new(baselineskip.base() - data.prevdepth - ht,baselineskip.stretch(),baselineskip.shrink());
                     let sk = if b.base() >= lineskiplimit { b }
                     else {
                         engine.state.get_primitive_skip(PRIMITIVES.lineskip)
@@ -513,16 +518,16 @@ pub trait Stomach {
             data.pagetotal = data.pagetotal + pre.base();
             data.page.push(VNode::VSkip(pre));
         }
-        data.pagetotal = data.pagetotal + node.height();// + node.depth() ?
+        data.pagetotal = data.pagetotal + node.height() + node.depth(); // ?
         if let VNode::Penalty(i) = node {
             if i <= -10000 {
                 if data.page_contains_boxes {
-                    return Self::do_shipout_output(engine, Some(i))
+                    return Self::maybe_shipout(engine, Some(i))
                 } else { return }
             }
         }
         data.page.push(node);
-        Self::maybe_shipout(engine)
+        Self::maybe_shipout(engine,None)
     }
 /*
     fn add_node(engine:&mut EngineReferences<Self::ET>,node: TeXNode<Self::ET>) {
@@ -571,10 +576,10 @@ pub trait Stomach {
 
  */
 
-    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>) {
+    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>,penalty:Option<i32>) {
         let data = engine.stomach.data_mut();
-        if !data.in_output && data.open_lists.is_empty() && data.pagetotal >= data.pagegoal && !data.page.is_empty() {
-            Self::do_shipout_output(engine, None)
+        if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() && (data.pagetotal >= data.pagegoal || penalty.is_some()) {
+            Self::do_shipout_output(engine, penalty)
         }
     }
 
@@ -670,6 +675,7 @@ pub trait Stomach {
 
         let depth = engine.state.get_group_level();
         while let Some(next) = engine.get_next() {
+            //println!("HERE: {}",engine.preview());
             if engine.state.get_group_level() == depth && next.is_end_group() {
                 engine.state.pop(engine.aux,engine.mouth);
                 engine.stomach.data_mut().in_output = false;
@@ -930,8 +936,15 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
                 }
                 data.botmarks.insert(*i,v.clone());
             }
+            VNode::Insert(_,bx) => {
+                target = target - bx.iter().map(|c| c.height() + c.depth()).sum(); // - n.depth() ?
+                if target < ET::Dim::default() {
+                    split = i;
+                    break
+                }
+            }
             _ => {
-                target = target + (-n.height()); // - n.depth() ?
+                target = target - (n.height() + n.depth()); // - n.depth() ?
                 if target < ET::Dim::default() {
                     split = i;
                     break

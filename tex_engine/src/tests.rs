@@ -67,7 +67,7 @@ mod tests {
     use crate::measure;
     use log::*;
     use crate::commands::{Command, CommandScope, Unexpandable};
-    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainPDFTeXEngine, TeXEngine};
+    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainTeXEngine, TeXEngine};
     use crate::engine::mouth::Mouth;
     use crate::engine::mouth::pretokenized::ExpansionContainer;
     use crate::engine::state::CustomStateChange;
@@ -76,8 +76,10 @@ mod tests {
     use crate::tex::input_text::StringLineSource;
     use crate::tex::token::Token;
     use crate::utils::Ptr;
-    use crate::engine::PDFTeXEngine;
     use crate::tex::nodes::NodeTrait;
+
+    #[cfg(feature="pdflatex")]
+    use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
 
     #[test]
     fn kpsewhich() { measure!(kpsewhich: {
@@ -87,23 +89,7 @@ mod tests {
         info!(target:"kpsewhich", "latex.ltx: {:?}", kpse.kpsewhich("latex.ltx").path);
         info!(target:"kpsewhich", "article.cls: {:?}",kpse.kpsewhich("article.cls").path);
         info!(target:"kpsewhich", "expl3-code: {:?}",kpse.kpsewhich("expl3-code").path);
-        /*for _ in 0..10000 {
-            kpse.kpsewhich("latex.ltx").path;
-            kpse.kpsewhich("expl3-code").path;
-        }*/
         info!(target:"kpsewhich", "-var-value MATHHUB: {:?}",kpse.kpsewhich("|kpsewhich -var-value MATHHUB").path);
-        /*
-        let fs = measure!(kpsewhich_initialization: {
-            KpseVirtualFileSystem::<u8>::new(std::env::current_dir().unwrap())
-        });
-        info!(target:"kpsewhich", "latex.ltx: {:?}",fs.kpsewhich("latex.ltx").path);
-        info!(target:"kpsewhich", "expl3-code: {:?}",fs.kpsewhich("expl3-code").path);
-        let kpse = Kpathsea::new(std::env::current_dir().unwrap());
-        let vv = kpse.kpsewhich("|kpsewhich -var-value MATHHUB");
-        info!(target:"kpsewhich", "-var-value MATHHUB: {:?}",vv.path);
-        info!(target:"kpsewhich", "returns: {:?}",String::from_utf8(kpse.get(&std::env::current_dir().unwrap(),&vv.path).unwrap()));
-
-         */
     });}
 
     #[test]
@@ -122,7 +108,6 @@ mod tests {
         let cc = &*DEFAULT_SCHEME_U8;
 
         let string = "\\foo   \n  \n   {a}{!}";
-// should yield: [ControlSequence("foo"),BeginGroup,Letter("a"),EndGroup,BeginGroup,Other("!"),EndGroup]
         let input: StringLineSource<u8> = string.into();
         let mut tokenizer = StringTokenizer::new(input);
         let eol = Some(b'\r');
@@ -147,18 +132,11 @@ mod tests {
         assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).is_none()); // EOF
     }
 
+    #[cfg(feature="pdflatex")]
     #[test]
-    fn initex() {
+    fn pdflatex_init() {
         debug();
         let mut engine = PlainPDFTeXEngine::new();
-        {
-           // let refs = engine.get_engine_refs();
-           // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingassigns,1,true);
-           // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingifs,1,true);
-           // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingcommands,1,true);
-           // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracinggroups,1,true);
-           // refs.state.set_primitive_int(&refs.aux,PRIMITIVES.tracingrestores,1,true);
-        }
         match engine.initialize_pdflatex() {
             Ok(_) => (),
             Err(e) => {
@@ -167,6 +145,8 @@ mod tests {
         }
     }
 
+
+    #[cfg(feature="pdflatex")]
     #[test]
     fn thesis() {
         debug();

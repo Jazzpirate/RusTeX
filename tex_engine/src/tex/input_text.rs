@@ -181,15 +181,15 @@ pub trait TextLineSource<C:Character> {
 }
 /// A source of lines of characters generated from a string.
 pub struct StringLineSource<C:Character> {
-    pub lines:Vec<TextLine<C>>
+    pub lines:std::vec::IntoIter<TextLine<C>>
 }
 impl<C:Character> From<Vec<Box<[C]>>> for StringLineSource<C> {
-    fn from(lines: Vec<Box<[C]>>) -> Self { Self { lines } }
+    fn from(lines: Vec<Box<[C]>>) -> Self { Self { lines:lines.into_iter() } }
 }
 impl<C:Character> TextLineSource<C> for StringLineSource<C> {
     #[inline(always)]
     fn get_line(&mut self) -> Option<TextLine<C>> {
-        self.lines.pop()
+        self.lines.next()
     }
 }
 impl<C:Character> From<&str> for StringLineSource<C> {
@@ -214,7 +214,7 @@ impl<C:Character> From<&str> for StringLineSource<C> {
             lines.push(C::convert(curr));
         }
         //lines.reverse();
-        Self { lines }
+        Self { lines:lines.into_iter() }
     }
 }
 impl<C:Character> From<String> for StringLineSource<C> {
@@ -239,6 +239,6 @@ impl<C:Character> From<String> for StringLineSource<C> {
             lines.push(C::convert(curr));
         }
         //lines.reverse();
-        Self { lines }
+        Self { lines:lines.into_iter() }
     }
 }

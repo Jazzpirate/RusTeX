@@ -1,21 +1,20 @@
-pub mod pdftexnodes;
-
 use crate::{cmtodo, cmtodos};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::mouth::pretokenized::{Tokenizer, WriteChars};
 use crate::tex::catcodes::CommandCode;
-use super::primitives::*;
+use crate::commands::primitives::*;
 use crate::engine::utils::memory::MemoryManager;
 use crate::tex::token::{StandardToken, Token};
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
 use std::fmt::Write;
 use crate::commands::CommandScope;
-use crate::commands::pdftex::pdftexnodes::{ColorStackAction, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFStartLink, PDFXForm};
+use super::nodes::{ColorStackAction, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFStartLink, PDFXForm};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
+use crate::pdflatex::FileWithMD5;
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
@@ -43,7 +42,7 @@ pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     let mut literal = String::new();
     engine.read_braced_string(true,&mut literal);
     let action = if engine.read_keyword(b"openaction") {
-        Some(pdftexnodes::action_spec(engine))
+        Some(super::nodes::action_spec(engine))
     } else { None };
     let node = PDFNode::PDFCatalog(PDFCatalog{
         literal,action
@@ -120,11 +119,11 @@ pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token)
     let structnum = if engine.read_keyword(b"struct") {
         Some(engine.read_int(false).into())
     } else { None };
-    let id = match pdftexnodes::num_or_name(engine) {
+    let id = match super::nodes::num_or_name(engine) {
         Some(n) => n,
         _ => todo!("throw error")
     };
-    let dest = pdftexnodes::pdfdest_type(engine);
+    let dest = super::nodes::pdfdest_type(engine);
     let node = PDFNode::PDFDest(PDFDest{structnum, id, dest});
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
@@ -148,7 +147,7 @@ pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::T
         engine.read_braced_string(true,&mut attr);
         Some(attr)
     } else { None };
-    let action = pdftexnodes::action_spec(engine);
+    let action = super::nodes::action_spec(engine);
     let node = PDFNode::PDFStartLink(PDFStartLink {width,height,depth,attr,action});
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
@@ -160,7 +159,7 @@ pub fn pdfendlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
 }
 
 pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
-    super::tex::skip_argument(engine)
+    crate::commands::tex::skip_argument(engine)
 }
 
 pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
@@ -297,8 +296,8 @@ pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Ve
 
 pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     // TODO
-    super::tex::skip_argument(engine);
-    super::tex::skip_argument(engine);
+    crate::commands::tex::skip_argument(engine);
+    crate::commands::tex::skip_argument(engine);
 }
 
 pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
@@ -341,7 +340,8 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
 }
 
 
-pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
+    where ET::File: FileWithMD5 {
     let mut f = |t| exp.push(t);
     if engine.read_keyword(b"file") {
         let mut filename = String::new();
@@ -427,7 +427,7 @@ pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     if engine.read_keyword(b"attr") {
         engine.read_braced_string(true,&mut attr);
     }
-    let action = pdftexnodes::action_spec(engine);
+    let action = super::nodes::action_spec(engine);
     let count = if engine.read_keyword(b"count") {
         Some(engine.read_int(false).into())
     } else { None };
@@ -449,7 +449,7 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     if engine.read_keyword(b"resources") {
         engine.read_braced_string(true,&mut attr);
     }
-    let idx = super::methods::read_register(engine);
+    let idx = crate::commands::methods::read_register(engine);
     let bx = engine.state.take_box_register(idx);
     engine.aux.extension.pdfxforms().push(PDFXForm {
         attr,resources,bx
@@ -579,7 +579,8 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
 
 pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     where <E::Types as EngineTypes>::Extension : PDFExtension<E::Types>,
-    <E::Types as EngineTypes>::CustomNode: From<PDFNode<E::Types>> {
+    <E::Types as EngineTypes>::CustomNode: From<PDFNode<E::Types>>,
+          <E::Types as EngineTypes>::File: FileWithMD5 {
 
     register_expandable(engine,"leftmarginkern",leftmarginkern);
     register_expandable(engine,"rightmarginkern",rightmarginkern);
