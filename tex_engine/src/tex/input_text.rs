@@ -183,8 +183,31 @@ pub trait TextLineSource<C:Character> {
 pub struct StringLineSource<C:Character> {
     pub lines:std::vec::IntoIter<TextLine<C>>
 }
-impl<C:Character> From<Vec<Box<[C]>>> for StringLineSource<C> {
-    fn from(lines: Vec<Box<[C]>>) -> Self { Self { lines:lines.into_iter() } }
+impl<C:Character> StringLineSource<C> {
+    pub fn make_lines<I:Iterator<Item=u8>>(mut iter:I) -> Vec<TextLine<C>> {
+        let mut lines = Vec::new();
+        let mut curr = Vec::new();
+        for b in iter {
+            if b == b'\n' {
+                if let Some(b'\r') = curr.last() {
+                    curr.pop();
+                }
+                while let Some(b' ') = curr.last() {
+                    curr.pop();
+                }
+                lines.push(C::convert(std::mem::take(&mut curr)));
+            } else {
+                curr.push(b);
+            }
+        }
+        if !curr.is_empty() {
+            lines.push(C::convert(curr));
+        }
+        lines
+    }
+}
+impl<C:Character> From<Vec<TextLine<C>>> for StringLineSource<C> {
+    fn from(lines: Vec< TextLine<C>>) -> Self { Self { lines:lines.into_iter() } }
 }
 impl<C:Character> TextLineSource<C> for StringLineSource<C> {
     #[inline(always)]
@@ -193,52 +216,8 @@ impl<C:Character> TextLineSource<C> for StringLineSource<C> {
     }
 }
 impl<C:Character> From<&str> for StringLineSource<C> {
-    fn from(s: &str) -> Self {
-        let mut lines = Vec::new();
-        let all = s.as_bytes().iter().copied();
-        let mut curr = Vec::new();
-        for b in all {
-            if b == b'\n' {
-                if let Some(b'\r') = curr.last() {
-                    curr.pop();
-                }
-                while let Some(b' ') = curr.last() {
-                    curr.pop();
-                }
-                lines.push(C::convert(std::mem::take(&mut curr)));
-            } else {
-                curr.push(b);
-            }
-        }
-        if !curr.is_empty() {
-            lines.push(C::convert(curr));
-        }
-        //lines.reverse();
-        Self { lines:lines.into_iter() }
-    }
+    fn from(s: &str) -> Self { Self::make_lines(s.as_bytes().iter().copied()).into() }
 }
 impl<C:Character> From<String> for StringLineSource<C> {
-    fn from(s: String) -> Self {
-        let mut lines = Vec::new();
-        let all = s.into_bytes().into_iter();
-        let mut curr = Vec::new();
-        for b in all {
-            if b == b'\n' {
-                if let Some(b'\r') = curr.last() {
-                    curr.pop();
-                }
-                while let Some(b' ') = curr.last() {
-                    curr.pop();
-                }
-                lines.push(C::convert(std::mem::take(&mut curr)));
-            } else {
-                curr.push(b);
-            }
-        }
-        if !curr.is_empty() {
-            lines.push(C::convert(curr));
-        }
-        //lines.reverse();
-        Self { lines:lines.into_iter() }
-    }
+    fn from(s: String) -> Self { Self::make_lines(s.into_bytes().into_iter()).into() }
 }
