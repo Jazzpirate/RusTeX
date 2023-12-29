@@ -88,9 +88,6 @@ pub trait State:Sized+Clone {
     fn get_mathcode(&self,c:Ch<Self>) -> u32;
     fn set_mathcode(&mut self,aux:&EngineAux<Self::ET>, c: Ch<Self>, mathcode:u32, globally:bool);
 
-    fn get_mode(&self) -> TeXMode;
-    fn set_mode(&mut self,mode:TeXMode);
-
     fn get_endline_char(&self) -> Option<Ch<Self>>;
     fn set_endline_char(&mut self,aux:&EngineAux<Self::ET>, c: Option<Ch<Self>>, globally:bool);
     fn get_escape_char(&self) -> Option<Ch<Self>>;
@@ -186,8 +183,6 @@ pub enum StateChange<ET:EngineTypes,S:State<ET=ET>> {
     UcCode{char:ET::Char,old:ET::Char},
     MathCode{char:ET::Char,old:u32},
     ParShape{old:Vec<(ET::Dim,ET::Dim)>},
-    /// A change to the [`TeXMode`], rolled back when a box group ends
-    TeXMode{old:TeXMode},
     CurrentFont(ET::Font),
     TextFont{idx:usize,old:ET::Font},
     ScriptFont{idx:usize,old:ET::Font},
@@ -233,7 +228,6 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateChange<ET,S> {
             (StateChange::LcCode {char:c1,..},StateChange::LcCode{char:c2,..}) => c1 == c2,
             (StateChange::UcCode {char:c1,..},StateChange::UcCode{char:c2,..}) => c1 == c2,
             (StateChange::MathCode {char:c1,..},StateChange::MathCode{char:c2,..}) => c1 == c2,
-            (StateChange::TeXMode{..},StateChange::TeXMode{..}) => true,
             (StateChange::CurrentFont(_),StateChange::CurrentFont(_)) => true,
             (StateChange::TextFont{idx:i1,..},StateChange::TextFont{idx:i2,..}) => i1 == i2,
             (StateChange::ScriptFont{idx:i1,..},StateChange::ScriptFont{idx:i2,..}) => i1 == i2,
@@ -301,23 +295,12 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateStack<ET,S> {
     /// Create a new [`StateStack`]
     pub fn new() -> Self { Self { stack:vec!(),factory:ReusableVectorFactory::new(8,8) } }
     /// Push a new stack level onto the stack with the given [`GroupType`], as a new group begins
-    pub fn push(&mut self,group_type:GroupType,current_mode:&mut TeXMode) {
+    pub fn push(&mut self,group_type:GroupType) {
         let mut lvl = StackLevel {
             group_type,
             aftergroup:vec!(),
             changes:self.factory.get()
         };
-        match group_type {
-            GroupType::Box(bt) => {
-                lvl.changes.push(StateChange::TeXMode{old:*current_mode});
-                *current_mode = bt.into();
-            },
-            GroupType::Math{display} => {
-                lvl.changes.push(StateChange::TeXMode{old:*current_mode});
-                *current_mode = if display {TeXMode::DisplayMath} else {TeXMode::InlineMath};
-            },
-            _ => ()
-        }
         self.stack.push(lvl);
     }
     /// register a global state change, never to be rolled back;

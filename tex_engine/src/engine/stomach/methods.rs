@@ -15,7 +15,7 @@ use crate::tex::numerics::Skip;
 #[macro_export]
 macro_rules! add_node {
     ($S:ty;$engine:expr,$v:expr,$h:expr,$m:expr) => {
-        match $engine.state.get_mode() {
+        match $engine.stomach.data_mut().mode() {
             TeXMode::Vertical |
             TeXMode::InternalVertical => <$S>::add_node_v($engine,$v),
             TeXMode::Horizontal |
@@ -37,7 +37,7 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
         }
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::Insert(n)}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
-            match engine.state.get_mode() {
+            match engine.stomach.data_mut().mode() {
                 TeXMode::Vertical => ET::Stomach::add_node_v(engine, VNode::Insert(n, children.into())),
                 TeXMode::Horizontal if engine.stomach.data_mut().open_lists.len() == 1 => ET::Stomach::add_node_h(engine, HNode::Insert(n, children.into())),
                 _ => engine.stomach.data_mut().inserts.push((n,children.into()))
@@ -67,7 +67,7 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
         o =>
             todo!("throw error: {:?}",o),
     }
-    match engine.state.get_mode() {
+    match engine.stomach.data_mut().mode() {
         TeXMode::Vertical => {
             let data = engine.stomach.data_mut();
             let inserts = std::mem::take(&mut data.inserts);

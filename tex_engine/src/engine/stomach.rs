@@ -82,7 +82,7 @@ pub trait Stomach {
     }
 
     fn do_mathchar(engine:&mut EngineReferences<Self::ET>,code:u32,_token:Tk<Self>) {
-        if !engine.state.get_mode().is_math() { todo!("throw error") }
+        if !engine.stomach.data_mut().mode().is_math() { todo!("throw error") }
         let ret = get_mathchar(engine, code, None);
         Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
     }
@@ -91,7 +91,7 @@ pub trait Stomach {
         if target.is_some() {
             target.call(engine,bx)
         } else {
-            match engine.state.get_mode() {
+            match engine.stomach.data_mut().mode() {
                 TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
                     Self::add_node_h(engine,HNode::Box(bx))
                 }
@@ -113,16 +113,16 @@ pub trait Stomach {
     fn do_char(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,char:Ch<Self>,code:CommandCode) {
         match code {
             CommandCode::EOF => (),
-            CommandCode::Space if engine.state.get_mode().is_horizontal() =>
+            CommandCode::Space if engine.stomach.data_mut().mode().is_horizontal() =>
                 Self::add_node_h(engine,HNode::Space),
             CommandCode::Space => (),
-            CommandCode::BeginGroup if engine.state.get_mode().is_math() => {
+            CommandCode::BeginGroup if engine.stomach.data_mut().mode().is_math() => {
                 engine.state.push(engine.aux,GroupType::Math {
-                    display: engine.state.get_mode() == TeXMode::DisplayMath
+                    display: engine.stomach.data_mut().mode() == TeXMode::DisplayMath
                 },engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(NodeList::new_math(engine.mouth.start_ref()));
             },
-            CommandCode::EndGroup if engine.state.get_mode().is_math() => {
+            CommandCode::EndGroup if engine.stomach.data_mut().mode().is_math() => {
                 match engine.stomach.data_mut().open_lists.pop() {
                     Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) if t.is_some() => {
                         engine.state.pop(engine.aux,engine.mouth);
@@ -149,11 +149,11 @@ pub trait Stomach {
                     o => todo!("throw error; group type {:?}",o)
                 }
             }
-            CommandCode::Other | CommandCode::Letter if engine.state.get_mode().is_horizontal() =>
+            CommandCode::Other | CommandCode::Letter if engine.stomach.data_mut().mode().is_horizontal() =>
                 Self::do_word(engine,char),
-            CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.state.get_mode().is_vertical() =>
+            CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.stomach.data_mut().mode().is_vertical() =>
                 Self::open_paragraph(engine,token),
-            CommandCode::MathShift if engine.state.get_mode().is_math() => match engine.stomach.data_mut().open_lists.pop() {
+            CommandCode::MathShift if engine.stomach.data_mut().mode().is_math() => match engine.stomach.data_mut().open_lists.pop() {
                 Some(NodeList::Math{children,start,tp:MathNodeListType::Top {display}}) => {
                     if display {match engine.get_next() {
                         Some(tk) if tk.command_code() == CommandCode::MathShift => (),
@@ -166,7 +166,7 @@ pub trait Stomach {
                 _ => todo!("error")
             }
             CommandCode::MathShift => {
-                let (display,every) = match engine.state.get_mode() {
+                let (display,every) = match engine.stomach.data_mut().mode() {
                     TeXMode::Horizontal => {
                         match engine.get_next() {
                             Some(tk) if tk.command_code() == CommandCode::MathShift => (true,PRIMITIVES.everydisplay),
@@ -192,10 +192,10 @@ pub trait Stomach {
                     Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
                 }
             }
-            CommandCode::Superscript if engine.state.get_mode().is_math() => {
+            CommandCode::Superscript if engine.stomach.data_mut().mode().is_math() => {
                 Self::do_superscript(engine)
             }
-            CommandCode::Subscript if engine.state.get_mode().is_math() => {
+            CommandCode::Subscript if engine.stomach.data_mut().mode().is_math() => {
                 Self::do_subscript(engine)
             }
             _ => todo!("{} > {:?}",char,code)
@@ -286,7 +286,7 @@ pub trait Stomach {
         }
     }
     fn maybe_switch_mode(engine:&mut EngineReferences<Self::ET>, scope: CommandScope, token:Tk<Self>) -> bool {
-        match (scope,engine.state.get_mode()) {
+        match (scope,engine.stomach.data_mut().mode()) {
             (CommandScope::Any, _) => true,
             (CommandScope::SwitchesToHorizontal | CommandScope::SwitchesToHorizontalOrMath, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => true,
             (CommandScope::SwitchesToVertical, TeXMode::Vertical | TeXMode::InternalVertical) => true,
@@ -409,7 +409,7 @@ pub trait Stomach {
                                                                                 -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>)>>) {
         if let Some(ret) = read(engine,token) {
             let wi = WhatsitNode::new(ret, name);
-            match engine.state.get_mode() {
+            match engine.stomach.data_mut().mode() {
                 TeXMode::Vertical | TeXMode::InternalVertical => Self::add_node_v(engine,VNode::Whatsit(wi)),
                 TeXMode::Horizontal | TeXMode::RestrictedHorizontal => Self::add_node_h(engine,HNode::Whatsit(wi)),
                 _ => Self::add_node_m(engine,MathNode::Whatsit(wi))
@@ -501,11 +501,14 @@ pub trait Stomach {
         };
 
         engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
-        engine.state.set_mode(TeXMode::InternalVertical);
-
-        for r in rest.into_iter() { Self::add_node_v(engine,r) }
 
         let data = engine.stomach.data_mut();
+
+        data.open_lists.push(NodeList::Vertical {
+            tp: VerticalNodeListType::Page,
+            children: vec!()
+        });
+
         data.in_output = true;
         data.deadcycles += 1;
         /* INSERTS:
@@ -579,6 +582,15 @@ pub trait Stomach {
             //println!("HERE: {}",engine.preview());
             if engine.state.get_group_level() == depth && next.is_end_group() {
                 engine.state.pop(engine.aux,engine.mouth);
+                match engine.stomach.data_mut().open_lists.pop() {
+                    Some(NodeList::Vertical {children,tp:VerticalNodeListType::Page}) => {
+                        for c in children {
+                            Self::add_node_v(engine, c);
+                        }
+                        for r in rest.into_iter() { Self::add_node_v(engine,r) }
+                    }
+                    _ => todo!("throw error")
+                }
                 engine.stomach.data_mut().in_output = false;
                 return
             }
@@ -601,7 +613,6 @@ pub trait Stomach {
             tp:HorizontalNodeListType::Paragraph(sref),
             children:vec!()
         });
-        engine.state.set_mode(TeXMode::Horizontal);
         match engine.resolve(token) {
             ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
                 if u.name == PRIMITIVES.indent => {
@@ -621,11 +632,6 @@ pub trait Stomach {
         let ls = &mut engine.stomach.data_mut().open_lists;
         match ls.pop() {
             Some(NodeList::Horizontal{tp:HorizontalNodeListType::Paragraph(sourceref),children}) => {
-                if ls.is_empty() {
-                    engine.state.set_mode(TeXMode::Vertical)
-                } else {
-                    engine.state.set_mode(TeXMode::InternalVertical)
-                }
                 if children.is_empty() {
                     let _ = engine.state.take_parshape();
                     engine.state.set_primitive_int(engine.aux,PRIMITIVES.hangafter,Int::<Self::ET>::default(),false);
@@ -765,6 +771,26 @@ impl <ET:EngineTypes> StomachData<ET> {
             None => &mut self.page
         }
     }*/
+    pub fn mode(&self) -> TeXMode {
+        match self.open_lists.last() {
+            Some(NodeList::Horizontal{tp:HorizontalNodeListType::Paragraph(..),..}) => TeXMode::Horizontal,
+            Some(NodeList::Horizontal{..}) => TeXMode::RestrictedHorizontal,
+            Some(NodeList::Vertical{..}) => TeXMode::InternalVertical,
+            Some(NodeList::Math{..}) => {
+                for ls in self.open_lists.iter().rev() {
+                    match ls {
+                        NodeList::Math {tp:MathNodeListType::Top{display},..} => {
+                            if *display { return TeXMode::DisplayMath }
+                            else { return TeXMode::InlineMath }
+                        }
+                        _ => ()
+                    }
+                }
+                unreachable!()
+            }
+            None => TeXMode::Vertical
+        }
+    }
     pub fn new() -> Self {
         StomachData {
             page:vec!(),
@@ -999,7 +1025,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             ResolvedToken::Tk {code:CommandCode::Space,..} => (),
             ResolvedToken::Tk {code:CommandCode::BeginGroup,..} => {
                 self.state.push(self.aux,GroupType::Math {
-                    display:self.state.get_mode() == TeXMode::DisplayMath
+                    display:self.stomach.data_mut().mode() == TeXMode::DisplayMath
                 },self.mouth.line_number());
                 let list = NodeList::Math{children:vec!(),start:self.mouth.start_ref(),
                     tp:MathNodeListType::Target(tp())};

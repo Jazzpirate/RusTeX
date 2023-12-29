@@ -390,5 +390,5 @@ macro_rules! do_cmd {
 }
 
 pub fn do_error<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cmd:Command<ET>) {
-    todo!("Not allowed in {:?} mode: {}",engine.state.get_mode(),cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
+    todo!("Not allowed in {:?} mode: {}",engine.stomach.data_mut().mode(),cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
 }

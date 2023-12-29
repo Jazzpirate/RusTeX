@@ -923,21 +923,21 @@ pub fn ifeof<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
 }
 
 pub fn ifhmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    match engine.state.get_mode() {
+    match engine.stomach.data_mut().mode() {
         TeXMode::Horizontal | TeXMode::RestrictedHorizontal => true,
         _ => false
 
     }
 }
 pub fn ifinner<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    match engine.state.get_mode() {
+    match engine.stomach.data_mut().mode() {
         TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::InlineMath => true,
         _ => false
 
     }
 }
 pub fn ifmmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    match engine.state.get_mode() {
+    match engine.stomach.data_mut().mode() {
         TeXMode::InlineMath | TeXMode::DisplayMath => true,
         _ => false
 
@@ -976,7 +976,7 @@ pub fn iffalse<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
 }
 
 pub fn ifvmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    match engine.state.get_mode() {
+    match engine.stomach.data_mut().mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => true,
         _ => false
 
@@ -1579,7 +1579,7 @@ pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET:
 
 
 pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    let mode = engine.state.get_mode();
+    let mode = engine.stomach.data_mut().mode();
     if mode.is_vertical() {return}
     if mode == TeXMode::Horizontal {
         ET::Stomach::close_paragraph(engine);return
@@ -1762,7 +1762,7 @@ pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
 }
 
 pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    if engine.state.get_mode() == TeXMode::Vertical {
+    if engine.stomach.data_mut().mode() == TeXMode::Vertical {
         todo!("throw error")
     }
     let data = engine.stomach.data_mut();
@@ -1928,7 +1928,7 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
 }
 
 pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    match engine.state.get_mode() {
+    match engine.stomach.data_mut().mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => todo!("throw error"),
         _ => ()
     }

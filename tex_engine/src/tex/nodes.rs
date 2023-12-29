@@ -49,7 +49,7 @@ pub enum VerticalNodeListType<ET:EngineTypes> {
     VAdjust,
     VAlignRow(SourceRef<ET>),
     VAlignCell(SourceRef<ET>),
-    HAlign
+    HAlign,Page
 }
 
 #[derive(Clone,Debug)]

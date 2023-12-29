@@ -595,8 +595,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Tok
     let img = PDFXImage {
         width,height,depth,attr,page,colorspace,boxspec,img,filepath:file.path().to_path_buf()
     };
-    engine.aux.extension.pdfximages().push(img);
-    engine.aux.extension.pdfximages().len() - 1
+    engine.aux.extension.pdfximages().push(img)
 }
 
 

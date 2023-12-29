@@ -23,7 +23,6 @@ use crate::tex::nodes::boxes::TeXBox;
 #[derive(Clone)]
 pub struct TeXState<ET:EngineTypes> {
     stack:StateStack<ET,Self>,
-    current_mode:TeXMode,
     catcodes: CategoryCodeScheme<ET::Char>,
     sfcodes: <ET::Char as Character>::CharMap<u16>,
     lccodes: <ET::Char as Character>::CharMap<ET::Char>,
@@ -101,7 +100,6 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         let mathfonts = array_init::array_init(|_| nullfont.clone());
         Self {
             stack: StateStack::new(),
-            current_mode: TeXMode::Vertical,
             catcodes: ET::Char::starting_catcode_scheme(),
             sfcodes: CharacterMap::default(),
             delcodes: CharacterMap::default(),
@@ -161,7 +159,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
 
     #[inline(always)]
     fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize) {
-        self.stack.push(group_type,&mut self.current_mode);
+        self.stack.push(group_type);
         let tracing = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
             Some(v) if *v > ET::Int::default() => true,
             _ => false
@@ -318,8 +316,6 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     }
                     *self.mathcodes.get_mut(char) = old;
                 }
-                StateChange::TeXMode {old} =>
-                    self.current_mode = old,
                 StateChange::EndlineChar {old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}endlinechar={}}}",
@@ -502,14 +498,6 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         self.stack.give_back(lvl);
     }
 
-    #[inline(always)]
-    fn get_mode(&self) -> TeXMode {
-        self.current_mode
-    }
-    #[inline(always)]
-    fn set_mode(&mut self, mode: TeXMode) {
-        self.current_mode = mode
-    }
 
     #[inline(always)]
     fn get_parshape(&self) -> &Vec<(Dim<Self>,Dim<Self>)> {
