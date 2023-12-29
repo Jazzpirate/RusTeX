@@ -359,14 +359,19 @@ pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
 }
 
 pub(crate) fn do_raise<F:FnOnce(Bx,&mut ShipoutState)>(mut bx:Bx, state:&mut ShipoutState,inv:bool, f:F) {
-    let d = match bx {
-        TeXBox::H {info: HBoxInfo::HBox { ref mut raised, .. },..} => std::mem::take(raised).unwrap(),
-        TeXBox::V{ info: VBoxInfo::VBox { ref mut raised, .. },..} => std::mem::take(raised).unwrap(),
-        TeXBox::V{ info: VBoxInfo::VTop { ref mut raised, .. },..} => std::mem::take(raised).unwrap(),
+    let (d,v) = match bx {
+        TeXBox::H {info: HBoxInfo::HBox { ref mut raised, .. },..} => (std::mem::take(raised).unwrap(),false),
+        TeXBox::V{ info: VBoxInfo::VBox { ref mut raised, .. },..} => (std::mem::take(raised).unwrap(),true),
+        TeXBox::V{ info: VBoxInfo::VTop { ref mut raised, .. },..} => (std::mem::take(raised).unwrap(),true),
         _ => unreachable!()
     };
     let mut node = HTMLNode::new(RAISE, inv);
     node.style("bottom",dim_to_string(d));
+    if v {
+        node.style_str("flex-direction","column")
+    } else {
+        node.style_str("flex-direction","row")
+    }
     state.do_in(node,|state| {
         f(bx, state)
     },|_,node| if node.label == RAISE {Some(node)} else {
@@ -375,13 +380,18 @@ pub(crate) fn do_raise<F:FnOnce(Bx,&mut ShipoutState)>(mut bx:Bx, state:&mut Shi
 }
 
 pub(crate) fn do_moveleft<F:FnOnce(Bx,&mut ShipoutState)>(mut bx:Bx, state:&mut ShipoutState,inv:bool, f:F) {
-    let d = match bx {
-        TeXBox::H {info: HBoxInfo::HBox { ref mut moved_left, .. },..} => std::mem::take(moved_left).unwrap(),
-        TeXBox::V{ info: VBoxInfo::VBox { ref mut moved_left, .. },..} => std::mem::take(moved_left).unwrap(),
-        TeXBox::V{ info: VBoxInfo::VTop { ref mut moved_left, .. },..} => std::mem::take(moved_left).unwrap(),
+    let (d,v) = match bx {
+        TeXBox::H {info: HBoxInfo::HBox { ref mut moved_left, .. },..} => (std::mem::take(moved_left).unwrap(),false),
+        TeXBox::V{ info: VBoxInfo::VBox { ref mut moved_left, .. },..} => (std::mem::take(moved_left).unwrap(),true),
+        TeXBox::V{ info: VBoxInfo::VTop { ref mut moved_left, .. },..} => (std::mem::take(moved_left).unwrap(),true),
         _ => unreachable!()
     };
     let mut node = HTMLNode::new(MOVE_RIGHT, inv);
+    if v {
+        node.style_str("flex-direction","column")
+    } else {
+        node.style_str("flex-direction","row")
+    }
     node.style("margin-left",dim_to_string(-d));
     state.do_in(node,|state| {
         f(bx, state)

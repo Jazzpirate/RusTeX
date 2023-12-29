@@ -130,7 +130,7 @@ pub trait RusTeXEngineT {
 }
 
 lazy_static! {
-static ref AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
+pub(crate) static ref AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
     let mut catcodes = [CategoryCode::Other;256];
     catcodes[123] = CategoryCode::BeginGroup;
     catcodes[125] = CategoryCode::EndGroup;
@@ -175,11 +175,11 @@ impl RusTeXEngineT for RusTeXEngine {
         let mut engine = Self::get();
 
 
-        //engine.stomach.continuous = true;
-        //engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout(e,n)).unwrap();
+        engine.stomach.continuous = true;
+        engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout(e,n)).unwrap();
 
 
-        engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout_paginated(e,n)).unwrap();
+        //engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout_paginated(e,n)).unwrap();
 
 
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));

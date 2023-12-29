@@ -5260,11 +5260,403 @@ a97;275B
 a98;275C
 a99;275D
 a9;2720
+# https://github.com/kohler/lcdf-typetools/blob/master/texglyphlist.txt
+#
+# lcdf-typetools texglyphlist.txt, Version 2.95
+# Contents: Extensions to the Adobe Glyph List for TeX fonts and
+# encodings. We also extend the second field so that it can contain
+# multiple Unicode scalar values, separated by commas, analogous to
+# otftotfm's "% UNICODING" comments.
+###############################################################################
+Delta;2206,0394
+Ifractur;2111
+FFsmall;F766 F766,0066 0066
+FFIsmall;F766 F766 F769,0066 0066 0069
+FFLsmall;F766 F766 F76C,0066 0066 006C
+FIsmall;F766 F769,0066 0069
+FLsmall;F766 F76C,0066 006C
+Germandbls;0053 0053
+Germandblssmall;F773 F773,0073 0073
+Ng;014A
+Omega;2126,03A9
+Rfractur;211C
+SS;0053 0053
+SSsmall;F773 F773,0073 0073
+# altselector: invalid Unicode
+altselector;D802
+angbracketleft;27E8,2329
+angbracketright;27E9,232A
+arrowbothv;2195
+arrowdblbothv;21D5
+arrowleftbothalf;21BD
+arrowlefttophalf;21BC
+arrownortheast;2197
+arrownorthwest;2196
+arrowrightbothalf;21C1
+arrowrighttophalf;21C0
+arrowsoutheast;2198
+arrowsouthwest;2199
+# ascendercompwordmark: taller cwm, invalid Unicode
+ascendercompwordmark;D80A
+asteriskcentered;2217
+bardbl;2225
+# capitalcompwordmark: taller cwm, invalid Unicode
+capitalcompwordmark;D809
+ceilingleft;2308
+ceilingright;2309
+circlecopyrt;20DD,25CB
+circledivide;2298
+circledot;2299
+circleminus;2296
+coproduct;2A3F
+ct;0063 0074
+# cwm: Unicode for ZWNJ, used for secondary replacement from EC.enc
+cwm;200C
+dblbracketleft;27E6
+dblbracketright;27E7
+# U+2662 is WHITE DIAMOND SUIT
+# U+25CA is LOZENGE
+# U+2666 is BLACK DIAMOND SUIT
+diamond;2662,25CA,2666
+diamondmath;22C4
+# U+0237 is the proposed allocation for dotless j as of Unicode 4.0
+# U+1D6A5 is the mathematical italic version approved in Unicode 5.0
+dotlessj;0237,F6BE,1D6A5
+emptyset;2205,F638
+# emptyslot: invalid Unicode; the user explicitly wants this slot empty
+emptyslot;D801
+epsilon1;03F5
+epsiloninv;03F6
+equivasymptotic;224D
+flat;266D
+floorleft;230A
+floorright;230B
+follows;227B
+followsequal;2AB0
+followsorcurly;227D
+greatermuch;226B
+heart;2661,2665
+interrobang;203D
+interrobangdown;2E18
+intersectionsq;2293
+latticetop;22A4
+lessmuch;226A
+longdbls;017F 017F
+longsh;017F 0068
+longsi;017F 0069
+longsl;017F 006C
+longst;FB05,017F 0074
+lscript;2113
+natural;266E
+negationslash;0338
+ng;014B
+owner;220B
+pertenthousand;2031
+# TeX encodings such as 'texmital.enc' disagree with Unicode and the Adobe
+# glyph list; in TeX, the "straight" form of phi takes the name "phi",
+# whereas the more-common "loopy" form of phi, \varphi, takes the name "phi1".
+phi;03D5,03C6
+phi1;03C6
+pi1;03D6
+precedesequal;2AAF
+precedesorcurly;227C
+prime;2032,02B9
+rho1;03F1
+# ringfitted: a ring character centered on the x-width of A, invalid Unicode
+ringfitted;D80D
+sharp;266F
+similarequal;2243
+slurabove;2322
+slurbelow;2323
+st;FB06,0073 0074
+star;22C6
+subsetsqequal;2291
+supersetsqequal;2292
+triangle;25B3
+triangleinv;25BD
+triangleleft;25C1
+triangleright;25B7
+turnstileleft;22A2
+turnstileright;22A3
+# twelveudash: 2/3-em dash; invalid Unicode
+twelveudash;D80C
+unionmulti;228E
+unionsq;2294
+vector;20D7
+# visualspace: Unicode for OPEN BOX, used for secondary replacement from EC.enc
+visualspace;2423
+wreathproduct;2240
+# -- Marco Kuhlmann reported annoying glyph neologisms in fontinst encodings
+# Dbar = Dcroat
+Dbar;0110
+# compwordmark = cwm
+compwordmark;200C
+# dbar = dcroat
+dbar;0111
+# rangedash = endash
+rangedash;2013
+# hyphenchar = hyphen
+hyphenchar;002D
+# punctdash = emdash
+punctdash;2014
+# visiblespace = visualspace
+visiblespace;2423
+# --
+# -- These character names are used in the MSAM fonts
+# --
+Yen;00A5
+# the MSAM10 glyph is more closed than U+21BA
+# the MSAM10 glyph's gap is at the top, while U+27F2 is on the left
+anticlockwise;27F2,21BA
+# XXX arrowaxisleft
+# XXX arrowaxisright
+arrowparrleftright;21C6
+arrowparrrightleft;21C4
+arrowtailleft;21A2
+arrowtailright;21A3
+arrowtripleleft;21DA
+arrowtripleright;21DB
+# XXX axisshort
+between;226C
+# U+2713 is a Zapf dingbat
+check;2713
+circleR;00AE
+# the MSAM10 glyph may be smaller than U+24C8
+circleS;24C8
+circleasterisk;229B
+circleequal;229C
+circlering;229A
+# the MSAM10 glyph is more closed than U+21BB
+# the MSAM10 glyph's gap is at the top, while U+27F3 is on the left
+clockwise;27F3,21BB
+complement;2201
+curlyleft;21AB
+curlyright;21AC
+dblarrowdwn;21CA
+dblarrowheadleft;219E
+dblarrowheadright;21A0
+dblarrowup;21C8
+defines;225C
+# U+2666 is BLACK DIAMOND SUIT
+# U+29EB is BLACK LOZENGE
+diamondsolid;2666,29EB
+difference;224F
+dotplus;2214
+downfall;22CE
+equaldotleftright;2252
+equaldotrightleft;2253
+equalorfollows;22DF
+equalorgreater;2A96
+equalorless;2A95
+equalorprecedes;22DE
+equalsdots;2251
+followsorequal;227F
+forces;22A9
+forcesbar;22AA
+fork;22D4
+frown;2322
+geomequivalent;224E
+greaterdbleqlless;2A8C
+greaterdblequal;2267
+greaterlessequal;22DB
+greaterorapproxeql;2A86
+greaterorequalslant;2A7E
+greaterorsimilar;2273
+harpoondownleft;21C3
+harpoondownright;21C2
+# MSAM probably misnamed this glyph; the right pointing harpoon is above
+# U+21CC has the right pointing harpoon above, like MSAM
+harpoonleftright;21CC
+# MSAM probably misnamed this glyph; the left pointing harpoon is above
+# U+21CB has the left pointing harpoon above, like MSAM
+harpoonrightleft;21CB
+harpoonupleft;21BF
+harpoonupright;21BE
+# U+22BA may be larger than MSAM intercal
+intercal;22BA
+intersectiondbl;22D2
+lessdbleqlgreater;2A8B
+lessdblequal;2266
+lessequalgreater;22DA
+lessorapproxeql;2A85
+lessorequalslant;2A7D
+lessorsimilar;2272
+maltesecross;2720
+measuredangle;2221
+multimap;22B8
+multiopenleft;22CB
+multiopenright;22CC
+nand;22BC
+orunderscore;22BB
+# U+2306 PERSPECTIVE is larger than the MSAM glyph
+perpcorrespond;2A5E,2306
+precedesorequal;227E
+primereverse;2035
+revasymptequal;22CD
+revsimilar;223D
+# U+231D TOP RIGHT CORNER is a quine corner,
+# U+2E23 TOP RIGHT HALF BRACKET is a half bracket.
+# MSAM rightanglene matches the shape of U+231C but the spacing of U+2E23.
+# Similar for other rightangle characters.
+rightanglene;231D,2E23
+rightanglenw;231C,2E22
+rightanglese;231F,2E25
+rightanglesw;231E,2E24
+ringinequal;2256
+# U+22A7 MODELS is shorter than U+22A8 TRUE = satisfies.
+# MSAM satisfies is in between.
+satisfies;22A8
+shiftleft;21B0
+shiftright;21B1
+smile;2323
+sphericalangle;2222
+# U+25A1 WHITE SQUARE
+square;25A1
+squaredot;22A1
+squareimage;228F
+squareminus;229F
+squaremultiply;22A0
+squareoriginal;2290
+squareplus;229E
+# XXX U+25AA BLACK SMALL SQUARE doesn't sit on the baseline
+# XXX squaresmallsolid
+squaresolid;25A0
+# U+21AD LEFT RIGHT WAVE ARROW is not actually a squiggle arrow
+squiggleleftright;21AD
+squiggleright;21DD
+subsetdbl;22D0
+subsetdblequal;2AC5
+supersetdbl;22D1
+supersetdblequal;2AC6
+triangledownsld;25BC
+# U+22B4 NORMAL SUBGROUP OF OR EQUAL TO is sharper than MSAM
+triangleleftequal;22B4,25C1 0332
+triangleleftsld;25C0
+# U+22B5 CONTAINS AS NORMAL SUBGROUP OR EQUAL TO is sharper than MSAM
+trianglerightequal;22B5,25B7 0332
+trianglerightsld;25B6
+trianglesolid;25B2
+uniondbl;22D3
+uprise;22CF
+# --
+# -- These character names are used in the MSBM fonts
+# --
+# U+1D7CB MATHEMATICAL BOLD SMALL DIGAMMA is the closest match to MSBM,
+# although MSBM Digamma's spelling indicates that a capital was intended
+# U+03DD GREEK SMALL LETTER DIGAMMA for fallback
+Digamma;1D7CB,03DD
+# U+2132 TURNED CAPITAL F is shown as seriffed, MSBM Finv is sans
+Finv;2132
+# U+2141 TURNED SANS-SERIF CAPITAL G is turned, MSBM Gmir is only reversed
+Gmir;2141
+Omegainv;2127
+approxorequal;224A
+archleftdown;21B6
+archrightdown;21B7
+# XXX barshort
+beth;2136
+daleth;2138
+dividemultiply;22C7
+# U+29F9 BIG REVERSE SOLIDUS seems the right size
+downslope;29F9
+equalorsimilar;2242
+follownotdbleqv;2ABA
+follownotslnteql;2AB6
+followornoteqvlnt;22E9
+greaterdot;22D7
+# MSBM misnamed this glyph; should be greaternotdbleqv
+greaternotdblequal;2A8A
+greaternotequal;2A88
+greaterornotdbleql;2269
+# XXX MSBM greaterornotequal has a vertical negation slash, not U+2269 diagonal
+greaterornotequal;2269
+# XXX greaterornotsimilar
+# XXX hatwide
+# XXX hatwider
+integerdivide;2216
+lessdot;22D6
+# MSBM misnamed this glyph; should be lessnotdbleqv
+lessnotdblequal;2A89
+lessnotequal;2A87
+lessornotdbleql;2268
+# XXX MSBM lessornotequal has a vertical negation slash, not U+2268 diagonal
+lessornotequal;2268
+# XXX lessornotsimilar
+multicloseleft;22C9
+multicloseright;22CA
+notapproxequal;2247
+notarrowboth;21AE
+notarrowleft;219A
+notarrowright;219B
+notbar;2224
+notdblarrowboth;21CE
+notdblarrowleft;21CD
+notdblarrowright;21CF
+notexistential;2204
+notfollows;2281
+# U+22E1 DOES NOT SUCCEED OR EQUAL has a curved equal sign, unlike MSBM
+notfollowsoreql;2AB0 0338,22E1
+notforces;22AE
+notforcesextra;22AF
+# Unicode has no precomposed negation of U+2267 GREATER THAN OVER EQUAL TO
+notgreaterdblequal;2267 0338
+notgreaterequal;2271
+notgreaterorslnteql;2A7E 0338
+notlessdblequal;2266 0338
+notlessequal;2270
+notlessorslnteql;2A7D 0338
+# U+22E0 DOES NOT PRECEDE OR EQUAL has a curved equal sign, unlike MSBM
+notprecedesoreql;2AAF 0338,22E0
+notsatisfies;22AD
+# XXX notshortbar
+# XXX notshortparallel
+notsimilar;2241
+notsubseteql;2288
+notsubsetordbleql;2AC5 0338
+# U+228A SUBSET OF WITH NOT EQUAL TO negation slash only touches bar below;
+# MSBM negation slash touches bar and lower part of subset
+notsubsetoreql;228A
+notsuperseteql;2289
+notsupersetordbleql;2AC6 0338
+# U+228A SUPERSET OF WITH NOT EQUAL TO negation slash only touches bar below;
+# MSBM negation slash touches bar and lower part of superset
+notsupersetoreql;228B
+# U+22EC NOT NORMAL SUBGROUP OF OR EQUAL TO is sharper than MSBM
+nottriangeqlleft;22EC,25C1 0332 0338
+# U+22ED DOES NOT CONTAIN AS NORMAL SUBGROUP OR EQUAL is sharper than MSBM
+nottriangeqlright;22ED,25B7 0332 0338
+# U+22EA NOT NORMAL SUBGROUP OF is sharper than MSBM
+nottriangleleft;22EA,25C1 0338
+# U+22EB DOES NOT CONTAIN AS NORMAL SUBGROUP is sharper than MSBM
+nottriangleright;22EB,25B7 0338
+notturnstile;22AC
+# XXX parallelshort
+planckover2pi;210F
+# U+210F PLANCK CONSTANT OVER TWO PI is shown with diagonal slash, which
+# corresponds to MSBM planckover2pi, but this is a font variant
+planckover2pi1;210F
+precedenotdbleqv;2AB9
+precedenotslnteql;2AB5
+precedeornoteqvlnt;22E8
+subsetnoteql;228A
+subsetornotdbleql;2ACB
+# XXX subsetornoteql
+supersetnoteql;228B
+supersetornotdbleql;2ACC
+# XXX supersetornoteql
+# XXX tildewide
+# XXX tildewider
+# U+29F8 BIG SOLIDUS seems the right size
+upslope;29F8
+
 # Additions
+
 .notdef;STRING
+.nodef;STRING
 cwm;STRING
 Togonek;STRING T̨
 togonek;STRING t̨
+nomero;2116
 armabbrev;055F
 armnum;055A
 armdram;058F
@@ -5512,6 +5904,7 @@ fi;STRING fi
 fl;STRING fl
 ffi;STRING ffi
 ffl;STRING ffl
+fij;STRING fij
 fj;STRING fj
 ffj;STRING ffj
 ft;STRING ft
@@ -5567,9 +5960,7 @@ erasetotheright;STRING ⌦
 shift;STRING ⇧
 shiftlock;STRING ⇪
 verticaltab;STRING ␋
-copy;STRING ???
 back;STRING ␈
-endtab;STRING ???
 insert;STRING ⎀
 tab;STRING ␉
 appleopen;STRING 🍏
@@ -5621,19 +6012,882 @@ Yen;STRING ¥
 LinearAI;STRING ㏑
 gravebelowcomb;STRING  ̖
 acutebelowcomb;STRING  ̗
+brevebelowcomb;STRING  ̮
 invertedbrevecomb;STRING  ̑
 divides;STRING |
 neswline;STRING /
 nwseline;STRING \
 Leftrightline;STRING ═
-parallel;STRING ∥
+% parallel;STRING ∥
 Neswline;STRING //
 Nwseline;STRING ⑊
 perpendicular;STRING ⟂
+dasiaoxia;STRING ῞
+perthousandoldstyle;STRING ‰
+flsmall;STRING fl
+fismall;STRING fi
+ohm;STRING Ω
+fhook;STRING Ƒ
+blanksymbol;STRING ␢
+dblbracketleft;STRING ⟦
+dblbracketright;STRING ⟧
+star;STRING ★
+recipe;STRING ℞
+gnaborretni;STRING ⸘
+permyriad;STRING ‱
+published;STRING ℗
+alefisolated;STRING أ
+alefwithhamzaaboveisolated;STRING أ
+alefwithhamzaabovefinal;STRING أ
+alefwithhamzabelowisolated;STRING إ
+alefwithhamzabelowfinal;STRING إ
+alefwithmaddaaboveisolated;STRING آ
+alefwithmaddaabovefinal;STRING آ
+behinitial;STRING ﺑ
+Qu;STRING Qu
+ck;STRING ck
+TZ;STRING TZ
+equalorig;STRING =
+textcircled;STRING
+tt;STRING tt
+tz;STRING tz
+visualspace;0020
+Engalt;STRING Ŋ
+germandblS;STRING ß
+plusinferior;STRING ₊
+equalinferior;STRING ₌
+paragraphalt;STRING ❡
+Numero;STRING №
+care;STRING ℅
+onefifth;STRING ⅕
+twofifths;STRING ⅖
+threefifths;STRING ⅗
+fourfifths;STRING ⅘
+onesixth;STRING ⅙
+fivesixths;STRING ⅚
+oneeighth;STRING ⅛
+threeeighths;STRING ⅜
+fiveeighths;STRING ⅝
+seveneighths;STRING ⅞
+return;STRING ⏎
+Return;STRING ⏎
+Righta;STRING ▶
+Lefta;STRING ◀
+Upa;STRING ▲
+Downa;STRING ▼
+squaredot;STRING ⊡
+squareplus;STRING ⊞
+squaremultiply;STRING ⊠
+squareminus;STRING ⊟
+square;STRING □
+squaresolid;STRING ■
+squaresmallsolid;STRING ▪
+diamondsolid;STRING ◆
+clockwise;STRING ↻
+anticlockwise;STRING ↺
+harpoonleftright;STRING ⇌
+harpoonrightleft;STRING ⇌
+forces;STRING ⊩
+forcesbar;STRING ⊪
+satisfies;STRING ⊨
+dblarrowheadright;STRING ↠
+dblarrowheadleft;STRING ↞
+dblarrowup;STRING ⇈
+dblarrowdwn;STRING ⇊
+harpoonupright;STRING ↾
+harpoondownright;STRING ⇂
+harpoonupleft;STRING ↿
+harpoondownleft;STRING ⇃
+arrowtailright;STRING ↣
+arrowtailleft;STRING ↢
+arrowparrleftright;STRING ⇆
+arrowparrrightleft;STRING ⇄
+shiftleft;STRING ↰
+shiftright;STRING ↱
+squiggleright;STRING ↝
+squiggleleftright;STRING ↭
+squiggleleft;STRING ↜
+curlyleft;STRING ↫
+curlyright;STRING ↬
+circleequal;STRING ≗
+greaterorsimilar;STRING ≳
+greaterorapproxeql;STRING ⪆
+multimap;STRING ⊸
+equalsdots;STRING ≑
+defines;STRING ≜
+lessorsimilar;STRING ≲
+lessorapproxeql;STRING ⪅
+equalorless;STRING ⋜
+equalorgreater;STRING ⋝
+equalorprecedes;STRING ⋞
+equalorfollows;STRING ⋟
+precedesorcurly;STRING ≼
+followsorcurly;STRING ≽
+lessdblequal;STRING ≦
+greaterdblequal;STRING ≧
+lessorequalslant;STRING ⩽
+leqslant;STRING ⩽
+greaterorequalslant;STRING ⩾
+geqslant;STRING ⩾
+parallelslanted;STRING //
+primereverse;STRING ‵
+axisshort;STRING -
+equaldotrightleft;STRING ≓
+equaldotleftright;STRING ≒
+squareimage;STRING ⊏
+squareoriginal;STRING ⊐
+triangleright;STRING ▷
+triangleleft;STRING ◁
+triangleleftequal;STRING ⊴
+dotbelow;STRING
+hookabove;STRING
+lessornotsimilar;STRING ⋦
+greaterornotsimilar;STRING ⋧
+althyphen;STRING -
+csquotedblright;STRING “
+Cedilla;STRING ¸
+dalt;STRING d
+dnos;STRING d
+fnos;STRING f
+falt;STRING f
+galt;STRING g
+kalt;STRING k
+talt;STRING t
+Yalt;STRING Y
+Zalt;STRING Z
+onealt;STRING 1
+ualt;STRING u
+ghost;STRING
+capitalgrave;STRING `
+capitagrave;STRING `
+capitalacute;STRING ´
+capitaltilde;STRING ˜
+capitaldieresis;STRING ¨
+capitalhungarumlaut;STRING ˝
+capitalring;STRING ˚
+capitalcaron;STRING ˇ
+capitalbreve;STRING ˘
+capitaldotaccent;STRING ˙
+capitalcircumflex;STRING ˆ
+capitalmacron;STRING ¯
+asciibreve;STRING ˘
+asciicaron;STRING ˇ
+asciiacutedbl;STRING  ̋
+asciigravedbl;STRING  ̏
+pertentousand;STRING ‱
+Tilde;STRING ~
+Ring;STRING ˚
+Breve;STRING ˘
+Macron;STRING ¯
+Dotaccent;STRING ˙
+Cedilla;STRING ¸
+Ogonek;STRING ˛
+quotesnglright;STRING ’
+quotesnglleft;STRING ‘
+asperperispomene;STRING ᾿
+Ksi;STRING Ξ
+ksi;STRING ξ
+cigmalunate;STRING Ϲ
+Engsmall;STRING ŋ
+euro2;STRING €
+hatmorewidest;STRING ^
+hatultime;STRING ^
+tildemorewidest;STRING ~
+tildeultime;STRING ~
+bracketdoubleleft;STRING ⟦
+bracketdoubleright;STRING ⟧
+bracketdoubleleftbig;STRING ⟦
+bracketdoublerightbig;STRING ⟧
+bracketdoubleleftBig;STRING ⟦
+bracketdoublerightBig;STRING ⟧
+bracketdoubleleftbbig;STRING ⟦
+bracketdoublerightbbig;STRING ⟧
+bracketdoubleleftBBig;STRING ⟦
+bracketdoublerightBBig;STRING ⟧
+dblbracketleftbig;STRING ⟦
+dblbracketrightbig;STRING ⟧
+dblbracketleftBig;STRING ⟦
+dblbracketrightBig;STRING ⟧
+dblbracketleftbigg;STRING ⟦
+dblbracketrightbigg;STRING ⟧
+dblbracketleftBigg;STRING ⟦
+dblbracketrightBigg;STRING ⟧
+harpoonleftup;STRING ↼
+harpoonrightup;STRING ⇀
+harpoonleftdown;STRING ↽
+harpoonrightdown;STRING ⇁
+rho2;STRING ϱ
+partialdiff1;STRING ∂
+pi2;STRING ϖ
+Xi1;STRING Ξ
+emptysetstress;STRING ∅
+radicallow;STRING √
+bartriple;STRING ⦀
+vDash;STRING ⊨
+blacktriangleleft;STRING ◀
+blacktriangleright;STRING ▶
+notleqslant;STRING ⩽̸
+notgeqslant;STRING ⩾̸
+notvDash;STRING ⊭
+notexists;STRING ∄
+varsubsetneqq;STRING ⊊︀
+swords;STRING ⚔
+notowner;STRING ∌
+smallsetminus;STRING ∖
+rightrightarrows;STRING ⇉
+leftleftarrows;STRING ⇇
+curvearrowleft;STRING ↶
+curvearrowright;STRING ↷
+noway;STRING ⛔
+beware;STRING ⚠
+caution;STRING ☡
+bomb;STRING 💣
+grimace;STRING 😖
+xswordsup;STRING ⚔
+Deltanum;STRING
+Etanum;STRING
+Chinum;STRING
+Munum;STRING
+zeta1;STRING
+braxy;STRING
+cy;STRING
+qoppa;STRING
+katotonos;STRING
+ou;STRING ȣ
+hatwide4;STRING ^
+hatwide5;STRING ^
+hatwide6;STRING ^
+hatwide7;STRING ^
+hatwide8;STRING ^
+hatwide9;STRING ^
+hatwide10;STRING ^
+hatwide13;STRING ^
+tildewide4;STRING ~
+tildewide5;STRING ~
+tildewide6;STRING ~
+tildewide7;STRING ~
+tildewide8;STRING ~
+tildewide9;STRING ~
+tildewide10;STRING ~
+tildewide13;STRING ~
+widearc1;STRING ⌒
+widearc2;STRING ⌒
+widearc3;STRING ⌒
+widearc4;STRING ⌒
+widearc5;STRING ⌒
+widearc6;STRING ⌒
+parenwide;STRING ⌒
+parenwide1;STRING ⌒
+parenwide3;STRING ⌒
+parenwide4;STRING ⌒
+parenwide5;STRING ⌒
+parenwide6;STRING ⌒
+parenwide7;STRING ⌒
+parenwide8;STRING ⌒
+parenwide9;STRING ⌒
+parenwide10;STRING ⌒
+parenwide13;STRING ⌒
+summationtext2;STRING ∑
+producttext2;STRING ∏
+summationdisplay2;STRING ∑
+productdisplay2;STRING ∏
+coproducttext2;STRING ∐
+coproductdisplay2;STRING ∐
+intersectionsqdisplay;STRING ⊓
+doublecontintegtext;STRING ∯
+doublecontintegdisplay;STRING ∯
+dblcontintegtext;STRING ∯
+dblcontintegdisplay;STRING ∯
+cntrclckwcontintegtext;STRING ∳
+cntrclckwcontintegdisplay;STRING ∳
+clckwcontintegtext;STRING ∲
+clckwcontintegdisplay;STRING ∲
+squarecontintegtext;STRING ⨖
+squarecontintegdisplay;STRING ⨖
+iintegtext;STRING ∬
+iintegdisplay;STRING ∬
+iiintegtext;STRING ∭
+iiintegdisplay;STRING ∭
+iiiintegtext;STRING ⨌
+iiiintegdisplay;STRING ⨌
+tplcontintegtext;STRING ∰
+tplcontintegdisplay;STRING ∰
+varcntrclckwcontintegtext;STRING ∳
+varcntrclckwcontintegdisplay;STRING ∳
+varclckwcontintegtext;STRING ∲
+varclckwcontintegdisplay;STRING ∲
+producttext1;STRING ⨯
+productdisplay1;STRING ⨯
+partialup;STRING ∂
+partialsf;STRING ∂
+patialupsf;STRING ∂
+flatsf;STRING ♭
+lscriptsf;STRING ℓ
+weierstrassf;STRING ℘
+Umicron;STRING Υ
+umicron;STRING υ
+vu;STRING ν
+varepsilon;STRING ε
+vartheta;STRING ϑ
+varpi;STRING ϖ
+varrho;STRING ϱ
+varsigma;STRING ς
+varphi;STRING φ
+varemptyset;STRING ∅
+notsimequal;STRING ≇
+medcircle;STRING ⚪
+medbullet;STRING ⚫
+parallel1;STRING ⑊
+doteq;STRING ≐
+multimapinv;STRING ⟜
+multimapboth;STRING ⧟
+lbagbig;STRING ⟅
+lbagBig;STRING ⟅
+lbagbigg;STRING ⟅
+lbagBigg;STRING ⟅
+lbagBiggg;STRING ⟅
+lbagBigggg;STRING ⟅
+lbagBiggggg;STRING ⟅
+rbagbig;STRING ⟆
+rbagBig;STRING ⟆
+rbagbigg;STRING ⟆
+rbagBigg;STRING ⟆
+rbagBiggg;STRING ⟆
+rbagBigggg;STRING ⟆
+rbagBiggggg;STRING ⟆
+fintegraltext;STRING ⨏
+fintegraldisplay;STRING ⨏
+fIntegraltext;STRING ⨏
+fIntegraldisplay;STRING ⨏
+A1;STRING 𝔸
+B1;STRING 𝔹
+C1;STRING ℂ
+D1;STRING 𝔻
+E1;STRING 𝔼
+F1;STRING 𝔽
+G1;STRING 𝔾
+H1;STRING ℍ
+I1;STRING 𝕀
+J1;STRING 𝕁
+K1;STRING 𝕂
+L1;STRING 𝕃
+M1;STRING 𝕄
+N1;STRING ℕ
+O1;STRING 𝕆
+P1;STRING ℙ
+Q1;STRING ℚ
+R1;STRING ℝ
+S1;STRING 𝕊
+T1;STRING 𝕋
+U1;STRING 𝕌
+V1;STRING 𝕍
+W1;STRING 𝕎
+X1;STRING 𝕏
+Y1;STRING 𝕐
+Z1;STRING ℤ
+capitalhungarhumlaut;STRING ˝
+angleleftbig;STRING ⟨
+angleleftbig3;STRING ⟨
+angleleftbig4;STRING ⟨
+angleleftbig5;STRING ⟨
+angleleftbig6;STRING ⟨
+angleleftbig7;STRING ⟨
+anglerightbig;STRING ⟩
+anglerightbig3;STRING ⟩
+anglerightbig4;STRING ⟩
+anglerightbig5;STRING ⟩
+anglerightbig6;STRING ⟩
+anglerightbig7;STRING ⟩
+parenleftbig3;STRING (
+parenleftbig4;STRING (
+parenleftbig5;STRING (
+parenleftbig6;STRING (
+parenleftbig7;STRING (
+parenrightbig3;STRING )
+parenrightbig4;STRING )
+parenrightbig5;STRING )
+parenrightbig6;STRING )
+parenrightbig7;STRING )
+bracketleftbig3;STRING [
+bracketleftbig4;STRING [
+bracketleftbig5;STRING [
+bracketleftbig6;STRING [
+bracketleftbig7;STRING [
+bracketrightbig3;STRING ]
+bracketrightbig4;STRING ]
+bracketrightbig5;STRING ]
+bracketrightbig6;STRING ]
+bracketrightbig7;STRING ]
+dblbracketleftbig3;STRING ⟦
+dblbracketleftbig4;STRING ⟦
+dblbracketleftbig5;STRING ⟦
+dblbracketleftbig6;STRING ⟦
+dblbracketleftbig7;STRING ⟦
+dblbracketrightbig3;STRING ⟧
+dblbracketrightbig4;STRING ⟧
+dblbracketrightbig5;STRING ⟧
+dblbracketrightbig6;STRING ⟧
+dblbracketrightbig7;STRING ⟧
+floorleftbig3;STRING ⌊
+floorleftbig4;STRING ⌊
+floorleftbig5;STRING ⌊
+floorleftbig6;STRING ⌊
+floorleftbig7;STRING ⌊
+floorrightbig3;STRING ⌋
+floorrightbig4;STRING ⌋
+floorrightbig5;STRING ⌋
+floorrightbig6;STRING ⌋
+floorrightbig7;STRING ⌋
+ceilingleftbig3;STRING ⌈
+ceilingleftbig4;STRING ⌈
+ceilingleftbig5;STRING ⌈
+ceilingleftbig6;STRING ⌈
+ceilingleftbig7;STRING ⌈
+ceilingrightbig3;STRING ⌉
+ceilingrightbig4;STRING ⌉
+ceilingrightbig5;STRING ⌉
+ceilingrightbig6;STRING ⌉
+ceilingrightbig7;STRING ⌉
+braceleftbig3;STRING {
+braceleftbig4;STRING {
+braceleftbig5;STRING {
+braceleftbig6;STRING {
+braceleftbig7;STRING {
+bracerightbig3;STRING }
+bracerightbig4;STRING }
+bracerightbig5;STRING }
+bracerightbig6;STRING }
+bracerightbig7;STRING }
+radicalbig3;STRING ⎷
+radicalbig4;STRING ⎷
+radicalbig5;STRING ⎷
+radicalbig6;STRING ⎷
+radicalbig7;STRING ⎷
+slashbig3;STRING /
+slashbig4;STRING /
+slashbig5;STRING /
+slashbig6;STRING /
+slashbig7;STRING /
+backslashbig3;STRING \
+backslashbig4;STRING \
+backslashbig5;STRING \
+backslashbig6;STRING \
+backslashbig7;STRING \
+hatwide3;STRING ^
+tildewide3;STRING ~
+Acal;STRING 𝒜
+Bcal;STRING ℬ
+Ccal;STRING 𝒞
+Dcal;STRING 𝒟
+Ecal;STRING ℰ
+Fcal;STRING ℱ
+Gcal;STRING 𝒢
+Hcal;STRING ℋ
+Ical;STRING ℐ
+Jcal;STRING 𝒥
+Kcal;STRING 𝒦
+Lcal;STRING ℒ
+Mcal;STRING ℳ
+Ncal;STRING 𝒩
+Ocal;STRING 𝒪
+Pcal;STRING 𝒫
+Qcal;STRING 𝒬
+Rcal;STRING ℛ
+Scal;STRING 𝒮
+Tcal;STRING 𝒯
+Ucal;STRING 𝒰
+Vcal;STRING 𝒱
+Wcal;STRING 𝒲
+Xcal;STRING 𝒳
+Ycal;STRING 𝒴
+Zcal;STRING 𝒵
+smallelement;STRING ∊
+smallowner;STRING ∍
+notsmallelement;STRING ∊̸
+notsmallowner;STRING ∍̸
+onebbb;STRING 𝟙
+Abbb;STRING 𝔸
+Bbbb;STRING 𝔹
+Cbbb;STRING ℂ
+Dbbb;STRING 𝔻
+Ebbb;STRING 𝔼
+Fbbb;STRING 𝔽
+Gbbb;STRING 𝔾
+Hbbb;STRING ℍ
+Ibbb;STRING 𝕀
+Jbbb;STRING 𝕁
+Kbbb;STRING 𝕂
+Lbbb;STRING 𝕃
+Mbbb;STRING 𝕄
+Nbbb;STRING ℕ
+Obbb;STRING 𝕆
+Pbbb;STRING ℙ
+Qbbb;STRING ℚ
+Rbbb;STRING ℝ
+Sbbb;STRING 𝕊
+Tbbb;STRING 𝕋
+Ubbb;STRING 𝕌
+Vbbb;STRING 𝕍
+Wbbb;STRING 𝕎
+Xbbb;STRING 𝕏
+Ybbb;STRING 𝕐
+Zbbb;STRING ℤ
+abbb;STRING 𝕒
+bbbb;STRING 𝕓
+cbbb;STRING 𝕔
+dbbb;STRING 𝕕
+ebbb;STRING 𝕖
+fbbb;STRING 𝕗
+gbbb;STRING 𝕘
+hbbb;STRING 𝕙
+ibbb;STRING 𝕚
+jbbb;STRING 𝕛
+kbbb;STRING 𝕜
+lbbb;STRING 𝕝
+mbbb;STRING 𝕞
+nbbb;STRING 𝕟
+obbb;STRING 𝕠
+pbbb;STRING 𝕡
+qbbb;STRING 𝕢
+rbbb;STRING 𝕣
+sbbb;STRING 𝕤
+tbbb;STRING 𝕥
+ubbb;STRING 𝕦
+vbbb;STRING 𝕧
+wbbb;STRING 𝕨
+xbbb;STRING 𝕩
+ybbb;STRING 𝕪
+zbbb;STRING 𝕫
+circlefigure;STRING ◯
+digammait;STRING Ϝ
+kappa1it;STRING 𝜘
+followsorapproxeql;STRING ⪸
+precedesorapproxeql;STRING ⪷
+followsorsimilar;STRING ≿
+precedesorsimilar;STRING ≾
+equalslantorless;STRING ⪕
+equalslantorgreater;STRING ⪖
+curlyorprecedes;STRING ⋞
+curlyorfollows;STRING ⋟
+lozengesolid;STRING ◆
+dblarrowdown;STRING ⇊
+dblarrowup;STRING ⇈
+vartriangleright;STRING ⊳
+vartriangleleft;STRING ⊲
+bigstar;STRING ★
+triangleup;STRING △
+triangledown;STRING ▽
+greaterequalless;STRING ⋛
+circlecirc;STRING ⊚
+circledash;STRING ⊝
+lessnotvertequal;STRING ≨
+greaternotvertequal;STRING ≩
+notlessorequalslant;STRING ⩽̸
+notgreaterorequalslant;STRING ⩾̸
+precedesornotsimilar;STRING ⋨
+followsornotsimilar;STRING ⋩
+precedesnotdbleql;STRING ⪳̸
+followsnotdbleql;STRING ⪴̸
+precedesnotapproxeql;STRING ⪹
+followsnotapproxeql;STRING ⪺
+lessnotapproxeql;STRING ⪉
+greaternotapproxeql;STRING ⪊
+notcongruent;STRING ≇
+clockwiseintegraltext;STRING ∱
+clockwiseintegraldisplay;STRING ∱
+clockwisecontintegraltext;STRING ∲
+clockwisecontintegraldisplay;STRING ∲
+anticlockwisecontintegraltext;STRING ∳
+anticlockwisecontintegraldisplay;STRING ∳
+contdblintegraltext;STRING ∯
+contdblintegraldisplay;STRING ∯
+conttripleintegraltext;STRING ∰
+conttripleintegraldisplay;STRING ∰
+multicloseleftright;STRING ⋈
+nexists;STRING ∄
+kappa1up;STRING ϰ
+shortleftarrow;STRING ←
+shortrightarrow;STRING →
+shortuparrow;STRING ↑
+shortdownarrow;STRING ↓
+recordright;STRING Ⓟ
+caret;STRING ‸
+caretinsert;STRING ⁁
+hyphenbullet;STRING ⁃
+refmark;STRING ※
+undertie;STRING ‿
+spaceopenbox;STRING ␣
+quotesinglrev;STRING ‛
+quotedblrev;STRING ‟
+trianglebullet;STRING ‣
+eurocurrency;STRING ₠
+coloncurrency;STRING ₡
+mill;STRING ₥
+pesetas;STRING ₧
+CL;STRING ℄
+lbbar;STRING ℔
+Rx;STRING ℞
+response;STRING ℟
+versicle;STRING ℣
+Fturn;STRING Ⅎ
+gravenosp;STRING `
+acutenosp;STRING ´
+circumflexnosp;STRING ˆ
+tildenosp;STRING ˜
+macronnosp;STRING ¯
+overscorenosp;STRING ¯
+brevenosp;STRING ˘
+dotnosp;STRING ˙
+diereesisnosp;STRING ¨
+ringnosp;STRING ˚
+acutedblnosp;STRING  ̋
+caronnosp;STRING ˇ
+linevertnosp;STRING '
+linevertdblnosp;STRING "
+gravedblnosp;STRING  ̏
+candrabindu;STRING  ̐
+breveinv;STRING  ̑
+commaturnsup;STRING  ̒
+NUL;STRING
+kra;STRING ĸ
+Kbreton;STRING Ꝃ
+kbreton;STRING ꝃ
+Epsilonlatin;STRING Ɛ
+Gammalatin;STRING Ɣ
+Ibar;STRING Ɨ
+mcapturn;STRING Ɯ
+Nhook;STRING Ɲ
+nleg;STRING ƞ
+Obar;STRING Ɵ
+OI;STRING Ƣ
+eshlooprev;STRING ƪ
+Trthook;STRING Ʈ
+Upsilonlatin;STRING Ʊ
+Vcursive;STRING Ʋ
+bbar;STRING ƀ
+cturn;STRING ↄ
+deltaturn;STRING ƍ
+epsilonlatinrev;STRING ɜ
+epsilonlatin;STRING ɛ
+babygamma;STRING ˠ
+Iotalatin;STRING Ɩ
+ibar;STRING ɨ
+lambdabar;STRING ƛ
+mturn;STRING ɯ
+rlfthook;STRING ᶉ
+YR;STRING Ʀ
+obar;STRING ɵ
+trthook;STRING ʈ
+vscript;STRING ʋ
+Zbar;STRING Ƶ
+Yogh;STRING Ȝ
+glottalstopbarinv;STRING ƾ
+Gbar;STRING Ǥ
+Lcatalan;STRING Ŀ
+lcatalan;STRING ŀ
+brevecomb;STRING  ̆
+xlessequal;STRING ⩽
+xgreaterequal;STRING ⩾
+ell;STRING ℓ
+anglearc;STRING ∢
+diameter;STRING ⌀
+sofpasuq;STRING ׃
+kaffinal;STRING ך
+memfinal;STRING ם
+nunfinal;STRING ן
+pefinal;STRING ף
+tsadifinal;STRING ץ
+qibuts;STRING ֻ
+alefmapiq;STRING אּ
+kaffinaldagesh;STRING ךּ
+pefinaldagesh;STRING פּ
+reshdagesh;STRING בֿ
+shinshindotdagesh;STRING שּׁ
+shinsindotdagesh;STRING שּׂ
+kaffinalsheva;STRING כּ
+kaffinalqamats;STRING כּ
+nunfinalqamats;STRING שּ
+primetriple;STRING ‴
+primequad;STRING ⁗
+primedblreversed;STRING ‶
+primetriplereversed;STRING ‷
+horizontal;STRING —
+mho;STRING ℧
+cwm;STRING ​
+wedgedot;STRING ⟑
+parenleftbig1;STRING (
+parenleftbig2;STRING (
+veedot;STRING ⟇
+behfinal;STRING ﺐ
+numeralgreek;STRING ʹ
+umatra;STRING ु
+uumatra;STRING ू
+rimatra;STRING ृ
+ematra;STRING े
+candra;STRING ॅ
+hat4;STRING ^
+hat5;STRING ^
+hat6;STRING ^
+tilde4;STRING ~
+tilde5;STRING ~
+tilde6;STRING ~
+cupdot;STRING ⨃
+behisolated;STRING ﺏ
+dotacc;STRING ˙
+0;STRING 0
+1;STRING 1
+2;STRING 2
+3;STRING 3
+4;STRING 4
+5;STRING 5
+6;STRING 6
+7;STRING 7
+8;STRING 8
+9;STRING 9
+cl;STRING CL
+Dzh;STRING Џ
+Ze;STRING З
+numeralgreeksub;STRING ʹ
+colonapprox;STRING :≈
+coloncolonapprox;STRING ::≈
+colonsim;STRING :~
+coloncolonsim;STRING ::~
+forcesextra;STRING ⊫
+simequal;STRING ≅
+precedesordblequal;STRING ⪳
+followsordblequal;STRING ⪴
+degreecentigrade;STRING ℃
+hdotdot;STRING ‥
+diamonddots;STRING ᠅
+dotminus;STRING ∸
+minusdot;STRING ⨪
+ffij;STRING ffij
+slongslong;STRING ſſ
+slongi;STRING ſi
+slongl;STRING ſl
+slongslongi;STRING ſſi
+slongslongl;STRING ſſl
+zbar;STRING ƶ
+yogh;STRING ȝ
+twobar;STRING ƻ
+gbar;STRING ǥ
+APLup;STRING △
+bowtie;STRING ⋈
+otriangle;STRING 🟕
+boxvert;STRING ◫
+diamonddiamond;STRING 🞜
+pentagram;STRING ⛤
+largepentagram;STRING ⛤
 
 # missing
+hbipropto;STRING ???
+neswbipropto;STRING ???
+vbipropto;STRING ???
+nwsebipropto;STRING ???
+downpropto;STRING ???
+rightpropto;STRING ???
+uppropto;STRING ???
+diamondminus;STRING ???
+diamondplus;STRING ???
+diamondvert;STRING ???
+diamondslash;STRING ???
+diamondtimes;STRING ???
+diamondbackslash;STRING ???
+sqcupplus;STRING ???
+sqcapplus;STRING ???
+capplus;STRING ???
+sqcupdot;STRING ???
+sqcapdot;STRING ???
+curlywedgedot;STRING ???
+curlyveedot;STRING ???
+doublecurlywedge;STRING ???
+doublecurlyvee;STRING ???
+rightY;STRING ???
+upY;STRING ???
+leftY;STRING ???
+downY;STRING ???
+dtimes;STRING ???
+utimes;STRING ???
+slashdiv;STRING ???
+backslashdiv;STRING ???
+vertdiv;STRING ???
+yoghrev;STRING ???
+fiogonek;STRING ???
+ffiogonek;STRING ???
+flslash;STRING ???
+fflslash;STRING ???
+Eturn;STRING ???
+ydotsubnosp;STRING ???
+dotmedvert;STRING ???
+medvertdot;STRING ???
+fivedots;STRING ???
+righttherefore;STRING ???
+lefttherefore;STRING ???
+udotdot;STRING ???
+ddotdot;STRING ???
+dialytikaperispomeni;STRING ???
+dialytikaoxia;STRING ???
+dialytikavaria;STRING ???
+oxia;STRING ???
+dasia;STRING ???
+psili;STRING ???
+dasiaperispomeni;STRING ???
+dasiavaria;STRING ???
+psiliperispomeni;STRING ???
+psilioxia;STRING ???
+psilivaria;STRING ???
+varia;STRING ???
+perispomeni;STRING ???
+omegapi;STRING ???
+Underbar;STRING ???
+squigarrowleftright;STRING ???
+DC;STRING ???
+DLE;STRING ???
+HT;STRING ???
+LF;STRING ???
+CR;STRING ???
+ullcorner;STRING ???
+Forcesbar;STRING ???
+solidmultimap;STRING ???
+solidmultimapinv;STRING ???
+solidmultimapboth;STRING ???
+rsolidmultimapboth;STRING ???
+lsolidmultimapboth;STRING ???
+cntrclclwdblcontinteg;STRING ???
+cntrclclwdblcontintegdisp;STRING ???
+varclclwdblcontinteg;STRING ???
+varclclwdblcontintegdisp;STRING ???
+copy;STRING ???
+endtab;STRING ???
 internalchar1;STRING ???
 internalchar2;STRING ???
+guillbracketleft;STRING ???
+guillbracketright;STRING ???
+mapsfromchar;STRING ???
+mapsfrom;STRING ???
+Mapsto;STRING ???
+Mapsfrom;STRING ???
+mmapsto;STRING ???
+mmapsfrom;STRING ???
+Mmapsto;STRING ???
+Mmapsfrom;STRING ???
+intersectmultitext;STRING ???
+intersectmultidisplay;STRING ???
+unionsqmultitext;STRING ???
+unionsqmultidisplay;STRING ???
+intersectsqmultitext;STRING ???
+intersectsqmultidisplay;STRING ???
+bracehext;STRING ???
+idotintegtext;STRING ???
+idotintegdisplay;STRING ???
+Obarvariant;STRING ???
+pipedblbar;STRING ???
+yoghtail;STRING ???
+Yoghrev;STRING ???
+Eshturn;STRING ???
+hooksup;STRING ???
+bracketquillleft;STRING ???
+bracketquillright;STRING ???
 yparithmon;STRING ???
 Neswarrow;STRING ???
 Nwsearrow;STRING ???
@@ -5800,3 +7054,66 @@ swModels;STRING ???
 seModels;STRING ???
 rcirclearrowdown;STRING ???
 lcirclearrowdown;STRING ???
+NameMe;STRING ???
+SSsmall;STRING ???
+arrowlefttophalf;STRING ???
+arrowleftbothalf;STRING ???
+arrowrighttophalf;STRING ???
+arrowrightbothalf;STRING ???
+arrowaxisright;STRING ???
+arrowaxisleft;STRING ???
+subsetornoteql;STRING ???
+supersetornoteql;STRING ???
+notshortparallel;STRING ???
+notshortbar;STRING ???
+barshort;STRING ???
+parallelshort;STRING ???
+arrowhookleft;STRING ???
+arrowhookright;STRING ???
+polishlcross;STRING ???
+oldhy;STRING ???
+barex;STRING ???
+bardblex;STRING ???
+arrowdblvertex;STRING ???
+dblbracketlefttp;STRING ???
+dblbracketrighttp;STRING ???
+dblbracketleftbt;STRING ???
+dblbracketrightbt;STRING ???
+dblbracketleftex;STRING ???
+dblbracketrightex;STRING ???
+verticalleftwave;STRING ???
+verticalrightwave;STRING ???
+mapstochar;STRING ???
+hookrightchar;STRING ???
+hookleftchar;STRING ???
+lslashslash;STRING ???
+multicloseup;STRING ???
+multiclosedown;STRING ???
+multicloseupdown;STRING ???
+mdlogo;STRING ???
+shortbar;STRING ???
+shortparallel;STRING ???
+thicksimilar;STRING ???
+thickapproxequal;STRING ???
+arrowaxishorizex;STRING ???
+trianglewide;STRING ???
+trianglewide3;STRING ???
+trianglewide4;STRING ???
+trianglewide5;STRING ???
+trianglewide6;STRING ???
+trianglewide7;STRING ???
+trianglewide8;STRING ???
+trianglewide9;STRING ???
+trianglewide10;STRING ???
+trianglewide13;STRING ???
+backapprox;STRING ???
+Orogate;STRING ???
+orogate;STRING ???
+nparallel;STRING ???
+parenlefttpA;STRING ???
+parenrighttpA;STRING ???
+parenleftbtA;STRING ???
+parenrightbtA;STRING ???
+parenleftexA;STRING ???
+parenrightexA;STRING ???
+notdef;STRING ???

@@ -58,7 +58,8 @@ pub enum RusTeXNode {
     PGFSvg {
         bx:TeXBox<Types>,
         minx:Dim32,miny:Dim32,maxx:Dim32,maxy:Dim32,
-    }
+    },
+    PageBegin,PageEnd
 }
 impl CustomNodeTrait<Types> for RusTeXNode {}
 impl NodeTrait<Types> for RusTeXNode {

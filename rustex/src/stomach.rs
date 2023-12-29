@@ -1,4 +1,5 @@
-use tex_engine::commands::CommandScope;
+use tex_engine::commands::{Command, CommandScope};
+use tex_engine::commands::methods::make_macro;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
@@ -6,14 +7,15 @@ use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData};
 use tex_engine::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
-use tex_engine::tex::numerics::Dim32;
+use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::token::CompactToken;
 use tex_engine::tex::types::{BoxType, GroupType};
-use crate::engine::{Font, Refs, Types};
+use crate::engine::{AT_LETTER_SCHEME, Font, Refs, Types};
 use crate::extension::FontChange;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
+use tex_engine::engine::stomach::methods::add_node_v;
 use tex_engine::tex::nodes::boxes::{TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
@@ -22,6 +24,8 @@ use tex_engine::tex::nodes::vertical::VNode;
 use crate::shipout::ZERO;
 use tex_engine::tex::types::TeXMode;
 use tex_engine::tex::numerics::TeXDimen;
+use tex_engine::tex::numerics::Skip;
+use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,
@@ -93,6 +97,15 @@ impl Stomach for RusTeXStomach {
         engine.stomach.prevent_shipout = false;
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphEnd));
     }
+    /*
+    fn add_node_v(engine: &mut EngineReferences<Self::ET>, node: VNode<Self::ET>) {
+        if engine.stomach.data.in_output
+        match node {
+            VNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd) => (),
+            _ => add_node_v(engine,node)
+        }
+    }
+     */
 
     fn maybe_shipout(engine:&mut EngineReferences<Self::ET>,penalty:Option<i32>) {
         if engine.stomach.prevent_shipout { return }
@@ -101,9 +114,13 @@ impl Stomach for RusTeXStomach {
         if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() {
             if continuous {
                 data.pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX / 3);
-                Self::do_shipout_output(engine,Some(-10000));
+                if data.page_contains_boxes && data.pagetotal > <Self::ET as EngineTypes>::Dim::from_sp(6553600 * 5) {
+                    do_shipout(engine,Some(-10000),|_|());
+                } else if penalty.is_some() {
+                    do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip32::new(Dim32(655360),None,None))));
+                }
             } else if data.pagetotal >= data.pagegoal || penalty.is_some() {
-                Self::do_shipout_output(engine, penalty)
+                do_shipout(engine,penalty,|_|());
             }
         }
     }
@@ -234,4 +251,27 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
         }
     }
     SplitResult{first:nodes,rest,split_penalty}
+}
+
+fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Types>,penalty:Option<i32>,f:F) {
+    let undefineds = vec![
+        // @mkboth: \long#1#2
+        engine.aux.memory.cs_interner_mut().new("@oddhead"),
+        engine.aux.memory.cs_interner_mut().new("@oddfoot"),
+        engine.aux.memory.cs_interner_mut().new("@evenhead"),
+        engine.aux.memory.cs_interner_mut().new("@evenfoot"),
+    ];
+    let mkboth = engine.aux.memory.cs_interner_mut().new("@mkboth");
+    let mut m = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(),&AT_LETTER_SCHEME,"#1#2","");
+    m.long = true;
+    engine.state.set_command(&engine.aux,mkboth,Some(Command::Macro(m)),true);
+    for s in undefineds.into_iter() {
+        let m = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(),&AT_LETTER_SCHEME,"","");
+        engine.state.set_command(&engine.aux,s,Some(Command::Macro(m)),true)
+    }
+    let data = engine.stomach.data_mut();
+    data.page.insert(0,VNode::Custom(RusTeXNode::PageBegin));
+    f(data);
+    data.page.push(VNode::Custom(RusTeXNode::PageEnd));
+    RusTeXStomach::do_shipout_output(engine,penalty)
 }

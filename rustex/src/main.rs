@@ -21,8 +21,8 @@ fn main() {
 
 fn thesis() {
     env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    //RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex")
-    RusTeXEngine::do_file("/home/jazzpirate/test.tex")
+    RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex")
+    //RusTeXEngine::do_file("/home/jazzpirate/test.tex")
 }
 
 fn profile() {

@@ -71,10 +71,8 @@ object Utils {
   }
 
   def numToChar(s:String) = {
-    val ls = if (s.forall(isHexDigit) && s.length == 12) {
-      s.take(4) :: s.slice(4, 8) :: s.drop(8) :: Nil
-    } else if (s.forall(isHexDigit) && s.length == 8) {
-      s.take(4) :: s.drop(4) :: Nil
+    val ls = if (s.forall(isHexDigit) && s.length > 4 && s.length % 4 == 0) {
+      s.grouped(4).toList
     } else s.split(' ').toList
     ls.map(s => Integer.parseInt(s,16)).map(i => new String(Character.toChars(i))).mkString
   }
@@ -119,6 +117,8 @@ object Utils {
         parseunicode(name.dropRight(6))
       case _ if name.endsWith("_swash1") =>
         parseunicode(name.dropRight(7))
+      case _ if name.endsWith("oldstyle") =>
+        parseunicode(name.dropRight(8))
       case _ if name.startsWith("_") =>
         "???"
       case _ if name.contains("_") =>
@@ -128,6 +128,14 @@ object Utils {
         val r = name.drop(7)
         val i = romanToInt(r) + Integer.parseInt("10600",16) - 1
         new String(Character.toChars(i))
+      case _ if name.endsWith("sf") =>
+        parseunicode(name.dropRight(2))
+      case _ if name.endsWith("1") || name.endsWith("2") =>
+        parseunicode(name.dropRight(1))
+      case _ if name.endsWith("nosp") =>
+        parseunicode(name.dropRight(4))
+      case _ if name.startsWith("dummy") =>
+        "???"
       case _ if name.startsWith("sym") =>
         "???"
       case _ =>
@@ -139,12 +147,13 @@ object Utils {
     encodings.find(p => p._1 == f.getName.replace(".enc","")) match {
       case Some((s,_)) => s
       case _ =>
-        val lines = fileToStrings(f).filterNot(l => l.startsWith("%") || l.endsWith("[") || l.endsWith("[%") || l.startsWith("]") || l.startsWith("/ECEncoding"))
-          .flatMap(s => s.takeWhile(_ != '%').split("\\s")).filter(_.startsWith("/"))
+        val lines = fileToStrings(f).map(_.takeWhile(_ != '%').trim).filterNot(l => l.startsWith("%") || l.endsWith("[") || l.startsWith("]") || l.endsWith("Encoding"))
+          .flatMap(s => s.takeWhile(_ != '%').split("\\s")).filter(_.startsWith("/")).filterNot(_.endsWith("Encoding"))
+          .flatMap(_.split('/').filter(_.nonEmpty))
         val filemap = mutable.Map.empty[Int, String]
         var i = 0
         lines.foreach { l =>
-          filemap(i) = parseunicode(l.drop(1).trim)
+          filemap(i) = parseunicode(l.trim)
           i += 1
         }
         encodings.find(p => p._2 == filemap) match {
@@ -223,6 +232,8 @@ object Utils {
             map(name) = code.drop(7)
           case name :: code :: _ if code == "STRING" =>
             map(name) = ""
+          case name :: code :: Nil if code.contains(' ') || code.contains(',') =>
+            map(name) = code.split(',').head.split(' ').map(numToChar).mkString
           case name :: code :: Nil =>
             map(name) = numToChar(code)
           case code :: name :: _ :: Nil =>
@@ -246,8 +257,14 @@ class Font(name: String, encfilename:Option[String], pfbfilename: Option[String]
     val f = new File(kpsewhich(name+".tfm"))
     if (f.exists()) Some(f) else None
   }
-  lazy val encfile = encfilename.flatMap(getEncFile)
-  lazy val pfbfile = pfbfilename.flatMap(getPfbFile)
+  lazy val encfile = getEncFile(encfilename match {
+    case Some(f) => f
+    case None => name + ".enc"
+  })
+  lazy val pfbfile = getPfbFile(pfbfilename match {
+    case Some(f) => f
+    case None => name + ".pfb"
+  })
   def get(outfile:File,oldchars:Option[String]) = tfm match {
     case Some(_) if openPdf(name) => encfile match {
       case Some(e) =>
@@ -273,6 +290,21 @@ class Font(name: String, encfilename:Option[String], pfbfilename: Option[String]
       }
     }
     case _ => None
+  }
+}
+
+object ConvertList {
+  def main(args: Array[String]): Unit = {
+    val outfile = new File("/home/jazzpirate/work/Software/sTeX/RusTeXNew/tex_tfm/src/resources/glyphmap.txt")
+    val outfile2 = new File("/home/jazzpirate/work/Software/sTeX/RusTeXNew/tex_tfm/src/resources/missing.txt")
+    var missings : List[String] = Nil
+    write(outfile,glyphmap.toList.sortBy(_._1).flatMap{
+      case (a,"???" | "") =>
+        missings ::= a
+        None
+      case (k,v) => Some(s"$k $v")
+    })
+    write(outfile2,List(missings.sorted.mkString(" ")))
   }
 }
 
@@ -309,11 +341,11 @@ object TfToUnicode {
               allfonts = allfonts.take(j) ::: allfonts.drop(j + 1)
             case _ =>
           }
-          val encfilename = entries.find(_.endsWith(".enc")).map(_.drop(1)) match {
+          val encfilename = entries.find(_.endsWith(".enc")).map(_.dropWhile(_ == '<')) match {
             case Some(s) if s.startsWith("[") => Some(s.drop(1))
             case o => o
           }
-          val pfbfilename = entries.find(_.endsWith(".pfb")).map(_.drop(1))
+          val pfbfilename = entries.find(_.endsWith(".pfb")).map(_.dropWhile(_ == '<'))
           print(s"\rProcessing font ${i + 1} of ${pdftexmap.size}: $name ($encfilename,$pfbfilename)                         ")
           val font = new Font(name, encfilename, pfbfilename)
           font.get(outfile,if (af.exists(_._3 == "l")) None else af.map(_._3)).foreach { t =>

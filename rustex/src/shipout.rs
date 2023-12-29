@@ -284,14 +284,52 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
         _ => unreachable!()
     }
 }
+
+fn get_inner_page(bx:TeXBox<Types>) -> Option<Vec<VNode<Types>>> {
+    match bx {
+        TeXBox::V {children,info:VBoxInfo::VBox {moved_left:Some(_),..},..} => Some(children.into_vec()),
+        TeXBox::V {children,..} => {
+            for c in children.into_vec().into_iter() { match c {
+                VNode::Box(bx) => match get_inner_page(bx) {
+                    None => (),
+                    Some(v) => return Some(v)
+                }
+                _ => ()
+            }}
+            None
+        }
+        _ => None
+    }
+}
+fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
+    let mut ret = Vec::new();
+    let vec = children.into_vec();
+    let mut list:VNodes = vec.into();
+    let mut in_page:usize = 0;
+
+    while let Some(c) = list.next() {
+        match c {
+            VNode::Box(TeXBox::V {children,..}) if in_page == 0 => list.prefix(children.into_vec()),
+            VNode::Custom(RusTeXNode::PageBegin) => in_page += 1,
+            VNode::Custom(RusTeXNode::PageEnd) => in_page -= 1,
+            VNode::Custom(_) | VNode::Whatsit(_) => ret.push(c),
+            _ if in_page == 0 => (),
+            _ => ret.push(c)
+        }
+    }
+    ret
+}
 #[inline(always)]
 pub(crate) fn shipout(engine:Refs, n: VNode<Types>) {
+    //return shipout_paginated(engine,n);
+    //println!("HERE: {}",n.readable());
     match n {
         VNode::Box(TeXBox::V { children, start, end, .. }) => {
+            let children = get_page_inner(children);
             split_state(engine, |engine, state| {
                 let node = HTMLNode::new(crate::html::labels::PAGE, true);
                 state.do_in(node, |state| {
-                    do_vlist(engine, state, &mut children.into_vec().into(), true)
+                    do_vlist(engine, state, &mut children.into(), true)
                 }, |state, node| if node.label == crate::html::labels::PAGE { state.output.push(HTMLChild::Node(node));None } else {
                     todo!()
                 });;
