@@ -593,6 +593,7 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>, top:bool) {
             }
             state.push_text(format!("<img src=\"{}\"{}/>",img.filepath.display(),attr));
         }
+        VNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) => nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
         VNode::Mark(..) => (),
         _ => panic!("Here: {:?}",n)
     }

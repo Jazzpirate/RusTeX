@@ -13,7 +13,10 @@ use crate::stomach::RusTeXStomach;
 use tex_engine::engine::stomach::Stomach;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
+use tex_engine::tex::nodes::math::MathNode;
+use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::token::Token;
+use tex_engine::tex::types::TeXMode;
 
 pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     crate::engine::register_command(engine, true, "pgfsysdriver", "",
@@ -111,7 +114,7 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
     let maxx = engine.read_dim(true);
     let maxy = engine.read_dim(true);
     let node = RusTeXNode::PGFSvg { bx, minx, miny, maxx, maxy };
-    RusTeXStomach::add_node_h(engine, HNode::Custom(node));
+    tex_engine::add_node!(RusTeXStomach;engine, VNode::Custom(node), HNode::Custom(node),MathNode::Custom(node));
 }
 fn pgfliteral(engine:Refs,_token:CompactToken) { todo!("pgfliteral") }
 fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {

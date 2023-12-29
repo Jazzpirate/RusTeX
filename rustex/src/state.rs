@@ -164,11 +164,6 @@ impl State for RusTeXState {
         self.0.set_mathcode(aux,c,mathcode,globally)
     }
 
-    #[inline(always)]
-    fn get_mode(&self) -> TeXMode { self.0.get_mode() }
-
-    #[inline(always)]
-    fn set_mode(&mut self, mode: TeXMode) { self.0.set_mode(mode) }
 
     #[inline(always)]
     fn get_endline_char(&self) -> Option<u8> { self.0.get_endline_char() }
