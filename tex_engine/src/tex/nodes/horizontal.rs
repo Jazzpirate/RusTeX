@@ -1,6 +1,6 @@
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
-use crate::engine::fontsystem::FontSystem;
+use crate::engine::fontsystem::{Font, FontSystem};
 use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
 use crate::tex::nodes::boxes::TeXBox;
@@ -30,7 +30,7 @@ pub enum HNode<ET:EngineTypes> {
     Insert(usize,Box<[VNode<ET>]>),
     VAdjust(Box<[VNode<ET>]>),
     MathGroup(MathGroup<ET,MathFontStyle<ET>>),
-    Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font, width:ET::Dim, height:ET::Dim, depth:ET::Dim  },
+    Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font },
     Custom(ET::CustomNode),
 }
 
@@ -107,7 +107,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
         match self {
             HNode::Box(b) => b.height(),
             HNode::VRule { height, .. } => height.unwrap_or_default(),
-            HNode::Char { height, .. } => *height,
+            HNode::Char { char,font } => font.get_ht(*char),
             HNode::Leaders(l) => l.height(),
             HNode::MathGroup(MathGroup {children,..}) => {
                 children.iter().map(|c| c.height()).max().unwrap_or_default()
@@ -119,7 +119,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
     fn width(&self) -> ET::Dim {
         match self {
             HNode::Box(b) => b.width(),
-            HNode::Char { width, .. } => *width,
+            HNode::Char { char,font } => font.get_wd(*char),
             HNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
             HNode::Leaders(l) => l.width(),
             HNode::MathGroup(MathGroup{children,..}) =>  {
@@ -135,7 +135,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
     fn depth(&self) -> ET::Dim {
         match self {
             HNode::Box(b) => b.depth(),
-            HNode::Char { depth, .. } => *depth,
+            HNode::Char { char,font } => font.get_dp(*char),
             HNode::VRule { depth, .. } => depth.unwrap_or_default(),
             HNode::Leaders(l) => l.depth(),
             HNode::MathGroup(MathGroup {children,..}) =>  {

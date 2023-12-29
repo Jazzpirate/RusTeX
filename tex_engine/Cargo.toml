@@ -29,7 +29,7 @@ debug = 2
 
 [features]
 default = []
-pdflatex = ["md5"]
+pdflatex = ["md5","image"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -38,7 +38,7 @@ pdflatex = ["md5"]
 #pkg-config = "0.3"
 
 [dev-dependencies]
-env_logger = "0.10.0"
+env_logger = "0.10.1"
 rand = "0.8.5"
 ansi_term = "0.12.1"
 
@@ -54,10 +54,10 @@ array-init = "2.1.0"
 arrayvec = "0.7.4"
 shared_vector = "0.4.4"
 regex = "1.10.2"
-#image = "0.24.7"
 #pdfium-render = "0.8.11" #, features = ["static"] }
 
 md5 = { version = "0.7.0",optional = true }
+image = { version = "0.24.7",optional = true }
 
 
 #hashbrown = {version="0.14.0",features=["raw"]}

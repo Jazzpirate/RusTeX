@@ -1,5 +1,5 @@
 use crate::engine::{EngineReferences, EngineTypes};
-use crate::tex::nodes::{HorizontalNodeListType, NodeList, VerticalNodeListType};
+use crate::tex::nodes::{HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
@@ -8,6 +8,9 @@ use crate::tex::types::{BoxType, TeXMode};
 use crate::engine::stomach::Stomach;
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
+use crate::engine::utils::memory::PRIMITIVES;
+use crate::tex::numerics::TeXDimen;
+use crate::tex::numerics::Skip;
 
 #[macro_export]
 macro_rules! add_node {
@@ -78,4 +81,68 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
         }
         _ => ()
     }
+}
+
+pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, node: VNode<ET>) {
+    let data = engine.stomach.data_mut();
+    let pre = match node {
+        VNode::Box(ref b@TeXBox::H {..}) => {
+            if data.prevdepth > ET::Dim::from_sp(-65536000) {
+                let baselineskip = engine.state.get_primitive_skip(PRIMITIVES.baselineskip);
+                let lineskiplimit = engine.state.get_primitive_dim(PRIMITIVES.lineskiplimit);
+                let ht = b.height();
+                let b = ET::Skip::new(baselineskip.base() - data.prevdepth - ht, baselineskip.stretch(), baselineskip.shrink());
+                let sk = if b.base() >= lineskiplimit { b }
+                else {
+                    engine.state.get_primitive_skip(PRIMITIVES.lineskip)
+                };
+                if sk != ET::Skip::default() {Some(sk)} else {None}
+            } else {None}
+        }
+        _ => None
+    };
+
+
+    if let VNode::HRule {..} = node {
+        data.prevdepth = ET::Dim::from_sp(-65536000);
+    } else {
+        data.prevdepth = node.depth();
+    }
+    match data.open_lists.last_mut() {
+        Some(NodeList::Vertical {children,..}) => {
+            if let Some(pre) = pre {
+                children.push(VNode::VSkip(pre));
+            }
+            children.push(node);
+            return
+        }
+        Some(_) => todo!("throw error"),
+        _ => ()
+    }
+    if !data.page_contains_boxes && !data.in_output /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
+        match &node {
+            VNode::Box(_) | VNode::Insert(..) => {
+                //crate::debug_log!(debug => "Here: {} \n\n {}",node.readable(),engine.mouth.display_position());
+                data.page_contains_boxes = true;
+                data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
+            }
+            n if n.discardable() => return,
+            _ => ()
+        }
+    }
+
+    if let Some(pre) = pre {
+        data.pagetotal = data.pagetotal + pre.base();
+        data.page.push(VNode::VSkip(pre));
+    }
+    data.pagetotal = data.pagetotal + node.height() + node.depth(); // ?
+    if let VNode::Penalty(i) = node {
+        if i <= -10000 {
+            if data.page_contains_boxes {
+                return ET::Stomach::maybe_shipout(engine, Some(i))
+            } else { return }
+        }
+    }
+    data.page.push(node);
+    ET::Stomach::maybe_shipout(engine, None)
 }
