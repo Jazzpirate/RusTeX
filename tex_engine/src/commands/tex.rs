@@ -61,6 +61,11 @@ pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
     engine.state.pop(engine.aux,engine.mouth);
 }
 
+pub fn end<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    ET::Stomach::flush(engine);
+    engine.mouth.finish();
+}
+
 #[inline(always)]
 pub fn endinput<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     engine.mouth.endinput();
@@ -1815,29 +1820,71 @@ pub fn lastpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
     ).unwrap_or_default().into()
 }
 
-pub fn pagegoal<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagegoal_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     engine.stomach.data_mut().pagegoal
 }
-pub fn pagetotal<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagegoal_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    engine.stomach.data_mut().pagegoal = d;
+}
+pub fn pagetotal_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     engine.stomach.data_mut().pagetotal
 }
-pub fn pagestretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagetotal_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    engine.stomach.data_mut().pagetotal = d;
+}
+pub fn pagestretch_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     ET::Dim::default() // TODO
 }
-pub fn pagefilstretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagestretch_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    // TODO
+}
+pub fn pagefilstretch_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     ET::Dim::default() // TODO
 }
-pub fn pagefillstretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagefilstretch_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    // TODO
+}
+pub fn pagefillstretch_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     ET::Dim::default() // TODO
 }
-pub fn pageshrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagefillstretch_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    // TODO
+}
+pub fn pageshrink_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     ET::Dim::default() // TODO
 }
-pub fn pagefilshrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pageshrink_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    // TODO
+}
+pub fn pagefilshrink_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     ET::Dim::default() // TODO
 }
-pub fn pagefillshrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
+pub fn pagefilshrink_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    // TODO
+}
+pub fn pagefillshrink_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     ET::Dim::default() // TODO
+}
+pub fn pagefillshrink_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    // TODO
+}
+
+pub fn deadcycles_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+    (engine.stomach.data_mut().deadcycles as i32).into()
+}
+pub fn deadcycles_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let i = engine.read_int(true).into();
+    if i >= 0 {
+        engine.stomach.data_mut().deadcycles = i as usize
+    }
 }
 
 pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
@@ -2246,6 +2293,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"year",year,None);
     register_int(engine,"lastpenalty",lastpenalty,None);
     register_int(engine,"parshape",parshape_get,Some(parshape_set));
+    register_int(engine,"deadcycles",deadcycles_get,Some(deadcycles_set));
 
     register_dim(engine,"fontdimen",fontdimen_get,Some(fontdimen_set));
     register_dim(engine,"dimen",dimen_get,Some(dimen_set));
@@ -2254,14 +2302,14 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_dim(engine,"ht",ht_get,Some(ht_set));
     register_dim(engine,"wd",wd_get,Some(wd_set));
     register_dim(engine,"lastkern",lastkern,None);
-    register_dim(engine,"pagegoal",pagegoal,None);
-    register_dim(engine,"pagetotal",pagetotal,None);
-    register_dim(engine,"pagestretch",pagestretch,None);
-    register_dim(engine,"pagefilstretch",pagefilstretch,None);
-    register_dim(engine,"pagefillstretch",pagefillstretch,None);
-    register_dim(engine,"pageshrink",pageshrink,None);
-    register_dim(engine,"pagefilshrink",pagefilshrink,None);
-    register_dim(engine,"pagefillshrink",pagefillshrink,None);
+    register_dim(engine,"pagegoal",pagegoal_get,Some(pagegoal_set));
+    register_dim(engine,"pagetotal",pagetotal_get,Some(pagegoal_set));
+    register_dim(engine,"pagestretch",pagestretch_get,Some(pagestretch_set));
+    register_dim(engine,"pagefilstretch",pagefilstretch_get,Some(pagefilstretch_set));
+    register_dim(engine,"pagefillstretch",pagefillstretch_get,Some(pagefillstretch_set));
+    register_dim(engine,"pageshrink",pageshrink_get,Some(pageshrink_set));
+    register_dim(engine,"pagefilshrink",pagefilshrink_get,Some(pagefilshrink_set));
+    register_dim(engine,"pagefillshrink",pagefillshrink_get,Some(pagefillshrink_set));
 
     register_skip(engine,"skip",skip_get,Some(skip_set));
     register_skip(engine,"lastskip",lastskip,None);
@@ -2343,6 +2391,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"dump",CommandScope::Any,|_,_|());
     register_unexpandable(engine,"endcsname",CommandScope::Any,endcsname);
     register_unexpandable(engine,"endgroup",CommandScope::Any,endgroup);
+    register_unexpandable(engine,"end",CommandScope::Any,end);
     register_unexpandable(engine,"errorstopmode",CommandScope::Any,errorstopmode);
     register_unexpandable(engine,"halign",CommandScope::SwitchesToVertical,halign);
     register_unexpandable(engine,"valign",CommandScope::SwitchesToHorizontal,valign);
@@ -2439,7 +2488,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathaccent,left,right,vtop,discretionary,end,noalign,omit,overline,
+        mathaccent,left,right,vtop,discretionary,noalign,omit,overline,
         pagedepth,span,underline
     );
 
@@ -2449,7 +2498,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     cmstodo!(engine,scriptstyle);
     cmstodo!(engine,scriptscriptstyle);
 
-    cmtodos!(engine,prevgraf,deadcycles,insertpenalties,scrollmode,nonstopmode,batchmode,
+    cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
         show,showbox,showthe,special,noboundary,accent,setlanguage,nonscript,
         over,atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
         leqno,bigskip,bye,fontname,italiccorr,medskip,smallskip

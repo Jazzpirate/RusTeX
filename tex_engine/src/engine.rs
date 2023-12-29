@@ -383,8 +383,12 @@ macro_rules! do_cmd {
             crate::commands::Command::Skip(crate::commands::SkipCommand { .. }) |
             crate::commands::Command::MuSkip(crate::commands::MuSkipCommand { .. }) |
             crate::commands::Command::FontCmd(crate::commands::FontCommand { .. }) =>
-                todo!("Not allowed in X mode"),
+                crate::engine::do_error($engine,$cmd.clone()),
             crate::commands::Command::Macro(_) | Command::Conditional(_) | Command::Expandable(_)  | Command::SimpleExpandable(_) | Command::Char {..} => unreachable!(),
         }
     }
+}
+
+pub fn do_error<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cmd:Command<ET>) {
+    todo!("Not allowed in {:?} mode: {}",engine.state.get_mode(),cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
 }

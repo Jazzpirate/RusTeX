@@ -37,6 +37,7 @@ pub trait Mouth:Sized {
     fn num_exps(&self) -> usize;
     fn line_number(&self) -> usize;
     fn endinput(&mut self);
+    fn finish(&mut self);
     fn read_until_endgroup<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token)>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,mut cont:Fn) -> Self::Token {
         let mut ingroups = 0;
         let mut eg:Option<Self::Token> = None;
@@ -88,7 +89,8 @@ pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
 pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
     inputs:Vec<TokenSource<T,F>>,
     args:Option<[Vec<T>;9]>,
-    start_ref:Option<SourceReference<F::SourceRefID>>
+    start_ref:Option<SourceReference<F::SourceRefID>>,
+    vecs:Vec<Vec<T>>
 }
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
     /*
@@ -118,8 +120,14 @@ fn clean(&mut self) {
         match self.inputs.last_mut() {
             Some(TokenSource::Vec(v)) => f(v),
             _ => {
-                let mut v = Vec::new();
-                f(&mut v);
+                let v = match self.vecs.pop() {
+                    Some(mut v) => {f(&mut v);v}
+                    None => {
+                        let mut v = Vec::new();
+                        f(&mut v);
+                        v
+                    }
+                };
                 self.inputs.push(TokenSource::Vec(v));
             }
         };
@@ -132,8 +140,17 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     fn new<ET: EngineTypes<Mouth=Self>>(_aux: &mut EngineAux<ET>, _state: &mut ET::State) -> Self {
         Self {
             inputs:Vec::new(),args:Some(array_init::array_init(|_| Vec::new())),
-            start_ref:None
+            start_ref:None,vecs:vec!()
         }
+    }
+
+    fn finish(&mut self) {
+        for s in self.inputs.drain(..) { match s {
+          TokenSource::Vec(mut v) => {
+              v.clear(); self.vecs.push(v)
+          }
+            _ => ()
+        } }
     }
 
     fn current_sourceref(&self) -> SourceReference<<Self::File as File>::SourceRefID> {
@@ -163,7 +180,9 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 })
             }
             Some(TokenSource::Vec(v)) if v.is_empty() => {
-                self.inputs.pop();
+                if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
+                    self.vecs.push(v)
+                } else {unreachable!()}
                 self.update_start_ref()
             }
             _ => ()
@@ -267,7 +286,11 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 TokenSource::Vec(v) => {
                     match v.pop() {
                         Some(t) => return Some(t),
-                        _ => { self.inputs.pop(); }
+                        _ => {
+                            if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
+                                self.vecs.push(v);
+                            } else {unreachable!()}
+                        }
                     }
                 }
                 /*
@@ -322,7 +345,9 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     while let Some(t) = v.pop() {
                         if !cont(aux,t) {return}
                     }
-                    self.inputs.pop();
+                    if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
+                        self.vecs.push(v);
+                    } else {unreachable!()}
                 }
                 /*
                 Some(TokenSource::Requeued(t)) => {

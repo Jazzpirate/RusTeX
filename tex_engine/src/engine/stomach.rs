@@ -48,6 +48,13 @@ pub trait Stomach {
     fn afterassignment(&mut self) -> &mut Option<Tk<Self>>;
     fn data_mut(&mut self) -> &mut StomachData<Self::ET>;
 
+    fn flush(engine:&mut EngineReferences<Self::ET>) {
+        let open_groups = std::mem::take(&mut engine.stomach.data_mut().open_lists);
+        if !open_groups.is_empty() { todo!("throw error") }
+        Self::add_node_v(engine,VNode::Penalty(-10000));
+        engine.stomach.data_mut().page.clear();
+    }
+
     #[inline(always)]
     fn do_unexpandable(
         engine:&mut EngineReferences<Self::ET>,
