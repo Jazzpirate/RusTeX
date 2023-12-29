@@ -34,6 +34,14 @@ pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
     idx as u16
 }
 
+pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+    match engine.get_next() {
+        Some(t) if t.is_begin_group() => (),
+        _ => todo!("throw error")
+    }
+    engine.read_until_endgroup(|_,_,_| {});
+}
+
 pub fn do_csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ET::CSName {
     *engine.gullet.csnames() += 1;
     let mut name = vec!();

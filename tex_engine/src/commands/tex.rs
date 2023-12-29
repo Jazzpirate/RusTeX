@@ -18,7 +18,7 @@ use crate::tex::token::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
 use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use std::fmt::Write;
-use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, get_mathchar, IfxCmd};
+use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, get_mathchar, IfxCmd, skip_argument};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
@@ -64,6 +64,13 @@ pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 pub fn end<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     ET::Stomach::flush(engine);
     engine.mouth.finish();
+}
+
+pub fn discretionary<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+    skip_argument(engine);
+    skip_argument(engine);
+    skip_argument(engine);
+    // TODO
 }
 
 #[inline(always)]
@@ -2209,14 +2216,6 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
     "errhelp"
 ];
 
-pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
-    match engine.get_next() {
-        Some(t) if t.is_begin_group() => (),
-        _ => todo!("throw error")
-    }
-    engine.read_until_endgroup(|_,_,_| {});
-}
-
 pub fn char_space<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     crate::add_node!(ET::Stomach;engine,unreachable!(), HNode::Space, MathNode::Space)
 }
@@ -2388,6 +2387,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"begingroup",CommandScope::Any,begingroup);
     register_unexpandable(engine,"closein",CommandScope::Any,closein);
     register_unexpandable(engine,"char",CommandScope::SwitchesToHorizontal,char_);
+    register_unexpandable(engine,"discretionary",CommandScope::Any,discretionary);
     register_unexpandable(engine,"dump",CommandScope::Any,|_,_|());
     register_unexpandable(engine,"endcsname",CommandScope::Any,endcsname);
     register_unexpandable(engine,"endgroup",CommandScope::Any,endgroup);
@@ -2488,7 +2488,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathaccent,left,right,vtop,discretionary,noalign,omit,overline,
+        mathaccent,left,right,vtop,noalign,omit,overline,
         pagedepth,span,underline
     );
 

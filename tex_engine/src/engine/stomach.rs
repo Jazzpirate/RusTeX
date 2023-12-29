@@ -544,7 +544,8 @@ pub trait Stomach {
             }
             _ => ()
         }}
-        for i in deletes { first.remove(i); }
+        let mut j = 0;
+        for i in deletes { first.remove(i - j);j += 1; }
 
         if let Some(p) = split_penalty {
             engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,p.into(),true);

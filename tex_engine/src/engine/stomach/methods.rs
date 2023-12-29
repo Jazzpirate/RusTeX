@@ -39,7 +39,7 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
             engine.state.pop(engine.aux,engine.mouth);
             match engine.state.get_mode() {
                 TeXMode::Vertical => ET::Stomach::add_node_v(engine, VNode::Insert(n, children.into())),
-                TeXMode::Horizontal => ET::Stomach::add_node_h(engine, HNode::Insert(n, children.into())),
+                TeXMode::Horizontal if engine.stomach.data_mut().open_lists.len() == 1 => ET::Stomach::add_node_h(engine, HNode::Insert(n, children.into())),
                 _ => engine.stomach.data_mut().inserts.push((n,children.into()))
             }
         }

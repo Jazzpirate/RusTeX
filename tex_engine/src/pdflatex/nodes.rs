@@ -1,4 +1,5 @@
 use std::fmt::Formatter;
+use std::path::PathBuf;
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::NodeTrait;
@@ -183,14 +184,20 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
 pub enum PDFNode<ET:EngineTypes> {
     Obj(PDFObj),
     XForm(PDFXForm<ET>),
-    XImage(PDFXImage),
+    XImage(PDFXImage<ET>),
     PDFLiteral(PDFLiteral),
     PDFOutline(PDFOutline),
     PDFCatalog(PDFCatalog),
     PDFDest(PDFDest<ET::Dim>),
     Color(ColorStackAction),
     PDFStartLink(PDFStartLink<ET>),
-    PDFEndLink
+    PDFEndLink,PDFSave,PDFRestore,
+    PDFMatrix {
+        scale:f32,
+        rotate:f32,
+        skewx:f32,
+        skewy:f32,
+    }
 }
 
 #[derive(Copy,Clone,Debug)]
@@ -228,9 +235,24 @@ impl<ET:EngineTypes> CustomNodeTrait<ET> for PDFNode<ET>
 
 impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
     where ET::CustomNode : From<PDFNode<ET>> {
-    fn height(&self) -> ET::Dim { ET::Dim::default() }
-    fn depth(&self) -> ET::Dim { ET::Dim::default() }
-    fn width(&self) -> ET::Dim { ET::Dim::default() }
+    fn height(&self) -> ET::Dim {
+        match self {
+            PDFNode::XImage(img) => img.height.unwrap_or(ET::Dim::from_sp(65536 * (img.img.height() as i32))),
+            _ => ET::Dim::default()
+        }
+    }
+    fn depth(&self) -> ET::Dim {
+        match self {
+            PDFNode::XImage(img) => img.depth.unwrap_or(ET::Dim::default()),
+            _ => ET::Dim::default()
+        }
+    }
+    fn width(&self) -> ET::Dim {
+        match self {
+            PDFNode::XImage(img) => img.width.unwrap_or(ET::Dim::from_sp(65536 * (img.img.width() as i32))),
+            _ => ET::Dim::default()
+        }
+    }
     fn nodetype(&self) -> NodeType { NodeType::WhatsIt }
     fn opaque(&self) -> bool { match self {
         PDFNode::Color(_) => true,
@@ -247,6 +269,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
                 write!(f,"<pdfoutline attr=\"{}\", action=\"{:?}\", count=\"{:?}\", content=\"{}\">",o.attr,o.action,o.count,o.content),
             PDFNode::Obj(o) =>
                 write!(f,"<pdfobj literal=\"{}\">",o.0),
+            PDFNode::PDFMatrix {scale,rotate,skewx,skewy} =>
+                write!(f,"<pdfmatrix scale=\"{}\", rotate=\"{}\", skewx=\"{}\", skewy=\"{}\">",scale,rotate,skewx,skewy),
             PDFNode::XForm(x) => {
                 write!(f, "<pdfxform attr=\"{}\", resources=\"{}\">", x.attr, x.resources)?;
                 if let Some(bx) = &x.bx {
@@ -255,8 +279,10 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
                 Self::readable_do_indent(indent,f)?;
                 write!(f,"</pdfxform>")
             }
-            PDFNode::XImage(_) =>
-                write!(f,"<pdfximage>"),
+            PDFNode::XImage(img) =>
+                write!(f,"<pdfximage {}>",img.filepath.display()),
+            PDFNode::PDFSave => write!(f,"<pdfsave>"),
+            PDFNode::PDFRestore => write!(f,"<pdfrestore>"),
             PDFNode::PDFLiteral(PDFLiteral {option,literal}) =>
                 write!(f,"<pdfliteral option=\"{:?}\", literal=\"{:?}\">",option,literal),
             PDFNode::Color(c) => {
@@ -302,7 +328,7 @@ pub trait PDFExtension<ET:EngineTypes>: EngineExtension {
     fn current_colorstack(&mut self) -> &mut usize;
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
-    fn pdfximages(&mut self) -> &mut Vec<PDFXImage>;
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>>;
 }
 
 pub struct MinimalPDFExtension<ET:EngineTypes> {
@@ -312,7 +338,7 @@ pub struct MinimalPDFExtension<ET:EngineTypes> {
     current_colorstack:usize,
     pdfobjs:Vec<PDFObj>,
     pdfxforms:Vec<PDFXForm<ET>>,
-    pdfximages:Vec<PDFXImage>,
+    pdfximages:Vec<PDFXImage<ET>>,
 }
 impl<ET:EngineTypes> EngineExtension for MinimalPDFExtension<ET> {
     fn new() -> Self {
@@ -345,7 +371,7 @@ impl<ET:EngineTypes> PDFExtension<ET> for MinimalPDFExtension<ET> {
     #[inline(always)]
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
     #[inline(always)]
-    fn pdfximages(&mut self) -> &mut Vec<PDFXImage> { &mut self.pdfximages }
+    fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>> { &mut self.pdfximages }
 }
 
 #[derive(Debug,Clone)]
@@ -359,7 +385,38 @@ pub struct PDFXForm<ET:EngineTypes> {
 }
 
 #[derive(Debug,Clone)]
-pub struct PDFXImage();
+pub enum PDFImage {
+    None,
+    Img(image::DynamicImage),
+}
+impl PDFImage {
+    pub fn width(&self) -> u32 {
+        match self {
+            PDFImage::None => 0,
+            PDFImage::Img(img) => img.width()
+        }
+    }
+    pub fn height(&self) -> u32 {
+        match self {
+            PDFImage::None => 0,
+            PDFImage::Img(img) => img.height()
+        }
+    }
+}
+
+#[derive(Debug,Clone)]
+pub struct PDFXImage<ET:EngineTypes> {
+    pub attr:String,
+    pub width:Option<ET::Dim>,
+    pub height:Option<ET::Dim>,
+    pub depth:Option<ET::Dim>,
+    pub colorspace: Option<i64>,
+    pub page:Option<i64>,
+    pub boxspec:Option<PDFBoxSpec>,
+    pub filepath:PathBuf,
+    pub img:PDFImage
+}
+
 
 #[derive(Debug,Clone)]
 pub struct PDFOutline {
