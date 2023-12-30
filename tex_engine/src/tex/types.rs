@@ -76,6 +76,14 @@ pub enum BoxType {
     /// A vertical box, e.g. `\vbox`.
     Vertical,
 }
+impl BoxType {
+    pub fn other(&self) -> Self {
+        match self {
+            BoxType::Horizontal => BoxType::Vertical,
+            BoxType::Vertical => BoxType::Horizontal,
+        }
+    }
+}
 impl Display for BoxType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -121,7 +121,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, node: VNode<
     }
     if !data.page_contains_boxes && !data.in_output /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
         match &node {
-            VNode::Box(_) | VNode::Insert(..) => {
+            VNode::Box(_) | VNode::Insert(..) | VNode::HRule {..} => {
                 //crate::debug_log!(debug => "Here: {} \n\n {}",node.readable(),engine.mouth.display_position());
                 data.page_contains_boxes = true;
                 data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
@@ -143,6 +143,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, node: VNode<
             } else { return }
         }
     }
+    let disc = node.discardable();
     data.page.push(node);
-    ET::Stomach::maybe_shipout(engine, None)
+    if disc {ET::Stomach::maybe_shipout(engine, None)}
 }

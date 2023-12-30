@@ -704,9 +704,43 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
             if *name == PRIMITIVES.crcr => (),
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-            if *name == PRIMITIVES.noalign => todo!(),
+            if *name == PRIMITIVES.noalign => {
+            engine.expand_until_bgroup(true);
+            engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
+            engine.stomach.data_mut().open_lists.push(
+                match mode {
+                    BoxType::Vertical => NodeList::Horizontal {
+                        children:vec!(),
+                        tp:HorizontalNodeListType::Box(HBoxInfo::HAlignRow,engine.mouth.start_ref(),BoxTarget::new(
+                            move |engine,l| {
+                                if let TeXBox::H {children,info:HBoxInfo::HAlignRow,..} = l  {
+                                    for c in children.into_vec() {
+                                        ET::Stomach::add_node_h(engine,c);
+                                    }
+                                } else {unreachable!()}
+                                start_align_row(engine,mode)
+                            }
+                        ))
+                    },
+                    _ => NodeList::Vertical {
+                        children:vec!(),
+                        tp:VerticalNodeListType::Box(VBoxInfo::VAlignRow,engine.mouth.start_ref(),BoxTarget::new(
+                            move |engine,l| {
+                                if let TeXBox::V {children,info:VBoxInfo::VAlignRow,..} = l  {
+                                    for c in children.into_vec() {
+                                        ET::Stomach::add_node_v(engine,c);
+                                    }
+                                } else {unreachable!()}
+                                start_align_row(engine,mode)
+                            }
+                        ))
+                    }
+                }
+            );
+            return
+        }
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-            if *name == PRIMITIVES.omit => todo!(),
+            if *name == PRIMITIVES.omit => todo!("omit"),
         ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
             engine.stomach.data_mut().open_lists.push(
                 match mode {
@@ -1030,7 +1064,8 @@ pub fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox<E
 }
 
 pub fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>) {
-    engine.read_char_or_math_group(move || ListTarget::<ET,_>::new(move |engine,children,start| {
+    engine.read_char_or_math_group(|_,engine,mc| ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom())),
+                                   move |_| ListTarget::<ET,_>::new(move |engine,children,start| {
         let node = MathNode::Atom(MathAtom {
             sub:None, sup:None, nucleus:match cls {
                 None => MathNucleus::Inner(MathKernel::List {start,children:children.into(),end:engine.mouth.current_sourceref()}),
@@ -1041,5 +1076,5 @@ pub fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option
             },
         });
         ET::Stomach::add_node_m(engine,node);
-    }))
+    }),())
 }

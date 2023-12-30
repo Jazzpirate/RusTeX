@@ -120,7 +120,7 @@ impl Stomach for RusTeXStomach {
                     do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip32::new(Dim32(655360),None,None))));
                 }
             } else if data.pagetotal >= data.pagegoal || penalty.is_some() {
-                do_shipout(engine,penalty,|_|());
+                RusTeXStomach::do_shipout_output(engine,penalty)
             }
         }
     }
@@ -216,6 +216,13 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
                 }
                 data.botmarks.insert(*i,v.clone());
             }
+            VNode::Insert(_,bx) => {
+                target = target - bx.iter().map(|c| c.height() + c.depth()).sum(); // - n.depth() ?
+                if target < Dim32(0) {
+                    split = i;
+                    break
+                }
+            }
             _ => {
                 target = target -(n.height() + n.depth()); // - n.depth() ?
                 if target < ZERO {
@@ -255,7 +262,6 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
 
 fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Types>,penalty:Option<i32>,f:F) {
     let undefineds = vec![
-        // @mkboth: \long#1#2
         engine.aux.memory.cs_interner_mut().new("@oddhead"),
         engine.aux.memory.cs_interner_mut().new("@oddfoot"),
         engine.aux.memory.cs_interner_mut().new("@evenhead"),

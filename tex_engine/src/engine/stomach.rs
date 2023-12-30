@@ -24,7 +24,7 @@ use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{MathAtom, MathChar, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::NodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
@@ -486,7 +486,7 @@ pub trait Stomach {
     fn do_shipout_output(engine:&mut EngineReferences<Self::ET>, forced:Option<i32>) {
         let data = engine.stomach.data_mut();
         let page = std::mem::take(&mut data.page);
-        data.pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX);
+        let goal = data.pagegoal;
         data.pagetotal = <Self::ET as EngineTypes>::Dim::default();
         data.page_contains_boxes = false;
         // TODO more precisely
@@ -494,11 +494,10 @@ pub trait Stomach {
 
         let SplitResult{mut first,rest,split_penalty} = match forced {
             Some(p) => SplitResult{first:page.into(),rest:vec!().into(),split_penalty:Some(p)},
-            _ => {
-                let goal = data.pagegoal;
-                Self::split_vertical(engine,page,goal)
-            }
+            _ => Self::split_vertical(engine,page,goal)
         };
+
+        let split_penalty = split_penalty.unwrap_or(0);
 
         engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
 
@@ -550,9 +549,7 @@ pub trait Stomach {
         let mut j = 0;
         for i in deletes { first.remove(i - j);j += 1; }
 
-        if let Some(p) = split_penalty {
-            engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,p.into(),true);
-        }
+        engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,split_penalty.into(),true);
 
         let bx = TeXBox::V {
             children:first.into(),
@@ -584,6 +581,7 @@ pub trait Stomach {
                 engine.state.pop(engine.aux,engine.mouth);
                 match engine.stomach.data_mut().open_lists.pop() {
                     Some(NodeList::Vertical {children,tp:VerticalNodeListType::Page}) => {
+                        engine.stomach.data_mut().pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX);
                         for c in children {
                             Self::add_node_v(engine, c);
                         }
@@ -983,6 +981,12 @@ impl Script {
             Script::Sub => a.sub.is_some()
         }
     }
+    pub fn merge<ET:EngineTypes>(self,n:MathNode<ET,UnresolvedMathFontStyle<ET>>,a:&mut MathAtom<ET,UnresolvedMathFontStyle<ET>>) {
+        match self {
+            Script::Sub => a.sub = Some(vec!(n).into()),
+            Script::Super => a.sup = Some(vec!(n).into())
+        }
+    }
     pub fn tp<ET:EngineTypes>(&self) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>> {
         match self {
             Script::Super => ListTarget::<ET,_>::new(
@@ -1016,11 +1020,22 @@ fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) {
         }
         _ => unreachable!()
     }
-    engine.read_char_or_math_group(|| script.tp())
+    engine.read_char_or_math_group(|script,engine,c| {
+        match engine.stomach.data_mut().open_lists.last_mut() {
+            Some(NodeList::Math { children, .. }) => {
+                match children.last_mut() {
+                    Some(MathNode::Atom(a)) =>
+                        script.merge(MathNode::Atom(c.to_atom()),a),
+                    _ => unreachable!()
+                }
+            }
+            _ => unreachable!()
+        }
+    },|script| script.tp(),script)
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn read_char_or_math_group<F2:FnOnce() -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,tp:F2) {
+    pub fn read_char_or_math_group<S,F1:FnOnce(S,&mut Self,MathChar<ET>),F2:FnOnce(S) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,f:F1,tp:F2,s:S) {
         crate::expand_loop!(self,
             ResolvedToken::Tk {code:CommandCode::Space,..} => (),
             ResolvedToken::Tk {code:CommandCode::BeginGroup,..} => {
@@ -1028,14 +1043,18 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                     display:self.stomach.data_mut().mode() == TeXMode::DisplayMath
                 },self.mouth.line_number());
                 let list = NodeList::Math{children:vec!(),start:self.mouth.start_ref(),
-                    tp:MathNodeListType::Target(tp())};
+                    tp:MathNodeListType::Target(tp(s))};
                 self.stomach.data_mut().open_lists.push(list);
                 return
             },
             ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
-            ResolvedToken::Tk {..} => {
-                todo!("char in xscript")
+            ResolvedToken::Tk {char,code:CommandCode::Other | CommandCode::Letter,..} => {
+                let mc = get_mathchar(self, self.state.get_mathcode(char), Some(char));
+                return f(s,self,mc)
             },
+            ResolvedToken::Tk {code,..} => {
+                todo!("??? {:?}",code)
+            }
             ResolvedToken::Cmd {cmd:Some(c),..} => {
                 todo!("Here: {}",c.meaning(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
             }

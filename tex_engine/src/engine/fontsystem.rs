@@ -32,6 +32,7 @@ pub trait Font:Clone+std::fmt::Debug {
     type Int:TeXInt;
     type CS:ControlSequenceName<Self::Char>;
     fn get_at(&self) -> Self::Dim;
+    fn has_at_set(&self) -> bool;
     fn set_at(&mut self,d:Self::Dim);
     fn name(&self) -> &Self::CS;
     fn filename(&self) -> &str;
@@ -183,6 +184,9 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
             Some(d) => d,
             None => D::from_sp(self.file.size as i32)
         }
+    }
+    fn has_at_set(&self) -> bool {
+        self.muts.read().unwrap().at.is_some()
     }
     fn get_dim(&self, idx: u16) -> Self::Dim {
         match self.muts.read().unwrap().dimens.get(idx as usize) {

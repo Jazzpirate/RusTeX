@@ -588,6 +588,7 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VN
 pub(crate) fn paragraph_list(children:&mut VNodes) -> Vec<HNode<Types>> {
     let mut success = false;
     let mut ret = vec!();
+    let mut later = vec!();
     while let Some(c) = children.next() {
         match c {
             VNode::Custom(RusTeXNode::ParagraphEnd) => {
@@ -595,12 +596,12 @@ pub(crate) fn paragraph_list(children:&mut VNodes) -> Vec<HNode<Types>> {
                 break;
             }
             VNode::Box(TeXBox::H { info: HBoxInfo::ParLine { .. },children,..}) => ret.extend(children.into_vec().into_iter()),
-            VNode::VSkip(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss | VNode::Mark(..) => (),
-            o =>
-                todo!("{:?}",o)
+            VNode::VSkip(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss | VNode::Mark(..) | VNode::VKern(_) => (),
+            _ => later.push(c),
         }
     }
     if !success { todo!("ERROR!") }
+    children.prefix(later);
     ret
 }
 
@@ -729,17 +730,30 @@ pub(crate) fn box_in_math(engine:Refs,state:&mut ShipoutState,mut bx:Bx) {
     })
 }
 
+enum RowOrNoAlign {
+    Row(Vec<HNode<Types>>,SRef,SRef),
+    NoAlign(Vec<VNode<Types>>)
+}
 pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNodes) {
     let mut num_cols= 0;
     let mut rows = Vec::new();
+    let mut noalign = Vec::new();
     while let Some(row) = children.next() {
         match row {
-            VNode::Custom(RusTeXNode::HAlignEnd) => break,
+            VNode::Custom(RusTeXNode::HAlignEnd) => {
+                if !noalign.is_empty() {
+                    rows.push(RowOrNoAlign::NoAlign(std::mem::take(&mut noalign)));
+                }
+                break
+            },
             VNode::Box(TeXBox::H { info: HBoxInfo::HAlignRow,children,start,end }) => {
                 num_cols = num_cols.max(children.len());
-                rows.push(VNode::Box(TeXBox::H {info:HBoxInfo::HAlignRow,children,start,end}));
+                if !noalign.is_empty() {
+                    rows.push(RowOrNoAlign::NoAlign(std::mem::take(&mut noalign)));
+                }
+                rows.push(RowOrNoAlign::Row(children.into_vec(),start,end));
             }
-            _ => todo!()
+            _ => noalign.push(row)
         }
     }
     let mut node = HTMLNode::new(HALIGN, true);
@@ -747,11 +761,11 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
     state.do_in(node,|state| {
         for row in rows {
             match row {
-                VNode::Box(TeXBox::H { info: HBoxInfo::HAlignRow, children,.. }) => {
+                RowOrNoAlign::Row(children,.. ) => {
                     let mut cols = 0;
                     let node = HTMLNode::new(HALIGN_ROW, true);
                     state.do_in(node,|state| {
-                        for c in children.into_vec() {
+                        for c in children {
                             cols += 1;
                             match c {
                                 HNode::Box(bx@ TeXBox::H { info: HBoxInfo::HAlignCell {.. },.. }) => {
@@ -766,11 +780,22 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
                                 _ => todo!()
                             }
                         }
+                        for _ in cols..num_cols {
+                            state.push(HTMLNode::new(HALIGN_CELL, true),false,false)
+                        }
                     },|_,node| if node.label == HALIGN_ROW {Some(node)} else {
                         todo!()
                     })
                 }
-                _ => todo!()
+                RowOrNoAlign::NoAlign(v) => {
+                    let mut node = HTMLNode::new(NOALIGN_H, true);
+                    node.style("grid-column",format!("span {}",num_cols));
+                    state.do_in(node,|state| {
+                        do_vlist(engine,state,&mut v.into(),false)
+                    },|_,node| if node.label == NOALIGN_H {Some(node)} else {
+                        todo!()
+                    })
+                }
             }
         }
     },|_,node| if node.label == HALIGN {Some(node)} else {

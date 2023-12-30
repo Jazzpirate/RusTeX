@@ -972,7 +972,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             }
             let old = std::mem::replace(&mut s.box_register[idx], v);
             if s.tracing_assigns() {
-                aux.outputs.write_neg1("TODO: trace box register change");
+                aux.outputs.write_neg1(format_args!("{{TODO: trace box register change {}}}",idx));
             }
             StateChange::BoxRegister { idx:idx as u16, old }
         });

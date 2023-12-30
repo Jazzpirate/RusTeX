@@ -4,8 +4,10 @@
 /* ----------------------------------------------------- CSS -------------------------------------------------------- */
 /* ------------------------------------------------------------------------------------------------------------------ */
 
-* { position:relative;}
+/* TODO remove this */
+* { position:relative; line-height: 1.0}
 a { color: inherit; text-decoration: inherit; }
+soan {display:contents;}
 
 .rustex-contents {display:contents}
 
@@ -24,52 +26,62 @@ a { color: inherit; text-decoration: inherit; }
     font-variant: normal;
 }
 
-.rustex-body {--temp-width:0}
-
-.rustex-monospaced {
-    font-family: Latin Modern Mono, FreeMono,Courier New,monospace;
-}
-
-.rustex-blackboard {
-    font-family: msbm, Latin Modern Math,math;
-}
-
-.rustex-script-font {
-    /*font-family: URW Chancery L, cursive; /* TODO think about this */
-}
-
-.rustex-sans-serif {
-    font-family: Latin Modern Sans, sans-serif;
-}
-
-.rustex-text {
-    display:contents;
-}
-
-/* ---------------------------------------------------- Boxes ------------------------------------------------------- */
-
 .rustex-body {
+    --temp-width:0;
     background-color:#f9fafb;
     color: #000000;
     display:flex;
     flex-direction: column;
 }
 
-.rustex-vbox, .rustex-vtop, .rustex-vcenter,.rustex-foreign {
-    display:inline-flex;
-    flex-direction: column;
+/* ---------------------------------------------------- Boxes ------------------------------------------------------- */
+
+.rustex-paragraph {
+    text-align:justify;
+    white-space:normal;
+    display: inline-block;
+    position: relative;
 }
 
-.rustex-hbox, .rustex-vbox, .rustex-vtop, .rustex-vcenter {
+.rustex-parindent {
+    display: inline-block;
+}
+
+
+.rustex-hbox {
+    display:inline-flex;
+    white-space: pre;
+    width: min-content;
+    height: min-content;
+    align-items: baseline;
     overflow: visible;
     text-align: left;
+    vertical-align: baseline;
+    position: relative;
+}
+
+.rustex-hbox-container {
+    display:inline-flex;
+    flex-direction: column;
+    width: min-content;
+    height: min-content;
+    justify-content: end;
+    vertical-align: baseline;
+    position: relative;
+}
+
+.rustex-space-in-hbox {
+    display: inline-block;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 0;
 }
 
 .rustex-vbox, .rustex-vtop, .rustex-vcenter {
     height: min-content;
     width: min-content;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
+    display: inline-flex;
+    flex-direction: column;
 }
 .rustex-vbox { vertical-align: bottom }
 .rustex-vtop {vertical-align: baseline }
@@ -81,16 +93,39 @@ a { color: inherit; text-decoration: inherit; }
     height: min-content;
     vertical-align: bottom;
 }
-
 .rustex-vtop-height-container {
     display:inline-block;
     width:min-content;
     height: min-content;
 }
+.rustex-vbox-container { display:inline-flex; width: min-content; height: min-content; align-items: last baseline }
+.rustex-vtop-container { display:inline-flex; width: min-content; height: min-content; align-items: first baseline }
+.rustex-vcenter-container { display:inline-flex; width: min-content; height: min-content; align-items: center }
 
-.rustex-vbox-container { display:inline-block; width: min-content; height: min-content }
-.rustex-vtop-container { display:inline-block;; width: min-content; height: min-content }
-.rustex-vcenter-container { display:inline-block; width: min-content; height: min-content }
+/*
+
+.rustex-vbox, .rustex-vtop, .rustex-vcenter,.rustex-foreign {
+    display:inline-flex;
+    flex-direction: column;
+}
+
+.rustex-hbox, .rustex-vbox, .rustex-vtop, .rustex-vcenter {
+    overflow: visible;
+    text-align: left;
+}
+
+.rustex-hbox, .rustex-hbox-no-space {
+    display:inline-flex;
+    white-space: pre;
+    width: min-content;
+    height: min-content;
+    align-items: baseline;
+}
+
+
+
+
+
 
 .rustex-display-vcenter {
     text-align:center;
@@ -102,52 +137,19 @@ a { color: inherit; text-decoration: inherit; }
     min-width: 100%;
 }
 
-.rustex-hbox, .rustex-hbox-no-space {
-    display:inline-flex;
-    white-space: pre;
-    width: min-content;
-    height: min-content;
-    align-items: baseline;
-    /*
-    vertical-align: bottom;
-    align-items: end;
-     */
-}
-/*.paragraph > .hbox { align-items: baseline}*/
-.rustex-space-in-hbox {
-    display: inline-block;
-    margin-top:auto;
-    margin-left: auto;
-    margin-right: auto;
-    line-height: 0;
-}
 .rustex-hbox-no-space > .rustex-space-in-hbox, .rustex-hbox-no-space > span > .rustex-space-in-hbox, .rustex-hbox-no-space > span > span > .rustex-space-in-hbox {
     margin:0;
 }
 .rustex-hbox > .rustex-text, .rustex-hbox > span > .rustex-text, .rustex-hbox > span > span > .rustex-text, .rustex-hbox > span > span > span > .rustex-text {
     display:inline-block;
     margin-bottom:1.2px;
-} /* line-height:0 */
-
-.rustex-hbox-container {
-    display:inline-flex;
-    flex-direction: column;
-    width: min-content;
-    height: min-content;
-    justify-content: end;
 }
 
-.rustex-paragraph {
-    text-align:justify;
-    white-space:normal;
-    display: inline-block;
-    /* margin-top: auto; */
-}
+
 .rustex-paragraph > .rustex-text, .rustex-paragraph > span > .rustex-text, .rustex-paragraph > span > span > .rustex-text, .rustex-paragraph > span > span > span > .rustex-text  { display:contents; }
 
-.rustex-parindent {
-    display: inline-block;
-}
+
+ */
 
 /* ---------------------------------------------------- Rules ------------------------------------------------------- */
 
@@ -312,8 +314,8 @@ foreignObject {display: flex;}
     display: inline-block;
 }
 .rustex-withwidth {
-    width: var(--temp-width);
     min-width: var(--temp-width);
+    max-width: var(--temp-width);
 }
 .rustex-withwidth > span {
     --document-width: var(--temp-width);

@@ -148,7 +148,7 @@ fn split_state<R,F:FnOnce(Refs,&mut ShipoutState) -> R>(engine:Refs,f:F) -> R {
 }
 
 
-const TEST_FILE: &str = "/home/jazzpirate/Downloads/example.html";
+const TEST_FILE: &str = "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html";
 const PREAMBLE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
@@ -681,7 +681,6 @@ fn kernel_is_h(k:&MathKernel<Types,MathFontStyle<Types>>) -> bool {
 
 fn get_box_dims(bx: &Bx,state:&ShipoutState,scale:fn(&Bx) -> Dim32,top:bool) -> (Option<Dim32>,Option<Dim32>,Option<Dim32>,Option<Dim32>) {
     let wd = match bx.assigned_width() {
-        Some(w) if w == state.curr_width() => None,
         Some(w) =>  Some(w),
         _ if top => match bx.width() {
             w if w < ZERO => Some(ZERO),

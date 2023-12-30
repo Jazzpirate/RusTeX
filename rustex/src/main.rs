@@ -15,8 +15,15 @@ use tex_engine::pdflatex::PlainPDFTeXEngine;
 
 fn main() {
     //profile()
-    thesis()
+    //thesis()
     //run()
+    test()
+}
+
+fn test() {
+    env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
+    RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.tex")
+
 }
 
 fn thesis() {

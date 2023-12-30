@@ -70,7 +70,6 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
                             if !n.children.is_empty() {state.push(n,math,svg);}
                             return
                         }
-                        let Some(f) = n.font.clone() else { unreachable!() };
                         if !n.children.is_empty() {state.push(n,math,svg);}
                         for mut c in requeue.into_iter().rev() {
                             let mut node = HTMLNode::new(COLOR_CHANGE, c.allow_newline);

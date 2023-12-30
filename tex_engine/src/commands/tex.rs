@@ -28,6 +28,7 @@ use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarge
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{MathAtom, MathNode, MathNucleus, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
+use crate::tex::numerics::TeXDimen;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -1090,6 +1091,17 @@ pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET
     write!(f,"{}",engine.aux.jobname).unwrap();
 }
 
+pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    let font = engine.read_font();
+    let mut fi = |t| exp.push(t);
+    let mut f = Tokenizer::new(&mut fi);
+    if font.has_at_set() {
+        write!(f,"{} at {}",font.filename(),font.get_at()).unwrap();
+    } else {
+        write!(f,"{}",font.filename()).unwrap();
+    }
+}
+
 pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) {
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
@@ -1832,7 +1844,10 @@ pub fn pagegoal_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
 }
 pub fn pagegoal_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
     let d = engine.read_dim(true);
-    engine.stomach.data_mut().pagegoal = d;
+    let data = engine.stomach.data_mut();
+    if data.pagegoal != ET::Dim::from_sp(i32::MAX) {
+        engine.stomach.data_mut().pagegoal = d;
+    }
 }
 pub fn pagetotal_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Dim {
     engine.stomach.data_mut().pagetotal
@@ -2077,23 +2092,34 @@ pub fn mathinner<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
     super::methods::do_math_class(engine,None)
 }
 pub fn mathchoice<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+    engine.read_char_or_math_group(|_,engine,mc| mathchoice_i(engine,vec!(MathNode::Atom(mc.to_atom())).into())
+                                   ,|_| ListTarget::<ET,_>::new(
         |engine,children,_| mathchoice_i(engine,children.into())
-    ))
+    ),())
 }
 type ML<ET> = Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>;
 pub fn mathchoice_i<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>) {
-    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+    engine.read_char_or_math_group(|d,engine,mc| mathchoice_ii(engine,d,vec!(MathNode::Atom(mc.to_atom())).into()),
+                                   |d| ListTarget::<ET,_>::new(
         move |engine,children,_| mathchoice_ii(engine,d,children.into())
-    ))
+    ),d)
 }
 pub fn mathchoice_ii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>) {
-    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+    engine.read_char_or_math_group(|(d,t),engine,mc| mathchoice_iii(engine,d,t,vec!(MathNode::Atom(mc.to_atom())).into()),
+                                   |(d,t)| ListTarget::<ET,_>::new(
         |engine,children,_| mathchoice_iii(engine,d,t,children.into())
-    ))
+    ),(d,t))
 }
 pub fn mathchoice_iii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>,s:ML<ET>) {
-    engine.read_char_or_math_group(|| ListTarget::<ET,_>::new(
+    engine.read_char_or_math_group(|(d,t,s),engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Choice(UnresolvedMathChoice {
+            display: d,
+            text: t,
+            script: s,
+            scriptscript: vec!(MathNode::Atom(mc.to_atom())).into()
+        }))
+    },
+                                   |(d,t,s)| ListTarget::<ET,_>::new(
         |engine,children,_|
             ET::Stomach::add_node_m(engine,MathNode::Choice(UnresolvedMathChoice {
                 display: d,
@@ -2101,7 +2127,7 @@ pub fn mathchoice_iii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>
                 script: s,
                 scriptscript: children.into()
             }))
-    ))
+    ),(d,t,s))
 }
 
 const PRIMITIVE_INTS:&[&'static str] = &[
@@ -2353,6 +2379,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_simple_expandable(engine,"noexpand",noexpand);
 
     register_expandable(engine,"jobname",jobname);
+    register_expandable(engine,"fontname",fontname);
     register_expandable(engine,"meaning",meaning);
     register_expandable(engine,"number",number);
     register_expandable(engine,"romannumeral",romannumeral);
@@ -2501,7 +2528,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
         show,showbox,showthe,special,noboundary,accent,setlanguage,nonscript,
         over,atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
-        leqno,bigskip,bye,fontname,italiccorr,medskip,smallskip
+        leqno,bigskip,bye,italiccorr,medskip,smallskip
     );
 
     register_primitive_int(engine,PRIMITIVE_INTS);
