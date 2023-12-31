@@ -822,8 +822,8 @@ pub fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<
     state.pop(aux,mouth);
     let bx = TeXBox::H {
         children:children.into(),start,
-        info: HBoxInfo::HAlignCell {to:None},
-        end: mouth.current_sourceref(),
+        info: HBoxInfo::new_cell(),
+        end: mouth.current_sourceref(),preskip:None
     };
     match stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignRow(..)}) =>
@@ -865,7 +865,7 @@ pub fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::M
     let bx = TeXBox::H {
         children:children.into(),start,
         info: HBoxInfo::HAlignRow,
-        end: mouth.current_sourceref(),
+        end: mouth.current_sourceref(),preskip:None
     };
     match stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::HAlign}) =>

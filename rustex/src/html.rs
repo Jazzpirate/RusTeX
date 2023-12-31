@@ -35,6 +35,8 @@ pub(crate) fn mudim_to_string(d:Mu) -> String {
 
 type Ref = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
 
+
+
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub enum Tag {
     Div,
@@ -138,6 +140,9 @@ pub(crate) mod labels {
     pub(crate) const SVG_ESCAPE_DIV: Label = Label { id: 50, cls: Some("rustex-foreign"), tag: Tag::Div };
     pub(crate) const PDF_MATRIX: Label = Label { id: 51, cls: Some("rustex-pdfmatrix"), tag: Tag::Span };
     pub(crate) const NOALIGN_H: Label = Label { id: 52, cls: Some("rustex-noalign"), tag: Tag::Div };
+    pub(crate) const VTOP_CONTAINER: Label = Label { id: 53, cls: Some("rustex-vtop-container"), tag: Tag::Div };
+    pub(crate) const VTOP_HEIGHT_CONTAINER: Label = Label { id: 54, cls: Some("rustex-vtop-height-container"), tag: Tag::Div };
+    pub(crate) const VTOP_INNER: Label = Label { id: 55, cls: Some("rustex-vtop"), tag: Tag::Div };
 }
 
 #[derive(Debug)]

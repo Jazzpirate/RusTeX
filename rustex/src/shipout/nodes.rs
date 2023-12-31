@@ -213,6 +213,51 @@ fn vbox_inner(has_wd:bool, to:Option<Dim32>, state:&mut ShipoutState, children:V
     })
 }
 
+pub(crate) fn do_vtop(bx:Bx, state:&mut ShipoutState, engine:Refs, top:bool, in_v:bool) {
+    let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.height(),top);
+    let (children,start,end) = if let TeXBox::V {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
+    if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && in_v {
+        return do_vlist(engine,state,&mut children.into(),false);
+    }
+    let mut node = HTMLNode::new(VTOP_CONTAINER, true);
+    if let Some(b) = bottom { node.style("margin-bottom",dim_to_string(b)) }
+    if let Some(w) = wd { node.width(w); }
+    state.do_in(node,|state| match ht {
+        Some(h) => {
+            let mut node = HTMLNode::new(VTOP_HEIGHT_CONTAINER, true);
+            node.style("height",dim_to_string(h));
+            if wd.is_some() { node.style_str("width","100%") }
+            state.do_in(node,|state| {
+                vtop_inner(wd.is_some(), to, state, children, start, end, engine)
+            },|_,node| if node.label == VTOP_HEIGHT_CONTAINER {Some(node)} else {
+                todo!()
+            })
+        }
+        None => vtop_inner(wd.is_some(), to, state, children, start, end, engine),
+    },|_,node| if node.label == VTOP_CONTAINER {Some(node)} else {
+        todo!()
+    });
+}
+
+fn vtop_inner(has_wd:bool, to:Option<Dim32>, state:&mut ShipoutState, children:Vec<VNode<Types>>, start:SRef, end:SRef, engine:Refs) {
+    let mut node = HTMLNode::new(VTOP_INNER, true);
+    node.sourceref(start,end);
+    if has_wd { node.style_str("width","100%") }
+    match to {
+        Some(d) if d < ZERO => {
+            node.style_str("height","0");
+            node.style("margin-bottom",dim_to_string(d))
+        }
+        Some(d) => node.style("height",dim_to_string(d)),
+        _ => ()
+    }
+    state.do_in(node,|state| {
+        do_vlist(engine,state,&mut children.into(),false);
+    },|_,node| if node.label == VTOP_INNER {Some(node)} else {
+        todo!()
+    })
+}
+
 pub(crate) fn do_hbox(bx:Bx, state:&mut ShipoutState, engine:Refs, top:bool, in_h:bool) {
     let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.width(),top);
     let (children,start,end) = if let TeXBox::H {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
@@ -746,7 +791,7 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
                 }
                 break
             },
-            VNode::Box(TeXBox::H { info: HBoxInfo::HAlignRow,children,start,end }) => {
+            VNode::Box(TeXBox::H { info: HBoxInfo::HAlignRow,children,start,end,.. }) => {
                 num_cols = num_cols.max(children.len());
                 if !noalign.is_empty() {
                     rows.push(RowOrNoAlign::NoAlign(std::mem::take(&mut noalign)));

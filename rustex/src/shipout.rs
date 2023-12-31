@@ -570,6 +570,7 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>, top:bool) {
         VNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox {moved_left:Some(_),..} | VBoxInfo::VTop{moved_left:Some(_),..},..} | bx @ TeXBox::H{info: HBoxInfo::HBox{moved_left:Some(_),..},..}) =>
             nodes::do_moveleft(bx,state,true,|n,state| do_v(engine,state,VNode::Box(n),false)),
         VNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox { .. },.. }) => nodes::do_vbox(bx,state,engine,top,true),
+        VNode::Box(bx@ TeXBox::V { info: VBoxInfo::VTop { .. },.. }) => nodes::do_vtop(bx,state,engine,top,true),
         VNode::Box(bx@ TeXBox::H { info: HBoxInfo::HBox { .. },.. }) => nodes::do_hbox(bx,state,engine,top,false),
         VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
         VNode::Whatsit(wi) => wi.call(engine),
@@ -606,6 +607,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>, par:bool,escape_s
         HNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox {moved_left:Some(_),..} | VBoxInfo::VTop {moved_left:Some(_),..},..} | bx @ TeXBox::H{info: HBoxInfo::HBox {moved_left:Some(_),..} ,..}) =>
             nodes::do_moveleft(bx,state,false,|n,state| do_h(engine,state,HNode::Box(n),false,escape_space)),
         HNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox { .. },.. }) => nodes::do_vbox(bx,state,engine,false,false),
+        HNode::Box(bx@ TeXBox::V { info: VBoxInfo::VTop { .. },.. }) => nodes::do_vtop(bx,state,engine,false,false),
         HNode::Box(bx@ TeXBox::H { info: HBoxInfo::HBox { .. },.. }) => nodes::do_hbox(bx,state,engine,false,!par),
         HNode::Box(TeXBox::H {info:HBoxInfo::ParIndent(d),..}) => {
             let mut node = HTMLNode::new(crate::html::labels::PARINDENT,false);

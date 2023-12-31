@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::fmt::{Debug, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
@@ -525,7 +526,10 @@ pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub display:bool,
     pub children:Box<[MathNode<ET,S>]>,
     pub start:SourceRef<ET>,
-    pub end:SourceRef<ET>
+    pub end:SourceRef<ET>,
+    pub(crate) computed_width:OnceCell<ET::Dim>,
+    pub(crate) computed_height:OnceCell<ET::Dim>,
+    pub(crate) computed_depth:OnceCell<ET::Dim>,
 }
 
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
@@ -540,7 +544,12 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
             forced_from:None
         } };
         let nch = Self::close_i(children,style);
-        MathGroup { display,children:nch.into(),start,end }
+        MathGroup {
+            display,children:nch.into(),start,end,
+            computed_width: OnceCell::new(),
+            computed_height: OnceCell::new(),
+            computed_depth: OnceCell::new(),
+        }
     }
     fn close_i(ls: Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,style:MathStyle) -> Vec<MathNode<ET,MathFontStyle<ET>>> {
         ls.into_iter().map(|n| match n {

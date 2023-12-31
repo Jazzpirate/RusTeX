@@ -813,24 +813,17 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Horizontal, PRIMITIVES.everyhbox);
-    Err(BoxInfo::H(HBoxInfo::HBox {
-        scaled,
-        assigned_width: None,
-        assigned_height: None,
-        assigned_depth: None,
-        moved_left:None,raised:None
-    }))
+    Err(BoxInfo::H(HBoxInfo::new_box()))
 }
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    Err(BoxInfo::V(VBoxInfo::VBox {
-        scaled,
-        assigned_width: None,
-        assigned_height: None,
-        assigned_depth: None,
-        moved_left:None,raised:None
-    }))
+    Err(BoxInfo::V(VBoxInfo::new_box()))
+}
+
+pub fn vtop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
+    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
+    Err(BoxInfo::V(VBoxInfo::new_top()))
 }
 
 pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
@@ -1731,7 +1724,7 @@ pub fn hss<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let dim = engine.state.get_primitive_dim(PRIMITIVES.parindent);
     ET::Stomach::add_node_h(engine,
-                            HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(dim),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()})
+                            HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(dim),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref(),preskip:None})
     )
 }
 
@@ -2509,13 +2502,14 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     register_box(engine,"hbox",hbox);
     register_box(engine,"vbox",vbox);
+    register_box(engine,"vtop",vtop);
     register_box(engine,"box",box_);
     register_box(engine,"copy",copy);
     register_box(engine,"lastbox",lastbox);
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathaccent,left,right,vtop,noalign,omit,overline,
+        mathaccent,left,right,noalign,omit,overline,
         pagedepth,span,underline
     );
 

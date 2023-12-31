@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
@@ -23,14 +24,22 @@ pub enum HBoxInfo<ET:EngineTypes> {
         assigned_height:Option<ET::Dim>,
         assigned_depth:Option<ET::Dim>,
         moved_left:Option<ET::Dim>,
-        raised:Option<ET::Dim>
+        raised:Option<ET::Dim>,
+        computed_width:OnceCell<ET::Dim>,
+        computed_height:OnceCell<ET::Dim>,
+        computed_depth:OnceCell<ET::Dim>,
     },
     ParLine {
         spec:ParLineSpec<ET>,
         ends_with_line_break:bool,
+        inner_height:ET::Dim,
+        inner_depth:ET::Dim,
     },
     HAlignRow, HAlignCell {
         to: Option<ET::Dim>,
+        computed_width:OnceCell<ET::Dim>,
+        computed_height:OnceCell<ET::Dim>,
+        computed_depth:OnceCell<ET::Dim>,
     },
     ParIndent(ET::Dim),
 }
@@ -47,6 +56,27 @@ impl<ET:EngineTypes> Display for HBoxInfo<ET> {
     }
 }
 impl<ET:EngineTypes> HBoxInfo<ET> {
+    pub fn new_box() -> Self {
+        HBoxInfo::HBox {
+            scaled: ToOrSpread::None,
+            assigned_width: None,
+            assigned_height: None,
+            assigned_depth: None,
+            moved_left: None,
+            raised: None,
+            computed_width: OnceCell::new(),
+            computed_height: OnceCell::new(),
+            computed_depth: OnceCell::new(),
+        }
+    }
+    pub fn new_cell() -> Self {
+        HBoxInfo::HAlignCell {
+            to: None,
+            computed_width: OnceCell::new(),
+            computed_height: OnceCell::new(),
+            computed_depth: OnceCell::new(),
+        }
+    }
     pub fn open_list(self,start:SourceRef<ET>) -> NodeList<ET> {
         match self {
             HBoxInfo::HBox {..} => NodeList::Horizontal {tp:HorizontalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
@@ -65,8 +95,8 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
 
     fn get_height(&self,v:&[HNode<ET>]) -> ET::Dim {
         match self {
-            HBoxInfo::HBox { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::height_inner(v)),
-            HBoxInfo::ParLine { .. } => Self::height_inner(v),
+            HBoxInfo::HBox { assigned_height,computed_height, .. } => assigned_height.unwrap_or_else(|| *computed_height.get_or_init(|| Self::height_inner(v))),
+            HBoxInfo::ParLine { inner_height,.. } => *inner_height,
             HBoxInfo::HAlignRow => Self::height_inner(v),
             HBoxInfo::HAlignCell { .. } => Self::height_inner(v),
             HBoxInfo::ParIndent(_) => ET::Dim::default(),
@@ -74,17 +104,17 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
     }
     fn get_width(&self,v:&[HNode<ET>]) -> ET::Dim {
         match self {
-            HBoxInfo::HBox { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::width_inner(v)),
+            HBoxInfo::HBox { assigned_width,computed_width, .. } => assigned_width.unwrap_or_else(|| *computed_width.get_or_init(|| Self::width_inner(v))),
             HBoxInfo::ParLine { spec,.. } => spec.leftskip.base() + spec.rightskip.base() + spec.target,
             HBoxInfo::HAlignRow => Self::width_inner(v),
-            HBoxInfo::HAlignCell { to } => to.unwrap_or_else(|| Self::width_inner(v)),
+            HBoxInfo::HAlignCell { to,computed_width,.. } => to.unwrap_or_else(|| *computed_width.get_or_init(|| Self::width_inner(v))),
             HBoxInfo::ParIndent(d) => *d,
         }
     }
     fn get_depth(&self,v:&[HNode<ET>]) -> ET::Dim {
         match self {
-            HBoxInfo::HBox { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::depth_inner(v)),
-            HBoxInfo::ParLine { .. } => Self::depth_inner(v),
+            HBoxInfo::HBox { assigned_depth, computed_depth, .. } => assigned_depth.unwrap_or_else(|| *computed_depth.get_or_init(|| Self::depth_inner(v))),
+            HBoxInfo::ParLine { inner_depth,.. } => *inner_depth,
             HBoxInfo::HAlignRow => Self::depth_inner(v),
             HBoxInfo::HAlignCell { .. } => Self::depth_inner(v),
             HBoxInfo::ParIndent(_) => ET::Dim::default(),
@@ -117,6 +147,9 @@ pub enum VBoxInfo<ET:EngineTypes> {
         assigned_depth:Option<ET::Dim>,
         moved_left:Option<ET::Dim>,
         raised:Option<ET::Dim>,
+        computed_width: OnceCell<ET::Dim>,
+        computed_height: OnceCell<ET::Dim>,
+        computed_depth: OnceCell<ET::Dim>,
     },
     VTop {
         scaled:ToOrSpread<ET::Dim>,
@@ -125,6 +158,9 @@ pub enum VBoxInfo<ET:EngineTypes> {
         assigned_depth:Option<ET::Dim>,
         moved_left:Option<ET::Dim>,
         raised:Option<ET::Dim>,
+        computed_width: OnceCell<ET::Dim>,
+        computed_height: OnceCell<ET::Dim>,
+        computed_depth: OnceCell<ET::Dim>,
     }
 }
 impl<ET:EngineTypes> Display for VBoxInfo<ET> {
@@ -135,12 +171,37 @@ impl<ET:EngineTypes> Display for VBoxInfo<ET> {
             VTop { .. } => write!(f, "vtop"),
             VAlignRow => write!(f, "valignrow"),
             VAlignCell { .. } => write!(f, "valigncell"),
-            Output => write!(f, "output"),
         }
     }
 }
 
 impl<ET:EngineTypes> VBoxInfo<ET> {
+    pub fn new_box() -> Self {
+        VBoxInfo::VBox {
+            scaled: ToOrSpread::None,
+            assigned_width: None,
+            assigned_height: None,
+            assigned_depth: None,
+            moved_left: None,
+            raised: None,
+            computed_width: OnceCell::new(),
+            computed_height: OnceCell::new(),
+            computed_depth: OnceCell::new(),
+        }
+    }
+    pub fn new_top() -> Self {
+        VBoxInfo::VTop {
+            scaled: ToOrSpread::None,
+            assigned_width: None,
+            assigned_height: None,
+            assigned_depth: None,
+            moved_left: None,
+            raised: None,
+            computed_width: OnceCell::new(),
+            computed_height: OnceCell::new(),
+            computed_depth: OnceCell::new(),
+        }
+    }
     pub fn open_list(self,start:SourceRef<ET>) -> NodeList<ET> {
         match self {
             VBoxInfo::VBox {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
@@ -151,7 +212,7 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
     }
     pub fn clone_for_split(&mut self) -> Self {
         match self {
-            VBoxInfo::VBox { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised } => {
+            VBoxInfo::VBox { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised,.. } => {
                 *assigned_height = None;
                 *assigned_depth = None;
                 *scaled = ToOrSpread::None;
@@ -162,19 +223,25 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
                     assigned_depth: None,
                     moved_left: moved_left.clone(),
                     raised: raised.clone(),
+                    computed_width: OnceCell::new(),
+                    computed_height: OnceCell::new(),
+                    computed_depth: OnceCell::new(),
                 }
             },
-            VBoxInfo::VTop { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised } => {
+            VBoxInfo::VTop { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised,.. } => {
                 *assigned_height = None;
                 *assigned_depth = None;
                 *scaled = ToOrSpread::None;
-                VBoxInfo::VTop {
+                VBoxInfo::VBox {
                     scaled: ToOrSpread::None,
                     assigned_width: assigned_width.clone(),
                     assigned_height: None,
                     assigned_depth: None,
                     moved_left: moved_left.clone(),
                     raised: raised.clone(),
+                    computed_width: OnceCell::new(),
+                    computed_height: OnceCell::new(),
+                    computed_depth: OnceCell::new(),
                 }
             },
             _ => unreachable!()
@@ -193,24 +260,37 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
         match self {
             VBoxInfo::VAlignRow => Self::height_inner(v),
             VBoxInfo::VAlignCell { to } => to.unwrap_or_else(||  Self::height_inner(v)),
-            VBoxInfo::VBox { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::height_inner(v)),
-            VBoxInfo::VTop { assigned_height, .. } => assigned_height.unwrap_or_else(|| Self::height_inner(v)), // TODO
+            VBoxInfo::VBox { assigned_height,computed_height, .. } => assigned_height.unwrap_or_else(|| *computed_height.get_or_init(|| Self::height_inner(v))),
+            VBoxInfo::VTop { assigned_height,computed_height, .. } => assigned_height.unwrap_or_else(|| *computed_height.get_or_init(|| {
+                match v.first() {
+                    Some(c@VNode::Box(..)) => c.height(),
+                    _ => ET::Dim::default()
+                }
+            })),
         }
     }
     fn get_width(&self,v:&[VNode<ET>]) -> ET::Dim {
         match self {
             VBoxInfo::VAlignRow => Self::width_inner(v),
             VBoxInfo::VAlignCell { .. } => Self::width_inner(v),
-            VBoxInfo::VBox { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::width_inner(v)),
-            VBoxInfo::VTop { assigned_width, .. } => assigned_width.unwrap_or_else(|| Self::width_inner(v)), // TODO
+            VBoxInfo::VBox { assigned_width,computed_width, .. } => assigned_width.unwrap_or_else(|| *computed_width.get_or_init(|| Self::width_inner(v))),
+            VBoxInfo::VTop { assigned_width,computed_width, .. } => assigned_width.unwrap_or_else(|| *computed_width.get_or_init(|| Self::width_inner(v))),
         }
     }
     fn get_depth(&self,v:&[VNode<ET>]) -> ET::Dim {
         match self {
             VBoxInfo::VAlignRow => Self::depth_inner(v),
             VBoxInfo::VAlignCell { .. } => Self::depth_inner(v),
-            VBoxInfo::VBox { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::depth_inner(v)),
-            VBoxInfo::VTop { assigned_depth, .. } => assigned_depth.unwrap_or_else(|| Self::depth_inner(v)), // TODO
+            VBoxInfo::VBox { assigned_depth,computed_depth, .. } => assigned_depth.unwrap_or_else(|| *computed_depth.get_or_init(|| Self::depth_inner(v))),
+            VBoxInfo::VTop { assigned_depth,computed_depth, .. } => assigned_depth.unwrap_or_else(|| *computed_depth.get_or_init(|| {
+                let x = match v.first() {
+                    Some(c@VNode::Box(..)) => c.height(),
+                    _ => ET::Dim::default()
+                };
+                let h = Self::height_inner(v);
+                let d = Self::depth_inner(v);
+                h + d - x
+            })),
         }
     }
 
@@ -258,7 +338,7 @@ impl<ET:EngineTypes> BoxInfo<ET> {
 #[derive(Debug,Clone)]
 pub enum TeXBox<ET:EngineTypes> {
     V { info:VBoxInfo<ET>, children:Box<[VNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET> },
-    H { info:HBoxInfo<ET>, children:Box<[HNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET> },
+    H { info:HBoxInfo<ET>, children:Box<[HNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET>,preskip:Option<ET::Skip> },
 }
 
 impl<ET:EngineTypes> TeXBox<ET> {
@@ -351,7 +431,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
     #[inline(always)]
     fn height(&self) -> ET::Dim {
         match self {
-            TeXBox::H { info, children,.. } => info.get_height(&children),
+            TeXBox::H { info, children,preskip,.. } => info.get_height(&children) + preskip.map(|s| s.base()).unwrap_or_default(),
             TeXBox::V { info, children,.. } => info.get_height(&children),
         }
     }

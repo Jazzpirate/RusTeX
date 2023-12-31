@@ -530,14 +530,7 @@ pub trait Stomach {
         for (i,b) in first.iter_mut().enumerate() { match b {
             VNode::Insert(n,v) => {
                 engine.state.set_box_register(engine.aux,*n as u16,Some(TeXBox::V {
-                    info: VBoxInfo::VBox {
-                        scaled: ToOrSpread::None,
-                        assigned_width: None,
-                        assigned_height: None,
-                        assigned_depth: None,
-                        moved_left: None,
-                        raised: None,
-                    },
+                    info: VBoxInfo::new_box(),
                     children:std::mem::replace(v, vec!().into()),
                     start:engine.mouth.current_sourceref(),
                     end:engine.mouth.current_sourceref(),
@@ -553,14 +546,7 @@ pub trait Stomach {
 
         let bx = TeXBox::V {
             children:first.into(),
-            info:VBoxInfo::VBox {
-                scaled: ToOrSpread::None,
-                assigned_width: None,
-                assigned_height: None,
-                assigned_depth: None,
-                moved_left: None,
-                raised: None,
-            },
+            info:VBoxInfo::new_box(),
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
         };
@@ -614,13 +600,13 @@ pub trait Stomach {
         match engine.resolve(token) {
             ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
                 if u.name == PRIMITIVES.indent => {
-                Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}))
+                Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref,preskip:None}))
             },
             ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
                 if u.name == PRIMITIVES.noindent => (),
             ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} => {
                 engine.mouth.requeue(token);
-                Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref}))
+                Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref,preskip:None}))
             }
         }
         engine.mouth.insert_every::<Self::ET>(engine.state,PRIMITIVES.everypar)
@@ -914,6 +900,8 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
     let mut target = line_spec.target;
     let mut currstart = start;
     let mut currend = currstart.clone();
+    let mut curr_height = ET::Dim::default();
+    let mut curr_depth = ET::Dim::default();
     'A:loop {
         let mut line = vec!();
         let mut reinserts = vec!();
@@ -923,7 +911,12 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 if !line.is_empty() {
                     let start = currstart.clone();
                     currstart = currend.clone();
-                    ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:$b}}));
+                    ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
+                        spec:line_spec.clone(),
+                        ends_with_line_break:$b,
+                        inner_height:std::mem::take(&mut curr_height),
+                        inner_depth:std::mem::take(&mut curr_depth)
+                    },preskip:None}));
                 }
                 for c in reinserts {
                     ret.push(ParLine::Adjust(c));
@@ -942,7 +935,12 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     if !line.is_empty() {
                         let start = currstart.clone();
                         currstart = currend.clone();
-                        ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {spec:line_spec.clone(),ends_with_line_break:false}}));
+                        ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
+                            spec:line_spec.clone(),
+                            ends_with_line_break:false,
+                            inner_height:std::mem::take(&mut curr_height),
+                            inner_depth:std::mem::take(&mut curr_depth)
+                        },preskip:None}));
                     }
                     for c in reinserts {
                         ret.push(ParLine::Adjust(c));
@@ -962,6 +960,8 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 Some(HNode::Penalty(_)) => (),
                 Some(node) => {
                     target = target + (-node.width());
+                    curr_height = curr_height.max(node.height());
+                    curr_depth = curr_depth.max(node.depth());
                     line.push(node);
                 }
             }

@@ -60,7 +60,7 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::Box(info,start,target)}) if bt == BoxType::Horizontal => {
             engine.state.pop(engine.aux,engine.mouth);
             let bx = TeXBox::H {
-                children:children.into(),info,start,end:engine.mouth.current_sourceref(),
+                children:children.into(),info,start,end:engine.mouth.current_sourceref(),preskip:None
             };
             ET::Stomach::add_box(engine, bx, target)
         }
@@ -83,36 +83,39 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
     }
 }
 
-pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, node: VNode<ET>) {
+pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VNode<ET>) {
     let data = engine.stomach.data_mut();
-    let pre = match node {
-        VNode::Box(ref b@TeXBox::H {..}) => {
-            if data.prevdepth > ET::Dim::from_sp(-65536000) {
-                let baselineskip = engine.state.get_primitive_skip(PRIMITIVES.baselineskip);
-                let lineskiplimit = engine.state.get_primitive_dim(PRIMITIVES.lineskiplimit);
-                let ht = b.height();
-                let b = ET::Skip::new(baselineskip.base() - data.prevdepth - ht, baselineskip.stretch(), baselineskip.shrink());
-                let sk = if b.base() >= lineskiplimit { b }
-                else {
-                    engine.state.get_primitive_skip(PRIMITIVES.lineskip)
-                };
-                if sk != ET::Skip::default() {Some(sk)} else {None}
-            } else {None}
-        }
-        _ => None
-    };
-
+    let prevdepth = data.prevdepth;
 
     if let VNode::HRule {..} = node {
         data.prevdepth = ET::Dim::from_sp(-65536000);
     } else {
         data.prevdepth = node.depth();
     }
+
+    let ht = node.height();
+
+    let pre = match node {
+        VNode::Box(TeXBox::H {ref mut preskip,..}) => {
+            if prevdepth > ET::Dim::from_sp(-65536000) {
+                let baselineskip = engine.state.get_primitive_skip(PRIMITIVES.baselineskip);
+                let lineskiplimit = engine.state.get_primitive_dim(PRIMITIVES.lineskiplimit);
+                let b = ET::Skip::new(baselineskip.base() - prevdepth - ht, baselineskip.stretch(), baselineskip.shrink());
+                let sk = if b.base() >= lineskiplimit { b }
+                else {
+                    engine.state.get_primitive_skip(PRIMITIVES.lineskip)
+                };
+                if sk != ET::Skip::default() {
+                    *preskip = Some(sk);
+                    Some(sk)
+                } else {None}
+            } else {None}
+        }
+        _ => None
+    };
+
     match data.open_lists.last_mut() {
         Some(NodeList::Vertical {children,..}) => {
-            if let Some(pre) = pre {
-                children.push(VNode::VSkip(pre));
-            }
             children.push(node);
             return
         }
@@ -133,9 +136,8 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, node: VNode<
 
     if let Some(pre) = pre {
         data.pagetotal = data.pagetotal + pre.base();
-        data.page.push(VNode::VSkip(pre));
     }
-    data.pagetotal = data.pagetotal + node.height() + node.depth(); // ?
+    data.pagetotal = data.pagetotal + ht + node.depth(); // ?
     if let VNode::Penalty(i) = node {
         if i <= -10000 {
             if data.page_contains_boxes {
