@@ -354,6 +354,13 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathAtom<ET,S> {
 pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
     Simple{cls: MathClass,kernel:MathKernel<ET,S>,limits:Option<bool>},
     Inner(MathKernel<ET,S>),
+    LeftRight{
+        start:SourceRef<ET>,
+        left:Option<Delimiter<ET>>,
+        children:Box<[MathNode<ET,S>]>,
+        right:Option<Delimiter<ET>>,
+        end:SourceRef<ET>
+    },
     Overline(MathKernel<ET,S>),
     Underline(MathKernel<ET,S>),
     Accent,Radical,
@@ -384,6 +391,20 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 k.readable_fmt(indent + 2, f)?;
                 Self::readable_do_indent(indent, f)?;
                 f.write_str("</mathinner>")
+            }
+            MathNucleus::LeftRight {left,right,children,..} => {
+                write!(f, "<leftright>")?;
+                if let Some(l) = left {
+                    write!(f, "<left = {}/>",l.small.char)?;
+                }
+                for c in children.iter() {
+                    c.readable_fmt(indent + 2, f)?;
+                }
+                if let Some(r) = right {
+                    write!(f, "<right = {}/>",r.small.char)?;
+                }
+                Self::readable_do_indent(indent, f)?;
+                f.write_str("</leftright>")
             }
             MathNucleus::Overline(k) => {
                 write!(f, "<overline>")?;
@@ -418,6 +439,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Simple {cls:MathClass::Op,kernel,..} => (kernel.height() + kernel.depth()).scale_float(0.5),
             MathNucleus::Simple {kernel,..} => kernel.height(),
             MathNucleus::Inner(k) => k.height(),
+            MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.height()).max().unwrap_or_default(),
             MathNucleus::Overline(k) => k.height(),
             MathNucleus::Underline(k) => k.height(),
             MathNucleus::Accent => ET::Dim::default(),
@@ -430,6 +452,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
         match self {
             MathNucleus::Simple{kernel,..} => kernel.width(),
             MathNucleus::Inner(k) => k.width(),
+            MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.width()).sum(),
             MathNucleus::Overline(k) => k.width(),
             MathNucleus::Underline(k) => k.width(),
             MathNucleus::Accent => ET::Dim::default(),
@@ -441,6 +464,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
         match self {
             MathNucleus::Simple {cls:MathClass::Op,kernel,..} => (kernel.height() + kernel.depth()).scale_float(0.5),
             MathNucleus::Simple {kernel,..} => kernel.depth(),
+            MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.depth()).max().unwrap_or_default(),
             MathNucleus::Inner(k) => k.depth(),
             MathNucleus::Overline(k) => k.depth(),
             MathNucleus::Underline(k) => k.depth(),
@@ -594,6 +618,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
                     Some(l) => Some(l),
                     None => if style.style == MathStyleType::Display { Some(true) } else { Some(false) }
                 } },
+            MathNucleus::LeftRight { start, left, children, right, end } =>
+                MathNucleus::LeftRight { start, left, children:Self::close_i(children.into_vec(),style).into(), right, end },
             MathNucleus::Simple { cls, kernel, limits } =>
                 MathNucleus::Simple { cls, kernel:Self::resolve_kernel(kernel,style), limits },
             MathNucleus::Inner(k) => MathNucleus::Inner(Self::resolve_kernel(k,style)),

@@ -13,7 +13,7 @@ use crate::engine::filesystem::File;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, VBoxInfo};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathNode, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, MathNode, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
 use crate::utils::Ptr;
@@ -38,7 +38,8 @@ impl<ET:EngineTypes> NodeList<ET> {
 #[derive(Clone,Debug)]
 pub enum MathNodeListType<ET:EngineTypes> {
     Top{display:bool},
-    Target(ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>)
+    Target(ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>),
+    LeftRight(Option<Delimiter<ET>>)
 }
 
 #[derive(Clone,Debug)]

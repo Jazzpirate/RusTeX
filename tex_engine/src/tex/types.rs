@@ -65,7 +65,8 @@ pub enum GroupType {
     ControlSequence,
     /// A box (e.g. `\hbox` or `\vbox`), or a math group.
     Box(BoxType),
-    Math{display:bool}
+    Math{display:bool},
+    LeftRight
 }
 
 /// The type of a box, e.g. `\hbox` or `\vbox`.

@@ -186,6 +186,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         "{{entering math shift group (level {}) at line {}}}",
                         self.stack.stack.len(), line_number
                     )),
+                GroupType::LeftRight =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{entering math left group (level {}) at line {}}}",
+                        self.stack.stack.len(), line_number
+                    )),
             }
         }
     }
@@ -218,6 +223,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 GroupType::Math { ..} =>
                     aux.outputs.write_neg1(format_args!(
                         "{{leaving math shift group (level {}) at line {}}}",
+                        self.stack.stack.len() + 1, mouth.line_number()
+                    )),
+                GroupType::LeftRight =>
+                    aux.outputs.write_neg1(format_args!(
+                        "{{leaving math left group (level {}) at line {}}}",
                         self.stack.stack.len() + 1, mouth.line_number()
                     )),
             }

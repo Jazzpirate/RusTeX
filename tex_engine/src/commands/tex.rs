@@ -24,7 +24,7 @@ use crate::utils::errors::ErrorHandler;
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, NodeList, NodeTrait, VerticalNodeListType};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{MathAtom, MathNode, MathNucleus, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
@@ -1227,6 +1227,38 @@ pub fn mathchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
     let i = i as u32;
     let ret = super::methods::get_mathchar(engine, i, None);
     ET::Stomach::add_node_m(engine, MathNode::Atom(ret.to_atom()));
+}
+
+pub fn left<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+    let del = super::methods::read_opt_delimiter(engine);
+    engine.stomach.data_mut().open_lists.push(
+        NodeList::Math {
+            children: Vec::new(),
+            start:engine.mouth.start_ref(),
+            tp: MathNodeListType::LeftRight(del)
+        }
+    );
+    engine.state.push(engine.aux,GroupType::LeftRight,engine.mouth.line_number());
+}
+pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+    if engine.state.get_group_type() != Some(GroupType::LeftRight) {
+        todo!("throw error")
+    }
+    let del = super::methods::read_opt_delimiter(engine);
+    match engine.stomach.data_mut().open_lists.pop() {
+        Some(NodeList::Math{children,start,tp:MathNodeListType::LeftRight(left)}) => {
+            engine.state.pop(engine.aux,engine.mouth);
+            ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+                nucleus: MathNucleus::LeftRight {
+                    left,right:del,
+                    start,end:engine.mouth.current_sourceref(),
+                    children:children.into()
+                },
+                sub:None,sup:None
+            }));
+        }
+        _ => todo!("throw error")
+    }
 }
 
 pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
@@ -2465,6 +2497,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "mskip", CommandScope::MathOnly, mskip);
     register_unexpandable(engine, "mkern", CommandScope::MathOnly, mkern);
     register_unexpandable(engine, "mathchar", CommandScope::MathOnly, mathchar);
+    register_unexpandable(engine, "left", CommandScope::MathOnly, left);
+    register_unexpandable(engine, "right", CommandScope::MathOnly, right);
     register_unexpandable(engine, "displaylimits", CommandScope::MathOnly, displaylimits);
     register_unexpandable(engine, "limits", CommandScope::MathOnly, limits);
     register_unexpandable(engine, "nolimits", CommandScope::MathOnly, nolimits);
@@ -2509,7 +2543,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathaccent,left,right,noalign,omit,overline,
+        mathaccent,noalign,omit,overline,
         pagedepth,span,underline
     );
 

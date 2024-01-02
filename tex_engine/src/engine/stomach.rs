@@ -1052,6 +1052,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 let mc = get_mathchar(self, self.state.get_mathcode(char), Some(char));
                 return f(s,self,mc)
             },
+            ResolvedToken::Cmd{cmd:Some(Command::MathChar(u)),..} => {
+                let mc = get_mathchar(self, *u, None);
+                return f(s,self,mc)
+            }
             ResolvedToken::Tk {code,..} => {
                 todo!("??? {:?}",code)
             }

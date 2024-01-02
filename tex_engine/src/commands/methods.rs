@@ -878,6 +878,23 @@ pub fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::M
 pub const END_TEMPLATE: &str = "!\"$%&/(endtemplate)\\&%$\"!";
 pub const END_TEMPLATE_ROW: &str = "!\"$%&/(endtemplate_row)\\&%$\"!";
 
+pub fn read_opt_delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Option<Delimiter<ET>> {
+    crate::expand_loop!(engine,
+        ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} if *name == PRIMITIVES.delimiter => {
+            let num = engine.read_int(false);
+            return Some(get_delimiter(engine,num))
+        }
+        ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
+            let num = engine.state.get_delcode(char);
+            if num == ET::Int::default() {return None} else {
+                return Some(get_delimiter(engine,num))
+            };
+        }
+        o => todo!("??? {:?}",o)
+    );
+    todo!("file end")
+}
+
 pub fn get_delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,num:ET::Int) -> Delimiter<ET> {
     let num = num.into();
     if num < 0 || num > u32::MAX.into() {
