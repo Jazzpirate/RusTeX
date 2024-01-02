@@ -13,7 +13,7 @@ env_logger = "0.10.1"
 
 [dependencies]
 phf = { version = "0.11.2", features = ["macros"] }
-ahash = "0.8.6"
+ahash = "0.8.7"
 
 log={version="0.4.20",features=["kv_unstable"]}
 env_logger = "0.10.1"

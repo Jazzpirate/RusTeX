@@ -27,6 +27,8 @@ pub type SourceRef<ET> = SourceReference<<<ET as EngineTypes>::File as File>::So
 pub trait FileSystem:Clone {
     /// The type of files provided by this [`FileSystem`].
     type File:File;
+
+    fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
     /// Creates a new [`FileSystem`] with the given working directory.
     fn new(pwd:PathBuf) -> Self;
     /// Returns the file with the given name in the file database.
@@ -103,6 +105,9 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             read_files:Vec::new(),
             interner:string_interner::StringInterner::new()
         }
+    }
+    fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
+        self.interner.resolve(id).unwrap()
     }
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         let path = self.kpse.kpsewhich(path);

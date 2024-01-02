@@ -56,9 +56,9 @@ impl<ET:EngineTypes> Display for HBoxInfo<ET> {
     }
 }
 impl<ET:EngineTypes> HBoxInfo<ET> {
-    pub fn new_box() -> Self {
+    pub fn new_box(scaled:ToOrSpread<ET::Dim>) -> Self {
         HBoxInfo::HBox {
-            scaled: ToOrSpread::None,
+            scaled,
             assigned_width: None,
             assigned_height: None,
             assigned_depth: None,
@@ -176,9 +176,9 @@ impl<ET:EngineTypes> Display for VBoxInfo<ET> {
 }
 
 impl<ET:EngineTypes> VBoxInfo<ET> {
-    pub fn new_box() -> Self {
+    pub fn new_box(scaled:ToOrSpread<ET::Dim>) -> Self {
         VBoxInfo::VBox {
-            scaled: ToOrSpread::None,
+            scaled,
             assigned_width: None,
             assigned_height: None,
             assigned_depth: None,
@@ -189,9 +189,9 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             computed_depth: OnceCell::new(),
         }
     }
-    pub fn new_top() -> Self {
+    pub fn new_top(scaled:ToOrSpread<ET::Dim>) -> Self {
         VBoxInfo::VTop {
-            scaled: ToOrSpread::None,
+            scaled,
             assigned_width: None,
             assigned_height: None,
             assigned_depth: None,

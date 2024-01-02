@@ -3,92 +3,29 @@ use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::File;
 use tex_engine::tex::numerics::{Dim32, Fill, Mu, Skip, Skip32};
 use crate::engine::{Bx, Font, Refs, SRef, Types};
-use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, mudim_to_string};
-use crate::shipout::{annotations, do_h, do_hlist, do_vlist, get_box_dims, HNodes, MNodes, node_from_class, nodes, ShipoutState, VNodes, ZERO, ZERO_MATH, ZERO_SKIP};
+use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::types::MathClass;
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::engine::stomach::ParLineSpec;
-use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, VBoxInfo};
+use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
-/*
-#[derive(PartialEq,Copy,Clone)]
-enum FilLevel {
-    None,Fil,Fill,Filll
-}
-impl From<Option<Fill<Dim32>>> for FilLevel {
-    fn from(f:Option<Fill<Dim32>>) -> Self {
-        match f {
-            Some(Fill::fil(_)) => Self::Fil,
-            Some(Fill::fill(_)) => Self::Fill,
-            _ => Self::None
-        }
-    }
-}
-impl FilLevel {
-    pub fn add(&mut self,other:FilLevel) {
-        use FilLevel::*;
-        match (&self,other) {
-            (None,o) => *self = o,
-            (_,None) => (),
-            (Fil,Fill) => *self = Fill,
-            (Fil,Filll) => *self = Filll,
-            (Fill,Filll) => *self = Filll,
-            _ => (),
-        }
-    }
-    pub fn cmp(&self, other: &Self) -> Alignment {
-        use FilLevel::*;
-        use Alignment::*;
-        match (self,other) {
-            (None,None) => S,
-            (a,b) if a == b => C,
-            (None,_) | (Fil,Fill) | (Fill,Filll) => L,
-            _ => R
-        }
-    }
-}
+use crate::shipout::{do_hlist, do_vlist, MNodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 
- */
-#[derive(PartialEq,Copy,Clone)]
-pub(crate) enum Alignment {
-    L,R,C,S
+pub(crate) trait MuAdd {
+    fn merge(&mut self,sk:Dim32,f:&Font);
 }
-impl Alignment {
-    pub fn from(skip1:Skip32<Dim32>,skip2:Skip32<Dim32>) -> Self {
-        use Alignment::*;
-        match (skip1.stretch,skip2.stretch) {
-            (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => S,
-            (Some(Fill::fil(_)),Some(Fill::fil(_))) => C,
-            (Some(Fill::fill(_)),Some(Fill::fill(_))) => C,
-            (Some(Fill::fill(_)),_) => R,
-            (_,Some(Fill::fill(_))) => L,
-            (Some(Fill::fil(_)),_) => R,
-            (_,Some(Fill::fil(_))) => L,
-        }
+impl MuAdd for Mu {
+    fn merge(&mut self,sk2:Dim32,f:&Font) {
+        let em = f.get_dim(5);
+        let nb = (((sk2.0 as f64) * 18.0 / (em.0 as f64)) * 65536.0) as i32;
+        self.0 += nb;
     }
 }
-/*
-impl From<(FilLevel,FilLevel)> for Alignment {
-    #[inline(always)]
-    fn from((a,b):(FilLevel,FilLevel)) -> Self {
-        a.cmp(&b)
-    }
-}
-impl From<(Skip32<Dim32>,Skip32<Dim32>)> for Alignment {
-    #[inline(always)]
-    fn from((a,b):(Skip32<Dim32>,Skip32<Dim32>)) -> Self {
-        let a: FilLevel = a.stretch.into();
-        let b: FilLevel = b.stretch.into();
-        a.cmp(&b)
-    }
-}
-
- */
 
 pub(crate) trait SkipAdd {
     fn merge(&mut self,sk:Skip32<Dim32>);
@@ -114,17 +51,24 @@ impl SkipAdd for Skip32<Dim32> {
     }
 }
 
-pub(crate) trait MuAdd {
-    fn merge(&mut self,sk:Dim32,f:&Font);
+#[derive(PartialEq,Copy,Clone)]
+pub(crate) enum Alignment {
+    L,R,C,S
 }
-impl MuAdd for Mu {
-    fn merge(&mut self,sk2:Dim32,f:&Font) {
-        let em = f.get_dim(5);
-        let nb = (((sk2.0 as f64) * 18.0 / (em.0 as f64)) * 65536.0) as i32;
-        self.0 += nb;
+impl Alignment {
+    pub fn from(skip1:Skip32<Dim32>,skip2:Skip32<Dim32>) -> Self {
+        use Alignment::*;
+        match (skip1.stretch,skip2.stretch) {
+            (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => S,
+            (Some(Fill::fil(_)),Some(Fill::fil(_))) => C,
+            (Some(Fill::fill(_)),Some(Fill::fill(_))) => C,
+            (Some(Fill::fill(_)),_) => R,
+            (_,Some(Fill::fill(_))) => L,
+            (Some(Fill::fil(_)),_) => R,
+            (_,Some(Fill::fil(_))) => L,
+        }
     }
 }
-
 
 pub(crate) fn alignment(mut v:Vec<HNode<Types>>) -> (Alignment, Vec<HNode<Types>>) {
     let (mut left,mut right) = (ZERO_SKIP,ZERO_SKIP);
@@ -154,193 +98,347 @@ pub(crate) fn alignment(mut v:Vec<HNode<Types>>) -> (Alignment, Vec<HNode<Types>
             _ => {nv.push(n);break}
         }
     }
-    if left.base != ZERO {
+    if left.base != Dim32(0) {
         nv.insert(0,HNode::HKern(left.base))
     }
     nv.extend(it);
-    if right.base != ZERO {
+    if right.base != Dim32(0) {
         nv.push(HNode::HKern(right.base))
     }
     (Alignment::from(left,right),nv)
 }
 
-use crate::html::labels::*;
-use crate::shipout::annotations::close_all;
-
-pub(crate) fn do_vbox(bx:Bx, state:&mut ShipoutState, engine:Refs, top:bool, in_v:bool) {
-    let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.height(),top);
-    let (children,start,end) = if let TeXBox::V {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
-    if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && in_v {
-        return do_vlist(engine,state,&mut children.into(),false);
+fn get_box_dims(bx: &Bx,state:&ShipoutState,scale:fn(&Bx) -> Dim32) -> (Option<Dim32>,Option<Dim32>,Option<Dim32>,Option<Dim32>) {
+    let wd = match bx.assigned_width() {
+        Some(w) =>  Some(w),
+        _ if state.mode() == ShipoutMode::Top => match bx.width() {
+            w if w < Dim32(0) => Some(Dim32(0)),
+            _ => None
+        }
+        _ => None
+    };
+    let (ht,mut bottom) = match bx.assigned_height() {
+        Some(h) if h < Dim32(0) => (Some(Dim32(0)),Some(h)),
+        Some(h) => (Some(h),None),
+        _ if state.mode() == ShipoutMode::Top && bx.height() < Dim32(0) => (Some(Dim32(0)),None),
+        _ => (None,None)
+    };
+    match (bottom,bx.assigned_depth()) {
+        (Some(b),Some(d)) => {
+            let s = b + d;
+            if s != Dim32(0) { bottom = Some(b);
+            } else { bottom = None; }
+        }
+        (_,Some(d)) if d != Dim32(0) => bottom = Some(d),
+        _ => ()
     }
-    let mut node = HTMLNode::new(VBOX_CONTAINER, true);
-    if let Some(b) = bottom { node.style("margin-bottom",dim_to_string(b)) }
-    if let Some(w) = wd { node.width(w); }
-    state.do_in(node,|state| match ht {
+    let to = match bx.to_or_scaled() {
+        ToOrSpread::To(d) => Some(d),
+        ToOrSpread::Spread(s) => Some(s + scale(bx)),
+        _ => None
+    };
+    (wd,ht,bottom,to)
+}
+
+// ----------------------------------------------------------------------------------------
+
+pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
+    if skip == ZERO_SKIP { return }
+    state.push_child(HTMLChild::VSkip(skip.base))
+}
+pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
+    if skip == ZERO_SKIP { return }
+    state.push_child(HTMLChild::HSkip(skip.base))
+}
+
+pub(crate) fn do_missing_glyph(char:u8,font:&Font,state:&mut ShipoutState) {
+    let s = match state.mode() {
+        ShipoutMode::H{..} | ShipoutMode::Par => "span",
+        ShipoutMode::Math => "mtext",
+        _ => unreachable!()
+    };
+    state.push_child(HTMLChild::Comment(
+        format!("<{} class=\"rustex-missing\" title=\"Missing Glyph: {} in font {}\"></{}>",s,char,font.filename(),s)
+    ));
+}
+
+pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VNodes,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip,parskip:Option<Skip32<Dim32>>) {
+    if let Some(parskip) = parskip {
+        state.push_child(HTMLChild::VSkip(parskip.base));
+    }
+    let spec = spec.pop().unwrap();
+    let align: Alignment = Alignment::from(spec.leftskip,spec.rightskip);
+    let mut node = HTMLNode::paragraph(start,end,spec.target);
+    if spec.leftskip.base != Dim32(0) {
+        node.styles.insert("margin-left".into(),dim_to_string(spec.leftskip.base).into());
+    }
+    if spec.rightskip.base != Dim32(0) {
+        node.styles.insert("margin-right".into(),dim_to_string(spec.rightskip.base).into());
+    }
+    match align {
+        Alignment::S => (),
+        Alignment::L => {node.styles.insert("text-align".into(),"left".into());}
+        Alignment::R => {node.styles.insert("text-align".into(),"right".into());}
+        Alignment::C => {node.styles.insert("text-align".into(),"center".into());}
+    };
+
+    let children = paragraph_list(children);
+
+    state.do_in(
+        HTMLNode::paragraph(start,end,spec.target),
+        Some(ShipoutMode::Par),|state| {
+            state.widths.push(spec.target);
+            state.lineskip.push(lineskip);
+            do_hlist(engine,state,&mut children.into());
+            state.widths.pop();
+            state.lineskip.pop();
+        }
+    );
+}
+
+pub(crate) fn paragraph_list(children:&mut VNodes) -> Vec<HNode<Types>> {
+    let mut success = false;
+    let mut ret = vec!();
+    let mut later = vec!();
+    while let Some(c) = children.next() {
+        match c {
+            VNode::Custom(RusTeXNode::ParagraphEnd) => {
+                success = true;
+                break;
+            }
+            VNode::Box(TeXBox::H { info: HBoxInfo::ParLine { .. },children,..}) => ret.extend(children.into_vec().into_iter()),
+            VNode::VSkip(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss | VNode::Mark(..) | VNode::VKern(_) => (),
+            _ => later.push(c),
+        }
+    }
+    if !success { todo!("ERROR!") }
+    children.prefix(later);
+    ret
+}
+
+pub(crate) fn do_vbox(state:&mut ShipoutState, engine:Refs,bx:Bx) {
+    let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.height());
+    let (children,start,end) = if let TeXBox::V {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
+    /*if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && state.mode().is_v() {
+        return do_vlist(engine,state,&mut children.into(),true);
+    }*/
+    let mut node = HTMLNode::new(HTMLTag::VBoxContainer);
+    node.classes.push("rustex-vbox-container".into());
+    if let Some(b) = bottom { node.styles.insert("margin-bottom".into(),dim_to_string(b).into()); }
+    if let Some(w) = wd { node.width = Some((w,false)); }
+    state.do_in(node,None,|state| match ht {
         Some(h) => {
-            let mut node = HTMLNode::new(VBOX_HEIGHT_CONTAINER, true);
-            node.style("height",dim_to_string(h));
-            if wd.is_some() { node.style_str("width","100%") }
-            state.do_in(node,|state| {
-                vbox_inner(wd.is_some(),to,state,children,start,end,engine)
-            },|_,node| if node.label == VBOX_HEIGHT_CONTAINER {Some(node)} else {
-                todo!()
+            let mut node = HTMLNode::new(HTMLTag::VBoxHeight);
+            node.classes.push("rustex-vbox-height-container".into());
+            node.styles.insert("height".into(),dim_to_string(h).into());
+            state.do_in(node,None,|state| {
+                vbox_inner(state,engine,wd.is_some(),to,children,start,end)
             })
         }
         None =>
-            vbox_inner(wd.is_some(),to,state,children,start,end,engine),
-    },|_,node| if node.label == VBOX_CONTAINER {Some(node)} else {
-        todo!()
+            vbox_inner(state,engine,wd.is_some(),to,children,start,end),
     });
 }
 
-fn vbox_inner(has_wd:bool, to:Option<Dim32>, state:&mut ShipoutState, children:Vec<VNode<Types>>, start:SRef, end:SRef, engine:Refs) {
-    let mut node = HTMLNode::new(VBOX_INNER, true);
-    node.sourceref(start,end);
-    if has_wd { node.style_str("width","100%") }
+fn vbox_inner(state:&mut ShipoutState, engine:Refs,has_wd:bool, to:Option<Dim32>, children:Vec<VNode<Types>>, start:SRef, end:SRef) {
+    let mut node = HTMLNode::new(HTMLTag::VBox);
+    node.classes.push("rustex-vbox".into());
+    node.sourceref = Some((start,end));
     match to {
-        Some(d) if d < ZERO => {
-            node.style_str("height","0");
-            node.style("margin-bottom",dim_to_string(d))
+        Some(d) if d < Dim32(0) => {
+            node.styles.insert("height".into(),"0".into());
+            node.styles.insert("margin-bottom".into(),dim_to_string(d).into());
         }
-        Some(d) => node.style("height",dim_to_string(d)),
+        Some(d) => {node.styles.insert("height".into(),dim_to_string(d).into());}
         _ => ()
     }
-    state.do_in(node,|state| {
-        do_vlist(engine,state,&mut children.into(),false);
-    },|_,node| if node.label == VBOX_INNER {Some(node)} else {
-        todo!()
+    state.do_in(node,Some(ShipoutMode::V),|state| {
+        do_vlist(engine,state,&mut children.into(),true);
     })
 }
 
-pub(crate) fn do_vtop(bx:Bx, state:&mut ShipoutState, engine:Refs, top:bool, in_v:bool) {
-    let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.height(),top);
-    let (children,start,end) = if let TeXBox::V {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
-    if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && in_v {
-        return do_vlist(engine,state,&mut children.into(),false);
+pub(crate) fn do_vtop(state:&mut ShipoutState, engine:Refs, mut bx:Bx) {
+    let wd = bx.assigned_width();
+    let ht = bx.assigned_height();
+    let dp = bx.assigned_depth();
+    let to = bx.to_or_scaled();
+    let cht = bx.height();
+    let (start,end) = if let TeXBox::V {start,end,..} = bx { (start,end) } else {unreachable!()};
+    if wd.is_none() && ht.is_none() && dp.is_none() && to == ToOrSpread::None && state.mode().is_v() {
+        let TeXBox::V {children,..} = bx else {unreachable!()};
+        return do_vlist(engine,state,&mut children.into_vec().into(),false);
     }
-    let mut node = HTMLNode::new(VTOP_CONTAINER, true);
-    if let Some(b) = bottom { node.style("margin-bottom",dim_to_string(b)) }
-    if let Some(w) = wd { node.width(w); }
-    state.do_in(node,|state| match ht {
-        Some(h) => {
-            let mut node = HTMLNode::new(VTOP_HEIGHT_CONTAINER, true);
-            node.style("height",dim_to_string(h));
-            if wd.is_some() { node.style_str("width","100%") }
-            state.do_in(node,|state| {
-                vtop_inner(wd.is_some(), to, state, children, start, end, engine)
-            },|_,node| if node.label == VTOP_HEIGHT_CONTAINER {Some(node)} else {
-                todo!()
+    let mut node = HTMLNode::new(HTMLTag::VTopContainer);
+    node.classes.push("rustex-vtop-container".into());
+    if let Some(w) = wd { node.width = Some((w,false)); }
+
+    let to = match to {
+        ToOrSpread::To(d) => Some(d),
+        ToOrSpread::Spread(s) => Some(s + cht),
+        _ => None
+    };
+
+    state.do_in(node,None,|state| match (ht,dp) {
+        (Some(_),_)|(_,Some(_)) => {
+            let mut node = HTMLNode::new(HTMLTag::VTopHeight);
+            node.classes.push("rustex-vtop-height-container".into());
+
+            let oht = if let TeXBox::V {info:VBoxInfo::VTop {computed_height,computed_depth,..},children,..} = &bx {
+                *computed_height.get_or_init(||
+                    match children.first() {
+                        Some(c@VNode::Box(..)) => c.height(),
+                        _ => Dim32(0)
+                    }
+                )
+            } else {unreachable!()};
+            if let Some(ah) = ht {
+                let ht = ah - oht;
+                node.styles.insert("margin-top".into(),dim_to_string(ht).into());
+                node.styles.insert("bottom".into(),dim_to_string(ht).into());
+            }
+            if let Some(dp) = dp {
+                let dp = dp + oht;
+                node.styles.insert("height".into(),dim_to_string(dp).into());
+            }
+            let TeXBox::V {children,..} = bx else {unreachable!()};
+
+            state.do_in(node,None,|state| {
+                vtop_inner(state,engine,to, children.into_vec(), start, end)
             })
         }
-        None => vtop_inner(wd.is_some(), to, state, children, start, end, engine),
-    },|_,node| if node.label == VTOP_CONTAINER {Some(node)} else {
-        todo!()
-    });
-}
-
-fn vtop_inner(has_wd:bool, to:Option<Dim32>, state:&mut ShipoutState, children:Vec<VNode<Types>>, start:SRef, end:SRef, engine:Refs) {
-    let mut node = HTMLNode::new(VTOP_INNER, true);
-    node.sourceref(start,end);
-    if has_wd { node.style_str("width","100%") }
-    match to {
-        Some(d) if d < ZERO => {
-            node.style_str("height","0");
-            node.style("margin-bottom",dim_to_string(d))
-        }
-        Some(d) => node.style("height",dim_to_string(d)),
-        _ => ()
-    }
-    state.do_in(node,|state| {
-        do_vlist(engine,state,&mut children.into(),false);
-    },|_,node| if node.label == VTOP_INNER {Some(node)} else {
-        todo!()
+        _ => {
+            let TeXBox::V {children,..} = bx else {unreachable!()};
+            vtop_inner(state,engine,to, children.into_vec(), start, end)
+        },
     })
 }
 
-pub(crate) fn do_hbox(bx:Bx, state:&mut ShipoutState, engine:Refs, top:bool, in_h:bool) {
-    let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.width(),top);
+fn vtop_inner(state:&mut ShipoutState, engine:Refs, to:Option<Dim32>, children:Vec<VNode<Types>>, start:SRef, end:SRef) {
+    let mut node = HTMLNode::new(HTMLTag::VTop);
+    node.classes.push("rustex-vtop".into());
+    node.sourceref = Some((start,end));
+    match to {
+        Some(d) if d < Dim32(0) => {
+            node.styles.insert("height".into(),"0".into());
+            node.styles.insert("margin-bottom".into(),dim_to_string(d).into());
+        }
+        Some(d) => {node.styles.insert("height".into(),dim_to_string(d).into());}
+        _ => ()
+    }
+    state.do_in(node,Some(ShipoutMode::V),|state| {
+        do_vlist(engine,state,&mut children.into(),true);
+    })
+}
+
+pub(crate) fn do_hbox(state:&mut ShipoutState, engine:Refs, bx:Bx) {
+    let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.width());
     let (children,start,end) = if let TeXBox::H {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
-    if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && in_h {
-        return do_hlist(engine,state,&mut children.into(),false,false);
+    if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && state.mode().is_h() {
+        return do_hlist(engine,state,&mut children.into());
     }
     if wd.is_none() && ht.is_none() && bottom.is_none() {
-        return hbox_inner(to,state,children,start,end,engine);
+        return hbox_inner(state,engine,to,children,start,end);
     }
-    let mut node = HTMLNode::new(HBOX_CONTAINER, true);
-    if let Some(b) = bottom { node.style("margin-bottom",dim_to_string(b)) }
-    if let Some(h) = ht { node.style("height",dim_to_string(h)); }
-    if let Some(w) = wd { node.width(w); }
-    state.do_in(node,|state| {
-        hbox_inner(to,state,children,start,end,engine)
-    },|_,node| if node.label == HBOX_CONTAINER {Some(node)} else {
-        todo!()
+    let mut node = HTMLNode::new(HTMLTag::HBoxContainer);
+    node.classes.push("rustex-hbox-container".into());
+    if let Some(b) = bottom { node.styles.insert("margin-bottom".into(),dim_to_string(b).into()); }
+    if let Some(h) = ht { node.styles.insert("height".into(),dim_to_string(h).into()); }
+    if let Some(w) = wd { node.width = Some((w,false)); }
+    state.do_in(node,None,|state| {
+        hbox_inner(state,engine,to,children,start,end)
     });
 }
 
-fn hbox_inner(to:Option<Dim32>, state:&mut ShipoutState, children:Vec<HNode<Types>>, start:SRef, end:SRef, engine:Refs) {
+fn hbox_inner(state:&mut ShipoutState, engine:Refs,to:Option<Dim32>, children:Vec<HNode<Types>>, start:SRef, end:SRef) {
     let (a,children) = alignment(children);
-    let mut node = HTMLNode::new(HBOX_INNER, false);
-    node.sourceref(start,end);
-    if let Some(wd) = to { node.width(wd); }
-    let esc = match a {
+    let mut node = HTMLNode::new(HTMLTag::HBox);
+    node.classes.push("rustex-hbox".into());
+    node.sourceref = Some((start,end));
+    if let Some(wd) = to { node.width = Some((wd,false)); }
+    let escape = match a {
         Alignment::L => {
-            node.style_str("justify-content","start");
+            node.styles.insert("justify-content".into(),"start".into());
             false
         },
         Alignment::R => {
-            node.style_str("justify-content","end");
+            node.styles.insert("justify-content".into(),"end".into());
             false
         },
         Alignment::C => {
-            node.style_str("justify-content","center");
+            node.styles.insert("justify-content".into(),"center".into());
             false
         },
-        _ => true
+        _ => to.is_some(),
     };
-    state.do_in(node,|state| {
-        do_hlist(engine,state,&mut children.into(),false,esc);
-    },|_,node| if node.label == HBOX_INNER {Some(node)} else {
-        todo!()
+    state.do_in(node,Some(ShipoutMode::H {escape}),|state| {
+        do_hlist(engine,state,&mut children.into());
     })
 }
 
-pub(crate) fn do_math_in_h(mut bx:MathGroup<Types,MathFontStyle<Types>>,state:&mut ShipoutState,engine:Refs, inpar:bool,escape_space:bool) {
-    if bx.display {todo!("display in H")}
-    let mut iter: MNodes = bx.children.into_vec().into();
-    let mut currskip = ZERO_SKIP;
-    while let Some(c) = iter.next() {match c {
-        MathNode::HKern(kn) => { currskip.base = currskip.base + kn; }
-        MathNode::Space if !escape_space => state.push_space(),
-        MathNode::Space => state.push_escaped_space(),
-        MathNode::HSkip(sk) => currskip.merge(sk),
-        MathNode::HFil | MathNode::Hss => currskip.set_fil(),
-        MathNode::HFill => currskip.set_fill(),
-        MathNode::HFilneg => (),
-        MathNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => super::annotations::do_color(state,engine,act,true,false),
-        MathNode::Custom(RusTeXNode::FontChange(font,true)) => {
-            if state.in_content {
-                todo!()
-            }
-            *state.fonts.last_mut().unwrap() = font;
-        }
-        MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,font),
-        MathNode::Custom(RusTeXNode::FontChangeEnd) => super::annotations::close_font(state,true,false),
-        MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_))) | MathNode::Penalty(_) => (),
-        MathNode::Atom(a) => match a.nucleus {
-            MathNucleus::VCenter {start,end,children} =>
-                do_vcenter(start,end,children,state,engine),
-            MathNucleus::Simple{kernel:MathKernel::Empty,..} | MathNucleus::Inner(MathKernel::Empty) => (),
-            MathNucleus::Simple{kernel:MathKernel::Box(b),..} | MathNucleus::Inner(MathKernel::Box(b)) =>
-                super::do_h(engine,state,HNode::Box(b),inpar,escape_space),
-            MathNucleus::Simple{kernel:MathKernel::List{children,..},..} | MathNucleus::Inner(MathKernel::List{children,..}) => {
-                iter.prefix(children.into_vec())
-            }
-            _ => unreachable!()
-        }
-        o => todo!("math in h: {:?}",o)
-    }}
+
+pub(crate) fn hrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Option<Dim32>, height:Dim32, depth:Dim32) {
+    let ht = height + depth;
+    if ht == Dim32(0) {return}
+    if state.mode() == ShipoutMode::Math { todo!() }
+    let bottom = if depth == Dim32(0) {None} else {Some(-depth)};
+    state.push_child(HTMLChild::HRule {width,height:ht,bottom,start,end,color:*state.colors.last().unwrap()});
 }
+
+pub(crate) fn vrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Dim32, height:Option<Dim32>, depth:Option<Dim32>) {
+    let mode = state.mode();
+    if mode == ShipoutMode::Math { todo!() }
+    if width == Dim32(0) { return }
+    match (height,depth) {
+        (None,None) =>
+            state.push_child(HTMLChild::VRuleS {width,
+            font_size:if mode == ShipoutMode::Par {Some(state.fonts.last().unwrap().get_at())} else {None},
+            start,end,color:*state.colors.last().unwrap()
+        }),
+        _ => {
+            let ht = height.unwrap_or(Dim32(0)) + depth.unwrap_or(Dim32(0));
+            let dp = if depth == None && mode == ShipoutMode::Par {None} else {Some(depth.unwrap_or(Dim32(0)))};
+            state.push_child(HTMLChild::VRuleC {width,height:ht,depth:dp,start,end,color:*state.colors.last().unwrap()});
+        }
+    }
+    /*
+    let mut node = HTMLNode::new(VRULE_INNER, false);
+    node.sourceref(start, end);
+    node.style("background",color);
+    // height things
+    // TODO maybe relativize;
+    if ht == ZERO {
+        node.style("width", dim_to_string(width));
+        node.style("min-width", dim_to_string(width));
+        if par {
+            todo!()
+        } else { node.style_str("align-self","stretch") }
+        state.push(node,false,false)
+    } else {
+        let mut cont = HTMLNode::new(VRULE_CONTAINER, false);
+        cont.style("width", dim_to_string(width));
+        cont.style("min-width", dim_to_string(width));
+        node.style_str("vertical-align","baseline");
+        node.style_str("width","100%");
+        cont.style("height",dim_to_string(ht));
+        if par && depth == ZERO {
+            node.style_str("margin-bottom","-0.5ex");
+            node.style("height",format!("calc(0.5ex + {})",dim_to_string(ht)));
+        } else {
+            node.style("height",dim_to_string(ht));
+            node.style("margin-bottom",dim_to_string(-depth));
+        }
+        cont.push_node(node);
+        state.push(cont,false,false);
+    }
+
+     */
+}
+
+/*
+
+use crate::html::labels::*;
+use crate::shipout::annotations::close_all;
+
 
 pub(crate) fn do_vcenter(start:SRef,end:SRef,children:Box<[VNode<Types>]>, state:&mut ShipoutState, engine:Refs) {
     let mut node = HTMLNode::new(VCENTER_CONTAINER, true);
@@ -382,15 +480,6 @@ pub(crate) fn do_math(mut bx:MathGroup<Types,MathFontStyle<Types>>, state:&mut S
 
     }
 }
-
-pub(crate) fn do_missing_glyph(char:u8,font:&Font,state:&mut ShipoutState,math:bool,svg:bool) {
-    let mut node = HTMLNode::new(MISSING_GLYPH, false);
-    node.attr("title",format!("Missing Glyph: {} in font {}",char,font.filename()));
-    let missing = tex_tfm::glyphs::Glyph::get("missingglyph");
-    node.push_glyph(missing);
-    state.push(node,math,svg);
-}
-
 
 pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
     let mut node = HTMLNode::new(DEST, false);
@@ -443,85 +532,6 @@ pub(crate) fn do_moveleft<F:FnOnce(Bx,&mut ShipoutState)>(mut bx:Bx, state:&mut 
     },|_,node| Some(node))
 }
 
-pub(crate) fn hrule(start:SRef, end:SRef, width:Dim32, height:Dim32, depth:Dim32, state:&mut ShipoutState) {
-    let ht = height + depth;
-    if ht == ZERO {return}
-    let mut cont = HTMLNode::new(HRULE_CONTAINER, false);
-    // TODO maybe relativize;
-    cont.style("height",dim_to_string(ht));
-    if width == ZERO {
-        cont.style_str("width","100%");
-    } else {
-        cont.width(width);
-    }
-    let color = state.colors.last().unwrap();
-    if *color != PDFColor::black() { todo!() }
-    let mut node = HTMLNode::new(HRULE_INNER, false);
-    node.style("background",color.to_string());
-    node.sourceref(start, end);
-    node.style_str("width","100%");
-    node.style("height",dim_to_string(ht));
-    if depth != ZERO {
-        node.style("margin-bottom",dim_to_string(-depth));
-    }
-    cont.push_node(node);
-    state.push(cont,false,false);
-}
-
-pub(crate) fn vrule(start:SRef, end:SRef, width:Dim32, height:Dim32, depth:Dim32, state:&mut ShipoutState, par:bool) {
-    if width == ZERO { return }
-    let ht = height + depth;
-    let mut node = HTMLNode::new(VRULE_INNER, false);
-    node.sourceref(start, end);
-    let color = state.colors.last().unwrap().to_string();
-    node.style("background",color);
-    // height things
-    // TODO maybe relativize;
-    if ht == ZERO {
-        node.style("width", dim_to_string(width));
-        node.style("min-width", dim_to_string(width));
-        if par {
-            todo!()
-        } else { node.style_str("align-self","stretch") }
-        state.push(node,false,false)
-    } else {
-        let mut cont = HTMLNode::new(VRULE_CONTAINER, false);
-        cont.style("width", dim_to_string(width));
-        cont.style("min-width", dim_to_string(width));
-        node.style_str("vertical-align","baseline");
-        node.style_str("width","100%");
-        cont.style("height",dim_to_string(ht));
-        if par && depth == ZERO {
-            node.style_str("margin-bottom","-0.5ex");
-            node.style("height",format!("calc(0.5ex + {})",dim_to_string(ht)));
-        } else {
-            node.style("height",dim_to_string(ht));
-            node.style("margin-bottom",dim_to_string(-depth));
-        }
-        cont.push_node(node);
-        state.push(cont,false,false);
-    }
-}
-
-pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
-    if skip == ZERO_SKIP { return }
-    let mut node = HTMLNode::new(VSKIP, false);
-    node.style("margin-bottom",dim_to_string(skip.base));
-    match skip.stretch {
-        Some(Fill::fil(_)) => {
-            node.style_str("margin-top","auto");
-            state.push(node,false,false)
-        }
-        Some(Fill::fill(_)) => {
-            node.style_str("margin-top","auto");
-            state.push(node,false,false);
-            let mut node = HTMLNode::new(VSKIP, false);
-            node.style_str("margin-top","auto");
-            state.push(node,false,false);
-        },
-        _ => state.push(node,false,false)
-    }
-}
 
 pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
     if skip == ZERO_SKIP { return }
@@ -593,62 +603,6 @@ pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState,current_class: &m
     }
 }
 
-pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VNodes,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip,parskip:Skip32<Dim32>) {
-    let mut children = paragraph_list(children);
-    if state.lineskip == LineSkip::default() {
-        state.lineskip = lineskip;
-    }
-    let mut node = HTMLNode::new(PARAGRAPH, false);
-    node.sourceref(start,end);
-    let spec = spec.pop().unwrap();
-    if spec.leftskip.base != ZERO {
-        node.style("margin-left",dim_to_string(spec.leftskip.base));
-    }
-    if spec.rightskip.base != ZERO {
-        node.style("margin-right",dim_to_string(spec.rightskip.base));
-    }
-    let parskip = parskip.base;
-    if parskip != ZERO {
-        node.style("margin-top",dim_to_string(parskip));
-    }
-    let wd = spec.target; //+ spec.leftskip.base + spec.rightskip.base;
-    node.width(wd);
-    let align: Alignment = Alignment::from(spec.leftskip,spec.rightskip);
-    match align {
-        Alignment::L => node.style_str("text-align","left"),
-        Alignment::R => node.style_str("text-align","right"),
-        Alignment::C => node.style_str("text-align","center"),
-        _ => ()
-    }
-    //if spec.target != wd { node.inner_width = Some(spec.target); }
-
-    // TODO: alignment
-    state.do_in(node,|state| {
-        do_hlist(engine,state,&mut children.into(),true,false);
-    },|_,node| if node.label == PARAGRAPH {Some(node)} else {
-        todo!()
-    })
-}
-
-pub(crate) fn paragraph_list(children:&mut VNodes) -> Vec<HNode<Types>> {
-    let mut success = false;
-    let mut ret = vec!();
-    let mut later = vec!();
-    while let Some(c) = children.next() {
-        match c {
-            VNode::Custom(RusTeXNode::ParagraphEnd) => {
-                success = true;
-                break;
-            }
-            VNode::Box(TeXBox::H { info: HBoxInfo::ParLine { .. },children,..}) => ret.extend(children.into_vec().into_iter()),
-            VNode::VSkip(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss | VNode::Mark(..) | VNode::VKern(_) => (),
-            _ => later.push(c),
-        }
-    }
-    if !success { todo!("ERROR!") }
-    children.prefix(later);
-    ret
-}
 
 fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,f:F) {
     let node = HTMLNode::default();
@@ -1036,3 +990,5 @@ fn parse_get_num<'a>(s:&'a str) -> (f32,&'a str) {
 fn scale(f:f32) -> String {
     (1.5 * f).to_string()
 }
+
+ */

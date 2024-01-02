@@ -21,7 +21,6 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::nodes::vertical::VNode;
-use crate::shipout::ZERO;
 use tex_engine::tex::types::TeXMode;
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
@@ -225,7 +224,7 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
             }
             _ => {
                 target = target -(n.height() + n.depth()); // - n.depth() ?
-                if target < ZERO {
+                if target < Dim32(0) {
                     split = i;
                     break
                 }

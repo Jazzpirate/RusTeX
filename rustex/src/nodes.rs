@@ -9,7 +9,6 @@ use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::types::NodeType;
 use tex_engine::utils::HMap;
 use crate::engine::{Font, SRef, Types};
-use crate::shipout::ZERO;
 use crate::state::RusTeXState;
 
 #[derive(Debug,Clone,Default,PartialEq)]
@@ -67,20 +66,20 @@ impl NodeTrait<Types> for RusTeXNode {
         match self {
             Self::PDFNode(n) => n.height(),
             Self::PGFSvg { miny, maxy, .. } => *maxy + -*miny,
-            _ => ZERO
+            _ => Dim32(0)
         }
     }
     fn depth(&self) -> Dim32 {
         match self {
             Self::PDFNode(n) => n.depth(),
-            _ => ZERO
+            _ => Dim32(0)
         }
     }
     fn width(&self) -> Dim32 {
         match self {
             Self::PDFNode(n) => n.width(),
             Self::PGFSvg { minx, maxx, .. } => *maxx + -*minx,
-            _ => ZERO
+            _ => Dim32(0)
         }
     }
     fn nodetype(&self) -> NodeType {NodeType::WhatsIt}

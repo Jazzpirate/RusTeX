@@ -28,6 +28,9 @@ impl FileSystem for RusTeXFileSystem {
             svg:(id,StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into())
         }
     }
+    fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
+        self.inner.ref_str(id)
+    }
 
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         use tex_engine::tex::input_text::*;

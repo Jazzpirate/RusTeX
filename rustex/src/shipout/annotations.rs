@@ -1,22 +1,21 @@
+use std::collections::BTreeSet;
 use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFNode, PDFStartLink};
 use crate::engine::{Font, Refs, Types};
-use crate::html::{HTMLChild, HTMLNode};
-use crate::html::labels::{COLOR_CHANGE, FONT_CHANGE, LINK};
-use crate::shipout::ShipoutState;
+use crate::html::{HTMLChild, HTMLNode, HTMLTag};
+use crate::shipout::{ShipoutMode, ShipoutState};
 use tex_engine::pdflatex::nodes::PDFExtension;
-use tex_engine::tex::nodes::horizontal::HNode;
-use crate::nodes::RusTeXNode;
-use std::fmt::Write;
+use tex_engine::engine::fontsystem::Font as FontT;
+use crate::fonts::FontStore;
 
-pub(crate) fn close_all(open: &mut Vec<HTMLNode>) -> HTMLNode {
+pub(crate) fn close_all(mode:ShipoutMode,open: &mut Vec<HTMLNode>) -> HTMLNode {
     let mut reopen:Vec<HTMLNode> = vec!();
     loop {
         let mut last = open.pop().unwrap();
-        if last.label == COLOR_CHANGE {
+        if matches!(last.tag, HTMLTag::ColorChange(_)) {
             reopen.push(last);
-        } else if last.label == FONT_CHANGE {
+        } else if matches!(last.tag, HTMLTag::FontChange(_)) {
             reopen.push(last);
-        } else if last.label == LINK {
+        } else if matches!(last.tag, HTMLTag::Link(_)) {
             reopen.push(last);
         } else {
             if reopen.is_empty() { return last }
@@ -27,9 +26,9 @@ pub(crate) fn close_all(open: &mut Vec<HTMLNode>) -> HTMLNode {
             for n in iter {
                 redo.push(n.reopened());
                 let old = std::mem::replace(&mut curr, n);
-                curr.push_node(old);
+                curr.push_open_node(mode,old);
             }
-            last.push_node(curr);
+            last.push_open_node(mode,curr);
             for n in redo.into_iter().rev() {
                 open.push(n);
             }
@@ -38,49 +37,98 @@ pub(crate) fn close_all(open: &mut Vec<HTMLNode>) -> HTMLNode {
     }
 }
 
-pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAction,math:bool,svg:bool) {
+pub(crate) fn do_font(state:&mut ShipoutState,store:&FontStore,font:Font) {
+    if state.fonts.last() == Some(&font) || font.filename().ends_with("nullfont") {
+        state.fonts.push(font);
+        return
+    }
+    if let Some(info) = store.get_info(font.filename()) {
+        if let Some((_,link)) = info.weblink {
+            state.fontlinks.insert(link.to_string());
+        }
+    }
+    state.fonts.push(font.clone());
+    let mut node = HTMLNode::new(HTMLTag::FontChange(state.mode()));
+    node.font = Some((font,false));
+    state.nodes.push(node);
+}
+
+pub(crate) fn close_font(state:&mut ShipoutState) {
+    let mut requeue:Vec<HTMLNode> = vec!();
+    let font = state.fonts.pop().unwrap();
+    if state.fonts.last() == Some(&font) || font.filename().ends_with("nullfont") {
+        return
+    }
+    while let Some(n) = state.nodes.pop() {
+        if matches!(n.tag, HTMLTag::FontChange(_)) {
+            if requeue.is_empty() {
+                if !n.children.is_empty() {state.push(n);}
+                return
+            }
+            let Some(f) = n.font.clone() else { unreachable!() };
+            if !n.children.is_empty() {state.push(n);}
+            for mut c in requeue.into_iter().rev() {
+                let mut node = HTMLNode::new(HTMLTag::FontChange(state.mode()));
+                node.font = Some(f.clone());
+                node.children = std::mem::take(&mut c.children);
+                if !node.children.is_empty() {c.push_child(state.mode(),HTMLChild::Node(node));}
+                state.nodes.push(c);
+            }
+            return
+        } else {
+            requeue.push(n);
+        }
+    }
+    unreachable!()
+}
+
+
+pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAction) {
     let stack = engine.aux.extension.colorstacks();
-    let curr = state.colors.last().unwrap();
+    let curr = *state.colors.last().unwrap();
     match color {
         ColorStackAction::Set(idx,c) => {
             *stack[idx].last_mut().unwrap() = c;
-            if *engine.aux.extension.current_colorstack() == idx && *curr != c {
+            if *engine.aux.extension.current_colorstack() == idx && curr != c {
                 todo!()
             }
         }
         ColorStackAction::Push(idx,c) => {
             stack[idx].push(c);
-            if *engine.aux.extension.current_colorstack() == idx && *curr != c {
+            if *engine.aux.extension.current_colorstack() == idx {
                 state.colors.push(c);
-                let mut node = HTMLNode::new(COLOR_CHANGE,false);
-                node.style("color",c.to_string());
-                state.nodes.push(node);
+                if  curr != c {
+                    let mut node = HTMLNode::new(HTMLTag::ColorChange(state.mode()));
+                    node.color = Some(c);
+                    state.nodes.push(node);
+                }
             }
         }
         ColorStackAction::Pop(idx) => {
             stack[idx].pop();
             let old = stack[idx].last().unwrap().clone();
-            let curr = *curr;
-            if *engine.aux.extension.current_colorstack() == idx && curr != old {
+            if *engine.aux.extension.current_colorstack() == idx  {
                 state.colors.pop();
-                let mut requeue:Vec<HTMLNode> = vec!();
-                while let Some(n) = state.nodes.pop() {
-                    if n.label == COLOR_CHANGE {
-                        if requeue.is_empty() {
-                            if !n.children.is_empty() {state.push(n,math,svg);}
+                if curr != old {
+                    let mut requeue: Vec<HTMLNode> = vec!();
+                    while let Some(n) = state.nodes.pop() {
+                        if matches!(n.tag,HTMLTag::ColorChange(_)) {
+                            if requeue.is_empty() {
+                                if !n.children.is_empty() { state.push(n); }
+                                return
+                            }
+                            if !n.children.is_empty() { state.push(n); }
+                            for mut c in requeue.into_iter().rev() {
+                                let mut node = HTMLNode::new(HTMLTag::ColorChange(state.mode()));
+                                node.color = Some(curr);
+                                node.children = std::mem::take(&mut c.children);
+                                if !node.children.is_empty() { c.push_child(state.mode(),HTMLChild::Node(node)); }
+                                state.nodes.push(c);
+                            }
                             return
+                        } else {
+                            requeue.push(n);
                         }
-                        if !n.children.is_empty() {state.push(n,math,svg);}
-                        for mut c in requeue.into_iter().rev() {
-                            let mut node = HTMLNode::new(COLOR_CHANGE, c.allow_newline);
-                            node.style("color",curr.to_string());
-                            node.children = std::mem::take(&mut c.children);
-                            if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
-                            state.nodes.push(c);
-                        }
-                        return
-                    } else {
-                        requeue.push(n);
                     }
                 }
             }
@@ -89,13 +137,16 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
             let old = stack[idx].last().unwrap().clone();
             if *engine.aux.extension.current_colorstack() != idx  {
                 *engine.aux.extension.current_colorstack() = idx;
-                if old != *curr {
+                if old != curr {
                     todo!()
                 }
             }
         }
     }
 }
+
+
+/*
 
 
 pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState,in_v:bool) {
@@ -169,33 +220,4 @@ pub(crate) fn reset_matrix(state:&mut ShipoutState,inmath:bool,insvg:bool) {
     }
 }
 
-pub(crate) fn do_font(state:&mut ShipoutState,font:Font) {
-    let mut node = HTMLNode::new(FONT_CHANGE,false);
-    node.set_font(font);
-    state.nodes.push(node);
-}
-
-pub(crate) fn close_font(state:&mut ShipoutState,math:bool,svg:bool) {
-    let mut requeue:Vec<HTMLNode> = vec!();
-    while let Some(n) = state.nodes.pop() {
-        if n.label == FONT_CHANGE {
-            if requeue.is_empty() {
-                if !n.children.is_empty() {state.push(n,math,svg);}
-                return
-            }
-            let Some(f) = n.font.clone() else { unreachable!() };
-            if !n.children.is_empty() {state.push(n,math,svg);}
-            for mut c in requeue.into_iter().rev() {
-                let mut node = HTMLNode::new(FONT_CHANGE, c.allow_newline);
-                node.set_font(f.clone());
-                node.children = std::mem::take(&mut c.children);
-                if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
-                state.nodes.push(c);
-            }
-            return
-        } else {
-            requeue.push(n);
-        }
-    }
-    unreachable!()
-}
+ */

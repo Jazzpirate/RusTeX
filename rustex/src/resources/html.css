@@ -7,14 +7,58 @@
 /* TODO remove this */
 * { position:relative; line-height: 1.0}
 a { color: inherit; text-decoration: inherit; }
-soan {display:contents;}
+span {display:contents;}
+
+.rustex-missing {
+    color:red;
+    z-index: 1000;
+    & ::before { content: "❓❓❓"; }
+}
 
 .rustex-contents {display:contents}
+
+.rustex-withwidth {
+    min-width: calc(var(--rustex-this-width) * 1px);
+    max-width: calc(var(--rustex-this-width) * 1px);
+    > span {
+        display:contents;
+        --rustex-curr-width: calc(var(--rustex-this-width) * 1px);
+    }
+}
+.rustex-scalewidth {
+    --rustex-this-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+    min-width: var(--rustex-this-width);
+    max-width: var(--rustex-this-width);
+    > span {
+        display:contents;
+        --rustex-curr-width: var(--rustex-this-width);
+    }
+}
+
+.rustex-body {
+    /* made up numbers to be replaced */
+    --rustex-text-width: 600;
+    --rustex-page-width: 750;
+    --rustex-scale-width:1.0;
+
+    --rustex-curr-width: calc((var(--rustex-text-width) / var(--rustex-page-width)) * min(100vw,calc(var(--rustex-page-width) * 1px)));
+    --rustex-this-width:var(--rustex-curr-width);
+
+    max-width: calc(var(--rustex-page-width) * 1px);
+    width:min(100vw,calc(var(--rustex-text-width) * 1px));
+    padding-left:calc(((var(--rustex-page-width) - var(--rustex-text-width)) / (2 * var(--rustex-page-width)) * min(100vw,calc(var(--rustex-page-width) * 1px))));
+    padding-right:calc(((var(--rustex-page-width) - var(--rustex-text-width)) / (2 * var(--rustex-page-width)) * min(100vw,calc(var(--rustex-page-width) * 1px))));
+    background-color:#f9fafb;
+    color: #000000;
+    display:flex;
+    flex-direction: column;
+}
 
 .rustex-page {
     display:flex;
     flex-direction: column;
     border: 1px solid #232323;
+    width:100%;
 }
 
 /* ---------------------------------------------------- Fonts ------------------------------------------------------- */
@@ -26,13 +70,6 @@ soan {display:contents;}
     font-variant: normal;
 }
 
-.rustex-body {
-    --temp-width:0;
-    background-color:#f9fafb;
-    color: #000000;
-    display:flex;
-    flex-direction: column;
-}
 
 /* ---------------------------------------------------- Boxes ------------------------------------------------------- */
 
@@ -76,11 +113,14 @@ soan {display:contents;}
     margin-left: auto;
     margin-right: auto;
     line-height: 0;
+    ::before {
+        content: "&nbsp;";
+    }
 }
 
 .rustex-vbox, .rustex-vtop, .rustex-vcenter {
     height: min-content;
-    width: min-content;
+    width: 100%;
     display: inline-flex;
     flex-direction: column;
 }
@@ -90,20 +130,42 @@ soan {display:contents;}
 
 .rustex-vbox-height-container {
     display:inline-block;
-    width:min-content;
-    height: min-content;
+    width:100%;
     white-space: initial;
     vertical-align: bottom;
 }
 .rustex-vtop-height-container {
     display:inline-block;
     white-space: initial;
-    width:min-content;
-    height: min-content;
+    width:100%;
 }
 .rustex-vbox-container { display:inline-block; width: min-content; height: min-content; white-space: initial; }
 .rustex-vtop-container { display:inline-block; width: min-content; height: min-content; white-space: initial; }
 .rustex-vcenter-container { display:inline-block; width: min-content; height: min-content; white-space: initial; }
+
+
+/* --------------------------------------------------- Spacing ------------------------------------------------------ */
+
+.rustex-hskip {
+    display:inline-block;
+    margin-right:auto;
+}
+.rustex-vskip {
+    display: block;
+    margin-top: auto;
+}
+
+.rustex-kern {
+    display: inline-block;
+}
+.rustex-Vss {
+    display:none;
+}
+.rustex-Hss {
+    display:none;
+}
+.rustex-HFil, .rustex-HFill { display:inline-block;margin-left: auto;margin-right: auto }
+.rustex-VFil, .rustex-VFill { display:block;margin-top: auto;margin-bottom: auto }
 
 /*
 
@@ -151,7 +213,6 @@ soan {display:contents;}
 
 .rustex-paragraph > .rustex-text, .rustex-paragraph > span > .rustex-text, .rustex-paragraph > span > span > .rustex-text, .rustex-paragraph > span > span > span > .rustex-text  { display:contents; }
 
-
  */
 
 /* ---------------------------------------------------- Rules ------------------------------------------------------- */
@@ -159,14 +220,25 @@ soan {display:contents;}
 .rustex-vrule {
     display:inline-block;
     vertical-align: text-bottom;
+    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
 }
-.rustex-hrule {
-    display:block;
+.rustex-vrule-inner {
+    display:inline-block;
+    width:100%;
+    height:100%;
 }
 .rustex-vrule-container {
-    display:inline-block;
-}.rustex-hrule-container {
-     display:block;
+    display:inline-block; white-space: initial;
+    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+}
+
+.rustex-hrule {
+     display:block; white-space: initial;
+    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+     > * { display:block; width:100% }
  }
 
 /* ----------------------------------------------------- Math ------------------------------------------------------- */
@@ -227,26 +299,6 @@ msub > :nth-child(2), msup > :nth-child(2) {font-size:inherit}
 mfrac > * {font-size: inherit}
 mover > :not(:first-child), munder > :not(:first-child) {font-size:inherit}
 mtd {padding:0;text-align: start}
-
-/* --------------------------------------------------- Spacing ------------------------------------------------------ */
-
-.rustex-hskip {
-    display:inline-block;
-}
-.rustex-vskip {
-    display: block;
-}
-.rustex-kern {
-    display: inline-block;
-}
-.rustex-Vss {
-    display:none;
-}
-.rustex-Hss {
-    display:none;
-}
-.rustex-HFil, .rustex-HFill { display:inline-block;margin-left: auto;margin-right: auto }
-.rustex-VFil, .rustex-VFill { display:block;margin-top: auto;margin-bottom: auto }
 
 /* --------------------------------------------------- Tables ------------------------------------------------------- */
 tbody {display:table-row-group}
@@ -315,11 +367,4 @@ foreignObject {display: flex;}
 .rustex-pdfmatrix {
     transform-origin: bottom left;
     display: inline-block;
-}
-.rustex-withwidth {
-    min-width: var(--temp-width);
-    max-width: var(--temp-width);
-}
-.rustex-withwidth > span {
-    --document-width: var(--temp-width);
 }

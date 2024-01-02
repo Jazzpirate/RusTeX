@@ -813,17 +813,17 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Horizontal, PRIMITIVES.everyhbox);
-    Err(BoxInfo::H(HBoxInfo::new_box()))
+    Err(BoxInfo::H(HBoxInfo::new_box(scaled)))
 }
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    Err(BoxInfo::V(VBoxInfo::new_box()))
+    Err(BoxInfo::V(VBoxInfo::new_box(scaled)))
 }
 
 pub fn vtop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
     let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    Err(BoxInfo::V(VBoxInfo::new_top()))
+    Err(BoxInfo::V(VBoxInfo::new_top(scaled)))
 }
 
 pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {

@@ -530,7 +530,7 @@ pub trait Stomach {
         for (i,b) in first.iter_mut().enumerate() { match b {
             VNode::Insert(n,v) => {
                 engine.state.set_box_register(engine.aux,*n as u16,Some(TeXBox::V {
-                    info: VBoxInfo::new_box(),
+                    info: VBoxInfo::new_box(ToOrSpread::None),
                     children:std::mem::replace(v, vec!().into()),
                     start:engine.mouth.current_sourceref(),
                     end:engine.mouth.current_sourceref(),
@@ -546,7 +546,7 @@ pub trait Stomach {
 
         let bx = TeXBox::V {
             children:first.into(),
-            info:VBoxInfo::new_box(),
+            info:VBoxInfo::new_box(ToOrSpread::None),
             start:engine.mouth.current_sourceref(),
             end:engine.mouth.current_sourceref(),
         };
