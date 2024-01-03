@@ -54,9 +54,9 @@ pub trait Gullet {
                         if data.ingroups == 0 { todo!() }
                         data.ingroups -= 1;
                         f(aux, state, self, t)
-                    } else if data.ingroups == 0 && t.is_align_tab() {
+                    } else if data.ingroups == data.groupval() && t.is_align_tab() {
                         todo!()
-                    } else if data.ingroups == 0 && t.is_cs_or_active() {
+                    } else if data.ingroups == data.groupval() && t.is_cs_or_active() {
                         match Self::resolve(state, t) {
                             ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
                             if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
@@ -80,8 +80,10 @@ pub trait Gullet {
         match self.get_align_data() {
             None => mouth.get_next_opt(aux,state),
             Some(a) => match mouth.get_next_opt(aux,state) {
-                Some(t) if t.is_begin_group()  => { a.ingroups += 1; Some(t) },
-                Some(t) if a.ingroups == 0 && t.is_align_tab() => {
+                Some(t) if t.is_begin_group()  => {
+                    a.ingroups += 1; Some(t)
+                },
+                Some(t) if a.ingroups == a.groupval() && t.is_align_tab() => {
                     methods::do_align(mouth,aux,a);
                     self.get_next_opt(mouth,aux,state)
                 }
@@ -90,7 +92,7 @@ pub trait Gullet {
                     a.ingroups -= 1;
                     Some(t)
                 },
-                Some(t) if a.ingroups == 0 && t.is_cs_or_active() => {
+                Some(t) if a.ingroups == a.groupval() && t.is_cs_or_active() => {
                     match Self::resolve(state,t) {
                         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                             if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
@@ -202,6 +204,7 @@ pub trait Gullet {
         let index = engine.gullet.get_conditionals().len();
         engine.gullet.get_conditionals().push(ActiveConditional::Unfinished(name));
         if trace {
+            crate::debug_log!(error => "Here: {}",engine.preview());
             engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",PRIMITIVES.printable(name,engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
         }
         let mut ret = f(engine,token);
@@ -277,12 +280,13 @@ pub enum ResolvedToken<'a,ET:EngineTypes> {
 pub struct AlignColumn<T:Token,Sk: crate::tex::numerics::Skip> {
     pub left: TokenList<T>,
     pub right: TokenList<T>,
+    pub inbraces:u8,
     pub tabskip: Sk,
 }
 impl <T:Token,Sk: crate::tex::numerics::Skip> AlignColumn<T,Sk> {
     #[inline(always)]
-    pub fn new(left:shared_vector::Vector<T>,right:shared_vector::Vector<T>,tabskip:Sk) -> Self {
-        Self { left:left.into(),right:right.into(),tabskip }
+    pub fn new(left:shared_vector::Vector<T>,right:shared_vector::Vector<T>,tabskip:Sk,inbraces:u8) -> Self {
+        Self { left:left.into(),inbraces,right:right.into(),tabskip }
     }
 }
 
@@ -295,6 +299,11 @@ pub struct AlignData<T:Token,Sk: crate::tex::numerics::Skip> {
     pub span:bool,
     pub inner_mode:BoxType,
     pub outer_mode:BoxType
+}
+impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
+    pub fn groupval(&self) -> u8 {
+        if self.omit { 0 } else { self.columns[self.currindex].inbraces }
+    }
 }
 
 
@@ -460,7 +469,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
                                 m.meaning::<ET>(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
                     ))
             };
-            //crate::debug_log!(debug => "Here: {}",engine.preview());
+            crate::debug_log!(error => "Here: {}",engine.preview());
         }
         if m.signature.params.is_empty() {
             engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));

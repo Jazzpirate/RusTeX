@@ -112,6 +112,12 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
                         arg.remove(0);
                     }
                 }
+                if ends_with_bgroup {
+                    match engine.gullet.get_align_data() {
+                        Some(a) => a.ingroups -= 1,
+                        _ => ()
+                    }
+                }
                 return
             }
         } else {

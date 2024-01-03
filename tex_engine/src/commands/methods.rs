@@ -604,6 +604,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
         recindex:Option<usize>,
         current_u: shared_vector::Vector<ET::Token>,
         current_v: shared_vector::Vector<ET::Token>,
+        ingroups:u8,
         in_v:bool,
         tabskip:ET::Skip,
         inner_mode:BoxType,
@@ -620,7 +621,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
     }
     impl<ET:EngineTypes> Into<AlignData<ET::Token,ET::Skip>> for AlignmentDataBuilder<ET> {
         fn into(mut self) -> AlignData<ET::Token, ET::Skip> {
-            self.columns.push(AlignColumn::new(self.current_u,self.current_v,self.tabskip));
+            self.columns.push(AlignColumn::new(self.current_u,self.current_v,self.tabskip,self.ingroups));
             AlignData {
                 columns: self.columns.into(),
                 ingroups: 0,
@@ -637,12 +638,14 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
     let mut cols = AlignmentDataBuilder::<ET> {
         columns:shared_vector::Vector::new(),
         recindex: None,
+        ingroups:0,
         current_u:shared_vector::Vector::new(),
         current_v:shared_vector::Vector::new(),
         in_v:false,
         tabskip:tabskip,
         inner_mode,between_mode
     };
+    let mut ingroups = 0;
 
     while let Some(next) = engine.mouth.get_next_opt(engine.aux,engine.state) {
         match ET::Gullet::resolve(engine.state,next) {
@@ -650,14 +653,18 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
             ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Parameter,..}),..} => {
                 if cols.in_v { todo!("throw error") }
                 cols.in_v = true;
+                cols.ingroups = ingroups;
             }
             ResolvedToken::Tk {code:CommandCode::AlignmentTab,..} |
             ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::AlignmentTab,..}),..} => {
+                if ingroups != 0 {
+                    todo!("throw error")
+                }
                 if !cols.in_v && cols.current_u.is_empty() {
                     cols.recindex = Some(cols.columns.len() - 1);
                 } else {
-                    let (u,v) = (std::mem::take(&mut cols.current_u),std::mem::take(&mut cols.current_v));
-                    cols.columns.push(AlignColumn::new(u,v,cols.tabskip));
+                    let (u,v,g) = (std::mem::take(&mut cols.current_u),std::mem::take(&mut cols.current_v),std::mem::take(&mut cols.ingroups));
+                    cols.columns.push(AlignColumn::new(u,v,cols.tabskip,g));
                     cols.tabskip = tabskip;
                     cols.in_v = false;
                 }
@@ -681,6 +688,14 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
                 } else {
                     todo!("File end error")
                 }
+            }
+            ResolvedToken::Tk {code:CommandCode::BeginGroup,token,..} => {
+                ingroups += 1;
+                cols.push(token);
+            }
+            ResolvedToken::Tk {code:CommandCode::EndGroup,token,..} => {
+                ingroups -= 1;
+                cols.push(token);
             }
             ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..}
                 => cols.push(token)
@@ -742,7 +757,22 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
                 return
             }
             ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-                if *name == PRIMITIVES.omit => todo!("omit"),
+                if *name == PRIMITIVES.omit => {
+                engine.stomach.data_mut().open_lists.push(
+                    match mode {
+                        BoxType::Vertical => NodeList::Vertical {
+                            children:vec!(),
+                            tp:VerticalNodeListType::VAlignRow(engine.mouth.start_ref())
+                        },
+                        _ => NodeList::Horizontal {
+                            children:vec!(),
+                            tp:HorizontalNodeListType::HAlignRow(engine.mouth.start_ref())
+                        }
+                    }
+                );
+                engine.gullet.get_align_data().unwrap().omit = true;
+                return open_align_cell(engine,mode)
+            }
             ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
@@ -756,7 +786,7 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
                         }
                     }
                 );
-                engine.requeue(token);
+                engine.mouth.requeue(token);
                 return open_align_cell(engine,mode)
             }
         );

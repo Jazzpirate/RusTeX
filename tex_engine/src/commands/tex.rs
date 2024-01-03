@@ -2330,7 +2330,10 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
                 ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                     if *name == PRIMITIVES.crcr => (),
                 ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-                    if *name == PRIMITIVES.omit => todo!(),
+                    if *name == PRIMITIVES.omit => {
+                    engine.gullet.get_align_data().unwrap().omit = true;
+                    return super::methods::open_align_cell(engine,mode)
+                },
                 ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
                     engine.requeue(token);
                     return super::methods::open_align_cell(engine,mode)
