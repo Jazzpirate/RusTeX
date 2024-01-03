@@ -9,7 +9,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType, MathNodeListType, ListTarget};
+use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType, MathNodeListType, ListTarget, MathNodeList};
 use crate::tex::numerics::NumSet;
 use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use crate::utils::HMap;
@@ -126,14 +126,21 @@ pub trait Stomach {
                 match engine.stomach.data_mut().open_lists.pop() {
                     Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) if t.is_some() => {
                         engine.state.pop(engine.aux,engine.mouth);
-                        t.call(engine,children,start);
+                        t.call(engine,children.close(start,engine.mouth.current_sourceref()),start);
                     }
                     Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) => {
+                        match children {
+                            MathNodeList::Simple(v) =>
+                                Self::add_node_m(engine,MathNode::Atom(MathAtom{
+                                    nucleus:MathNucleus::Inner(MathKernel::List {children:v.into(),start,end:engine.mouth.current_sourceref()}),
+                                    sub:None,sup:None
+                                })),
+                            MathNodeList::Over {top,sep,bottom,left,right} => Self::add_node_m(engine,MathNode::Over {
+                                start,end:engine.mouth.current_sourceref(),
+                                top:top.into(),bottom:bottom.into(),sep,left,right
+                            })
+                        }
                         engine.state.pop(engine.aux,engine.mouth);
-                        Self::add_node_m(engine,MathNode::Atom(MathAtom{
-                            nucleus:MathNucleus::Inner(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()}),
-                            sub:None,sup:None
-                        }))
                     }
                     _ => todo!("error")
                 }
@@ -160,7 +167,12 @@ pub trait Stomach {
                         _ => todo!("throw error")
                     }}
                     engine.state.pop(engine.aux,engine.mouth);
-                    let group = MathGroup::<Self::ET,MathFontStyle<Self::ET>>::close(display,start,engine.mouth.current_sourceref(),children);
+                    let group = MathGroup::<Self::ET,MathFontStyle<Self::ET>>::close(
+                        if display {Some((
+                            engine.state.get_primitive_skip(PRIMITIVES.abovedisplayskip),
+                            engine.state.get_primitive_skip(PRIMITIVES.belowdisplayskip)
+                        ))} else {None},
+                        start,engine.mouth.current_sourceref(),children.close(start,engine.mouth.current_sourceref()));
                     Self::add_node_h(engine,HNode::MathGroup(group));
                 }
                 _ => todo!("error")
@@ -178,7 +190,7 @@ pub trait Stomach {
                     }
                     _ => (false,PRIMITIVES.everymath)
                 };
-                engine.stomach.data_mut().open_lists.push(NodeList::Math {children:vec!(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
+                engine.stomach.data_mut().open_lists.push(NodeList::Math {children:MathNodeList::new(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
                 engine.state.push(engine.aux,GroupType::Math{display},engine.mouth.line_number());
                 engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
                 engine.mouth.insert_every::<Self::ET>(engine.state,every);
@@ -952,7 +964,23 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 Some(HNode::Insert(n,ch)) =>
                     reinserts.push(VNode::Insert(n,ch)),
                 Some(HNode::VAdjust(ls)) => reinserts.extend(ls.into_vec().into_iter()),
-                Some(HNode::MathGroup(MathGroup {display:true,..})) => todo!(),
+                Some(g@HNode::MathGroup(MathGroup {display:Some(_),..})) => {
+                    let (a,b) = if let HNode::MathGroup(MathGroup {display:Some((a,b)),..}) = &g {
+                        (*a,*b)
+                    } else { unreachable!() };
+                    let ht = g.height();
+                    let dp = g.depth();
+                    reinserts.push(VNode::VSkip(a));
+                    next_line!(false);
+                    ret.push(ParLine::Line(TeXBox::H {children:vec!(g).into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
+                        spec:line_spec.clone(),
+                        ends_with_line_break:false,
+                        inner_height:ht,
+                        inner_depth:dp
+                    },preskip:None}));
+                    ret.push(ParLine::Adjust(VNode::VSkip(b)));
+                    continue 'A
+                }
                 Some(HNode::Penalty(i)) if i <= -10000 => {
                     next_line!(true); // TODO mark somehow
                     continue 'A
@@ -991,14 +1019,14 @@ impl Script {
         match self {
             Script::Super => ListTarget::<ET,_>::new(
                 |engine,children,_| if let Some(NodeList::Math{children:ch,..}) = engine.stomach.data_mut().open_lists.last_mut() {
-                    if let Some(MathNode::Atom(a)) = ch.last_mut() {
+                    if let Some(MathNode::Atom(a)) = ch.list_mut().last_mut() {
                         a.sup = Some(children.into())
                     } else {unreachable!()}
                 } else {unreachable!()}
             ),
             _ => ListTarget::<ET,_>::new(
                 |engine,children,_| if let Some(NodeList::Math{children:ch,..}) = engine.stomach.data_mut().open_lists.last_mut() {
-                    if let Some(MathNode::Atom(a)) = ch.last_mut() {
+                    if let Some(MathNode::Atom(a)) = ch.list_mut().last_mut() {
                         a.sub = Some(children.into())
                     } else {unreachable!()}
                 } else {unreachable!()}
@@ -1010,7 +1038,7 @@ impl Script {
 fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math { children, .. }) => {
-            match children.last() {
+            match children.list_mut().last() {
                 Some(MathNode::Atom(a)) if script.invalid(a) => {
                     todo!("throw double xscript error")
                 },
@@ -1023,7 +1051,7 @@ fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) {
     engine.read_char_or_math_group(|script,engine,c| {
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Math { children, .. }) => {
-                match children.last_mut() {
+                match children.list_mut().last_mut() {
                     Some(MathNode::Atom(a)) =>
                         script.merge(MathNode::Atom(c.to_atom()),a),
                     _ => unreachable!()
@@ -1042,7 +1070,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 self.state.push(self.aux,GroupType::Math {
                     display:self.stomach.data_mut().mode() == TeXMode::DisplayMath
                 },self.mouth.line_number());
-                let list = NodeList::Math{children:vec!(),start:self.mouth.start_ref(),
+                let list = NodeList::Math{children:MathNodeList::new(),start:self.mouth.start_ref(),
                     tp:MathNodeListType::Target(tp(s))};
                 self.stomach.data_mut().open_lists.push(list);
                 return

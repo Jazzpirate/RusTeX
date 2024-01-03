@@ -31,23 +31,11 @@ pub trait State:Sized+Clone {
 
     fn aftergroup(&mut self,token:T<Self>);
 
-    fn get_mathstyle(&self) -> MathStyle;
-    fn set_mathstyle(&mut self,style:MathStyle);
-
     fn get_mathfonts(&self,fam:usize) -> UnresolvedMathFontStyle<Self::ET> {
-        let style = self.get_mathstyle();
-        if style.forced_from.is_some() {
-            UnresolvedMathFontStyle::Forced {style:style.style,cramped:style.cramped,font: match style.style {
-                MathStyleType::Script => self.get_scriptfont(fam).clone(),
-                MathStyleType::ScriptScript => self.get_scriptscriptfont(fam).clone(),
-                _ => self.get_textfont(fam).clone(),
-            }}
-        } else {
-            UnresolvedMathFontStyle::Unforced {style:style.style,cramped:style.cramped,
-                text_font:self.get_textfont(fam).clone(),
-                script_font:self.get_scriptfont(fam).clone(),
-                script_script_font:self.get_scriptscriptfont(fam).clone()
-            }
+        UnresolvedMathFontStyle {
+            text_font:self.get_textfont(fam).clone(),
+            script_font:self.get_scriptfont(fam).clone(),
+            script_script_font:self.get_scriptscriptfont(fam).clone()
         }
     }
 

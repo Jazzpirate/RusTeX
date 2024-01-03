@@ -323,7 +323,7 @@ pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
             None => (-1).into(),
             Some(n) => (n.nodetype().to_u8() as i32).into()
         },
-        Some(NodeList::Math {children,..}) => match children.last() {
+        Some(NodeList::Math {children,..}) => match children.list().last() {
             None => (-1).into(),
             Some(n) => (n.nodetype().to_u8() as i32).into()
         }

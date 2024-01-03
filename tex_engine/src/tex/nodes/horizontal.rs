@@ -78,14 +78,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("</vadjust>")
             },
-            HNode::MathGroup(MathGroup{ children,display,..}) => {
-                Self::readable_do_indent(indent,f)?;
-                write!(f, "<{}math>",if *display {"display"} else {""})?;
-                for c in children.iter() {
-                    c.readable_fmt(indent+2, f)?;
-                }
-                Self::readable_do_indent(indent, f)?;
-                write!(f, "</{}math>",if *display {"display"} else {""})
+            HNode::MathGroup(mg) => {
+                mg.readable_fmt(indent, f)
             }
             HNode::Char { char, .. } =>
                 Ok(char.display(f)),
@@ -109,9 +103,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::VRule { height, .. } => height.unwrap_or_default(),
             HNode::Char { char,font } => font.get_ht(*char),
             HNode::Leaders(l) => l.height(),
-            HNode::MathGroup(MathGroup {children,computed_height,..}) => *computed_height.get_or_init( || {
-                children.iter().map(|c| c.height()).max().unwrap_or_default()
-            }),
+            HNode::MathGroup(mg) => mg.height(),
             HNode::Custom(n) => n.height(),
             _ => ET::Dim::default(),
         }
@@ -122,9 +114,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Char { char,font } => font.get_wd(*char),
             HNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
             HNode::Leaders(l) => l.width(),
-            HNode::MathGroup(MathGroup{children,computed_width,..}) => *computed_width.get_or_init( || {
-                children.iter().map(|c| c.width()).sum()
-            }),
+            HNode::MathGroup(mg) => mg.width(),
             HNode::Custom(n) => n.width(),
             HNode::HKern(d) => *d,
             HNode::HSkip(s) => s.base(),
@@ -138,9 +128,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Char { char,font } => font.get_dp(*char),
             HNode::VRule { depth, .. } => depth.unwrap_or_default(),
             HNode::Leaders(l) => l.depth(),
-            HNode::MathGroup(MathGroup {children,computed_depth,..}) => *computed_depth.get_or_init( || {
-                children.iter().map(|c| c.depth()).max().unwrap_or_default()
-            }),
+            HNode::MathGroup(mg) => mg.depth(),
             HNode::Custom(n) => n.depth(),
             _ => ET::Dim::default(),
         }

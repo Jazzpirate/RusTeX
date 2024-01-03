@@ -27,11 +27,52 @@ pub enum LeaderType {
 pub enum NodeList<ET:EngineTypes> {
     Vertical{tp:VerticalNodeListType<ET>,children:Vec<VNode<ET>>},
     Horizontal{tp:HorizontalNodeListType<ET>,children:Vec<HNode<ET>>},
-    Math{children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,start:SourceRef<ET>,tp:MathNodeListType<ET>},
+    Math{children:MathNodeList<ET>,start:SourceRef<ET>,tp:MathNodeListType<ET>},
 }
 impl<ET:EngineTypes> NodeList<ET> {
     pub fn new_math(start:SourceRef<ET>) -> Self {
-        NodeList::Math{children:Vec::new(),start,tp:MathNodeListType::Target(ListTarget::none())}
+        NodeList::Math{children:MathNodeList::new(),start,tp:MathNodeListType::Target(ListTarget::none())}
+    }
+}
+
+#[derive(Clone,Debug)]
+pub enum MathNodeList<ET:EngineTypes> {
+    Simple(Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>),
+    Over {
+        top:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+        sep:Option<ET::Dim>,
+        bottom:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+        left:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
+        right:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
+    },
+}
+impl <ET:EngineTypes> MathNodeList<ET> {
+    pub fn new() -> Self { MathNodeList::Simple(Vec::new()) }
+    pub fn push(&mut self, n:MathNode<ET,UnresolvedMathFontStyle<ET>>) {
+        match self {
+            MathNodeList::Simple(v) => v.push(n),
+            MathNodeList::Over{bottom,..} => bottom.push(n),
+        }
+    }
+    pub fn close(self,start:SourceRef<ET>,end:SourceRef<ET>) -> Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
+        match self {
+            MathNodeList::Simple(v) => v,
+            MathNodeList::Over{top,sep,bottom,left,right} => vec!(MathNode::Over {
+                start,end, top:top.into(),bottom:bottom.into(),sep,left,right
+            })
+        }
+    }
+    pub fn list_mut(&mut self) -> &mut Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
+        match self {
+            MathNodeList::Simple(v) => v,
+            MathNodeList::Over{bottom,..} => bottom,
+        }
+    }
+    pub fn list(&self) -> &Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
+        match self {
+            MathNodeList::Simple(v) => v,
+            MathNodeList::Over{bottom,..} => bottom,
+        }
     }
 }
 

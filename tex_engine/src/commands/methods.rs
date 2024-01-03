@@ -694,70 +694,73 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     if let Some(d) = engine.gullet.get_align_data() {
         d.currindex = 0
     } else { todo!("throw error") }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
-        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
-            engine.gullet.pop_align();
-            return ET::Stomach::close_align(engine)
-        }
-        ResolvedToken::Tk{code:CommandCode::Space,..} => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-            if *name == PRIMITIVES.crcr => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-            if *name == PRIMITIVES.noalign => {
-            engine.expand_until_bgroup(true);
-            engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
-            engine.stomach.data_mut().open_lists.push(
-                match mode {
-                    BoxType::Vertical => NodeList::Horizontal {
-                        children:vec!(),
-                        tp:HorizontalNodeListType::Box(HBoxInfo::HAlignRow,engine.mouth.start_ref(),BoxTarget::new(
-                            move |engine,l| {
-                                if let TeXBox::H {children,info:HBoxInfo::HAlignRow,..} = l  {
-                                    for c in children.into_vec() {
-                                        ET::Stomach::add_node_h(engine,c);
-                                    }
-                                } else {unreachable!()}
-                                start_align_row(engine,mode)
-                            }
-                        ))
-                    },
-                    _ => NodeList::Vertical {
-                        children:vec!(),
-                        tp:VerticalNodeListType::Box(VBoxInfo::VAlignRow,engine.mouth.start_ref(),BoxTarget::new(
-                            move |engine,l| {
-                                if let TeXBox::V {children,info:VBoxInfo::VAlignRow,..} = l  {
-                                    for c in children.into_vec() {
-                                        ET::Stomach::add_node_v(engine,c);
-                                    }
-                                } else {unreachable!()}
-                                start_align_row(engine,mode)
-                            }
-                        ))
+    // avoid the gullet here as to not throw an error on '}'!
+    while let Some(tk) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        crate::expand!(engine,tk;
+            ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
+            ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
+                engine.gullet.pop_align();
+                return ET::Stomach::close_align(engine)
+            }
+            ResolvedToken::Tk{code:CommandCode::Space,..} => (),
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                if *name == PRIMITIVES.crcr => (),
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                if *name == PRIMITIVES.noalign => {
+                engine.expand_until_bgroup(true);
+                engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
+                engine.stomach.data_mut().open_lists.push(
+                    match mode {
+                        BoxType::Vertical => NodeList::Horizontal {
+                            children:vec!(),
+                            tp:HorizontalNodeListType::Box(HBoxInfo::HAlignRow,engine.mouth.start_ref(),BoxTarget::new(
+                                move |engine,l| {
+                                    if let TeXBox::H {children,info:HBoxInfo::HAlignRow,..} = l  {
+                                        for c in children.into_vec() {
+                                            ET::Stomach::add_node_h(engine,c);
+                                        }
+                                    } else {unreachable!()}
+                                    start_align_row(engine,mode)
+                                }
+                            ))
+                        },
+                        _ => NodeList::Vertical {
+                            children:vec!(),
+                            tp:VerticalNodeListType::Box(VBoxInfo::VAlignRow,engine.mouth.start_ref(),BoxTarget::new(
+                                move |engine,l| {
+                                    if let TeXBox::V {children,info:VBoxInfo::VAlignRow,..} = l  {
+                                        for c in children.into_vec() {
+                                            ET::Stomach::add_node_v(engine,c);
+                                        }
+                                    } else {unreachable!()}
+                                    start_align_row(engine,mode)
+                                }
+                            ))
+                        }
                     }
-                }
-            );
-            return
-        }
-        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-            if *name == PRIMITIVES.omit => todo!("omit"),
-        ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
-            engine.stomach.data_mut().open_lists.push(
-                match mode {
-                    BoxType::Vertical => NodeList::Vertical {
-                        children:vec!(),
-                        tp:VerticalNodeListType::VAlignRow(engine.mouth.start_ref())
-                    },
-                    _ => NodeList::Horizontal {
-                        children:vec!(),
-                        tp:HorizontalNodeListType::HAlignRow(engine.mouth.start_ref())
+                );
+                return
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                if *name == PRIMITIVES.omit => todo!("omit"),
+            ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
+                engine.stomach.data_mut().open_lists.push(
+                    match mode {
+                        BoxType::Vertical => NodeList::Vertical {
+                            children:vec!(),
+                            tp:VerticalNodeListType::VAlignRow(engine.mouth.start_ref())
+                        },
+                        _ => NodeList::Horizontal {
+                            children:vec!(),
+                            tp:HorizontalNodeListType::HAlignRow(engine.mouth.start_ref())
+                        }
                     }
-                }
-            );
-            engine.requeue(token);
-            return open_align_cell(engine,mode)
-        }
-    );
+                );
+                engine.requeue(token);
+                return open_align_cell(engine,mode)
+            }
+        );
+    }
     todo!("file end")
 }
 
@@ -982,10 +985,10 @@ pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) ->
         Some(NodeList::Math {children,..}) => {
             let mut readd = arrayvec::ArrayVec::<_,10>::new();
             loop {
-                match children.last_mut() {
-                    Some(n) if m(n) => { children.pop();break }
+                match children.list_mut().last_mut() {
+                    Some(n) if m(n) => { children.list_mut().pop();break }
                     Some(n) if n.opaque() => {
-                        readd.push(children.pop().unwrap());
+                        readd.push(children.list_mut().pop().unwrap());
                     }
                     _ => break
                 }
@@ -1018,7 +1021,7 @@ pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>
             }
         }
         Some(NodeList::Math {children,..}) => {
-            for n in children.iter().rev() {
+            for n in children.list_mut().iter().rev() {
                 if n.opaque() {continue}
                 return m(n)
             }

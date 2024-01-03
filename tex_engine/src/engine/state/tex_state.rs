@@ -51,7 +51,6 @@ pub struct TeXState<ET:EngineTypes> {
     scriptscriptfonts:[Fnt<ET>;16],
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
-    mathstyle:MathStyle,
 }
 impl<ET:EngineTypes> TeXState<ET> {
 
@@ -126,18 +125,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             textfonts:mathfonts.clone(),
             scriptfonts:mathfonts.clone(),
             scriptscriptfonts:mathfonts,
-            mathstyle:MathStyle{cramped:false, forced_from:None,style:crate::tex::types::MathStyleType::Text},
         }
-    }
-
-    #[inline(always)]
-    fn get_mathstyle(&self) -> MathStyle {
-        self.mathstyle
-    }
-
-    #[inline(always)]
-    fn set_mathstyle(&mut self, style: MathStyle) {
-        self.mathstyle = style
     }
 
     #[inline(always)]
