@@ -194,7 +194,7 @@ fn split_state<R,F:FnOnce(Refs,&mut ShipoutState) -> R>(engine:Refs,f:F) -> R {
 }
 
 
-const TEST_FILE: &str = "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html";
+const TEST_FILE: &str = "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html";
 const PREAMBLE: &str = r#"
 <!DOCTYPE html>
 <html lang="en">
@@ -425,9 +425,9 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
                 *state.fonts.last_mut().unwrap() = font;
             }
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
-                todo!(),//annotations::do_link(link,state,true),
+                annotations::do_link(link,state,true),
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
-                todo!(),//annotations::close_link(state,false,false),
+                annotations::close_link(state,false,false),
             VNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             VNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_)| PDFNode::PDFSave)) | VNode::Penalty(_) => (),
@@ -466,9 +466,9 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) {
             }
             HNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
-                todo!(),//annotations::do_link(link,state,false),
+                annotations::do_link(link,state,false),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
-                todo!(),//annotations::close_link(state,false,false),
+                annotations::close_link(state,false,false),
             HNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
             HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave)) | HNode::Penalty(_) => (),
@@ -486,7 +486,7 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) {
         VNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox { .. },.. }) => nodes::do_vbox(state,engine,bx),
         VNode::Box(bx@ TeXBox::V { info: VBoxInfo::VTop { .. },.. }) => nodes::do_vtop(state,engine,bx),
         VNode::Box(bx@ TeXBox::H { info: HBoxInfo::HBox { .. },.. }) => nodes::do_hbox(state,engine,bx),
-        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => todo!(),//nodes::do_pdfdest(state, id),
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
         VNode::Whatsit(wi) => wi.call(engine),
         VNode::HRule {ref start,ref end,ref width,..} => {
             let height = n.height();
@@ -529,7 +529,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
         HNode::Box(TeXBox::H {info:HBoxInfo::ParIndent(d),..}) => {
             if d > Dim32(0) { state.push_comment(format_args!("<div class=\"rustex-parindent\" style=\"margin-left:{}\"></div>",dim_to_string(d))) }
         }
-        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => todo!(),//nodes::do_pdfdest(state, id),
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
         HNode::Whatsit(wi) => wi.call(engine),
         HNode::Char {char,font,..} => {
             if font == engine.fontsystem.null() { return }
@@ -763,9 +763,9 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
                 annotations::do_color(state,engine,act)
             },
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
-                todo!(),//annotations::do_link(link,state,false),
+                annotations::do_link(link,state,false),
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
-                todo!(),//annotations::close_link(state,true,false),
+                annotations::close_link(state,true,false),
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg => (),
             o => todo!(" {:?}",o)
         }

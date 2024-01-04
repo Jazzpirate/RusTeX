@@ -145,6 +145,56 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
     }
 }
 
+pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState,in_v:bool) {
+    match link.action {
+        ActionSpec::Goto(GotoAction::Current {target,..}) => {
+            let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
+            node.attrs.insert("href".into(),format!("#{}",target.as_name()).into());
+            state.nodes.push(node);
+        },
+        ActionSpec::User(str) => {
+            let url = if str.contains("/URI(") {
+                str.split("/URI(").last().unwrap().split(")").next().unwrap()
+            } else if str.contains("/F(") {
+                str.split("/F(").last().unwrap().split(")").next().unwrap()
+            } else {
+                ""
+            };
+            let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
+            node.attrs.insert("href".into(),url.to_string().into());
+            state.nodes.push(node);
+        }
+        ActionSpec::Goto(_) => todo!(),
+        _ => ()
+    }
+}
+
+pub(crate) fn close_link(state:&mut ShipoutState,math:bool,svg:bool) {
+    let mut requeue:Vec<HTMLNode> = vec!();
+    while let Some(n) = state.nodes.pop() {
+        if matches!(n.tag,HTMLTag::Link(_)) {
+            if requeue.is_empty() {
+                if !n.children.is_empty() {state.push(n);}
+                return
+            }
+            let Some(url) = n.attrs.get("href") else { unreachable!() };
+            let url = url.to_string();
+            if !n.children.is_empty() {state.push(n);}
+            for mut c in requeue.into_iter().rev() {
+                let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
+                node.attrs.insert("href".into(),url.clone().into());
+                node.children = std::mem::take(&mut c.children);
+                if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
+                state.nodes.push(c);
+            }
+            return
+        } else {
+            requeue.push(n);
+        }
+    }
+    unreachable!()
+}
+
 pub(crate) fn do_matrix(state:&mut ShipoutState,scale:f32,rotate:f32,skewx:f32,skewy:f32) {
     let mut node = HTMLNode::new(HTMLTag::Matrix(state.mode()));
     node.classes.push("rustex-pdfmatrix".into());
@@ -171,54 +221,5 @@ pub(crate) fn reset_matrix(state:&mut ShipoutState) {
 /*
 
 
-pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState,in_v:bool) {
-    match link.action {
-        ActionSpec::Goto(GotoAction::Current {target,..}) => {
-            let mut node = HTMLNode::new(LINK,in_v);
-            node.attr("href",format!("#{}",target.as_name()));
-            state.nodes.push(node);
-        },
-        ActionSpec::User(str) => {
-            let url = if str.contains("/URI(") {
-                str.split("/URI(").last().unwrap().split(")").next().unwrap()
-            } else if str.contains("/F(") {
-                str.split("/F(").last().unwrap().split(")").next().unwrap()
-            } else {
-                ""
-            };
-            let mut node = HTMLNode::new(LINK,in_v);
-            node.attr("href",url.to_string());
-            state.nodes.push(node);
-        }
-        ActionSpec::Goto(_) => todo!(),
-        _ => ()
-    }
-}
-
-pub(crate) fn close_link(state:&mut ShipoutState,math:bool,svg:bool) {
-    let mut requeue:Vec<HTMLNode> = vec!();
-    while let Some(n) = state.nodes.pop() {
-        if n.label == LINK {
-            if requeue.is_empty() {
-                if !n.children.is_empty() {state.push(n,math,svg);}
-                return
-            }
-            let Some(url) = n.attrs.get("href") else { unreachable!() };
-            let url = url.to_string();
-            if !n.children.is_empty() {state.push(n,math,svg);}
-            for mut c in requeue.into_iter().rev() {
-                let mut node = HTMLNode::new(LINK, c.allow_newline);
-                node.attr("href",url.clone());
-                node.children = std::mem::take(&mut c.children);
-                if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
-                state.nodes.push(c);
-            }
-            return
-        } else {
-            requeue.push(n);
-        }
-    }
-    unreachable!()
-}
 
  */

@@ -501,6 +501,7 @@ pub enum HTMLTag {
     HAlign,HBody,HRow,HCell,NoAlignH,
     FontChange(ShipoutMode),ColorChange(ShipoutMode),Link(ShipoutMode),
     Matrix(ShipoutMode),
+    Dest(ShipoutMode),
     Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,
     MathEscape,
     SvgWrap,SvgG(String),SvgTop,SvgForeign,EscapeSvg
@@ -558,6 +559,11 @@ impl Display for HTMLTag {
             }
             Link(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
+                else if *mode == ShipoutMode::SVG { f.write_str("g") }
+                else { f.write_str("span") }
+            }
+            Dest(mode) => {
+                if *mode == ShipoutMode::Math { f.write_str("mspace") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }
                 else { f.write_str("a") }
             }
@@ -632,7 +638,7 @@ fn font_attributes(store:&FontStore, font:&Font,parent:Option<&Font>) -> (Option
 
 fn simple_font(store:&FontStore, font:&Font) -> (Option<String>,Option<String>) {
     match store.get_info(font.filename()) {
-        None => (None,Some(format!("<!-- Unknown web font for {} -->",font.filename()))),
+        None => (None,if font.filename().ends_with("nullfont") {None} else {Some(format!("<!-- Unknown web font for {} -->",font.filename()))}),
         Some(info) => {
             let mut s = String::new();
             write!(s,"font-size:{};",dim_to_string(font.get_at())).unwrap();
@@ -644,8 +650,8 @@ fn simple_font(store:&FontStore, font:&Font) -> (Option<String>,Option<String>) 
             else if info.styles.oblique { s.push_str("font-style:oblique;"); }
             else { s.push_str("font-style:normal;");}
             match info.weblink {
-                None if s.is_empty() => (None,Some(format!("<!-- Unknown web font for {} -->",font.filename()))),
-                None => (Some(s),Some(format!("<!-- Unknown web font for {} -->",font.filename()))),
+                None if s.is_empty() => (None,if font.filename().ends_with("nullfont") {None} else {Some(format!("<!-- Unknown web font for {} -->",font.filename()))}),
+                None => (Some(s),if font.filename().ends_with("nullfont") {None} else {Some(format!("<!-- Unknown web font for {} -->",font.filename()))}),
                 Some((name,_)) => {
                     write!(s,"font-family:{};",name).unwrap();
                     (Some(s),None)

@@ -772,6 +772,17 @@ pub(crate) fn vrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Dim32, h
     }
 }
 
+pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
+    let mut node = HTMLNode::new(HTMLTag::Dest(state.mode()));
+    let target = match id {
+        NumOrName::Num(n) => format!("NUM_{}",n),
+        NumOrName::Name(n) => n
+    };
+    node.attrs.insert("name".into(),target.clone().into());
+    node.attrs.insert("id".into(),target.into());
+    state.push(node);
+}
+
 enum RowOrNoAlign {
     Row(Vec<HNode<Types>>,SRef,SRef),
     NoAlign(Vec<VNode<Types>>)
@@ -972,7 +983,8 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
                 );
                 node.classes.push("rustex-foreign".into());
                 state.do_in(node,None,|state| {
-                    let node = HTMLNode::new(HTMLTag::EscapeSvg);
+                    let mut node = HTMLNode::new(HTMLTag::EscapeSvg);
+                    node.font = Some((state.fonts.last().unwrap().clone(),true));
                     //node.width = Some((wd,true));
                     state.do_in(node,Some(ShipoutMode::V),|state| {
                         super::do_h(engine,state,HNode::Box(bx))
@@ -1103,15 +1115,5 @@ use crate::shipout::annotations::close_all;
 
 
 
-pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
-    let mut node = HTMLNode::new(DEST, false);
-    let target = match id {
-        NumOrName::Num(n) => format!("NUM_{}",n),
-        NumOrName::Name(n) => n
-    };
-    node.attr("name",target.clone());
-    node.attr("id",target);
-    state.push(node,false,false);
-}
 
  */

@@ -15,9 +15,9 @@ use tex_engine::pdflatex::PlainPDFTeXEngine;
 
 fn main() {
     //profile()
-    //thesis()
+    thesis()
     //run()
-    test()
+    //test()
 }
 
 fn test() {

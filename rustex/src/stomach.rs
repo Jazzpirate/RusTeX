@@ -1,4 +1,4 @@
-use tex_engine::commands::{Command, CommandScope};
+use tex_engine::commands::{Command, CommandScope, Conditional};
 use tex_engine::commands::methods::make_macro;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
@@ -87,14 +87,18 @@ impl Stomach for RusTeXStomach {
             lineskip:LineSkip::get(engine.state),
             parskip:engine.state.get_primitive_skip(PRIMITIVES.parskip)
         }));
+        let mut redo = vec!();
         for line in ret {
             match line {
-                ParLine::Adjust(n) => Self::add_node_v(engine,n),
+                ParLine::Adjust(n) => redo.push(n),
                 ParLine::Line(bx) => Self::add_node_v(engine,VNode::Box(bx))
             }
         }
         engine.stomach.prevent_shipout = false;
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphEnd));
+        for r in redo.into_iter() {
+            Self::add_node_v(engine,r);
+        }
     }
     /*
     fn add_node_v(engine: &mut EngineReferences<Self::ET>, node: VNode<Self::ET>) {
@@ -113,8 +117,10 @@ impl Stomach for RusTeXStomach {
         if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() {
             if continuous {
                 data.pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX / 3);
+                engine.state.set_primitive_dim(engine.aux,PRIMITIVES.vsize,data.pagegoal,true);
                 if data.page_contains_boxes && data.pagetotal > <Self::ET as EngineTypes>::Dim::from_sp(6553600 * 5) {
-                    do_shipout(engine,Some(-10000),|_|());
+                    do_shipout(engine,penalty.or(Some(-10000)),|_|());
+                    engine.stomach.data_mut().page_contains_boxes = true;
                 } else if penalty.is_some() {
                     do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip32::new(Dim32(655360),None,None))));
                 }
@@ -274,6 +280,12 @@ fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Ty
     for s in undefineds.into_iter() {
         engine.state.set_command(&engine.aux, s, Some(Command::Macro(empty.clone())), true)
     }
+    let iffalse = Command::Conditional(Conditional {
+        name: PRIMITIVES.iffalse,
+        expand: tex_engine::commands::tex::iffalse::<Types>,
+    });
+    let specialpage = engine.aux.memory.cs_interner_mut().new("if@specialpage");
+    engine.state.set_command(&engine.aux,specialpage,Some(iffalse),true);
     let data = engine.stomach.data_mut();
     data.page.insert(0,VNode::Custom(RusTeXNode::PageBegin));
     f(data);
