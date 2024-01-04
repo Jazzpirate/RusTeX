@@ -2314,6 +2314,16 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
         None => unreachable!(),
         Some(data) => {
             data.omit = false;
+            let skip = data.columns[data.currindex].tabskip;
+            match engine.stomach.data_mut().open_lists.last_mut() {
+                Some(NodeList::Horizontal {children,..}) => {
+                    children.push(HNode::HSkip(skip));
+                }
+                Some(NodeList::Vertical {children,..}) => {
+                    children.push(VNode::VSkip(skip));
+                }
+                _ => unreachable!()
+            }
             data.currindex += 1;
             if data.span {
                 todo!()
@@ -2349,6 +2359,16 @@ pub fn end_template_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET:
         None => unreachable!(),
         Some(data) => {
             data.omit = false;
+            let skip = data.columns[data.currindex].tabskip;
+            match engine.stomach.data_mut().open_lists.last_mut() {
+                Some(NodeList::Horizontal {children,..}) => {
+                    children.push(HNode::HSkip(skip));
+                }
+                Some(NodeList::Vertical {children,..}) => {
+                    children.push(VNode::VSkip(skip));
+                }
+                _ => unreachable!()
+            }
             let mode = data.inner_mode;
             super::methods::pop_align_cell(engine.state, engine.aux, engine.stomach, engine.mouth, mode);
             super::methods::pop_align_row::<ET>(engine.stomach, engine.mouth, mode);

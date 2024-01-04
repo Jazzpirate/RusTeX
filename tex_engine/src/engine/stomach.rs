@@ -541,12 +541,20 @@ pub trait Stomach {
         let mut deletes = vec!();
         for (i,b) in first.iter_mut().enumerate() { match b {
             VNode::Insert(n,v) => {
+                let children: Box<[VNode<Self::ET>]> = match engine.state.take_box_register(*n as u16) {
+                    Some(TeXBox::V {children,..}) => {
+                        let mut c = children.into_vec();
+                        c.extend(std::mem::replace(v, vec!().into()).into_vec().into_iter());
+                        c.into()
+                    },
+                    _ => std::mem::replace(v, vec!().into())
+                };
                 engine.state.set_box_register(engine.aux,*n as u16,Some(TeXBox::V {
                     info: VBoxInfo::new_box(ToOrSpread::None),
-                    children:std::mem::replace(v, vec!().into()),
+                    children,
                     start:engine.mouth.current_sourceref(),
                     end:engine.mouth.current_sourceref(),
-                }),false);
+                }),true);
                 deletes.push(i)
             }
             _ => ()
@@ -941,7 +949,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
             };
         }
 
-        while target > ET::Dim::default() {
+        loop {
             match nodes.next() {
                 None => {
                     if !line.is_empty() {
@@ -986,6 +994,10 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     continue 'A
                 }
                 Some(HNode::Penalty(_)) => (),
+                Some(n@HNode::Space | n@HNode::Hss | n@HNode::HSkip(_) | n@HNode::HFil | n@HNode::HFill) if target <= ET::Dim::default() => {
+                    line.push(n);
+                    break
+                }
                 Some(node) => {
                     target = target + (-node.width());
                     curr_height = curr_height.max(node.height());
