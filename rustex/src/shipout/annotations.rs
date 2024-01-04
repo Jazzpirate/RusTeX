@@ -145,6 +145,28 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
     }
 }
 
+pub(crate) fn do_matrix(state:&mut ShipoutState,scale:f32,rotate:f32,skewx:f32,skewy:f32) {
+    let mut node = HTMLNode::new(HTMLTag::Matrix(state.mode()));
+    node.classes.push("rustex-pdfmatrix".into());
+    node.styles.insert(
+        "transform".into(),
+        format!("matrix({},{},{},{},0,0)",scale,rotate,skewx,skewy).into()
+    );
+    state.nodes.push(node);
+}
+
+pub(crate) fn reset_matrix(state:&mut ShipoutState) {
+    let i = state.nodes.iter().enumerate().find_map(|(i,n)|
+        if matches!(n.tag,HTMLTag::Matrix(_)) {Some(i)} else {None});
+    if let Some(i) = i {
+        if i != state.nodes.len() - 1 {
+            todo!("reset matrix")
+        }
+        let matrix = state.nodes.pop().unwrap();
+        state.push(matrix)
+    }
+}
+
 
 /*
 
@@ -197,27 +219,6 @@ pub(crate) fn close_link(state:&mut ShipoutState,math:bool,svg:bool) {
         }
     }
     unreachable!()
-}
-
-pub(crate) fn do_matrix(state:&mut ShipoutState,scale:f32,rotate:f32,skewx:f32,skewy:f32,math:bool,svg:bool) {
-    if scale != skewy || rotate != 0.0 || skewx != 0.0 {
-        let mut node = HTMLNode::new(crate::html::labels::PDF_MATRIX,false);
-        let mut s = String::new();
-        write!(&mut s,"matrix({},{},{},{},0,0)",scale,rotate,skewx,skewy).unwrap();
-        node.style("transform",s);
-        state.push(node,false,false);
-    }
-}
-
-pub(crate) fn reset_matrix(state:&mut ShipoutState,inmath:bool,insvg:bool) {
-    let i = state.nodes.iter().enumerate().find_map(|(i,n)| if n.label == crate::html::labels::PDF_MATRIX {Some(i)} else {None});
-    if let Some(i) = i {
-        if i != state.nodes.len() - 1 {
-            todo!("reset matrix")
-        }
-        let matrix = state.nodes.pop().unwrap();
-        state.push(matrix,inmath,insvg)
-    }
 }
 
  */

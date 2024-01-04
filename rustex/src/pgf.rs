@@ -36,7 +36,7 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
         engine.register_primitive(Command::Unexpandable(
             Unexpandable {
                 name:PRIMITIVES.get(s),
-                scope:CommandScope::Any,
+                scope:CommandScope::SwitchesToHorizontalOrMath,
                 apply:*c
             }
         ),s);
@@ -114,7 +114,8 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
     let maxx = engine.read_dim(true);
     let maxy = engine.read_dim(true);
     let node = RusTeXNode::PGFSvg { bx, minx, miny, maxx, maxy };
-    tex_engine::add_node!(RusTeXStomach;engine, VNode::Custom(node), HNode::Custom(node),MathNode::Custom(node));
+    RusTeXStomach::add_node_h(engine, HNode::Custom(node));
+    //tex_engine::add_node!(RusTeXStomach;engine, VNode::Custom(node), HNode::Custom(node),MathNode::Custom(node));
 }
 fn pgfliteral(engine:Refs,_token:CompactToken) { todo!("pgfliteral") }
 fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {

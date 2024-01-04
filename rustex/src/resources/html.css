@@ -5,9 +5,11 @@
 /* ------------------------------------------------------------------------------------------------------------------ */
 
 /* TODO remove this */
-* { position:relative; line-height: 1.0}
 a { color: inherit; text-decoration: inherit; }
+/*
 span {display:contents;}
+* { position:relative; line-height: 1.0}
+ */
 
 .rustex-missing {
     color:red;
@@ -18,12 +20,9 @@ span {display:contents;}
 .rustex-contents {display:contents}
 
 .rustex-withwidth {
-    min-width: calc(var(--rustex-this-width) * 1px);
-    max-width: calc(var(--rustex-this-width) * 1px);
-    > span {
-        display:contents;
-        --rustex-curr-width: calc(var(--rustex-this-width) * 1px);
-    }
+    min-width: var(--rustex-curr-width);
+    max-width: var(--rustex-curr-width);
+    --rustex-curr-width: calc(var(--rustex-this-width) * 1px);
 }
 .rustex-scalewidth {
     --rustex-this-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
@@ -80,11 +79,10 @@ span {display:contents;}
     position: relative;
     margin-top: auto;
 }
-
 .rustex-parindent {
     display: inline-block;
+    position: relative;
 }
-
 
 .rustex-hbox {
     display:inline-flex;
@@ -110,6 +108,7 @@ span {display:contents;}
 
 .rustex-space-in-hbox {
     display: inline-block;
+    position: relative;
     margin-left: auto;
     margin-right: auto;
     line-height: 0;
@@ -118,54 +117,199 @@ span {display:contents;}
     }
 }
 
-.rustex-vbox, .rustex-vtop, .rustex-vcenter {
+.rustex-vbox, .rustex-vtop {
     height: min-content;
     width: 100%;
     display: inline-flex;
     flex-direction: column;
+    position: relative;
 }
 .rustex-vbox { vertical-align: bottom }
 .rustex-vtop {vertical-align: baseline }
-.rustex-vcenter{vertical-align: middle}
 
 .rustex-vbox-height-container {
     display:inline-block;
     width:100%;
     white-space: initial;
     vertical-align: bottom;
+    position: relative;
 }
 .rustex-vtop-height-container {
     display:inline-block;
     white-space: initial;
     width:100%;
+    position: relative;
 }
-.rustex-vbox-container { display:inline-block; width: min-content; height: min-content; white-space: initial; }
-.rustex-vtop-container { display:inline-block; width: min-content; height: min-content; white-space: initial; }
-.rustex-vcenter-container { display:inline-block; width: min-content; height: min-content; white-space: initial; }
+.rustex-vbox-container, .rustex-vtop-container {
+    display:inline-block;
+    width: min-content;
+    height: min-content;
+    white-space: initial;
+    position:relative;
+}
+.rustex-vcenter-container {
+    display:inline-block;
+    width: min-content;
+    height: min-content;
+    white-space: initial;
+    vertical-align: middle;
+    position:relative;
+    > div {
+        height: min-content;
+        width: 100%;
+        display: inline-flex;
+        flex-direction: column;
+        vertical-align: middle;
+        position:relative;
+    }
+}
 
+/* ---------------------------------------------------- Rules ------------------------------------------------------- */
+
+.rustex-vrule {
+    display:inline-block;
+    vertical-align: text-bottom;
+    min-width: var(--rustex-this-width);
+    max-width: var(--rustex-this-width);
+    position:relative;
+}
+.rustex-vrule-container {
+    display:inline-block; white-space: initial;
+    min-width: var(--rustex-this-width);
+    max-width: var(--rustex-this-width);
+    position:relative;
+    > * {
+        display:inline-block;
+        width:100%;
+        height:100%;
+        position:relative;
+    }
+}
+
+.rustex-hrule {
+    display:block; white-space: initial;
+    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
+    > * {
+        display:block;
+        width:100%;
+        position:relative;
+    }
+}
 
 /* --------------------------------------------------- Spacing ------------------------------------------------------ */
 
-.rustex-hskip {
+.rustex-hskip, .rustex-hkern {
     display:inline-block;
-    margin-right:auto;
+    position:relative;
 }
-.rustex-vskip {
+.rustex-vskip, .rustex-vkern {
     display: block;
-    margin-top: auto;
+    position:relative;
+}
+.rustex-mskip {}
+
+.rustex-vss {
+    display:block;margin-top: auto;margin-bottom: auto;
+    position:relative;
+}
+.rustex-hss {
+    display: inline-block;margin-left: auto;margin-right: auto;
+    position:relative;
+}
+.rustex-hfil, .rustex-hfill { display:inline-block;margin-left: auto;margin-right: auto;
+    position:relative; }
+.rustex-vfil, .rustex-vfill { display:block;margin-top: auto;margin-bottom: auto;
+    position:relative; }
+
+/* ----------------------------------------------------- Math ------------------------------------------------------- */
+
+.rustex-math {
+    line-height: inherit;
+    font-size: inherit;
+    font-family: Latin Modern Math, math;
+    mi {text-transform: none;}
 }
 
-.rustex-kern {
-    display: inline-block;
+.rustex-math-ord, .rustex-math-open, .rustex-math-close, .rustex-math-cramped {
+    padding-left: 0;
+    padding-right: 0;
 }
-.rustex-Vss {
-    display:none;
+.rustex-math-op {
+    padding-left: 0.15em;
+    padding-right: 0.15em;
+    + .rustex-math-op { padding-left: 0; }
+    &:has(+ .rustex-math-op) { padding-right: 0; }
+    &:first-child { padding-left: 0; }
+    &:last-child { padding-right: 0; }
 }
-.rustex-Hss {
-    display:none;
+.rustex-math-bin {
+    padding-left: 0.15em;
+    padding-right: 0.15em;
+    + .rustex-math-bin { padding-left: 0; }
+    &:has(+ .rustex-math-bin) { padding-right: 0; }
+    &:first-child { padding-left: 0; }
+    &:last-child { padding-right: 0; }
 }
-.rustex-HFil, .rustex-HFill { display:inline-block;margin-left: auto;margin-right: auto }
-.rustex-VFil, .rustex-VFill { display:block;margin-top: auto;margin-bottom: auto }
+.rustex-math-rel {
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+    + .rustex-math-rel { padding-left: 0; }
+    &:has(+ .rustex-math-rel) { padding-right: 0; }
+    &:first-child { padding-left: 0; }
+    &:last-child { padding-right: 0; }
+}
+.rustex-math-punct {
+    padding-left: 0;
+    padding-right: 0.15em;
+    &:has(+ .rustex-math-punct) { padding-right: 0; }
+    &:last-child { padding-right: 0; }
+}
+
+.rustex-display {
+    text-align:center;
+    display:block;
+    align-self: center;
+    width: 100%;
+    min-width: 100%;
+    position:relative;
+}
+
+.rustex-math-escape {
+    display: inline-flex;
+    /*width: 100%;*/
+    text-align: center;
+    justify-content: center;
+    letter-spacing: initial;
+    word-spacing: initial;
+    > * {
+        font-size: inherit;
+        writing-mode: initial;
+        position:relative;
+    }
+}
+
+/* inline-flex avoids weird vertical gaps in e.g. footnote markers */
+/*
+mtext {
+    letter-spacing: initial;
+    word-spacing: initial;
+    display: inline-flex;
+}
+mtext > {display:initial}
+mtext * {
+    font-size: inherit;
+    writing-mode: initial;
+}
+
+mi { position: relative}
+mo {position: relative;padding-left: 0;padding-right: 0}
+msub > :nth-child(2), msup > :nth-child(2) {font-size:inherit}
+mfrac > * {font-size: inherit}
+mover > :not(:first-child), munder > :not(:first-child) {font-size:inherit}
+mtd {padding:0;text-align: start}
+
+ */
 
 /*
 
@@ -186,11 +330,6 @@ span {display:contents;}
     height: min-content;
     align-items: baseline;
 }
-
-
-
-
-
 
 .rustex-display-vcenter {
     text-align:center;
@@ -215,114 +354,38 @@ span {display:contents;}
 
  */
 
-/* ---------------------------------------------------- Rules ------------------------------------------------------- */
 
-.rustex-vrule {
-    display:inline-block;
-    vertical-align: text-bottom;
-    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
-    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
-}
-.rustex-vrule-inner {
-    display:inline-block;
-    width:100%;
-    height:100%;
-}
-.rustex-vrule-container {
-    display:inline-block; white-space: initial;
-    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
-    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
-}
-
-.rustex-hrule {
-     display:block; white-space: initial;
-    min-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
-    max-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
-     > * { display:block; width:100% }
- }
-
-/* ----------------------------------------------------- Math ------------------------------------------------------- */
-
-.rustex-math {
-    line-height: inherit;
-    font-size: inherit;
-    font-family: Latin Modern Math, math;
-}
-
-.rustex-math-ord, .rustex-math-open, .rustex-math-close {
-    padding-left: 0;
-    padding-right: 0;
-}
-.rustex-math-op, .rustex-math-bin {
-    padding-left: 0.15em;
-    padding-right: 0.15em;
-}
-.rustex-math-rel {
-    padding-left: 0.2em;
-    padding-right: 0.2em;
-}
-.rustex-math-punct {
-    padding-left: 0.15em;
-    padding-right: 0.15em;
-}
-
-/* inline-flex avoids weird vertical gaps in e.g. footnote markers */
-mtext {
-    letter-spacing: initial;
-    word-spacing: initial;
-    display: inline-flex;
-}
-mtext > {display:initial}
-mtext * {
-    font-size: inherit;
-    writing-mode: initial;
-}
-.rustex-math-escape {
-    display: inline-flex;
-    width: 100%;
-    text-align: center;
-    justify-content: center;
-}
-
-.rustex-display-math-container {
-    text-align:center;
-    display:block;
-    align-self: center;
-    margin-top: 5px;
-    margin-bottom: 5px;
-    width: 100%;
-    min-width: 100%;
-}
-mi { position: relative}
-mo {position: relative;padding-left: 0;padding-right: 0}
-msub > :nth-child(2), msup > :nth-child(2) {font-size:inherit}
-mfrac > * {font-size: inherit}
-mover > :not(:first-child), munder > :not(:first-child) {font-size:inherit}
-mtd {padding:0;text-align: start}
 
 /* --------------------------------------------------- Tables ------------------------------------------------------- */
-tbody {display:table-row-group}
+
 .rustex-halign{
     display:inline-grid;
     border-collapse:collapse;
     width: fit-content;
     grid-auto-rows: auto;
     align-content: baseline;
+    grid-template-columns: repeat(var(--rustex-align-num),1fr);
+    > tbody {
+        display:contents;
+        > tr {
+            display:contents;
+        }
+    }
+    > tr {
+        display:contents;
+    }
 }
-.rustex-halign > tbody {
-    display:contents;
-}
-.rustex-halign-row {
-    display:contents;
-}
+
 .rustex-halign-cell {
     display:inline-flex;
     white-space: pre;
     align-items: baseline;
+    padding:0;
     width: 100%;
     height: 100%;
+    > .rustex-hbox { width:100%; height:100%; }
 }
-.rustex-halign-noalign {
+.rustex-noalign {
     display:inline-flex;
     flex-direction: column;
     overflow: visible;
@@ -330,40 +393,59 @@ tbody {display:table-row-group}
     width: 100%;
     flex-wrap: nowrap;
     justify-content: flex-start;
+    grid-column: span var(--rustex-align-num);
 }
+/*
 .rustex-halign-cell > .rustex-space-in-hbox, .rustex-halign-cell > span > .rustex-space-in-hbox, .rustex-halign-cell > span > span > .rustex-space-in-hbox {
     margin:0;
 }
+
+ */
 
 /* --------------------------------------------------- Others ------------------------------------------------------- */
 
 .rustex-raise {
     display: inline-flex;
     flex-direction: inherit;
+    white-space: initial;
+    bottom:var(--rustex-raise);
+    margin-top: var(--rustex-raise);
+    margin-bottom: calc(-1 * var(--rustex-raise));
+    position: relative;
 }
-.rustex-moveright {
+
+.rustex-moveleft {
     display: inline-flex;
     flex-direction: inherit;
+    white-space: initial;
+    position: relative;
+    margin-left: calc(-1 * var(--rustex-moveleft));
 }
-hr {width: 100%;}
+
 .rustex-foreign {
-    width: 100%;
-    height: 100%;
-    text-align: center;
-    justify-content: start;
-    /*align-content: center;*/
-    flex-wrap: wrap;
-    line-height: 1;
-}
-svg, foreignObject {
+    display: flex;
     overflow: visible;
+    > div {
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        justify-content: start;
+        /*align-content: center;*/
+        flex-wrap: wrap;
+        line-height: 1;
+        > * {
+            text-align: initial;
+        }
+    }
 }
-foreignObject {display: flex;}
 
-.rustex_svg {
+.rustex-svg {
     display:inline-block;
+    white-space: initial;
+    > svg {
+        overflow: visible;
+    }
 }
-
 .rustex-pdfmatrix {
     transform-origin: bottom left;
     display: inline-block;

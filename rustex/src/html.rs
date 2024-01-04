@@ -11,6 +11,7 @@ use crate::engine::{Font, SRef, Types};
 use crate::fonts::FontStore;
 use crate::shipout::{ShipoutMode, ShipoutState};
 use std::fmt::Write;
+use std::path::PathBuf;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::pdflatex::nodes::PDFColor;
 use crate::files::RusTeXFileSystem;
@@ -33,7 +34,7 @@ pub(crate) fn dim_to_string(d:Dim32) -> String {
 
 #[inline(always)]
 pub(crate) fn mudim_to_string(d:Mu) -> String {
-    format!("{:.5}",dim_to_px(d.0) / 18.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
+    format!("{:.5}",(d.0 as f64) / 18.0 / 65536.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
 }
 
 type Ref = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
@@ -60,25 +61,19 @@ impl<'a,W:Write> Write for Escaper<'a,W> {
 pub enum HTMLChild {
     Node(HTMLNode),
     Text(String),
-    VSkip(Dim32),HSkip(Dim32),
+    Comment(String),
     HRule{width:Option<Dim32>,height:Dim32,bottom:Option<Dim32>,color:PDFColor,start:SRef,end:SRef},
     VRuleS {width:Dim32,font_size:Option<Dim32>,color:PDFColor,start:SRef,end:SRef},
     VRuleC {width:Dim32,height:Dim32,depth:Option<Dim32>,color:PDFColor,start:SRef,end:SRef},
-    Comment(String)
+    Image {width:Dim32,height:Dim32,filepath:PathBuf}
     //Glyph(Glyph),Space,EscapedSpace
 }
 impl HTMLChild {
-    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,indent:usize,curr_width:Dim32,in_font:&Font,f:&mut Formatter<'_>) -> std::fmt::Result {
+    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            HTMLChild::Node(n) => n.display_fmt(store, files, indent, curr_width, in_font, f),
+            HTMLChild::Node(n) => n.display_fmt(store, files, indent, curr_width, in_font,do_refs, f),
             HTMLChild::Text(string) => f.write_str(string),
             HTMLChild::Comment(s) => f.write_str(s),
-            HTMLChild::VSkip(dim) => {
-                write!(f, "<div class=\"rustex-vskip\" style=\"margin-bottom:{};\"></div>", dim_to_string(*dim))
-            }
-            HTMLChild::HSkip(dim) => {
-                write!(f, "<div class=\"rustex-hskip\" style=\"margin-left:{};\"></div>", dim_to_string(*dim))
-            },
             HTMLChild::HRule { width, height, bottom, color, start, end } => {
                 write!(f, "<div class=\"rustex-hrule\" style=\"height:{};{}\"><div style=\"background:{};height:{};{}\" {}></div></div>",
                        dim_to_string(*height),
@@ -92,25 +87,25 @@ impl HTMLChild {
                            None => "".to_string(),
                            Some(b) => format!("margin-bottom:{};", dim_to_string(*b))
                        },
-                       SourceRange(start, end, files)
+                       SourceRange(start, end, files,do_refs)
                 )
             },
             HTMLChild::VRuleS { width, font_size, color, start, end } => {
-                write!(f,"<div class=\"rustex-vrule\" style=\"--rustex-scale-width:{};{};background:{};\" {}></div>",
-                    (width.0 as f32) / (curr_width.0 as f32),
+                write!(f,"<div class=\"rustex-vrule\" style=\"--rustex-this-width:{};{};background:{};\" {}></div>",
+                       dim_to_string(*width),
                     match font_size {
                         Some(font_size) => format!("min-height:{}",dim_to_string(*font_size)),
                         _ => "align-self:stretch".to_string()
                     },
                     color,
-                    SourceRange(start,end,files)
+                    SourceRange(start,end,files,do_refs)
                 )
             }
             HTMLChild::VRuleC { width, height, depth, color, start, end } => {
                 write!(f,
-                       "<div class=\"rustex-vrule-container\" style=\"height:{};--rustex-scale-width:{};\"><div class=\"rustex-vrule-inner\" style=\"{}background:{};\"></div></div>",
+                       "<div class=\"rustex-vrule-container\" style=\"height:{};--rustex-this-width:{};\"><div style=\"{}background:{};\"></div></div>",
                         dim_to_string(*height),
-                       (width.0 as f32) / (curr_width.0 as f32),
+                       dim_to_string(*width),
                        /*match depth {
                            None => "-0.5ex".to_string(),
                            Some(d) => dim_to_string(-*d)
@@ -122,6 +117,13 @@ impl HTMLChild {
                        color
                 )
             }
+            HTMLChild::Image { width, height, filepath } => {
+                write!(f, "<img src=\"{}\" width=\"{}\" height=\"{}\"/>",
+                       filepath.display(),
+                       dim_to_string(*width),
+                       dim_to_string(*height),
+                )
+            }
         }
     }
 }
@@ -131,7 +133,7 @@ pub struct HTMLNode {
     pub tag:HTMLTag,
     pub children:Vec<HTMLChild>,
     uses_font:bool,
-    uses_color:bool,
+    pub(crate) uses_color:bool,
     pub color:Option<PDFColor>,
     pub font:Option<(Font,bool)>, // true = absolute, false = relative
     pub width:Option<(Dim32,bool)>, // true = absolute, false = relative
@@ -144,7 +146,7 @@ pub struct HTMLNode {
 impl HTMLNode {
     pub fn reopened(&self) -> Self {
         HTMLNode {
-            tag:self.tag,
+            tag:self.tag.clone(),
             children:Vec::new(),
             uses_font:self.uses_font,
             uses_color:self.uses_color,
@@ -257,14 +259,18 @@ impl HTMLNode {
         }
     }
     pub fn push_child(&mut self,mode:ShipoutMode,ch:HTMLChild) {
-        match ch {
-            t@ HTMLChild::Text{..} => {
-                if self.font.is_none() { self.uses_font = true }
-                if self.color.is_none() { self.uses_color = true }
-                self.children.push(t);
+        if mode == ShipoutMode::SVG {
+            self.children.push(ch)
+        } else {
+            match ch {
+                t @ HTMLChild::Text { .. } => {
+                    if mode != ShipoutMode::Math && self.font.is_none() { self.uses_font = true }
+                    if self.color.is_none() { self.uses_color = true }
+                    self.children.push(t);
+                }
+                HTMLChild::Node(n) => return self.push_open_node(mode, n),
+                o => self.children.push(o)
             }
-            HTMLChild::Node(n) => return self.push_open_node(mode,n),
-            o => self.children.push(o)
         }
     }
 
@@ -282,18 +288,18 @@ impl HTMLNode {
             HTMLTag::FontChange(_) => close_font(self,mode,parent),
             HTMLTag::ColorChange(_) => close_color(self,mode,parent),
             _ if self.children.len() == 1 => match &self.children[0] {
-                HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_)) => merge_annotation(self, mode, parent),
+                HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_)|HTMLTag::Link(_))
+                => merge_annotation(self, mode, parent),
                 _ => parent.push(HTMLChild::Node(self))
             },
             _ => parent.push(HTMLChild::Node(self))
         }
     }
-    pub fn displayable<'a>(&'a self,store:&'a FontStore,files:&'a RusTeXFileSystem,width:Dim32,font:&'a Font) -> impl Display + 'a {
-        DisplayableNode {node:self,files,store,width,font}
+    pub fn displayable<'a>(&'a self,store:&'a FontStore,files:&'a RusTeXFileSystem,width:Dim32,font:&'a Font,do_refs:bool) -> impl Display + 'a {
+        DisplayableNode {node:self,files,store,width,font,do_refs}
     }
-    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,indent:usize,curr_width:Dim32,in_font:&Font,f:&mut Formatter<'_>) -> std::fmt::Result {
+    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"<{}",self.tag)?;
-
         let (widthcls,widthsstyle,wd,scaled) = if let Some((wd,abs)) = self.width {
             if wd == Dim32(0) {
                 (None,Some("max-width:0;".to_string()),curr_width,false)
@@ -350,9 +356,11 @@ impl HTMLNode {
             }
             f.write_char('"')?;
         }
-        if let Some((start,end)) = &self.sourceref {
-            f.write_char(' ')?;
-            do_sourceref(files,start,end,f)?;
+        if do_refs {
+            if let Some((start, end)) = &self.sourceref {
+                f.write_char(' ')?;
+                do_sourceref(files, start, end, f)?;
+            }
         }
         f.write_char('>')?;
         if scaled {
@@ -365,7 +373,7 @@ impl HTMLNode {
             if self.tag.allow_linebreak() {
                 do_indent(indent+2,f)?;
             }
-            c.display_fmt(store,files,indent+2,wd,font,f)?;
+            c.display_fmt(store,files,indent+2,wd,font,do_refs,f)?;
         }
         if scaled {
             f.write_str("</span>")?;
@@ -379,7 +387,18 @@ impl HTMLNode {
 
 fn merge_annotation(mut node:HTMLNode, _mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
     match node.children.pop() {
-        Some(HTMLChild::Node(n)) if matches!(n.tag,HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)) => {
+        Some(HTMLChild::Node(n))
+        if matches!(n.tag,HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)) => {
+            if n.attrs.iter().any(|(k,_)| {
+                node.attrs.contains_key(k)
+            }) {
+                node.children.push(HTMLChild::Node(n));
+                parent.push(HTMLChild::Node(node));
+                return
+            }
+            for (k,v) in n.attrs {
+                node.attrs.insert(k,v);
+            }
             if n.color.is_some() {
                 node.color = n.color;
                 node.uses_color = false;
@@ -387,6 +406,9 @@ fn merge_annotation(mut node:HTMLNode, _mode:ShipoutMode, parent:&mut Vec<HTMLCh
             if n.font.is_some() {
                 node.font = n.font;
                 node.uses_font = false;
+            }
+            for s in n.styles {
+                node.styles.insert(s.0,s.1);
             }
             node.children = n.children;
             parent.push(HTMLChild::Node(node));
@@ -460,31 +482,44 @@ struct DisplayableNode<'a> {
     files:&'a RusTeXFileSystem,
     store:&'a FontStore,
     width:Dim32,
-    font:&'a Font
+    font:&'a Font,
+    do_refs:bool
 }
 impl<'a> Display for DisplayableNode<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.node.display_fmt(self.store,self.files,0,self.width,self.font,f)
+        self.node.display_fmt(self.store,self.files,0,self.width,self.font,self.do_refs,f)
     }
 }
 
-#[derive(Debug,PartialEq,Eq,Clone,Copy)]
+#[derive(Debug,PartialEq,Eq,Clone)]
 pub enum HTMLTag {
     Page,Paragraph,
     VBoxContainer,VBoxHeight,VBox,
     VTopContainer,VTopHeight,VTop,
-    HBoxContainer,HBox,
-    FontChange(ShipoutMode),ColorChange(ShipoutMode),Link(ShipoutMode)
+    VCenterContainer,VCenter,
+    HBoxContainer,HBox,Display,Raise,MoveLeft,
+    HAlign,HBody,HRow,HCell,NoAlignH,
+    FontChange(ShipoutMode),ColorChange(ShipoutMode),Link(ShipoutMode),
+    Matrix(ShipoutMode),
+    Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,
+    MathEscape,
+    SvgWrap,SvgG(String),SvgTop,SvgForeign,EscapeSvg
 }
 impl HTMLTag {
     fn allow_linebreak(&self) -> bool {
         use HTMLTag::*;
         match self {
-            Page | VBoxContainer | VBoxHeight | VBox | VTopContainer | VTopHeight | VTop => true,
-            HBoxContainer | HBox | Paragraph => false,
-            FontChange(m) | ColorChange(m) | Link(m) => {
-                if m.is_v() { true } else { false }
-            }
+            HBoxContainer | HBox | Paragraph | Mi | Mo => false,
+            FontChange(m) | ColorChange(m) | Link(m) |
+            Matrix(m) => !m.is_h(),
+            _ => true
+        }
+    }
+    fn is_math(&self) -> bool {
+        use HTMLTag::*;
+        match self {
+            Math | MathGroup | Mo | Mi | MUnderOver | MUnder | MOver | MSubSup | MSub | MSup | MathEscape | MFrac => true,
+            _ => false
         }
     }
 }
@@ -494,8 +529,29 @@ impl Display for HTMLTag {
         match self {
             Page => f.write_str("article"),
             Paragraph | VBoxContainer | VBoxHeight | VBox | VTopContainer | VTopHeight | VTop |
-            HBoxContainer | HBox => f.write_str("div"),
-            FontChange(mode) | ColorChange(mode) => {
+            HBoxContainer | HBox | Display | Raise | MoveLeft | VCenterContainer | VCenter |
+            SvgWrap | EscapeSvg => f.write_str("div"),
+            Math => f.write_str("math"),
+            MathGroup => f.write_str("mrow"),
+            MathEscape => f.write_str("mtext"),
+            MFrac => f.write_str("mfrac"),
+            HAlign => f.write_str("table"),
+            HBody => f.write_str("tbody"),
+            HRow => f.write_str("tr"),
+            HCell => f.write_str("td"),
+            NoAlignH => f.write_str("td"),
+            SvgG(s) => f.write_str(s),
+            SvgTop => f.write_str("svg"),
+            SvgForeign => f.write_str("foreignObject"),
+            Mo => f.write_str("mo"),
+            Mi => f.write_str("mi"),
+            MUnderOver => f.write_str("munderover"),
+            MUnder => f.write_str("munder"),
+            MOver => f.write_str("mover"),
+            MSubSup => f.write_str("msubsup"),
+            MSub => f.write_str("msub"),
+            MSup => f.write_str("msup"),
+            FontChange(mode) | ColorChange(mode) | Matrix(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }
                 else { f.write_str("span") }
@@ -603,10 +659,10 @@ fn do_sourceref(files:&RusTeXFileSystem,start:&SRef,end:&SRef,f:&mut Formatter<'
     write!(f,"data-rustex-sourceref=\"{}#({};{}):({};{})\"",files.ref_str(start.file),start.line,start.column,end.line,end.column)
 }
 
-struct SourceRange<'a>(&'a SRef,&'a SRef,&'a RusTeXFileSystem);
+struct SourceRange<'a>(&'a SRef,&'a SRef,&'a RusTeXFileSystem,bool);
 impl<'a> Display for SourceRange<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        do_sourceref(self.2,self.0,self.1,f)
+        if self.3 {do_sourceref(self.2,self.0,self.1,f) } else {Ok(())}
     }
 }
 

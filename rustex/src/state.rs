@@ -39,16 +39,6 @@ impl State for RusTeXState {
     }
 
     #[inline(always)]
-    fn get_mathstyle(&self) -> MathStyle {
-        self.0.get_mathstyle()
-    }
-    #[inline(always)]
-    fn set_mathstyle(&mut self, style: MathStyle) {
-        self.0.set_mathstyle(style)
-    }
-
-
-    #[inline(always)]
     fn pop(&mut self, aux: &mut EngineAux<Self::ET>, mouth: &mut <Self::ET as EngineTypes>::Mouth) {
         self.0.pop(aux,mouth);
         let closefont = CompactToken::from_cs(

@@ -1,11 +1,11 @@
 use tex_engine::pdflatex::nodes::{NumOrName, PDFColor, PDFNode};
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::File;
-use tex_engine::tex::numerics::{Dim32, Fill, Mu, Skip, Skip32};
+use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuFill, MuSkip32, Skip, Skip32};
 use crate::engine::{Bx, Font, Refs, SRef, Types};
 use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
 use tex_engine::tex::nodes::NodeTrait;
-use tex_engine::tex::types::MathClass;
+use tex_engine::tex::types::{MathClass, MathStyleType};
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::engine::stomach::ParLineSpec;
@@ -14,7 +14,8 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
-use crate::shipout::{do_hlist, do_vlist, MNodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
+use crate::shipout::{do_hlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
+use tex_engine::tex::numerics::TeXDimen;
 
 pub(crate) trait MuAdd {
     fn merge(&mut self,sk:Dim32,f:&Font);
@@ -26,6 +27,29 @@ impl MuAdd for Mu {
         self.0 += nb;
     }
 }
+/*
+pub(crate) fn mu_to_dim(mu:Mu,f:&Font) -> Dim32 {
+    let em = f.get_dim(5);
+    Dim32(((mu.0 as f64) * (em.0 as f64) / 65536.0 / 18.0) as i32)
+}
+pub(crate) fn muskip_to_skip(ms:MuSkip32,f:&Font) -> Skip32<Dim32> {
+    let em : Dim32 = f.get_dim(5);
+    let base = em.scale_float((ms.base.0 as f64) / (65536.0 * 18.0));
+    let stretch = match ms.stretch {
+        Some(MuFill::mu(i)) => Some(Fill::pt(Dim32(i))),
+        Some(MuFill::fil(i)) => Some(Fill::fil(i)),
+        Some(MuFill::fill(i)) => Some(Fill::fill(i)),
+        None => None
+    };
+    let shrink = match ms.shrink {
+        Some(MuFill::mu(i)) => Some(Fill::pt(Dim32(i))),
+        Some(MuFill::fil(i)) => Some(Fill::fil(i)),
+        Some(MuFill::fill(i)) => Some(Fill::fill(i)),
+        None => None
+    };
+    Skip32 { base,stretch,shrink }
+}
+ */
 
 pub(crate) trait SkipAdd {
     fn merge(&mut self,sk:Skip32<Dim32>);
@@ -70,34 +94,33 @@ impl Alignment {
     }
 }
 
+fn align_i(n:HNode<Types>,remove_space:bool,skip:&mut Skip32<Dim32>,v:Option<&mut Vec<HNode<Types>>>,rep:&mut Vec<HNode<Types>>) -> bool {
+    match n {
+        HNode::HKern(n) => skip.base = skip.base + n,
+        HNode::HSkip(sk) => skip.merge(sk),
+        HNode::HFil | HNode::Hss => skip.set_fil(),
+        HNode::HFill => skip.set_fill(),
+        HNode::Penalty(_) | HNode::Mark(..) => (),
+        HNode::Space if remove_space => (),
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest {..} | PDFNode::Color(..)) | RusTeXNode::FontChange(..) | RusTeXNode::FontChangeEnd) | HNode::Space => rep.push(n),
+        _ => {
+            match v {
+                Some(v) => v.push(n),
+                _ => rep.push(n)
+            }
+            return true
+        }
+    }
+    false
+}
 pub(crate) fn alignment(mut v:Vec<HNode<Types>>) -> (Alignment, Vec<HNode<Types>>) {
     let (mut left,mut right) = (ZERO_SKIP,ZERO_SKIP);
     let mut repush = Vec::new();
-    while let Some(n) = v.pop() {
-        match n {
-            HNode::HKern(n) => right.base = right.base + n,
-            HNode::HSkip(sk) => right.merge(sk),
-            HNode::HFil | HNode::Hss => right.set_fil(),
-            HNode::HFill => right.set_fill(),
-            HNode::Penalty(_) | HNode::Mark(..) => (),
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest {..})) => repush.push(n),
-            _ => {v.push(n);break}
-        }
-    }
+    while let Some(n) = v.pop() { if align_i(n,true,&mut right,Some(&mut v),&mut repush) {break} }
     v.extend(repush.into_iter().rev());
     let mut nv = vec!();
     let mut it = v.into_iter();
-    while let Some(n) = it.next() {
-        match n {
-            HNode::HKern(n) => left.base = left.base + n,
-            HNode::HSkip(sk) => left.merge(sk),
-            HNode::HFil | HNode::Hss => left.set_fil(),
-            HNode::HFill => left.set_fill(),
-            HNode::Penalty(_) | HNode::Mark(..) => (),
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest {..})) => nv.push(n),
-            _ => {nv.push(n);break}
-        }
-    }
+    while let Some(n) = it.next() { if align_i(n,false,&mut left,None,&mut nv) {break} }
     if left.base != Dim32(0) {
         nv.insert(0,HNode::HKern(left.base))
     }
@@ -140,18 +163,48 @@ fn get_box_dims(bx: &Bx,state:&ShipoutState,scale:fn(&Bx) -> Dim32) -> (Option<D
     (wd,ht,bottom,to)
 }
 
+pub(crate) fn class_from_mathclass(cls:MathClass,cramped:bool) -> &'static str {
+    use MathClass::*;
+    if cramped { return "rustex-math-cramped" }
+    match cls {
+        Ord => "rustex-math-ord",
+        Op => "rustex-math-op",
+        Bin => "rustex-math-bin",
+        Rel => "rustex-math-rel",
+        Open => "rustex-math-open",
+        Close => "rustex-math-close",
+        Punct => "rustex-math-punct",
+    }
+}
+pub(crate) fn node_from_class(cls:MathClass,cramped:bool) -> HTMLNode {
+    use MathClass::*;
+    match cls {
+        Ord => HTMLNode::new(HTMLTag::Mi),
+        o => {
+            let mut node = HTMLNode::new(HTMLTag::Mo);
+            node.attrs.insert("stretchy".into(), "false".into());
+            node.classes.push(class_from_mathclass(o,cramped).into());
+            node
+        }
+    }
+}
+
+pub(crate) fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,f:F) {
+    let node = HTMLNode::new(HTMLTag::MathGroup);
+    let mut node = state.do_in_and(node, None,|state| f(state));
+    if node.children.len() == 1 {
+        if let Some(HTMLChild::Node(n)) = node.children.pop() {
+            state.push(n)
+        } else {unreachable!()}
+    }
+    else {
+        state.push(node)
+    }
+}
+
 // ----------------------------------------------------------------------------------------
 
-pub(crate) fn vskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
-    if skip == ZERO_SKIP { return }
-    state.push_child(HTMLChild::VSkip(skip.base))
-}
-pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
-    if skip == ZERO_SKIP { return }
-    state.push_child(HTMLChild::HSkip(skip.base))
-}
-
-pub(crate) fn do_missing_glyph(char:u8,font:&Font,state:&mut ShipoutState) {
+pub(crate) fn do_missing_glyph(state:&mut ShipoutState,char:u8,font:&Font) {
     let s = match state.mode() {
         ShipoutMode::H{..} | ShipoutMode::Par => "span",
         ShipoutMode::Math => "mtext",
@@ -164,7 +217,7 @@ pub(crate) fn do_missing_glyph(char:u8,font:&Font,state:&mut ShipoutState) {
 
 pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VNodes,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip,parskip:Option<Skip32<Dim32>>) {
     if let Some(parskip) = parskip {
-        state.push_child(HTMLChild::VSkip(parskip.base));
+        state.push_comment(format!("<div class=\"rustex-vskip\", style=\"margin-bottom:{};\"></div>",dim_to_string(parskip.base)))
     }
     let spec = spec.pop().unwrap();
     let align: Alignment = Alignment::from(spec.leftskip,spec.rightskip);
@@ -184,8 +237,7 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VN
 
     let children = paragraph_list(children);
 
-    state.do_in(
-        HTMLNode::paragraph(start,end,spec.target),
+    state.do_in(node,
         Some(ShipoutMode::Par),|state| {
             state.widths.push(spec.target);
             state.lineskip.push(lineskip);
@@ -198,20 +250,30 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VN
 
 pub(crate) fn paragraph_list(children:&mut VNodes) -> Vec<HNode<Types>> {
     let mut success = false;
+    let mut emergency_break= false;
     let mut ret = vec!();
     let mut later = vec!();
     while let Some(c) = children.next() {
         match c {
+            VNode::Custom(RusTeXNode::ParagraphEnd) if ret.is_empty() => {
+                emergency_break = true
+            }
             VNode::Custom(RusTeXNode::ParagraphEnd) => {
                 success = true;
                 break;
             }
             VNode::Box(TeXBox::H { info: HBoxInfo::ParLine { .. },children,..}) => ret.extend(children.into_vec().into_iter()),
+            VNode::Box(TeXBox::H { info: HBoxInfo::HBox { moved_left:None,raised:None,.. },children,..}) if emergency_break => ret.extend(children.into_vec().into_iter()),
             VNode::VSkip(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss | VNode::Mark(..) | VNode::VKern(_) => (),
+            _ if emergency_break => {
+                later.push(c);
+                success = true;
+                break
+            },
             _ => later.push(c),
         }
     }
-    if !success { todo!("ERROR!") }
+    if !success && !emergency_break { todo!("ERROR!") }
     children.prefix(later);
     ret
 }
@@ -330,6 +392,18 @@ fn vtop_inner(state:&mut ShipoutState, engine:Refs, to:Option<Dim32>, children:V
     })
 }
 
+pub(crate) fn do_vcenter(state:&mut ShipoutState, engine:Refs,start:SRef,end:SRef,children:Box<[VNode<Types>]>) {
+    let mut node = HTMLNode::new(HTMLTag::VCenterContainer);
+    node.sourceref = Some((start,end));
+    node.classes.push("rustex-vcenter-container".into());
+    state.do_in(node,None,|state| {
+        let node = HTMLNode::new(HTMLTag::VCenter);
+        state.do_in(node,Some(ShipoutMode::V),|state| {
+            do_vlist(engine,state,&mut children.into_vec().into(),false);
+        })
+    })
+}
+
 pub(crate) fn do_hbox(state:&mut ShipoutState, engine:Refs, bx:Bx) {
     let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.width());
     let (children,start,end) = if let TeXBox::H {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
@@ -375,6 +449,302 @@ fn hbox_inner(state:&mut ShipoutState, engine:Refs,to:Option<Dim32>, children:Ve
     })
 }
 
+pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types,MathFontStyle<Types>>) {
+    match bx.display {
+        Some((pre,post)) => {
+            let mut node = HTMLNode::new(HTMLTag::Display);
+            if pre.base != Dim32(0) {
+                node.styles.insert("margin-top".into(),dim_to_string(pre.base).into());
+            }
+            if post.base != Dim32(0) {
+                node.styles.insert("margin-bottom".into(),dim_to_string(post.base).into());
+            }
+            node.classes.push("rustex-display".into());
+            state.do_in(node,None,|state| {
+                math_inner(state,engine,bx)
+            })
+        }
+        None => math_inner(state,engine,bx)
+    }
+}
+fn math_inner(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types,MathFontStyle<Types>>) {
+    let mut node = HTMLNode::new(HTMLTag::Math);
+    node.classes.push("rustex-math".into());
+    node.sourceref = Some((bx.start,bx.end));
+    state.do_in(node,Some(ShipoutMode::Math),|state| {
+        let node = HTMLNode::new(HTMLTag::MathGroup);
+        state.do_in(node,None,|state| {
+            let children = bx.children.into_vec();
+            super::do_mathlist(engine,state,&mut children.into());
+        });
+    })
+}
+
+pub(crate) fn math_escape<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut ShipoutState,width:Dim32,height:Dim32,mode:ShipoutMode,f:F) {
+    let mut node = HTMLNode::new(HTMLTag::MathEscape);
+    node.classes.push("rustex-math-escape".into());
+    node.width = Some((width,true));
+    //node.styles.insert("height".into(),dim_to_string(height).into());
+    node.font = Some((state.fonts.last().unwrap().clone(),true));
+    state.do_in(node,Some(mode),|state| f(engine,state))
+}
+
+pub(crate) fn box_in_math(engine:Refs,state:&mut ShipoutState,bx:Bx) {
+    let mode = match &bx {
+        TeXBox::H { .. } => ShipoutMode::V,
+        _ => ShipoutMode::H { escape: false }
+    };
+    let wd = bx.width();
+    let ht = bx.height() + bx.depth();
+    math_escape(engine,state,wd,ht,mode,move |engine,state| {
+        match &bx {
+            TeXBox::H {..} => {
+                let ls = vec!(VNode::Box(bx));
+                do_vlist(engine,state,&mut ls.into(),true);
+            }
+            _ => {
+                let ls = vec!(HNode::Box(bx));
+                do_hlist(engine,state,&mut ls.into());
+            }
+        }
+    })
+}
+
+pub(crate) fn do_sub_sup(engine:Refs, state:&mut ShipoutState,a: MathAtom<Types,MathFontStyle<Types>>) {
+    match (a.nucleus,a.sub,a.sup) {
+        (n@MathNucleus::Simple{limits:Some(true),..},Some(sub),Some(sup)) => {
+            let mut node = HTMLNode::new(HTMLTag::MUnderOver);
+            node.attrs.insert("displaystyle".into(),"true".into());
+            state.do_in(node,None,|state| {
+                wrap(state,|state| do_nucleus(engine,state,n));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+            })
+        }
+        (n,Some(sub),Some(sup)) => {
+            let node = HTMLNode::new(HTMLTag::MSubSup);
+            state.do_in(node,None,|state| {
+                wrap(state,|state| do_nucleus(engine,state,n));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+            })
+        }
+        (n@MathNucleus::Simple{limits:Some(true),..},Some(sub),_) => {
+            let mut node = HTMLNode::new(HTMLTag::MUnder);
+            node.attrs.insert("displaystyle".into(),"true".into());
+            state.do_in(node,None,|state| {
+                wrap(state,|state| do_nucleus(engine,state,n));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
+            })
+        }
+        (n@MathNucleus::Simple{limits:Some(true),..},_,Some(sup)) => {
+            let mut node = HTMLNode::new(HTMLTag::MOver);
+            node.attrs.insert("displaystyle".into(),"true".into());
+            state.do_in(node,None,|state| {
+                wrap(state,|state| do_nucleus(engine,state,n));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+            })
+        }
+        (n,Some(sub),_) => {
+            let node = HTMLNode::new(HTMLTag::MSub);
+            state.do_in(node,None,|state| {
+                wrap(state,|state| do_nucleus(engine,state,n));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
+            })
+        }
+        (n,_,Some(sup)) => {
+            let node = HTMLNode::new(HTMLTag::MSup);
+            state.do_in(node,None,|state| {
+                wrap(state,|state| do_nucleus(engine,state,n));
+                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+            })
+        }
+        _ => unreachable!()
+    };
+}
+
+pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types,MathFontStyle<Types>>) {
+    use tex_tfm::fontstyles::FontModifiable;
+    match n {
+        MathNucleus::Simple{kernel:MathKernel::Char {char,style:MathFontStyle{font,cramped,..}},cls,..} => {
+            state.in_content = true;
+            let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
+            let glyph = glyphtable.get(char);
+            if !glyph.is_defined() {
+                do_missing_glyph(state,char,&font);
+            }
+            let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
+                Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
+                _ => None
+            };
+            let mut node = node_from_class(cls,cramped);
+            if let Some(m) = modifiers {
+                node.push_string(glyph.to_string().apply(m).to_string(),ShipoutMode::Math,true);
+            } else {
+                node.push_glyph(ShipoutMode::Math,glyph)
+            }
+            state.push(node)
+        }
+        MathNucleus::Simple{kernel:MathKernel::List {children,start,end},cls,..} => {
+            let mut node = HTMLNode::new(HTMLTag::MathGroup);
+            node.classes.push(class_from_mathclass(cls,false).into());
+            node.sourceref = Some((start,end));
+            let mut node = state.do_in_and(node,None,|state| {
+                super::do_mathlist(engine,state,&mut children.into_vec().into())
+            });
+            if node.children.len() == 1 && matches!(node.children.first(),Some(HTMLChild::Node(_))) {
+                if let Some(HTMLChild::Node(mut nc)) = node.children.pop() {
+                    if nc.tag == HTMLTag::Mo {
+                        for c in node.classes {
+                            if !nc.classes.contains(&c) {
+                                nc.classes.push(c)
+                            }
+                        }
+                        state.push(nc)
+                    } else {
+                        node.children.push(HTMLChild::Node(nc));
+                        state.push(node)
+                    }
+                } else {unreachable!()}
+            } else { state.push(node) }
+        }
+        MathNucleus::Simple {kernel:MathKernel::Empty,..} | MathNucleus::Inner(MathKernel::Empty) => (),
+        MathNucleus::Inner(MathKernel::List{children,..}) => {
+            let children = children.into_vec();
+            super::do_mathlist(engine, state, &mut children.into())
+        }
+        o => todo!(" {:?}",o)
+    }
+}
+
+pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState, char:u8, cls:MathClass, font:Font) -> HTMLNode {
+    use tex_tfm::fontstyles::FontModifiable;
+    state.in_content = true;
+    let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
+    let glyph = glyphtable.get(char);
+    if !glyph.is_defined() {
+        do_missing_glyph(state,char,&font);
+    }
+    let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
+        Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
+        _ => None
+    };
+    let mut node = node_from_class(cls,false);
+    if let Some(m) = modifiers {
+        node.push_string(glyph.to_string().apply(m).to_string(),ShipoutMode::Math,true);
+    } else {
+        node.push_glyph(ShipoutMode::Math,glyph)
+    }
+    node
+}
+pub(crate) fn merge_mathchar(engine:Refs, state:&mut ShipoutState, current_class: &mut Option<(MathClass,bool, HTMLNode)>, char:u8, cls:MathClass, font:Font, cramped:bool) {
+    use tex_tfm::fontstyles::FontModifiable;
+    state.in_content = true;
+    let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
+    let glyph = glyphtable.get(char);
+    if !glyph.is_defined() {
+        do_missing_glyph(state,char,&font);
+    }
+    let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
+        Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
+        _ => None
+    };
+    match current_class {
+        Some((mc2,cr,ref mut node)) if *mc2 == cls && *cr==cramped => {
+            if let Some(m) = modifiers {
+                node.push_string(glyph.to_string().apply(m).to_string(),ShipoutMode::Math,true);
+            } else {
+                node.push_glyph(ShipoutMode::Math,glyph)
+            }
+        },
+        Some((ref mut c,cr,ref mut n)) => {
+            *c = cls;
+            *cr = cramped;
+            let mut node = node_from_class(cls, cramped);
+            if let Some(m) = modifiers {
+                node.push_string(glyph.to_string().apply(m).to_string(),ShipoutMode::Math,true);
+            } else {
+                node.push_glyph(ShipoutMode::Math,glyph)
+            }
+            let old = std::mem::replace(n,node);
+            state.push(old)
+        }
+        r@None => {
+            let mut node = node_from_class(cls, cramped);
+            if let Some(m) = modifiers {
+                node.push_string(glyph.to_string().apply(m).to_string(),ShipoutMode::Math,true);
+            } else {
+                node.push_glyph(ShipoutMode::Math,glyph)
+            }
+            *r = Some((cls, cramped, node))
+        }
+    }
+}
+
+pub(crate) fn do_over(state:&mut ShipoutState,engine:Refs,top:Box<[MNode]>,bottom:Box<[MNode]>,sep:Option<Dim32>,left:Option<(u8,MathFontStyle<Types>)>,right:Option<(u8,MathFontStyle<Types>)>,start:SRef,end:SRef) {
+    if let Some((c,s)) = left {
+        let mut node = do_mathchar(engine, state, c, MathClass::Open, s.font);
+        node.attrs.insert("stretchy".into(),"true".into());
+        state.push(node);
+    };
+    let mut node = HTMLNode::new(HTMLTag::MFrac);
+    node.sourceref = Some((start,end));
+    node.classes.push("rustex-math-over".into());
+    match sep {
+        Some(Dim32(0))|None => (),
+        Some(d) => {node.attrs.insert("linethickness".into(),dim_to_string(d).into());}
+    }
+    state.do_in(node,None,|state| {
+        wrap(state,|state| super::do_mathlist(engine,state,&mut top.into_vec().into()));
+        wrap(state,|state| super::do_mathlist(engine,state,&mut bottom.into_vec().into()));
+    });
+    if let Some((c,s)) = right {
+        let mut node = do_mathchar(engine, state, c, MathClass::Close, s.font);
+        node.attrs.insert("stretchy".into(),"true".into());
+        state.push(node);
+    };
+}
+
+
+pub(crate) fn do_raise<F:FnOnce(Bx,&mut ShipoutState)>(state:&mut ShipoutState,mut bx:Bx, f:F) {
+    let d = match bx {
+        TeXBox::H {info: HBoxInfo::HBox { ref mut raised, .. },..} => std::mem::take(raised).unwrap(),
+        TeXBox::V{ info: VBoxInfo::VBox { ref mut raised, .. },..} => std::mem::take(raised).unwrap(),
+        TeXBox::V{ info: VBoxInfo::VTop { ref mut raised, .. },..} => std::mem::take(raised).unwrap(),
+        _ => unreachable!()
+    };
+    let mut node = HTMLNode::new(HTMLTag::Raise);
+    node.classes.push("rustex-raise".into());
+    node.styles.insert("--rustex-raise".into(),dim_to_string(d).into());
+    /*if v {
+        node.style_str("flex-direction","column")
+    } else {
+        node.style_str("flex-direction","row")
+    }*/
+    state.do_in(node,None,|state| {
+        f(bx, state)
+    })
+}
+
+pub(crate) fn do_moveleft<F:FnOnce(Bx,&mut ShipoutState)>(state:&mut ShipoutState,mut bx:Bx, f:F) {
+    let d = match bx {
+        TeXBox::H {info: HBoxInfo::HBox { ref mut moved_left, .. },..} => std::mem::take(moved_left).unwrap(),
+        TeXBox::V{ info: VBoxInfo::VBox { ref mut moved_left, .. },..} => std::mem::take(moved_left).unwrap(),
+        TeXBox::V{ info: VBoxInfo::VTop { ref mut moved_left, .. },..} => std::mem::take(moved_left).unwrap(),
+        _ => unreachable!()
+    };
+    let mut node = HTMLNode::new(HTMLTag::MoveLeft);
+    node.classes.push("rustex-moveleft".into());
+    /*if v {
+        node.style_str("flex-direction","column")
+    } else {
+        node.style_str("flex-direction","row")
+    }*/
+    node.styles.insert("--rustex-moveleft".into(),dim_to_string(d).into());
+    state.do_in(node,None,|state| {
+        f(bx, state)
+    })
+}
 
 pub(crate) fn hrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Option<Dim32>, height:Dim32, depth:Dim32) {
     let ht = height + depth;
@@ -400,333 +770,6 @@ pub(crate) fn vrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Dim32, h
             state.push_child(HTMLChild::VRuleC {width,height:ht,depth:dp,start,end,color:*state.colors.last().unwrap()});
         }
     }
-    /*
-    let mut node = HTMLNode::new(VRULE_INNER, false);
-    node.sourceref(start, end);
-    node.style("background",color);
-    // height things
-    // TODO maybe relativize;
-    if ht == ZERO {
-        node.style("width", dim_to_string(width));
-        node.style("min-width", dim_to_string(width));
-        if par {
-            todo!()
-        } else { node.style_str("align-self","stretch") }
-        state.push(node,false,false)
-    } else {
-        let mut cont = HTMLNode::new(VRULE_CONTAINER, false);
-        cont.style("width", dim_to_string(width));
-        cont.style("min-width", dim_to_string(width));
-        node.style_str("vertical-align","baseline");
-        node.style_str("width","100%");
-        cont.style("height",dim_to_string(ht));
-        if par && depth == ZERO {
-            node.style_str("margin-bottom","-0.5ex");
-            node.style("height",format!("calc(0.5ex + {})",dim_to_string(ht)));
-        } else {
-            node.style("height",dim_to_string(ht));
-            node.style("margin-bottom",dim_to_string(-depth));
-        }
-        cont.push_node(node);
-        state.push(cont,false,false);
-    }
-
-     */
-}
-
-/*
-
-use crate::html::labels::*;
-use crate::shipout::annotations::close_all;
-
-
-pub(crate) fn do_vcenter(start:SRef,end:SRef,children:Box<[VNode<Types>]>, state:&mut ShipoutState, engine:Refs) {
-    let mut node = HTMLNode::new(VCENTER_CONTAINER, true);
-    /*let do_wd = if bx.width() == ZERO {
-        node.width(ZERO);
-        true
-    } else { false };*/
-    state.do_in(node,|state| {
-        let mut node = HTMLNode::new(VCENTER_INNER, true);
-        /*if do_wd {
-            node.style_str("width", "100%");
-        }*/
-        state.do_in(node,|state| {
-            do_vlist(engine,state,&mut children.into_vec().into(),false);
-        },|_,node| if node.label == VCENTER_INNER {Some(node)} else {
-            todo!()
-        })
-    },|_,node| if node.label == VCENTER_CONTAINER {Some(node)} else {
-        todo!()
-    })
-}
-
-pub(crate) fn do_math(mut bx:MathGroup<Types,MathFontStyle<Types>>, state:&mut ShipoutState, engine:Refs) {
-    if bx.display {
-        todo!()
-    } else {
-        let mut node = HTMLNode::new(MATH, true);
-        node.sourceref(bx.start,bx.end);
-        state.do_in(node,|state| {
-            let node = HTMLNode::new(MATH_ROW, true);
-            state.do_in(node,|state| {
-                super::do_mathlist(engine,state,&mut bx.children.into_vec().into());
-            },|_,node| if node.label == MATH_ROW {Some(node)} else {
-                todo!()
-            });
-        },|_,node| if node.label == MATH {Some(node)} else {
-            todo!()
-        })
-
-    }
-}
-
-pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
-    let mut node = HTMLNode::new(DEST, false);
-    let target = match id {
-        NumOrName::Num(n) => format!("NUM_{}",n),
-        NumOrName::Name(n) => n
-    };
-    node.attr("name",target.clone());
-    node.attr("id",target);
-    state.push(node,false,false);
-}
-
-pub(crate) fn do_raise<F:FnOnce(Bx,&mut ShipoutState)>(mut bx:Bx, state:&mut ShipoutState,inv:bool, f:F) {
-    let (d,v) = match bx {
-        TeXBox::H {info: HBoxInfo::HBox { ref mut raised, .. },..} => (std::mem::take(raised).unwrap(),false),
-        TeXBox::V{ info: VBoxInfo::VBox { ref mut raised, .. },..} => (std::mem::take(raised).unwrap(),true),
-        TeXBox::V{ info: VBoxInfo::VTop { ref mut raised, .. },..} => (std::mem::take(raised).unwrap(),true),
-        _ => unreachable!()
-    };
-    let mut node = HTMLNode::new(RAISE, inv);
-    node.style("bottom",dim_to_string(d));
-    if v {
-        node.style_str("flex-direction","column")
-    } else {
-        node.style_str("flex-direction","row")
-    }
-    state.do_in(node,|state| {
-        f(bx, state)
-    },|_,node| if node.label == RAISE {Some(node)} else {
-        todo!()
-    })
-}
-
-pub(crate) fn do_moveleft<F:FnOnce(Bx,&mut ShipoutState)>(mut bx:Bx, state:&mut ShipoutState,inv:bool, f:F) {
-    let (d,v) = match bx {
-        TeXBox::H {info: HBoxInfo::HBox { ref mut moved_left, .. },..} => (std::mem::take(moved_left).unwrap(),false),
-        TeXBox::V{ info: VBoxInfo::VBox { ref mut moved_left, .. },..} => (std::mem::take(moved_left).unwrap(),true),
-        TeXBox::V{ info: VBoxInfo::VTop { ref mut moved_left, .. },..} => (std::mem::take(moved_left).unwrap(),true),
-        _ => unreachable!()
-    };
-    let mut node = HTMLNode::new(MOVE_RIGHT, inv);
-    if v {
-        node.style_str("flex-direction","column")
-    } else {
-        node.style_str("flex-direction","row")
-    }
-    node.style("margin-left",dim_to_string(-d));
-    state.do_in(node,|state| {
-        f(bx, state)
-    },|_,node| Some(node))
-}
-
-
-pub(crate) fn hskip(state:&mut ShipoutState, skip:Skip32<Dim32>) {
-    if skip == ZERO_SKIP { return }
-    let mut node = HTMLNode::new(HSKIP, false);
-    node.style("margin-left",dim_to_string(skip.base));
-    match skip.stretch {
-        Some(Fill::fil(_)) => {
-            node.style_str("margin-right","auto");
-            state.push(node,false,false)
-        }
-        Some(Fill::fill(_)) => {
-            node.style_str("margin-right","auto");
-            state.push(node,false,false);
-            let mut node = HTMLNode::new(HSKIP, false);
-            node.style_str("margin-right","auto");
-            state.push(node,false,false);
-        }
-        _ => state.push(node,false,false)
-    }
-}
-
-pub(crate) fn mskip(state:&mut ShipoutState, mskip:Mu) {
-    if mskip == ZERO_MATH { return }
-    let mut node = HTMLNode::new(MSKIP, true);
-    node.attr("width",mudim_to_string(mskip));
-    state.push(node,true,false)
-}
-
-pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState,current_class: &mut Option<(MathClass,HTMLNode)>,char:u8,cls:MathClass,font:Font) {
-    use tex_tfm::fontstyles::FontModifiable;
-    state.in_content = true;
-    let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
-    let glyph = glyphtable.get(char);
-    if !glyph.is_defined() {
-        do_missing_glyph(char,&font,state,true,false);
-    }
-    let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
-        Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
-        _ => None
-    };
-    match current_class {
-        Some((mc2,ref mut node)) if *mc2 == cls => {
-            if let Some(m) = modifiers {
-                node.push_text(glyph.to_string().apply(m).to_string());
-            } else {
-                node.push_glyph(glyph)
-            }
-        },
-        Some((ref mut c,ref mut n)) => {
-            *c = cls;
-            let mut node = node_from_class(cls);
-            if let Some(m) = modifiers {
-                node.push_text(glyph.to_string().apply(m).to_string());
-            } else {
-                node.push_glyph(glyph)
-            }
-            let old = std::mem::replace(n,node);
-            state.push(old,true,false)
-        }
-        r@None => {
-            let mut node = node_from_class(cls);
-            if let Some(m) = modifiers {
-                node.push_text(glyph.to_string().apply(m).to_string());
-            } else {
-                node.push_glyph(glyph)
-            }
-            *r = Some((cls,node))
-        }
-    }
-}
-
-
-fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,f:F) {
-    let node = HTMLNode::default();
-    state.do_in(node,|state| {
-        f(state)
-    },|_,mut node| if node.label == DUMMY {
-        if node.children.len() == 1 {
-            if let Some(HTMLChild::Node(n)) = node.children.pop() {
-                Some(n)
-            } else {unreachable!()}
-        } else {Some(node)}
-    } else {
-        todo!()
-    })
-}
-pub(crate) fn do_sub_sup(engine:Refs, state:&mut ShipoutState,a: MathAtom<Types,MathFontStyle<Types>>) {
-    match (a.nucleus,a.sub,a.sup) {
-        (n@MathNucleus::Simple{limits:Some(true),..},Some(sub),Some(sup)) => {
-            let node = HTMLNode::new(MUNDEROVER, true);
-            state.do_in(node,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
-            },|_,node| if node.label == MUNDEROVER {Some(node)} else {
-                todo!()
-            })
-        }
-        (n,Some(sub),Some(sup)) => {
-            let node = HTMLNode::new(MSUBSUP, true);
-            state.do_in(node,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
-            },|_,node| if node.label == MSUBSUP {Some(node)} else {
-                todo!()
-            })
-        }
-        (n@MathNucleus::Simple{limits:Some(true),..},Some(sub),_) => {
-            let node = HTMLNode::new(MUNDER, true);
-            state.do_in(node,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
-            },|_,node| if node.label == MUNDER {Some(node)} else {
-                todo!()
-            })
-        }
-        (n@MathNucleus::Simple{limits:Some(true),..},_,Some(sup)) => {
-            let node = HTMLNode::new(MOVER, true);
-            state.do_in(node,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
-            },|_,node| if node.label == MOVER {Some(node)} else {
-                todo!()
-            })
-        }
-        (n,Some(sub),_) => {
-            let node = HTMLNode::new(MSUB, true);
-            state.do_in(node,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
-            },|_,node| if node.label == MSUB {Some(node)} else {
-                todo!()
-            })
-        }
-        (n,_,Some(sup)) => {
-            let node = HTMLNode::new(MSUP, true);
-            state.do_in(node,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
-            },|_,node| if node.label == MSUP {Some(node)} else {
-                todo!()
-            })
-        }
-        _ => unreachable!()
-    };
-}
-
-pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types,MathFontStyle<Types>>) {
-    use tex_tfm::fontstyles::FontModifiable;
-    match n {
-        MathNucleus::Simple{kernel:MathKernel::Char {char,style:MathFontStyle{font,..}},cls,..} => {
-            state.in_content = true;
-            let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
-            let glyph = glyphtable.get(char);
-            if !glyph.is_defined() {
-                do_missing_glyph(char,&font,state,true,false);
-            }
-            let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
-                Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
-                _ => None
-            };
-            let mut node = node_from_class(cls);
-            if let Some(m) = modifiers {
-                node.push_text(glyph.to_string().apply(m).to_string());
-            } else {
-                node.push_glyph(glyph)
-            }
-            state.push(node,true,false)
-        }
-        MathNucleus::Simple {kernel:MathKernel::Empty,..} | MathNucleus::Inner(MathKernel::Empty) => (),
-        MathNucleus::Inner(MathKernel::List{children,..}) =>
-            super::do_mathlist(engine,state,&mut children.into_vec().into()),
-        o => todo!(" {:?}",o)
-    }
-}
-
-pub(crate) fn box_in_math(engine:Refs,state:&mut ShipoutState,mut bx:Bx) {
-    let mut node = HTMLNode::new(MATH_ESCAPE, true);
-    node.set_font(state.fonts.last().unwrap().clone());
-    node.force_font = true;
-    state.do_in(node,|state| {
-        match &bx {
-            TeXBox::H {..} => {
-                let ls = vec!(VNode::Box(bx));
-                do_vlist(engine,state,&mut ls.into(),false);
-            }
-            _ => {
-                let ls = vec!(HNode::Box(bx));
-                do_hlist(engine,state,&mut ls.into(),false,false);
-            }
-        }
-    },|_,node| if node.label == MATH_ESCAPE {Some(node)} else {
-        todo!()
-    })
 }
 
 enum RowOrNoAlign {
@@ -755,76 +798,134 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
             _ => noalign.push(row)
         }
     }
-    let mut node = HTMLNode::new(HALIGN, true);
-    node.style("grid-template-columns",format!("repeat({},1fr)",num_cols));
-    state.do_in(node,|state| {
-        for row in rows {
-            match row {
-                RowOrNoAlign::Row(children,.. ) => {
-                    let mut cols = 0;
-                    let node = HTMLNode::new(HALIGN_ROW, true);
-                    state.do_in(node,|state| {
-                        for c in children {
-                            cols += 1;
-                            match c {
-                                HNode::Box(bx@ TeXBox::H { info: HBoxInfo::HAlignCell {.. },.. }) => {
-                                    let node = HTMLNode::new(HALIGN_CELL, true);
-                                    state.do_in(node,|state| {
-                                        // TODO do moar smart stuff
-                                        do_hbox(bx,state,engine,false,false)
-                                    },|_,node| if node.label == HALIGN_CELL {Some(node)} else {
-                                        todo!()
-                                    })
+    let mut node = HTMLNode::new(HTMLTag::HAlign);
+    node.styles.insert("--rustex-align-num".into(),num_cols.to_string().into());
+    node.classes.push("rustex-halign".into());
+    state.do_in(node,None,|state| {
+        state.do_in(HTMLNode::new(HTMLTag::HBody),Some(ShipoutMode::V), |state| {
+            for row in rows {
+                match row {
+                    RowOrNoAlign::Row(children,.. ) => {
+                        let mut cols = 0;
+                        let node = HTMLNode::new(HTMLTag::HRow);
+                        state.do_in(node,None,|state| {
+                            for c in children {
+                                cols += 1;
+                                match c {
+                                    HNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell {.. },children,start,end,.. }) => {
+                                        let mut node = HTMLNode::new(HTMLTag::HCell);
+                                        node.sourceref = Some((start,end));
+                                        node.classes.push("rustex-halign-cell".into());
+                                        let (a,v) = align_cell(children.into_vec());
+                                        state.do_in(node,None,|state| {
+                                            let mut node = HTMLNode::new(HTMLTag::HBox);
+                                            node.classes.push("rustex-hbox".into());
+                                            match a {
+                                                Alignment::L => {
+                                                    node.styles.insert("justify-content".into(),"start".into());
+                                                },
+                                                Alignment::R => {
+                                                    node.styles.insert("justify-content".into(),"end".into());
+                                                },
+                                                Alignment::C => {
+                                                    node.styles.insert("justify-content".into(),"center".into());
+                                                },
+                                                _ => (),
+                                            };
+                                            state.do_in(node,Some(ShipoutMode::H {escape:false}),|state| {
+                                                do_hlist(engine,state,&mut v.into());
+                                            })
+                                        })
+                                    }
+                                    _ => todo!()
                                 }
-                                _ => todo!()
                             }
-                        }
-                        for _ in cols..num_cols {
-                            state.push(HTMLNode::new(HALIGN_CELL, true),false,false)
-                        }
-                    },|_,node| if node.label == HALIGN_ROW {Some(node)} else {
-                        todo!()
-                    })
-                }
-                RowOrNoAlign::NoAlign(v) => {
-                    let mut node = HTMLNode::new(NOALIGN_H, true);
-                    node.style("grid-column",format!("span {}",num_cols));
-                    state.do_in(node,|state| {
-                        do_vlist(engine,state,&mut v.into(),false)
-                    },|_,node| if node.label == NOALIGN_H {Some(node)} else {
-                        todo!()
-                    })
+                            for _ in cols..num_cols {
+                                let mut node = HTMLNode::new(HTMLTag::HCell);
+                                node.classes.push("rustex-halign-cell".into());
+                                state.push(node)
+                            }
+                        })
+                    }
+                    RowOrNoAlign::NoAlign(v) => {
+                        let node = HTMLNode::new(HTMLTag::HRow);
+                        state.do_in(node,None,|state|{
+                            let mut node = HTMLNode::new(HTMLTag::NoAlignH);
+                            node.classes.push("rustex-noalign".into());
+                            state.do_in(node,None,|state| {
+                                do_vlist(engine,state,&mut v.into(),false)
+                            })
+                        })
+                    }
                 }
             }
-        }
-    },|_,node| if node.label == HALIGN {Some(node)} else {
-        todo!()
+        })
     })
 }
 
+fn align_cell(mut v:Vec<HNode<Types>>) -> (Alignment, Vec<HNode<Types>>) {
+    let (mut left,mut right) = (ZERO_SKIP,ZERO_SKIP);
+    let mut repush = Vec::new();
+    while let Some(n) = v.pop() { if halign_i(n,&mut right,Some(&mut v),&mut repush) {break} }
+    v.extend(repush.into_iter().rev());
+    let mut nv = vec!();
+    let mut it = v.into_iter();
+    while let Some(n) = it.next() { if halign_i(n,&mut left,None,&mut nv) {break} }
+    if left.base != Dim32(0) {
+        nv.insert(0,HNode::HKern(left.base))
+    }
+    nv.extend(it);
+    if right.base != Dim32(0) {
+        nv.push(HNode::HKern(right.base))
+    }
+    (Alignment::from(left,right),nv)
+}
+
+fn halign_i(n:HNode<Types>,skip:&mut Skip32<Dim32>,v:Option<&mut Vec<HNode<Types>>>,rep:&mut Vec<HNode<Types>>) -> bool {
+    match n {
+        HNode::HKern(n) => skip.base = skip.base + n,
+        HNode::HSkip(sk) => skip.merge(sk),
+        HNode::HFil | HNode::Hss => skip.set_fil(),
+        HNode::HFill => skip.set_fill(),
+        HNode::Penalty(_) | HNode::Mark(..) => (),
+        ref vr@HNode::VRule {ref height,..} if vr.height() < Dim32(10) && height.is_some() => (),
+        vr@HNode::VRule {..} if vr.width() <= Dim32(10) => rep.push(vr),
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest {..} | PDFNode::Color(..)) | RusTeXNode::FontChange(..) | RusTeXNode::FontChangeEnd) | HNode::Space => rep.push(n),
+        _ => {
+            match v {
+                Some(v) => v.push(n),
+                _ => rep.push(n)
+            }
+            return true
+        }
+    }
+    false
+}
 
 pub(crate) fn do_svg(engine:Refs,state:&mut ShipoutState,bx:TeXBox<Types>,minx:Dim32,miny:Dim32,maxx:Dim32,maxy:Dim32) {
-    let node = HTMLNode::new(SVG_WRAP, true);
-    state.do_in(node,|state| {
-        let mut svg = HTMLNode::new(SVG, true);
-        svg.attr("width",dim_to_string(maxx - minx));
-        svg.attr("height",dim_to_string(maxy - miny));
-        svg.attr("viewBox",format!("{} {} {} {}",dim_to_num(minx.0),dim_to_num(miny.0),dim_to_num(maxx.0 - minx.0),dim_to_num(maxy.0 - miny.0)));
-        state.do_in(svg,|state| {
-            let mut g = HTMLNode::new(svg_g("g".into()), true);
-            g.attr("transform",format!("translate(0,{})",dim_to_num(maxy.0 + miny.0)));
-            state.do_in(g,|state| {
+    let mut node = HTMLNode::new(HTMLTag::SvgWrap);
+    node.classes.push("rustex-svg".into());
+    state.do_in(node,None,|state| {
+        let mut svg = HTMLNode::new(HTMLTag::SvgTop);
+        svg.attrs.insert("width".into(),dim_to_string(maxx - minx).into());
+        svg.attrs.insert("height".into(),dim_to_string(maxy - miny).into());
+        svg.attrs.insert("viewBox".into(),format!("{} {} {} {}",
+               dim_to_num(minx.0),
+               dim_to_num(miny.0),
+               dim_to_num(maxx.0 - minx.0),
+               dim_to_num(maxy.0 - miny.0)
+        ).into());
+        state.do_in(svg,Some(ShipoutMode::SVG),|state| {
+            let mut g = HTMLNode::new(HTMLTag::SvgG("g".to_string()));
+            g.attrs.insert("transform".into(),
+                   format!("translate(0,{})",dim_to_num(maxy.0 + miny.0)).into()
+            );
+            state.do_in(g,None,|state| {
                 if let TeXBox::H {children,..} = bx {
                     svg_inner(engine,state,&mut children.into_vec().into())
                 } else { unreachable!() }
-            },|_,node| if node.label.id == 49 {Some(node)} else {
-                todo!()
             });
-        },|_,node| if node.label == SVG {Some(node)} else {
-            todo!()
         })
-    },|_,node| if node.label == SVG_WRAP {Some(node)} else {
-        todo!()
     })
 }
 
@@ -836,45 +937,46 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
     while let Some(c) = children.next() {
         match c {
             HNode::Custom(RusTeXNode::PGFGBegin {attrs,tag}) => {
-                let mut node = HTMLNode::new(svg_g(tag), true);
+                let mut node = HTMLNode::new(HTMLTag::SvgG(tag));
                 for (k,v) in attrs.into_iter() {
                     match k {
                         k if k == "stroke-width" => {
-                            node.attr(k, strtonum(v))
+                            node.attrs.insert(k.into(), strtonum(v).into());
                         }
                         k if k == "d" => {
-                            node.attr(k, parse_path(v))
+                            node.attrs.insert(k.into(), parse_path(v).into());
                         }
                         k if k == "transform" => {
-                            node.attr(k.into(),parse_transform(v))
+                            node.attrs.insert(k.into(),parse_transform(v).into());
                         }
-                        _ => node.attr(k, v)
+                        _ => {node.attrs.insert(k.into(), v.into());}
                     }
                 }
                 state.nodes.push(node);
             }
             HNode::Custom(RusTeXNode::PGFGEnd) => {
-                let node = close_all(&mut state.nodes);
-                state.nodes.last_mut().unwrap().push_node(node);
+                let node = super::annotations::close_all(state.mode(),&mut state.nodes);
+                let mode = state.mode();
+                state.nodes.last_mut().unwrap().push_open_node(mode,node);
             }
             HNode::Custom(RusTeXNode::PGFEscape(bx)) => {
-                let mut node = HTMLNode::new(SVG_FOREIGN,true);
+                let mut node = HTMLNode::new(HTMLTag::SvgForeign);
                 let wd = bx.width();
                 let ht = bx.height() + bx.depth();
-                node.inner_width = Some(wd);
-                node.style("width",dim_to_string(wd));
-                node.style("height",dim_to_string(ht));
-                node.style("translate",format!("0 {}",dim_to_string(-ht)));
-                state.do_in(node,|state| {
-                    let mut node = HTMLNode::new(SVG_ESCAPE_DIV,true);
-                    node.inner_width = Some(wd);
-                    state.do_in(node,|state| {
-                        do_h(engine,state,HNode::Box(bx),false,false)
-                    },|_,node| if node.label == SVG_ESCAPE_DIV {Some(node)} else {
-                        todo!()
+                node.width = Some((wd,true));
+                node.styles.insert("width".into(),dim_to_string(wd).into());
+                node.styles.insert("height".into(),dim_to_string(ht).into());
+                node.styles.insert(
+                    "translate".into(),
+                    format!("0 {}",dim_to_string(-ht)).into()
+                );
+                node.classes.push("rustex-foreign".into());
+                state.do_in(node,None,|state| {
+                    let node = HTMLNode::new(HTMLTag::EscapeSvg);
+                    //node.width = Some((wd,true));
+                    state.do_in(node,Some(ShipoutMode::V),|state| {
+                        super::do_h(engine,state,HNode::Box(bx))
                     })
-                },|_,node| if node.label == SVG_FOREIGN {Some(node)} else {
-                    todo!()
                 })
             }
             HNode::Char {char,font,..} => {
@@ -883,16 +985,19 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
                 let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
                 let glyph = glyphtable.get(char);
                 if !glyph.is_defined() {
-                    nodes::do_missing_glyph(char,&font,state,false,true);
+                    do_missing_glyph(state,char,&font);
                 } else {
                     state.push_glyph(glyph)
                 }
             }
             HNode::Space | HNode::Hss => (),
             HNode::Box(TeXBox::H {children:chs,..}) => children.prefix(chs.into_vec()),
-            HNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,font),
-            HNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state,false,true),
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => annotations::do_color(state,engine,act,false,true),
+            HNode::Custom(RusTeXNode::FontChange(font,false)) =>
+                super::annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
+            HNode::Custom(RusTeXNode::FontChangeEnd) =>
+                super::annotations::close_font(state),
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) =>
+                super::annotations::do_color(state,engine,act),
             o => todo!("svg: {:?}",o)
         }
     }
@@ -989,6 +1094,24 @@ fn parse_get_num<'a>(s:&'a str) -> (f32,&'a str) {
 
 fn scale(f:f32) -> String {
     (1.5 * f).to_string()
+}
+
+/*
+
+use crate::html::labels::*;
+use crate::shipout::annotations::close_all;
+
+
+
+pub(crate) fn do_pdfdest(state:&mut ShipoutState, id:NumOrName) {
+    let mut node = HTMLNode::new(DEST, false);
+    let target = match id {
+        NumOrName::Num(n) => format!("NUM_{}",n),
+        NumOrName::Name(n) => n
+    };
+    node.attr("name",target.clone());
+    node.attr("id",target);
+    state.push(node,false,false);
 }
 
  */

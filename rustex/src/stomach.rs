@@ -179,9 +179,9 @@ pub(crate) fn close_font(engine: Refs, _token: CompactToken) {
             }
         },
         Some(NodeList::Math{ref mut children,..}) => {
-            match children.last() {
+            match children.list_mut().last() {
                 Some(MathNode::Custom(RusTeXNode::FontChange(_,_))) => {
-                    children.pop();
+                    children.list_mut().pop();
                 }
                 _ => children.push(MathNode::Custom(RusTeXNode::FontChangeEnd))
             }
