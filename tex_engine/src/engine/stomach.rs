@@ -1078,7 +1078,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn read_char_or_math_group<S,F1:FnOnce(S,&mut Self,MathChar<ET>),F2:FnOnce(S) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,f:F1,tp:F2,s:S) {
         crate::expand_loop!(self,
             ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-            ResolvedToken::Tk {code:CommandCode::BeginGroup,..} => {
+            ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
+            ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::BeginGroup,..}),..}=> {
                 self.state.push(self.aux,GroupType::Math {
                     display:self.stomach.data_mut().mode() == TeXMode::DisplayMath
                 },self.mouth.line_number());

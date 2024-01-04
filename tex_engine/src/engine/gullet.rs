@@ -204,7 +204,7 @@ pub trait Gullet {
         let index = engine.gullet.get_conditionals().len();
         engine.gullet.get_conditionals().push(ActiveConditional::Unfinished(name));
         if trace {
-            crate::debug_log!(error => "Here: {}",engine.preview());
+            //crate::debug_log!(error => "Here: {}",engine.preview());
             engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",PRIMITIVES.printable(name,engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
         }
         let mut ret = f(engine,token);
@@ -469,7 +469,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
                                 m.meaning::<ET>(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
                     ))
             };
-            crate::debug_log!(error => "Here: {}",engine.preview());
+            //crate::debug_log!(error => "Here: {}",engine.preview());
         }
         if m.signature.params.is_empty() {
             engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));

@@ -635,9 +635,9 @@ pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub children:Box<[MathNode<ET,S>]>,
     pub start:SourceRef<ET>,
     pub end:SourceRef<ET>,
-    pub(crate) computed_width:OnceCell<ET::Dim>,
-    pub(crate) computed_height:OnceCell<ET::Dim>,
-    pub(crate) computed_depth:OnceCell<ET::Dim>,
+    pub computed_width:OnceCell<ET::Dim>,
+    pub computed_height:OnceCell<ET::Dim>,
+    pub computed_depth:OnceCell<ET::Dim>,
 }
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathGroup<ET,S> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {

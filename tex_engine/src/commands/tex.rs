@@ -26,7 +26,7 @@ use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeList, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathAtom, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
 
@@ -2093,6 +2093,37 @@ pub fn nolimits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
     }
 }
 
+pub fn underline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    engine.read_char_or_math_group(|_,engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+            nucleus: MathNucleus::Underline(MathKernel::Char {char: mc.char,style:mc.style}),
+            sub: None,
+            sup: None,
+        }))
+    },|_| ListTarget::<ET,_>::new(
+            |engine,children,start| ET::Stomach::add_node_m(engine,MathNode::Atom(
+                MathAtom {
+                    sup:None,sub:None,nucleus:MathNucleus::Underline(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()})
+                }
+            ))
+    ),())
+}
+pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    engine.read_char_or_math_group(|_,engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+            nucleus: MathNucleus::Overline(MathKernel::Char {char: mc.char,style:mc.style}),
+            sub: None,
+            sup: None,
+        }))
+    },|_| ListTarget::<ET,_>::new(
+        |engine,children,start| ET::Stomach::add_node_m(engine,MathNode::Atom(
+            MathAtom {
+                sup:None,sub:None,nucleus:MathNucleus::Overline(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()})
+            }
+        ))
+    ),())
+}
+
 pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
@@ -2572,7 +2603,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "hfilneg", CommandScope::SwitchesToHorizontalOrMath, hfilneg);
     register_unexpandable(engine, "hss", CommandScope::SwitchesToHorizontalOrMath, hss);
     register_unexpandable(engine, "indent", CommandScope::SwitchesToHorizontal, indent);
-    register_unexpandable(engine, " ", CommandScope::SwitchesToHorizontal, char_space);
+    register_unexpandable(engine, " ", CommandScope::SwitchesToHorizontalOrMath, char_space);
     register_unexpandable(engine,"vcenter",CommandScope::MathOnly,vcenter);
 
     register_unexpandable(engine, "mathord", CommandScope::MathOnly, mathord);
@@ -2585,6 +2616,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "mathinner", CommandScope::MathOnly, mathinner);
     register_unexpandable(engine, "mathchoice", CommandScope::MathOnly, mathchoice);
     register_unexpandable(engine, "over", CommandScope::MathOnly, over);
+    register_unexpandable(engine, "underline", CommandScope::MathOnly, underline);
+    register_unexpandable(engine, "overline", CommandScope::MathOnly, overline);
 
     register_unexpandable(engine, "displaystyle", CommandScope::MathOnly, displaystyle);
     register_unexpandable(engine, "textstyle", CommandScope::MathOnly, textstyle);
@@ -2604,8 +2637,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathaccent,noalign,omit,overline,
-        pagedepth,span,underline
+        mathaccent,noalign,omit,
+        pagedepth,span
     );
 
     cmstodo!(engine,radical);

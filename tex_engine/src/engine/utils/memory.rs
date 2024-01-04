@@ -186,6 +186,8 @@ pub struct PrimitiveInterner {
     pub delimiter:PrimitiveIdentifier,
     pub abovedisplayskip:PrimitiveIdentifier,
     pub belowdisplayskip:PrimitiveIdentifier,
+    pub iffalse:PrimitiveIdentifier,
+    pub iftrue:PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -262,6 +264,8 @@ impl PrimitiveInterner {
         let delimiter = PrimitiveIdentifier(interner.get_or_intern_static("delimiter"));
         let abovedisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("abovedisplayskip"));
         let belowdisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("belowdisplayskip"));
+        let iffalse = PrimitiveIdentifier(interner.get_or_intern_static("iffalse"));
+        let iftrue = PrimitiveIdentifier(interner.get_or_intern_static("iftrue"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
@@ -272,7 +276,7 @@ impl PrimitiveInterner {
             pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
             noalign,omit,baselineskip,lineskip,lineskiplimit,parindent,hrule,vrule,
             vskip,hskip,vfil,hfil,vfill,hfill,parskip,delimiter,abovedisplayskip,
-            belowdisplayskip
+            belowdisplayskip,iffalse,iftrue
         }
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.
