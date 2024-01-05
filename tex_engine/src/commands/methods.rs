@@ -661,7 +661,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
                     todo!("throw error")
                 }
                 if !cols.in_v && cols.current_u.is_empty() {
-                    cols.recindex = Some(cols.columns.len() - 1);
+                    cols.recindex = Some(cols.columns.len());
                 } else {
                     let (u,v,g) = (std::mem::take(&mut cols.current_u),std::mem::take(&mut cols.current_v),std::mem::take(&mut cols.ingroups));
                     cols.columns.push(AlignColumn::new(u,v,cols.tabskip,g));
