@@ -14,7 +14,7 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
-use crate::shipout::{do_hlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
+use crate::shipout::{do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 use tex_engine::tex::numerics::TeXDimen;
 
 pub(crate) trait MuAdd {
@@ -189,9 +189,13 @@ pub(crate) fn node_from_class(cls:MathClass,cramped:bool) -> HTMLNode {
     }
 }
 
-pub(crate) fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,f:F) {
+pub(crate) fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,refs:Option<(SRef,SRef)>,f:F) {
     let node = HTMLNode::new(HTMLTag::MathGroup);
     let mut node = state.do_in_and(node, None,|state| f(state));
+    match (refs,node.sourceref) {
+        (Some(r),None) => node.sourceref = Some(r),
+        _ => ()
+    }
     if node.children.len() == 1 {
         if let Some(HTMLChild::Node(n)) = node.children.pop() {
             state.push(n)
@@ -475,7 +479,7 @@ fn math_inner(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types,MathFo
         let node = HTMLNode::new(HTMLTag::MathGroup);
         state.do_in(node,None,|state| {
             let children = bx.children.into_vec();
-            super::do_mathlist(engine,state,&mut children.into());
+            do_mathlist(engine,state,&mut children.into());
         });
     })
 }
@@ -516,57 +520,123 @@ pub(crate) fn do_sub_sup(engine:Refs, state:&mut ShipoutState,a: MathAtom<Types,
             let mut node = HTMLNode::new(HTMLTag::MUnderOver);
             node.attrs.insert("displaystyle".into(),"true".into());
             state.do_in(node,None,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+                wrap(state,None,|state| do_nucleus(engine,state,n));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sub.into_vec().into()));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sup.into_vec().into()));
             })
         }
         (n,Some(sub),Some(sup)) => {
             let node = HTMLNode::new(HTMLTag::MSubSup);
             state.do_in(node,None,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+                wrap(state,None,|state| do_nucleus(engine,state,n));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sub.into_vec().into()));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sup.into_vec().into()));
             })
         }
         (n@MathNucleus::Simple{limits:Some(true),..},Some(sub),_) => {
             let mut node = HTMLNode::new(HTMLTag::MUnder);
             node.attrs.insert("displaystyle".into(),"true".into());
             state.do_in(node,None,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
+                wrap(state,None,|state| do_nucleus(engine,state,n));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sub.into_vec().into()));
             })
         }
         (n@MathNucleus::Simple{limits:Some(true),..},_,Some(sup)) => {
             let mut node = HTMLNode::new(HTMLTag::MOver);
             node.attrs.insert("displaystyle".into(),"true".into());
             state.do_in(node,None,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
+                wrap(state,None,|state| do_nucleus(engine,state,n));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sup.into_vec().into()));
             })
         }
         (n,Some(sub),_) => {
             let node = HTMLNode::new(HTMLTag::MSub);
             state.do_in(node,None,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sub.into_vec().into()));
+                wrap(state,None,|state| do_nucleus(engine,state,n));
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sub.into_vec().into()));
             })
         }
         (n,_,Some(sup)) => {
             let node = HTMLNode::new(HTMLTag::MSup);
-            state.do_in(node,None,|state| {
-                wrap(state,|state| do_nucleus(engine,state,n));
-                wrap(state,|state| super::do_mathlist(engine,state,&mut sup.into_vec().into()));
-            })
+            let mut node = state.do_in_and(node,None,|state| {
+                wrap(state,None,|state| do_nucleus(engine,state,n));
+                let sup = sup.into_vec();
+                wrap(state,None,|state| do_mathlist(engine,state,&mut sup.into()));
+            });
+            // This is a hack to fix the rendering of primes
+            match node.children.get(1) {
+                Some(HTMLChild::Node(n)) if n.tag == HTMLTag::Mi => {
+                    if n.children.len() == 1 {
+                        match n.children.first() {
+                            Some(HTMLChild::Text(s)) if s == "′" || s == "'" || s == "’" || s == "′" => {
+                                let Some(HTMLChild::Node(_)) = node.children.pop() else {unreachable!()};
+                                let Some(HTMLChild::Node(first)) = node.children.pop() else {unreachable!()};
+                                state.push(first);
+                                state.push_child(HTMLChild::Comment("<mo>′</mo>".to_string()));
+                                return
+                            }
+                            _ => ()
+                        }
+                    }
+                }
+                _ => ()
+            }
+            // END HACK
+            state.push(node);
         }
         _ => unreachable!()
     };
 }
 
 pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types,MathFontStyle<Types>>) {
-    use tex_tfm::fontstyles::FontModifiable;
     match n {
-        MathNucleus::Simple{kernel:MathKernel::Char {char,style:MathFontStyle{font,cramped,..}},cls,..} => {
+        MathNucleus::Simple{kernel,cls,..} => do_mathkernel(engine,state,kernel,Some(cls)),
+        MathNucleus::Inner(kernel) => do_mathkernel(engine,state,kernel,None),
+        c@MathNucleus::VCenter {..} => {
+            let width = c.width();
+            let height = c.height() + c.depth();
+            if let MathNucleus::VCenter {start,end,children} = c {
+                math_escape(engine, state,width,height, ShipoutMode::H {escape:false}, |engine, state| {
+                    do_vcenter(state, engine, start, end, children)
+                })
+            } else {unreachable!()}
+        },
+        MathNucleus::LeftRight {left,right,children,start,end} => {
+            let mut node = HTMLNode::new(HTMLTag::MathGroup);
+            node.sourceref = Some((start,end));
+            state.do_in(node,None,|state| {
+                if let Some((c,s)) = left {
+                    let mut node = nodes::do_mathchar(engine, state, c, MathClass::Open, s.font);
+                    node.attrs.insert("stretchy".into(),"true".into());
+                    state.push(node);
+                };
+                do_mathlist(engine,state,&mut children.into_vec().into());
+                if let Some((c,s)) = right {
+                    let mut node =nodes::do_mathchar(engine, state, c, MathClass::Close, s.font);
+                    node.attrs.insert("stretchy".into(),"true".into());
+                    state.push(node);
+                };
+            });
+        }
+        MathNucleus::Underline(k) => {
+            let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+            node.styles.insert("text-decoration".into(),"underline".into());
+            state.do_in(node,None,|state| do_mathkernel(engine,state,k,None));
+        }
+        MathNucleus::Overline(k) => {
+            let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+            node.styles.insert("text-decoration".into(),"overline".into());
+            state.do_in(node,None,|state| do_mathkernel(engine,state,k,None));
+        }
+        o => todo!(" {:?}",o)
+    }
+}
+
+pub(crate) fn do_mathkernel(engine:Refs,state:&mut ShipoutState,kernel:MathKernel<Types,MathFontStyle<Types>>,cls:Option<MathClass>) {
+    use tex_tfm::fontstyles::FontModifiable;
+    match kernel {
+        MathKernel::Char {char,style:MathFontStyle{font,cramped,..}} => {
+            let cls = cls.unwrap_or(MathClass::Ord);
             state.in_content = true;
             let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
             let glyph = glyphtable.get(char);
@@ -585,12 +655,13 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
             }
             state.push(node)
         }
-        MathNucleus::Simple{kernel:MathKernel::List {children,start,end},cls,..} => {
+        MathKernel::List {children,start,end} if cls.is_some() => {
+            let cls = cls.unwrap();
             let mut node = HTMLNode::new(HTMLTag::MathGroup);
             node.classes.push(class_from_mathclass(cls,false).into());
             node.sourceref = Some((start,end));
             let mut node = state.do_in_and(node,None,|state| {
-                super::do_mathlist(engine,state,&mut children.into_vec().into())
+                do_mathlist(engine,state,&mut children.into_vec().into())
             });
             if node.children.len() == 1 && matches!(node.children.first(),Some(HTMLChild::Node(_))) {
                 if let Some(HTMLChild::Node(mut nc)) = node.children.pop() {
@@ -608,12 +679,43 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
                 } else {unreachable!()}
             } else { state.push(node) }
         }
-        MathNucleus::Simple {kernel:MathKernel::Empty,..} | MathNucleus::Inner(MathKernel::Empty) => (),
-        MathNucleus::Inner(MathKernel::List{children,..}) => {
+        MathKernel::List{children,start,end} => {
             let children = children.into_vec();
-            super::do_mathlist(engine, state, &mut children.into())
+            wrap(state,Some((start,end)),|state| do_mathlist(engine, state, &mut children.into()))
         }
-        o => todo!(" {:?}",o)
+        MathKernel::Box(bx) => {
+            if bx.is_empty() {
+                let wd = bx.assigned_width();
+                let ht = bx.assigned_height();
+                let dp = bx.assigned_depth();
+                match (wd,ht,dp) {
+                    (Some(Dim32(0))|None,Some(Dim32(0))|None,Some(Dim32(0))|None) => (),
+                    _ => state.push_comment(
+                        format!("<mspace{}{}{}/>",
+                                match wd {
+                                    None | Some(Dim32(0)) => "".into(),
+                                    Some(wd) => format!(" width=\"{}\"", dim_to_string(wd))
+                                },
+                                match ht {
+                                    None | Some(Dim32(0)) => "".into(),
+                                    Some(ht) => format!(" height=\"{}\"", dim_to_string(ht))
+                                },
+                                match dp {
+                                    None | Some(Dim32(0)) => "".into(),
+                                    Some(dp) => format!(" depth=\"{}\"", dim_to_string(dp))
+                                }
+                        ))
+                }
+            } else { match cls {
+                Some(cls) if cls != MathClass::Ord => {
+                    let mut node = HTMLNode::new(HTMLTag::MathGroup);
+                    node.classes.push(class_from_mathclass(cls,false).into());
+                    state.do_in(node,None,|state| box_in_math(engine,state,bx))
+                },
+                _ => box_in_math(engine, state, bx)
+            } }
+        }
+        MathKernel::Empty => (),
     }
 }
 
@@ -695,8 +797,8 @@ pub(crate) fn do_over(state:&mut ShipoutState,engine:Refs,top:Box<[MNode]>,botto
         Some(d) => {node.attrs.insert("linethickness".into(),dim_to_string(d).into());}
     }
     state.do_in(node,None,|state| {
-        wrap(state,|state| super::do_mathlist(engine,state,&mut top.into_vec().into()));
-        wrap(state,|state| super::do_mathlist(engine,state,&mut bottom.into_vec().into()));
+        wrap(state,None,|state| do_mathlist(engine,state,&mut top.into_vec().into()));
+        wrap(state,None,|state| do_mathlist(engine,state,&mut bottom.into_vec().into()));
     });
     if let Some((c,s)) = right {
         let mut node = do_mathchar(engine, state, c, MathClass::Close, s.font);

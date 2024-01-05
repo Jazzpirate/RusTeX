@@ -173,7 +173,7 @@ impl HTMLNode {
             sourceref:None
         }
     }
-    pub fn page(start:SRef,end:SRef) -> Self {
+    pub fn page() -> Self {
         HTMLNode {
             tag:HTMLTag::Page,
             children:Vec::new(),
@@ -184,7 +184,7 @@ impl HTMLNode {
             classes:vec!("rustex-page".into()),
             attrs:BTreeMap::new(),
             styles:BTreeMap::new(),
-            sourceref:Some((start,end))
+            sourceref:None
         }
     }
     pub fn push_glyph(&mut self,mode:ShipoutMode,g:Glyph) {
@@ -287,8 +287,9 @@ impl HTMLNode {
         match self.tag {
             HTMLTag::FontChange(_) => close_font(self,mode,parent),
             HTMLTag::ColorChange(_) => close_color(self,mode,parent),
+            HTMLTag::Link(_)|HTMLTag::Annot(_) => close_annot(self,mode,parent),
             _ if self.children.len() == 1 => match &self.children[0] {
-                HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_)|HTMLTag::Link(_))
+                HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_))
                 => merge_annotation(self, mode, parent),
                 _ => parent.push(HTMLChild::Node(self))
             },
@@ -385,6 +386,47 @@ impl HTMLNode {
     }
 }
 
+
+fn close_annot(mut node:HTMLNode, mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
+    if node.children.len() == 1 {
+        match node.children.first().unwrap() {
+            HTMLChild::Node(_) => {
+                if let Some(HTMLChild::Node(mut n)) = node.children.pop() {
+                    if node.attrs.iter().any(|(k,_)| {
+                        n.attrs.contains_key(k)
+                    }) {
+                        node.children.push(HTMLChild::Node(n));
+                        parent.push(HTMLChild::Node(node));
+                        return
+                    }
+                    for (k,v) in node.attrs {
+                        n.attrs.insert(k,v);
+                    }
+                    match (node.color,n.color) {
+                        (Some(c),None) => {
+                            n.color = Some(c);
+                            n.uses_color = false;
+                        }
+                        _ => {}
+                    }
+                    match (node.font,&n.font) {
+                        (Some(c),None) => {
+                            n.font = Some(c);
+                            n.uses_font = false;
+                        }
+                        _ => {}
+                    }
+                    for s in node.styles {
+                        n.styles.insert(s.0,s.1);
+                    }
+                    parent.push(HTMLChild::Node(n));
+                } else {unreachable!()}
+            }
+            _ => parent.push(HTMLChild::Node(node))
+        }
+    }
+}
+
 fn merge_annotation(mut node:HTMLNode, _mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
     match node.children.pop() {
         Some(HTMLChild::Node(n))
@@ -477,6 +519,7 @@ fn close_color(mut annot:HTMLNode,mode:ShipoutMode,parent:&mut Vec<HTMLChild>) {
     }
 }
 
+
 struct DisplayableNode<'a> {
     node:&'a HTMLNode,
     files:&'a RusTeXFileSystem,
@@ -500,6 +543,7 @@ pub enum HTMLTag {
     HBoxContainer,HBox,Display,Raise,MoveLeft,
     HAlign,HBody,HRow,HCell,NoAlignH,
     FontChange(ShipoutMode),ColorChange(ShipoutMode),Link(ShipoutMode),
+    Annot(ShipoutMode),
     Matrix(ShipoutMode),
     Dest(ShipoutMode),
     Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,
@@ -512,7 +556,7 @@ impl HTMLTag {
         match self {
             HBoxContainer | HBox | Paragraph | Mi | Mo => false,
             FontChange(m) | ColorChange(m) | Link(m) |
-            Matrix(m) => !m.is_h(),
+            Matrix(m) | Annot(m) => !m.is_h(),
             _ => true
         }
     }
@@ -552,7 +596,7 @@ impl Display for HTMLTag {
             MSubSup => f.write_str("msubsup"),
             MSub => f.write_str("msub"),
             MSup => f.write_str("msup"),
-            FontChange(mode) | ColorChange(mode) | Matrix(mode) => {
+            FontChange(mode) | ColorChange(mode) | Annot(mode) | Matrix(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }
                 else { f.write_str("span") }

@@ -165,8 +165,8 @@ impl Stomach for RusTeXStomach {
     }
 }
 
-pub(crate) const CLOSE_FONT:&str = "!\"$%&/(closefont)\\&%$\"!";
-pub(crate) fn close_font(engine: Refs, _token: CompactToken) {
+pub const CLOSE_FONT:&str = "!\"$%&/(closefont)\\&%$\"!";
+pub fn close_font(engine: Refs, _token: CompactToken) {
     match engine.stomach.data.open_lists.last_mut() {
         Some(NodeList::Vertical{ref mut children,..}) => {
             match children.last() {

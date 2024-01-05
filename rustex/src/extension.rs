@@ -12,8 +12,7 @@ pub(crate) struct FontChange(pub(crate) Font);
 pub struct RusTeXExtension {
     pdf: MinimalPDFExtension<Types>,
     pub(crate) state:ShipoutState,
-    pub(crate) change_markers:Vec<Vec<FontChange>>,
-    pub(crate) do_sourcerefs:bool,
+    pub(crate) change_markers:Vec<Vec<FontChange>>
 }
 impl RusTeXExtension {
     pub(crate) fn push(&mut self) {
@@ -24,7 +23,7 @@ impl RusTeXExtension {
     }
 }
 impl EngineExtension for RusTeXExtension {
-    fn new() -> Self { Self { pdf: MinimalPDFExtension::new(),state:ShipoutState::default(),change_markers:vec!(),do_sourcerefs:true } }
+    fn new() -> Self { Self { pdf: MinimalPDFExtension::new(),state:ShipoutState::default(),change_markers:vec!() } }
 }
 impl PDFExtension<Types> for RusTeXExtension {
     #[inline(always)]
