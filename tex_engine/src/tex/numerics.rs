@@ -435,9 +435,20 @@ impl Display for MuSkip32  {
 }
 impl Neg for MuSkip32 {
     type Output = Self;
-    #[inline(always)]
     fn neg(self) -> Self::Output {
-        todo!()
+        MuSkip32 {
+            base:Mu(-self.base.0),
+            stretch:self.stretch.map(|s| match s {
+                MuFill::mu(d) => MuFill::mu(-d),
+                MuFill::fil(i) => MuFill::fil(-i),
+                MuFill::fill(i) => MuFill::fill(-i),
+            }),
+            shrink:self.shrink.map(|s| match s {
+                MuFill::mu(d) => MuFill::mu(-d),
+                MuFill::fil(i) => MuFill::fil(-i),
+                MuFill::fill(i) => MuFill::fill(-i),
+            })
+        }
     }
 }
 impl Numeric<i32> for MuSkip32 {

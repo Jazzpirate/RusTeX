@@ -2123,6 +2123,33 @@ pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
     ),())
 }
 
+pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let i = engine.read_int(false).into();
+    if i < 0 || i > u32::MAX as i64 {
+        todo!("matchchar out of range")
+    }
+    let char = super::methods::get_mathchar(engine,i as u32,None);
+    engine.read_char_or_math_group(|(char,style),engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+            nucleus: MathNucleus::Accent{
+                accent:(char,style),
+                inner:vec!(MathNode::Atom(mc.to_atom())).into()
+            },
+            sub: None,
+            sup: None,
+        }))
+    },|(char,style)| ListTarget::<ET,_>::new(
+        move |engine,children,start| ET::Stomach::add_node_m(engine,MathNode::Atom(
+            MathAtom {
+                sup:None,sub:None,nucleus:MathNucleus::Accent{
+                    accent:(char,style),
+                    inner:children.into()
+                },
+            }
+        ))
+    ),(char.char,char.style))
+}
+
 pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
@@ -2617,6 +2644,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "over", CommandScope::MathOnly, over);
     register_unexpandable(engine, "underline", CommandScope::MathOnly, underline);
     register_unexpandable(engine, "overline", CommandScope::MathOnly, overline);
+    register_unexpandable(engine, "mathaccent", CommandScope::MathOnly, mathaccent);
 
     register_unexpandable(engine, "displaystyle", CommandScope::MathOnly, displaystyle);
     register_unexpandable(engine, "textstyle", CommandScope::MathOnly, textstyle);
@@ -2636,7 +2664,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        mathaccent,noalign,omit,
+        noalign,omit,
         pagedepth,span
     );
 

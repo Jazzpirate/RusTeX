@@ -447,7 +447,11 @@ pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
     },
     Overline(MathKernel<ET,S>),
     Underline(MathKernel<ET,S>),
-    Accent,Radical,
+    Accent {
+        accent:(ET::Char,S),
+        inner:Box<[MathNode<ET,S>]>
+    },
+    Radical,
     VCenter{
         start:SourceRef<ET>,
         end:SourceRef<ET>,
@@ -502,8 +506,13 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 Self::readable_do_indent(indent, f)?;
                 f.write_str("</underline>")
             }
-            MathNucleus::Accent => {
-                todo!()
+            MathNucleus::Accent{accent,inner} => {
+                write!(f, "<accent char=\"{}\">",accent.0)?;
+                for i in inner.iter() {
+                    i.readable_fmt(indent + 2, f)?;
+                }
+                Self::readable_do_indent(indent, f)?;
+                f.write_str("</accent>")
             }
             MathNucleus::Radical => {
                 todo!()
@@ -526,7 +535,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.height()).max().unwrap_or_default(),
             MathNucleus::Overline(k) => k.height(),
             MathNucleus::Underline(k) => k.height(),
-            MathNucleus::Accent => ET::Dim::default(),
+            MathNucleus::Accent{inner,accent:(c,f)} =>
+                inner.iter().map(|c| c.height()).max().unwrap_or_default() + f.get_font().get_ht(*c) + f.get_font().get_dp(*c),
             MathNucleus::Radical => ET::Dim::default(),
             MathNucleus::VCenter{children,..} => children.iter().map(|c| c.height() + c.depth()).sum::<ET::Dim>() +
                 -children.iter().last().map(|c| c.depth()).unwrap_or_default()
@@ -539,7 +549,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.width()).sum(),
             MathNucleus::Overline(k) => k.width(),
             MathNucleus::Underline(k) => k.width(),
-            MathNucleus::Accent => ET::Dim::default(),
+            MathNucleus::Accent{inner,..} =>inner.iter().map(|c| c.width()).sum(),
             MathNucleus::Radical => ET::Dim::default(),
             MathNucleus::VCenter{children,..} => children.iter().map(|c| c.width()).max().unwrap_or_default()
         }
@@ -552,7 +562,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Inner(k) => k.depth(),
             MathNucleus::Overline(k) => k.depth(),
             MathNucleus::Underline(k) => k.depth(),
-            MathNucleus::Accent => ET::Dim::default(),
+            MathNucleus::Accent{inner,..} => inner.iter().map(|c| c.depth()).max().unwrap_or_default(),
             MathNucleus::Radical => ET::Dim::default(),
             MathNucleus::VCenter{children,..} => children.iter().last().map(|c| c.depth()).unwrap_or_default()
         }
@@ -758,7 +768,10 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
             MathNucleus::Inner(k) => MathNucleus::Inner(Self::resolve_kernel(k,style)),
             MathNucleus::Overline(k) => MathNucleus::Overline(Self::resolve_kernel(k,style)),
             MathNucleus::Underline(k) => MathNucleus::Underline(Self::resolve_kernel(k,style)),
-            MathNucleus::Accent => MathNucleus::Accent,
+            MathNucleus::Accent{accent:(c,f),inner} => MathNucleus::Accent {
+                accent:(c,Self::resolve_style(style,f)),
+                inner:Self::close_i(inner.into_vec(),style).into()
+            },
             MathNucleus::Radical => MathNucleus::Radical,
             MathNucleus::VCenter{start,end,children} => MathNucleus::VCenter{start,end,children}
         }
