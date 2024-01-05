@@ -560,9 +560,23 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
 }
 
 pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<Types,MathFontStyle<Types>>) {
-    if bx.display.is_some() {todo!("display in H")}
     let mut iter: MNodes = bx.children.into_vec().into();
-    do_mathlist_in_h(state,engine,&mut iter);
+    match bx.display {
+        Some((pre,post)) => {
+            let mut node = HTMLNode::new(HTMLTag::Display);
+            if pre.base != Dim32(0) {
+                node.styles.insert("margin-top".into(),dim_to_string(pre.base).into());
+            }
+            if post.base != Dim32(0) {
+                node.styles.insert("margin-bottom".into(),dim_to_string(post.base).into());
+            }
+            node.classes.push("rustex-display".into());
+            state.do_in(node,None,|state| {
+                do_mathlist_in_h(state,engine,&mut iter)
+            })
+        }
+        None => do_mathlist_in_h(state,engine,&mut iter)
+    }
 }
 pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNodes) {
     while let Some(c) = iter.next() {match c {

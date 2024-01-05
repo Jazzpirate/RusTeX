@@ -628,6 +628,21 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
             node.styles.insert("text-decoration".into(),"overline".into());
             state.do_in(node,None,|state| do_mathkernel(engine,state,k,None));
         }
+        MathNucleus::Accent {accent:(char,style),inner} => {
+            let mut node = HTMLNode::new(HTMLTag::MOver);
+            node.attrs.insert("accent".into(),"true".into());
+            let mut node = state.do_in_and(node,None,|state| {
+                wrap(state,None,|state|
+                    do_mathlist(engine,state,&mut inner.into_vec().into())
+                );
+                do_mathkernel(engine,state,MathKernel::Char{char,style},None);
+            });
+            match node.children.last_mut() {
+                Some(HTMLChild::Node(n)) => {n.attrs.insert("stretchy".into(),"true".into());}
+                _ => ()
+            }
+            state.push(node)
+        }
         o => todo!(" {:?}",o)
     }
 }
