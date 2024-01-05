@@ -89,7 +89,7 @@ pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
 pub struct DefaultMouth<T:Token,F:File<Char=T::Char>> {
     inputs:Vec<TokenSource<T,F>>,
     args:Option<[Vec<T>;9]>,
-    start_ref:Option<SourceReference<F::SourceRefID>>,
+    start_ref:Vec<SourceReference<F::SourceRefID>>,
     vecs:Vec<Vec<T>>
 }
 impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
@@ -140,7 +140,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     fn new<ET: EngineTypes<Mouth=Self>>(_aux: &mut EngineAux<ET>, _state: &mut ET::State) -> Self {
         Self {
             inputs:Vec::new(),args:Some(array_init::array_init(|_| Vec::new())),
-            start_ref:None,vecs:vec!()
+            start_ref:vec!(),vecs:vec!()
         }
     }
 
@@ -151,6 +151,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
           }
             _ => ()
         } }
+        self.start_ref.clear();
     }
 
     fn current_sourceref(&self) -> SourceReference<<Self::File as File>::SourceRefID> {
@@ -168,16 +169,20 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         unreachable!()
     }
     fn start_ref(&self) -> SourceReference<<Self::File as File>::SourceRefID> {
-        self.start_ref.unwrap()
+        *self.start_ref.last().unwrap()
     }
     fn update_start_ref(&mut self) {
         match self.inputs.last() {
             Some(TokenSource::File(f,id)) => {
-                self.start_ref = Some(SourceReference {
+                let rf = SourceReference {
                     file:*id,
                     line:f.line(),
                     column:f.column()
-                })
+                };
+                match self.start_ref.last_mut() {
+                    None => self.start_ref.push(rf),
+                    Some(s) => *s = rf
+                }
             }
             Some(TokenSource::Vec(v)) if v.is_empty() => {
                 if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
@@ -209,6 +214,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                 TokenSource::File(f,_) => {
                     aux.outputs.file_close(f.source.path().display());
                     self.inputs.remove(i);
+                    self.start_ref.pop();
                     return
                 }
                 _ => ()
@@ -271,8 +277,13 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         //self.clean();
         let id = f.sourceref();
         let s = f.line_source().unwrap();
+        let rf = SourceReference {
+            file:id,
+            line:0,
+            column:0
+        };
         self.inputs.push(TokenSource::File(StringTokenizer::new(s),id));
-        if self.start_ref.is_none() {self.update_start_ref()}
+        self.start_ref.push(rf);
     }
     fn current_position_fmt<W:std::fmt::Write>(&self,mut w:W) -> std::fmt::Result {
         for i in self.inputs.iter().rev() { match i {
@@ -422,6 +433,7 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
     fn end_file<ET:EngineTypes<Char=T::Char,Token =T,File = F>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> T {
         match self.inputs.pop() {
             Some(TokenSource::File(f,_)) => {
+                self.start_ref.pop();
                 aux.outputs.file_close(f.source.path().display());
             }
             Some(TokenSource::String(_)) => (),//aux.outputs.file_close(""),
