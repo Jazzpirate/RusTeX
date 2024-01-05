@@ -22,7 +22,7 @@ macro_rules! cmtodo {
         let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
         let command = crate::commands::Command::SimpleExpandable(crate::commands::SimpleExpandable{
             name:id,
-            expand:|e,_| todo!("\\{} at {}",
+            expand:|e,_| crate::throw!("Not yet implemented: \\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::display_position(e.mouth)
             )
@@ -52,7 +52,7 @@ macro_rules! cmstodo {
         let command = crate::commands::Command::Unexpandable(crate::commands::Unexpandable{
             name:id,
             scope:crate::commands::CommandScope::Any,
-            apply:|e,_| todo!("\\{} at {}",
+            apply:|e,_| crate::throw!("Not yet implemented: \\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::display_position(e.mouth)
             )

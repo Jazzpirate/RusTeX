@@ -25,7 +25,7 @@ pub trait PDFTeXEngine: TeXEngine
         self.do_file_default(s,f)
     }
 
-    fn initialize_pdflatex(&mut self) -> Result<(),TeXError> {
+     fn initialize_pdflatex(&mut self) -> Result<(),TeXError> {
         self.initialize_etex();
         commands::register_pdftex_primitives(self);
         self.init_file("pdftexconfig.tex")?;

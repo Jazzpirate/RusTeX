@@ -36,7 +36,7 @@ pub trait Mouth:Sized {
     fn requeue(&mut self,t:Self::Token);
     fn num_exps(&self) -> usize;
     fn line_number(&self) -> usize;
-    fn endinput(&mut self);
+    fn endinput<ET:EngineTypes>(&mut self, aux:&EngineAux<ET>);
     fn finish(&mut self);
     fn read_until_endgroup<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token)>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,mut cont:Fn) -> Self::Token {
         let mut ingroups = 0;
@@ -203,10 +203,11 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         self.args = Some(exp);
     }
 
-    fn endinput(&mut self) {
+    fn endinput<ET:EngineTypes>(&mut self, aux:&EngineAux<ET>) {
         for (i,s) in self.inputs.iter().enumerate().rev() {
             match s {
-                TokenSource::File(_,_) => {
+                TokenSource::File(f,_) => {
+                    aux.outputs.file_close(f.source.path().display());
                     self.inputs.remove(i);
                     return
                 }
@@ -423,7 +424,7 @@ impl<T:Token,F:File<Char=T::Char>> DefaultMouth<T,F> {
             Some(TokenSource::File(f,_)) => {
                 aux.outputs.file_close(f.source.path().display());
             }
-            Some(TokenSource::String(_)) => aux.outputs.file_close(""),
+            Some(TokenSource::String(_)) => (),//aux.outputs.file_close(""),
             _ => unreachable!()
         };
         let everyeof = state.get_primitive_tokens(PRIMITIVES.everyeof);

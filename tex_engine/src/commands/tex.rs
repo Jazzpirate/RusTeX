@@ -76,8 +76,7 @@ pub fn discretionary<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::T
 
 #[inline(always)]
 pub fn endinput<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    engine.mouth.endinput();
-    engine.aux.outputs.file_close("");
+    engine.mouth.endinput(engine.aux);
 }
 
 #[inline(always)]
