@@ -11,15 +11,19 @@ use crate::tex::control_sequences::ControlSequenceNameHandler;
 use crate::tex::token::{StandardToken, Token};
 use super::primitives::*;
 use std::fmt::Write;
+use crate::commands::tex::left;
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::utils::outputs::Outputs;
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;
-use crate::tex::nodes::{NodeList, NodeTrait};
+use crate::tex::nodes::{MathNodeList, MathNodeListType, NodeList, NodeTrait};
 use crate::tex::control_sequences::ResolvedCSName;
 use crate::tex::input_text::CharacterMap;
+use crate::tex::nodes::math::{MathKernel, MathNode, MathNucleus};
+use crate::tex::types::GroupType;
+use crate::tex::nodes::math::MathAtom;
 
 pub fn eTeXversion<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     2.into()
@@ -425,6 +429,20 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     }
 }
 
+pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+    match engine.state.get_group_type() {
+        Some(GroupType::LeftRight) => (),
+        _ => todo!("error?")
+    }
+    let del = match super::methods::read_opt_delimiter(engine) {
+        None => todo!("error?"),
+        Some(c) => c
+    };
+    ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+        sub:None,sup:None,nucleus:MathNucleus::Middle(del.small.char,del.small.style)
+    }))
+}
+
 pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
@@ -513,6 +531,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"eTeXrevision",eTeXrevision);
 
     register_unexpandable(engine,"marks",CommandScope::Any,marks);
+    register_unexpandable(engine, "middle", CommandScope::MathOnly, middle);
 
     register_simple_expandable(engine,"unless",unless);
     register_simple_expandable(engine,"scantokens",scantokens);
@@ -541,7 +560,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodo!(engine,interactionmode);
     cmtodo!(engine,interlinepenalties);
     cmtodo!(engine,lastlinefit);
-    cmtodo!(engine,middle);
     cmtodo!(engine,mutoglue);
     cmtodo!(engine,pagediscards);
     cmtodo!(engine,parshapedimen);

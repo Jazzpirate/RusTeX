@@ -445,6 +445,7 @@ pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
         right:Option<(ET::Char,S)>,
         end:SourceRef<ET>
     },
+    Middle(ET::Char,S),
     Overline(MathKernel<ET,S>),
     Underline(MathKernel<ET,S>),
     Accent {
@@ -494,6 +495,9 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 Self::readable_do_indent(indent, f)?;
                 f.write_str("</leftright>")
             }
+            MathNucleus::Middle(c,_) => {
+                write!(f, "<middle = {}/>",c)
+            }
             MathNucleus::Overline(k) => {
                 write!(f, "<overline>")?;
                 k.readable_fmt(indent + 2, f)?;
@@ -535,6 +539,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.height()).max().unwrap_or_default(),
             MathNucleus::Overline(k) => k.height(),
             MathNucleus::Underline(k) => k.height(),
+            MathNucleus::Middle(c,s) => s.get_font().get_ht(*c),
             MathNucleus::Accent{inner,accent:(c,f)} =>
                 inner.iter().map(|c| c.height()).max().unwrap_or_default() + f.get_font().get_ht(*c) + f.get_font().get_dp(*c),
             MathNucleus::Radical => ET::Dim::default(),
@@ -549,6 +554,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.width()).sum(),
             MathNucleus::Overline(k) => k.width(),
             MathNucleus::Underline(k) => k.width(),
+            MathNucleus::Middle(c,s) => s.get_font().get_wd(*c),
             MathNucleus::Accent{inner,..} =>inner.iter().map(|c| c.width()).sum(),
             MathNucleus::Radical => ET::Dim::default(),
             MathNucleus::VCenter{children,..} => children.iter().map(|c| c.width()).max().unwrap_or_default()
@@ -562,6 +568,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Inner(k) => k.depth(),
             MathNucleus::Overline(k) => k.depth(),
             MathNucleus::Underline(k) => k.depth(),
+            MathNucleus::Middle(c,s) => s.get_font().get_dp(*c),
             MathNucleus::Accent{inner,..} => inner.iter().map(|c| c.depth()).max().unwrap_or_default(),
             MathNucleus::Radical => ET::Dim::default(),
             MathNucleus::VCenter{children,..} => children.iter().last().map(|c| c.depth()).unwrap_or_default()
@@ -763,6 +770,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
                     right:right.map(|(c,s)| (c,Self::resolve_style(style,s))),
                     end
                 },
+            MathNucleus::Middle(c,f) => MathNucleus::Middle(c,Self::resolve_style(style,f)),
             MathNucleus::Simple { cls, kernel, limits } =>
                 MathNucleus::Simple { cls, kernel:Self::resolve_kernel(kernel,style), limits },
             MathNucleus::Inner(k) => MathNucleus::Inner(Self::resolve_kernel(k,style)),
