@@ -313,12 +313,44 @@ fn get_inner_page(bx:TeXBox<Types>) -> Option<Vec<VNode<Types>>> {
         _ => None
     }
 }
+
+fn get_page_hbox(children:&Box<[HNode<Types>]>) -> bool {
+    let children = children.clone().into_vec();
+    print!("");
+    children.iter().any(|n| match n {
+        HNode::HSkip(_) | HNode::Space | HNode::HKern(_) | HNode::HFil | HNode::HFill | HNode::HFilneg |
+        HNode::Penalty(_) | HNode::Mark(_,_) |
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(..) | PDFNode::PDFCatalog(_) | PDFNode::PDFLiteral(_) |
+                                          PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFOutline(_))) => false,
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(_))) => false,
+        HNode::Box(TeXBox::H {children,..}) => get_page_hbox(children),
+        _ => true
+    })
+}
 fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
     let mut ret = Vec::new();
     let vec = children.into_vec();
     let mut list:VNodes = vec.into();
+    while let Some(c) = list.next() {
+        match c {
+            VNode::Box(TeXBox::V {children,..}) => {
+                if children.iter().any(|n| match n {
+                    VNode::Box(TeXBox::H {children,..}) => get_page_hbox(children),
+                    _ => false
+                }) {
+                    ret.extend(children.into_vec().into_iter())
+                } else {
+                    list.prefix(children.into_vec())
+                }
+            }
+            VNode::VSkip(_) | VNode::VKern(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss => (),
+            VNode::Custom(RusTeXNode::PageBegin) => (),
+            VNode::Custom(RusTeXNode::PageEnd) => (),
+            _ => ret.push(c)
+        }
+    }
+    /*
     let mut in_page:usize = 0;
-
     while let Some(c) = list.next() {
         match c {
             VNode::Box(TeXBox::V {children,..}) if in_page == 0 => list.prefix(children.into_vec()),
@@ -329,6 +361,8 @@ fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
             _ => ret.push(c)
         }
     }
+
+     */
     ret
 }
 #[inline(always)]
@@ -496,7 +530,7 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) {
         }
         VNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) =>
             nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
-        VNode::Mark(..) => (),
+        VNode::Mark(..) | VNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd) => (),
         _ => panic!("Here: {:?}",n)
     }
 }
@@ -669,11 +703,19 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
         match c {
             MathNode::MSkip {skip,..} => {
                 flush!();
-                state.push_comment(format!("<mspace class=\"rustex-mskip\" width=\"{}\"></mspace>", mudim_to_string(skip.base)));
+                if skip.base.0 < 0 {
+                    state.push_comment(format!("<mspace class=\"rustex-mskip\" style=\"margin-left:{}\"></mspace>", mudim_to_string(skip.base)));
+                } else {
+                    state.push_comment(format!("<mspace class=\"rustex-mskip\" width=\"{}\"></mspace>", mudim_to_string(skip.base)));
+                }
             }
             MathNode::MKern{kern,..} => {
                 flush!();
-                state.push_comment(format!("<mspace class=\"rustex-mkern\" width=\"{}\"></mspace>", mudim_to_string(kern)));
+                if kern.0 < 0 {
+                    state.push_comment(format!("<mspace class=\"rustex-mkern\" style=\"margin-left:{}\"></mspace>", mudim_to_string(kern)))
+                } else {
+                    state.push_comment(format!("<mspace class=\"rustex-mkern\" width=\"{}\"></mspace>", mudim_to_string(kern)));
+                }
             }
             MathNode::Space => {
                 flush!();
@@ -682,13 +724,21 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
             MathNode::HSkip(sk) => {
                 if sk.base != Dim32(0) {
                     flush!();
-                    state.push_comment(format!("<mspace width=\"{}\"></mspace>", dim_to_string(sk.base)));
+                    if sk.base.0 < 0 {
+                        state.push_comment(format!("<mspace class=\"rustex-hskip\" style=\"margin-left:{}\"></mspace>", dim_to_string(sk.base)));
+                    } else {
+                        state.push_comment(format!("<mspace class=\"rustex-hskip\" width=\"{}\"></mspace>", dim_to_string(sk.base)));
+                    }
                 }
             },
             MathNode::HKern(d) => {
                 if d != Dim32(0) {
                     flush!();
-                    state.push_comment(format!("<mspace width=\"{}\"></mspace>", dim_to_string(d)));
+                    if d.0 < 0 {
+                        state.push_comment(format!("<mspace class=\"rustex-hkern\" style=\"margin-left:{}\"></mspace>", dim_to_string(d)));
+                    } else {
+                        state.push_comment(format!("<mspace class=\"rustex-hkern\" width=\"{}\"></mspace>", dim_to_string(d)));
+                    }
                 }
             },
             MathNode::Atom(a) if a.sup.is_none() && a.sub.is_none() => match a.nucleus {
@@ -722,6 +772,7 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
                 annotations::close_link(state, true, false)
             }
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg => (),
+            MathNode::Leaders(_) => (), // TODO?
             o => todo!(" {:?}",o)
         }
     }

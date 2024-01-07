@@ -287,7 +287,7 @@ impl HTMLNode {
         match self.tag {
             HTMLTag::FontChange(_) => close_font(self,mode,parent),
             HTMLTag::ColorChange(_) => close_color(self,mode,parent),
-            HTMLTag::Link(_)|HTMLTag::Annot(_) => close_annot(self,mode,parent),
+            HTMLTag::Annot(_) => close_annot(self,mode,parent),
             _ if self.children.len() == 1 => match &self.children[0] {
                 HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_))
                 => merge_annotation(self, mode, parent),
@@ -430,7 +430,7 @@ fn close_annot(mut node:HTMLNode, mode:ShipoutMode, parent:&mut Vec<HTMLChild>) 
 fn merge_annotation(mut node:HTMLNode, _mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
     match node.children.pop() {
         Some(HTMLChild::Node(n))
-        if matches!(n.tag,HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)) => {
+        if matches!(n.tag,HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)) => {
             if n.attrs.iter().any(|(k,_)| {
                 node.attrs.contains_key(k)
             }) {
@@ -604,7 +604,7 @@ impl Display for HTMLTag {
             Link(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }
-                else { f.write_str("span") }
+                else { f.write_str("a") }
             }
             Dest(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mspace") }

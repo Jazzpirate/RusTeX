@@ -6,6 +6,7 @@
 
 /* TODO remove this */
 a { color: inherit; text-decoration: inherit; }
+* { position: static;z-index: auto }
 /*
 span {display:contents;}
 * { position:relative; line-height: 1.0}
@@ -76,12 +77,11 @@ span {display:contents;}
     text-align:justify;
     white-space:normal;
     display: inline-block;
-    position: relative;
     margin-top: auto;
+    /*span { position:relative; display:contents; }*/
 }
 .rustex-parindent {
     display: inline-block;
-    position: relative;
 }
 
 .rustex-hbox {
@@ -93,7 +93,7 @@ span {display:contents;}
     overflow: visible;
     text-align: left;
     vertical-align: baseline;
-    position: relative;
+    /*span { position:relative; display: contents; }*/
 }
 
 .rustex-hbox-container {
@@ -103,12 +103,10 @@ span {display:contents;}
     height: min-content;
     justify-content: end;
     vertical-align: baseline;
-    position: relative;
 }
 
 .rustex-space-in-hbox {
     display: inline-block;
-    position: relative;
     margin-left: auto;
     margin-right: auto;
     line-height: 0;
@@ -122,7 +120,6 @@ span {display:contents;}
     width: 100%;
     display: inline-flex;
     flex-direction: column;
-    position: relative;
 }
 .rustex-vbox { vertical-align: bottom }
 .rustex-vtop {vertical-align: baseline }
@@ -132,20 +129,19 @@ span {display:contents;}
     width:100%;
     white-space: initial;
     vertical-align: bottom;
-    position: relative;
 }
 .rustex-vtop-height-container {
     display:inline-block;
     white-space: initial;
     width:100%;
-    position: relative;
+    position:relative;
+    z-index: auto;
 }
 .rustex-vbox-container, .rustex-vtop-container {
     display:inline-block;
     width: min-content;
     height: min-content;
     white-space: initial;
-    position:relative;
 }
 .rustex-vcenter-container {
     display:inline-block;
@@ -153,14 +149,12 @@ span {display:contents;}
     height: min-content;
     white-space: initial;
     vertical-align: middle;
-    position:relative;
     > div {
         height: min-content;
         width: 100%;
         display: inline-flex;
         flex-direction: column;
         vertical-align: middle;
-        position:relative;
     }
 }
 
@@ -171,18 +165,15 @@ span {display:contents;}
     vertical-align: text-bottom;
     min-width: var(--rustex-this-width);
     max-width: var(--rustex-this-width);
-    position:relative;
 }
 .rustex-vrule-container {
     display:inline-block; white-space: initial;
     min-width: var(--rustex-this-width);
     max-width: var(--rustex-this-width);
-    position:relative;
     > * {
         display:inline-block;
         width:100%;
         height:100%;
-        position:relative;
     }
 }
 
@@ -193,7 +184,6 @@ span {display:contents;}
     > * {
         display:block;
         width:100%;
-        position:relative;
     }
 }
 
@@ -201,26 +191,20 @@ span {display:contents;}
 
 .rustex-hskip, .rustex-hkern {
     display:inline-block;
-    position:relative;
 }
 .rustex-vskip, .rustex-vkern {
     display: block;
-    position:relative;
 }
 .rustex-mskip {}
 
 .rustex-vss {
     display:block;margin-top: auto;margin-bottom: auto;
-    position:relative;
 }
 .rustex-hss {
     display: inline-block;margin-left: auto;margin-right: auto;
-    position:relative;
 }
-.rustex-hfil, .rustex-hfill { display:inline-block;margin-left: auto;margin-right: auto;
-    position:relative; }
-.rustex-vfil, .rustex-vfill { display:block;margin-top: auto;margin-bottom: auto;
-    position:relative; }
+.rustex-hfil, .rustex-hfill { display:inline-block;margin-left: auto;margin-right: auto; }
+.rustex-vfil, .rustex-vfill { display:block;margin-top: auto;margin-bottom: auto; }
 
 /* ----------------------------------------------------- Math ------------------------------------------------------- */
 
@@ -272,7 +256,6 @@ span {display:contents;}
     align-self: center;
     width: 100%;
     min-width: 100%;
-    position:relative;
 }
 
 .rustex-math-escape {
@@ -285,7 +268,6 @@ span {display:contents;}
     > * {
         font-size: inherit;
         writing-mode: initial;
-        position:relative;
     }
 }
 

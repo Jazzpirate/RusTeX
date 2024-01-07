@@ -221,7 +221,7 @@ pub(crate) fn do_missing_glyph(state:&mut ShipoutState,char:u8,font:&Font) {
 
 pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VNodes,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip,parskip:Option<Skip32<Dim32>>) {
     if let Some(parskip) = parskip {
-        state.push_comment(format!("<div class=\"rustex-vskip\", style=\"margin-bottom:{};\"></div>",dim_to_string(parskip.base)))
+        state.push_comment(format!("<div class=\"rustex-vskip\" style=\"margin-bottom:{};\"></div>",dim_to_string(parskip.base)))
     }
     let spec = spec.pop().unwrap();
     let align: Alignment = Alignment::from(spec.leftskip,spec.rightskip);
@@ -617,6 +617,11 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
                     state.push(node);
                 };
             });
+        }
+        MathNucleus::Middle(c,s) => {
+            let mut node = nodes::do_mathchar(engine, state, c, MathClass::Op, s.font);
+            node.attrs.insert("stretchy".into(),"true".into());
+            state.push(node)
         }
         MathNucleus::Underline(k) => {
             let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));

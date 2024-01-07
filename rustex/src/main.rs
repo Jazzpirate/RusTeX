@@ -35,7 +35,7 @@ fn test() {
 
 fn thesis() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",false,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html", &ret).unwrap();
 }
 
