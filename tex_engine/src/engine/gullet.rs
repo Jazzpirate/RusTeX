@@ -304,6 +304,18 @@ impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
     pub fn groupval(&self) -> u8 {
         if self.omit { 0 } else { self.columns[self.currindex].inbraces }
     }
+    pub fn dummy() -> Self {
+        Self {
+            ingroups:125,
+            currindex:0,
+            recindex:None,
+            columns:shared_vector::vector!(AlignColumn::new(shared_vector::Vector::new(),shared_vector::Vector::new(),Sk::default(),0)).into(),
+            omit:false,
+            span:false,
+            inner_mode:BoxType::Horizontal,
+            outer_mode:BoxType::Vertical
+        }
+    }
 }
 
 

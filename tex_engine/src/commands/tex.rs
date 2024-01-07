@@ -837,6 +837,14 @@ pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
+    match engine.stomach.data_mut().mode() {
+        TeXMode::Horizontal => {
+            engine.requeue(token);
+            return ET::Stomach::close_paragraph(engine)
+        },
+        TeXMode::DisplayMath | TeXMode::Vertical | TeXMode::InternalVertical => (),
+        _ => todo!("throw error")
+    }
     let wd = if engine.read_keyword(b"to") {
         Some(engine.read_dim(false))
     } else {
@@ -2382,6 +2390,12 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
                 _ => unreachable!()
             }
             data.currindex += 1;
+            if data.columns.len() <= data.currindex {
+                match data.recindex {
+                    Some(i) => data.currindex = i,
+                    _ => ()
+                }
+            }
             if data.span {
                 todo!()
             } else {
@@ -2391,7 +2405,7 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
             crate::expand_loop!(engine,
                 ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
                 ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
-                    todo!("close align")
+                    todo!("close align?")
                 }
                 ResolvedToken::Tk{code:CommandCode::Space,..} => (),
                 ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
@@ -2557,7 +2571,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"endgroup",CommandScope::Any,endgroup);
     register_unexpandable(engine,"end",CommandScope::Any,end);
     register_unexpandable(engine,"errorstopmode",CommandScope::Any,errorstopmode);
-    register_unexpandable(engine,"halign",CommandScope::SwitchesToVertical,halign);
+    register_unexpandable(engine,"halign",CommandScope::Any,halign);
     register_unexpandable(engine,"valign",CommandScope::SwitchesToHorizontal,valign);
     register_unexpandable(engine, "hyphenation",CommandScope::Any, |e,_|skip_argument(e));
     register_unexpandable(engine,"ignorespaces",CommandScope::Any,ignorespaces);
@@ -2681,230 +2695,4 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_primitive_skip(engine,PRIMITIVE_SKIPS);
     register_primitive_muskip(engine,PRIMITIVE_MUSKIPS);
     register_primitive_toks(engine,PRIMITIVE_TOKS);
-
-    // TODOS ---------------------------------------------------------------------
-
-
-/*
-    register_assign!(advance,engine,(e,cmd,global) =>advance::<ET>(e,&cmd,global));
-    register_unexpandable!(afterassignment,engine,None,(e,cmd) =>afterassignment::<ET>(e,&cmd));
-    register_unexpandable!(aftergroup,engine,None,(e,cmd) =>aftergroup::<ET>(e,&cmd));
-    register_unexpandable!(begingroup,engine,None,(e,cmd) =>begingroup::<ET>(&mut e.state));
-    register_box!(box,engine,(e,cmd) =>box_::<ET>(e,&cmd));
-    register_value_assign_int!(catcode,engine);
-    register_unexpandable!(char,engine,Some(HorV::Horizontal),(e,cmd) =>char::<ET>(e,&cmd));
-    register_assign!(chardef,engine,(e,cmd,global) =>chardef::<ET>(e,&cmd,global));
-    register_unexpandable!(closein,engine,None,(e,cmd) =>closein::<ET>(e,&cmd));
-    register_whatsit!(closeout,engine,(e,cmd) =>closeout::<ET>(e,&cmd));
-    register_box!(copy,engine,(e,cmd) =>copy::<ET>(e,&cmd));
-    register_value_assign_int!(count,engine);
-    register_assign!(countdef,engine,(e,cmd,global) =>countdef::<ET>(e,&cmd,global));
-    register_unexpandable!(cr,engine,None,(e,cmd) => cr::<ET>(e,&cmd));
-    register_unexpandable!(crcr,engine,None,(e,cmd) => crcr::<ET>(e,&cmd));
-    register_expandable_notk!(csname,engine,(e,cmd) =>csname::<ET>(e,&cmd));
-    register_int!(day,engine,(e,cmd) => day::<ET>(e,&cmd));
-    register_assign!(def,engine,(e,cmd,global) =>def::<ET>(e,&cmd,global,false,false,false));
-    register_unexpandable!(delimiter,engine,None,(e,cmd) =>delimiter::<ET>(e,&cmd));
-    register_value_assign_int!(delcode,engine);
-    register_value_assign_dim!(dimen,engine);
-    register_assign!(dimendef,engine,(e,cmd,global) =>dimendef::<ET>(e,&cmd,global));
-    register_unexpandable!(discretionary,engine,Some(HorV::Horizontal),(e,cmd) =>discretionary::<ET>(e,&cmd));
-    register_unexpandable!(displaylimits,engine,None,(e,cmd) =>displaylimits::<ET>(e,&cmd));
-    register_assign!(divide,engine,(e,cmd,global) =>divide::<ET>(e,&cmd,global));
-    register_value_assign_dim!(dp,engine);
-    register_unexpandable!(dump,engine,None,(_,cmd) =>dump::<ET>());
-    register_assign!(edef,engine,(e,cmd,global) =>edef::<ET>(e,&cmd,global,false,false,false));
-    register_expandable_notk!(else,engine,(e,cmd) =>else_::<ET>(e,&cmd));
-    register_unexpandable!(end,engine,None,(_,cmd) =>end::<ET>());
-    register_unexpandable!(endcsname,engine,None,(_,cmd) =>endcsname::<ET>(&cmd));
-    register_expandable_notk!(endinput,engine,(e,cmd) => endinput::<ET>(e,&cmd));
-    register_unexpandable!(endgroup,engine,None,(e,cmd) =>endgroup::<ET>(e,&cmd));
-    register_value_assign_int!(endlinechar,engine);
-    register_tok_assign!(errhelp,engine);
-
-    let em = Some(Command::new(BaseCommand::Unexpandable {
-        name:ERRMESSAGE,
-        apply:|e,cmd| errmessage::<ET>(e,&cmd),
-        forces_mode:None
-    },None));
-    engine.state.set_command(ET::Char::from_str(ERRMESSAGE,&mut engine.interner),em.clone(),true);
-    engine.state.set_command(ET::Char::from_str("LaTeX3 error:",&mut engine.interner),em,true);
-
-    register_unexpandable!(errorstopmode,engine,None,(_,cmd) =>errorstopmode::<ET>());
-    register_value_assign_int!(escapechar,engine);
-    register_expandable_notk!(expandafter,engine,(e,cmd) => expandafter::<ET>(e,&cmd));
-    register_expandable_notk!(fi,engine,(e,cmd) =>fi::<ET>(e,&cmd));
-    register_value_assign_font!(font,engine);
-    register_value_assign_dim!(fontdimen,engine);
-    register_assign!(futurelet,engine,(e,cmd,global) =>futurelet::<ET>(e,&cmd,global));
-    register_assign!(gdef,engine,(e,cmd,global) =>gdef::<ET>(e,&cmd,global,false,false,false));
-    register_assign!(global,engine,(e,cmd,g) =>global::<ET>(e,&cmd,g,false,false,false));
-    register_unexpandable!(halign,engine,Some(HorV::Vertical),(e,cmd) =>halign::<ET>(e,&cmd));
-    register_open_box!(hbox,engine,BoxMode::H,(e,cmd) =>hbox::<ET>(e,&cmd));
-    register_unexpandable!(hfil,engine,Some(HorV::Horizontal),(e,cmd) =>hfil::<ET>(e,&cmd));
-    register_unexpandable!(hfill,engine,Some(HorV::Horizontal),(e,cmd) =>hfill::<ET>(e,&cmd));
-    register_unexpandable!(hfilneg,engine,Some(HorV::Horizontal),(e,cmd) =>hfilneg::<ET>(e,&cmd));
-    register_unexpandable!(hss,engine,Some(HorV::Horizontal),(e,cmd) =>hss::<ET>(e,&cmd));
-    register_unexpandable!(hrule,engine,Some(HorV::Vertical),(e,cmd) =>hrule::<ET>(e,&cmd));
-    register_unexpandable!(hskip,engine,Some(HorV::Horizontal),(e,cmd) =>hskip::<ET>(e,&cmd));
-    register_value_assign_dim!(ht,engine);
-    register_unexpandable!(hyphenation,engine,None,(e,cmd) =>hyphenation::<ET>(e,&cmd));
-    register_value_assign_int!(hyphenchar,engine);
-    register_conditional!(if,engine,(e,cmd) =>if_::<ET>(e,&cmd));
-    register_conditional!(ifcase,engine,(_,cmd) =>ifcase::<ET>());
-    register_conditional!(ifcat,engine,(e,cmd) =>ifcat::<ET>(e,&cmd));
-    register_conditional!(ifdim,engine,(e,cmd) =>ifdim::<ET>(e,&cmd));
-    register_conditional!(ifeof,engine,(e,cmd) =>ifeof::<ET>(e,&cmd));
-    register_conditional!(iffalse,engine,(_,_) => false);
-    register_conditional!(ifhbox,engine,(e,cmd) => ifhbox::<ET>(e,&cmd));
-    register_conditional!(ifhmode,engine,(e,cmd) =>ifhmode::<ET>(e,&cmd));
-    register_conditional!(ifinner,engine,(e,cmd) =>ifinner::<ET>(e,&cmd));
-    register_conditional!(ifmmode,engine,(e,cmd) =>ifmmode::<ET>(e,&cmd));
-    register_conditional!(ifnum,engine,(e,cmd) =>ifnum::<ET>(e,&cmd));
-    register_conditional!(ifodd,engine,(e,cmd) =>ifodd::<ET>(e,&cmd));
-    register_conditional!(iftrue,engine,(_,_) => true);
-    register_conditional!(ifvbox,engine,(e,cmd) =>ifvbox::<ET>(e,&cmd));
-    register_conditional!(ifvmode,engine,(e,cmd) =>ifvmode::<ET>(e,&cmd));
-    register_conditional!(ifvoid,engine,(e,cmd) =>ifvoid::<ET>(e,&cmd));
-    register_conditional!(ifx,engine,(e,cmd) =>ifx::<ET>(e,&cmd));
-    register_unexpandable!(ignorespaces,engine,None,(e,cmd) => ignorespaces::<ET>(e,&cmd));
-    register_unexpandable!(immediate,engine,None,(e,cmd) =>immediate::<ET>(e,&cmd));
-    register_unexpandable!(indent,engine,Some(HorV::Horizontal),(e,cmd) =>indent::<ET>(e,&cmd));
-    register_expandable_notk!(input,engine,(e,cmd) =>input::<ET>(e,&cmd));
-    register_int!(inputlineno,engine,(e,cmd) => inputlineno::<ET>(e,&cmd));
-    register_unexpandable!(insert,engine,None,(e,cmd) =>insert::<ET>(e,&cmd));
-    register_expandable!(jobname,engine,(e,c,f) =>jobname::<ET>(e,&c,f));
-    register_unexpandable!(kern,engine,None,(e,cmd) =>kern::<ET>(e,&cmd));
-    register_box!(lastbox,engine,(e,cmd) =>lastbox::<ET>(e,&cmd));
-    register_dim!(lastkern,engine,(e,cmd) => lastkern::<ET>(e,&cmd));
-    register_skip!(lastskip,engine,(e,cmd) => lastskip::<ET>(e,&cmd));
-    register_int!(lastpenalty,engine,(e,cmd) => lastpenalty::<ET>(e,&cmd));
-    register_value_assign_int!(lccode,engine);
-    register_unexpandable!(leaders,engine,None,(e,cmd) =>leaders::<ET>(e,&cmd));
-    register_unexpandable!(cleaders,engine,None,(e,cmd) =>cleaders::<ET>(e,&cmd));
-    register_unexpandable!(xleaders,engine,None,(e,cmd) =>xleaders::<ET>(e,&cmd));
-    register_unexpandable!(left,engine,None,(e,cmd) =>left::<ET>(e,&cmd));
-    register_unexpandable!(right,engine,None,(e,cmd) =>right::<ET>(e,&cmd));
-    register_assign!(let,engine,(e,cmd,global) =>let_::<ET>(e,&cmd,global));
-    register_assign!(long,engine,(e,cmd,g) =>long::<ET>(e,&cmd,g,false,false,false));
-    register_unexpandable!(lower,engine,Some(HorV::Horizontal),(e,cmd) =>lower::<ET>(e,&cmd));
-    register_unexpandable!(lowercase,engine,None,(e,cmd) =>lowercase::<ET>(e,&cmd));
-    register_unexpandable!(mark,engine,None,(e,cmd) =>mark::<ET>(e,&cmd));
-    register_expandable!(topmark,engine,(e,c,f) =>topmark::<ET>(e,&c,f));
-    register_expandable!(firstmark,engine,(e,c,f) =>firstmark::<ET>(e,&c,f));
-    register_expandable!(botmark,engine,(e,c,f) =>botmark::<ET>(e,&c,f));
-    register_expandable!(splitfirstmark,engine,(e,c,f) =>splitfirstmark::<ET>(e,&c,f));
-    register_expandable!(splitbotmark,engine,(e,c,f) =>splitbotmark::<ET>(e,&c,f));
-    register_unexpandable!(mathaccent,engine,None,(e,cmd) =>mathaccent::<ET>(e,&cmd));
-    register_unexpandable!(mathchar,engine,None,(e,cmd) =>mathchar::<ET>(e,&cmd));
-    register_unexpandable!(mathord,engine,None,(e,cmd) =>mathord::<ET>(e,&cmd));
-    register_unexpandable!(mathop,engine,None,(e,cmd) =>mathop::<ET>(e,&cmd));
-    register_unexpandable!(mathbin,engine,None,(e,cmd) =>mathbin::<ET>(e,&cmd));
-    register_unexpandable!(mathrel,engine,None,(e,cmd) =>mathrel::<ET>(e,&cmd));
-    register_unexpandable!(mathopen,engine,None,(e,cmd) =>mathopen::<ET>(e,&cmd));
-    register_unexpandable!(mathclose,engine,None,(e,cmd) =>mathclose::<ET>(e,&cmd));
-    register_unexpandable!(mathpunct,engine,None,(e,cmd) =>mathpunct::<ET>(e,&cmd));
-    register_unexpandable!(mathinner,engine,None,(e,cmd) =>mathinner::<ET>(e,&cmd));
-    register_unexpandable!(mathchoice,engine,None,(e,cmd) =>mathchoice::<ET>(e,&cmd));
-    register_assign!(mathchardef,engine,(e,cmd,global) =>mathchardef::<ET>(e,&cmd,global));
-    register_value_assign_int!(mathcode,engine);
-    register_expandable!(meaning,engine,(e,cmd,f) => meaning::<ET>(e,&cmd,f));
-    register_unexpandable!(message,engine,None,(e,cmd) =>message::<ET>(e,&cmd));
-    register_unexpandable!(mkern,engine,None,(e,cmd) =>mkern::<ET>(e,&cmd));
-    register_int!(month,engine,(e,cmd) => month::<ET>(e,&cmd));
-    register_unexpandable!(moveright,engine,Some(HorV::Vertical),(e,cmd) =>moveright::<ET>(e,&cmd));
-    register_unexpandable!(moveleft,engine,Some(HorV::Vertical),(e,cmd) =>moveleft::<ET>(e,&cmd));
-    register_unexpandable!(mskip,engine,None,(e,cmd) =>mskip::<ET>(e,&cmd));
-    register_assign!(multiply,engine,(e,cmd,global) =>multiply::<ET>(e,&cmd,global));
-    register_value_assign_muskip!(muskip,engine);
-    register_assign!(muskipdef,engine,(e,cmd,global) =>muskipdef::<ET>(e,&cmd,global));
-    register_value_assign_int!(newlinechar,engine);
-    register_unexpandable!(noalign,engine,None,(e,cmd) =>noalign::<ET>(e,&cmd));
-    register_expandable_notk!(noexpand,engine,(e,cmd) => noexpand::<ET>(e,&cmd));
-    register_unexpandable!(noindent,engine,Some(HorV::Horizontal),(e,cmd) =>noindent::<ET>(e,&cmd));
-    engine.state.set_command(ET::Char::from_str("nullfont",&mut engine.interner), Some(Command::new(
-        BaseCommand::Font(ET::FontRef::default())
-        ,None)), true);
-    register_expandable!(number,engine,(e,cmd,f) => number::<ET>(e,&cmd,f));
-    register_unexpandable!(omit,engine,None,(e,cmd) =>omit::<ET>(e,&cmd));
-    register_unexpandable!(openin,engine,None,(e,cmd) =>openin::<ET>(e,&cmd));
-    register_whatsit!(openout,engine,(e,cmd) =>openout::<ET>(e,&cmd));
-    register_expandable_notk!(or,engine,(e,cmd) => or::<ET>(e,&cmd));
-    register_assign!(outer,engine,(e,cmd,g) =>outer::<ET>(e,&cmd,g,false,false,false));
-    register_unexpandable!(overline,engine,None,(e,cmd) =>overline::<ET>(e,&cmd));
-    register_value_assign_dim!(pagegoal,engine);
-    register_value_assign_dim!(pagetotal,engine);
-    register_value_assign_dim!(pagestretch,engine);
-    register_value_assign_dim!(pagefilstretch,engine);
-    register_value_assign_dim!(pagefillstretch,engine);
-    register_value_assign_dim!(pagefilllstretch,engine);
-    register_value_assign_dim!(pageshrink,engine);
-    register_value_assign_dim!(pagedepth,engine);
-
-    engine.state.set_command(ET::Char::from_str("par",&mut engine.interner),Some(Command::new(BaseCommand::Unexpandable {
-        name:"par",
-        apply:|e,cmd| par::<ET>(e,&cmd),
-        forces_mode:Some(HorV::Vertical)
-    },None)),true);
-    register_value_assign_int!(parshape,engine);
-    register_unexpandable!(patterns,engine,None,(e,cmd) =>patterns::<ET>(e,&cmd));
-    register_unexpandable!(penalty,engine,None,(e,cmd) =>penalty::<ET>(e,&cmd));
-    register_value_assign_dim!(prevdepth,engine);
-    register_unexpandable!(raise,engine,Some(HorV::Horizontal),(e,cmd) =>raise::<ET>(e,&cmd));
-    register_assign!(read,engine,(e,cmd,global) =>read::<ET>(e,&cmd,global));
-    engine.state.set_command(engine.interner.relax, Some(Command::new(BaseCommand::Relax,None)), true);
-    register_expandable!(romannumeral,engine,(e,cmd,f) => romannumeral::<ET>(e,&cmd,f));
-    register_value_assign_font!(scriptfont,engine);
-    register_value_assign_font!(scriptscriptfont,engine);
-    register_assign!(setbox,engine,(e,cmd,global) =>setbox::<ET>(e,&cmd,global));
-    register_value_assign_int!(sfcode,engine);
-    register_unexpandable!(shipout,engine,None,(e,cmd) =>shipout::<ET>(e,&cmd));
-    register_value_assign_int!(skewchar,engine);
-    register_value_assign_skip!(skip,engine);
-    register_assign!(skipdef,engine,(e,cmd,global) =>skipdef::<ET>(e,&cmd,global));
-    register_value_assign_int!(spacefactor,engine);
-    register_unexpandable!(span,engine,None,(e,cmd) => span::<ET>(e,&cmd));
-    register_expandable!(string,engine,(e,cmd,f) => string::<ET>(e,&cmd,f));
-    register_value_assign_font!(textfont,engine);
-    register_expandable!(the,engine,(e,cmd,f) => the::<ET>(e,&cmd,f));
-    register_int!(time,engine,(e,cmd) => time::<ET>(e,&cmd));
-    register_value_assign_toks!(toks,engine);
-    register_assign!(toksdef,engine,(e,cmd,global) =>toksdef::<ET>(e,&cmd,global));
-    register_value_assign_int!(uccode,engine);
-    register_unexpandable!(underline,engine,None,(e,cmd) =>underline::<ET>(e,&cmd));
-    register_unexpandable!(unhbox,engine,Some(HorV::Horizontal),(e,cmd) =>unhbox::<ET>(e,&cmd));
-    register_unexpandable!(unhcopy,engine,Some(HorV::Horizontal),(e,cmd) =>unhcopy::<ET>(e,&cmd));
-    register_unexpandable!(unvbox,engine,Some(HorV::Vertical),(e,cmd) =>unvbox::<ET>(e,&cmd));
-    register_unexpandable!(unvcopy,engine,Some(HorV::Vertical),(e,cmd) =>unvcopy::<ET>(e,&cmd));
-    register_unexpandable!(unskip,engine,None,(e,cmd) =>unskip::<ET>(e,&cmd));
-    register_unexpandable!(unkern,engine,None,(e,cmd) =>unkern::<ET>(e,&cmd));
-    register_unexpandable!(unpenalty,engine,None,(e,cmd) =>unpenalty::<ET>(e,&cmd));
-    register_unexpandable!(uppercase,engine,None,(e,cmd) =>uppercase::<ET>(e,&cmd));
-    register_open_box!(vadjust,engine,BoxMode::V,(e,cmd) =>vadjust::<ET>(e,&cmd));
-    register_unexpandable!(valign,engine,Some(HorV::Vertical),(e,cmd) =>valign::<ET>(e,&cmd));
-    register_open_box!(vbox,engine,BoxMode::V,(e,cmd) =>vbox::<ET>(e,&cmd));
-    register_open_box!(vcenter,engine,BoxMode::V,(e,cmd) =>vcenter::<ET>(e,&cmd));
-    register_open_box!(vtop,engine,BoxMode::V,(e,cmd) =>vtop::<ET>(e,&cmd));
-    register_unexpandable!(vfil,engine,Some(HorV::Vertical),(e,cmd) =>vfil::<ET>(e,&cmd));
-    register_unexpandable!(vfill,engine,Some(HorV::Vertical),(e,cmd) =>vfill::<ET>(e,&cmd));
-    register_unexpandable!(vfilneg,engine,Some(HorV::Vertical),(e,cmd) =>vfilneg::<ET>(e,&cmd));
-    register_unexpandable!(vskip,engine,Some(HorV::Vertical),(e,cmd) =>vskip::<ET>(e,&cmd));
-    register_box!(vsplit,engine,(e,cmd) =>vsplit::<ET>(e,&cmd));
-    register_unexpandable!(vss,engine,Some(HorV::Vertical),(e,cmd) =>vss::<ET>(e,&cmd));
-    register_unexpandable!(vrule,engine,Some(HorV::Horizontal),(e,cmd) =>vrule::<ET>(e,&cmd));
-    register_value_assign_dim!(wd,engine);
-    register_whatsit!(write,engine,(e,cmd) =>write::<ET>(e,&cmd));
-    register_assign!(xdef,engine,(e,cmd,global) =>xdef::<ET>(e,&cmd,global,false,false,false));
-    register_skip_assign!(xspaceskip,engine);
-    register_int!(year,engine,(e,cmd) => year::<ET>(e,&cmd));
-
-    engine.state.set_command(ET::Char::from_str(" ",&mut engine.interner),Some(
-        Command::new(BaseCommand::Unexpandable {
-            name:" ",
-            apply:|e,cmd| SPACE::<ET>(e,&cmd),
-            forces_mode:Some(HorV::Horizontal)
-        },None)),true);
-
-
- */
 }

@@ -592,8 +592,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,to:Option<ET::Dim>) {
     engine.expand_until_bgroup(true);
+    engine.gullet.push_align(AlignData::dummy());
     let data = read_align_preamble(engine,inner,between);
-    engine.gullet.push_align(data);
+    *engine.gullet.get_align_data().unwrap() = data;
     ET::Stomach::open_align(engine,inner,between);
     start_align_row(engine,inner);
 }
@@ -798,13 +799,6 @@ pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     match engine.gullet.get_align_data() {
         None => todo!("throw error"),
         Some(data) => {
-            if data.columns.len() <= data.currindex {
-                match data.recindex {
-                    Some(i) => data.currindex = i,
-                    _ =>
-                        todo!("throw error")
-                }
-            }
             if !data.omit { engine.mouth.push_exp(TokenListIterator::new(None,data.columns[data.currindex].left.clone())); }
             engine.state.push(engine.aux,GroupType::Box(mode),engine.mouth.line_number());
             engine.stomach.data_mut().open_lists.push(

@@ -316,7 +316,7 @@ pub trait Stomach {
             (a,b) => {
                 let mut str = String::new();
                 token.display_fmt(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char(),&mut str).unwrap();
-                todo!("switch modes maybe: {:?} in {:?}: {}",a,b,str)
+                crate::throw!("switch modes maybe: {:?} in {:?}: {}",a,b,str)
             }
         }
     }
@@ -363,6 +363,75 @@ pub trait Stomach {
                 }
                 _ => todo!("throw error")
             }
+            ResolvedToken::Cmd {cmd:Some(Command::PrimitiveToks(name)),..} => {
+                let tks = engine.state.get_primitive_tokens(*name).clone();
+                engine.state.set_toks_register(engine.aux,register,tks,global);
+                insert_afterassignment(engine);
+                return ()
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} => {
+                let tks = engine.state.get_toks_register(*u).clone();
+                engine.state.set_toks_register(engine.aux,register,tks,global);
+                insert_afterassignment(engine);
+                return ()
+            }
+            _ => todo!("throw error")
+        )
+    }
+    fn assign_primitive_toks(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
+        let mut had_eq = false;
+        crate::expand_loop!(Self::ET; engine,
+            ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
+                (_,CommandCode::Space) => (),
+                (Ok(b'='),CommandCode::Other) if !had_eq => {
+                    if had_eq { todo!("throw error") }
+                    had_eq = true;
+                }
+                (_,CommandCode::BeginGroup) => {
+                    let mut tks = shared_vector::Vector::new();
+                    if name == PRIMITIVES.output {
+                        tks.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
+                        engine.read_until_endgroup(|_,_,t| tks.push(t));
+                        tks.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
+                    } else {
+                        engine.read_until_endgroup(|_,_,t| tks.push(t));
+                    }
+                    engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
+                    insert_afterassignment(engine);
+                    return ()
+                }
+                _ => todo!("throw error")
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::PrimitiveToks(n)),..} => {
+                let tks = engine.state.get_primitive_tokens(*n);
+                let tks = if name == PRIMITIVES.output {
+                    let mut ntk = shared_vector::Vector::new();
+                    ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
+                    ntk.extend_from_slice(tks.0.as_slice());
+                    ntk.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
+                    ntk.into()
+                } else {
+                    tks.clone()
+                };
+                engine.state.set_primitive_tokens(engine.aux,name,tks,global);
+                insert_afterassignment(engine);
+                return ()
+            }
+            ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} => {
+                let tks = engine.state.get_toks_register(*u);
+                let tks = if name == PRIMITIVES.output {
+                    let mut ntk = shared_vector::Vector::new();
+                    ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
+                    ntk.extend_from_slice(tks.0.as_slice());
+                    ntk.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
+                    ntk.into()
+                } else {
+                    tks.clone()
+                };
+                engine.state.set_primitive_tokens(engine.aux,name,tks,global);
+                insert_afterassignment(engine);
+                return ()
+            }
             _ => todo!("throw error")
         )
     }
@@ -389,33 +458,6 @@ pub trait Stomach {
         let val = engine.read_muskip(true);
         engine.state.set_primitive_muskip(engine.aux,name,val,global);
         insert_afterassignment(engine);
-    }
-    fn assign_primitive_toks(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        let mut had_eq = false;
-        crate::expand_loop!(Self::ET; engine,
-            ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
-                (_,CommandCode::Space) => (),
-                (Ok(b'='),CommandCode::Other) if !had_eq => {
-                    if had_eq { todo!("throw error") }
-                    had_eq = true;
-                }
-                (_,CommandCode::BeginGroup) => {
-                    let mut tks = shared_vector::Vector::new();
-                    if name == PRIMITIVES.output {
-                        tks.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                        engine.read_until_endgroup(|_,_,t| tks.push(t));
-                        tks.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-                    } else {
-                        engine.read_until_endgroup(|_,_,t| tks.push(t));
-                    }
-                    engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
-                    insert_afterassignment(engine);
-                    return ()
-                }
-                _ => todo!("throw error")
-            }
-            _ => todo!("throw error")
-        )
     }
     fn do_whatsit(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
                                                                                 -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>)>>) {
@@ -448,8 +490,16 @@ pub trait Stomach {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
                 engine.state.pop(engine.aux,&mut engine.mouth);
-                for c in children {
-                    Self::add_node_v(engine, c);
+                match engine.stomach.data_mut().open_lists.last_mut() {
+                    Some(NodeList::Math {..}) => {
+                        Self::add_node_m(engine,MathNode::Atom(MathAtom {
+                            nucleus: MathNucleus::VCenter {children:children.into(),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()},
+                            sup:None,sub:None
+                        }));
+                    }
+                    _ => for c in children {
+                        Self::add_node_v(engine, c);
+                    }
                 }
             }
             Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::VAlign}) => {
@@ -978,15 +1028,15 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     } else { unreachable!() };
                     let ht = g.height();
                     let dp = g.depth();
-                    reinserts.push(VNode::VSkip(a));
+                    //reinserts.push(VNode::VSkip(a));
                     next_line!(false);
                     ret.push(ParLine::Line(TeXBox::H {children:vec!(g).into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
                         spec:line_spec.clone(),
                         ends_with_line_break:false,
-                        inner_height:ht,
-                        inner_depth:dp
+                        inner_height:ht + dp + a.base() + b.base(),
+                        inner_depth:ET::Dim::default()
                     },preskip:None}));
-                    ret.push(ParLine::Adjust(VNode::VSkip(b)));
+                    //ret.push(ParLine::Adjust(VNode::VSkip(b)));
                     continue 'A
                 }
                 Some(HNode::Penalty(i)) if i <= -10000 => {
