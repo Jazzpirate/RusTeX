@@ -90,7 +90,7 @@ pub enum VerticalNodeListType<ET:EngineTypes> {
     VCenter(SourceRef<ET>),
     VAdjust,
     VAlignRow(SourceRef<ET>),
-    VAlignCell(SourceRef<ET>),
+    VAlignCell(SourceRef<ET>,u8),
     HAlign,Page
 }
 
@@ -100,7 +100,7 @@ pub enum HorizontalNodeListType<ET:EngineTypes> {
     Box(HBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
     VAlign,
     HAlignRow(SourceRef<ET>),
-    HAlignCell(SourceRef<ET>),
+    HAlignCell(SourceRef<ET>,u8),
 }
 
 pub struct BoxTarget<ET:EngineTypes>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,TeXBox<ET>)>>);

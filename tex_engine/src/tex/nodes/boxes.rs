@@ -40,6 +40,7 @@ pub enum HBoxInfo<ET:EngineTypes> {
         computed_width:OnceCell<ET::Dim>,
         computed_height:OnceCell<ET::Dim>,
         computed_depth:OnceCell<ET::Dim>,
+        spans:u8
     },
     ParIndent(ET::Dim),
 }
@@ -69,12 +70,13 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
             computed_depth: OnceCell::new(),
         }
     }
-    pub fn new_cell() -> Self {
+    pub fn new_cell(spans:u8) -> Self {
         HBoxInfo::HAlignCell {
             to: None,
             computed_width: OnceCell::new(),
             computed_height: OnceCell::new(),
             computed_depth: OnceCell::new(),
+            spans
         }
     }
     pub fn open_list(self,start:SourceRef<ET>) -> NodeList<ET> {
@@ -82,7 +84,7 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
             HBoxInfo::HBox {..} => NodeList::Horizontal {tp:HorizontalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             HBoxInfo::ParLine {..} => NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(start),children:vec!()},
             HBoxInfo::HAlignRow => NodeList::Horizontal {tp:HorizontalNodeListType::HAlignRow(start),children:vec!()},
-            HBoxInfo::HAlignCell {..} => NodeList::Horizontal {tp:HorizontalNodeListType::HAlignCell(start),children:vec!()},
+            HBoxInfo::HAlignCell {..} => NodeList::Horizontal {tp:HorizontalNodeListType::HAlignCell(start,0),children:vec!()},
             HBoxInfo::ParIndent(_) => unreachable!(),
         }
     }
@@ -138,7 +140,7 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub enum VBoxInfo<ET:EngineTypes> {
     VAlignRow,VAlignCell {
-        to: Option<ET::Dim>,
+        to: Option<ET::Dim>,spans:u8
     },
     VBox {
         scaled:ToOrSpread<ET::Dim>,
@@ -207,7 +209,7 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             VBoxInfo::VBox {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             VBoxInfo::VTop {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             VBoxInfo::VAlignRow => NodeList::Vertical {tp:VerticalNodeListType::VAlignRow(start),children:vec!()},
-            VBoxInfo::VAlignCell {..} => NodeList::Vertical {tp:VerticalNodeListType::VAlignCell(start),children:vec!()},
+            VBoxInfo::VAlignCell {..} => NodeList::Vertical {tp:VerticalNodeListType::VAlignCell(start,0),children:vec!()},
         }
     }
     pub fn clone_for_split(&mut self) -> Self {
@@ -259,7 +261,7 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
     fn get_height(&self,v:&[VNode<ET>]) -> ET::Dim {
         match self {
             VBoxInfo::VAlignRow => Self::height_inner(v),
-            VBoxInfo::VAlignCell { to } => to.unwrap_or_else(||  Self::height_inner(v)),
+            VBoxInfo::VAlignCell { to,.. } => to.unwrap_or_else(||  Self::height_inner(v)),
             VBoxInfo::VBox { assigned_height,computed_height, .. } => assigned_height.unwrap_or_else(|| *computed_height.get_or_init(|| Self::height_inner(v))),
             VBoxInfo::VTop { assigned_height,computed_height, .. } => assigned_height.unwrap_or_else(|| *computed_height.get_or_init(|| {
                 match v.first() {

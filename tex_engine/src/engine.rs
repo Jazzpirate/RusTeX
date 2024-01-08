@@ -160,7 +160,7 @@ pub trait TeXEngine:Sized {
         comps.mouth.insert_every::<Self::Types>(&comps.state,PRIMITIVES.everyjob);
         comps.aux.start_time = chrono::Local::now();
         //comps.aux.elapsed = std::time::Instant::now();
-        debug_log!(debug =>"Here: {}",comps.preview());
+        //debug_log!(debug =>"Here: {}",comps.preview());
         comps.colon = Colon::new(f);
         comps.top_loop();
     })}

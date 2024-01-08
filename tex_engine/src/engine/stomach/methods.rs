@@ -139,6 +139,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
     }
     data.pagetotal = data.pagetotal + ht + node.depth(); // ?
     if let VNode::Penalty(i) = node {
+        data.lastpenalty = i;
         if i <= -10000 {
             if data.page_contains_boxes {
                 return ET::Stomach::maybe_shipout(engine, Some(i))
@@ -147,5 +148,5 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
     }
     let disc = node.discardable();
     data.page.push(node);
-    if disc {ET::Stomach::maybe_shipout(engine, None)}
+    if disc && data.lastpenalty < 1000 {ET::Stomach::maybe_shipout(engine, None)}
 }

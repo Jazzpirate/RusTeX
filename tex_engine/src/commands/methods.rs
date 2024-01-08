@@ -591,8 +591,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 
 pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,to:Option<ET::Dim>) {
-    engine.expand_until_bgroup(true);
     engine.gullet.push_align(AlignData::dummy());
+    engine.expand_until_bgroup(true);
     let data = read_align_preamble(engine,inner,between);
     *engine.gullet.get_align_data().unwrap() = data;
     ET::Stomach::open_align(engine,inner,between);
@@ -800,19 +800,23 @@ pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
         None => todo!("throw error"),
         Some(data) => {
             if !data.omit { engine.mouth.push_exp(TokenListIterator::new(None,data.columns[data.currindex].left.clone())); }
-            engine.state.push(engine.aux,GroupType::Box(mode),engine.mouth.line_number());
-            engine.stomach.data_mut().open_lists.push(
-                match mode {
-                    BoxType::Vertical => NodeList::Vertical {
-                        children:vec!(),
-                        tp:VerticalNodeListType::VAlignCell(engine.mouth.start_ref())
-                    },
-                    _ => NodeList::Horizontal {
-                        children:vec!(),
-                        tp:HorizontalNodeListType::HAlignCell(engine.mouth.start_ref())
+            if data.span {
+                data.span = false
+            } else {
+                engine.state.push(engine.aux, GroupType::Box(mode), engine.mouth.line_number());
+                engine.stomach.data_mut().open_lists.push(
+                    match mode {
+                        BoxType::Vertical => NodeList::Vertical {
+                            children: vec!(),
+                            tp: VerticalNodeListType::VAlignCell(engine.mouth.start_ref(), 0)
+                        },
+                        _ => NodeList::Horizontal {
+                            children: vec!(),
+                            tp: HorizontalNodeListType::HAlignCell(engine.mouth.start_ref(), 0)
+                        }
                     }
-                }
-            );
+                )
+            }
         }
     }
 }
@@ -825,14 +829,14 @@ pub fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET
 }
 
 pub fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
-    let (children,start) = match stomach.data_mut().open_lists.pop() {
-        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignCell(start)}) => (children,start),
+    let (children,start,spans) = match stomach.data_mut().open_lists.pop() {
+        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignCell(start,i)}) => (children,start,i),
         _ => todo!("throw error")
     };
     state.pop(aux,mouth);
     let bx = TeXBox::V {
         children:children.into(),start,
-        info: VBoxInfo::VAlignCell {to:None},
+        info: VBoxInfo::VAlignCell {to:None,spans},
         end: mouth.current_sourceref(),
     };
     match stomach.data_mut().open_lists.last_mut() {
@@ -842,14 +846,14 @@ pub fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<
     }
 }
 pub fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
-    let (children,start) = match stomach.data_mut().open_lists.pop() {
-        Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignCell(start)}) => (children,start),
+    let (children,start,spans) = match stomach.data_mut().open_lists.pop() {
+        Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignCell(start,i)}) => (children,start,i),
         _ => todo!("throw error")
     };
     state.pop(aux,mouth);
     let bx = TeXBox::H {
         children:children.into(),start,
-        info: HBoxInfo::new_cell(),
+        info: HBoxInfo::new_cell(spans),
         end: mouth.current_sourceref(),preskip:None
     };
     match stomach.data_mut().open_lists.last_mut() {

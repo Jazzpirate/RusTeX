@@ -62,6 +62,10 @@ pub trait Gullet {
                             if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
                                 todo!()
                             }
+                            ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
+                            if *name == PRIMITIVES.span => {
+                                todo!()
+                            }
                             ResolvedToken::Tk { token, .. } | ResolvedToken::Cmd { token, .. } =>
                                 f(aux, state, self, token)
                         }
@@ -98,6 +102,12 @@ pub trait Gullet {
                             if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
                             methods::do_cr(mouth,aux,state,a);
                             return self.get_next_opt(mouth,aux,state)
+                        }
+                        ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
+                            if *name == PRIMITIVES.span => {
+                            a.span = true;
+                            methods::do_align(mouth,aux,a);
+                            self.get_next_opt(mouth,aux,state)
                         }
                         ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} =>
                             Some(token)
@@ -369,7 +379,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         }
     }
 
-    pub fn read_braced_string(&mut self,skip_ws:bool, mut str:&mut String) {
+    pub fn read_braced_string(&mut self,skip_ws:bool, expand_protected:bool, mut str:&mut String) {
         loop {
             match self.get_next() {
                 Some(t) if t.is_begin_group() => break,
@@ -378,7 +388,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 None => todo!("file end")
             }
         }
-        ET::Gullet::expand_until_endgroup(self,true,false,|a,s,_,t| {
+        ET::Gullet::expand_until_endgroup(self,expand_protected,false,|a,s,_,t| {
             t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
                           s.get_escape_char(),&mut str).unwrap();
         });
@@ -467,20 +477,27 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
         let trace = engine.state.get_primitive_int(PRIMITIVES.tracingcommands) > Int::<Self>::default();
         if trace {
             match token.to_enum() {
-                StandardToken::ControlSequence(cs) =>
+                StandardToken::ControlSequence(cs) => {
                     engine.aux.outputs.write_neg1(format_args!("~.{}{}{} {}",
-                                 Dots(engine.mouth.num_exps()),
-                                ET::Char::displayable_opt(engine.state.get_escape_char()),
-                                engine.aux.memory.cs_interner().resolve(&cs),
-                                 m.meaning::<ET>(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
-                    )),
-                StandardToken::Character(c,_) =>
+                                                               Dots(engine.mouth.num_exps()),
+                                                               ET::Char::displayable_opt(engine.state.get_escape_char()),
+                                                               engine.aux.memory.cs_interner().resolve(&cs),
+                                                               m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
+                    ));
+                    /*engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
+                    if engine.aux.memory.cs_interner().resolve(&cs).to_string() == "lst@ReplaceIn@" {
+                        println!("HERE!!!!")
+                    }*/
+                }
+                StandardToken::Character(c,_) => {
                     engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
-                                 Dots(engine.mouth.num_exps()),
-                                 c.displayable(),
-                                m.meaning::<ET>(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
-                    ))
-            };
+                                                               Dots(engine.mouth.num_exps()),
+                                                               c.displayable(),
+                                                               m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
+                    ));
+                    //engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
+                }
+            }
             //crate::debug_log!(error => "Here: {}",engine.preview());
         }
         if m.signature.params.is_empty() {

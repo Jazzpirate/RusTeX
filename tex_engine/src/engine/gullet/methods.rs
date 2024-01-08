@@ -8,7 +8,7 @@ use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::file_end;
 use std::str::FromStr;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
-use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
+use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, Int, ResolvedToken};
 use crate::engine::mouth::pretokenized::{TokenList, TokenListIterator};
 use crate::tex::control_sequences::{ControlSequenceNameHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;
@@ -124,7 +124,7 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
             arg.push(t);
         }
     }
-    todo!("file end")
+    crate::throw!("file end")
 }
 
 fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool) {

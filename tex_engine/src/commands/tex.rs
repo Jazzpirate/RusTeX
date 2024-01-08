@@ -6,7 +6,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
+use crate::engine::mouth::pretokenized::{Tokenizer, TokenList, TokenListIterator};
 use super::primitives::*;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
@@ -1303,14 +1303,14 @@ pub fn cleaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token
 
 pub fn message<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,&mut out);
+    engine.read_braced_string(false,true,&mut out);
     engine.aux.outputs.message(&out);
     engine.aux.memory.return_string(out);
 }
 
 pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) {
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,&mut out);
+    engine.read_braced_string(false,true,&mut out);
     write!(out," (line {})",engine.mouth.line_number());
     engine.aux.outputs.errmessage(&out);
     engine.aux.memory.return_string(out);
@@ -1618,7 +1618,7 @@ pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET
 pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET::Token>) {
     engine.mouth.push_vec(v.into_iter());
     let mut out = String::new();
-    engine.read_braced_string(false,&mut out);
+    engine.read_braced_string(false,false,&mut out);
     engine.filesystem.write(i,&out,engine.state.get_newline_char(),engine.aux);
 }
 
@@ -2397,7 +2397,13 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
                 }
             }
             if data.span {
-                todo!()
+                match engine.stomach.data_mut().open_lists.last_mut() {
+                    Some(NodeList::Horizontal {tp:HorizontalNodeListType::HAlignCell(_,ref mut span),..}) |
+                    Some(NodeList::Vertical {tp:VerticalNodeListType::VAlignCell(_,ref mut span),..}) => {
+                        *span += 1;
+                    }
+                    _ => todo!("throw error")
+                }
             } else {
                 super::methods::pop_align_cell(engine.state, engine.aux, engine.stomach, engine.mouth, data.inner_mode);
             }
@@ -2408,8 +2414,8 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
                     todo!("close align?")
                 }
                 ResolvedToken::Tk{code:CommandCode::Space,..} => (),
-                ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-                    if *name == PRIMITIVES.crcr => (),
+                /*ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
+                    if *name == PRIMITIVES.crcr => (),*/
                 ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                     if *name == PRIMITIVES.omit => {
                     engine.gullet.get_align_data().unwrap().omit = true;

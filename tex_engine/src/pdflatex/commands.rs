@@ -40,7 +40,7 @@ pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     let mut literal = String::new();
-    engine.read_braced_string(true,&mut literal);
+    engine.read_braced_string(true,true,&mut literal);
     let action = if engine.read_keyword(b"openaction") {
         Some(super::nodes::action_spec(engine))
     } else { None };
@@ -77,7 +77,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"set") => {
             let mut color = String::new();
-            engine.read_braced_string(true,&mut color);
+            engine.read_braced_string(true,true,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
             crate::add_node!(ET::Stomach;engine,
@@ -88,7 +88,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"push") => {
             let mut color = String::new();
-            engine.read_braced_string(true,&mut color);
+            engine.read_braced_string(true,true,&mut color);
             let color = PDFColor::parse(color);
             let stack = engine.aux.extension.colorstacks();
             crate::add_node!(ET::Stomach;engine,
@@ -106,7 +106,7 @@ pub fn pdfcolorstackinit<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET
     engine.read_keyword(b"page");
     engine.read_keyword(b"direct");
     let mut color = String::new();
-    engine.read_braced_string(false,&mut color);
+    engine.read_braced_string(false,true,&mut color);
     let color = PDFColor::parse(color);
     let idx = engine.aux.extension.colorstacks().len() as i32;
     engine.aux.extension.colorstacks().push(vec![color]);
@@ -144,7 +144,7 @@ pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::T
     }
     let attr = if engine.read_keyword(b"attr") {
         let mut attr = String::new();
-        engine.read_braced_string(true,&mut attr);
+        engine.read_braced_string(true,true,&mut attr);
         Some(attr)
     } else { None };
     let action = super::nodes::action_spec(engine);
@@ -185,7 +185,7 @@ pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::T
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     let mut str = String::new();
-    engine.read_braced_string(true,&mut str);
+    engine.read_braced_string(true,true,&mut str);
     let mut scale = 0f32;
     let mut rotate = 0f32;
     let mut skewx = 0f32;
@@ -337,7 +337,7 @@ pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
 
 pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut filename = engine.aux.memory.get_string();
-    engine.read_braced_string(false,&mut filename);
+    engine.read_braced_string(false,true,&mut filename);
     let file = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     if file.exists() {
@@ -362,8 +362,8 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
     let mut pattern_string = engine.aux.memory.get_string();
     let mut target_string = engine.aux.memory.get_string();
     if icase {pattern_string.push_str("(?i)");}
-    engine.read_braced_string(false,&mut pattern_string);
-    engine.read_braced_string(false,&mut target_string);
+    engine.read_braced_string(false,true,&mut pattern_string);
+    engine.read_braced_string(false,true,&mut target_string);
     let pdfmatches = engine.aux.extension.pdfmatches();
     pdfmatches.clear();
 
@@ -398,13 +398,13 @@ pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
     let mut f = |t| exp.push(t);
     if engine.read_keyword(b"file") {
         let mut filename = String::new();
-        engine.read_braced_string(true,&mut filename);
+        engine.read_braced_string(true,true,&mut filename);
         let file = engine.filesystem.get(&filename);
         let mut t = Tokenizer::new(&mut f);
         write!(t,"{:X}",file.md5()).unwrap()
     } else {
         let mut str = String::new();
-        engine.read_braced_string(false,&mut str);
+        engine.read_braced_string(false,true,&mut str);
         let mut t = Tokenizer::new(&mut f);
         write!(t,"{:X}",md5::compute(str)).unwrap()
     }
@@ -423,7 +423,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
             let num = num as usize;
             if num >= engine.aux.extension.pdfobjs().len() {todo!("throw error")}
             let mut str = String::new();
-            engine.read_braced_string(false,&mut str);
+            engine.read_braced_string(false,true,&mut str);
             engine.aux.extension.pdfobjs()[num] = PDFObj(str);
             num
         }
@@ -432,7 +432,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
                 // TODO
             }
             let mut str = String::new();
-            engine.read_braced_string(false,&mut str);
+            engine.read_braced_string(false,true,&mut str);
             engine.aux.extension.pdfobjs().push(PDFObj(str));
             engine.aux.extension.pdfobjs().len() - 1
         }
@@ -478,14 +478,14 @@ pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
           ET::CustomNode:From<PDFNode<ET>> {
     let mut attr = String::new();
     if engine.read_keyword(b"attr") {
-        engine.read_braced_string(true,&mut attr);
+        engine.read_braced_string(true,true,&mut attr);
     }
     let action = super::nodes::action_spec(engine);
     let count = if engine.read_keyword(b"count") {
         Some(engine.read_int(false).into())
     } else { None };
     let mut content = String::new();
-    engine.read_braced_string(true,&mut content);
+    engine.read_braced_string(true,true,&mut content);
     let node = PDFNode::PDFOutline(PDFOutline{
         attr,action,count,content
     });
@@ -496,11 +496,11 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     where ET::Extension : PDFExtension<ET> {
     let mut attr = String::new();
     if engine.read_keyword(b"attr") {
-        engine.read_braced_string(true,&mut attr);
+        engine.read_braced_string(true,true,&mut attr);
     }
     let mut resources = String::new();
     if engine.read_keyword(b"resources") {
-        engine.read_braced_string(true,&mut attr);
+        engine.read_braced_string(true,true,&mut attr);
     }
     let idx = crate::commands::methods::read_register(engine);
     let bx = engine.state.take_box_register(idx);
@@ -560,7 +560,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Tok
     }
     let mut attr = String::new();
     if engine.read_keyword(b"attr") {
-        engine.read_braced_string(true,&mut attr)
+        engine.read_braced_string(true,true,&mut attr)
     }
     let page = if engine.read_keyword(b"page") {
         Some(engine.read_int(false).into())
@@ -578,7 +578,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Tok
         _ => unreachable!()
     };
     let mut filename = String::new();
-    engine.read_braced_string(true,&mut filename);
+    engine.read_braced_string(true,true,&mut filename);
     let file = engine.filesystem.get(&filename);
     let img = match match image::io::Reader::open(file.path()) {
         Ok(x) => x,
@@ -631,7 +631,7 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
         todo!("shipout pdfliteral")
     } else {
         let mut literal = String::new();
-        engine.read_braced_string(false,&mut literal);
+        engine.read_braced_string(false,true,&mut literal);
         let node = PDFNode::PDFLiteral(PDFLiteral{ literal, option});
         crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
     }
@@ -646,8 +646,8 @@ pub fn pdfshellescape<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::T
 pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     let mut first = engine.aux.memory.get_string();
     let mut second = engine.aux.memory.get_string();
-    engine.read_braced_string(false,&mut first);
-    engine.read_braced_string(false,&mut second);
+    engine.read_braced_string(false,true,&mut first);
+    engine.read_braced_string(false,true,&mut second);
 
     if first == second {
         exp.push(ET::Token::from_char_cat(b'0'.into(),CommandCode::Other))

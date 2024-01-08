@@ -123,7 +123,8 @@ pub trait Stomach {
                 engine.stomach.data_mut().open_lists.push(NodeList::new_math(engine.mouth.start_ref()));
             },
             CommandCode::EndGroup if engine.stomach.data_mut().mode().is_math() => {
-                match engine.stomach.data_mut().open_lists.pop() {
+                let ls = engine.stomach.data_mut().open_lists.pop();
+                match ls {
                     Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) if t.is_some() => {
                         engine.state.pop(engine.aux,engine.mouth);
                         t.call(engine,children.close(start,engine.mouth.current_sourceref()),start);
@@ -523,6 +524,9 @@ pub trait Stomach {
     }
 
     fn add_node_h(engine:&mut EngineReferences<Self::ET>,node: HNode<Self::ET>) {
+        if let HNode::Penalty(i) = node {
+            engine.stomach.data_mut().lastpenalty = i;
+        }
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Horizontal {children,..}) => {
                 children.push(node);
@@ -813,6 +817,7 @@ pub struct StomachData<ET:EngineTypes> {
     pub splitfirstmarks:HMap<usize,TokenList<ET::Token>>,
     pub splitbotmarks:HMap<usize,TokenList<ET::Token>>,
     pub page_contains_boxes:bool,
+    pub lastpenalty: i32,
     pub in_output:bool,
     pub deadcycles:usize,
     pub vadjusts:Vec<VNode<ET>>,
@@ -864,6 +869,7 @@ impl <ET:EngineTypes> StomachData<ET> {
             botmarks:HMap::default(),
             splitfirstmarks:HMap::default(),
             splitbotmarks:HMap::default(),
+            lastpenalty:0,
             page_contains_boxes:false,
             in_output:false,
             deadcycles:0,
