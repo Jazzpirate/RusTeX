@@ -20,6 +20,7 @@ use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use lazy_static::lazy_static;
+use path_dedot::ParseDot;
 use crate::debug_log;
 use crate::tex::control_sequences::ResolvedCSName;
 use crate::utils::HMap;
@@ -370,6 +371,7 @@ impl Kpathsea {
 
     /// Search for a file in the database.
     pub fn kpsewhich<S:AsRef<str>>(&self,filestr:S) -> KpseResult {
+        use path_dedot::*;
         let filestr = filestr.as_ref();
         if filestr.starts_with("|kpsewhich") {
             return KpseResult{path:self.pwd.join(filestr),exists:true}
@@ -400,7 +402,8 @@ impl Kpathsea {
             Some(p) => return KpseResult{path:p.clone(),exists:true},
             None => ()
         }
-        KpseResult{path:self.pwd.join(filestr),exists:false}
+        let p = self.pwd.join(Path::new(filestr)).parse_dot().unwrap().to_path_buf();
+        KpseResult{exists:p.exists(),path:p}
     }
 }
 
