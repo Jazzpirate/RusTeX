@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use crate::engine::TeXError;
 
 pub trait Outputs {
     fn new() -> Self;

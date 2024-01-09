@@ -24,6 +24,7 @@ use crate::tex::input_text::CharacterMap;
 use crate::tex::nodes::math::{MathKernel, MathNode, MathNucleus};
 use crate::tex::types::GroupType;
 use crate::tex::nodes::math::MathAtom;
+use crate::utils::errors::TeXError;
 
 pub fn eTeXversion<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
     2.into()

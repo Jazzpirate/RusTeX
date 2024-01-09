@@ -168,7 +168,7 @@ impl<'a,T:Token,F:FnMut(T)> Tokenizer<'a,T,F> {
 }
 
 impl<'a,T:Token,F:FnMut(T)> WriteChars<T::Char,T::CS> for Tokenizer<'a,T,F> {
-    fn push_char(&mut self, c:T::Char) { (self.0)(T::from_char_cat(c, CommandCode::Other)) }
+    fn push_char(&mut self, c:T::Char) {if matches!(c.try_into(),Ok(b' ')) {(self.0)(T::space())} else { (self.0)(T::from_char_cat(c, CommandCode::Other)) } }
     fn push_cs<I:ControlSequenceNameHandler<T::Char,T::CS>>(&mut self,cs:T::CS,int:&I,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) {
         if let Some(e) = esc {
             (self.0)(T::from_char_cat(e, CommandCode::Other));

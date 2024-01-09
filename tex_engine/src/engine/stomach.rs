@@ -1,4 +1,5 @@
 pub mod methods;
+use crate::engine::TeXError;
 
 use crate::commands::{CommandScope, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};

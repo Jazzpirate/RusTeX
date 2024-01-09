@@ -164,7 +164,7 @@ const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc"
 impl TeXDimen for Dim32 {
     #[inline(always)]
     fn scale_float(&self, times: f64) -> Self {
-        Self((self.0 as f64 * times).round() as i32)
+        Self((self.0 as f64 * times).floor() as i32)
     }
     #[inline(always)]
     fn from_sp(sp: i32) -> Self { Self(sp) }

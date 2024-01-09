@@ -7,7 +7,7 @@ use crate::engine::mouth::strings::StringTokenizer;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::control_sequences::ControlSequenceName;
-use crate::tex::input_text::{Character, TextLine, TextLineSource};
+use crate::tex::input_text::{Character, StringLineSource, TextLine, TextLineSource};
 use crate::tex::token::Token;
 use crate::utils::{HMap, Ptr};
 use crate::utils::errors::ErrorHandler;
@@ -110,31 +110,41 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         self.interner.resolve(id).unwrap()
     }
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
-        let path = self.kpse.kpsewhich(path);
-        match self.files.get(&path.path) {
+        let path = path.as_ref();
+        let kpath = self.kpse.kpsewhich(path);
+        match self.files.get(&kpath.path) {
             Some(f) => f.clone(),
             None => {
-                /*
-                let string = if path.path.starts_with(&self.kpse.pwd) {
-                    format!("./{}",path.path.strip_prefix(&self.kpse.pwd).unwrap().display())
-                } else if self.kpse.global.pre.iter().any(|p| path.path.starts_with(p)) {
-                    format!("<TEXINPUTS>/{}",path.path.file_name().unwrap().to_str().unwrap())
-                } else if self.kpse.global.post.iter().any(|p| path.path.starts_with(p)) {
-                    format!("<TEXINPUTS>/{}",path.path.file_name().unwrap().to_str().unwrap())
+                if path.starts_with("|kpsewhich ") {
+                    let s = &path[1..];
+                    let out = if cfg!(target_os = "windows") {
+                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(&["/C",s])//args.collect::<Vec<&str>>())
+                            .output().expect("kpsewhich not found!")
+                            .stdout
+                    } else {
+                        let args = s[10..].split(" ");
+                        std::process::Command::new("kpsewhich").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(args.collect::<Vec<&str>>())
+                            .output().expect("kpsewhich not found!")
+                            .stdout
+                    };
+                    let source = Some(StringLineSource::make_lines(out.into_iter()).into());
+                    let f = VirtualFile {
+                        path: kpath.path, source,
+                        pipe:true,
+                        exists:kpath.exists,
+                        id:self.interner.get_or_intern(path)
+                    };
+                    self.files.insert(f.path.clone(),f.clone());
+                    return f
+                }
+                let string = if kpath.path.starts_with(&self.kpse.pwd) {
+                    format!("./{}", kpath.path.strip_prefix(&self.kpse.pwd).unwrap().display())
                 } else {
-                    path.path.display().to_string()
-                };
-                 */
-                let string = if path.path.starts_with(&self.kpse.pwd) {
-                    format!("./{}",path.path.strip_prefix(&self.kpse.pwd).unwrap().display())
-                } else if self.kpse.global.set.iter().any(|p| path.path.starts_with(p)) {
-                    format!("<TEXINPUTS>/{}",path.path.file_name().unwrap().to_str().unwrap())
-                } else {
-                    path.path.display().to_string()
+                    kpath.path.display().to_string()
                 };
                 let f = VirtualFile {
-                    path:path.path,
-                    source:None,
+                    path: kpath.path,
+                    source:None,pipe:false,exists:kpath.exists,
                     id:self.interner.get_or_intern(string)
                 };
                 self.files.insert(f.path.clone(),f.clone());
@@ -206,9 +216,8 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             Some(o) => match std::mem::take(o) {
                 Some(f) => {
                     let vf = VirtualFile {
-                        path:f.1,
-                        source:Some(f.0.into()),id:f.2
-
+                        path:f.1,exists:true,
+                        source:Some(f.0.into()),id:f.2,pipe:false
                     };
                     self.files.insert(vf.path.clone(),vf);
                 }
@@ -314,8 +323,10 @@ impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
 #[derive(Clone,Debug)]
 pub struct VirtualFile<C:Character> {
     pub path:PathBuf,
+    pub pipe:bool,
     pub id:string_interner::symbol::SymbolU32,
-    pub source:Option<VirtualFileContents<C>>
+    pub source:Option<VirtualFileContents<C>>,
+    pub exists:bool
 }
 impl<C:Character> std::fmt::Display for VirtualFile<C> {
     #[inline(always)]
@@ -329,7 +340,7 @@ impl<C:Character> File for VirtualFile<C> {
     type SourceRefID = string_interner::symbol::SymbolU32;
     #[inline(always)]
     fn exists(&self) -> bool {
-        self.source.is_some() || self.path().exists()
+        self.exists
     }
     #[inline(always)]
     fn sourceref(&self) -> Self::SourceRefID { self.id }
@@ -369,92 +380,3 @@ impl<C:Character> File for VirtualFile<C> {
         }
     }
 }
-
-/*
-
-pub trait FileLineSource<C:Character>:TextLineSource<C> {
-    fn path(&self) -> &Path;
-}
-
-pub struct ReadOpenPhysicalFile<C:Character> {
-    path:PathBuf,
-    reader:std::io::Split<std::io::BufReader<std::fs::File>>,
-    phantom:PhantomData<C>
-}
-impl<C:Character> FileLineSource<C> for ReadOpenPhysicalFile<C> {
-    #[inline(always)]
-    fn path(&self) -> &Path { &self.path }
-}
-impl<C:Character> TextLineSource<C> for ReadOpenPhysicalFile<C> {
-    fn get_line(&mut self) -> Option<TextLine<C>> {
-        match self.reader.next() {
-            Some(Ok(mut s)) => {
-                if let Some(b'\r') = s.last() {
-                    s.pop();
-                }
-                while let Some(b' ') = s.last() {
-                    s.pop();
-                }
-                Some(C::convert(s))
-            }
-            _ => None
-        }
-    }
-}
-
-
-pub trait WriteOpenFile<C:Character> {
-    //fn write_line<I:Iterator<Item = C>>(&mut self,chars:&mut I);
-}
-
-
-
-
-impl<C:Character> File for VirtualFile<C> {
-    type Char = C;
-    type LineSource = ReadOpenVirtualFile<C>;
-    type Write = WriteOpenVirtualFile<C>;
-    fn path(&self) -> &Path { &self.path }
-    fn line_source(self) -> Option<Self::LineSource> {
-        ReadOpenVirtualFile {
-            path:self.path,
-            source:match self.source {
-                Some(src) => ROVF::Memory((*src).clone()),
-                None => ROVF::Physical()
-            }
-        }
-        match self.source {
-        }
-    }
-    fn write(self) -> Self::Write { todo!() }
-}
-
-pub struct ReadOpenVirtualFile<C:Character> {
-    path:PathBuf,
-    source:ROVF<C>
-}
-impl<C:Character> FileLineSource<C> for ReadOpenVirtualFile<C> {
-    #[inline(always)]
-    fn path(&self) -> &Path { &self.path }
-}
-impl<C:Character> TextLineSource<C> for ReadOpenVirtualFile<C> {
-    #[inline(always)]
-    fn get_line(&mut self) -> Option<Box<[C]>> { match self.source {
-        ROVF::Physical(ref mut f) => f.get_line(),
-        ROVF::Memory(ref mut s) => s.get_line()
-    } }
-}
-
-enum ROVF<C:Character> {
-    Physical(ReadOpenPhysicalFile<C>),
-    Memory(StringLineSource)
-}
-
-pub struct WriteOpenVirtualFile<C:Character> {
-    phantom:PhantomData<C>
-}
-
-impl<C:Character> WriteOpenFile<C> for WriteOpenVirtualFile<C> {
-}
-
-*/

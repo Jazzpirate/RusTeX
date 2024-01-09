@@ -1,5 +1,5 @@
 use std::fmt::Formatter;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::NodeTrait;
@@ -327,8 +327,31 @@ pub trait PDFExtension<ET:EngineTypes>: EngineExtension {
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>>;
     fn current_colorstack(&mut self) -> &mut usize;
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj>;
+    fn pdfannots(&mut self) -> &mut Vec<PDFAnnot<ET>>;
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>>;
+    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    fn pdfium_direct(&mut self) -> &mut Option<pdfium_render::prelude::Pdfium>;
+
+    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    fn pdfium(&mut self) -> Option<&pdfium_render::prelude::Pdfium> {
+        use pdfium_render::prelude::*;
+        match self.pdfium_direct() {
+            Some(p) => Some(p),
+            r => {
+                #[cfg(feature="pdfium-dyn")]
+                let lib = match Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
+                    .or_else(|_| Pdfium::bind_to_system_library()) {
+                    Ok(r) => r,
+                    _ => return None
+                };
+                #[cfg(feature="pdfium-static")]
+                let lib = Pdfium::bind_to_statically_linked_library().unwrap();
+                *r = Some(Pdfium::new(lib));
+                r.as_ref()
+            }
+        }
+    }
 }
 
 pub struct MinimalPDFExtension<ET:EngineTypes> {
@@ -339,6 +362,9 @@ pub struct MinimalPDFExtension<ET:EngineTypes> {
     pdfobjs:Vec<PDFObj>,
     pdfxforms:Vec<PDFXForm<ET>>,
     pdfximages:Vec<PDFXImage<ET>>,
+    pdfannots:Vec<PDFAnnot<ET>>,
+    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    pdfium:Option<pdfium_render::prelude::Pdfium>
 }
 impl<ET:EngineTypes> EngineExtension for MinimalPDFExtension<ET> {
     fn new() -> Self {
@@ -348,8 +374,11 @@ impl<ET:EngineTypes> EngineExtension for MinimalPDFExtension<ET> {
             colorstacks:vec!(vec!(PDFColor::black())),
             current_colorstack:0,
             pdfobjs:Vec::new(),
+            pdfannots:Vec::new(),
             pdfxforms:Vec::new(),
             pdfximages:Vec::new(),
+            #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+            pdfium:None
         }
     }
 }
@@ -371,7 +400,15 @@ impl<ET:EngineTypes> PDFExtension<ET> for MinimalPDFExtension<ET> {
     #[inline(always)]
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
     #[inline(always)]
+    fn pdfannots(&mut self) -> &mut Vec<PDFAnnot<ET>> { &mut self.pdfannots }
+    #[inline(always)]
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>> { &mut self.pdfximages }
+
+    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    #[inline(always)]
+    fn pdfium_direct(&mut self) -> &mut Option<pdfium_render::prelude::Pdfium> {
+        &mut self.pdfium
+    }
 }
 
 #[derive(Debug,Clone)]
@@ -383,23 +420,36 @@ pub struct PDFXForm<ET:EngineTypes> {
     pub resources:String,
     pub bx:Option<TeXBox<ET>>
 }
+#[derive(Debug,Clone)]
+pub struct PDFAnnot<ET:EngineTypes> {
+    pub width:Option<ET::Dim>,
+    pub height:Option<ET::Dim>,
+    pub depth:Option<ET::Dim>,
+    pub content:String
+}
 
 #[derive(Debug,Clone)]
 pub enum PDFImage {
     None,
     Img(image::DynamicImage),
+    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    PDF(image::DynamicImage)
 }
 impl PDFImage {
     pub fn width(&self) -> u32 {
         match self {
-            PDFImage::None => 0,
-            PDFImage::Img(img) => img.width()
+            PDFImage::None => 20,
+            PDFImage::Img(img) => img.width(),
+            #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+            PDFImage::PDF(img) => img.width()
         }
     }
     pub fn height(&self) -> u32 {
         match self {
-            PDFImage::None => 0,
-            PDFImage::Img(img) => img.height()
+            PDFImage::None => 20,
+            PDFImage::Img(img) => img.height(),
+            #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+            PDFImage::PDF(img) => img.width()
         }
     }
 }
@@ -415,6 +465,30 @@ pub struct PDFXImage<ET:EngineTypes> {
     pub boxspec:Option<PDFBoxSpec>,
     pub filepath:PathBuf,
     pub img:PDFImage
+}
+
+pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(path:&Path,ext:&mut E) -> PDFImage {
+    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    {
+        use pdfium_render::prelude::PdfRenderConfig;
+        match ext.pdfium() {
+            None => PDFImage::None,
+            Some(pdfium) => {
+                match pdfium.load_pdf_from_file(&path,None) {
+                    Ok(doc) => {
+                        let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
+                        match doc.pages().iter().next().unwrap().render_with_config(&cfg) {
+                            Ok(mut bmp) => PDFImage::PDF(bmp.as_image()),
+                            _ => PDFImage::None
+                        }
+                    }
+                    _ => PDFImage::None
+                }
+            }
+        }
+    }
+    #[cfg(not(any(feature="pdfium-dyn",feature="pdfium-static")))]
+    { PDFImage::None }
 }
 
 

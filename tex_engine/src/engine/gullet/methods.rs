@@ -17,6 +17,7 @@ use crate::utils::errors::ErrorHandler;
 use crate::tex::input_text::Character;
 use crate::engine::EngineAux;
 use crate::tex::numerics::TeXInt;
+use crate::engine::TeXError;
 
 pub fn do_align<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,a:&AlignData<ET::Token,ET::Skip>) {
     let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
@@ -722,7 +723,7 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
             }
             (_,CommandCode::Space) => {
                 let f = ret_float(engine,ret,is_negative);
-                return read_dim_unit(engine,f,None)
+                return read_unit_or_dim(engine,f)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
                 let f = ret_float(engine,ret,is_negative);

@@ -979,7 +979,7 @@ pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u
 pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> bool,h:fn(&HNode<ET>) -> bool,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> bool) {
     let data = engine.stomach.data_mut();
     match data.open_lists.last_mut() {
-        None => todo!("throw error: Not allowed in vertical"),
+        None => (),//todo!("throw error: Not allowed in vertical"), <- not entirely true; if there's contributed stuff not yet migrated to the current page, it's allowed
         Some(NodeList::Vertical {children,..}) => {
             let mut readd = arrayvec::ArrayVec::<VNode<ET>,10>::new();
             loop {

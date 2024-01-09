@@ -19,6 +19,7 @@ use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::types::TeXMode;
+use crate::utils::errors::TeXError;
 
 
 #[inline(always)]
@@ -392,6 +393,22 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
     }
 }
 
+pub fn pdflastmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
+    where ET::Extension : PDFExtension<ET>  {
+    let i = engine.read_int(false).into();
+    if i < 0 {todo!("throw error")}
+    match engine.aux.extension.pdfmatches().get(i as usize) {
+        None =>{
+            exp.push(ET::Token::from_char_cat(b'-'.into(),CommandCode::Other));
+            exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
+        }
+        Some(s) => {
+            let mut f = |t| exp.push(t);
+            let mut t = Tokenizer::new(&mut f);
+            write!(t,"{}",s).unwrap();
+        }
+    }
+}
 
 pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
     where ET::File: FileWithMD5 {
@@ -408,6 +425,12 @@ pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
         let mut t = Tokenizer::new(&mut f);
         write!(t,"{:X}",md5::compute(str)).unwrap()
     }
+}
+
+pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token) {
+ // \pdfannot ⟨annot type spec⟩ (h, v, m)
+    // reserveobjnum | [ useobjnum ⟨number⟩ ] [ ⟨rule spec⟩ ] ⟨general text⟩
+    // ⟨rule spec⟩ → ( width | height | depth ) ⟨dimen⟩ [ ⟨rule spec⟩ ]
 }
 
 pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
@@ -439,6 +462,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
         _ => todo!("throw error"),
     }
 }
+
 pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>
     where ET::Extension : PDFExtension<ET> {
@@ -587,7 +611,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Tok
         Ok(x) => PDFImage::Img(x),
         Err(e) => {
             match file.path().extension() {
-                Some(s) if s == "pdf" => todo!(),
+                Some(s) if s == "pdf" => super::nodes::pdf_as_image(file.path(),&mut engine.aux.extension),
                 _ => todo!("Error decoding image {} - {}",filename,e)
             }
         }
@@ -716,6 +740,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_expandable(engine,"pdfescapestring",pdfescapestring);
     register_expandable(engine,"pdffilesize",pdffilesize);
     register_expandable(engine,"pdfmatch",pdfmatch);
+    register_expandable(engine,"pdflastmatch",pdflastmatch);
     register_expandable(engine,"pdfstrcmp",pdfstrcmp);
     register_expandable(engine,"pdftexrevision",pdftexrevision);
     register_expandable(engine,"pdfmdfivesum",pdfmdfivesum);
@@ -822,7 +847,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdffontobjnum);
     cmtodo!(engine,pdfincludechars);
     cmtodo!(engine,pdfinsertht);
-    cmtodo!(engine,pdflastmatch);
     cmtodo!(engine,pdfnormaldeviate);
     cmtodo!(engine,pdfpageref);
     cmtodo!(engine,pdftexbanner);

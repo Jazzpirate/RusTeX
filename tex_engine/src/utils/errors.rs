@@ -181,13 +181,13 @@ impl Error for TeXError {
 #[macro_export]
 macro_rules! throw {
     ($arg:expr) => {
-        std::panic::panic_any::<crate::utils::errors::TeXError>(crate::utils::errors::TeXError{
+        std::panic::panic_any::<_>(TeXError{
             msg:$arg.to_string(),
             source:std::option::Option::None
         })
     };
     ($first:expr,$($arg:expr),*) => {
-        std::panic::panic_any::<crate::utils::errors::TeXError>(crate::utils::errors::TeXError{
+        std::panic::panic_any::<_>(TeXError{
             msg:format!($first,$($arg),*),
             source:std::option::Option::None
         })

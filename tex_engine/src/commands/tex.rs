@@ -29,6 +29,7 @@ use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
+use crate::utils::errors::TeXError;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -1052,13 +1053,14 @@ pub fn input<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     if filename.is_empty() {
         todo!("throw error")
     }
+    let is_file = !filename.starts_with("|");
     let file = engine.filesystem.get(&filename);
-    if !file.exists() {
+    if is_file && !file.exists() {
         todo!("throw error")
     }
     engine.aux.memory.return_string(filename);
     engine.aux.outputs.file_open(&file);
-    engine.push_file(file);
+    engine.push_file(file)
 }
 
 pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
@@ -1313,6 +1315,7 @@ pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Tok
     engine.read_braced_string(false,true,&mut out);
     write!(out," (line {})",engine.mouth.line_number());
     engine.aux.outputs.errmessage(&out);
+    engine.aux.error_handler.error_message::<(),_>(&out);
     engine.aux.memory.return_string(out);
 }
 
@@ -2302,7 +2305,8 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "tracingstats",
     "uchyph",
     "vbadness",
-    "widowpenalty"
+    "widowpenalty",
+    "synctex" // not technically plain tex, but supported in basically all engines
 ];
 
 const PRIMITIVE_DIMS:&[&'static str] = &[
@@ -2671,6 +2675,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "scriptstyle", CommandScope::MathOnly, scriptstyle);
     register_unexpandable(engine, "scriptscriptstyle", CommandScope::MathOnly, scriptscriptstyle);
 
+    register_unexpandable(engine,"nonscript",CommandScope::MathOnly,|_,_|()); // TODO
+
     register_whatsit(engine,"closeout",closeout,closeout_immediate);
     register_whatsit(engine,"openout",openout,openout_immediate);
     register_whatsit(engine,"write",write,write_immediate);
@@ -2691,7 +2697,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     cmstodo!(engine,radical);
 
     cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
-        show,showbox,showthe,special,noboundary,accent,setlanguage,nonscript,
+        show,showbox,showthe,special,noboundary,accent,setlanguage,
         atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
         leqno,bigskip,bye,italiccorr,medskip,smallskip
     );
