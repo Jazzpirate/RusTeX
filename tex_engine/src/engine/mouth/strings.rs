@@ -233,7 +233,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
                 None
             }
             Invalid => eh.invalid_character(c,format_args!("l. {} {}",self.line,self.current_line.displayable(self.col))),
-            Escape => Some(self.get_escape::<T>(handler, cc)),
+            Escape => Some(self.get_escape::<T>(handler, cc, endline)),
             Superscript => match self.maybe_superscript(c) {
                 Some(c) => self.check_char::<T, E>(eh, handler, cc, endline, c),
                 None => {
@@ -248,23 +248,30 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
         }
     }
 
-    fn get_escape<T:Token<Char=C>>(&mut self, handler:&mut CSHandler<T>, cc:&CategoryCodeScheme<C>) -> T {
+    fn get_escape<T:Token<Char=C>>(&mut self, handler:&mut CSHandler<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>) -> T {
         let name = match self.get_char() {
             None => {
                 self.state = MouthState::NewLine;
-                handler.empty_str()
+                match endline {
+                    None => handler.empty_str(),
+                    Some(c) => {
+                        self.tempstr.clear();
+                        self.tempstr.push(c);
+                        handler.from_chars(&self.tempstr)
+                    }
+                }
             },
-            Some(next) => self.check_escape::<T>(handler, cc, next)
+            Some(next) => self.check_escape::<T>(handler, cc, endline, next)
         };
         T::from_cs(name)
     }
 
-    fn check_escape<T:Token<Char=C>>(&mut self, handler:&mut CSHandler<T>, cc:&CategoryCodeScheme<C>, next:C) -> T::CS {
+    fn check_escape<T:Token<Char=C>>(&mut self, handler:&mut CSHandler<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, next:C) -> T::CS {
         use CategoryCode::*;
         match cc.get(next) {
             Superscript => {
                 match self.maybe_superscript(next) {
-                    Some(c) => self.check_escape::<T>(handler, cc, c),
+                    Some(c) => self.check_escape::<T>(handler, cc, endline, c),
                     None => {
                         self.state = MouthState::MidLine;
                         self.tempstr.clear();

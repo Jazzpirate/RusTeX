@@ -72,9 +72,9 @@ pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> PDFDest
             let mut depth = None;
             loop {
                 match engine.read_keywords(&[b"width",b"height",b"depth"]) {
-                    Some(b"width") => width = Some(engine.read_dim(false).into()),
-                    Some(b"height") => height = Some(engine.read_dim(false).into()),
-                    Some(b"depth") => depth = Some(engine.read_dim(false).into()),
+                    Some(b"width") => width = Some(engine.read_dim(false)),
+                    Some(b"height") => height = Some(engine.read_dim(false)),
+                    Some(b"depth") => depth = Some(engine.read_dim(false)),
                     _ => break
                 }
             }
@@ -191,6 +191,7 @@ pub enum PDFNode<ET:EngineTypes> {
     PDFDest(PDFDest<ET::Dim>),
     Color(ColorStackAction),
     PDFStartLink(PDFStartLink<ET>),
+    PDFAnnot(PDFAnnot<ET>),
     PDFEndLink,PDFSave,PDFRestore,
     PDFMatrix {
         scale:f32,
@@ -237,19 +238,33 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
     where ET::CustomNode : From<PDFNode<ET>> {
     fn height(&self) -> ET::Dim {
         match self {
-            PDFNode::XImage(img) => img.height.unwrap_or(ET::Dim::from_sp(65536 * (img.img.height() as i32))),
+            PDFNode::XImage(img) => match (img.height,img.width) {
+                (None,Some(w)) => {
+                    let scale = img.img.width() as f32 / (w.into() as f32);
+                    ET::Dim::from_sp((img.img.height() as f32 / scale).round() as i32)
+                }
+                (Some(h),_) => h,
+                _ => ET::Dim::from_sp(65536 * (img.img.height() as i32))
+            }
+            _ => ET::Dim::default()
+        }
+    }
+    fn width(&self) -> ET::Dim {
+        match self {
+            PDFNode::XImage(img) => match (img.height,img.width) {
+                (Some(h),None) => {
+                    let scale = img.img.height() as f32 / (h.into() as f32);
+                    ET::Dim::from_sp((img.img.width() as f32 / scale).round() as i32)
+                }
+                (_,Some(w)) => w,
+                _ => ET::Dim::from_sp(65536 * (img.img.width() as i32))
+            }
             _ => ET::Dim::default()
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
             PDFNode::XImage(img) => img.depth.unwrap_or(ET::Dim::default()),
-            _ => ET::Dim::default()
-        }
-    }
-    fn width(&self) -> ET::Dim {
-        match self {
-            PDFNode::XImage(img) => img.width.unwrap_or(ET::Dim::from_sp(65536 * (img.img.width() as i32))),
             _ => ET::Dim::default()
         }
     }
@@ -269,6 +284,8 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
                 write!(f,"<pdfoutline attr=\"{}\", action=\"{:?}\", count=\"{:?}\", content=\"{}\">",o.attr,o.action,o.count,o.content),
             PDFNode::Obj(o) =>
                 write!(f,"<pdfobj literal=\"{}\">",o.0),
+            PDFNode::PDFAnnot(a) =>
+                write!(f,"<pdfannot width=\"{:?}\", height=\"{:?}\", depth=\"{:?}\", content=\"{}\">",a.width,a.height,a.depth,a.content),
             PDFNode::PDFMatrix {scale,rotate,skewx,skewy} =>
                 write!(f,"<pdfmatrix scale=\"{}\", rotate=\"{}\", skewx=\"{}\", skewy=\"{}\">",scale,rotate,skewx,skewy),
             PDFNode::XForm(x) => {

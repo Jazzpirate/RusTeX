@@ -221,8 +221,29 @@ pub fn chardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,gl
 
 pub fn char_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     let char = engine.read_charcode(false);
-    let tk = <ET::Token as Token>::from_char_cat(char,CommandCode::Other);
-    ET::Stomach::do_char(engine,tk,char,CommandCode::Other)
+    match engine.stomach.data_mut().mode() {
+        TeXMode::DisplayMath | TeXMode::InlineMath => {
+            let font = engine.state.get_current_font().clone();
+            ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+                sup:None,sub:None,nucleus:MathNucleus::Simple {
+                    cls:MathClass::Ord,
+                    limits:None,
+                    kernel:MathKernel::Char {
+                        char,
+                        style:UnresolvedMathFontStyle {
+                            text_font:font.clone(),
+                            script_font:font.clone(),
+                            script_script_font:font
+                        }
+                    }
+                }
+            }))
+        }
+        _ => {
+            let tk = <ET::Token as Token>::from_char_cat(char,CommandCode::Other);
+            ET::Stomach::do_char(engine,tk,char,CommandCode::Other)
+        }
+    }
 }
 
 pub fn csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
@@ -369,7 +390,7 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
     let (sig,end) = super::methods::parse_signature(engine);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
-    ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,_,t| {
+    ET::Gullet::expand_until_endgroup(engine,false,true,|_,_,t| {
         super::methods::parse_exp_i::<ET>(sig.arity, &mut inparam, &mut exp, t)
     });
     if inparam {todo!("error")}
@@ -1611,7 +1632,7 @@ pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET
         Some(_) => todo!("should be begingroup"),
         None => todo!("file end")
     }
-    ET::Gullet::expand_until_endgroup(engine,true,false,|a,s,_,t| {
+    ET::Gullet::expand_until_endgroup(engine,true,false,|a,s,t| {
         t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
                       s.get_escape_char(),&mut out).unwrap();
     });
@@ -2179,6 +2200,104 @@ pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     }
 }
 
+pub fn overwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let left = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let right = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    match engine.stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
+            //let v = std::mem::take(v);
+            let old = std::mem::replace(ch,MathNodeList::Over {
+                top: vec!(),
+                bottom: vec!().into(),
+                left,right,sep:None
+            });
+            if let MathNodeList::Over {top,..} = ch {
+                *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
+            } else {unreachable!()}
+        }
+        Some(NodeList::Math {children,..}) => todo!("throw error"),
+        _ => unreachable!()
+    }
+}
+
+pub fn above<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let sep = engine.read_dim(false);
+    match engine.stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
+            //let v = std::mem::take(v);
+            let old = std::mem::replace(ch,MathNodeList::Over {
+                top: vec!(),
+                bottom: vec!().into(),
+                left:None,right:None,sep:Some(sep)
+            });
+            if let MathNodeList::Over {top,..} = ch {
+                *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
+            } else {unreachable!()}
+        }
+        Some(NodeList::Math {children,..}) => todo!("throw error"),
+        _ => unreachable!()
+    }
+}
+
+pub fn abovewithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let left = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let right = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let sep = engine.read_dim(false);
+    match engine.stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
+            //let v = std::mem::take(v);
+            let old = std::mem::replace(ch,MathNodeList::Over {
+                top: vec!(),
+                bottom: vec!().into(),
+                left,right,sep:Some(sep)
+            });
+            if let MathNodeList::Over {top,..} = ch {
+                *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
+            } else {unreachable!()}
+        }
+        Some(NodeList::Math {children,..}) => todo!("throw error"),
+        _ => unreachable!()
+    }
+}
+
+pub fn atop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    match engine.stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
+            //let v = std::mem::take(v);
+            let old = std::mem::replace(ch,MathNodeList::Over {
+                top: vec!(),
+                bottom: vec!().into(),
+                left:None,right:None,sep:Some(ET::Dim::default())
+            });
+            if let MathNodeList::Over {top,..} = ch {
+                *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
+            } else {unreachable!()}
+        }
+        Some(NodeList::Math {children,..}) => todo!("throw error"),
+        _ => unreachable!()
+    }
+}
+
+pub fn atopwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    let left = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let right = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    match engine.stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
+            //let v = std::mem::take(v);
+            let old = std::mem::replace(ch,MathNodeList::Over {
+                top: vec!(),
+                bottom: vec!().into(),
+                left,right,sep:Some(ET::Dim::default())
+            });
+            if let MathNodeList::Over {top,..} = ch {
+                *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
+            } else {unreachable!()}
+        }
+        Some(NodeList::Math {children,..}) => todo!("throw error"),
+        _ => unreachable!()
+    }
+}
+
 pub fn mathord<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     super::methods::do_math_class(engine,Some(MathClass::Ord))
 }
@@ -2574,7 +2693,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"aftergroup",CommandScope::Any,aftergroup);
     register_unexpandable(engine,"begingroup",CommandScope::Any,begingroup);
     register_unexpandable(engine,"closein",CommandScope::Any,closein);
-    register_unexpandable(engine,"char",CommandScope::SwitchesToHorizontal,char_);
+    register_unexpandable(engine,"char",CommandScope::SwitchesToHorizontalOrMath,char_);
     register_unexpandable(engine,"discretionary",CommandScope::Any,discretionary);
     register_unexpandable(engine,"dump",CommandScope::Any,|_,_|());
     register_unexpandable(engine,"endcsname",CommandScope::Any,endcsname);
@@ -2665,10 +2784,16 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "mathpunct", CommandScope::MathOnly, mathpunct);
     register_unexpandable(engine, "mathinner", CommandScope::MathOnly, mathinner);
     register_unexpandable(engine, "mathchoice", CommandScope::MathOnly, mathchoice);
-    register_unexpandable(engine, "over", CommandScope::MathOnly, over);
     register_unexpandable(engine, "underline", CommandScope::MathOnly, underline);
     register_unexpandable(engine, "overline", CommandScope::MathOnly, overline);
     register_unexpandable(engine, "mathaccent", CommandScope::MathOnly, mathaccent);
+
+    register_unexpandable(engine, "over", CommandScope::MathOnly, over);
+    register_unexpandable(engine, "overwithdelims", CommandScope::MathOnly, overwithdelims);
+    register_unexpandable(engine, "above", CommandScope::MathOnly, above);
+    register_unexpandable(engine, "abovewithdelims", CommandScope::MathOnly, abovewithdelims);
+    register_unexpandable(engine, "atop", CommandScope::MathOnly, atop);
+    register_unexpandable(engine, "atopwithdelims", CommandScope::MathOnly, atopwithdelims);
 
     register_unexpandable(engine, "displaystyle", CommandScope::MathOnly, displaystyle);
     register_unexpandable(engine, "textstyle", CommandScope::MathOnly, textstyle);
@@ -2697,8 +2822,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     cmstodo!(engine,radical);
 
     cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
-        show,showbox,showthe,special,noboundary,accent,setlanguage,
-        atop,above,overwithdelims,atopwithdelims,abovewithdelims,eqno,
+        show,showbox,showthe,special,noboundary,accent,setlanguage,eqno,
         leqno,bigskip,bye,italiccorr,medskip,smallskip
     );
 

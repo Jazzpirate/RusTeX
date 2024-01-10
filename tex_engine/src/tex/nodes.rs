@@ -229,10 +229,16 @@ impl<ET:EngineTypes> LeaderSkip<ET> {
 }
 
 #[derive(Clone,Debug)]
+pub enum LeaderBody<ET:EngineTypes> {
+    Box(TeXBox<ET>),
+    Rule { width:Option<ET::Dim>, height:Option<ET::Dim>, depth:Option<ET::Dim> }
+}
+
+#[derive(Clone,Debug)]
 pub struct Leaders<ET:EngineTypes> {
     pub tp:LeaderType,
     pub skip:LeaderSkip<ET>,
-    pub bx:TeXBox<ET>
+    pub bx:LeaderBody<ET>
 }
 impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -252,13 +258,13 @@ impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
             LeaderSkip::VFill => write!(f, " vfill")?,
         }
         write!(f, ">")?;
-        self.bx.readable_fmt(indent+2, f)?;
+        //self.bx.readable_fmt(indent+2, f)?;
         Self::readable_do_indent(indent,f)?;
         write!(f, "</leaders>")
     }
     fn height(&self) -> ET::Dim {
         if self.skip.is_h() {
-            self.bx.height()
+            ET::Dim::default()//self.bx.height()
         } else {
             match self.skip {
                 LeaderSkip::VSkip(s) => s.base(),
@@ -273,11 +279,12 @@ impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
                 _ => ET::Dim::default(),
             }
         } else {
-            self.bx.width()
+            ET::Dim::default()//self.bx.width()
         }
     }
     fn depth(&self) -> ET::Dim {
-        self.bx.depth()
+        ET::Dim::default()
+        //self.bx.depth()
     }
     fn nodetype(&self) -> NodeType {
         NodeType::Glue

@@ -184,7 +184,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     match engine.get_next() {
         Some(t) if t.is_begin_group() => {
-            ET::Gullet::expand_until_endgroup(engine,false,false,|a,s,g,t| exp.push(t));
+            ET::Gullet::expand_until_endgroup(engine,false,false,|_,_,t| exp.push(t));
         }
         _ => todo!("throw errors")
     }
@@ -295,7 +295,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
     }
     fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,cmd:Command<ET>,tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
         crate::engine::gullet::methods::read_muskip_command(
-            engine,is_negative,cmd,tk,|s| s
+            engine,is_negative,cmd,tk,|d,e| crate::engine::gullet::methods::read_muskip_ii(e, d),|s| s
         )
     }
     let (i,r) = expr_loop(engine,

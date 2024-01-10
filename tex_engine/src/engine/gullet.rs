@@ -258,7 +258,7 @@ pub trait Gullet {
             }
         }
     }
-    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,&mut Self,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,cont:Fn);
+    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,cont:Fn);
 }
 
 #[derive(Copy,Clone,Eq,PartialEq,Debug)]
@@ -342,8 +342,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     #[inline(always)]
-    pub fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,expand_protected:bool,edef_like:bool,mut cont:Fn) {
-        ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t))
+    pub fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self,expand_protected:bool,edef_like:bool,mut cont:Fn) {
+        ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,|a,s,t| cont(a,s,t))
     }
 
     #[inline(always)]
@@ -388,7 +388,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 None => todo!("file end")
             }
         }
-        ET::Gullet::expand_until_endgroup(self,expand_protected,false,|a,s,_,t| {
+        ET::Gullet::expand_until_endgroup(self,expand_protected,false,|a,s,t| {
             t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
                           s.get_escape_char(),&mut str).unwrap();
         });
@@ -460,17 +460,17 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     fn pop_align(&mut self) -> Option<AlignData<T<Self>, Skip<Self>>> {
         self.align_data.pop()
     }
-    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<Self::ET>, &S<Self>, &mut Self, T<Self>)>(engine: &mut EngineReferences<Self::ET>, expand_protected: bool, edef_like: bool, mut cont: Fn) {
-        let ad = std::mem::take(&mut engine.gullet.align_data);
-        methods::expand_until_endgroup(engine,expand_protected,edef_like,|a,s,g,t| cont(a,s,g,t));
-        engine.gullet.align_data = ad;
+    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<Self::ET>, &S<Self>, T<Self>)>(engine: &mut EngineReferences<Self::ET>, expand_protected: bool, edef_like: bool, mut cont: Fn) {
+        //let ad = std::mem::take(&mut engine.gullet.align_data);
+        methods::expand_until_endgroup(engine,expand_protected,edef_like,cont);
+        /*engine.gullet.align_data = ad;
         match engine.gullet.align_data.last_mut() {
             None => (),
             Some(d) => {
                 if d.ingroups == 0 { todo!() }
                 d.ingroups -= 1;
             }
-        }
+        }*/
     }
 
     fn do_macro(engine: &mut EngineReferences<Self::ET>, m: Macro<T<Self>>, token: T<Self>) {

@@ -367,7 +367,7 @@ impl<C:Character> File for VirtualFile<C> {
     fn size(&self) -> usize {
         match &self.source {
             Some(src) => {
-                let cnt = src.iter().count() + src.len();
+                let cnt = src.iter().map(|s| s.len()).sum::<usize>() + src.len();
                 if cnt == 0 { 0 } else { cnt - 1 }
             }
             None => {

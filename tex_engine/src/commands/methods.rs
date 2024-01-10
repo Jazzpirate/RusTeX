@@ -18,13 +18,14 @@ use std::fmt::Write;
 use crate::engine::mouth::strings::StringTokenizer;
 use crate::tex::input_text::StringLineSource;
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderBody, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::utils::errors::ErrorThrower;
 use crate::tex::nodes::NodeTrait;
 use crate::tex::types::TeXMode;
+use crate::utils::errors::TeXError;
 
 pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
     let idx = engine.read_int(false).into();
@@ -544,7 +545,7 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
 pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let mut v = shared_vector::Vector::new();
     engine.expand_until_bgroup(false);
-    engine.expand_until_endgroup(true,true,|_,_,_,t| v.push(t));
+    engine.expand_until_endgroup(true,true,|_,_,t| v.push(t));
     let data = engine.stomach.data_mut();
     for list in data.open_lists.iter_mut().rev() {
         match list {
@@ -1065,9 +1066,9 @@ pub fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType
             ResolvedToken::Cmd {cmd:Some(Command::Box(bx)),token} => {
                 match (bx.read)(engine,token) {
                     Ok(None) => todo!(),
-                    Ok(Some(bx)) => return leaders_skip(engine,bx,tp),
+                    Ok(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp),
                     Err(bi) => {
-                        let target = BoxTarget::<ET>::new(move |e,b| leaders_skip(e,b,tp));
+                        let target = BoxTarget::<ET>::new(move |e,b| leaders_skip(e,LeaderBody::Box(b),tp));
                         let mut ls = bi.open_list(engine.mouth.start_ref());
                         match ls {
                             NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = target,
@@ -1081,8 +1082,24 @@ pub fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType
             }
             ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} if
                 *name == PRIMITIVES.hrule || *name == PRIMITIVES.vrule => {
-                todo!();
-                return ()
+                let mut width = None;
+                let mut height = None;
+                let mut depth = None;
+                loop {
+                    match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+                        Some(b"width") => {
+                            width = Some(engine.read_dim(false));
+                        }
+                        Some(b"height") => {
+                            height = Some(engine.read_dim(false));
+                        }
+                        Some(b"depth") => {
+                            depth = Some(engine.read_dim(false));
+                        }
+                        _ => break
+                    }
+                }
+                return leaders_skip(engine,LeaderBody::Rule {width,height,depth},tp)
             }
             _ => todo!("throw error")
         )
@@ -1090,7 +1107,7 @@ pub fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType
     todo!("file end")
 }
 
-pub fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox<ET>,tp:LeaderType) {
+pub fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<ET>,tp:LeaderType) {
     crate::expand_loop!(engine,
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} => {
             let skip = match *name {

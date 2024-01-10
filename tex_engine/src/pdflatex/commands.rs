@@ -10,7 +10,7 @@ use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
 use std::fmt::Write;
 use crate::commands::CommandScope;
-use super::nodes::{ColorStackAction, PDFBoxSpec, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFImage, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFStartLink, PDFXForm, PDFXImage};
+use super::nodes::{ColorStackAction, PDFAnnot, PDFBoxSpec, PDFCatalog, PDFColor, PDFDest, PDFExtension, PDFImage, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFStartLink, PDFXForm, PDFXImage};
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
@@ -137,9 +137,9 @@ pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::T
     let mut depth = None;
     loop {
         match engine.read_keywords(&[b"width",b"height",b"depth"]) {
-            Some(b"width") => width = Some(engine.read_dim(false).into()),
-            Some(b"height") => height = Some(engine.read_dim(false).into()),
-            Some(b"depth") => depth = Some(engine.read_dim(false).into()),
+            Some(b"width") => width = Some(engine.read_dim(false)),
+            Some(b"height") => height = Some(engine.read_dim(false)),
+            Some(b"depth") => depth = Some(engine.read_dim(false)),
             _ => break
         }
     }
@@ -318,7 +318,7 @@ pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
-    engine.expand_until_endgroup(true,false,|a,st,_,t|{
+    engine.expand_until_endgroup(true,false,|a,st,t|{
         if t.is_space() {f(t)}
         else if t.is_param() {
             f(t.clone());f(t)
@@ -342,7 +342,8 @@ pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Ve
     let file = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     if file.exists() {
-        for u in file.size().to_string().bytes() {
+        let size = file.size();
+        for u in size.to_string().bytes() {
             exp.push(ET::Token::from_char_cat(u.into(),CommandCode::Other));
         }
     }
@@ -427,10 +428,56 @@ pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
     }
 }
 
-pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token) {
- // \pdfannot ⟨annot type spec⟩ (h, v, m)
-    // reserveobjnum | [ useobjnum ⟨number⟩ ] [ ⟨rule spec⟩ ] ⟨general text⟩
-    // ⟨rule spec⟩ → ( width | height | depth ) ⟨dimen⟩ [ ⟨rule spec⟩ ]
+pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, token:ET::Token)
+    where ET::Extension : PDFExtension<ET>,
+          ET::CustomNode:From<PDFNode<ET>>  {
+    let num = match engine.read_keywords(&[b"reserveobjnum",b"useobjnum"]) {
+        Some(b"reserveobjnum") => {
+            engine.aux.extension.pdfannots().push(PDFAnnot {
+                width:None,height:None,depth:None,content:String::new()
+            });
+            return
+        }
+        Some(b"useobjnum") => {
+            let num = engine.read_int(false).into();
+            if num < 0 {todo!("throw error")}
+            let num = num as usize;
+            if num >= engine.aux.extension.pdfannots().len() {todo!("throw error")}
+            Some(num)
+        }
+        _ => None
+    };
+    let mut width = None;
+    let mut height = None;
+    let mut depth = None;
+    loop {
+        match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+            Some(b"width") => width = Some(engine.read_dim(false)),
+            Some(b"height") => height = Some(engine.read_dim(false)),
+            Some(b"depth") => depth = Some(engine.read_dim(false)),
+            _ => break
+        }
+    }
+    let mut content = String::new();
+    engine.read_braced_string(true,true,&mut content);
+    let annot = PDFAnnot {
+        width,height,depth,content
+    };
+    match num {
+        None => engine.aux.extension.pdfannots().push(annot.clone()),
+        Some(num) => engine.aux.extension.pdfannots()[num] = annot.clone()
+    }
+    crate::add_node!(ET::Stomach;engine,
+        VNode::Custom(PDFNode::PDFAnnot(annot).into()),
+        HNode::Custom(PDFNode::PDFAnnot(annot).into()),
+        MathNode::Custom(PDFNode::PDFAnnot(annot).into())
+    )
+}
+
+#[inline(always)]
+pub fn pdflastannot<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int
+    where ET::Extension : PDFExtension<ET> {
+    <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfannots().len() as i32) - 1)
 }
 
 pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
@@ -770,6 +817,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_unexpandable(engine,"pdfsave",CommandScope::Any,pdfsave);
     register_unexpandable(engine,"pdfrestore",CommandScope::Any,pdfrestore);
     register_unexpandable(engine,"pdfsetmatrix",CommandScope::Any,pdfsetmatrix);
+    register_unexpandable(engine,"pdfannot",CommandScope::Any,pdfannot);
 
     register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate);
     register_unexpandable(engine,"pdfrefobj",CommandScope::Any,pdfrefobj);
@@ -780,6 +828,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_unexpandable(engine,"pdfximage",CommandScope::Any,pdfximage);
     register_unexpandable(engine,"pdfrefximage",CommandScope::Any,pdfrefximage);
     register_int(engine,"pdflastximage",pdflastximage,None);
+    register_int(engine,"pdflastannot",pdflastannot,None);
 
     register_primitive_int(engine,PRIMITIVE_INTS);
     register_primitive_dim(engine,PRIMITIVE_DIMS);
@@ -819,7 +868,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,showstream);
     cmtodo!(engine,stbscode);
     cmtodo!(engine,tagcode);
-    cmtodo!(engine,pdflastannot);
     cmtodo!(engine,pdflastlink);
     cmtodo!(engine,pdflastximagecolordepth);
     cmtodo!(engine,pdflastximagepages);
@@ -857,7 +905,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
 
     cmtodo!(engine,letterspacefont);
     cmtodo!(engine,partokenname);
-    cmtodo!(engine,pdfannot);
     cmtodo!(engine,pdfcopyfont);
     cmtodo!(engine,pdfendthread);
     cmtodo!(engine,pdffakespace);

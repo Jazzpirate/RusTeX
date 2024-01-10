@@ -33,7 +33,7 @@ pub trait TeXInt:Numeric<Self> + From<i32> + TryFrom<i64> + Into<i64> + TryInto<
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, std::num::ParseIntError>;
 }
 /// A TeX dimension. By default [`Dim32`].
-pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output=Self> + Sub<Self,Output=Self> + Neg<Output=Self>+std::iter::Sum {
+pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output=Self> + Sub<Self,Output=Self> + Neg<Output=Self> + Into<i64> + std::iter::Sum {
     fn units() -> &'static[&'static [u8]];
     fn scale_float(&self,times:f64) -> Self;
     fn from_sp(sp:i32) -> Self;
@@ -157,6 +157,10 @@ impl Display for Dim32 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::display_num(self.0,"pt",f)
     }
+}
+impl Into<i64> for Dim32 {
+    #[inline(always)]
+    fn into(self) -> i64 { self.0 as i64 }
 }
 
 const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc",b"sp",b"em",b"ex"];
