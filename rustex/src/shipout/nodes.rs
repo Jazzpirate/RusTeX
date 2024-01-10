@@ -16,6 +16,7 @@ use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
 use crate::shipout::{do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 use tex_engine::tex::numerics::TeXDimen;
+use tex_tfm::glyphs::GlyphName;
 
 pub(crate) trait MuAdd {
     fn merge(&mut self,sk:Dim32,f:&Font);
@@ -208,14 +209,14 @@ pub(crate) fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,refs:Opt
 
 // ----------------------------------------------------------------------------------------
 
-pub(crate) fn do_missing_glyph(state:&mut ShipoutState,char:u8,font:&Font) {
+pub(crate) fn do_missing_glyph(state:&mut ShipoutState,name:GlyphName,char:u8,font:&Font) {
     let s = match state.mode() {
         ShipoutMode::H{..} | ShipoutMode::Par => "span",
         ShipoutMode::Math => "mtext",
         _ => unreachable!()
     };
     state.push_child(HTMLChild::Comment(
-        format!("<{} class=\"rustex-missing\" title=\"Missing Glyph: {} in font {}\"></{}>",s,char,font.filename(),s)
+        format!("<{} class=\"rustex-missing\" title=\"Missing Glyph: {} (pos. {}) in font {}\"></{}>",s,name,char,font.filename(),s)
     ));
 }
 
@@ -661,7 +662,7 @@ pub(crate) fn do_mathkernel(engine:Refs,state:&mut ShipoutState,kernel:MathKerne
             let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
             let glyph = glyphtable.get(char);
             if !glyph.is_defined() {
-                do_missing_glyph(state,char,&font);
+                do_missing_glyph(state,glyph.name(),char,&font);
             }
             let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
                 Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
@@ -745,7 +746,7 @@ pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState, char:u8, cls:Mat
     let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
     let glyph = glyphtable.get(char);
     if !glyph.is_defined() {
-        do_missing_glyph(state,char,&font);
+        do_missing_glyph(state,glyph.name(),char,&font);
     }
     let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
         Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
@@ -765,7 +766,7 @@ pub(crate) fn merge_mathchar(engine:Refs, state:&mut ShipoutState, current_class
     let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
     let glyph = glyphtable.get(char);
     if !glyph.is_defined() {
-        do_missing_glyph(state,char,&font);
+        do_missing_glyph(state,glyph.name(),char,&font);
     }
     let modifiers = match engine.fontsystem.glyphmaps.get_info(font.filename()) {
         Some(mds) if mds.styles != ModifierSeq::empty() => Some(mds.styles),
@@ -945,10 +946,13 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
                             for c in children {
                                 cols += 1;
                                 match c {
-                                    HNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell {.. },children,start,end,.. }) => {
+                                    HNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell {spans,.. },children,start,end,.. }) => {
                                         let mut node = HTMLNode::new(HTMLTag::HCell);
                                         node.sourceref = Some((start,end));
                                         node.classes.push("rustex-halign-cell".into());
+                                        if spans > 0 {
+                                            node.styles.insert("grid-column".into(),format!("span {}",spans+1).into());
+                                        }
                                         let (a,v) = align_cell(children.into_vec());
                                         state.do_in(node,None,|state| {
                                             let mut node = HTMLNode::new(HTMLTag::HBox);
@@ -1119,7 +1123,7 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
                 let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
                 let glyph = glyphtable.get(char);
                 if !glyph.is_defined() {
-                    do_missing_glyph(state,char,&font);
+                    do_missing_glyph(state,glyph.name(),char,&font);
                 } else {
                     state.push_glyph(glyph)
                 }

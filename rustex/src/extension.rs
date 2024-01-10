@@ -1,4 +1,5 @@
-use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
+use pdfium_render::pdfium::Pdfium;
+use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFAnnot, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
 use tex_engine::engine::{EngineExtension, EngineTypes};
 use crate::engine::{Font, Refs, Types};
 use crate::nodes::RusTeXNode;
@@ -44,4 +45,13 @@ impl PDFExtension<Types> for RusTeXExtension {
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<Types>> { self.pdf.pdfxforms() }
     #[inline(always)]
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<Types>> { self.pdf.pdfximages() }
+    #[inline(always)]
+    fn pdfannots(&mut self) -> &mut Vec<PDFAnnot<Types>> {
+        self.pdf.pdfannots()
+    }
+
+    #[inline(always)]
+    fn pdfium_direct(&mut self) -> &mut Option<Pdfium> {
+        self.pdf.pdfium_direct()
+    }
 }

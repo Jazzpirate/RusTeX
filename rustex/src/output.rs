@@ -20,6 +20,7 @@ pub enum RusTeXOutput {
     None,
     Cont(Box<dyn OutputCont>)
 }
+use tex_engine::utils::errors::TeXError;
 impl Outputs for RusTeXOutput {
     fn new() -> Self {Self::None}
     #[inline(always)]
@@ -35,7 +36,9 @@ impl Outputs for RusTeXOutput {
     fn errmessage<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.errmessage(text),
-            Self::Print(_) => println!("\n\n{}",Red.paint(text.to_string())),
+            Self::Print(_) => {
+                println!("\n\n{}",Red.paint(text.to_string()));
+            },
             Self::None => {},
             Self::Cont(b) => b.errmessage(text.to_string())
         }

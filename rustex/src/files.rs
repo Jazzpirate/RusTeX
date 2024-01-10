@@ -38,7 +38,7 @@ impl FileSystem for RusTeXFileSystem {
         if sr.ends_with("pgfsys-rustex.def") {
             VirtualFile {
                 path:self.inner.kpse.pwd.join("pgfsys-rustex.def"),
-                id:self.svg.0,
+                id:self.svg.0,pipe:false,exists:true,
                 source:Some(self.svg.1.clone())
             }
         } else {

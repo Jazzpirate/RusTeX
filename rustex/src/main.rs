@@ -22,9 +22,15 @@ use tex_engine::pdflatex::PlainPDFTeXEngine;
 
 fn main() {
     //profile()
-    thesis()
+    //thesis()
     //run()
     //test()
+    notes()
+    //test2()
+}
+
+fn test2() {
+    tex_engine::engine::filesystem::kpathsea::KpathseaBase::new();
 }
 
 fn test() {
@@ -35,8 +41,16 @@ fn test() {
 
 fn thesis() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",false,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html", &ret).unwrap();
+}
+
+fn notes() {
+    //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
+    // /home/jazzpirate/work/MathHub/MiKoMH/AI/source/search/slides/ts-ex.en.tex
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",true,true,true);
+    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/game-play/slides/agenda.en.tex",true,true,true);
+    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html", &ret).unwrap();
 }
 
 fn profile() {

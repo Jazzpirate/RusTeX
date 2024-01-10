@@ -131,7 +131,6 @@ impl Stomach for RusTeXStomach {
     }
 
     fn open_align(engine: Refs, _inner: BoxType, between: BoxType) {
-        tex_engine::add_node!(Self;engine,VNode::Custom(RusTeXNode::HAlignBegin),HNode::Custom(RusTeXNode::HAlignBegin),unreachable!());
         engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
         engine.stomach.data_mut().open_lists.push(
             if between == BoxType::Vertical {
@@ -144,13 +143,23 @@ impl Stomach for RusTeXStomach {
                     children: vec!()
                 }
             });
+        Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignBegin))
     }
     fn close_align(engine: &mut EngineReferences<Self::ET>) {
+        Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignEnd));
         match engine.stomach.data_mut().open_lists.pop() {
             Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
                 engine.state.pop(engine.aux,&mut engine.mouth);
-                for c in children {
-                    Self::add_node_v(engine, c);
+                match engine.stomach.data_mut().open_lists.last_mut() {
+                    Some(NodeList::Math {..}) => {
+                        Self::add_node_m(engine,MathNode::Atom(MathAtom {
+                            nucleus: MathNucleus::VCenter {children:children.into(),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()},
+                            sup:None,sub:None
+                        }));
+                    }
+                    _ => for c in children {
+                        Self::add_node_v(engine, c);
+                    }
                 }
             }
             Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::VAlign}) => {
@@ -161,7 +170,6 @@ impl Stomach for RusTeXStomach {
             }
             _ => todo!("throw error")
         };
-        tex_engine::add_node!(Self;engine,VNode::Custom(RusTeXNode::HAlignEnd),HNode::Custom(RusTeXNode::HAlignEnd),unreachable!());
     }
 }
 

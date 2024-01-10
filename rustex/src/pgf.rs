@@ -131,8 +131,9 @@ fn gbegin(engine:Refs,_token:CompactToken) {
     let mut attrs : HMap<&'static str,String> = HMap::default();
     let mut key = String::new();
     let start = engine.mouth.start_ref();
-    engine.read_braced_string(true,&mut key);
+    engine.read_braced_string(true,true,&mut key);
     'attr: loop {
+        //println!("HERE! {}",engine.preview());
         match engine.read_keywords(&[
             b"about",b"datatype",b"href",b"inlist",b"prefix",b"property",b"rel",
             b"resource",b"rev",b"src",b"typeof",b"content",
@@ -145,7 +146,6 @@ fn gbegin(engine:Refs,_token:CompactToken) {
             b"animateTransform",b"animateMotion",b"type",b"gradientTransform",b"offset",b"width",b"height",
             b"dur",b"restart",b"repeatCount",b"repeatDur",b"begin",b"end"]) {
             None => {
-                //println!("HERE! {}",engine.preview());
                 break 'attr
             },
             Some(s) if s == b"animateTransform" => {

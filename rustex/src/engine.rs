@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
+use log::error;
 use tex_engine::commands::{Command, CommandScope, Unexpandable};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
@@ -32,6 +33,7 @@ use crate::shipout;
 use crate::shipout::make_page;
 use crate::state::RusTeXState;
 use crate::stomach::{CLOSE_FONT, close_font, RusTeXStomach};
+use tex_engine::engine::utils::memory::MemoryManager;
 
 pub(crate) type Extension = super::extension::RusTeXExtension;
 pub(crate) type Memory = utils::memory::ReuseTokenLists<CompactToken>;
@@ -80,6 +82,7 @@ fn get_state(log:bool) -> (RusTeXState,Memory) {
         match &mut *guard {
             Some((s, m)) =>return  (s.clone(), m.clone()),
             n => {
+                let start = std::time::Instant::now();
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
@@ -100,6 +103,7 @@ fn get_state(log:bool) -> (RusTeXState,Memory) {
                 crate::pgf::register_pgf(&mut engine);
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
+                //println!("Initialized in {:?}", start.elapsed());
                 return (engine.state, engine.aux.memory)
             }
         }
@@ -186,6 +190,12 @@ impl RusTeXEngineT for RusTeXEngine {
             Ok(_) => (),
             Err(e) => engine.aux.outputs.errmessage(e)
         }
+
+
+        let cap = engine.aux.memory.cs_interner().cap();
+        println!("\n\nCapacity: {} of {} ({:.2}%)",cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
+
+
 
         // ----------------
         let out = std::mem::take(&mut engine.aux.extension.state.output);
