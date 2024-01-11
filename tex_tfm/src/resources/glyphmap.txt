@@ -5718,3 +5718,5 @@ zukatakana ズ
 missingglyph ❓❓❓
 anglebar.left ⟬
 anglebar.right ⟭
+rhd ▷
+leadsto ↝
