@@ -45,9 +45,9 @@ mod tests {
         let mut es = get_store();
         log::info!("cmr10:\n{}",es.display_encoding("cmr10").unwrap());
         log::info!("cmbx10:\n{}",es.display_encoding("cmbx10").unwrap());
+        /*
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());
         log::info!("ec-lmr10:\n{}",es.display_encoding("ec-lmr10").unwrap());
-        /*
         log::info!("jkpbitc:\n{}",es.display_encoding("jkpbitc").unwrap());
         log::info!("ot1-stix2textsc:\n{}",es.display_encoding("ot1-stix2textsc").unwrap());
         log::info!("stix-mathbbit-bold:\n{}",es.display_encoding("stix-mathbbit-bold").unwrap());
