@@ -6,7 +6,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: TeXLive
-        run: sudo apt install texlive-full
+        run: sudo apt install texlive-base
+      - name: Packages
+        run: sudo tlmgr install article geometry xcolor amsmath graphicx stex wrapfig mdframed listings tcolorbox
       - name: Test tex_engine
         run: cd tex_engine && cargo test --features pdflatex
   test_tex_tfm:
