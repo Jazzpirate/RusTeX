@@ -8,7 +8,7 @@ jobs:
       - name: TeXLive
         run: sudo apt install texlive-base
       - name: Packages
-        run: tlmgr init-usertree && sudo tlmgr install article geometry xcolor amsmath graphicx stex wrapfig mdframed listings tcolorbox
+        run: tlmgr init-usertree && tlmgr install article geometry xcolor amsmath graphicx stex wrapfig mdframed listings tcolorbox
       - name: Test tex_engine
         run: cd tex_engine && cargo test --features pdflatex
   test_tex_tfm:
