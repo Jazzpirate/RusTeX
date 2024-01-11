@@ -61,26 +61,12 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Formatter;
     use ansi_term::Colour::*;
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
-    use path_dedot::ParseDot;
-    use crate::commands::{Command, CommandScope, Unexpandable};
-    use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainTeXEngine, TeXEngine};
-    use crate::engine::mouth::Mouth;
-    use crate::engine::mouth::pretokenized::ExpansionContainer;
-    use crate::engine::state::CustomStateChange;
-    use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::StringLineSource;
-    use crate::tex::token::Token;
-    use crate::utils::{Ptr, PWD};
-    use crate::tex::nodes::NodeTrait;
-
-    #[cfg(feature="pdflatex")]
-    use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
 
     #[test]
     fn kpsewhich() { measure!(kpsewhich: {
@@ -113,29 +99,30 @@ mod tests {
         let mut tokenizer = StringTokenizer::new(input);
         let eol = Some(b'\r');
         let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo
-        assert!(matches!(next,Some(T::ControlSequence(s)) if &*s == "foo"));
+        assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));
         let next = tokenizer.get_next(&eh,&mut cs_handler,cc,eol); // \par
-        assert!(matches!(next,Some(T::ControlSequence(s)) if &*s == "par"));
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // {
+        assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "par"));
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // {
         assert_eq!(next.command_code(), CommandCode::BeginGroup);
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // a
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // a
         assert_eq!(next.command_code(), CommandCode::Letter);
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // }
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // }
         assert_eq!(next.command_code(), CommandCode::EndGroup);
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // {
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // {
         assert_eq!(next.command_code(), CommandCode::BeginGroup);
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // !
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // !
         assert_eq!(next.command_code(), CommandCode::Other);
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // }
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // }
         assert_eq!(next.command_code(), CommandCode::EndGroup);
-        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // end of line => space
+        let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
         assert_eq!(next.command_code(), CommandCode::Space);
-        assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).is_none()); // EOF
+        assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
     }
 
     #[cfg(feature="pdflatex")]
     #[test]
     fn pdflatex_init() {
+        use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
         debug();
         let mut engine = PlainPDFTeXEngine::new();
         match engine.initialize_pdflatex() {
@@ -149,6 +136,8 @@ mod tests {
     #[cfg(feature="pdflatex")]
     #[test]
     fn testfile() {
+        use crate::utils::PWD;
+        use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
         use path_dedot::*;
         let testpath = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
         debug();
@@ -159,9 +148,8 @@ mod tests {
                 panic!("{}",e.msg)
             }
         }
-        engine.do_file_pdf(testpath.to_str().unwrap(),|_,b| {
-        }).unwrap_or_else(|e| {
-            let pos = engine.mouth.display_position().to_string();
+        engine.do_file_pdf(testpath.to_str().unwrap(),|_,_| {}).unwrap_or_else(|e| {
+            //let pos = engine.mouth.display_position().to_string();
             //let cap = engine.aux.memory.cs_interner().cap();
             //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
             panic!("{}",e.msg);

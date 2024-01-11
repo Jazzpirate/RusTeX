@@ -184,7 +184,7 @@ pub struct StringLineSource<C:Character> {
     pub lines:std::vec::IntoIter<TextLine<C>>
 }
 impl<C:Character> StringLineSource<C> {
-    pub fn make_lines<I:Iterator<Item=u8>>(mut iter:I) -> Vec<TextLine<C>> {
+    pub fn make_lines<I:Iterator<Item=u8>>(iter:I) -> Vec<TextLine<C>> {
         let mut lines = Vec::new();
         let mut curr = Vec::new();
         for b in iter {

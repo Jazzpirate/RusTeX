@@ -484,29 +484,28 @@ pub struct PDFXImage<ET:EngineTypes> {
     pub img:PDFImage
 }
 
+#[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
 pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(path:&Path,ext:&mut E) -> PDFImage {
-    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
-    {
-        use pdfium_render::prelude::PdfRenderConfig;
-        match ext.pdfium() {
-            None => PDFImage::None,
-            Some(pdfium) => {
-                match pdfium.load_pdf_from_file(&path,None) {
-                    Ok(doc) => {
-                        let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
-                        match doc.pages().iter().next().unwrap().render_with_config(&cfg) {
-                            Ok(mut bmp) => PDFImage::PDF(bmp.as_image()),
-                            _ => PDFImage::None
-                        }
+    use pdfium_render::prelude::PdfRenderConfig;
+    match ext.pdfium() {
+        None => PDFImage::None,
+        Some(pdfium) => {
+            match pdfium.load_pdf_from_file(&path,None) {
+                Ok(doc) => {
+                    let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
+                    match doc.pages().iter().next().unwrap().render_with_config(&cfg) {
+                        Ok(bmp) => PDFImage::PDF(bmp.as_image()),
+                        _ => PDFImage::None
                     }
-                    _ => PDFImage::None
                 }
+                _ => PDFImage::None
             }
         }
     }
-    #[cfg(not(any(feature="pdfium-dyn",feature="pdfium-static")))]
-    { PDFImage::None }
 }
+
+#[cfg(not(any(feature="pdfium-dyn",feature="pdfium-static")))]
+pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(_path:&Path,_ext:&mut E) -> PDFImage { PDFImage::None }
 
 
 #[derive(Debug,Clone)]

@@ -25,7 +25,6 @@ use crate::tex::nodes::vertical::VNode;
 use crate::utils::errors::ErrorThrower;
 use crate::tex::nodes::NodeTrait;
 use crate::tex::types::TeXMode;
-use crate::utils::errors::TeXError;
 
 pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
     let idx = engine.read_int(false).into();
@@ -214,7 +213,7 @@ pub fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferen
 macro_rules! modify_num {
     ($engine:ident,$globally:ident,$int:expr,$dim:expr,$skip:expr) => {
         crate::expand_loop!($engine,
-            ResolvedToken::Cmd {cmd:Some(cm),token} => match cm {
+            ResolvedToken::Cmd {cmd:Some(cm),..} => match cm {
                 Command::Int(IntCommand{name,..}) if *name == PRIMITIVES.count => {
                     let idx = $engine.read_int(false);
                     let idx = match idx.try_into() {
@@ -591,7 +590,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 }
 
 
-pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,to:Option<ET::Dim>) {
+pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>) { // TODO use to
     engine.gullet.push_align(AlignData::dummy());
     engine.expand_until_bgroup(true);
     let data = read_align_preamble(engine,inner,between);

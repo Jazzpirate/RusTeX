@@ -10,26 +10,25 @@ use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::control_sequences::CSHandler;
 use crate::tex::token::{StandardToken, Token};
 use super::primitives::*;
-use std::fmt::Write;
-use crate::commands::tex::left;
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::engine::filesystem::FileSystem;
-use crate::engine::utils::outputs::Outputs;
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;
-use crate::tex::nodes::{MathNodeList, MathNodeListType, NodeList, NodeTrait};
+use crate::tex::nodes::{NodeList, NodeTrait};
 use crate::tex::control_sequences::ResolvedCSName;
 use crate::tex::input_text::CharacterMap;
-use crate::tex::nodes::math::{MathKernel, MathNode, MathNucleus};
+use crate::tex::nodes::math::{MathNode, MathNucleus};
 use crate::tex::types::GroupType;
 use crate::tex::nodes::math::MathAtom;
 use crate::utils::errors::TeXError;
 
-pub fn eTeXversion<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+#[allow(non_snake_case)]
+pub fn eTeXversion<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
     2.into()
 }
-pub fn eTeXrevision<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+#[allow(non_snake_case)]
+pub fn eTeXrevision<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     exp.push(ET::Token::from_char_cat(b'.'.into(),CommandCode::Other));
     exp.push(ET::Token::from_char_cat(b'6'.into(),CommandCode::Other));
 }
@@ -55,23 +54,6 @@ fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
 
 struct Summand<ET:EngineTypes,R:Numeric<ET::Int>>{base:R,times:Vec<ET::Int>,div:Vec<ET::Int>}
 impl<ET:EngineTypes,R:Numeric<ET::Int>> Summand<ET,R> {
-    fn reduce_trace<O:Outputs>(v:Vec<Self>,trace:bool,output: &O) -> R {
-        if trace {
-            let mut res = String::new();
-            for x in v.iter() {
-                write!(res,"{} +",x).unwrap();
-            }
-            output.write_17(format_args!("\\<X>expr: {}",res))
-        }
-        let r = v.into_iter().map(|x| x.resolve()).reduce(|a,b| a + b).unwrap();
-        if trace {
-            output.write_17(format_args!("        = {}",r));
-        }
-        r
-    }
-    fn reduce(v:Vec<Self>) -> R {
-        v.into_iter().map(|x| x.resolve()).reduce(|a,b| a + b).unwrap()
-    }
     fn new(r:R) -> Self {
         Self {base:r,times:vec!(),div:vec!()}
     }
@@ -155,11 +137,11 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
     }
 }
 
-pub fn currentgrouplevel<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+pub fn currentgrouplevel<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
     (engine.state.get_group_level() as i32).into()
 }
 
-pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
@@ -181,7 +163,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     });
 }
 
-pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     match engine.get_next() {
         Some(t) if t.is_begin_group() => {
             ET::Gullet::expand_until_endgroup(engine,false,false,|_,_,t| exp.push(t));
@@ -190,33 +172,33 @@ pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
     }
 }
 
-pub fn fontchardp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+pub fn fontchardp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Dim {
     let fnt = engine.read_font();
     let char = engine.read_charcode(false);
     fnt.get_dp(char)
 }
-pub fn fontcharht<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+pub fn fontcharht<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Dim {
     let fnt = engine.read_font();
     let char = engine.read_charcode(false);
     fnt.get_ht(char)
 }
-pub fn fontcharwd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+pub fn fontcharwd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Dim {
     let fnt = engine.read_font();
     let char = engine.read_charcode(false);
     fnt.get_wd(char)
 }
-pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Dim {
     let fnt = engine.read_font();
     let char = engine.read_charcode(false);
     fnt.get_ic(char)
 }
 
-pub fn ifcsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
+pub fn ifcsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
     let name = super::methods::do_csname(engine);
     engine.state.get_command(&name).is_some()
 }
 
-pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
+pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
     match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
@@ -229,13 +211,13 @@ pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
     }
 }
 
-pub fn iffontchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
+pub fn iffontchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
     let font = engine.read_font();
     let char = engine.read_charcode(false);
     font.has_char(char)
 }
 
-pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Int {
+pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_int_byte,
                           crate::engine::gullet::methods::read_int_command
@@ -252,7 +234,7 @@ pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
     i
 }
 
-pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
+pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Dim {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_dim_byte,
                           crate::engine::gullet::methods::read_dim_command
@@ -269,7 +251,7 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
     i
 }
 
-pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Skip {
+pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Skip {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_skip_byte,
                           crate::engine::gullet::methods::read_skip_command
@@ -286,7 +268,7 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
     i
 }
 
-pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
+pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
     fn muskip_byte<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,b:u8) -> <ET::Num as NumSet>::MuSkip {
         crate::engine::gullet::methods::read_muskip_byte(
             engine,is_negative,b,
@@ -313,7 +295,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
     i
 }
 
-pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int {
+pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
     let data = engine.stomach.data_mut();
     match data.open_lists.last() {
         None => match data.page.last() {
@@ -335,7 +317,7 @@ pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
     }
 }
 
-pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
+pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,_protected:bool,globally:bool) {
     crate::expand_loop!(engine,
         ResolvedToken::Cmd {cmd:Some(Command::Assignment(a)),token} => match a.name {
             n if n == PRIMITIVES.outer => return super::tex::outer(engine,token,outer,long,true,globally),
@@ -352,7 +334,7 @@ pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,o
     )
 }
 
-pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,globally:bool) {
+pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let idx = super::methods::read_file_index(engine);
     if !engine.read_keyword("to".as_bytes()) {
         todo!("throw error")
@@ -372,7 +354,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token
 }
 
 
-pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     engine.expand_until_bgroup(false);
     let mut ret: Vec<Box<[ET::Char]>> = vec!();
     let mut curr = vec!();
@@ -411,14 +393,14 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 }
 
 
-pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     engine.expand_until_bgroup(false);
     engine.read_until_endgroup(|_,_,t|{
         exp.push(t)
     });
 }
 
-pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     match engine.get_next() {
         None => todo!("file end"),
         Some(t) => match ET::Gullet::resolve(engine.state,t) {
@@ -444,7 +426,7 @@ pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     }))
 }
 
-pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
@@ -452,35 +434,35 @@ pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     super::methods::do_marks(engine, i as usize)
 }
 
-pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
     super::methods::get_marks(engine, exp, |d| &mut d.topmarks, i as usize)
 }
-pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
     super::methods::get_marks(engine, exp, |d| &mut d.firstmarks, i as usize)
 }
-pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
     super::methods::get_marks(engine, exp, |d| &mut d.botmarks, i as usize)
 }
-pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
     super::methods::get_marks(engine, exp, |d| &mut d.splitfirstmarks, i as usize)
 }
-pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,token:ET::Token) {
+pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")

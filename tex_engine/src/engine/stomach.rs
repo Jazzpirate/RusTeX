@@ -130,7 +130,7 @@ pub trait Stomach {
                         let (children,None) = children.close(start,engine.mouth.current_sourceref()) else { unreachable!() };
                         t.call(engine,children,start);
                     }
-                    Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) => {
+                    Some(NodeList::Math {children,start,tp:MathNodeListType::Target(_)}) => {
                         match children {
                             MathNodeList::Simple(v) =>
                                 Self::add_node_m(engine,MathNode::Atom(MathAtom{
@@ -708,10 +708,9 @@ pub trait Stomach {
 
     fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<HNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
-        if let parskip = engine.state.get_primitive_skip(PRIMITIVES.parskip) {
-            if parskip != <Self::ET as EngineTypes>::Skip::default() {
-                Self::add_node_v(engine,VNode::VSkip(parskip));
-            }
+        let parskip = engine.state.get_primitive_skip(PRIMITIVES.parskip);
+        if parskip != <Self::ET as EngineTypes>::Skip::default() {
+            Self::add_node_v(engine,VNode::VSkip(parskip));
         }
         let ret = split_paragraph_roughly(engine,specs,children,sourceref);
         for line in ret {

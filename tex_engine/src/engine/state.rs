@@ -286,7 +286,7 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateStack<ET,S> {
     pub fn new() -> Self { Self { stack:vec!(),vecs:vec!() } }
     /// Push a new stack level onto the stack with the given [`GroupType`], as a new group begins
     pub fn push(&mut self,group_type:GroupType) {
-        let mut lvl = StackLevel {
+        let lvl = StackLevel {
             group_type,
             aftergroup:vec!(),
             changes:match self.vecs.pop() {

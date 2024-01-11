@@ -38,24 +38,24 @@ let input: StringLineSource<u8> = string.into();
 let mut tokenizer = StringTokenizer::new(input);
 let eol = Some(b'\r');
 let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo
-assert!(matches!(next,Some(T::ControlSequence(s)) if &*s == "foo"));
+assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));
 let next = tokenizer.get_next(&eh,&mut cs_handler,cc,eol); // \par
-assert!(matches!(next,Some(T::ControlSequence(s)) if &*s == "par"));
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // {
+assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "par"));
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // {
 assert_eq!(next.command_code(), CommandCode::BeginGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // a
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // a
 assert_eq!(next.command_code(), CommandCode::Letter);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // }
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // }
 assert_eq!(next.command_code(), CommandCode::EndGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // {
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // {
 assert_eq!(next.command_code(), CommandCode::BeginGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // !
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // !
 assert_eq!(next.command_code(), CommandCode::Other);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // }
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // }
 assert_eq!(next.command_code(), CommandCode::EndGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap(); // end of line => space
+let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
 assert_eq!(next.command_code(), CommandCode::Space);
-assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).is_none()); // EOF
+assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
 ```
 */
 #[derive(Clone,Debug)]
@@ -70,6 +70,12 @@ pub struct StringTokenizer<C:Character,S:TextLineSource<C>> {
 }
 
 pub struct InvalidCharacterError<C:Character>(pub C);
+impl<C:Character> std::fmt::Debug for InvalidCharacterError<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"Invalid character: {:?}",self.0)
+    }
+
+}
 
 type CSH<T> = <<T as Token>::CS as CSName<<T as Token>::Char>>::Handler;
 

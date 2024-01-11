@@ -2,7 +2,7 @@ use std::cell::OnceCell;
 use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
-use crate::engine::stomach::{ParLineSpec, Stomach};
+use crate::engine::stomach::ParLineSpec;
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::vertical::VNode;

@@ -460,17 +460,9 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     fn pop_align(&mut self) -> Option<AlignData<T<Self>, Skip<Self>>> {
         self.align_data.pop()
     }
-    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<Self::ET>, &S<Self>, T<Self>)>(engine: &mut EngineReferences<Self::ET>, expand_protected: bool, edef_like: bool, mut cont: Fn) {
-        //let ad = std::mem::take(&mut engine.gullet.align_data);
+    #[inline(always)]
+    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<Self::ET>, &S<Self>, T<Self>)>(engine: &mut EngineReferences<Self::ET>, expand_protected: bool, edef_like: bool, cont: Fn) {
         methods::expand_until_endgroup(engine,expand_protected,edef_like,cont);
-        /*engine.gullet.align_data = ad;
-        match engine.gullet.align_data.last_mut() {
-            None => (),
-            Some(d) => {
-                if d.ingroups == 0 { todo!() }
-                d.ingroups -= 1;
-            }
-        }*/
     }
 
     fn do_macro(engine: &mut EngineReferences<Self::ET>, m: Macro<T<Self>>, token: T<Self>) {
