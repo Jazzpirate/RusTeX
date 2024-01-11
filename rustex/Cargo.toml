@@ -34,6 +34,7 @@ chrono = "0.4.31"
 clap = { version = "4.4.13", features = ["derive"] }
 lazy_static = "1.4.0"
 pdfium-render = { version="0.8.17" }
+path-dedot = "3.1.1"
 
 mimalloc = "0.1.39"
 #rpmalloc = "0.2.0"
