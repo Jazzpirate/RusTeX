@@ -12,5 +12,6 @@ jobs:
   test_tex_tfm:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - name: Test tex_tfm
         run: cd tex_tfm && cargo test
