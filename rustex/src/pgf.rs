@@ -12,7 +12,7 @@ use tex_engine::engine::state::State;
 use crate::stomach::RusTeXStomach;
 use tex_engine::engine::stomach::Stomach;
 use tex_engine::engine::utils::memory::MemoryManager;
-use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
+use tex_engine::tex::control_sequences::CSHandler;
 use tex_engine::tex::nodes::math::MathNode;
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::token::Token;

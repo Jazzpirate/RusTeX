@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use tex_engine::engine::{EngineAux, EngineTypes};
 use tex_engine::engine::filesystem::{File, FileSystem, NoOutputFileSystem, VirtualFile};
 use tex_engine::tex::catcodes::CategoryCodeScheme;
-use tex_engine::tex::control_sequences::ControlSequenceName;
+use tex_engine::tex::control_sequences::CSName;
 use tex_engine::tex::input_text::{StringLineSource, TextLine};
 use tex_engine::tex::token::Token;
 use tex_engine::utils::errors::ErrorHandler;
@@ -76,9 +76,9 @@ impl FileSystem for RusTeXFileSystem {
     }
     #[inline(always)]
     fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
-                                                                                idx:u8,eh:&E,
-                                                                                handler:&mut <T::CS as ControlSequenceName<T::Char>>::Handler,
-                                                                                cc:&CategoryCodeScheme<<Self::File as File>::Char>,endline:Option<<Self::File as File>::Char>,cont:F
+                                                                                idx:u8, eh:&E,
+                                                                                handler:&mut <T::CS as CSName<T::Char>>::Handler,
+                                                                                cc:&CategoryCodeScheme<<Self::File as File>::Char>, endline:Option<<Self::File as File>::Char>, cont:F
     ) {
         self.inner.read(idx,eh,handler,cc,endline,cont)
     }

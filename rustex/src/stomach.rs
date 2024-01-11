@@ -24,7 +24,7 @@ use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::types::TeXMode;
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
-use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
+use tex_engine::tex::control_sequences::CSHandler;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,

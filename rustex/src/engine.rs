@@ -160,7 +160,7 @@ pub(crate) static ref AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
 }
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     use tex_engine::engine::utils::memory::MemoryManager;
-    use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
+    use tex_engine::tex::control_sequences::CSHandler;
     let e = e.get_engine_refs();
     let name = e.aux.memory.cs_interner_mut().new(name);
     let mut cmd = tex_engine::commands::methods::make_macro::<Types,_,_>(

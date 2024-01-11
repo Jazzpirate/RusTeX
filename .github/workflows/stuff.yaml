@@ -9,6 +9,8 @@ jobs:
         run: sudo apt install texlive-full
   #    - name: Packages
   #      run: tlmgr init-usertree && tlmgr install article geometry xcolor amsmath graphicx stex wrapfig mdframed listings tcolorbox
+      - name: rustup
+        run: rustup update && rustup toolchain install nightly
       - name: Test tex_engine
         run: cd tex_engine && cargo test --features pdflatex
   test_tex_tfm:

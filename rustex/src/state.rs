@@ -12,7 +12,7 @@ use crate::stomach::CLOSE_FONT;
 use tex_engine::tex::token::Token;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::engine::mouth::Mouth;
-use tex_engine::tex::control_sequences::ControlSequenceNameHandler;
+use tex_engine::tex::control_sequences::CSHandler;
 use tex_engine::tex::nodes::boxes::TeXBox;
 
 #[derive(Clone)]
