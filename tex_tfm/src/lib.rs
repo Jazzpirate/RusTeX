@@ -50,5 +50,6 @@ mod tests {
         log::info!("cmr10:\n{}",es.display_encoding("cmr10").unwrap());
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());
         log::info!("ec-lmr10:\n{}",es.display_encoding("ec-lmr10").unwrap());
+        log::info!("MnSymbolE10:\n{}",es.display_encoding("MnSymbolE10").unwrap());
     }
 }

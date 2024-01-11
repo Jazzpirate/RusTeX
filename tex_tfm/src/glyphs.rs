@@ -11,7 +11,7 @@ pub(crate) enum GlyphI {
     Undefined(Box<str>)
 }
 
-struct GlyphName<'a>(&'a GlyphI);
+pub struct GlyphName<'a>(&'a GlyphI);
 impl<'a> Display for GlyphName<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
@@ -30,7 +30,7 @@ impl<'a> Display for GlyphName<'a> {
 }
 impl Glyph {
     #[inline(always)]
-    pub fn name<'a>(&'a self) -> impl Display + 'a { GlyphName(&self.0) }
+    pub fn name<'a>(&'a self) -> GlyphName<'a> { GlyphName(&self.0) }
 
     #[inline(always)]
     pub fn is_defined(&self) -> bool {

@@ -443,12 +443,12 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
                 *state.fonts.last_mut().unwrap() = font;
             }
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
-                annotations::do_link(link,state,true),
+                annotations::do_link(link,state),
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
-                annotations::close_link(state,false,false),
+                annotations::close_link(state),
             VNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             VNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_)| PDFNode::PDFSave| PDFNode::PDFAnnot(_))) | VNode::Penalty(_) => (),
+            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_)| PDFNode::PDFSave| PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | VNode::Penalty(_) => (),
             c => {
                 empty = false;
                 do_v(engine,state,c)
@@ -484,12 +484,12 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) {
             }
             HNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
-                annotations::do_link(link,state,false),
+                annotations::do_link(link,state),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) =>
-                annotations::close_link(state,false,false),
+                annotations::close_link(state),
             HNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
             HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_))) | HNode::Penalty(_) => (),
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | HNode::Penalty(_) => (),
             c => do_h(engine,state,c)
         }
     }
@@ -644,9 +644,10 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
         }
         MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
         MathNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-        MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_)| PDFNode::PDFAnnot(_))) | MathNode::Penalty(_) => (),
+        MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_)| PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | MathNode::Penalty(_) => (),
         MathNode::Atom(a) => match a.nucleus {
-            MathNucleus::VCenter {start,end,children} =>
+            MathNucleus::VCenter {start,end,children,..} =>
+            // TODO to/spread for VCenter
                 nodes::do_vcenter(state,engine,start,end,children),
             MathNucleus::Simple{kernel,..} | MathNucleus::Inner(kernel) =>
                 do_kernel_in_h(state,engine,kernel,iter),
@@ -767,14 +768,16 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
             },
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) => {
                 flush!();
-                annotations::do_link(link, state, false)
+                annotations::do_link(link, state)
             }
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFEndLink)) => {
                 flush!();
-                annotations::close_link(state, true, false)
+                annotations::close_link(state)
             }
+            MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
+            MathNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg | MathNode::Penalty(_) => (),
-            MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_))) => (),
+            MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => (),
             MathNode::Leaders(_) => (), // TODO?
             o => todo!(" {:?}",o)
         }
@@ -794,7 +797,7 @@ fn mathlist_is_h(ls: &[MNode]) -> bool {
                 _ => false
             }
         }
-        MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_))) => true,
+        MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => true,
         MathNode::HSkip(_) | MathNode::HFil | MathNode::HFill | MathNode::HFilneg | MathNode::Hss | MathNode::Space |
             MathNode::MSkip {..} | MathNode::MKern {..} | MathNode::HKern(_) | MathNode::Penalty(_) |
             MathNode::Mark(..) | MathNode::VRule {..} | MathNode::Whatsit(_) | MathNode::Custom(_) => true,

@@ -66,6 +66,7 @@ mod tests {
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
+    use path_dedot::ParseDot;
     use crate::commands::{Command, CommandScope, Unexpandable};
     use crate::engine::{DefaultPlainTeXEngineTypes, EngineReferences, PlainTeXEngine, TeXEngine};
     use crate::engine::mouth::Mouth;
@@ -75,7 +76,7 @@ mod tests {
     use crate::tex::catcodes::CommandCode;
     use crate::tex::input_text::StringLineSource;
     use crate::tex::token::Token;
-    use crate::utils::Ptr;
+    use crate::utils::{Ptr, PWD};
     use crate::tex::nodes::NodeTrait;
 
     #[cfg(feature="pdflatex")]
@@ -145,7 +146,30 @@ mod tests {
         }
     }
 
+    #[cfg(feature="pdflatex")]
+    #[test]
+    fn testfile() {
+        use path_dedot::*;
+        let testpath = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
+        debug();
+        let mut engine = PlainPDFTeXEngine::new();
+        match engine.initialize_pdflatex() {
+            Ok(_) => (),
+            Err(e) => {
+                panic!("{}",e.msg)
+            }
+        }
+        engine.do_file_pdf(testpath.to_str().unwrap(),|_,b| {
+        }).unwrap_or_else(|e| {
+            let pos = engine.mouth.display_position().to_string();
+            //let cap = engine.aux.memory.cs_interner().cap();
+            //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
+            panic!("{}",e.msg);
+        });
 
+    }
+
+/*
     #[cfg(feature="pdflatex")]
     #[test]
     fn thesis() {
@@ -180,6 +204,8 @@ mod tests {
         });
     }
 
+ */
+/*
     #[test]
     fn memory_things() {
         debug();
@@ -187,6 +213,7 @@ mod tests {
         type CS = <Tk as Token>::CS;
         type State = crate::engine::state::tex_state::TeXState<DefaultPlainTeXEngineTypes>;
         type Change = crate::engine::state::StateChange<DefaultPlainTeXEngineTypes,State>;
+        type Bx = crate::tex::nodes::boxes::TeXBox<DefaultPlainTeXEngineTypes>;
         info!("primitive id: {}b",std::mem::size_of::<crate::engine::utils::memory::PrimitiveIdentifier>());
         info!("control sequence name: {}b",std::mem::size_of::<CS>());
         info!("compact token: {}b",std::mem::size_of::<Tk>());
@@ -194,6 +221,7 @@ mod tests {
         info!("command: {}b",std::mem::size_of::<crate::commands::Command<DefaultPlainTeXEngineTypes>>());
         info!("macro: {}b",std::mem::size_of::<crate::commands::Macro<Tk>>());
         info!("fn: {}b",std::mem::size_of::<fn(&mut EngineReferences<DefaultPlainTeXEngineTypes>,&mut ExpansionContainer<Tk>,Tk)>());
+        info!("box: {}b",std::mem::size_of::<Bx>());
         info!("state change: {}b",std::mem::size_of::<Change>());
         info!("custom state change: {}b",std::mem::size_of::<Ptr<dyn CustomStateChange<DefaultPlainTeXEngineTypes,State>>>());
         info!("primitive id + int: {}b",std::mem::size_of::<(crate::engine::utils::memory::PrimitiveIdentifier,i32)>());
@@ -202,6 +230,7 @@ mod tests {
         info!("ptr: {}b",std::mem::size_of::<Ptr<&'static str>>());
         info!("char: {}b",std::mem::size_of::<char>());
 
+        /*
         struct DP(u8);
         impl std::fmt::Display for DP {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -214,5 +243,8 @@ mod tests {
         for a in 0u8..255 {
             info!("{}: {}",a,DP(a))
         }
+
+         */
     }
+ */
 }

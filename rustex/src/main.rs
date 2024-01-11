@@ -3,7 +3,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 //static ALLOC: rpmalloc::RpMalloc = rpmalloc::RpMalloc;
-pub use RusTeX::engine::{RusTeXEngine,RusTeXEngineT};
+use RusTeX::engine::{RusTeXEngine,RusTeXEngineT};
 
 use std::env;
 use std::path::Path;
@@ -29,10 +29,6 @@ fn main() {
     //test2()
 }
 
-fn test2() {
-    tex_engine::engine::filesystem::kpathsea::KpathseaBase::new();
-}
-
 fn test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.tex",false,true,true);
@@ -49,7 +45,7 @@ fn notes() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     // /home/jazzpirate/work/MathHub/MiKoMH/AI/source/search/slides/ts-ex.en.tex
     let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",true,true,true);
-    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/game-play/slides/agenda.en.tex",true,true,true);
+    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/CompLog/source/kr/tikz/axioms2.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html", &ret).unwrap();
 }
 

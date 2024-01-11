@@ -198,9 +198,14 @@ pub(crate) fn wrap<F:FnOnce(&mut ShipoutState)>(state:&mut ShipoutState,refs:Opt
         _ => ()
     }
     if node.children.len() == 1 {
-        if let Some(HTMLChild::Node(n)) = node.children.pop() {
-            state.push(n)
-        } else {unreachable!()}
+        match node.children.pop() {
+            Some(HTMLChild::Node(n)) => state.push(n),
+            Some(o) => {
+                node.children.push(o);
+                state.push(node)
+            }
+            None => unreachable!()
+        }
     }
     else {
         state.push(node)
@@ -468,6 +473,7 @@ pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Type
             state.do_in(node,None,|state| {
                 math_inner(state,engine,bx)
             })
+            // TODO eqno/leqno
         }
         None => math_inner(state,engine,bx)
     }
@@ -596,7 +602,8 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
         c@MathNucleus::VCenter {..} => {
             let width = c.width();
             let height = c.height() + c.depth();
-            if let MathNucleus::VCenter {start,end,children} = c {
+            if let MathNucleus::VCenter {start,end,children,..} = c {
+                // TODO to/spread for VCenter
                 math_escape(engine, state,width,height, ShipoutMode::H {escape:false}, |engine, state| {
                     do_vcenter(state, engine, start, end, children)
                 })
@@ -648,6 +655,12 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
                 _ => ()
             }
             state.push(node)
+        }
+        MathNucleus::Radical {rad:_,inner} => {
+            let node = HTMLNode::new(HTMLTag::MSqrt);
+            state.do_in(node,None,|state| {
+                do_mathlist(engine,state,&mut inner.into_vec().into());
+            });
         }
         o => todo!(" {:?}",o)
     }

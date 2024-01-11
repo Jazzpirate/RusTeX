@@ -546,7 +546,7 @@ pub enum HTMLTag {
     Annot(ShipoutMode),
     Matrix(ShipoutMode),
     Dest(ShipoutMode),
-    Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,
+    Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,MSqrt,
     MathEscape,
     SvgWrap,SvgG(String),SvgTop,SvgForeign,EscapeSvg
 }
@@ -563,7 +563,7 @@ impl HTMLTag {
     fn is_math(&self) -> bool {
         use HTMLTag::*;
         match self {
-            Math | MathGroup | Mo | Mi | MUnderOver | MUnder | MOver | MSubSup | MSub | MSup | MathEscape | MFrac => true,
+            Math | MathGroup | Mo | Mi | MUnderOver | MUnder | MOver | MSubSup | MSub | MSup | MathEscape | MFrac | MSqrt => true,
             _ => false
         }
     }
@@ -596,6 +596,7 @@ impl Display for HTMLTag {
             MSubSup => f.write_str("msubsup"),
             MSub => f.write_str("msub"),
             MSup => f.write_str("msup"),
+            MSqrt => f.write_str("msqrt"),
             FontChange(mode) | ColorChange(mode) | Annot(mode) | Matrix(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }

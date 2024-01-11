@@ -105,7 +105,7 @@
     }{%
         \pgf@sys@svg@node{path}{%
             id="\pgfsys@if@fresh@currentid{\pgf@sys@cacheref}{pgfcp\the\pgf@sys@svg@objectcount}" d="%
-            \ifx\pgfsys@anim@ba@d\pgfutil@empty\pgf@sys@flushsvgpath\else\pgfsys@anim@ba@d\fi%
+            \ifx\pgfsys@anim@ba@d\pgfutil@empty\pgf@sys@flushsvgpath\else\pgfsys@anim@ba@d\fi" %
         }{}%
     }%
     \pgf@sys@svg@node{use}{%
@@ -156,7 +156,7 @@
 
     \pgf@sys@svg@node{clipPath}{id="pgfcp\the\pgf@sys@svg@objectcount"}{%
         \pgf@sys@svg@node{path}{\pgfsys@if@fresh@currentid{id="\pgfsys@id@refcurrent"}{}d="%
-            \ifx\pgfsys@anim@ba@d\pgfutil@empty\pgf@sys@flushsvgpath\else\pgfsys@anim@ba@d\fi%
+            \ifx\pgfsys@anim@ba@d\pgfutil@empty\pgf@sys@flushsvgpath\else\pgfsys@anim@ba@d\fi" %
         }{}%
     }%
     \pgf@sys@svg@node@beging{clip-path="url(\#pgfcp\the\pgf@sys@svg@objectcount)"}%

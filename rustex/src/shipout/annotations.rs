@@ -145,7 +145,7 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
     }
 }
 
-pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState,in_v:bool) {
+pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState) {
     match link.action {
         ActionSpec::Goto(GotoAction::Current {target,..}) => {
             let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
@@ -169,7 +169,7 @@ pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState,in_v:bool
     }
 }
 
-pub(crate) fn close_link(state:&mut ShipoutState,math:bool,svg:bool) {
+pub(crate) fn close_link(state:&mut ShipoutState) {
     let mut requeue:Vec<HTMLNode> = vec!();
     while let Some(n) = state.nodes.pop() {
         if matches!(n.tag,HTMLTag::Link(_)) {
@@ -206,15 +206,30 @@ pub(crate) fn do_matrix(state:&mut ShipoutState,scale:f32,rotate:f32,skewx:f32,s
 }
 
 pub(crate) fn reset_matrix(state:&mut ShipoutState) {
-    let i = state.nodes.iter().enumerate().find_map(|(i,n)|
-        if matches!(n.tag,HTMLTag::Matrix(_)) {Some(i)} else {None});
-    if let Some(i) = i {
-        if i != state.nodes.len() - 1 {
-            todo!("reset matrix")
+    let mut requeue:Vec<HTMLNode> = vec!();
+    while let Some(n) = state.nodes.pop() {
+        if matches!(n.tag,HTMLTag::Matrix(_)) {
+            if requeue.is_empty() {
+                if !n.children.is_empty() {state.push(n);}
+                return
+            }
+            let Some(transform) = n.styles.get("transfomr") else { unreachable!() };
+            let transform = transform.to_string();
+            if !n.children.is_empty() {state.push(n);}
+            for mut c in requeue.into_iter().rev() {
+                let mut node = HTMLNode::new(HTMLTag::Matrix(state.mode()));
+                node.attrs.insert("transform".into(),transform.clone().into());
+                node.classes.push("rustex-pdfmatrix".into());
+                node.children = std::mem::take(&mut c.children);
+                if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
+                state.nodes.push(c);
+            }
+            return
+        } else {
+            requeue.push(n);
         }
-        let matrix = state.nodes.pop().unwrap();
-        state.push(matrix)
     }
+    unreachable!()
 }
 
 

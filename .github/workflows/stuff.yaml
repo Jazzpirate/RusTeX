@@ -1,0 +1,16 @@
+name: Test
+on: [push]
+jobs:
+  test_tex_engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: TeXLive
+        run: sudo apt install texlive-full
+      - name: Test tex_engine
+        run: cd tex_engine && cargo test --features pdflatex
+  test_tex_tfm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test tex_tfm
+        run: cd tex_tfm && cargo test

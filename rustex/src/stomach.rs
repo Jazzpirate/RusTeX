@@ -153,7 +153,7 @@ impl Stomach for RusTeXStomach {
                 match engine.stomach.data_mut().open_lists.last_mut() {
                     Some(NodeList::Math {..}) => {
                         Self::add_node_m(engine,MathNode::Atom(MathAtom {
-                            nucleus: MathNucleus::VCenter {children:children.into(),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()},
+                            nucleus: MathNucleus::VCenter {children:children.into(),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref(),scaled:ToOrSpread::None},
                             sup:None,sub:None
                         }));
                     }

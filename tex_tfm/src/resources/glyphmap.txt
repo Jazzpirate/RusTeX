@@ -5716,3 +5716,5 @@ zstroke ƶ
 zuhiragana ず
 zukatakana ズ
 missingglyph ❓❓❓
+anglebar.left ⟬
+anglebar.right ⟭
