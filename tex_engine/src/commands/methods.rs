@@ -15,7 +15,7 @@ use crate::tex::types::{BoxType, GroupType, MathClass};
 use crate::utils::HMap;
 use crate::tex::control_sequences::{CSName, CSHandler};
 use std::fmt::Write;
-use crate::engine::mouth::strings::StringTokenizer;
+use crate::engine::mouth::strings::InputTokenizer;
 use crate::tex::input_text::StringLineSource;
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderBody, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
@@ -68,7 +68,7 @@ pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSNa
         MacroSignature { arity:0, params: params.into() }
     } else {
         let sigsrc: StringLineSource<ET::Char> = sig.into();
-        let mut sigsrc = StringTokenizer::new(sigsrc);
+        let mut sigsrc = InputTokenizer::new(sigsrc);
         while let Ok(Some(t)) = sigsrc.get_next::<ET::Token, _>(&ErrorThrower, int, scheme, None) {
             parse_sig_i::<ET>(&mut arity, &mut inparam, &mut ends_with_brace, &mut params, t);
         }
@@ -77,7 +77,7 @@ pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSNa
 
     let exp = exp.as_ref();
     let expsrc :StringLineSource<ET::Char> = exp.into();
-    let mut expsrc = StringTokenizer::new(expsrc);
+    let mut expsrc = InputTokenizer::new(expsrc);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
     while let Ok(Some(t)) = expsrc.get_next::<ET::Token,_>(&ErrorThrower,int,scheme,None) {

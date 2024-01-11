@@ -4,7 +4,7 @@ use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::mouth::pretokenized::{MacroExpansion, TokenListIterator, TokenVecIterator};
-use crate::engine::mouth::strings::StringTokenizer;
+use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
@@ -80,8 +80,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 }
 
 pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
-    String(StringTokenizer<T::Char,StringLineSource<T::Char>>),
-    File(StringTokenizer<T::Char,F::LineSource>,F::SourceRefID),
+    String(InputTokenizer<T::Char,StringLineSource<T::Char>>),
+    File(InputTokenizer<T::Char,F::LineSource>, F::SourceRefID),
     Vec(Vec<T>)
 }
 
@@ -257,7 +257,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
     }
     #[inline(always)]
     fn push_string(&mut self, s: StringLineSource<C<Self>>) {
-        self.inputs.push(TokenSource::String(StringTokenizer::new(s)));
+        self.inputs.push(TokenSource::String(InputTokenizer::new(s)));
     }
 
     fn insert_every<ET: EngineTypes<Char=C<Self>, Token=Self::Token, File=Self::File>>(&mut self, state: &ET::State, every: PrimitiveIdentifier) {
@@ -282,7 +282,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
             line:0,
             column:0
         };
-        self.inputs.push(TokenSource::File(StringTokenizer::new(s),id));
+        self.inputs.push(TokenSource::File(InputTokenizer::new(s), id));
         self.start_ref.push(rf);
     }
     fn current_position_fmt<W:std::fmt::Write>(&self,mut w:W) -> std::fmt::Result {

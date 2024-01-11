@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::filesystem::kpathsea::Kpathsea;
-use crate::engine::mouth::strings::StringTokenizer;
+use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::control_sequences::CSName;
@@ -82,7 +82,7 @@ pub struct NoOutputFileSystem<C:Character> {
     pub kpse:Kpathsea,
     files:HMap<PathBuf,VirtualFile<C>>,
     write_files:Vec<Option<WritableVirtualFile<C>>>,
-    read_files:Vec<Option<StringTokenizer<C,VirtualFileLineSource<C>>>>,
+    read_files:Vec<Option<InputTokenizer<C,VirtualFileLineSource<C>>>>,
     pub interner:string_interner::StringInterner<string_interner::DefaultBackend<string_interner::symbol::SymbolU32>,ahash::RandomState>
 }
 impl<C:Character> Clone for NoOutputFileSystem<C> {
@@ -163,7 +163,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         match self.read_files.get_mut(idx as usize) {
             Some(n) =>
                 *n = match file.line_source() {
-                    Some(src) => Some(StringTokenizer::new( src)),
+                    Some(src) => Some(InputTokenizer::new( src)),
                     _ => None
                 },
             _ => unreachable!()

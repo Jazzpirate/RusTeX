@@ -7,7 +7,7 @@
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use crate::engine::mouth::strings::StringTokenizer;
+use crate::engine::mouth::strings::InputTokenizer;
 use crate::tex::control_sequences::{CSName, CSHandler};
 use crate::tex::input_text::{Character, TextLineSource};
 use crate::tex::token::Token;
@@ -21,13 +21,13 @@ pub trait ErrorHandler {
         crate::throw!("! Text line contains an invalid character.\n{}",text);
     }
     /// "Runaway argument? Paragraph ended before `\foo` was complete."
-    fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self,_tokenizer:&mut StringTokenizer<T::Char,S>,_name:St,_start:(usize,usize)) -> T {
+    fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
         //let line = &tokenizer.string.line(start.0)[start.1..];
         //throw!("Runaway argument?\n{}\n! Paragraph ended before \\{} was complete.",InputLinePresenter(line),name.as_ref());
         todo!()
     }
     /// "Runaway argument? File ended while scanning use of `\foo`."
-    fn file_end<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self,_tokenizer:&mut StringTokenizer<T::Char,S>,_name:St,_start:(usize,usize)) -> T {
+    fn file_end<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
         //let line = &tokenizer.string.line(start.0)[start.1..];
         //throw!("Runaway argument?\n{}\n! File ended while scanning use of \\{}.",InputLinePresenter(line),name.as_ref());
         todo!()

@@ -83,7 +83,7 @@ mod tests {
     fn tokenizer() {
         debug();
         use crate::utils::errors::ErrorThrower;
-        use crate::engine::mouth::strings::StringTokenizer;
+        use crate::engine::mouth::strings::InputTokenizer;
         use crate::tex::token::StandardToken;
         use crate::tex::catcodes::DEFAULT_SCHEME_U8;
         use crate::utils::Ptr;
@@ -96,7 +96,7 @@ mod tests {
 
         let string = "\\foo   \n  \n   {a}{!}";
         let input: StringLineSource<u8> = string.into();
-        let mut tokenizer = StringTokenizer::new(input);
+        let mut tokenizer = InputTokenizer::new(input);
         let eol = Some(b'\r');
         let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo
         assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));

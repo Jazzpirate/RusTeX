@@ -1,10 +1,8 @@
-/*! String tokenizer for TeX input, primarily from files.
-*/
 use crate::prelude::*;
 use crate::tex::input_text::{TextLine, TextLineSource};
 use crate::utils::errors::ErrorHandler;
 
-/// A [`StringTokenizer`] is in one of three states
+/// An [`InputTokenizer`] is in one of three states
 #[derive(Copy,Clone,PartialEq,Eq,Debug)]
 pub enum MouthState {
     /// Beginning of line
@@ -15,12 +13,13 @@ pub enum MouthState {
     MidLine
 }
 
-/** Takes a [`TextLineSource`] and lazily turns it into [`Token`]s
+/** Takes a [`TextLineSource`] and lazily turns it into [`Token`]s, given a [`CategoryCodeScheme`] and an optional
+    end-of-line [`Character`]. The primary use case is to process an input `.tex` file.
 
   *Example:*
 ```rust
 use tex_engine::utils::errors::ErrorThrower;
-use tex_engine::engine::mouth::strings::StringTokenizer;
+use tex_engine::engine::mouth::strings::InputTokenizer;
 use tex_engine::tex::token::StandardToken;
 use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
 use tex_engine::utils::Ptr;
@@ -35,7 +34,7 @@ let cc = &*DEFAULT_SCHEME_U8;
 
 let string = "\\foo   \n  \n   {a}{!}";
 let input: StringLineSource<u8> = string.into();
-let mut tokenizer = StringTokenizer::new(input);
+let mut tokenizer = InputTokenizer::new(input);
 let eol = Some(b'\r');
 let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo
 assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));
@@ -59,7 +58,7 @@ assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).unwrap().is_none()
 ```
 */
 #[derive(Clone,Debug)]
-pub struct StringTokenizer<C:Character,S:TextLineSource<C>> {
+pub struct InputTokenizer<C:Character,S:TextLineSource<C>> {
     state : MouthState,
     line : usize,
     col : usize,
@@ -69,6 +68,7 @@ pub struct StringTokenizer<C:Character,S:TextLineSource<C>> {
     tempstr:Vec<C>
 }
 
+/// An error indicating that an invalid [`Character`] was encountered
 pub struct InvalidCharacterError<C:Character>(pub C);
 impl<C:Character> std::fmt::Debug for InvalidCharacterError<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -79,8 +79,8 @@ impl<C:Character> std::fmt::Debug for InvalidCharacterError<C> {
 
 type CSH<T> = <<T as Token>::CS as CSName<<T as Token>::Char>>::Handler;
 
-impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
-    /// Create a new [`StringTokenizer`] from a [`TextLineSource`]
+impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
+    /// Create a new [`InputTokenizer`] from a [`TextLineSource`]
     pub fn new(mut source:S) -> Self {
         Self {
             state: MouthState::NewLine,
@@ -113,6 +113,8 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
         }
     }
 
+    /// `\readline` - read a line of input as [`Character`]s of [`CategoryCode::Other`] (except for ` `, which has
+    /// [`Space`](CategoryCode::Space)) and passing each token to the given function.
     pub fn readline<T:Token<Char=C>,F:FnMut(T)>(&mut self,mut f:F) {
         while self.col < self.current_line.len() {
             let next = self.current_line[self.col];
@@ -125,6 +127,9 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
         self.next_line();
     }
 
+    /// `\read` - read a line of input as [`Character`]s in the currenct [`CategoryCodeScheme`], respecting
+    /// braces ([`CategoryCode::BeginGroup`] and [`EndGroup`](CategoryCode::EndGroup)) and passing each token to the
+    /// given function.
     pub fn read<T:Token<Char=C>,E:ErrorHandler,F:FnMut(T)>(&mut self, eh:&E, handler:&mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) {
         let mut ingroups = 0;
         let line = self.line;
@@ -154,7 +159,8 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
         }
     }
 
-    /// Get the next [`Token`] from the [`StringTokenizer`].
+    /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacterError`]
+    /// on encountering a character of code [`CategoryCode::Invalid`].
     pub fn get_next<T:Token<Char=C>, E: ErrorHandler>(&mut self, eh:&E, handler: &mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacterError<C>> { loop {
         match self.get_char() {
             None if self.eof => return Ok(None),
@@ -404,6 +410,7 @@ impl<C:Character,S:TextLineSource<C>> StringTokenizer<C,S> {
         }
     }
 
+    /// Only useful for debugging purposes: Print the next `len` [`Character`]s to the given [`Write`]r.
     pub fn preview<W:std::fmt::Write>(&self,len:&mut usize,mut f: W) -> std::fmt::Result {
         if self.current_line.is_empty() {
             return Ok(())
