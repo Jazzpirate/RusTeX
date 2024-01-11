@@ -6,7 +6,7 @@ use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::Font;
 use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
-use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::boxes::{TeXBox, ToOrSpread};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{MuSkip, Numeric, Skip, TeXDimen};
 use crate::tex::types::{MathClass, MathStyle, MathStyleType, NodeType};
@@ -452,11 +452,15 @@ pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
         accent:(ET::Char,S),
         inner:Box<[MathNode<ET,S>]>
     },
-    Radical,
+    Radical {
+        rad:(ET::Char,S),
+        inner:Box<[MathNode<ET,S>]>
+    },
     VCenter{
         start:SourceRef<ET>,
         end:SourceRef<ET>,
-        children:Box<[VNode<ET>]>
+        children:Box<[VNode<ET>]>,
+        scaled:ToOrSpread<ET::Dim>
     }
 }
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
@@ -518,8 +522,13 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 Self::readable_do_indent(indent, f)?;
                 f.write_str("</accent>")
             }
-            MathNucleus::Radical => {
-                todo!()
+            MathNucleus::Radical{rad,inner} => {
+                write!(f, "<radical char=\"{}\">",rad.0)?;
+                for i in inner.iter() {
+                    i.readable_fmt(indent + 2, f)?;
+                }
+                Self::readable_do_indent(indent, f)?;
+                f.write_str("</radical>")
             }
             MathNucleus::VCenter{children,..} => {
                 write!(f, "<vcenter>")?;
@@ -542,7 +551,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Middle(c,s) => s.get_font().get_ht(*c),
             MathNucleus::Accent{inner,accent:(c,f)} =>
                 inner.iter().map(|c| c.height()).max().unwrap_or_default() + f.get_font().get_ht(*c) + f.get_font().get_dp(*c),
-            MathNucleus::Radical => ET::Dim::default(),
+            MathNucleus::Radical {inner,rad:(c,f)} =>
+                inner.iter().map(|c| c.height()).max().unwrap_or_default() + f.get_font().get_ht(*c), // + \epsilon?
             MathNucleus::VCenter{children,..} => children.iter().map(|c| c.height() + c.depth()).sum::<ET::Dim>() +
                 -children.iter().last().map(|c| c.depth()).unwrap_or_default()
         }
@@ -556,7 +566,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Underline(k) => k.width(),
             MathNucleus::Middle(c,s) => s.get_font().get_wd(*c),
             MathNucleus::Accent{inner,..} =>inner.iter().map(|c| c.width()).sum(),
-            MathNucleus::Radical => ET::Dim::default(),
+            MathNucleus::Radical{inner,rad,..} =>inner.iter().map(|c| c.width()).sum::<ET::Dim>() + rad.1.get_font().get_wd(rad.0),
             MathNucleus::VCenter{children,..} => children.iter().map(|c| c.width()).max().unwrap_or_default()
         }
     }
@@ -570,7 +580,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Underline(k) => k.depth(),
             MathNucleus::Middle(c,s) => s.get_font().get_dp(*c),
             MathNucleus::Accent{inner,..} => inner.iter().map(|c| c.depth()).max().unwrap_or_default(),
-            MathNucleus::Radical => ET::Dim::default(),
+            MathNucleus::Radical{inner,..} => inner.iter().map(|c| c.depth()).max().unwrap_or_default(),
             MathNucleus::VCenter{children,..} => children.iter().last().map(|c| c.depth()).unwrap_or_default()
         }
     }
@@ -646,12 +656,18 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathKernel<ET,S> {
     }
 }
 
+#[derive(Debug,Copy,Clone)]
+pub enum EqNoPosition {
+    Left,Right
+}
+
 #[derive(Debug,Clone)]
 pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub display:Option<(ET::Skip,ET::Skip)>,
     pub children:Box<[MathNode<ET,S>]>,
     pub start:SourceRef<ET>,
     pub end:SourceRef<ET>,
+    pub eqno:Option<(EqNoPosition,Box<[MathNode<ET,S>]>)>,
     pub computed_width:OnceCell<ET::Dim>,
     pub computed_height:OnceCell<ET::Dim>,
     pub computed_depth:OnceCell<ET::Dim>,
@@ -685,7 +701,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathGroup<ET,S> {
 }
 
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
-    pub fn close(display:Option<(ET::Skip,ET::Skip)>,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>) -> MathGroup<ET,MathFontStyle<ET>> {
+    pub fn close(display:Option<(ET::Skip,ET::Skip)>,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,eqno:Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) -> MathGroup<ET,MathFontStyle<ET>> {
         let style = if display.is_some() { MathStyle {
             style:MathStyleType::Display,
             cramped:false,
@@ -700,6 +716,15 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
             computed_width: OnceCell::new(),
             computed_height: OnceCell::new(),
             computed_depth: OnceCell::new(),
+            eqno:match eqno {
+                None => None,
+                Some((pos,ch)) => {
+                    Some((pos,Self::close_i(ch,MathStyle {
+                        style:MathStyleType::Text,
+                        cramped:false,
+                    }).into()))
+                }
+            }
         }
     }
     fn close_i(ls: Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,mut style:MathStyle) -> Vec<MathNode<ET,MathFontStyle<ET>>> {
@@ -780,8 +805,11 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
                 accent:(c,Self::resolve_style(style,f)),
                 inner:Self::close_i(inner.into_vec(),style).into()
             },
-            MathNucleus::Radical => MathNucleus::Radical,
-            MathNucleus::VCenter{start,end,children} => MathNucleus::VCenter{start,end,children}
+            MathNucleus::Radical{rad:(c,f),inner} => MathNucleus::Radical {
+                rad:(c,Self::resolve_style(style,f)),
+                inner:Self::close_i(inner.into_vec(),style).into()
+            },
+            MathNucleus::VCenter{start,end,children,scaled} => MathNucleus::VCenter{start,end,children,scaled}
         }
     }
     fn resolve_kernel(n:MathKernel<ET,UnresolvedMathFontStyle<ET>>,style:MathStyle) -> MathKernel<ET,MathFontStyle<ET>> {

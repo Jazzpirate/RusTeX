@@ -128,7 +128,8 @@ pub trait Stomach {
                 match ls {
                     Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) if t.is_some() => {
                         engine.state.pop(engine.aux,engine.mouth);
-                        t.call(engine,children.close(start,engine.mouth.current_sourceref()),start);
+                        let (children,None) = children.close(start,engine.mouth.current_sourceref()) else { unreachable!() };
+                        t.call(engine,children,start);
                     }
                     Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) => {
                         match children {
@@ -140,7 +141,8 @@ pub trait Stomach {
                             MathNodeList::Over {top,sep,bottom,left,right} => Self::add_node_m(engine,MathNode::Over {
                                 start,end:engine.mouth.current_sourceref(),
                                 top:top.into(),bottom:bottom.into(),sep,left,right
-                            })
+                            }),
+                            MathNodeList::EqNo {..} => todo!("throw error")
                         }
                         engine.state.pop(engine.aux,engine.mouth);
                     }
@@ -169,12 +171,13 @@ pub trait Stomach {
                         _ => todo!("throw error")
                     }}
                     engine.state.pop(engine.aux,engine.mouth);
+                    let (children,eqno) = children.close(start,engine.mouth.current_sourceref());
                     let group = MathGroup::<Self::ET,MathFontStyle<Self::ET>>::close(
                         if display {Some((
                             engine.state.get_primitive_skip(PRIMITIVES.abovedisplayskip),
                             engine.state.get_primitive_skip(PRIMITIVES.belowdisplayskip)
                         ))} else {None},
-                        start,engine.mouth.current_sourceref(),children.close(start,engine.mouth.current_sourceref()));
+                        start,engine.mouth.current_sourceref(),children,eqno);
                     Self::add_node_h(engine,HNode::MathGroup(group));
                 }
                 _ => todo!("error")
@@ -495,7 +498,7 @@ pub trait Stomach {
                 match engine.stomach.data_mut().open_lists.last_mut() {
                     Some(NodeList::Math {..}) => {
                         Self::add_node_m(engine,MathNode::Atom(MathAtom {
-                            nucleus: MathNucleus::VCenter {children:children.into(),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref()},
+                            nucleus: MathNucleus::VCenter {children:children.into(),start:engine.mouth.start_ref(),end:engine.mouth.current_sourceref(),scaled:ToOrSpread::None},
                             sup:None,sub:None
                         }));
                     }

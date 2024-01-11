@@ -361,6 +361,8 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
                 }
             }
         }
+        ResolvedToken::Cmd {cmd:Some(Command::CharDef(c)),..} => c.display(ret),
+        ResolvedToken::Cmd {cmd:Some(Command::Char{char,..}),..} => char.display(ret),
         ResolvedToken::Cmd {cmd:Some(Command::Relax),..} if !quoted => return,
         ResolvedToken::Cmd {token,..} if !quoted => {
             engine.mouth.requeue(token);

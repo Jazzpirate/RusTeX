@@ -11,9 +11,9 @@ use crate::engine::filesystem::{SourceRef, SourceReference};
 use crate::tex::types::NodeType;
 use crate::engine::filesystem::File;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
-use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, VBoxInfo};
+use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{Delimiter, MathNode, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathNode, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
 use crate::utils::Ptr;
@@ -45,6 +45,11 @@ pub enum MathNodeList<ET:EngineTypes> {
         left:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
         right:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
     },
+    EqNo {
+        pos:EqNoPosition,
+        main:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+        eqno:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+    }
 }
 impl <ET:EngineTypes> MathNodeList<ET> {
     pub fn new() -> Self { MathNodeList::Simple(Vec::new()) }
@@ -52,26 +57,30 @@ impl <ET:EngineTypes> MathNodeList<ET> {
         match self {
             MathNodeList::Simple(v) => v.push(n),
             MathNodeList::Over{bottom,..} => bottom.push(n),
+            MathNodeList::EqNo {eqno,..} => eqno.push(n)
         }
     }
-    pub fn close(self,start:SourceRef<ET>,end:SourceRef<ET>) -> Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
+    pub fn close(self,start:SourceRef<ET>,end:SourceRef<ET>) -> (Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) {
         match self {
-            MathNodeList::Simple(v) => v,
-            MathNodeList::Over{top,sep,bottom,left,right} => vec!(MathNode::Over {
+            MathNodeList::Simple(v) => (v,None),
+            MathNodeList::Over{top,sep,bottom,left,right} => (vec!(MathNode::Over {
                 start,end, top:top.into(),bottom:bottom.into(),sep,left,right
-            })
+            }),None),
+            MathNodeList::EqNo {main,eqno,pos} => (main,Some((pos,eqno)))
         }
     }
     pub fn list_mut(&mut self) -> &mut Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
         match self {
             MathNodeList::Simple(v) => v,
             MathNodeList::Over{bottom,..} => bottom,
+            MathNodeList::EqNo {eqno,..} => eqno
         }
     }
     pub fn list(&self) -> &Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
         match self {
             MathNodeList::Simple(v) => v,
             MathNodeList::Over{bottom,..} => bottom,
+            MathNodeList::EqNo {eqno,..} => eqno
         }
     }
 }
@@ -87,7 +96,7 @@ pub enum MathNodeListType<ET:EngineTypes> {
 pub enum VerticalNodeListType<ET:EngineTypes> {
     Box(VBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
     Insert(usize),
-    VCenter(SourceRef<ET>),
+    VCenter(SourceRef<ET>,ToOrSpread<ET::Dim>),
     VAdjust,
     VAlignRow(SourceRef<ET>),
     VAlignCell(SourceRef<ET>,u8),

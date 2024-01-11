@@ -26,7 +26,7 @@ use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeList, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{EqNoPosition, MathAtom, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
 use crate::utils::errors::TeXError;
@@ -848,13 +848,10 @@ pub fn vtop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> Re
 }
 
 pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
-    engine.expand_until_bgroup(true);
-    //let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
-    engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
-    engine.mouth.insert_every::<ET>(&engine.state,PRIMITIVES.everyvbox);
+    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
     engine.stomach.data_mut().open_lists.push(NodeList::Vertical {
         children: Vec::new(),
-        tp: VerticalNodeListType::VCenter(engine.mouth.start_ref())
+        tp: VerticalNodeListType::VCenter(engine.mouth.start_ref(),scaled)
     });
 }
 
@@ -1278,12 +1275,13 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Math{children,start,tp:MathNodeListType::LeftRight(left)}) => {
             engine.state.pop(engine.aux,engine.mouth);
+            let (children,None) = children.close(start,engine.mouth.current_sourceref()).into() else {unreachable!()};
             ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
                 nucleus: MathNucleus::LeftRight {
                     left:left.map(|d| (d.large.char,d.large.style)),
                     right:del.map(|d| (d.large.char,d.large.style)),
                     start,end:engine.mouth.current_sourceref(),
-                    children:children.close(start,engine.mouth.current_sourceref()).into()
+                    children:children.into()
                 },
                 sub:None,sup:None
             }));
@@ -2182,6 +2180,52 @@ pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     ),(char.char,char.style))
 }
 
+pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+
+    let i = engine.read_int(false).into();
+    if i < 0 || i > u32::MAX as i64 {
+        todo!("matchchar out of range")
+    }
+    let char = super::methods::get_mathchar(engine,i as u32,None);
+    engine.read_char_or_math_group(|(char,style),engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+            nucleus: MathNucleus::Radical{
+                rad:(char,style),
+                inner:vec!(MathNode::Atom(mc.to_atom())).into()
+            },
+            sub: None,
+            sup: None,
+        }))
+    },|(char,style)| ListTarget::<ET,_>::new(
+        move |engine,children,start| ET::Stomach::add_node_m(engine,MathNode::Atom(
+            MathAtom {
+                sup:None,sub:None,nucleus:MathNucleus::Radical{
+                    rad:(char,style),
+                    inner:children.into()
+                },
+            }
+        ))
+    ),(char.char,char.style))
+}
+
+fn do_eqno<ET:EngineTypes>(engine:&mut EngineReferences<ET>,pos:EqNoPosition) {
+    match engine.stomach.data_mut().open_lists.last_mut() {
+        Some(NodeList::Math {children:ch@MathNodeList::Simple(_)|ch@MathNodeList::Over {..},tp:MathNodeListType::Top {..},start}) => {
+            let old = std::mem::replace(ch,MathNodeList::EqNo {
+                pos,main:vec!(),eqno:vec!()
+            });
+            let (children,None) = old.close(*start,engine.mouth.current_sourceref()) else {unreachable!()};
+            let MathNodeList::EqNo {main,..} = ch else {unreachable!()};
+            *main = children;
+        }
+        _ => todo!("throw error")
+    }
+}
+#[inline(always)]
+pub fn eqno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) { do_eqno(engine,EqNoPosition::Right) }
+#[inline(always)]
+pub fn leqno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) { do_eqno(engine,EqNoPosition::Left) }
+
 pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
@@ -2787,6 +2831,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "underline", CommandScope::MathOnly, underline);
     register_unexpandable(engine, "overline", CommandScope::MathOnly, overline);
     register_unexpandable(engine, "mathaccent", CommandScope::MathOnly, mathaccent);
+    register_unexpandable(engine, "radical", CommandScope::MathOnly, radical);
+    register_unexpandable(engine, "eqno", CommandScope::MathOnly, eqno);
+    register_unexpandable(engine, "leqno", CommandScope::MathOnly, leqno);
 
     register_unexpandable(engine, "over", CommandScope::MathOnly, over);
     register_unexpandable(engine, "overwithdelims", CommandScope::MathOnly, overwithdelims);
@@ -2819,11 +2866,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         pagedepth,span
     );
 
-    cmstodo!(engine,radical);
-
     cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
-        show,showbox,showthe,special,noboundary,accent,setlanguage,eqno,
-        leqno,bigskip,bye,italiccorr,medskip,smallskip
+        show,showbox,showthe,special,noboundary,accent,setlanguage,
+        bigskip,bye,italiccorr,medskip,smallskip
     );
 
     register_primitive_int(engine,PRIMITIVE_INTS);

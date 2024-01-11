@@ -50,10 +50,10 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
             };
             ET::Stomach::add_box(engine, bx, target)
         }
-        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VCenter(start)}) if bt == BoxType::Vertical => {
+        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VCenter(start,scaled)}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
             ET::Stomach::add_node_m(engine, MathNode::Atom(MathAtom {
-                nucleus: MathNucleus::VCenter {children:children.into(),start,end:engine.mouth.current_sourceref()},
+                nucleus: MathNucleus::VCenter {children:children.into(),start,end:engine.mouth.current_sourceref(),scaled},
                 sub:None,sup:None
             }))
         }
