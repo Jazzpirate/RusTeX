@@ -13,7 +13,7 @@ use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::token::Token;
 use crate::tex::types::{BoxType, GroupType, MathClass};
 use crate::utils::HMap;
-use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler};
+use crate::tex::control_sequences::{CSName, CSHandler};
 use std::fmt::Write;
 use crate::engine::mouth::strings::StringTokenizer;
 use crate::tex::input_text::StringLineSource;
@@ -59,7 +59,7 @@ pub fn do_csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ET::CSName
     todo!("file end")
 }
 
-pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSName as ControlSequenceName<ET::Char>>::Handler,scheme:&CategoryCodeScheme<ET::Char>,sig:S1,exp:S2) -> Macro<ET::Token> {
+pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSName as CSName<ET::Char>>::Handler, scheme:&CategoryCodeScheme<ET::Char>, sig:S1, exp:S2) -> Macro<ET::Token> {
     let mut arity = 0;
     let mut params = shared_vector::Vector::new();
     let mut inparam = false;
@@ -70,7 +70,7 @@ pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSNa
     } else {
         let sigsrc: StringLineSource<ET::Char> = sig.into();
         let mut sigsrc = StringTokenizer::new(sigsrc);
-        while let Some(t) = sigsrc.get_next::<ET::Token, _>(&ErrorThrower, int, scheme, None) {
+        while let Ok(Some(t)) = sigsrc.get_next::<ET::Token, _>(&ErrorThrower, int, scheme, None) {
             parse_sig_i::<ET>(&mut arity, &mut inparam, &mut ends_with_brace, &mut params, t);
         }
         MacroSignature { arity, params: params.into() }
@@ -81,7 +81,7 @@ pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSNa
     let mut expsrc = StringTokenizer::new(expsrc);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
-    while let Some(t) = expsrc.get_next::<ET::Token,_>(&ErrorThrower,int,scheme,None) {
+    while let Ok(Some(t)) = expsrc.get_next::<ET::Token,_>(&ErrorThrower,int,scheme,None) {
         parse_exp_i::<ET>(arity, &mut inparam, &mut exp, t);
     }
     if let Some(e) = ends_with_brace {

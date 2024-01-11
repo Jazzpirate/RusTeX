@@ -8,7 +8,7 @@ use crate::engine::mouth::pretokenized::TokenList;
 use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
 use crate::tex::nodes::boxes::{TeXBox, ToOrSpread};
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::numerics::{MuSkip, Numeric, Skip, TeXDimen};
+use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
 use crate::tex::types::{MathClass, MathStyle, MathStyleType, NodeType};
 use crate::tex::numerics::NumSet;
 
@@ -125,7 +125,7 @@ pub enum UnresolvedMarkers {
     Display, Text, Script, ScriptScript
 }
 impl<ET:EngineTypes> NodeTrait<ET> for UnresolvedMarkers {
-    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn readable_fmt(&self, _indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             UnresolvedMarkers::Display => f.write_str("<display>"),
             UnresolvedMarkers::Text => f.write_str("<text>"),
@@ -284,8 +284,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
             MathNode::Atom(a) => a.width(),
             MathNode::Choice(c) => c.width(),
             MathNode::Over { top,bottom, .. } => {
-                let mut top: ET::Dim = top.iter().map(|c| c.width()).sum();
-                let mut bot: ET::Dim = bottom.iter().map(|c| c.width()).sum();
+                let top: ET::Dim = top.iter().map(|c| c.width()).sum();
+                let bot: ET::Dim = bottom.iter().map(|c| c.width()).sum();
                 top.max(bot)
             }
             _=> ET::Dim::default(),

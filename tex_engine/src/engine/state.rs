@@ -12,8 +12,8 @@ use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::math::UnresolvedMathFontStyle;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
-use crate::tex::types::{GroupType, MathStyle, MathStyleType, TeXMode};
-use crate::utils::{Ptr, ReusableVectorFactory};
+use crate::tex::types::GroupType;
+use crate::utils::Ptr;
 
 type Ch<S> = <<S as State>::ET as EngineTypes>::Char;
 type Int<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::Int;
@@ -265,29 +265,34 @@ pub struct StackLevel<ET:EngineTypes,S:State<ET=ET>> {
 /// A stack of [`StateChange`]s, to be rolled back when a group ends
 pub struct StateStack<ET:EngineTypes,S:State<ET=ET>> {
     pub stack:Vec<StackLevel<ET,S>>,
-    factory:ReusableVectorFactory<StateChange<ET,S>>
+    vecs:Vec<Vec<StateChange<ET,S>>>
 }
 impl<ET:EngineTypes,S:State<ET=ET>> Clone for StateStack<ET,S> {
     fn clone(&self) -> Self {
         Self {
             stack:self.stack.clone(),
-            factory:ReusableVectorFactory::new(8,4)
+            vecs:vec!()
         }
     }
 
 }
 impl<ET:EngineTypes,S:State<ET=ET>> StateStack<ET,S> {
-    pub fn give_back(&mut self,lvl:StackLevel<ET,S>) {
-        self.factory.give_back(lvl.changes);
+    #[inline(always)]
+    pub fn give_back(&mut self,mut lvl:StackLevel<ET,S>) {
+        lvl.changes.clear();
+        self.vecs.push(lvl.changes);
     }
     /// Create a new [`StateStack`]
-    pub fn new() -> Self { Self { stack:vec!(),factory:ReusableVectorFactory::new(8,8) } }
+    pub fn new() -> Self { Self { stack:vec!(),vecs:vec!() } }
     /// Push a new stack level onto the stack with the given [`GroupType`], as a new group begins
     pub fn push(&mut self,group_type:GroupType) {
         let mut lvl = StackLevel {
             group_type,
             aftergroup:vec!(),
-            changes:self.factory.get()
+            changes:match self.vecs.pop() {
+                Some(v) => v,
+                _ => Vec::new()
+            }
         };
         self.stack.push(lvl);
     }

@@ -7,7 +7,7 @@ use crate::engine::mouth::pretokenized::{Tokenizer, WriteChars};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::control_sequences::CSHandler;
 use crate::tex::token::{StandardToken, Token};
 use super::primitives::*;
 use std::fmt::Write;

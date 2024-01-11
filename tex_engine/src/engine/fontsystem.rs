@@ -9,15 +9,15 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::fontsystem::tfm::TfmFile;
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::control_sequences::CSName;
 use crate::tex::input_text::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
 use crate::utils::{HMap, Ptr};
-use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::control_sequences::CSHandler;
 
 pub trait FontSystem:Clone+std::fmt::Debug {
     type Char:Character;
-    type CS:ControlSequenceName<Self::Char>;
+    type CS: CSName<Self::Char>;
     type Int:TeXInt;
     type Font:Font<Char=Self::Char,CS=Self::CS, Dim=Self::Dim,Int=Self::Int>;
     type Dim:TeXDimen;
@@ -30,7 +30,7 @@ pub trait Font:Clone+std::fmt::Debug {
     type Char:Character;
     type Dim:TeXDimen;
     type Int:TeXInt;
-    type CS:ControlSequenceName<Self::Char>;
+    type CS: CSName<Self::Char>;
     fn get_at(&self) -> Self::Dim;
     fn has_at_set(&self) -> bool;
     fn set_at(&mut self,d:Self::Dim);
@@ -43,7 +43,7 @@ pub trait Font:Clone+std::fmt::Debug {
     fn get_skewchar(&self) -> Self::Int;
     fn set_skewchar(&mut self,c:Self::Int);
     fn has_char(&self,c:Self::Char) -> bool;
-    fn display<W:std::fmt::Write>(&self,i:&<Self::CS as ControlSequenceName<Self::Char>>::Handler,w:W) -> std::fmt::Result;
+    fn display<W:std::fmt::Write>(&self, i:&<Self::CS as CSName<Self::Char>>::Handler, w:W) -> std::fmt::Result;
     fn get_wd(&self,c:Self::Char) -> Self::Dim;
     fn get_ht(&self,c:Self::Char) -> Self::Dim;
     fn get_dp(&self,c:Self::Char) -> Self::Dim;
@@ -56,12 +56,12 @@ pub trait Font:Clone+std::fmt::Debug {
     fn ligature(&self,c1:Self::Char,c2:Self::Char) -> Option<Self::Char>;
 }
 #[derive(Clone,Debug)]
-pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> {
+pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> {
     files:HMap<PathBuf,Ptr<TfmFile>>,
     null:Ptr<TfmFontI<I,D,CS>>
 }
 
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> FontSystem for TfmFontSystem<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSystem<I,D,CS> {
     type Char = u8;
     type Int = I;
     type Font = TfmFont<I,D,CS>;
@@ -135,17 +135,17 @@ struct Mutables<I:TeXInt,D:TeXDimen + Numeric<I>>  {
     dimens:Vec<D>
 }
 
-pub struct TfmFontI<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>>  {
+pub struct TfmFontI<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>>  {
     file:Ptr<TfmFile>,
     name:CS,
     muts:RwLock<Mutables<I,D>>
 }
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> PartialEq for TfmFontI<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> PartialEq for TfmFontI<I,D,CS> {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> std::fmt::Debug for TfmFontI<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> std::fmt::Debug for TfmFontI<I,D,CS> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,"Font {:?}",self.name)
     }
@@ -153,7 +153,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> std::fmt::Debu
 }
 
 pub type TfmFont<I,D,CS> = Ptr<TfmFontI<I,D,CS>>;
-impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFont<I,D,CS> {
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
     type Char = u8;
     type CS = CS;
     type Int = I;
@@ -216,7 +216,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS:ControlSequenceName<u8>> Font for TfmFo
     fn filename(&self) -> &str {
         self.file.name()
     }
-    fn display<W:std::fmt::Write>(&self,_i:&<Self::CS as ControlSequenceName<u8>>::Handler,mut w:W) -> std::fmt::Result {
+    fn display<W:std::fmt::Write>(&self, _i:&<Self::CS as CSName<u8>>::Handler, mut w:W) -> std::fmt::Result {
         let at = self.muts.read().unwrap().at;
         match at {
             Some(d) => write!(w,"{} at {}",self.file.name(),d),

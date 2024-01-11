@@ -8,7 +8,7 @@ use crate::engine::mouth::strings::StringTokenizer;
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
-use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::control_sequences::CSName;
 use crate::tex::input_text::StringLineSource;
 use crate::tex::token::Token;
 
@@ -61,7 +61,7 @@ pub trait Mouth:Sized {
     fn display_position(&self) -> MouthPosition<Self> {
         MouthPosition(self)
     }
-    fn preview(&self,int:&<<Self::Token as Token>::CS as ControlSequenceName<C<Self>>>::Handler,cc:&CategoryCodeScheme<C<Self>>,esc:Option<C<Self>>) -> String;
+    fn preview(&self, int:&<<Self::Token as Token>::CS as CSName<C<Self>>>::Handler, cc:&CategoryCodeScheme<C<Self>>, esc:Option<C<Self>>) -> String;
 }
 
 pub struct MouthPosition<'a,M:Mouth>(&'a M);
@@ -305,44 +305,20 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                         }
                     }
                 }
-                /*
-                TokenSource::Requeued(_) => {
-                    if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
-                        return Some(t)
-                    } else { unreachable!() }
-                }
-                TokenSource::TokenVec(s) => {
-                    match s.next() {
-                        Some(t) => return Some(t),
-                        _ => {self.inputs.pop();}
-                    }
-                }
-                TokenSource::TokenList(s) => {
-                    match s.next() {
-                        Some(t) => return Some(t),
-                        _ => { self.inputs.pop(); }
-                    }
-                }
-                TokenSource::Expansion(s) => {
-                    match s.next() {
-                        Some(t) => return Some(t),
-                        _ => { self.inputs.pop(); }
-                    }
-                }
-
-                 */
                 TokenSource::String(s) => {
                     match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
-                        Some(t) => return Some(t),
-                        _ => return Some(self.end_file(aux,state))
+                        Ok(Some(t)) => return Some(t),
+                        Ok(_) => return Some(self.end_file(aux,state)),
+                        Err(_) => todo!()
                     }
                 }
                 TokenSource::File(s,_) => {
                     let cc: &CategoryCodeScheme<T::Char> = state.get_catcode_scheme();
                     let endline: Option<T::Char> = state.get_endline_char();
                     match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
-                        Some(t) => return Some(t),
-                        _ => return Some(self.end_file(aux,state))
+                        Ok(Some(t)) => return Some(t),
+                        Ok(_) => return Some(self.end_file(aux,state)),
+                        Err(_) => todo!()
                     }
                 }
             }
@@ -361,45 +337,30 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                         self.vecs.push(v);
                     } else {unreachable!()}
                 }
-                /*
-                Some(TokenSource::Requeued(t)) => {
-                    if let Some(TokenSource::Requeued(t)) = self.inputs.pop() {
-                        if t.is_noexpand_marker() {continue}
-                        if !cont(aux,t) {return}
-                    } else { unreachable!() }
-                }
-                Some(TokenSource::TokenList(s)) => {
-                    for t in s { if !cont(aux,t) { return } }
-                    self.inputs.pop();
-                }
-                Some(TokenSource::TokenVec(s)) => {
-                    for t in s { if !cont(aux,t) { return } }
-                    self.inputs.pop();
-                }
-                Some(TokenSource::Expansion(s)) => {
-                    for t in s { if !cont(aux,t) { return } }
-                    self.inputs.pop();
-                }
-
-                 */
                 Some(TokenSource::String(s)) => {
-                    while let Some(t) = s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
-                        if !cont(aux,t) { return }
+                    loop {
+                        match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                            Ok(Some(t)) => if !cont(aux,t) { return },
+                            Ok(_) => todo!(),
+                            Err(_) => todo!()
+                        }
                     }
-                    todo!()
                 }
                 Some(TokenSource::File(s,_)) => {
-                    while let Some(t) = s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
-                        if !cont(aux,t) { return }
+                    loop {
+                        match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                            Ok(Some(t)) => if !cont(aux,t) { return },
+                            Ok(_) => todo!(),
+                            Err(_) => todo!()
+                        }
                     }
-                    todo!()
                 }
                 None => todo!()
             }
         }
     }
 
-    fn preview(&self,int:&<T::CS as ControlSequenceName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,esc:Option<T::Char>) -> String {
+    fn preview(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, esc:Option<T::Char>) -> String {
         let mut str = String::new();
         for src in self.inputs.iter().rev() {
             match src {

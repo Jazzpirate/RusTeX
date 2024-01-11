@@ -1,4 +1,4 @@
-/*! A [Token] is -- conceptually -- either a [control sequence](ControlSequenceName),
+/*! A [Token] is -- conceptually -- either a [control sequence](CSName),
 or a pair of a [character](Character) and a [category code](super::catcodes::CategoryCode).
  */
 
@@ -7,13 +7,13 @@ use std::marker::PhantomData;
 use crate::engine::utils::memory::InternedCSName;
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
 use crate::tex::input_text::Character;
-use crate::tex::control_sequences::{ControlSequenceName, ControlSequenceNameHandler, ResolvedCSName};
+use crate::tex::control_sequences::{CSName, CSHandler, ResolvedCSName};
 use crate::tex::input_text::CharacterMap;
 
 /// Trait for Tokens, to be implemented for an engine.
 pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     /// The type of the control sequence name.
-    type CS : ControlSequenceName<Self::Char>;
+    type CS : CSName<Self::Char>;
     /// The type of the character.
     type Char : Character;
 
@@ -122,7 +122,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
         }
     }
 
-    fn display_fmt<W:Write>(&self,int:&<Self::CS as ControlSequenceName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, mut f: W)  -> std::fmt::Result {
+    fn display_fmt<W:Write>(&self, int:&<Self::CS as CSName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, mut f: W) -> std::fmt::Result {
         match self.to_enum() {
             StandardToken::Character(_,CommandCode::Space) => write!(f," "),
             StandardToken::Character(c,_) => write!(f,"{}",c.displayable()),
@@ -148,11 +148,11 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
  Is [`Copy`] iff [`CS`](Token::CS) is [`Copy`].
  */
 #[derive(Clone,Copy,Eq,Debug)]
-pub enum StandardToken<Char:Character,CS:ControlSequenceName<Char>> {
+pub enum StandardToken<Char:Character,CS: CSName<Char>> {
     ControlSequence(CS),
     Character(Char,CommandCode)
 }
-impl<Char:Character,CS:ControlSequenceName<Char>> PartialEq for StandardToken<Char,CS> {
+impl<Char:Character,CS: CSName<Char>> PartialEq for StandardToken<Char,CS> {
     fn eq(&self,other:&Self) -> bool {
         match (self,other) {
             (StandardToken::ControlSequence(a), StandardToken::ControlSequence(b)) => a==b,
@@ -162,7 +162,7 @@ impl<Char:Character,CS:ControlSequenceName<Char>> PartialEq for StandardToken<Ch
         }
     }
 }
-impl<Char:Character,CS:ControlSequenceName<Char>> Token for StandardToken<Char,CS> {
+impl<Char:Character,CS: CSName<Char>> Token for StandardToken<Char,CS> {
     type CS = CS;
     type Char = Char;
     #[inline(always)]

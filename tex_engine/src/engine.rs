@@ -7,14 +7,14 @@ use crate::engine::utils::memory::{InternedCSName, MemoryManager, PRIMITIVES};
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
-use crate::{debug_log, tex};
+use crate::{tex};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::Command;
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
-use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::control_sequences::CSName;
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
@@ -35,7 +35,7 @@ pub mod fontsystem;
 */
 pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Char: Character;
-    type CSName: ControlSequenceName<Self::Char>;
+    type CSName: CSName<Self::Char>;
     type Token: Token<Char = Self::Char, CS = Self::CSName>;
     type ErrorHandler: ErrorHandler;
     type Extension: EngineExtension;
@@ -224,7 +224,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
 impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
     type Types = ET;
     fn register_primitive(&mut self,cmd: Command<ET>, name: &str) {
-        use crate::tex::control_sequences::ControlSequenceNameHandler;
+        use crate::tex::control_sequences::CSHandler;
         let name = self.aux.memory.cs_interner_mut().new(name);
         self.state.set_command(&self.aux,name,Some(cmd),true);
     }

@@ -8,7 +8,7 @@ use crate::engine::fontsystem::FontSystem;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::mouth::pretokenized::{Stringify, TokenList, WriteChars};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::control_sequences::CSName;
 use crate::tex::numerics::NumSet;
 use crate::tex::token::Token;
 use crate::engine::fontsystem::Font;
@@ -57,14 +57,14 @@ pub enum Command<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> Command<ET> {
     #[inline(always)]
-    pub fn meaning<'a>(&'a self,int:&'a <<ET::Token as Token>::CS as ControlSequenceName<ET::Char>>::Handler,cc:&'a CategoryCodeScheme<ET::Char>,escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
+    pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
         Meaning{cmd:self,int,cc,escapechar}
     }
 }
 
 pub struct Meaning<'a,ET:EngineTypes>{
     cmd:&'a Command<ET>,
-    int:&'a <<ET::Token as Token>::CS as ControlSequenceName<ET::Char>>::Handler,
+    int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler,
     cc:&'a CategoryCodeScheme<ET::Char>,
     escapechar:Option<ET::Char>
 }
@@ -156,10 +156,10 @@ pub struct Macro<T:Token> {
 }
 impl<T:Token> Macro<T> {
     #[inline(always)]
-    pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self,int:&'a <T::CS as ControlSequenceName<ET::Char>>::Handler,cc:&'a CategoryCodeScheme<T::Char>,escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
+    pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self, int:&'a <T::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
         MacroMeaning{cmd:self,int,cc,escapechar}
     }
-    pub fn meaning_char<F:WriteChars<T::Char,T::CS>>(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: F) {
+    pub fn meaning_char<F:WriteChars<T::Char,T::CS>>(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: F) {
         if self.protected {
             if let Some(e) = escapechar { f.push_char(e) }
             write!(f,"protected ").unwrap();
@@ -177,7 +177,7 @@ impl<T:Token> Macro<T> {
         write!(f,"->").unwrap();
         self.expansion.meaning_char(int, cc, escapechar, &mut f, true)
     }
-    pub fn meaning_fmt(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn meaning_fmt(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.meaning_char( int, cc, escapechar,Stringify::new(f));
         Ok(())
     }
@@ -185,7 +185,7 @@ impl<T:Token> Macro<T> {
 
 pub struct MacroMeaning<'a,ET:EngineTypes>{
     cmd:&'a Macro<ET::Token>,
-    int:&'a <<ET::Token as Token>::CS as ControlSequenceName<ET::Char>>::Handler,
+    int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler,
     cc:&'a CategoryCodeScheme<ET::Char>,
     escapechar:Option<ET::Char>
 }

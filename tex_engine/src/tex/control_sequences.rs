@@ -2,7 +2,7 @@
     We can just use strings to represent them, but there is room for optimization by e.g. interning
     them, which requires some more infrastructure to intern and resolve them.
 
-    We implement the trait [`ControlSequenceNameHandler`] for the Unit type `()`, in case
+    We implement the trait [`CSHandler`] for the Unit type `()`, in case
     we don't want to do any interning and just use [`Ptr`]`<str>`s.
 */
 
@@ -14,9 +14,9 @@ use crate::utils::Ptr;
 
 
 /** The name of a control sequence. */
-pub trait ControlSequenceName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
+pub trait CSName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
     /// The type of the handler for this control sequence name.
-    type Handler: ControlSequenceNameHandler<C,Self>;
+    type Handler: CSHandler<C,Self>;
     fn as_usize(&self) -> usize;
 }
 
@@ -27,7 +27,7 @@ pub trait ResolvedCSName<'a,C:Character>:Display {
 }
 
 /** Handles control sequence names - conversion from/to strings, displaying etc. */
-pub trait ControlSequenceNameHandler<C:Character,CS: ControlSequenceName<C>>:Default+Clone {
+pub trait CSHandler<C:Character,CS: CSName<C>>:Default+Clone {
     type Resolved<'a>:ResolvedCSName<'a,C> where Self:'a;
     /// Creates a new control sequence name from a string.
     fn new(&mut self,s: &str) -> CS;
@@ -50,7 +50,7 @@ impl<'a,C:Character> ResolvedCSName<'a,C> for &'a str {
     }
 }
 
-impl<C:Character> ControlSequenceNameHandler<C,Ptr<str>> for () {
+impl<C:Character> CSHandler<C,Ptr<str>> for () {
     type Resolved<'a> = &'a str;
     #[inline(always)]
     fn new(&mut self,s: &str) -> Ptr<str> {
@@ -73,13 +73,13 @@ impl<C:Character> ControlSequenceNameHandler<C,Ptr<str>> for () {
     }
 }
 
-impl<C:Character> ControlSequenceName<C> for Ptr<str> {
+impl<C:Character> CSName<C> for Ptr<str> {
     type Handler = ();
     fn as_usize(&self) -> usize {
         todo!()
     }
 }
-impl<C:Character> ControlSequenceName<C> for InternedString {
+impl<C:Character> CSName<C> for InternedString {
     type Handler = StringInterner;
     fn as_usize(&self) -> usize {
         self.to_usize()

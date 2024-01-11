@@ -6,7 +6,7 @@ use crate::engine::filesystem::kpathsea::Kpathsea;
 use crate::engine::mouth::strings::StringTokenizer;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
-use crate::tex::control_sequences::ControlSequenceName;
+use crate::tex::control_sequences::CSName;
 use crate::tex::input_text::{Character, StringLineSource, TextLine, TextLineSource};
 use crate::tex::token::Token;
 use crate::utils::{HMap, Ptr};
@@ -45,9 +45,9 @@ pub trait FileSystem:Clone {
     fn eof(&self,idx:u8) -> bool;
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
     fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
-                                                  idx:u8,eh:&E,
-                                                  handler:&mut <T::CS as ControlSequenceName<T::Char>>::Handler,
-                                                  cc:&CategoryCodeScheme<<Self::File as File>::Char>,endline:Option<<Self::File as File>::Char>,cont:F
+                                                                                idx:u8, eh:&E,
+                                                                                handler:&mut <T::CS as CSName<T::Char>>::Handler,
+                                                                                cc:&CategoryCodeScheme<<Self::File as File>::Char>, endline:Option<<Self::File as File>::Char>, cont:F
     );
     fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F);
 }
@@ -170,9 +170,9 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         }
     }
     fn read<T:Token<Char=C>,E:ErrorHandler,F:FnMut(T)>(&mut self,
-                                                  idx:u8,eh:&E,
-                                                  handler:&mut <T::CS as ControlSequenceName<C>>::Handler,
-        cc:&CategoryCodeScheme<C>,endline:Option<C>,cont:F
+                                                       idx:u8, eh:&E,
+                                                       handler:&mut <T::CS as CSName<C>>::Handler,
+                                                       cc:&CategoryCodeScheme<C>, endline:Option<C>, cont:F
     ) {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {

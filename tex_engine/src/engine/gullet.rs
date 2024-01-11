@@ -14,7 +14,7 @@ use crate::tex::catcodes::CommandCode;
 use crate::tex::input_text::Character;
 use crate::tex::numerics::{MuSkip, NumSet};
 use crate::tex::token::{StandardToken, Token};
-use crate::tex::control_sequences::ControlSequenceNameHandler;
+use crate::tex::control_sequences::CSHandler;
 use crate::tex::types::BoxType;
 
 type M<G> = <<G as Gullet>::ET as EngineTypes>::Mouth;
