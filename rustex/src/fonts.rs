@@ -29,10 +29,10 @@ impl FontSystemT for Fontsystem {
             glyphmaps: FontStore::new(get)
         }
     }
-    #[inline(always)]
+
     fn new_font<S: AsRef<str>, F: FileSystem>(&mut self, path: S, macroname: <Self::Font as Font>::CS, fs: &mut F) -> Self::Font {
         self.fs.new_font(path, macroname, fs)
     }
-    #[inline(always)]
+
     fn null(&self) -> Self::Font { self.fs.null() }
 }

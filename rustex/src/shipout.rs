@@ -169,7 +169,7 @@ impl ShipoutState {
             None => node.close(mode,&mut self.output),
         }
     }
-    #[inline(always)]
+
     fn push_glyph(&mut self,glyph:Glyph) {
         let mode = self.mode();
         self.nodes.last_mut().unwrap().push_glyph(mode,glyph)
@@ -365,7 +365,7 @@ fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
      */
     ret
 }
-#[inline(always)]
+
 pub(crate) fn shipout(engine:Refs, n: VNode<Types>) {
     match n {
         VNode::Box(TeXBox::V { children, start,end, .. }) => {

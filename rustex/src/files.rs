@@ -19,7 +19,7 @@ pub struct RusTeXFileSystem{
 
 impl FileSystem for RusTeXFileSystem {
     type File = VirtualFile<u8>;
-    #[inline(always)]
+
     fn new(pwd: PathBuf) -> Self {
         let mut inner = tex_engine::engine::filesystem::NoOutputFileSystem::new(pwd);
         let id = inner.interner.get_or_intern("<TEXINPUTS>/pgfsys-rustex.def");
@@ -45,36 +45,36 @@ impl FileSystem for RusTeXFileSystem {
             self.inner.get(sr)
         }
     }
-    #[inline(always)]
+
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf {
         self.inner.set_pwd(pwd)
     }
 
-    #[inline(always)]
+
     fn open_out(&mut self,idx:u8,file:Self::File) {
         self.inner.open_out(idx,file)
     }
-    #[inline(always)]
+
     fn open_in(&mut self,idx:u8,file:Self::File) {
         self.inner.open_in(idx,file)
     }
-    #[inline(always)]
+
     fn close_in(&mut self,idx:u8) {
         self.inner.close_in(idx)
     }
-    #[inline(always)]
+
     fn close_out(&mut self,idx:u8) {
         self.inner.close_out(idx)
     }
-    #[inline(always)]
+
     fn eof(&self,idx:u8) -> bool {
         self.inner.eof(idx)
     }
-    #[inline(always)]
+
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
         self.inner.write(idx,string,newlinechar,aux)
     }
-    #[inline(always)]
+
     fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
                                                                                 idx:u8, eh:&E,
                                                                                 handler:&mut <T::CS as CSName<T::Char>>::Handler,

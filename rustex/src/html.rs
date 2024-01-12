@@ -17,22 +17,22 @@ use tex_engine::pdflatex::nodes::PDFColor;
 use crate::files::RusTeXFileSystem;
 use super::shipout::nodes::Alignment;
 
-#[inline(always)]
+
 fn dim_to_px(d:i32) -> f64{
     d as f64 / 65536.0 * 1.5
 }
 
-#[inline(always)]
+
 pub(crate) fn dim_to_num(d:i32) -> String {
     format!("{:.5}",dim_to_px(d)).trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-#[inline(always)]
+
 pub(crate) fn dim_to_string(d:Dim32) -> String {
     dim_to_num(d.0) + "px"
 }
 
-#[inline(always)]
+
 pub(crate) fn mudim_to_string(d:Mu) -> String {
     format!("{:.5}",(d.0 as f64) / 18.0 / 65536.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
 }
@@ -783,7 +783,7 @@ pub(crate) mod labels {
         pub(crate) tag: Tag
     }
     impl PartialEq for Label {
-        #[inline(always)]
+
         fn eq(&self, other: &Self) -> bool {
             self.id == other.id
         }
@@ -867,7 +867,7 @@ pub struct HTMLNode {
 }
 
 impl HTMLNode {
-    #[inline(always)]
+
     pub(crate) fn reopened(&self) -> Self {
         Self {
             tag:self.tag.clone(),
@@ -888,7 +888,7 @@ impl HTMLNode {
         self.children.is_empty()
     }
 
-    #[inline(always)]
+
     pub fn display<W:std::fmt::Write>(self,store:&mut FontStore,state:&mut ShipoutState,mut f:&mut W) -> std::fmt::Result {
         let urls = &mut state.fontlinks;
         let fnt = state.fonts.first().unwrap();
@@ -1209,53 +1209,53 @@ impl HTMLNode {
         true
     }
 
-    #[inline(always)]
+
     pub fn push_text(&mut self,s:String) {
         self.children.push(HTMLChild::Text(s));
     }
-    #[inline(always)]
+
     pub fn push_glyph(&mut self,g:Glyph) {
         self.children.push(HTMLChild::Glyph(g));
     }
-    #[inline(always)]
+
     pub fn push_space(&mut self) {
         self.children.push(HTMLChild::Space);
     }
 
-    #[inline(always)]
+
     pub fn width(&mut self,w:Dim32) {
         self.width = Some(w);
     }
 
-    #[inline(always)]
+
     pub fn class(&mut self,cls:&'static str) {
         self.classes.push(Cow::Borrowed(cls));
     }
 
-    #[inline(always)]
+
     pub fn attr(&mut self,attr:&'static str,value:String) {
         self.attrs.insert(Cow::Borrowed(attr),value);
     }
 
-    #[inline(always)]
+
     pub fn style(&mut self,attr:&'static str,value:String) {
         self.styles.insert(Cow::Borrowed(attr),Cow::Owned(value));
     }
-    #[inline(always)]
+
     pub fn style_str(&mut self,attr:&'static str,value:&'static str) {
         self.styles.insert(Cow::Borrowed(attr),Cow::Borrowed(value));
     }
 
-    #[inline(always)]
+
     pub fn set_font(&mut self,font:Font) {
         self.font = Some(font);
     }
 
-    #[inline(always)]
+
     pub fn sourceref(&mut self,start:Ref,end:Ref) {
         self.sourceref = Some((start,end));
     }
-    #[inline(always)]
+
     pub fn new(label: labels::Label, allow_newline:bool) -> Self {
         let cls = label.cls.clone();
         let mut r = HTMLNode {

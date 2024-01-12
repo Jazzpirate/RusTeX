@@ -27,30 +27,30 @@ impl EngineExtension for RusTeXExtension {
     fn new() -> Self { Self { pdf: MinimalPDFExtension::new(),state:ShipoutState::default(),change_markers:vec!() } }
 }
 impl PDFExtension<Types> for RusTeXExtension {
-    #[inline(always)]
+
     fn pdfmatches(&mut self) -> &mut Vec<String> {
         self.pdf.pdfmatches()
     }
-    #[inline(always)]
+
     fn elapsed(&mut self) -> &mut std::time::Instant {
         self.pdf.elapsed()
     }
-    #[inline(always)]
+
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>> { self.pdf.colorstacks() }
-    #[inline(always)]
+
     fn current_colorstack(&mut self) -> &mut usize { self.pdf.current_colorstack() }
-    #[inline(always)]
+
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { self.pdf.pdfobjs() }
-    #[inline(always)]
+
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<Types>> { self.pdf.pdfxforms() }
-    #[inline(always)]
+
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<Types>> { self.pdf.pdfximages() }
-    #[inline(always)]
+
     fn pdfannots(&mut self) -> &mut Vec<PDFAnnot<Types>> {
         self.pdf.pdfannots()
     }
 
-    #[inline(always)]
+
     fn pdfium_direct(&mut self) -> &mut Option<Pdfium> {
         self.pdf.pdfium_direct()
     }

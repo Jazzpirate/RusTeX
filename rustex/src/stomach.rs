@@ -34,19 +34,19 @@ pub struct RusTeXStomach {
 }
 impl Stomach for RusTeXStomach {
     type ET = Types;
-    #[inline(always)]
+
     fn new(_aux: &mut EngineAux<Types>, _state: &mut RusTeXState) -> Self {
         Self { afterassignment:None, data:StomachData::new(), prevent_shipout:false,continuous:false }
     }
-    #[inline(always)]
+
     fn afterassignment(&mut self) -> &mut Option<CompactToken> {
         &mut self.afterassignment
     }
-    #[inline(always)]
+
     fn data_mut(&mut self) -> &mut StomachData<Types> {
         &mut self.data
     }
-    #[inline(always)]
+
     fn split_vertical(engine: Refs, nodes: Vec<VNode<Types>>, target: Dim32) -> SplitResult<Types> {
         vsplit(engine, nodes, target)
     }

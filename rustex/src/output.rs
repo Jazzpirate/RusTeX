@@ -23,7 +23,7 @@ pub enum RusTeXOutput {
 use tex_engine::utils::errors::TeXError;
 impl Outputs for RusTeXOutput {
     fn new() -> Self {Self::None}
-    #[inline(always)]
+
     fn message<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.message(text),
@@ -32,7 +32,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.message(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn errmessage<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.errmessage(text),
@@ -43,7 +43,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.errmessage(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn file_open<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.file_open(text),
@@ -52,7 +52,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.file_open(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn file_close<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.file_close(""),
@@ -62,7 +62,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.file_close(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn write_18<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.write_18(text),
@@ -71,7 +71,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.write_18(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn write_17<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.write_17(text),
@@ -80,7 +80,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.write_17(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn write_16<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.write_16(text),
@@ -89,7 +89,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.write_16(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn write_neg1<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.write_neg1(text),
@@ -98,7 +98,7 @@ impl Outputs for RusTeXOutput {
             Self::Cont(b) => b.write_neg1(text.to_string())
         }
     }
-    #[inline(always)]
+
     fn write_other<D:Display>(&self,text:D) {
         match self {
             Self::Log(l) => l.write_other(text),

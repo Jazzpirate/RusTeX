@@ -37,7 +37,6 @@ use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::prelude::*;
 
 pub(crate) type Extension = super::extension::RusTeXExtension;
-pub(crate) type Memory = utils::memory::ReuseTokenLists<CompactToken>;
 pub(crate) type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
 pub(crate) type Bx = TeXBox<Types>;
 pub(crate) type SRef = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
@@ -58,7 +57,6 @@ impl EngineTypes for Types {
     type MuSkip = MuSkip32;
     type Num = tex::numerics::DefaultNumSet;
     type State = RusTeXState;
-    type Memory = utils::memory::ReuseTokenLists<Self::Token>;
     type File = VirtualFile<u8>;
     type FileSystem = crate::files::RusTeXFileSystem;
     type Outputs = RusTeXOutput;
@@ -73,11 +71,11 @@ impl EngineTypes for Types {
 
 
 thread_local! {
-    static MAIN_STATE : Mutex<Option<(RusTeXState,Memory)>> = Mutex::new(None);
+    static MAIN_STATE : Mutex<Option<(RusTeXState,MemoryManager<CompactToken>)>> = Mutex::new(None);
     static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = Mutex::new(None);
 }
 
-fn get_state(log:bool) -> (RusTeXState,Memory) {
+fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
     MAIN_STATE.with(|state| {
         let mut guard = state.lock().unwrap();
         match &mut *guard {
@@ -176,9 +174,9 @@ pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name
 }*/
 pub type RusTeXEngine = DefaultEngine<Types>;
 impl RusTeXEngineT for RusTeXEngine {
-    #[inline(always)]
+
     fn initialize(log:bool) { let _ = get_engine(log); }
-    #[inline(always)]
+
     fn get() -> Self { get_engine(false) }
     fn do_file<S:AsRef<str>>(file:S,verbose:bool,log:bool,sourcerefs:bool) -> String {
         use std::fmt::Write;
