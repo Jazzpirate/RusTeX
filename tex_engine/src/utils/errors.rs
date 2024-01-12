@@ -8,10 +8,10 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::mouth::strings::InputTokenizer;
-use crate::tex::control_sequences::{CSName, CSHandler};
+use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use crate::tex::input_text::{Character, TextLineSource};
-use crate::tex::token::Token;
-use crate::tex::token::StandardToken;
+use crate::tex::tokens::Token;
+use crate::tex::tokens::StandardToken;
 
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler {

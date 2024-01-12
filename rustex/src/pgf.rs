@@ -1,7 +1,7 @@
 use tex_engine::commands::{Command, CommandScope, Expandable, Unexpandable};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::engine::utils::memory::PRIMITIVES;
-use tex_engine::tex::token::CompactToken;
+use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Refs, register_command, Types};
 use tex_engine::engine::TeXEngine;
 use tex_engine::tex::nodes::horizontal::HNode;
@@ -12,10 +12,9 @@ use tex_engine::engine::state::State;
 use crate::stomach::RusTeXStomach;
 use tex_engine::engine::stomach::Stomach;
 use tex_engine::engine::utils::memory::MemoryManager;
-use tex_engine::tex::control_sequences::CSHandler;
 use tex_engine::tex::nodes::math::MathNode;
 use tex_engine::tex::nodes::vertical::VNode;
-use tex_engine::tex::token::Token;
+use tex_engine::tex::tokens::Token;
 use tex_engine::tex::types::TeXMode;
 
 pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {

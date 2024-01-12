@@ -1,24 +1,32 @@
 /*! A [Token] is -- conceptually -- either a [control sequence](CSName),
-or a pair of a [character](Character) and a [category code](super::catcodes::CategoryCode).
+or a pair of a [character](Character) and a [`CategoryCode`](super::catcodes::CategoryCode). In practice, we use
+[`CommandCode`] instead, which omits "impossible" codes (e.g. [`Invalid`](CategoryCode::Invalid) or
+[`Comment`](CategoryCode::Comment)) and adds internal ones (e.g. [`Noexpand`](CommandCode::Noexpand) or
+[`Argument`](CommandCode::Argument)).
+
+The "canonical" way to represent a [`Token`] is [`StandardToken`], which is an enum with two variants.
+However, since [`Token`]s are read, processed, inspected, passed around, stored and retrieved extremely often, and in
+the most performance-critical parts of the engine, their representation matters. In particular, we want them to be small
+and ideally `Copy`, which excludes representing control sequences as strings; hence the generic [`CSName`] type
+and [`CompactToken`] as a significantly more efficient representation.
  */
 
 use std::fmt::Write;
 use std::marker::PhantomData;
-use crate::engine::utils::memory::InternedCSName;
-use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
+use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::input_text::Character;
-use crate::tex::control_sequences::{CSName, CSHandler, ResolvedCSName};
-use crate::tex::input_text::CharacterMap;
+use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
 
-/// Trait for Tokens, to be implemented for an engine.
+pub mod control_sequences;
+pub mod token_lists;
+
+/// Trait for Tokens, to be implemented for an engine (see [above](crate::tex::tokens)).
+/// Note that two [`Space`](CommandCode::Space) tokens are always considered equal.
 pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
-    /// The type of the control sequence name.
+    /// The [`CSName`] type used for control sequence names (e.g. `Rc<str>` or something interned).
     type CS : CSName<Self::Char>;
-    /// The type of the character.
+    /// The [`Character`] type for char/catcode-pair tokens.
     type Char : Character;
-
-    //const TOKEN_LIST_FACTORY: Option<RefCell<ReusableVectorFactory<Self>>> = None;
-
     /// Converts to the canonical enum representation of a token, i.e. [`StandardToken`].
     fn to_enum(&self) -> StandardToken<Self::Char,Self::CS>;
     /// Create a new token from a control sequence name.
@@ -29,6 +37,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     fn noexpand_marker() -> Self;
     /// Create a new argument marker token. `i` needs to be in the range `0..=8`.
     fn argument_marker(i:u8) -> Self;
+    /// Create a new end-of-file token.
     fn eof() -> Self;
     /// Create a new character token with given [`CommandCode`] (i.e.
     /// conceptually the [`CategoryCode`](super::catcodes::CategoryCode)).
@@ -50,6 +59,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
         }
     }
 
+    /// Check if this token is a control sequence or an active character
     #[inline(always)]
     fn is_cs_or_active(&self) -> bool {
         match self.to_enum() {
@@ -59,6 +69,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
         }
     }
 
+    /// Check if this token is a control sequence with the given name.
     #[inline(always)]
     fn is_cs(&self,name:&Self::CS) -> bool {
         match self.to_enum() {
@@ -90,6 +101,14 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             _ => false
         }
     }
+    /// Check if this token has [`CommandCode::EndGroup`].
+    #[inline(always)]
+    fn is_end_group(&self) -> bool {
+        match self.to_enum() {
+            StandardToken::Character(_, CommandCode::EndGroup) => true,
+            _ => false
+        }
+    }
     /// Check if this token has [`CommandCode::Space`].
     #[inline(always)]
     fn is_space(&self) -> bool {
@@ -106,14 +125,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             _ => false
         }
     }
-    /// Check if this token has [`CommandCode::EndGroup`].
-    #[inline(always)]
-    fn is_end_group(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::EndGroup) => true,
-            _ => false
-        }
-    }
+    /// Check if this token has [`CommandCode::Parameter`].
     #[inline(always)]
     fn is_param(&self) -> bool {
         match self.to_enum() {
@@ -121,24 +133,17 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             _ => false
         }
     }
-
+    /// Display this token to a writer, using the given [`CSHandler`] (in case it is a control sequence).
+    /// In that case, we also need the current `\escapechar` to optionally insert it in front of the control sequence
+    /// name, and the current [`CategoryCodeScheme`] to determine whether or not to insert a space afterwards - which
+    /// we do unless the control sequence name is a single character with any [`CommandCode`] other than
+    /// [`Letter`](CommandCode::Letter).
     fn display_fmt<W:Write>(&self, int:&<Self::CS as CSName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, mut f: W) -> std::fmt::Result {
         match self.to_enum() {
-            StandardToken::Character(_,CommandCode::Space) => write!(f," "),
-            StandardToken::Character(c,_) => write!(f,"{}",c.displayable()),
-            StandardToken::ControlSequence(cs) => {
-                let res = int.resolve(&cs);
-                write!(f, "{}{}", Self::Char::displayable_opt(escapechar), res)?;
-                if res.len() == 1 {
-                    let c = res.iter().next().unwrap();
-                    match cc.get(c) {
-                        CategoryCode::Letter => write!(f," "),
-                        _ => Ok(())
-                    }
-                } else {
-                    write!(f," ")
-                }
-            }
+            StandardToken::Character(_,CommandCode::Space) => f.write_char(' '),
+            StandardToken::Character(c,_) => Ok(c.display_fmt(&mut f)),
+            StandardToken::ControlSequence(cs) =>
+                cs.display_fmt(int,cc,escapechar,f)
         }
     }
 }
@@ -187,11 +192,15 @@ impl<Char:Character,CS: CSName<Char>> Token for StandardToken<Char,CS> {
     }
 }
 
-/** A compact representation of a [`Token`] with [`Char`](Token::Char)`==u8` and [`CS`](Token::CS)`==`[`InternedString`]
- as a single `u32` (similar to the way plain TeX does it).
+/** A compact representation of a [`Token`] with [`Char`](Token::Char)`==u8` and [`CS`](Token::CS)`==`[`InternedCSName`]
+ as a single `u32` (similar to the way plain TeX does it) -- i.e. it is small and `Copy`, which yields a significant
+ performance improvement in the most performance critical parts of the code.
 
- Very memory efficient and correspondingly fast, but at the disadvantage of restricting the number of total control sequence names
- to 2³¹ (which is still a lot).
+Values up to `0x8000_0000` are interpreted as interned control sequences, and the rest as character tokens. The downside
+is that we need an interning table for control sequences, that needs passing around whenever we want to
+make a Token from a control sequence name or display a [`CompactToken`] to the user in a comprehensible way.
+
+(Also, we can only have 2³¹ control sequences in total, but that limit is ridiculously large.)
 */
 #[derive(Clone,Copy,Eq, Debug)]
 pub struct CompactToken(u32);

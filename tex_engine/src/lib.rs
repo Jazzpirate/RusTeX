@@ -14,6 +14,7 @@ pub mod tests;
 pub mod prelude {
     pub use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
     pub use crate::tex::input_text::{Character,CharacterMap};
-    pub use crate::tex::token::Token;
-    pub use crate::tex::control_sequences::{CSName,CSHandler};
+    pub use crate::tex::tokens::Token;
+    pub use crate::tex::tokens::control_sequences::{CSName,CSHandler,ResolvedCSName};
+    pub use crate::tex::tokens::token_lists::{WriteChars,TokenList};
 }

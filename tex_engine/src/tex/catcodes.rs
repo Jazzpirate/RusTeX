@@ -4,8 +4,8 @@ Category codes
 
 use std::fmt::Formatter;
 use lazy_static::lazy_static;
-use crate::engine::mouth::pretokenized::WriteChars;
-use crate::tex::control_sequences::CSName;
+use crate::tex::tokens::token_lists::WriteChars;
+use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::input_text::Character;
 
 /** The category code of a character.
@@ -221,7 +221,7 @@ lazy_static! {
 
 /// After scanning a file, [`CategoryCode`]s such as [`EOL`](CategoryCode::EOL),
 /// [`Comment`](CategoryCode::Comment) or [`Invalid`](CategoryCode::Invalid)
-/// can not occur anymore. Instead, a [`Token`](super::token::Token) can represent e.g. a
+/// can not occur anymore. Instead, a [`Token`](super::tokens::Token) can represent e.g. a
 /// *numbered parameter* (e.g. `#1` in a macro expansion), or an end-of-file, or
 /// a `\noexpand` marker, or a marker for the end of an alignment cell, etc.
 #[derive(Copy,PartialEq,Eq,Clone,Debug)]

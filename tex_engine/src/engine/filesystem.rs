@@ -6,9 +6,9 @@ use crate::engine::filesystem::kpathsea::Kpathsea;
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
-use crate::tex::control_sequences::CSName;
+use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::input_text::{Character, StringLineSource, TextLine, TextLineSource};
-use crate::tex::token::Token;
+use crate::tex::tokens::Token;
 use crate::utils::{HMap, Ptr};
 use crate::utils::errors::ErrorHandler;
 

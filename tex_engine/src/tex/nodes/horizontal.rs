@@ -1,7 +1,7 @@
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::{Font, FontSystem};
-use crate::engine::mouth::pretokenized::TokenList;
+use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::math::{MathFontStyle, MathGroup};
@@ -82,7 +82,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 mg.readable_fmt(indent, f)
             }
             HNode::Char { char, .. } =>
-                Ok(char.display(f)),
+                Ok(char.display_fmt(f)),
             HNode::Whatsit(w) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "{:?}",w)

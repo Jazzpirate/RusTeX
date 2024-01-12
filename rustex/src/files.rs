@@ -2,11 +2,11 @@ use std::path::PathBuf;
 use tex_engine::engine::{EngineAux, EngineTypes};
 use tex_engine::engine::filesystem::{File, FileSystem, NoOutputFileSystem, VirtualFile};
 use tex_engine::tex::catcodes::CategoryCodeScheme;
-use tex_engine::tex::control_sequences::CSName;
 use tex_engine::tex::input_text::{StringLineSource, TextLine};
-use tex_engine::tex::token::Token;
+use tex_engine::tex::tokens::Token;
 use tex_engine::utils::errors::ErrorHandler;
 use tex_engine::utils::Ptr;
+use tex_engine::prelude::CSName;
 
 static PGFSYS: &str = include_str!("resources/pgfsys.def");
 

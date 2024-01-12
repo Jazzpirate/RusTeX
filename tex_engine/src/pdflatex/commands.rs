@@ -1,11 +1,11 @@
 use crate::{cmtodo, cmtodos};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::mouth::pretokenized::{Tokenizer, WriteChars};
+use crate::tex::tokens::token_lists::{Tokenizer, WriteChars};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::primitives::*;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::token::{StandardToken, Token};
+use crate::tex::tokens::{StandardToken, Token};
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;
 use std::fmt::Write;

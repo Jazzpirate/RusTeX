@@ -1,8 +1,7 @@
-/*! Core data structures, such as [`CategoryCode`](catcodes::CategoryCode)s and [`Token`](token::Token)s.*/
+/*! Core data structures, such as [`CategoryCode`](catcodes::CategoryCode)s and [`Token`](tokens::Token)s.*/
 pub mod catcodes;
 pub mod input_text;
-pub mod token;
-pub mod control_sequences;
+pub mod tokens;
 pub mod numerics;
 pub mod types;
 pub mod nodes;

@@ -6,11 +6,11 @@ use std::fmt::Display;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::mouth::pretokenized::{Stringify, TokenList, WriteChars};
+use crate::tex::tokens::token_lists::{Stringify, TokenList, WriteChars};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::control_sequences::CSName;
+use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::numerics::NumSet;
-use crate::tex::token::Token;
+use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 

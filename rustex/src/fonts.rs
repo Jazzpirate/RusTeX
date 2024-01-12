@@ -1,8 +1,8 @@
 use tex_engine::engine::{EngineAux, EngineTypes};
 use tex_engine::engine::filesystem::FileSystem;
-use tex_engine::engine::utils::memory::InternedCSName;
 use tex_engine::tex::numerics::Dim32;
 use tex_engine::engine::fontsystem::{Font, FontSystem as FontSystemT};
+use tex_engine::tex::tokens::control_sequences::InternedCSName;
 
 pub(crate) type FontStore = tex_tfm::encodings::EncodingStore<String,fn(&str) -> String>;
 

@@ -1,4 +1,4 @@
-/*! A control sequence is a [`Token`](super::token::Token) of the (usually) form `\foo`.
+/*! A control sequence is a [`Token`](super::tokens::Token) of the (usually) form `\foo`.
     We can just use strings to represent them, but there is room for optimization by e.g. interning
     them, which requires some more infrastructure to intern and resolve them.
 
@@ -6,11 +6,13 @@
     we don't want to do any interning and just use [`Ptr`]`<str>`s.
 */
 
-use std::fmt::{Debug, Display};
-use string_interner::Symbol;
-use crate::engine::utils::memory::{InternedString, StringInterner};
+use std::fmt::{Debug, Display, Write};
+use std::marker::PhantomData;
+use crate::engine::utils::memory::CharacterVecInterner;
+use crate::prelude::{CategoryCode, CategoryCodeScheme};
 use crate::tex::input_text::Character;
 use crate::utils::Ptr;
+use crate::tex::input_text::CharacterMap;
 
 
 /** The name of a control sequence. */
@@ -18,6 +20,35 @@ pub trait CSName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
     /// The type of the handler for this control sequence name.
     type Handler: CSHandler<C,Self>;
     fn as_usize(&self) -> usize;
+    fn display_fmt<W:Write>(&self, int:&Self::Handler, cc:&CategoryCodeScheme<C>, escapechar:Option<C>, mut f: W) -> std::fmt::Result {
+        let res = int.resolve(self);
+        write!(f, "{}{}", C::displayable_opt(escapechar), res)?;
+        if res.len() == 1 {
+            let c = res.iter().next().unwrap();
+            match cc.get(c) {
+                CategoryCode::Letter => write!(f," "),
+                _ => Ok(())
+            }
+        } else {
+            write!(f," ")
+        }
+    }
+}
+
+impl<C:Character> CSName<C> for Ptr<str> {
+    type Handler = ();
+    fn as_usize(&self) -> usize {
+        todo!()
+    }
+}
+
+pub type InternedCSName<C> = (u32,PhantomData<C>);
+impl<C:Character> CSName<C> for InternedCSName<C> {
+    type Handler = CharacterVecInterner<C>;
+    #[inline(always)]
+    fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
 }
 
 pub trait ResolvedCSName<'a,C:Character>:Display {
@@ -67,21 +98,17 @@ impl<C:Character> CSHandler<C,Ptr<str>> for () {
     fn from_chars(&mut self, v: &Vec<C>) -> Ptr<str> {
         let mut s = String::new();
         for c in v {
-            c.display(&mut s);
+            c.display_fmt(&mut s);
         }
         s.into()
     }
 }
 
-impl<C:Character> CSName<C> for Ptr<str> {
-    type Handler = ();
-    fn as_usize(&self) -> usize {
-        todo!()
-    }
-}
+/*
 impl<C:Character> CSName<C> for InternedString {
     type Handler = StringInterner;
     fn as_usize(&self) -> usize {
         self.to_usize()
     }
 }
+ */

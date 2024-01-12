@@ -3,7 +3,7 @@
 */
 use std::fmt::Debug;
 use crate::engine::gullet::{DefaultGullet, Gullet, ResolvedToken};
-use crate::engine::utils::memory::{InternedCSName, MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
@@ -14,11 +14,11 @@ use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::input_text::Character;
-use crate::tex::control_sequences::CSName;
+use crate::tex::tokens::control_sequences::{CSName, InternedCSName,CSHandler};
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
-use crate::tex::token::Token;
+use crate::tex::tokens::Token;
 use crate::utils::errors::{catch, ErrorHandler, TeXError};
 
 pub mod filesystem;
@@ -115,8 +115,8 @@ pub struct EngineReferences<'et,ET:EngineTypes> {
 pub struct DefaultPlainTeXEngineTypes;
 impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Char = u8;
-    type CSName = utils::memory::InternedCSName<u8>;//InternedString;
-    type Token = super::tex::token::CompactToken;//::StandardToken<Self::CSName,u8>;//
+    type CSName = InternedCSName<u8>;//InternedString;
+    type Token = super::tex::tokens::CompactToken;//::StandardToken<Self::CSName,u8>;//
     type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = ();
     type Int = i32;
@@ -224,7 +224,6 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
 impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
     type Types = ET;
     fn register_primitive(&mut self,cmd: Command<ET>, name: &str) {
-        use crate::tex::control_sequences::CSHandler;
         let name = self.aux.memory.cs_interner_mut().new(name);
         self.state.set_command(&self.aux,name,Some(cmd),true);
     }

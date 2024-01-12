@@ -5,9 +5,9 @@ use crate::engine::state::{Ch, CS, Dim, State, StateChange, StateChangeTracker, 
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::TokenList;
+use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::utils::outputs::Outputs;
-use crate::tex::control_sequences::CSHandler;
+use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::input_text::Character;
 use crate::tex::input_text::CharacterMap;
 use crate::tex::types::GroupType;
@@ -15,7 +15,6 @@ use crate::utils::HMap;
 use crate::engine::FontSystem;
 
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
-use crate::tex::control_sequences::CSName;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::TeXBox;
 

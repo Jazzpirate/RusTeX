@@ -18,9 +18,9 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
 
     /// Display this character to a [`Write`](std::fmt::Write) (e.g. a `&mut String`). Relevant for e.g.
     /// TeX's convention to display control characters using `^^` encoding.
-    fn display<W:std::fmt::Write>(&self, target:&mut W);
+    fn display_fmt<W:std::fmt::Write>(&self, target:&mut W);
 
-    /// Convert this character to a [`DisplayableCharacter`] that calls [`display`](Self::display); useful in
+    /// Convert this character to a [`DisplayableCharacter`] that calls [`display`](Self::display_fmt); useful in
     /// `format!` and `write!` macros.
     #[inline(always)]
     fn displayable(&self) -> DisplayableCharacter<Self> { DisplayableCharacter(*self) }
@@ -43,7 +43,7 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
 pub struct DisplayableCharacter<C:Character>(C);
 impl<C:Character> Display for DisplayableCharacter<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.display(f);
+        self.0.display_fmt(f);
         Ok(())
     }
 }
@@ -53,7 +53,7 @@ impl<C:Character> Display for DisplayableCharacter<C> {
 pub struct DisplayableCharacterOpt<C:Character>(Option<C>);
 impl<C:Character> Display for DisplayableCharacterOpt<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(c) = self.0{ c.display(f) }
+        if let Some(c) = self.0{ c.display_fmt(f) }
         Ok(())
     }
 }
@@ -85,7 +85,7 @@ impl Character for u8 {
 
     #[inline(always)]
     #[allow(unused_must_use)]
-    fn display<W:std::fmt::Write>(&self, target:&mut W) {
+    fn display_fmt<W:std::fmt::Write>(&self, target:&mut W) {
         if self.is_ascii() {
             target.write_char(*self as char);
         }  else if *self > 128 && (*self - 64).is_ascii() {

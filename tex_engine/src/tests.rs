@@ -84,10 +84,10 @@ mod tests {
         debug();
         use crate::utils::errors::ErrorThrower;
         use crate::engine::mouth::strings::InputTokenizer;
-        use crate::tex::token::StandardToken;
+        use crate::tex::tokens::StandardToken;
         use crate::tex::catcodes::DEFAULT_SCHEME_U8;
         use crate::utils::Ptr;
-        use crate::tex::token::Token;
+        use crate::tex::tokens::Token;
 
         type T = StandardToken<u8,Ptr<str>>;
         let eh = ErrorThrower;

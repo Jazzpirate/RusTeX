@@ -9,10 +9,10 @@ use crate::file_end;
 use std::str::FromStr;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
 use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
-use crate::engine::mouth::pretokenized::{TokenList, TokenListIterator};
-use crate::tex::control_sequences::{CSHandler, ResolvedCSName};
+use crate::tex::tokens::token_lists::{TokenList, TokenListIterator};
+use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;
-use crate::tex::token::{StandardToken, Token};
+use crate::tex::tokens::{StandardToken, Token};
 use crate::utils::errors::ErrorHandler;
 use crate::tex::input_text::Character;
 use crate::engine::EngineAux;
@@ -38,7 +38,7 @@ pub fn do_cr<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&
 
 pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut [Vec<ET::Token>;9],params:TokenList<ET::Token>,long:bool) {
     let mut i = 1usize;
-    let inner = params.inner();
+    let inner = &params.0;
     let mut next = &inner[0];
     loop {
         match next.is_argument_marker() {
@@ -357,12 +357,12 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
                     was_quoted = true;
                     quoted = !quoted;
                 } else {
-                    char.display(ret);
+                    char.display_fmt(ret);
                 }
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::CharDef(c)),..} => c.display(ret),
-        ResolvedToken::Cmd {cmd:Some(Command::Char{char,..}),..} => char.display(ret),
+        ResolvedToken::Cmd {cmd:Some(Command::CharDef(c)),..} => c.display_fmt(ret),
+        ResolvedToken::Cmd {cmd:Some(Command::Char{char,..}),..} => char.display_fmt(ret),
         ResolvedToken::Cmd {cmd:Some(Command::Relax),..} if !quoted => return,
         ResolvedToken::Cmd {token,..} if !quoted => {
             engine.mouth.requeue(token);

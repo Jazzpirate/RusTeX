@@ -1,37 +1,28 @@
 use std::fmt::{Arguments, Display, Write};
 use std::marker::PhantomData;
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier};
-use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::control_sequences::{CSName, CSHandler, ResolvedCSName};
-use crate::tex::token::{StandardToken, Token};
-use crate::tex::catcodes::CategoryCodeScheme;
-use crate::tex::input_text::Character;
+use crate::engine::utils::memory::PrimitiveIdentifier;
+use crate::prelude::{CategoryCode, CategoryCodeScheme, Character, CommandCode, CSHandler, CSName, Token};
+use crate::tex::tokens::StandardToken;
+use crate::tex::tokens::control_sequences::ResolvedCSName;
 use crate::tex::input_text::CharacterMap;
 
-#[derive(Clone,Debug)]
+/// A list of [`Token`]s; conceptually, a wrapper around `Rc<[T]>`
+#[derive(Clone,Debug,PartialEq)]
 pub struct TokenList<T:Token>(pub shared_vector::SharedVector<T>);
-impl<T:Token> PartialEq for TokenList<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
 impl<T:Token> TokenList<T> {
+    /// Whether the list is empty
     #[inline(always)]
-    pub fn inner(&self) -> &[T] { &*self.0 }
-    pub fn give_back_maybe<M:MemoryManager<T>>(self,_memory:&mut M) {
-        /*match std::rc::Rc::try_unwrap(self.0) {
-            Ok(sl) => memory.return_token_vec(sl.into_vec()),
-            _ => ()
-        }*/
-    }
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+    /// return the `i`th token in the list. Will panic if out of bounds.
     #[inline(always)]
     pub fn get(&self,i:usize) -> &T {
         &(*self.0)[i]
     }
 
+    /// A helper struct that implements [`Display`] for [`TokenList`]. Needs a [`CSHandler`] and a [`CategoryCodeScheme`]
+    /// to resolve control sequences and insert spaces between them properly.
     pub fn displayable<'a>(&'a self, int:&'a <T::CS as CSName<T::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> TLMeaning<'a,T> {
         TLMeaning {
             ls:self,
@@ -68,7 +59,7 @@ pub fn meaning_char<'a,T:Token,I:Iterator<Item=&'a T>,W:WriteChars<T::Char,T::CS
     Ok(())
 }
 pub fn meaning_fmt<'a,T:Token,I:Iterator<Item=&'a T>>(iter:I, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>, double_par:bool) {
-    let s = Stringify::<T::Char,T::CS>::new(f);
+    let s = Stringify::<_,T::Char,T::CS>::new(f);
     meaning_char(iter,int,cc,escapechar,s,double_par).unwrap();
 }
 
@@ -111,6 +102,12 @@ impl<'a,T:Token> Display for TLVecMeaning<'a,T> {
 pub trait WriteChars<C:Character,CS: CSName<C>>: std::fmt::Write {
     fn push_char(&mut self,c:C);
     fn push_cs<I: CSHandler<C,CS>>(&mut self, cs:CS, int:&I, cc:&CategoryCodeScheme<C>, esc:Option<C>);
+    fn push_tk<T:Token<Char=C,CS=CS>>(&mut self, t:T, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) {
+        match t.to_enum() {
+            StandardToken::Character(c,_) => self.push_char(c),
+            StandardToken::ControlSequence(cs) => self.push_cs(cs,int,cc,escapechar),
+        }
+    }
 }
 impl<'a,C:Character,CS: CSName<C>,A:WriteChars<C,CS>> WriteChars<C,CS> for &'a mut A {
     fn push_char(&mut self, c: C) { (*self).push_char(c) }
@@ -118,14 +115,14 @@ impl<'a,C:Character,CS: CSName<C>,A:WriteChars<C,CS>> WriteChars<C,CS> for &'a m
         (*self).push_cs(cs,int,cc,esc)
     }
 }
-pub struct Stringify<'a,'b,C:Character,CS: CSName<C>>(&'a mut std::fmt::Formatter<'b>, PhantomData<C>, PhantomData<CS>);
-impl <'a,'b,C:Character,CS: CSName<C>> Stringify<'a,'b,C,CS> {
+pub struct Stringify<'a,W:Write,C:Character,CS: CSName<C>>(&'a mut W, PhantomData<C>, PhantomData<CS>);
+impl <'a,W:Write,C:Character,CS: CSName<C>> Stringify<'a,W,C,CS> {
     #[inline(always)]
-    pub fn new(f:&'a mut std::fmt::Formatter<'b>) -> Self {
+    pub fn new(f:&'a mut W) -> Self {
         Self(f,PhantomData,PhantomData)
     }
 }
-impl<'a,'b,C:Character,CS: CSName<C>> std::fmt::Write for Stringify<'a,'b,C,CS> {
+impl<'a,W:Write,C:Character,CS: CSName<C>> std::fmt::Write for Stringify<'a,W,C,CS> {
     #[inline(always)]
     fn write_char(&mut self, c: char) -> std::fmt::Result {
         self.0.write_char(c)
@@ -139,13 +136,12 @@ impl<'a,'b,C:Character,CS: CSName<C>> std::fmt::Write for Stringify<'a,'b,C,CS> 
         self.0.write_str(s)
     }
 }
-impl<'a,'b,C:Character,CS: CSName<C>> WriteChars<C,CS> for Stringify<'a,'b,C,CS> {
+impl<'a,W:Write,C:Character,CS: CSName<C>> WriteChars<C,CS> for Stringify<'a,W,C,CS> {
     fn push_char(&mut self, c: C) {
-        c.display(self.0)
+        c.display_fmt(self.0)
     }
     fn push_cs<I: CSHandler<C,CS>>(&mut self, cs:CS, int:&I, cc:&CategoryCodeScheme<C>, esc:Option<C>) {
         let res = int.resolve(&cs);
-        //let str = res.as_ref();
         write!(self, "{}{}", C::displayable_opt(esc), res).unwrap();
         if res.len() == 1 {
             let c = res.iter().next().unwrap();
@@ -216,15 +212,6 @@ pub struct TokenListIterator<T:Token> {
     index:usize
 }
 impl<T:Token> TokenListIterator<T> {
-    #[inline(always)]
-    pub fn give_back_maybe<M:MemoryManager<T>>(self,memory:&mut M) {
-        self.ls.give_back_maybe(memory)
-    }
-    /*pub fn preview<W:Write>(&self, int:&<T::CS as ControlSequenceName<T::Char>>::Handler,
-                            cc:&CategoryCodeScheme<T::Char>,
-                            escapechar:Option<T::Char>,w:W) {
-        meaning_fmt(self.ls.0[self.index..].iter(),int,cc,escapechar,w,false).unwrap()
-    }*/
     pub fn new(name:Option<PrimitiveIdentifier>,ls:TokenList<T>) -> Self {
         Self {
             name,
@@ -264,13 +251,6 @@ impl<T:Token> MacroExpansion<T> {
     }
 }
 impl<T:Token> MacroExpansion<T> {
-    #[inline(always)]
-    pub fn give_back_maybe<M:MemoryManager<T>>(self,memory:&mut M) {
-        self.ls.give_back_maybe(memory);
-        for a in self.args {
-            memory.return_token_vec(a);
-        }
-    }
     pub fn new(ls:TokenList<T>,args:[Vec<T>;9]) -> Self {
         Self {
             ls,

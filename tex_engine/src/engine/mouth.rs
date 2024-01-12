@@ -3,17 +3,16 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::mouth::pretokenized::{MacroExpansion, TokenListIterator, TokenVecIterator};
+use crate::tex::tokens::token_lists::{MacroExpansion, TokenListIterator, TokenVecIterator};
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
-use crate::tex::control_sequences::CSName;
+use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::input_text::StringLineSource;
-use crate::tex::token::Token;
+use crate::tex::tokens::Token;
 
 pub mod strings;
-pub mod pretokenized;
 
 type C<M> = <<M as Mouth>::Token as Token>::Char;
 

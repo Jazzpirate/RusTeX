@@ -5,10 +5,10 @@ use std::marker::PhantomData;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use string_interner::Symbol;
-use crate::engine::mouth::pretokenized::TokenList;
-use crate::tex::control_sequences::{CSName, CSHandler, ResolvedCSName};
+use crate::tex::tokens::token_lists::TokenList;
+use crate::tex::tokens::control_sequences::{CSName, CSHandler, ResolvedCSName, InternedCSName};
 use crate::tex::input_text::Character;
-use crate::tex::token::Token;
+use crate::tex::tokens::Token;
 use crate::utils::HMap;
 
 /// Utility component for managing memory allocation, string interning and similar
@@ -302,7 +302,7 @@ impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
         let lock = self.2.interner.read().unwrap();
         match self.1 {
             None => (),
-            Some(c) => c.display(f)
+            Some(c) => c.display_fmt(f)
         }
         write!(f,"{}",lock.resolve(self.0.0).unwrap())
     }
@@ -320,6 +320,9 @@ impl PrimitiveIdentifier {
     pub fn to_usize(&self) -> usize { self.0.to_usize() }
 }
 
+
+
+/*
 /// A `Copy` interned string for a control sequence name.
 pub type InternedString = string_interner::symbol::SymbolU32;
 type Backend = string_interner::backend::StringBackend<InternedString>;
@@ -384,15 +387,8 @@ impl Default for StringInterner {
     #[inline(always)]
     fn default() -> Self { Self::new() }
 }
+*/
 
-pub type InternedCSName<C> = (u32,PhantomData<C>);
-impl<C:Character> CSName<C> for InternedCSName<C> {
-    type Handler = CharacterVecInterner<C>;
-    #[inline(always)]
-    fn as_usize(&self) -> usize {
-        self.0 as usize
-    }
-}
 #[derive(Clone)]
 pub struct CharacterVecInterner<C:Character> {
     map:HMap<Box<[C]>,u32>,
@@ -465,7 +461,7 @@ pub struct DisplayCSName<'a,C:Character>(&'a [C]);
 impl<C:Character> Display for DisplayCSName<'_,C> {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for c in self.0 {
-            c.display(f)
+            c.display_fmt(f)
         }
         Ok(())
     }

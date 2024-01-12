@@ -7,11 +7,11 @@ use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
-use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
+use tex_engine::engine::utils::memory::PRIMITIVES;
 use tex_engine::engine::utils::outputs::LogOutputs;
 use tex_engine::tex;
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
-use tex_engine::tex::token::CompactToken;
+use tex_engine::tex::tokens::CompactToken;
 use tex_engine::utils::errors::{ErrorThrower};
 use tex_engine::engine::TeXEngine;
 use tex_engine::engine::utils::outputs::Outputs;
@@ -34,6 +34,7 @@ use crate::shipout::make_page;
 use crate::state::RusTeXState;
 use crate::stomach::{CLOSE_FONT, close_font, RusTeXStomach};
 use tex_engine::engine::utils::memory::MemoryManager;
+use tex_engine::tex::tokens::control_sequences::InternedCSName;
 
 pub(crate) type Extension = super::extension::RusTeXExtension;
 pub(crate) type Memory = utils::memory::ReuseTokenLists<CompactToken>;
@@ -160,7 +161,6 @@ pub(crate) static ref AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
 }
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     use tex_engine::engine::utils::memory::MemoryManager;
-    use tex_engine::tex::control_sequences::CSHandler;
     let e = e.get_engine_refs();
     let name = e.aux.memory.cs_interner_mut().new(name);
     let mut cmd = tex_engine::commands::methods::make_macro::<Types,_,_>(

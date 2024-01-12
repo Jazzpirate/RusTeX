@@ -8,7 +8,7 @@ use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, 
 use tex_engine::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
 use tex_engine::tex::numerics::{Dim32, Skip32};
-use tex_engine::tex::token::CompactToken;
+use tex_engine::tex::tokens::CompactToken;
 use tex_engine::tex::types::{BoxType, GroupType};
 use crate::engine::{AT_LETTER_SCHEME, Font, Refs, Types};
 use crate::extension::FontChange;
@@ -24,7 +24,6 @@ use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::types::TeXMode;
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
-use tex_engine::tex::control_sequences::CSHandler;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,

@@ -4,16 +4,16 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::engine::gullet::{AlignColumn, AlignData, Gullet, ResolvedToken};
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{Tokenizer, TokenList, TokenListIterator};
+use crate::tex::tokens::token_lists::{Tokenizer, TokenList, TokenListIterator};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::token::Token;
+use crate::tex::tokens::Token;
 use crate::tex::types::{BoxType, GroupType, MathClass};
 use crate::utils::HMap;
-use crate::tex::control_sequences::{CSName, CSHandler};
+use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use std::fmt::Write;
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::tex::input_text::StringLineSource;
@@ -503,7 +503,7 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
                 return ()
             }
             Command::ToksRegister(u) => {
-                for t in engine.state.get_toks_register(*u).inner() {
+                for t in &engine.state.get_toks_register(*u).0 {
                     cont(engine.aux,engine.state,engine.gullet,t.clone())
                 }
                 return ()
@@ -513,13 +513,13 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
                 if u < ET::Int::default() || u.into() > u16::MAX.into() {
                     todo!("throw error")
                 }
-                for t in engine.state.get_toks_register(u.into() as u16).inner() {
+                for t in &engine.state.get_toks_register(u.into() as u16).0 {
                     cont(engine.aux,engine.state,engine.gullet,t.clone())
                 }
                 return ()
             }
             Command::PrimitiveToks(n) => {
-                for t in engine.state.get_primitive_tokens(*n).inner() {
+                for t in &engine.state.get_primitive_tokens(*n).0 {
                     cont(engine.aux,engine.state,engine.gullet,t.clone())
                 }
                 return ()

@@ -9,11 +9,10 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::fontsystem::tfm::TfmFile;
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::utils::memory::MemoryManager;
-use crate::tex::control_sequences::CSName;
+use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::input_text::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
 use crate::utils::{HMap, Ptr};
-use crate::tex::control_sequences::CSHandler;
 
 pub trait FontSystem:Clone+std::fmt::Debug {
     type Char:Character;

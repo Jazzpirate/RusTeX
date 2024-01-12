@@ -8,9 +8,9 @@ use crate::engine::fontsystem::{TfmFont, TfmFontSystem};
 use crate::engine::gullet::DefaultGullet;
 use crate::engine::mouth::DefaultMouth;
 use crate::engine::stomach::StomachWithShipout;
-use crate::engine::utils::memory::InternedCSName;
 use crate::engine::utils::outputs::LogOutputs;
 use crate::tex;
+use crate::tex::tokens::control_sequences::InternedCSName;
 use crate::tex::input_text::Character;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip32, Skip32};
@@ -56,8 +56,8 @@ impl<C:Character> FileWithMD5 for VirtualFile<C> {
 pub struct DefaultPDFTeXEngineTypes;
 impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Char = u8;
-    type CSName = utils::memory::InternedCSName<u8>;//InternedString;
-    type Token = super::tex::token::CompactToken;//::StandardToken<u8,Self::CSName>;//
+    type CSName = InternedCSName<u8>;//InternedString;
+    type Token = super::tex::tokens::CompactToken;//::StandardToken<u8,Self::CSName>;//
     type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = MinimalPDFExtension<Self>;
     type Int = i32;

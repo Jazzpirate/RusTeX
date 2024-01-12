@@ -6,15 +6,15 @@ use std::marker::PhantomData;
 use crate::commands::{Command, Macro, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{ExpansionContainer, MacroExpansion, TLVecMeaning, TokenList, TokenListIterator};
+use crate::tex::tokens::token_lists::{ExpansionContainer, MacroExpansion, TLVecMeaning, TokenList, TokenListIterator};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::input_text::Character;
 use crate::tex::numerics::{MuSkip, NumSet};
-use crate::tex::token::{StandardToken, Token};
-use crate::tex::control_sequences::CSHandler;
+use crate::tex::tokens::{StandardToken, Token};
+use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::types::BoxType;
 
 type M<G> = <<G as Gullet>::ET as EngineTypes>::Mouth;

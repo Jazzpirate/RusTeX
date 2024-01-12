@@ -10,7 +10,7 @@ use std::vec::IntoIter;
 use tex_engine::pdflatex::nodes::{PDFColor, PDFDest, PDFNode};
 use tex_engine::engine::{EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
-use tex_engine::engine::utils::memory::{InternedCSName, PRIMITIVES};
+use tex_engine::engine::utils::memory::PRIMITIVES;
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuSkip, MuSkip32, Skip32};
 use tex_engine::engine::state::State;

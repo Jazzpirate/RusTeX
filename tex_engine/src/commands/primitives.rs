@@ -4,7 +4,7 @@ use crate::engine::utils::memory::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::state::State;
-use crate::tex::control_sequences::CSHandler;
+use crate::tex::tokens::control_sequences::CSHandler;
 use crate::engine::utils::memory::MemoryManager;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 use crate::tex::numerics::NumSet;

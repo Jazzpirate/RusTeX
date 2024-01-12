@@ -16,8 +16,8 @@ crate-type = ["lib"]
 path = "src/lib.rs"
 
 [profile.dev]
-opt-level = 3
-lto = true
+#opt-level = 3
+#lto = true
 #debug = 2
 #split-debuginfo = "off"
 #strip = "none"

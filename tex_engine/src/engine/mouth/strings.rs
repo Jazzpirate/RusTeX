@@ -18,15 +18,14 @@ pub enum MouthState {
 
   *Example:*
 ```rust
-use tex_engine::utils::errors::ErrorThrower;
-use tex_engine::engine::mouth::strings::InputTokenizer;
-use tex_engine::tex::token::StandardToken;
-use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
-use tex_engine::utils::Ptr;
-use tex_engine::tex::token::Token;
-use tex_engine::tex::catcodes::CommandCode;
-use tex_engine::tex::input_text::StringLineSource;
-
+# use tex_engine::utils::errors::ErrorThrower;
+# use tex_engine::engine::mouth::strings::InputTokenizer;
+# use tex_engine::tex::tokens::{Token,StandardToken};
+# use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
+# use tex_engine::utils::Ptr;
+# use tex_engine::tex::catcodes::CommandCode;
+# use tex_engine::tex::input_text::StringLineSource;
+#
 type T = StandardToken<u8,Ptr<str>>;
 let eh = ErrorThrower;
 let mut cs_handler = ();
@@ -418,7 +417,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         if self.current_line.len() > self.col {
             for c in &self.current_line[self.col..] {
                 *len -=1;
-                c.display(&mut f);
+                c.display_fmt(&mut f);
                 if *len == 0 {return Ok(())}
             }
         }

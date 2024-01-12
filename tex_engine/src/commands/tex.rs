@@ -6,7 +6,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
-use crate::engine::mouth::pretokenized::{Tokenizer, TokenList};
+use crate::tex::tokens::token_lists::{Tokenizer, TokenList};
 use super::primitives::*;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
@@ -14,14 +14,14 @@ use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::input_text::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
-use crate::tex::token::{StandardToken, Token};
+use crate::tex::tokens::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};
 use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use std::fmt::Write;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd, skip_argument};
 use crate::engine::fontsystem::FontSystem;
 use crate::utils::errors::ErrorHandler;
-use crate::tex::control_sequences::{CSHandler, ResolvedCSName};
+use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeList, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
@@ -30,6 +30,7 @@ use crate::tex::nodes::math::{EqNoPosition, MathAtom, MathKernel, MathNode, Math
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
 use crate::utils::errors::TeXError;
+use crate::tex::tokens::token_lists::WriteChars;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -1290,7 +1291,6 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Tokenizer::new(&mut fi);
-    use crate::engine::mouth::pretokenized::WriteChars;
     match engine.get_next() {
         None => todo!("throw error"),
         Some(t) => match ET::Gullet::resolve(engine.state,t) {
@@ -1622,6 +1622,8 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
 pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let idx = engine.read_int(false).into();
     let mut out = engine.aux.memory.get_string();
+    engine.read_braced_string(false,true,&mut out);
+    /*
     match engine.get_next() {
         Some(t) if t.is_begin_group() => (),
         Some(_) => todo!("should be begingroup"),
@@ -1631,6 +1633,8 @@ pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::
         t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
                       s.get_escape_char(),&mut out).unwrap();
     });
+
+     */
     engine.filesystem.write(idx,&out,engine.state.get_newline_char(),engine.aux);
     engine.aux.memory.return_string(out);
 }
