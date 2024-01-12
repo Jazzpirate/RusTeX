@@ -1,7 +1,7 @@
 use crate::{cmtodo, cmtodos};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::tex::tokens::token_lists::{Tokenizer, WriteChars};
+use crate::tex::tokens::token_lists::{Otherize, CharWrite};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::primitives::*;
 use crate::engine::utils::memory::MemoryManager;
@@ -293,19 +293,19 @@ pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token
 pub fn leftmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     // todo
     let _ = engine.read_int(false);
-    Tokenizer::new(&mut |t| exp.push(t)).write_str("0pt").unwrap();
+    Otherize::new(&mut |t| exp.push(t)).write_str("0pt").unwrap();
 }
 pub fn rightmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     // todo
     let _ = engine.read_int(false);
-    Tokenizer::new(&mut |t| exp.push(t)).write_str("0pt").unwrap();
+    Otherize::new(&mut |t| exp.push(t)).write_str("0pt").unwrap();
 }
 
 pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     use chrono::{Datelike,Timelike};
     let dt = engine.aux.start_time;
     let mut f = |t| exp.push(t);
-    let mut tk = Tokenizer::new(&mut f);
+    let mut tk = Otherize::new(&mut f);
     write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
                       dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
                       dt.offset().to_string().replace(":","'")).unwrap();
@@ -322,7 +322,7 @@ pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
             f(t.clone());f(t)
         }
         else {
-            let mut tokenizer = Tokenizer::new(&mut f);
+            let mut tokenizer = Otherize::new(&mut f);
             match t.to_enum() {
                 StandardToken::Character(c, _) =>
                     tokenizer.push_char(c),
@@ -403,7 +403,7 @@ pub fn pdflastmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
         }
         Some(s) => {
             let mut f = |t| exp.push(t);
-            let mut t = Tokenizer::new(&mut f);
+            let mut t = Otherize::new(&mut f);
             write!(t,"{}",s).unwrap();
         }
     }
@@ -416,12 +416,12 @@ pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
         let mut filename = String::new();
         engine.read_braced_string(true,true,&mut filename);
         let file = engine.filesystem.get(&filename);
-        let mut t = Tokenizer::new(&mut f);
+        let mut t = Otherize::new(&mut f);
         write!(t,"{:X}",file.md5()).unwrap()
     } else {
         let mut str = String::new();
         engine.read_braced_string(false,true,&mut str);
-        let mut t = Tokenizer::new(&mut f);
+        let mut t = Otherize::new(&mut f);
         write!(t,"{:X}",md5::compute(str)).unwrap()
     }
 }
@@ -734,7 +734,7 @@ pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<
 pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let dim = engine.read_font().get_at();
     let mut f = |t| exp.push(t);
-    let mut t = Tokenizer::new(&mut f);
+    let mut t = Otherize::new(&mut f);
     write!(t,"{}",dim).unwrap();
 }
 

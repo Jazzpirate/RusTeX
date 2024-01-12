@@ -6,7 +6,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
-use crate::tex::tokens::token_lists::{Tokenizer, TokenList};
+use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use super::primitives::*;
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
@@ -30,7 +30,7 @@ use crate::tex::nodes::math::{EqNoPosition, MathAtom, MathKernel, MathNode, Math
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
 use crate::utils::errors::TeXError;
-use crate::tex::tokens::token_lists::WriteChars;
+use crate::tex::tokens::token_lists::CharWrite;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -1105,14 +1105,14 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
 
 pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let mut fi = |t| exp.push(t);
-    let mut f = Tokenizer::new(&mut fi);
+    let mut f = Otherize::new(&mut fi);
     write!(f,"{}",engine.aux.jobname).unwrap();
 }
 
 pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let font = engine.read_font();
     let mut fi = |t| exp.push(t);
-    let mut f = Tokenizer::new(&mut fi);
+    let mut f = Otherize::new(&mut fi);
     if font.has_at_set() {
         write!(f,"{} at {}",font.filename(),font.get_at()).unwrap();
     } else {
@@ -1203,7 +1203,7 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
             }
         }
     });
-    engine.mouth.push_vec(exp.into_iter());
+    engine.mouth.push_vec(exp);
 }
 
 pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
@@ -1223,7 +1223,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
             }
         }
     });
-    engine.mouth.push_vec(exp.into_iter());
+    engine.mouth.push_vec(exp);
 }
 
 pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
@@ -1290,7 +1290,7 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 
 pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let mut fi = |t| exp.push(t);
-    let mut f = Tokenizer::new(&mut fi);
+    let mut f = Otherize::new(&mut fi);
     match engine.get_next() {
         None => todo!("throw error"),
         Some(t) => match ET::Gullet::resolve(engine.state,t) {
@@ -1301,7 +1301,7 @@ pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET
                 write!(f,"undefined").unwrap();
             }
             ResolvedToken::Cmd{cmd:Some(cmd),..} => {
-                cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).write_chars(f)
+                cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).write_chars(&mut f)
             }
             ResolvedToken::Tk {char,code,..} =>
                 code.meaning(char,f)
@@ -1357,7 +1357,7 @@ pub fn newlinechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 
 pub fn number<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let val = engine.read_int(false);
-    write!(Tokenizer::new(&mut|t| exp.push(t)),"{}",val).unwrap();
+    write!(Otherize::new(&mut|t| exp.push(t)), "{}", val).unwrap();
 }
 
 pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
@@ -1639,7 +1639,7 @@ pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::
     engine.aux.memory.return_string(out);
 }
 pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET::Token>) {
-    engine.mouth.push_vec(v.into_iter());
+    engine.mouth.push_vec(v);
     let mut out = String::new();
     engine.read_braced_string(false,false,&mut out);
     engine.filesystem.write(i,&out,engine.state.get_newline_char(),engine.aux);

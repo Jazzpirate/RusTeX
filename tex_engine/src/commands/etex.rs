@@ -3,7 +3,7 @@ use crate::commands::{Command, CommandScope, Macro, MacroSignature};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
-use crate::tex::tokens::token_lists::{Tokenizer, WriteChars};
+use crate::tex::tokens::token_lists::{Otherize, CharWrite};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
@@ -150,7 +150,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
             f(t.clone());f(t)
         }
         else {
-            let mut tokenizer = Tokenizer::new(&mut f);
+            let mut tokenizer = Otherize::new(&mut f);
             match t.to_enum() {
                 StandardToken::Character(c, _) =>
                     tokenizer.push_char(c),

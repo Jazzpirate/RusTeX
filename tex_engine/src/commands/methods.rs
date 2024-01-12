@@ -4,7 +4,7 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::engine::gullet::{AlignColumn, AlignData, Gullet, ResolvedToken};
 use crate::engine::mouth::Mouth;
-use crate::tex::tokens::token_lists::{Tokenizer, TokenList, TokenListIterator};
+use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
@@ -435,71 +435,71 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
         ResolvedToken::Cmd {cmd:Some(c),token} => match c {
             Command::Int(ic) => {
                 let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::Dim(ic) => {
                 let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::Skip(ic) => {
                 let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::MuSkip(ic) => {
                 let val = (ic.read)(engine,token);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::IntRegister(u) => {
                 let val = engine.state.get_int_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::DimRegister(u) => {
                 let val = engine.state.get_dim_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::SkipRegister(u) => {
                 let val = engine.state.get_skip_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::MuSkipRegister(u) => {
                 let val = engine.state.get_muskip_register(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::PrimitiveInt(u) => {
                 let val = engine.state.get_primitive_int(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::PrimitiveDim(u) => {
                 let val = engine.state.get_primitive_dim(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::PrimitiveSkip(u) => {
                 let val = engine.state.get_primitive_skip(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::PrimitiveMuSkip(u) => {
                 let val = engine.state.get_primitive_muskip(*u);
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::CharDef(c) => {
                 let val : u64 = (*c).into();
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
                 return ()
             }
             Command::MathChar(u) => {
-                write!(Tokenizer::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",*u).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",*u).unwrap();
                 return ()
             }
             Command::ToksRegister(u) => {
@@ -799,7 +799,7 @@ pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     match engine.gullet.get_align_data() {
         None => todo!("throw error"),
         Some(data) => {
-            if !data.omit { engine.mouth.push_exp(TokenListIterator::new(None,data.columns[data.currindex].left.clone())); }
+            if !data.omit { engine.mouth.push_exp(data.columns[data.currindex].left.clone().into_iter(None)); }
             if data.span {
                 data.span = false
             } else {

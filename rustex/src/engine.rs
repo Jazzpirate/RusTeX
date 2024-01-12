@@ -34,7 +34,7 @@ use crate::shipout::make_page;
 use crate::state::RusTeXState;
 use crate::stomach::{CLOSE_FONT, close_font, RusTeXStomach};
 use tex_engine::engine::utils::memory::MemoryManager;
-use tex_engine::tex::tokens::control_sequences::InternedCSName;
+use tex_engine::prelude::*;
 
 pub(crate) type Extension = super::extension::RusTeXExtension;
 pub(crate) type Memory = utils::memory::ReuseTokenLists<CompactToken>;

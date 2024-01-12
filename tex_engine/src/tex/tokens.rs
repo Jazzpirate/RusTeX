@@ -138,10 +138,10 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     /// name, and the current [`CategoryCodeScheme`] to determine whether or not to insert a space afterwards - which
     /// we do unless the control sequence name is a single character with any [`CommandCode`] other than
     /// [`Letter`](CommandCode::Letter).
-    fn display_fmt<W:Write>(&self, int:&<Self::CS as CSName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, mut f: W) -> std::fmt::Result {
+    fn display_fmt<W:Write>(&self, int:&<Self::CS as CSName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, f: &mut W) -> std::fmt::Result {
         match self.to_enum() {
             StandardToken::Character(_,CommandCode::Space) => f.write_char(' '),
-            StandardToken::Character(c,_) => Ok(c.display_fmt(&mut f)),
+            StandardToken::Character(c,_) => Ok(c.display_fmt(f)),
             StandardToken::ControlSequence(cs) =>
                 cs.display_fmt(int,cc,escapechar,f)
         }

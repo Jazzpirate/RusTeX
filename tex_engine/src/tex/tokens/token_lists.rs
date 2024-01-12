@@ -21,108 +21,109 @@ impl<T:Token> TokenList<T> {
         &(*self.0)[i]
     }
 
-    /// A helper struct that implements [`Display`] for [`TokenList`]. Needs a [`CSHandler`] and a [`CategoryCodeScheme`]
-    /// to resolve control sequences and insert spaces between them properly.
-    pub fn displayable<'a>(&'a self, int:&'a <T::CS as CSName<T::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> TLMeaning<'a,T> {
-        TLMeaning {
-            ls:self,
+    /// wraps this list in a [`TokenListDisplay`], which implements [`Display`].
+    /// If `double_par` is true, parameter tokens will be doubled.
+    pub fn display<'a>(&'a self, int:&'a <T::CS as CSName<T::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>,double_par:bool) -> TokenListDisplay<'a,T> {
+        TokenListDisplay {
+            ls:self.0.as_slice(),
             int,
             cc,
-            escapechar
+            escapechar,
+            double_par
         }
     }
-    pub fn meaning_char<W:WriteChars<T::Char,T::CS>>(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: W, double_par:bool) {
-        meaning_char(self.0.iter(),int,cc,escapechar,f,double_par).unwrap();
+
+    /// returns an iterator over the tokens in this list. `name` is the optional
+    /// [`PrimitiveIdentifier`] representing the source of this list; e.g. `everypar`.
+    pub fn into_iter(self,name:Option<PrimitiveIdentifier>) -> TokenListIterator<T> {
+        TokenListIterator {
+            name,
+            ls:self,
+            index:0
+        }
     }
 }
 
-pub fn meaning_tk<'a,T:Token,W:WriteChars<T::Char,T::CS>>(t:T, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W, double_par:bool) {
-    match t.is_argument_marker() {
-        Some(i) => write!(f,"#{}",(i + 1)).unwrap(),
-        _ => {
-            match t.to_enum() {
-                StandardToken::Character(c,CommandCode::Parameter) if double_par => {
-                    f.push_char(c);
-                    f.push_char(c)
+/// A helper struct that implements [`Display`] for [`TokenList`]. Needs a [`CSHandler`] and a [`CategoryCodeScheme`]
+/// to resolve control sequences and insert spaces between them properly.
+pub struct TokenListDisplay<'a,T:Token> {
+    ls:&'a [T],
+    int:&'a <T::CS as CSName<T::Char>>::Handler,
+    cc:&'a CategoryCodeScheme<T::Char>,
+    escapechar:Option<T::Char>,
+    double_par:bool
+}
+impl <'a,T:Token> TokenListDisplay<'a,T> {
+    /// Creates a new [`TokenListDisplay`] from a [`Vec`] of [`Token`]s.
+    /// If `double_par` is true, parameter tokens will be doubled.
+    pub fn from_vec(v:&'a Vec<T>,int:&'a <T::CS as CSName<T::Char>>::Handler,
+                cc:&'a CategoryCodeScheme<T::Char>,
+                escapechar:Option<T::Char>,
+                double_par:bool) -> Self {
+        Self {
+            ls:v.as_slice(),
+            int,
+            cc,
+            escapechar,
+            double_par
+        }
+    }
+    /// allows for writing the tokens directly to a [`CharWrite`]; potentially circumventing the need to
+    /// convert it to a string only to convert it back to tokents
+    pub fn fmt_cw<W:CharWrite<T::Char,T::CS>>(&self,f:&mut W) -> std::fmt::Result {
+        for t in self.ls.iter() {
+            match t.is_argument_marker() {
+                Some(i) => write!(f,"#{}",(i + 1))?,
+                _ => match t.to_enum() {
+                    StandardToken::Character(c,CommandCode::Parameter) if self.double_par => {
+                        f.push_char(c);f.push_char(c)
+                    }
+                    _ => f.push_tk(t,self.int,self.cc,self.escapechar)//o.display_fmt(self.int,self.cc,self.escapechar,f)?
                 }
-                StandardToken::Character(_,CommandCode::Space) => f.push_char(b' '.into()),
-                StandardToken::Character(c,_) => f.push_char(c),
-                StandardToken::ControlSequence(cs) =>
-                    f.push_cs(cs,int,cc,escapechar)
             }
         }
-    }
-}
-
-pub fn meaning_char<'a,T:Token,I:Iterator<Item=&'a T>,W:WriteChars<T::Char,T::CS>>(iter:I, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: W, double_par:bool) -> std::fmt::Result {
-    for t in iter { meaning_tk(t.clone(),int,cc,escapechar,&mut f,double_par) }
-    Ok(())
-}
-pub fn meaning_fmt<'a,T:Token,I:Iterator<Item=&'a T>>(iter:I, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>, double_par:bool) {
-    let s = Stringify::<_,T::Char,T::CS>::new(f);
-    meaning_char(iter,int,cc,escapechar,s,double_par).unwrap();
-}
-
-pub struct TLMeaning<'a,T:Token> {
-    ls:&'a TokenList<T>,
-    int:&'a <T::CS as CSName<T::Char>>::Handler,
-    cc:&'a CategoryCodeScheme<T::Char>,
-    escapechar:Option<T::Char>
-}
-impl<'a,T:Token> Display for TLMeaning<'a,T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let i =self.ls.0.iter();
-        meaning_fmt(i,self.int,self.cc,self.escapechar,f,false);
         Ok(())
     }
 }
 
-pub struct TLVecMeaning<'a,T:Token> {
-    ls:&'a Vec<T>,
-    int:&'a <T::CS as CSName<T::Char>>::Handler,
-    cc:&'a CategoryCodeScheme<T::Char>,
-    escapechar:Option<T::Char>
-}
-impl<'a,T:Token> TLVecMeaning<'a,T> {
-    pub fn new(ls:&'a Vec<T>, int:&'a <T::CS as CSName<T::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> Self {
-        Self {
-            ls,
-            int,
-            cc,
-            escapechar
-        }
-    }
-}
-impl<'a,T:Token> Display for TLVecMeaning<'a,T> {
+impl<'a,T:Token> Display for TokenListDisplay<'a,T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        meaning_fmt(self.ls.iter(),self.int,self.cc,self.escapechar,f,false);
-        Ok(())
+        self.fmt_cw(&mut StringCharWrite::new(f))
     }
 }
-pub trait WriteChars<C:Character,CS: CSName<C>>: std::fmt::Write {
+
+/// An extension of [`Write`] that can handle [`Character`]s and [`CSName`]s
+/// (and hence [`Token`]s) directly. Useful, since it allows for
+/// directly turning strings into [`TokenList`]s using `write!`, `format!` etc.
+pub trait CharWrite<C:Character,CS: CSName<C>>: std::fmt::Write {
+    /// Pushes a [`Character`] to the underlying writer.
     fn push_char(&mut self,c:C);
+    /// Pushes a [`CSName`] to the underlying writer.
     fn push_cs<I: CSHandler<C,CS>>(&mut self, cs:CS, int:&I, cc:&CategoryCodeScheme<C>, esc:Option<C>);
-    fn push_tk<T:Token<Char=C,CS=CS>>(&mut self, t:T, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) {
+    /// Pushes a [`Token`] to the underlying writer.
+    fn push_tk<T:Token<Char=C,CS=CS>>(&mut self, t:&T, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) {
         match t.to_enum() {
             StandardToken::Character(c,_) => self.push_char(c),
             StandardToken::ControlSequence(cs) => self.push_cs(cs,int,cc,escapechar),
         }
     }
 }
-impl<'a,C:Character,CS: CSName<C>,A:WriteChars<C,CS>> WriteChars<C,CS> for &'a mut A {
+impl<'a,C:Character,CS: CSName<C>,A: CharWrite<C,CS>> CharWrite<C,CS> for &'a mut A {
     fn push_char(&mut self, c: C) { (*self).push_char(c) }
     fn push_cs<I: CSHandler<C,CS>>(&mut self, cs:CS, int:&I, cc:&CategoryCodeScheme<C>, esc:Option<C>) {
         (*self).push_cs(cs,int,cc,esc)
     }
 }
-pub struct Stringify<'a,W:Write,C:Character,CS: CSName<C>>(&'a mut W, PhantomData<C>, PhantomData<CS>);
-impl <'a,W:Write,C:Character,CS: CSName<C>> Stringify<'a,W,C,CS> {
+
+/// Wrapper struct that adds [`CharWrite`] to any [`Write`]
+pub struct StringCharWrite<'a,W:Write,C:Character,CS: CSName<C>>(&'a mut W, PhantomData<C>, PhantomData<CS>);
+impl <'a,W:Write,C:Character,CS: CSName<C>> StringCharWrite<'a,W,C,CS> {
     #[inline(always)]
     pub fn new(f:&'a mut W) -> Self {
         Self(f,PhantomData,PhantomData)
     }
 }
-impl<'a,W:Write,C:Character,CS: CSName<C>> std::fmt::Write for Stringify<'a,W,C,CS> {
+impl<'a,W:Write,C:Character,CS: CSName<C>> std::fmt::Write for StringCharWrite<'a,W,C,CS> {
     #[inline(always)]
     fn write_char(&mut self, c: char) -> std::fmt::Result {
         self.0.write_char(c)
@@ -136,7 +137,7 @@ impl<'a,W:Write,C:Character,CS: CSName<C>> std::fmt::Write for Stringify<'a,W,C,
         self.0.write_str(s)
     }
 }
-impl<'a,W:Write,C:Character,CS: CSName<C>> WriteChars<C,CS> for Stringify<'a,W,C,CS> {
+impl<'a,W:Write,C:Character,CS: CSName<C>> CharWrite<C,CS> for StringCharWrite<'a,W,C,CS> {
     fn push_char(&mut self, c: C) {
         c.display_fmt(self.0)
     }
@@ -155,15 +156,22 @@ impl<'a,W:Write,C:Character,CS: CSName<C>> WriteChars<C,CS> for Stringify<'a,W,C
     }
 }
 
-pub struct Tokenizer<'a,T:Token,F:FnMut(T)>(&'a mut F,PhantomData<T>);
-impl<'a,T:Token,F:FnMut(T)> Tokenizer<'a,T,F> {
+/// Struct that allows to `write!` and `format!` by converting the string to
+/// [`Token`]s and passes them to a closure. All tokens have [`CommandCode::Other`]
+/// except for space characters.
+/// For example, `write!(Tokenizer::new(|t| vec.push(t), "ab c")` will
+/// push four tokens to `vec`, where the first, second and fourth have
+/// [`CommandCode::Other`] and the third has [`CommandCode::Space`].
+pub struct Otherize<'a,T:Token,F:FnMut(T)>(&'a mut F, PhantomData<T>);
+impl<'a,T:Token,F:FnMut(T)> Otherize<'a,T,F> {
+    /// Creates a new [`Otherize`] from a closure.
     #[inline(always)]
     pub fn new(f:&'a mut F) -> Self {
         Self(f,PhantomData)
     }
 }
 
-impl<'a,T:Token,F:FnMut(T)> WriteChars<T::Char,T::CS> for Tokenizer<'a,T,F> {
+impl<'a,T:Token,F:FnMut(T)> CharWrite<T::Char,T::CS> for Otherize<'a,T,F> {
     fn push_char(&mut self, c:T::Char) {if matches!(c.try_into(),Ok(b' ')) {(self.0)(T::space())} else { (self.0)(T::from_char_cat(c, CommandCode::Other)) } }
     fn push_cs<I: CSHandler<T::Char,T::CS>>(&mut self, cs:T::CS, int:&I, cc:&CategoryCodeScheme<T::Char>, esc:Option<T::Char>) {
         if let Some(e) = esc {
@@ -188,7 +196,7 @@ impl<'a,T:Token,F:FnMut(T)> WriteChars<T::Char,T::CS> for Tokenizer<'a,T,F> {
         }
     }
 }
-impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Tokenizer<'a,T,F> {
+impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Otherize<'a,T,F> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         for u in T::Char::string_to_iter(s) {
             if matches!(u.try_into(),Ok(b' ')) { (self.0)(T::space()) }
@@ -206,22 +214,11 @@ impl<T:Token> From<shared_vector::Vector<T>> for TokenList<T> {
     }
 }
 
+/// An iterator over [`Token`]s in a [`TokenList`]
 pub struct TokenListIterator<T:Token> {
     pub name:Option<PrimitiveIdentifier>,
     pub ls:TokenList<T>,
     index:usize
-}
-impl<T:Token> TokenListIterator<T> {
-    pub fn new(name:Option<PrimitiveIdentifier>,ls:TokenList<T>) -> Self {
-        Self {
-            name,
-            ls,
-            index:0
-        }
-    }
-    pub fn has_next(&self) -> bool {
-        self.index < self.ls.0.len()
-    }
 }
 impl<T:Token> Iterator for TokenListIterator<T> {
     type Item = T;
@@ -232,12 +229,13 @@ impl<T:Token> Iterator for TokenListIterator<T> {
     }
 }
 
-pub type TokenVecIterator<T> = std::vec::IntoIter<T>;
-
+/// A [`MacroExpansion`] bundles the [`TokenList`] of a macro with its arguments.
 pub struct MacroExpansion<T:Token> {
     pub ls:TokenList<T>,index:usize,currarg:Option<(usize,usize)>,pub args:[Vec<T>;9]
 }
 impl<T:Token> MacroExpansion<T> {
+    /// Consumes the [`MacroExpansion`] by pushing its [`Token`]s reversed into the provided
+    /// `Vec` - i.e. afterwards, the first [`Token`] of the expansion is the last one of the provided `Vec`.
     pub fn consume_rev(&mut self, v:&mut Vec<T>) {
         for t in self.ls.0.iter().rev() {
             if let Some(i) = t.is_argument_marker() {
@@ -251,6 +249,7 @@ impl<T:Token> MacroExpansion<T> {
     }
 }
 impl<T:Token> MacroExpansion<T> {
+    /// Creates a new [`MacroExpansion`] from a [`TokenList`] and a list of arguments.
     pub fn new(ls:TokenList<T>,args:[Vec<T>;9]) -> Self {
         Self {
             ls,
@@ -260,6 +259,7 @@ impl<T:Token> MacroExpansion<T> {
         }
     }
 
+    /// useful for debugging: prints the expansion from the current index to a [`Write`]
     pub fn preview<W:Write>(&self, int:&<T::CS as CSName<T::Char>>::Handler,
                             cc:&CategoryCodeScheme<T::Char>,
                             escapechar:Option<T::Char>, mut w:W) {
@@ -282,12 +282,6 @@ impl<T:Token> MacroExpansion<T> {
                 }
                 _ => return
             }
-        }
-    }
-    pub fn has_next(&mut self) -> bool {
-        self.index < self.ls.0.len() || match self.currarg {
-            Some((i,j)) => j < self.args[i].len(),
-            _ => false
         }
     }
 }
@@ -315,21 +309,5 @@ impl<T:Token> Iterator for MacroExpansion<T> {
                 }
             }
         }
-    }
-}
-
-pub struct ExpansionContainer<T:Token>(shared_vector::Vector<T>);
-impl<T:Token> ExpansionContainer<T> {
-    #[inline(always)]
-    pub fn push(&mut self,t:T) {
-        self.0.push(t)
-    }
-    #[inline(always)]
-    pub fn new() -> Self {
-        Self(shared_vector::Vector::new())
-    }
-    #[inline(always)]
-    pub fn to_iter(self) -> TokenListIterator<T> {
-        TokenListIterator::new(None,TokenList::from(self.0))
     }
 }

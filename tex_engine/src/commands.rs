@@ -6,7 +6,7 @@ use std::fmt::Display;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
-use crate::tex::tokens::token_lists::{Stringify, TokenList, WriteChars};
+use crate::tex::tokens::token_lists::{StringCharWrite, TokenList, CharWrite};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::numerics::NumSet;
@@ -69,7 +69,7 @@ pub struct Meaning<'a,ET:EngineTypes>{
     escapechar:Option<ET::Char>
 }
 impl<'a,ET:EngineTypes> Meaning<'a,ET> {
-    fn write_chars<W:WriteChars<ET::Char,ET::CSName>>(&self,mut f:W) {
+    fn write_chars<W: CharWrite<ET::Char,ET::CSName>>(&self, f:&mut W) {
         match self.cmd {
             Command::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
             Command::Char{char,code} =>
@@ -135,7 +135,7 @@ impl<'a,ET:EngineTypes> Meaning<'a,ET> {
 }
 impl<'a,ET:EngineTypes> Display for Meaning<'a,ET> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.write_chars(Stringify::new(f));
+        self.write_chars(&mut StringCharWrite::new(f));
         Ok(())
     }
 }
@@ -159,7 +159,7 @@ impl<T:Token> Macro<T> {
     pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self, int:&'a <T::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
         MacroMeaning{cmd:self,int,cc,escapechar}
     }
-    pub fn meaning_char<F:WriteChars<T::Char,T::CS>>(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, mut f: F) {
+    pub fn meaning_char<F: CharWrite<T::Char,T::CS>>(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>,f: &mut F) {
         if self.protected {
             if let Some(e) = escapechar { f.push_char(e) }
             write!(f,"protected ").unwrap();
@@ -173,12 +173,12 @@ impl<T:Token> Macro<T> {
             write!(f,"outer ").unwrap();
         }
         write!(f,"macro:").unwrap();
-        self.signature.params.meaning_char(int, cc, escapechar, &mut f, false);
+        self.signature.params.display(int, cc, escapechar, false).fmt_cw(f).unwrap();
         write!(f,"->").unwrap();
-        self.expansion.meaning_char(int, cc, escapechar, &mut f, true)
+        self.expansion.display(int, cc, escapechar, true).fmt_cw(f).unwrap();
     }
     pub fn meaning_fmt(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.meaning_char( int, cc, escapechar,Stringify::new(f));
+        self.meaning_char(int, cc, escapechar, &mut StringCharWrite::new(f));
         Ok(())
     }
 }

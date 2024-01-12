@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use crate::commands::{Command, Macro, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
-use crate::tex::tokens::token_lists::{ExpansionContainer, MacroExpansion, TLVecMeaning, TokenList, TokenListIterator};
+use crate::tex::tokens::token_lists::{MacroExpansion, TokenList, TokenListDisplay};
 use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
@@ -179,16 +179,11 @@ pub trait Gullet {
         }
     }
 
-    #[inline(always)]
-    fn get_expansion_container(_engine:&mut EngineReferences<Self::ET>) -> ExpansionContainer<T<Self>> {
-        ExpansionContainer::new()
-    }
-
     fn do_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,&mut Vec<T<Self>>,T<Self>)) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         let mut exp = Vec::new();// ExpansionContainer::new(engine.aux.memory.get_token_vec());
         f(engine,&mut exp,token);
-        engine.mouth.push_vec(exp.into_iter());
+        engine.mouth.push_vec(exp);
     }
     fn do_macro(engine: &mut EngineReferences<Self::ET>,m:Macro<T<Self>>,token:T<Self>);
     #[inline(always)]
@@ -484,7 +479,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
                 StandardToken::Character(c,_) => {
                     engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
                                                                Dots(engine.mouth.num_exps()),
-                                                               c.displayable(),
+                                                               c.display(),
                                                                m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
                     ));
                     //engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
@@ -493,7 +488,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
             //crate::debug_log!(error => "Here: {}",engine.preview());
         }
         if m.signature.params.is_empty() {
-            engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));
+            engine.mouth.push_exp(m.expansion.into_iter(None));
             return;
         }
         let mut args = engine.mouth.get_args();
@@ -503,14 +498,14 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
                 engine.aux.outputs.write_neg1(
                     format_args!("#{}<-{}",
                                  i+1,
-                                 TLVecMeaning::new(&args[i as usize], engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
+                        TokenListDisplay::from_vec(&args[i as usize], engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char(),false)
                 ));
 
             }
         }
         if m.signature.arity == 0 {
             engine.mouth.return_args(args);
-            engine.mouth.push_exp(TokenListIterator::new(None,m.expansion));
+            engine.mouth.push_exp(m.expansion.into_iter(None));
         } else {
             engine.mouth.push_macro_exp(MacroExpansion::new(m.expansion,args))
         }

@@ -4,7 +4,7 @@ Category codes
 
 use std::fmt::Formatter;
 use lazy_static::lazy_static;
-use crate::tex::tokens::token_lists::WriteChars;
+use crate::tex::tokens::token_lists::CharWrite;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::input_text::Character;
 
@@ -258,7 +258,7 @@ pub enum CommandCode {
     Argument = 14
 }
 impl CommandCode {
-    pub fn meaning<C:Character,CS: CSName<C>,W:WriteChars<C,CS>>(&self, c:C, mut f:W) {
+    pub fn meaning<C:Character,CS: CSName<C>,W: CharWrite<C,CS>>(&self, c:C, mut f:W) {
         match self {
             CommandCode::BeginGroup => write!(f,"begin-group character "),
             CommandCode::EndGroup => write!(f,"end-group character "),

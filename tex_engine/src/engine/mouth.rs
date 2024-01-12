@@ -3,7 +3,7 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
-use crate::tex::tokens::token_lists::{MacroExpansion, TokenListIterator, TokenVecIterator};
+use crate::tex::tokens::token_lists::{MacroExpansion, TokenListIterator};
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
@@ -28,7 +28,7 @@ pub trait Mouth:Sized {
     fn push_file(&mut self,f:Self::File);
     fn push_string(&mut self,s:StringLineSource<C<Self>>);
     fn push_exp(&mut self,exp:TokenListIterator<Self::Token>);
-    fn push_vec(&mut self, exp: TokenVecIterator<Self::Token>);
+    fn push_vec(&mut self, exp: Vec<Self::Token>);
     fn push_macro_exp(&mut self,exp:MacroExpansion<Self::Token>);
     fn get_next_opt<ET:EngineTypes<Char = C<Self>,Token = Self::Token,File = Self::File>>(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<Self::Token>;
     fn iterate<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,cont:Fn);
@@ -251,8 +251,8 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         self.with_list(|v|v.extend(exp.ls.0.iter().rev().cloned()))
     }
     #[inline(always)]
-    fn push_vec(&mut self, exp: TokenVecIterator<Self::Token>) {
-        self.with_list(|v| v.extend(exp.rev()))
+    fn push_vec(&mut self, exp: Vec<Self::Token>) {
+        self.with_list(|v| v.extend(exp.into_iter().rev()))
     }
     #[inline(always)]
     fn push_string(&mut self, s: StringLineSource<C<Self>>) {

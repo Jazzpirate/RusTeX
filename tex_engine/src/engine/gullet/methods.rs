@@ -9,7 +9,7 @@ use crate::file_end;
 use std::str::FromStr;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
 use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
-use crate::tex::tokens::token_lists::{TokenList, TokenListIterator};
+use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::{StandardToken, Token};
@@ -23,7 +23,7 @@ pub fn do_align<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,a:&A
     let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
     mouth.requeue(end_align);
     if !a.omit {
-        mouth.push_exp(TokenListIterator::new(None, a.columns[a.currindex].right.clone()));
+        mouth.push_exp(a.columns[a.currindex].right.clone().into_iter(None));
     }
 }
 
@@ -32,7 +32,7 @@ pub fn do_cr<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&
     let end = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE_ROW));
     mouth.requeue(end);
     if !a.omit {
-        mouth.push_exp(TokenListIterator::new(None, a.columns[a.currindex].right.clone()));
+        mouth.push_exp(a.columns[a.currindex].right.clone().into_iter(None));
     }
 }
 

@@ -17,6 +17,7 @@ use crate::engine::FontSystem;
 type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::tokens::control_sequences::CSNameMap;
 
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
@@ -39,7 +40,7 @@ pub struct TeXState<ET:EngineTypes> {
     muskip_register:Vec<ET::MuSkip>,
     toks_register:Vec<TokenList<ET::Token>>,
     box_register:Vec<Option<TeXBox<ET>>>,
-    commands:Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
+    commands:<ET::CSName as CSName<ET::Char>>::Map<Command<ET>>,//Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
     ac_commands:<ET::Char as Character>::CharMap<Option<Command<ET>>>,
     endline_char:Option<ET::Char>,
     escape_char:Option<ET::Char>,
@@ -114,7 +115,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             muskip_register: Vec::new(),
             toks_register: Vec::new(),
             box_register: Vec::new(),
-            commands:Vec::new(),//HMap::default(),
+            commands:<ET::CSName as CSName<ET::Char>>::Map::default(),
             ac_commands:<ET::Char as Character>::CharMap::default(),
             endline_char:Some(ET::Char::from(b'\r')),
             escape_char:Some(ET::Char::from(b'\\')),
@@ -382,7 +383,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}toks{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            idx,old.displayable( aux.memory.cs_interner(), &self.catcodes, self.escape_char)
+                                                            idx,old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
                                                             ));
                     }
                     self.toks_register[idx as usize] = old;
@@ -434,7 +435,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
                                                             PRIMITIVES.printable(name,self.escape_char),
-                                                            old.displayable( aux.memory.cs_interner(), &self.catcodes, self.escape_char)
+                                                            old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
                                                             ));
                     }
                     self.primitive_toks.insert(name,old);
@@ -458,7 +459,10 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                             )
                         }
                     }
-                    self.commands[name.as_usize()] = old;
+                    match old {
+                        Some(o) => self.commands.insert(name,o),
+                        None => self.commands.remove(&name)
+                    };
                 }
                 StateChange::AcCommand {char,old} => {
                     if trace {
@@ -466,14 +470,14 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{restoring {}{}={}undefined}}",
                                              <ET::Char as Character>::displayable_opt(self.escape_char),
-                                             char.displayable(),
+                                             char.display(),
                                              <ET::Char as Character>::displayable_opt(self.escape_char)
                                 )
                             ),
                             Some(ref c) => aux.outputs.write_neg1(
                                 format_args!("{{restoring {}{}={}}}",
                                              <ET::Char as Character>::displayable_opt(self.escape_char),
-                                             char.displayable(),
+                                             char.display(),
                                              c.meaning(aux.memory.cs_interner(),&self.catcodes,self.escape_char)
                                 )
                             )
@@ -490,7 +494,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             }
         }
         if !lvl.aftergroup.is_empty() {
-            mouth.push_vec(std::mem::take(&mut lvl.aftergroup).into_iter())
+            mouth.push_vec(std::mem::take(&mut lvl.aftergroup))
         }
         self.stack.give_back(lvl);
     }
@@ -994,14 +998,14 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}toks{}={}}}",
                                                     if g { "globally " } else { "" },
                                                     ET::Char::displayable_opt(s.escape_char),
-                                                    idx, s.toks_register[idx].displayable(aux.memory.cs_interner(), &s.catcodes, s.escape_char)
+                                                    idx, s.toks_register[idx].display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                 ));
             }
             let old = std::mem::replace(&mut s.toks_register[idx], v);
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{into {}toks{}={}}}",
                                                     ET::Char::displayable_opt(s.escape_char),idx,
-                                                    s.toks_register[idx].displayable( aux.memory.cs_interner(), &s.catcodes, s.escape_char)
+                                                    s.toks_register[idx].display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                                                     ))
             }
             StateChange::ToksRegister { idx:idx as u16, old }
@@ -1023,12 +1027,12 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     format_args!("{{{}changing {}={}}}",
                                  if g {"globally "} else {""},
                                  PRIMITIVES.printable(name,s.escape_char),
-                                 old.displayable(aux.memory.cs_interner(), &s.catcodes, s.escape_char)
+                                 old.display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                     ));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}={}}}",
                                  PRIMITIVES.printable(name,s.escape_char),
-                                 s.primitive_toks.get(&name).unwrap().displayable(aux.memory.cs_interner(), &s.catcodes, s.escape_char)))
+                                 s.primitive_toks.get(&name).unwrap().display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)))
             }
             StateChange::PrimitiveToks { name, old }
         });
@@ -1090,20 +1094,13 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
 
     #[inline(always)]
     fn get_command(&self, name: &CS<Self>) -> Option<&Command<Self::ET>> {
-        match self.commands.get(name.as_usize()) {
-            None => None,
-            Some(o) => o.as_ref()
-        }
+        self.commands.get(name)
     }
     fn set_command(&mut self,aux:&EngineAux<ET>, name: CS<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let idx = name.as_usize();
-            if s.commands.len() <= idx {
-                s.commands.resize(idx + 1, None);
-            }
             let old = match cmd {
                 None => {
-                    let o = std::mem::replace(&mut s.commands[idx],None);
+                    let o = s.commands.remove(&name);
                     if s.tracing_assigns() {
                         match o {
                             None => aux.outputs.write_neg1(
@@ -1135,7 +1132,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 },
                 Some(cmd) => {
                     if s.tracing_assigns() {
-                        match s.commands[idx] {
+                        match s.commands.get(&name) {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}undefined}}",
                                              if g { "globally " } else { "" },
@@ -1161,7 +1158,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                             )
                         );
                     }
-                    std::mem::replace(&mut s.commands[idx],Some(cmd))
+                    s.commands.insert(name.clone(),cmd)
                 }
             };
             StateChange::Command { name, old }

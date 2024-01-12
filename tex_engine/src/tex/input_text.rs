@@ -23,12 +23,12 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
     /// Convert this character to a [`DisplayableCharacter`] that calls [`display`](Self::display_fmt); useful in
     /// `format!` and `write!` macros.
     #[inline(always)]
-    fn displayable(&self) -> DisplayableCharacter<Self> { DisplayableCharacter(*self) }
+    fn display(&self) -> DisplayableCharacter<Self> { DisplayableCharacter(*self) }
 
     /// Convert this character to a `char`.
     fn to_char(&self) -> char;
 
-    /// Like [`displayable`](Self::displayable), but for an [`Option`]`<`[`Character`]`>`. Useful for
+    /// Like [`displayable`](Self::display), but for an [`Option`]`<`[`Character`]`>`. Useful for
     /// `format!` and `write!` macros specifically for the current `\ecapechar` (which may or may not be defined).
     #[inline(always)]
     fn displayable_opt(c:Option<Self>) -> DisplayableCharacterOpt<Self> { DisplayableCharacterOpt(c) }
