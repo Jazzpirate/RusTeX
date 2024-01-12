@@ -545,12 +545,6 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     }
 }
 
-fn ret_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> f64 {
-    let f = f64::from_str(std::str::from_utf8(&v).unwrap()).unwrap();
-    engine.aux.memory.return_bytes(v);
-    return if is_negative { -f } else { f }
-}
-
 pub fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> <ET::Num as NumSet>::Int {
     let mut ret = (first - b'0') as i32;
     crate::expand_loop!(engine,
@@ -713,25 +707,32 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
 }
 
 fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> <ET::Num as NumSet>::Dim {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
-    ret.push(first);
+    let mut ret = 0f64;
+    let mut in_decimal = first == b'.';
+    let mut fac = 10f64;
+    if !in_decimal {
+        ret = (first - b'0') as f64;
+    }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                if in_decimal {
+                    ret += (b - b'0') as f64 / fac;
+                    fac *= 10.0;
+                } else {
+                    ret = 10.0*ret + ((b - b'0') as f64);
+                }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal { todo!("throw error") }
                 in_decimal = true;
-                ret.push(b'.');
             }
             (_,CommandCode::Space) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_unit_or_dim(engine,f)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_dim_unit(engine,f,Some((b,token)))
             }
             _ => {
@@ -740,7 +741,7 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
         }
         ResolvedToken::Cmd {cmd:Some(c),token} => {
             let base = read_dim_command(engine,false,c.clone(),token);
-            let f = ret_float(engine,ret,is_negative);
+            let f = if is_negative {-ret} else {ret};
             return base.scale_float(f)
         }
         _ => todo!("command in read_dim_inner")
@@ -964,25 +965,32 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
     crate::file_end!()
 }
 fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Str<ET> {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
-    ret.push(first);
+    let mut ret = 0f64;
+    let mut in_decimal = first == b'.';
+    let mut scale = 10f64;
+    if !in_decimal {
+        ret = (first - b'0') as f64;
+    }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                if in_decimal {
+                    ret += (b - b'0') as f64 / scale;
+                    scale *= 10.0;
+                } else {
+                    ret = 10.0*ret + ((b - b'0') as f64);
+                }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal { todo!("throw error") }
                 in_decimal = true;
-                ret.push(b'.');
             }
             (_,CommandCode::Space) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_stretch_unit(engine,f,None)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_stretch_unit(engine,f,Some((b,token)))
             }
             _ => {
@@ -991,7 +999,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
         }
         ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
             let base = engine.state.get_dim_register(*u);
-            let scale = ret_float(engine,ret,is_negative);
+            let scale = if is_negative {-ret} else {ret};
             return Sk::<ET>::stretch_from_dimen(engine,scale,base)
         }
         o => todo!("command in read_stretch_inner: {:?}",o)
@@ -1041,25 +1049,32 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
     crate::file_end!()
 }
 fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Shr<ET> {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
-    ret.push(first);
+    let mut ret = 0f64;
+    let mut in_decimal = first == b'.';
+    let mut scale = 10f64;
+    if !in_decimal {
+        ret = (first - b'0') as f64;
+    }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                if in_decimal {
+                    ret += (b - b'0') as f64 / scale;
+                    scale *= 10.0;
+                } else {
+                    ret = 10.0*ret + ((b - b'0') as f64);
+                }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal { todo!("throw error") }
                 in_decimal = true;
-                ret.push(b'.');
             }
             (_,CommandCode::Space) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_shrink_unit(engine,f,None)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_shrink_unit(engine,f,Some((b,token)))
             }
             _ => {
@@ -1068,7 +1083,7 @@ fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
         }
         ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
             let base = engine.state.get_dim_register(*u);
-            let scale = ret_float(engine,ret,is_negative);
+            let scale = if is_negative {-ret} else {ret};
             return Sk::<ET>::shrink_from_dimen(engine,scale,base)
         }
         _ => todo!("command in read_dim_inner")
@@ -1166,25 +1181,32 @@ fn read_muskip_dim<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 }
 
 fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MB<ET> {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
-    ret.push(first);
+    let mut ret = 0f64;
+    let mut in_decimal = first == b'.';
+    let mut fac = 10f64;
+    if !in_decimal {
+        ret = (first - b'0') as f64;
+    }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                if in_decimal {
+                    ret += (b - b'0') as f64 / fac;
+                    fac *= 10.0;
+                } else {
+                    ret = 10.0*ret + ((b - b'0') as f64);
+                }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal { todo!("throw error") }
                 in_decimal = true;
-                ret.push(b'.');
             }
             (_,CommandCode::Space) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_mudim_unit(engine,f,None)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_mudim_unit(engine,f,Some((b,token)))
             }
             _ => {
@@ -1244,25 +1266,32 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
     crate::file_end!()
 }
 fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSt<ET> {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
-    ret.push(first);
+    let mut ret = 0f64;
+    let mut in_decimal = first == b'.';
+    let mut fac = 10f64;
+    if !in_decimal {
+        ret = (first - b'0') as f64;
+    }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                if in_decimal {
+                    ret += (b - b'0') as f64 / fac;
+                    fac *= 10.0;
+                } else {
+                    ret = 10.0*ret + ((b - b'0') as f64);
+                }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal { todo!("throw error") }
                 in_decimal = true;
-                ret.push(b'.');
             }
             (_,CommandCode::Space) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_mustretch_unit(engine,f,None)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_mustretch_unit(engine,f,Some((b,token)))
             }
             _ => {
@@ -1300,25 +1329,32 @@ fn read_mushrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSh<ET> {
 }
 
 fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSh<ET> {
-    let mut ret = engine.aux.memory.get_bytes();
-    let mut in_decimal = first == b'.' && {ret.push(b'0');true};
-    ret.push(first);
+    let mut ret = 0f64;
+    let mut in_decimal = first == b'.';
+    let mut fac = 10f64;
+    if !in_decimal {
+        ret = (first - b'0') as f64;
+    }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                ret.push(b);
+                if in_decimal {
+                    ret += (b - b'0') as f64 / fac;
+                    fac *= 10.0;
+                } else {
+                    ret = 10.0*ret + ((b - b'0') as f64);
+                }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal { todo!("throw error") }
                 in_decimal = true;
-                ret.push(b'.');
             }
             (_,CommandCode::Space) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_mushrink_unit(engine,f,None)
             }
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = ret_float(engine,ret,is_negative);
+                let f = if is_negative {-ret} else {ret};
                 return read_mushrink_unit(engine,f,Some((b,token)))
             }
             _ => {

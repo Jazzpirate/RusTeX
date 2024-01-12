@@ -39,9 +39,16 @@ impl<T:Token> MemoryManager<T> {
     pub fn get_string(&mut self) -> String {
         self.strings.pop().unwrap_or_default()
     }
-    pub fn return_string(&mut self,_s:String) {
+    pub fn return_string(&mut self,mut s:String) {
         s.clear();
         self.strings.push(s)
+    }
+    pub fn get_token_vec(&mut self) -> Vec<T> {
+        self.token_vecs.pop().unwrap_or_default()
+    }
+    pub fn return_token_vec(&mut self,mut v:Vec<T>) {
+        v.clear();
+        self.token_vecs.push(v)
     }
     pub fn new_with_cs_interner(cs_interner:<T::CS as CSName<T::Char>>::Handler) -> Self {
         MemoryManager {
