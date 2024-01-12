@@ -1,4 +1,4 @@
-/*! A control sequence is a [`Token`](super::tokens::Token) of the (usually) form `\foo`.
+/*! A control sequence is a [`Token`](super::Token) of the (usually) form `\foo`.
     We can just use strings to represent them, but there is room for optimization by e.g. interning
     them, which requires some more infrastructure to intern and resolve them.
 

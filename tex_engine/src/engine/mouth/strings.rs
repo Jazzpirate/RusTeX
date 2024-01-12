@@ -409,7 +409,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         }
     }
 
-    /// Only useful for debugging purposes: Print the next `len` [`Character`]s to the given [`Write`]r.
+    /// Only useful for debugging purposes: Print the next `len` [`Character`]s to the given [`Write`](std::fmt::Write)r.
     pub fn preview<W:std::fmt::Write>(&self,len:&mut usize,mut f: W) -> std::fmt::Result {
         if self.current_line.is_empty() {
             return Ok(())
