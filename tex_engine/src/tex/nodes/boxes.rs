@@ -88,11 +88,11 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
             HBoxInfo::ParIndent(_) => unreachable!(),
         }
     }
-    #[inline(always)]
+
     fn height_inner(v:&[HNode<ET>]) -> ET::Dim { v.iter().map(|c| c.height()).max().unwrap_or_default() }
-    #[inline(always)]
+
     fn depth_inner(v:&[HNode<ET>]) -> ET::Dim { v.iter().map(|c| c.depth()).max().unwrap_or_default() }
-    #[inline(always)]
+
     fn width_inner(v:&[HNode<ET>]) -> ET::Dim { v.iter().map(|c| c.width()).sum() }
 
     fn get_height(&self,v:&[HNode<ET>]) -> ET::Dim {
@@ -249,13 +249,13 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             _ => unreachable!()
         }
     }
-    #[inline(always)]
+
     fn height_inner(v:&[VNode<ET>]) -> ET::Dim { v.iter().map(|c| c.height() + c.depth()).sum::<ET::Dim>() + -Self::depth_inner(v) }
-    #[inline(always)]
+
     fn depth_inner(v:&[VNode<ET>]) -> ET::Dim { for c in v.iter().rev() {
         if !c.opaque() { return c.depth() }
     } ET::Dim::default() }
-    #[inline(always)]
+
     fn width_inner(v:&[VNode<ET>]) -> ET::Dim { v.iter().map(|c| c.width()).max().unwrap_or_default() }
 
     fn get_height(&self,v:&[VNode<ET>]) -> ET::Dim {
@@ -430,21 +430,21 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
             },
         }
     }
-    #[inline(always)]
+
     fn height(&self) -> ET::Dim {
         match self {
             TeXBox::H { info, children,preskip,.. } => info.get_height(&children) + preskip.map(|s| s.base()).unwrap_or_default(),
             TeXBox::V { info, children,.. } => info.get_height(&children),
         }
     }
-    #[inline(always)]
+
     fn width(&self) -> ET::Dim {
         match self {
             TeXBox::H { info, children,.. } => info.get_width(&children),
             TeXBox::V { info, children,.. } => info.get_width(&children),
         }
     }
-    #[inline(always)]
+
     fn depth(&self) -> ET::Dim {
         match self {
             TeXBox::H { info, children,.. } => info.get_depth(&children),

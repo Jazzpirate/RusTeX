@@ -62,11 +62,11 @@ impl<T:Token> MemoryManager<T> {
     pub fn set_cs_interner(&mut self,cs_interner:<T::CS as CSName<T::Char>>::Handler) {
         self.cs_interner = cs_interner;
     }
-    #[inline(always)]
+
     pub fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { &mut self.cs_interner }
-    #[inline(always)]
+
     pub fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { &self.cs_interner }
-    #[inline(always)]
+
     pub fn empty_list(&self) -> TokenList<T> { self.empty.clone() }
 }
 
@@ -96,11 +96,11 @@ pub trait MemoryManager<T:Token> {
     fn new() -> Self;
 }
 impl<CS: CSName<T::Char,Handler=()>,T:Token<CS=CS>> MemoryManager<T> for () {
-    #[inline(always)]
+
     fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { self }
-    #[inline(always)]
+
     fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { self }
-    #[inline(always)]
+
     fn empty(&self) -> TokenList<T> { TokenList(shared_vector::SharedVector::new()) }
     fn new() -> Self { () }
 }
@@ -137,38 +137,38 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
         }
     }
 
-    #[inline(always)]
+
     fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { &self.handler }
-    #[inline(always)]
+
     fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { &mut self.handler }
-    #[inline(always)]
+
     fn get_string(&mut self) -> String {
         //self.strings.pop().unwrap_or_default()
         String::new()
     }
-    #[inline(always)]
+
     fn return_string(&mut self,_s:String) {
         /*s.clear();
         self.strings.push(s)*/
     }
-    #[inline(always)]
+
     fn get_bytes(&mut self) -> Vec<u8> {
         Vec::new()//self.bytes.pop().unwrap_or_default()
     }
-    #[inline(always)]
+
     fn return_bytes(&mut self,_b:Vec<u8>) {
         //b.clear();
         //self.bytes.push(b)
     }
-    #[inline(always)]
+
     fn get_token_vec(&mut self) -> Vec<T> {
         Vec::new()//self.factory.get()
     }
-    #[inline(always)]
+
     fn return_token_vec(&mut self, _v: Vec<T>) {
         //self.factory.give_back(v)
     }
-    #[inline(always)]
+
     fn empty(&self) -> TokenList<T> { TokenList(self.empty.clone()) }
 }
 
@@ -344,16 +344,16 @@ impl PrimitiveInterner {
     }
     /// Returns the identifier for the given primitive command name, interning it if necessary.
     /// This is thread-safe, but slow, so should only be used ideally once per primitive at startup.
-    #[inline(always)]
+
     pub fn get(&self,s:&'static str) -> PrimitiveIdentifier {
         let mut lock = self.interner.write().unwrap();
         PrimitiveIdentifier(lock.get_or_intern_static(s))
     }
-    #[inline(always)]
+
     pub fn printable<C:Character>(&'static self,ident:PrimitiveIdentifier,escapechar:Option<C>) -> PrintableIdentifier<C> {
         PrintableIdentifier(ident,escapechar,&self)
     }
-    #[inline(always)]
+
     pub fn with<F:FnOnce(&str)>(&'static self,ident:PrimitiveIdentifier,f:F) {
         let lock = self.interner.read().unwrap();
         f(lock.resolve(ident.0).unwrap())
@@ -379,7 +379,7 @@ lazy_static!(
 #[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
 pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
 impl PrimitiveIdentifier {
-    #[inline(always)]
+
     pub fn to_usize(&self) -> usize { self.0.to_usize() }
 }
 
@@ -411,30 +411,30 @@ impl StringInterner {
         }
     }
     /// Resolves an [`InternedString`] to a `&str`.
-    #[inline(always)]
+
     pub fn resolve(&self,string:InternedString) -> &str {
         self.interner.resolve(string).unwrap()
     }
     /// Interns a `&static str`.
-    #[inline(always)]
+
     pub fn from_static(&mut self,s:&'static str) -> InternedString {
         self.interner.get_or_intern_static(s)
     }
     /// Interns a string. For `&static str`s, use [`from_static`](Self::from_static) instead.
-    #[inline(always)]
+
     pub fn from_string<S>(&mut self,s:S) -> InternedString where S:AsRef<str> {
         self.interner.get_or_intern(s)
     }
 }
 impl<C:Character> CSHandler<C,InternedString> for StringInterner {
     type Resolved<'a> = &'a str;
-    #[inline(always)]
+
     fn empty_str(&self) -> InternedString { self.empty_str }
-    #[inline(always)]
+
     fn par(&self) -> InternedString { self.par }
-    #[inline(always)]
+
     fn new(&mut self, s: &str) -> InternedString { self.from_string(s) }
-    #[inline(always)]
+
     fn resolve<'a>(&'a self, cs: &'a InternedString) -> Self::Resolved<'a> {
         self.interner.resolve(*cs).unwrap()
     }
@@ -447,7 +447,7 @@ impl<C:Character> CSHandler<C,InternedString> for StringInterner {
     }
 }
 impl Default for StringInterner {
-    #[inline(always)]
+
     fn default() -> Self { Self::new() }
 }
 */
@@ -469,15 +469,15 @@ impl<C:Character> CharacterVecInterner<C> {
         r.from_static("par");
         r
     }
-    #[inline(always)]
+
     pub fn from_static(&mut self,s:&'static str) -> InternedCSName<C> {
         self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice().into())
     }
-    #[inline(always)]
+
     pub fn from_string<S:AsRef<str>>(&mut self,s:S) -> InternedCSName<C> {
         self.intern(C::string_to_iter(s.as_ref()).collect::<Vec<_>>().as_slice().into())
     }
-    #[inline(always)]
+
     pub fn resolve(&self,i:InternedCSName<C>) -> &[C] {
         self.get(i.0)
     }
@@ -503,19 +503,19 @@ impl<C:Character> CharacterVecInterner<C> {
 }
 impl<C:Character> CSHandler<C,InternedCSName<C>> for CharacterVecInterner<C> {
     type Resolved<'a> = DisplayCSName<'a,C>;
-    #[inline(always)]
+
     fn new(&mut self,s: &str) -> InternedCSName<C> {
         self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
     }
-    #[inline(always)]
+
     fn from_chars(&mut self, v: &Vec<C>) -> InternedCSName<C> {
         self.intern(v.as_slice())
     }
-    #[inline(always)]
+
     fn par(&self) -> InternedCSName<C> { (1,PhantomData::default()) }
-    #[inline(always)]
+
     fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData::default()) }
-    #[inline(always)]
+
     fn resolve<'a>(&'a self, cs: &InternedCSName<C>) -> DisplayCSName<'a,C> {
         DisplayCSName(self.get(cs.0))
     }
@@ -532,12 +532,12 @@ impl<C:Character> Display for DisplayCSName<'_,C> {
 
 impl<'a,C:Character> ResolvedCSName<'a,C> for DisplayCSName<'a,C> {
     type Iter = std::iter::Copied<std::slice::Iter<'a,C>>;
-    #[inline(always)]
+
     fn iter(&self) -> Self::Iter { self.0.iter().copied() }
-    #[inline(always)]
+
     fn len(&self) -> usize { self.0.len() }
 }
 impl <C:Character> Default for CharacterVecInterner<C> {
-    #[inline(always)]
+
     fn default() -> Self { Self::new() }
 }

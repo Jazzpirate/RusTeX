@@ -64,14 +64,14 @@ impl NumSet for DefaultNumSet {
     fn mudim_to_dim(mudim: <Self::MuSkip as MuSkip>::Base, em: Self::Dim) -> Self::Dim {
         Dim32(((mudim.0 as f64 / 65536.0) * (em.0 as f64) / 18.0).round() as i32)
     }
-    #[inline(always)]
+
     fn dim_to_int(dim: Self::Dim) -> Self::Int {
         dim.0
     }
 }
 
 impl Numeric<i32> for i32 {
-    #[inline(always)]
+
     fn scale(&self, times: i32, div: i32) -> Self {
         ((*self as f64 * times as f64) / (div as f64)).round() as i32
     }
@@ -79,7 +79,7 @@ impl Numeric<i32> for i32 {
 impl TeXInt for i32 {
     const MIN: Self = i32::MIN;
     const MAX: Self = i32::MAX;
-    #[inline(always)]
+
     fn from_str_radix(src: &str, radix: u32) -> Result<Self, ParseIntError> {
         i32::from_str_radix(src, radix)
     }
@@ -89,35 +89,35 @@ impl TeXInt for i32 {
 #[derive(Clone,Copy,Eq,PartialEq,Ord,PartialOrd,Debug,Default)]
 pub struct Dim32(pub i32);
 impl Numeric<i32> for Dim32 {
-    #[inline(always)]
+
     fn scale(&self, times: i32, div: i32) -> Self {
         Self((self.0 as i64 * (times as i64) / (div as i64)) as i32)
     }
 }
 impl Add for Dim32 {
     type Output = Self;
-    #[inline(always)]
+
     fn add(self, rhs: Self) -> Self::Output {
         Dim32(self.0 + rhs.0)
     }
 }
 impl Sub for Dim32 {
     type Output = Self;
-    #[inline(always)]
+
     fn sub(self, rhs: Self) -> Self::Output {
         Dim32(self.0 - rhs.0)
     }
 }
 impl Div<i32> for Dim32 {
     type Output = Self;
-    #[inline(always)]
+
     fn div(self, rhs: i32) -> Self::Output {
         self.scale(1,rhs)
     }
 }
 impl Mul<i32> for Dim32 {
     type Output = Self;
-    #[inline(always)]
+
     fn mul(self, rhs: i32) -> Self::Output {
         self.scale(rhs,1)
     }
@@ -146,7 +146,7 @@ impl Dim32 {
 }
 impl Neg for Dim32 {
     type Output = Self;
-    #[inline(always)]
+
     fn neg(self) -> Self::Output {
         Dim32(-self.0)
     }
@@ -158,20 +158,20 @@ impl Display for Dim32 {
     }
 }
 impl Into<i64> for Dim32 {
-    #[inline(always)]
+
     fn into(self) -> i64 { self.0 as i64 }
 }
 
 const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc",b"sp",b"em",b"ex"];
 
 impl TeXDimen for Dim32 {
-    #[inline(always)]
+
     fn scale_float(&self, times: f64) -> Self {
         Self((self.0 as f64 * times).floor() as i32)
     }
-    #[inline(always)]
+
     fn from_sp(sp: i32) -> Self { Self(sp) }
-    #[inline(always)]
+
     fn units() -> &'static[&'static [u8]] { DEFAULT_UNITS }
     fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self {
         match dim {
@@ -273,23 +273,23 @@ impl<D:TeXDimen> Skip for Skip32<D> {
     type Base = D;
     type Stretch = Fill<D>;
     type Shrink = Fill<D>;
-    #[inline(always)]
+
     fn base(self) -> Self::Base { self.base }
-    #[inline(always)]
+
     fn stretch(&self) -> Option<Self::Stretch> { self.stretch }
-    #[inline(always)]
+
     fn shrink(&self) -> Option<Self::Shrink> { self.shrink }
-    #[inline(always)]
+
     fn new(base: D, stretch: Option<Fill<D>>, shrink: Option<Fill<D>>) -> Self {
         Self{base,stretch,shrink}
     }
-    #[inline(always)]
+
     fn add(self, other: Self::Base) -> Self {
         Self{base:self.base+other,stretch:self.stretch,shrink:self.shrink}
     }
-    #[inline(always)]
+
     fn stretch_units() -> &'static[&'static [u8]] { STRETCH_SHRINK_UNITS }
-    #[inline(always)]
+
     fn shrink_units() -> &'static[&'static [u8]] { STRETCH_SHRINK_UNITS }
     fn stretch_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Stretch {
         match dim {
@@ -298,16 +298,16 @@ impl<D:TeXDimen> Skip for Skip32<D> {
             _ => Fill::pt(D::from_float(engine,float,dim))
         }
     }
-    #[inline(always)]
+
     fn shrink_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Shrink {
         Self::stretch_from_float(engine,float,dim)
     }
-    #[inline(always)]
+
     fn stretch_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
         let d = dimen.scale_float(float);
         Fill::pt(d)
     }
-    #[inline(always)]
+
     fn shrink_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
         let d = dimen.scale_float(float);
         Fill::pt(d)
@@ -390,22 +390,22 @@ impl MuSkip for MuSkip32 {
     type Base = Mu;
     type Stretch = MuFill;
     type Shrink = MuFill;
-    #[inline(always)]
+
     fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Base {
         match dim {
             b"mu" => Mu((float*65536.0).round() as i32),
             _ => unreachable!()
         }
     }
-    #[inline(always)]
+
     fn base(self) -> Self::Base { self.base }
-    #[inline(always)]
+
     fn units() -> &'static [&'static [u8]] { &[b"mu"]}
-    #[inline(always)]
+
     fn stretch_units() -> &'static [&'static [u8]] { &[b"mu",b"fil",b"fill"] }
-    #[inline(always)]
+
     fn shrink_units() -> &'static [&'static [u8]] { &[b"mu",b"fil",b"fill"] }
-    #[inline(always)]
+
     fn new(base: Self::Base, stretch: Option<Self::Stretch>, shrink: Option<Self::Shrink>) -> Self {
         Self{base,stretch,shrink}
     }
@@ -416,7 +416,7 @@ impl MuSkip for MuSkip32 {
             _ => MuFill::mu(Self::from_float(engine,float,dim).0)
         }
     }
-    #[inline(always)]
+
     fn shrink_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Shrink {
         Self::stretch_from_float(engine,float,dim)
     }

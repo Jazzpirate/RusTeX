@@ -47,11 +47,11 @@ pub trait CSNameMap<C:Character,CS:CSName<C>,A:Clone>:Clone+Default {
 }
 
 impl<C:Character,CS:CSName<C>,A:Clone> CSNameMap<C,CS,A> for HMap<CS,A> {
-    #[inline(always)]
+
     fn get(&self, cs: &CS) -> Option<&A> { self.get(cs) }
-    #[inline(always)]
+
     fn insert(&mut self, cs: CS, a: A) -> Option<A> { self.insert(cs,a) }
-    #[inline(always)]
+
     fn remove(&mut self, cs: &CS) -> Option<A> { self.remove(cs) }
 }
 
@@ -73,7 +73,7 @@ impl<C:Character> CSName<C> for InternedCSName<C> {
 #[derive(Clone)]
 pub struct CSNameVec<C:Character,A:Clone>(Vec<Option<A>>,PhantomData<C>);
 impl<C:Character,A:Clone> Default for CSNameVec<C,A> {
-    #[inline(always)]
+
     fn default() -> Self { Self(Vec::new(),PhantomData) }
 }
 
@@ -137,17 +137,17 @@ impl<'a,C:Character> ResolvedCSName<'a,C> for &'a str {
 
 impl<C:Character> CSHandler<C,Ptr<str>> for () {
     type Resolved<'a> = &'a str;
-    #[inline(always)]
+
     fn new(&mut self,s: &str) -> Ptr<str> {
         s.into()
     }
-    #[inline(always)]
+
     fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Resolved<'a> {
         &*cs
     }
-    #[inline(always)]
+
     fn par(&self) -> Ptr<str> { "par".to_string().into() }
-    #[inline(always)]
+
     fn empty_str(&self) -> Ptr<str> { "".to_string().into() }
     fn from_chars(&mut self, v: &Vec<C>) -> Ptr<str> {
         let mut s = String::new();

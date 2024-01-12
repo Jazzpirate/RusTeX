@@ -25,7 +25,7 @@ impl PartialEq for TfmFile {
 }
 
 impl TfmFile {
-    #[inline(always)]
+
     pub fn name(&self) -> &str {
         self.filepath.file_stem().unwrap().to_str().unwrap()
     }

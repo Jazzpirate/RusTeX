@@ -18,12 +18,12 @@ impl MathStyle {
             MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
         }
     }
-    #[inline(always)]
+
     pub fn cramp(mut self) -> Self {
         self.cramped = true;
         self
     }
-    #[inline(always)]
+
     pub fn sub(self) -> Self { self.sup().cramp() }
     pub fn numerator(self) -> Self {
         match self.style {
@@ -32,7 +32,7 @@ impl MathStyle {
             MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
         }
     }
-    #[inline(always)]
+
     pub fn denominator(self) -> Self {
         self.numerator().cramp()
     }

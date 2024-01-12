@@ -11,12 +11,12 @@ use crate::tex::characters::CharacterMap;
 pub struct TokenList<T:Token>(pub shared_vector::SharedVector<T>);
 impl<T:Token> TokenList<T> {
     /// Whether the list is empty
-    #[inline(always)]
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
     /// return the `i`th token in the list. Will panic if out of bounds.
-    #[inline(always)]
+
     pub fn get(&self,i:usize) -> &T {
         &(*self.0)[i]
     }
@@ -118,21 +118,21 @@ impl<'a,C:Character,CS: CSName<C>,A: CharWrite<C,CS>> CharWrite<C,CS> for &'a mu
 /// Wrapper struct that adds [`CharWrite`] to any [`Write`]
 pub struct StringCharWrite<'a,W:Write,C:Character,CS: CSName<C>>(&'a mut W, PhantomData<C>, PhantomData<CS>);
 impl <'a,W:Write,C:Character,CS: CSName<C>> StringCharWrite<'a,W,C,CS> {
-    #[inline(always)]
+
     pub fn new(f:&'a mut W) -> Self {
         Self(f,PhantomData,PhantomData)
     }
 }
 impl<'a,W:Write,C:Character,CS: CSName<C>> std::fmt::Write for StringCharWrite<'a,W,C,CS> {
-    #[inline(always)]
+
     fn write_char(&mut self, c: char) -> std::fmt::Result {
         self.0.write_char(c)
     }
-    #[inline(always)]
+
     fn write_fmt(&mut self, args: Arguments<'_>) -> std::fmt::Result {
         self.0.write_fmt(args)
     }
-    #[inline(always)]
+
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         self.0.write_str(s)
     }
@@ -165,7 +165,7 @@ impl<'a,W:Write,C:Character,CS: CSName<C>> CharWrite<C,CS> for StringCharWrite<'
 pub struct Otherize<'a,T:Token,F:FnMut(T)>(&'a mut F, PhantomData<T>);
 impl<'a,T:Token,F:FnMut(T)> Otherize<'a,T,F> {
     /// Creates a new [`Otherize`] from a closure.
-    #[inline(always)]
+
     pub fn new(f:&'a mut F) -> Self {
         Self(f,PhantomData)
     }

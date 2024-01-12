@@ -55,7 +55,7 @@ pub trait Stomach {
         engine.stomach.data_mut().page.clear();
     }
 
-    #[inline(always)]
+
     fn do_unexpandable(
         engine:&mut EngineReferences<Self::ET>,
         name:PrimitiveIdentifier,
@@ -106,7 +106,7 @@ pub trait Stomach {
         }
     }
 
-    #[inline(always)]
+
     fn close_box(engine:&mut EngineReferences<Self::ET>, bt:BoxType) {
         methods::close_box(engine,bt)
     }
@@ -218,12 +218,12 @@ pub trait Stomach {
         }
     }
 
-    #[inline(always)]
+
     fn do_superscript(engine:&mut EngineReferences<Self::ET>) {
         do_xscript(engine,Script::Super)
     }
 
-    #[inline(always)]
+
     fn do_subscript(engine:&mut EngineReferences<Self::ET>) {
         do_xscript(engine,Script::Sub)
     }
@@ -539,7 +539,7 @@ pub trait Stomach {
         }
     }
 
-    #[inline(always)]
+
     fn add_node_v(engine:&mut EngineReferences<Self::ET>,node: VNode<Self::ET>) {
         methods::add_node_v(engine,node)
     }
@@ -893,16 +893,16 @@ impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
             data:StomachData::new()
         }
     }
-    #[inline(always)]
+
     fn afterassignment(&mut self) -> &mut Option<Tk<Self>> {
         &mut self.afterassignment
     }
-    #[inline(always)]
+
     fn data_mut(&mut self) -> &mut StomachData<Self::ET> {
         &mut self.data
     }
 
-    #[inline(always)]
+
     fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<VNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
         vsplit_roughly(engine, nodes, target)
     }

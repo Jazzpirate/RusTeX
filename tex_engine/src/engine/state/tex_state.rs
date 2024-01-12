@@ -69,7 +69,7 @@ impl<ET:EngineTypes> TeXState<ET> {
 }
 
 impl<ET:EngineTypes> StateChangeTracker<Self> for TeXState<ET> {
-    #[inline(always)]
+
     fn stack(&mut self) -> &mut StateStack<ET,Self> { &mut self.stack }
 }
 
@@ -128,16 +128,16 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
-    #[inline(always)]
+
     fn get_group_type(&self) -> Option<GroupType> {
         self.stack.stack.last().map(|lvl| lvl.group_type)
     }
-    #[inline(always)]
+
     fn get_group_level(&self) -> usize {
         self.stack.stack.len()
     }
 
-    #[inline(always)]
+
     fn aftergroup(&mut self, token: T<Self>) {
         match self.stack.stack.last_mut() {
             None => (),
@@ -145,7 +145,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
-    #[inline(always)]
+
     fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize) {
         self.stack.push(group_type);
         let tracing = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
@@ -500,7 +500,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    #[inline(always)]
+
     fn get_parshape(&self) -> &Vec<(Dim<Self>,Dim<Self>)> {
         &self.parshape
     }
@@ -519,11 +519,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_current_font(&self) -> &crate::engine::state::Fnt<Self> {
         &self.current_font
     }
-    #[inline(always)]
+
     fn set_current_font(&mut self, aux: &mut EngineAux<Self::ET>, fnt: crate::engine::state::Fnt<Self>, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -543,11 +543,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             StateChange::CurrentFont(old)
         })
     }
-    #[inline(always)]
+
     fn get_textfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
         &self.textfonts[i]
     }
-    #[inline(always)]
+
     fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -568,11 +568,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_scriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
         &self.scriptfonts[i]
     }
-    #[inline(always)]
+
     fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -593,11 +593,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_scriptscriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
         &self.scriptscriptfonts[i]
     }
-    #[inline(always)]
+
     fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -618,7 +618,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char> { &self.catcodes }
     fn set_catcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, cc: CategoryCode, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -636,7 +636,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_sfcode(&self,c:ET::Char) -> u16 { *self.sfcodes.get(c) }
     fn set_sfcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:u16, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -657,7 +657,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_delcode(&self,c:ET::Char) -> ET::Int { *self.delcodes.get(c) }
     fn set_delcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Int, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -678,7 +678,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_lccode(&self,c:ET::Char) -> ET::Char { *self.lccodes.get(c) }
     fn set_lccode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Char, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -699,7 +699,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_uccode(&self,c:ET::Char) -> ET::Char { *self.uccodes.get(c) }
     fn set_uccode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Char, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -720,7 +720,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_mathcode(&self,c:ET::Char) -> u32 { *self.mathcodes.get(c) }
     fn set_mathcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:u32, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -742,7 +742,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    #[inline(always)]
+
     fn get_endline_char(&self) -> Option<ET::Char> { self.endline_char }
     fn set_endline_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -768,7 +768,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_escape_char(&self) -> Option<ET::Char> { self.escape_char }
     fn set_escape_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -794,7 +794,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_newline_char(&self) -> Option<ET::Char> { self.newline_char }
     fn set_newline_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -820,7 +820,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    #[inline(always)]
+
     fn get_primitive_int(&self, name: PrimitiveIdentifier) -> ET::Int {
         match self.primitive_ints.get(&name) {
             Some(i) => *i,
@@ -838,7 +838,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_int_register(&self, idx: u16) -> crate::engine::state::Int<Self> {
         match self.int_register.get(idx as usize) {
             Some(i) => *i,
@@ -864,7 +864,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_dim_register(&self, idx: u16) -> ET::Dim {
         match self.dim_register.get(idx as usize) {
             Some(i) => *i,
@@ -891,7 +891,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    #[inline(always)]
+
     fn get_skip_register(&self, idx: u16) -> ET::Skip {
         match self.skip_register.get(idx as usize) {
             Some(i) => *i,
@@ -917,7 +917,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_muskip_register(&self, idx: u16) -> ET::MuSkip {
         match self.muskip_register.get(idx as usize) {
             Some(i) => *i,
@@ -943,7 +943,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_box_register(&self, idx: u16) -> Option<&TeXBox<ET>> {
         match self.box_register.get(idx as usize) {
             None => None,
@@ -951,14 +951,14 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
-    #[inline(always)]
+
     fn get_box_register_mut(&mut self, idx: u16) -> Option<&mut TeXBox<ET>> {
         match self.box_register.get_mut(idx as usize) {
             None => None,
             Some(i) => i.as_mut()
         }
     }
-    #[inline(always)]
+
     fn take_box_register(&mut self, idx: u16) -> Option<TeXBox<ET>> {
         match self.box_register.get_mut(idx as usize) {
             None => None,
@@ -980,7 +980,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    #[inline(always)]
+
     fn get_toks_register(&self, idx: u16) -> &TokenList<ET::Token> {
         match self.toks_register.get(idx as usize) {
             Some(i) => i,
@@ -1012,7 +1012,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_primitive_tokens(&self, name: PrimitiveIdentifier) -> &TokenList<ET::Token> {
         match self.primitive_toks.get(&name) {
             Some(i) => i,
@@ -1038,7 +1038,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_primitive_dim(&self, name: PrimitiveIdentifier) -> ET::Dim {
         match self.primitive_dims.get(&name) {
             Some(i) => *i,
@@ -1056,7 +1056,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> ET::Skip {
         match self.primitive_skips.get(&name) {
             Some(i) => *i,
@@ -1074,7 +1074,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> ET::MuSkip {
         match self.primitive_muskips.get(&name) {
             Some(i) => *i,
@@ -1092,7 +1092,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    #[inline(always)]
+
     fn get_command(&self, name: &CS<Self>) -> Option<&Command<Self::ET>> {
         self.commands.get(name)
     }
@@ -1164,7 +1164,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             StateChange::Command { name, old }
         });
     }
-    #[inline(always)]
+
     fn get_ac_command(&self, c: Ch<Self>) -> Option<&Command<Self::ET>> {
         self.ac_commands.get(c).as_ref()
     }

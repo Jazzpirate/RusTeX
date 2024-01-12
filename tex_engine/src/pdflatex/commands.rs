@@ -22,11 +22,11 @@ use crate::tex::types::TeXMode;
 use crate::utils::errors::TeXError;
 
 
-#[inline(always)]
+
 pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)
 }
-#[inline(always)]
+
 pub fn pdfmajorversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(1)
 }
@@ -473,7 +473,7 @@ pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
     )
 }
 
-#[inline(always)]
+
 pub fn pdflastannot<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
     where ET::Extension : PDFExtension<ET> {
     <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfannots().len() as i32) - 1)
@@ -537,7 +537,7 @@ pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
     }
 }
 
-#[inline(always)]
+
 pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
     where ET::Extension : PDFExtension<ET> {
     <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfobjs().len() as i32) - 1)
@@ -608,7 +608,7 @@ pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Toke
     }
 }
 
-#[inline(always)]
+
 pub fn pdflastxform<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
     where ET::Extension : PDFExtension<ET> {
     <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfxforms().len() as i32) - 1)
@@ -683,7 +683,7 @@ pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
     }
 }
 
-#[inline(always)]
+
 pub fn pdflastximage<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
     where ET::Extension : PDFExtension<ET> {
     (engine.aux.extension.pdfximages().len() as i32 - 1).into()
@@ -707,7 +707,7 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token
     }
 }
 
-#[inline(always)]
+
 pub fn pdfshellescape<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(2)
 }

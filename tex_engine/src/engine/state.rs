@@ -277,7 +277,7 @@ impl<ET:EngineTypes,S:State<ET=ET>> Clone for StateStack<ET,S> {
 
 }
 impl<ET:EngineTypes,S:State<ET=ET>> StateStack<ET,S> {
-    #[inline(always)]
+
     pub fn give_back(&mut self,mut lvl:StackLevel<ET,S>) {
         lvl.changes.clear();
         self.vecs.push(lvl.changes);

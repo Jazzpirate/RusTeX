@@ -76,12 +76,12 @@ pub fn discretionary<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::T
     // TODO
 }
 
-#[inline(always)]
+
 pub fn endinput<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     engine.mouth.endinput(engine.aux);
 }
 
-#[inline(always)]
+
 pub fn errorstopmode<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) {}
 
 pub fn expandafter<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
@@ -127,7 +127,7 @@ pub fn sfcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
     engine.state.set_sfcode(engine.aux,char,sf,globally)
 }
 
-#[inline(always)]
+
 pub fn spacefactor_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.stomach.data_mut().spacefactor)
 }
@@ -140,7 +140,7 @@ pub fn spacefactor_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 }
 
 
-#[inline(always)]
+
 pub fn parshape_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.state.get_parshape().len() as i32)
 }
@@ -406,12 +406,12 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer
     engine.set_command(&cm,Some(Command::Macro(cmd)),globally)
 }
 
-#[inline(always)]
+
 pub fn xdef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,_globally:bool) {
     edef(engine,tk,outer,long,protected,true)
 }
 
-#[inline(always)]
+
 pub fn gdef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,_globally:bool) {
     def(engine,tk,outer,long,protected,true)
 }
@@ -690,7 +690,7 @@ pub fn escapechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
     engine.state.set_escape_char(engine.aux,val,globally)
 }
 
-#[inline(always)]
+
 pub fn font_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Fnt<ET> {
     engine.state.get_current_font().clone()
 }
@@ -717,7 +717,7 @@ pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
     engine.state.set_command(engine.aux,cs,Some(Command::Font(font)),global)
 }
 
-#[inline(always)]
+
 pub fn textfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Fnt<ET> {
     let num = engine.read_int(false).into();
     if num < 0 || num > 15 {
@@ -735,7 +735,7 @@ pub fn textfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::To
     engine.state.set_textfont(engine.aux,num as usize,fnt,global)
 }
 
-#[inline(always)]
+
 pub fn scriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Fnt<ET> {
     let num = engine.read_int(false).into();
     if num < 0 || num > 15 {
@@ -753,7 +753,7 @@ pub fn scriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
     engine.state.set_scriptfont(engine.aux,num as usize,fnt,global)
 }
 
-#[inline(always)]
+
 pub fn scriptscriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Fnt<ET> {
     let num = engine.read_int(false).into();
     if num < 0 || num > 15 {
@@ -981,14 +981,14 @@ pub fn ifnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
     }
 }
 
-#[inline(always)]
+
 pub fn ifodd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
     engine.read_int(false).into() % 2 != 0
 }
 
-#[inline(always)]
+
 pub fn iftrue<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool { true }
-#[inline(always)]
+
 pub fn iffalse<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
     false
 }
@@ -1644,7 +1644,7 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     todo!("throw error?")
 }
 
-#[inline(always)]
+
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     super::methods::do_the(engine, |_, _, _, t|exp.push(t))
 }
@@ -2003,22 +2003,22 @@ pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
 }
 
-#[inline(always)]
+
 pub fn year<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.aux.start_time.year())
 }
 
-#[inline(always)]
+
 pub fn month<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.aux.start_time.month() as i32)
 }
 
-#[inline(always)]
+
 pub fn day<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.aux.start_time.day() as i32)
 }
 
-#[inline(always)]
+
 pub fn inputlineno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.mouth.line_number() as i32)
 }
@@ -2027,23 +2027,23 @@ pub fn mark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     super::methods::do_marks(engine, 0)
 }
 
-#[inline(always)]
+
 pub fn topmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     super::methods::get_marks(engine, exp, |d| &mut d.topmarks, 0)
 }
-#[inline(always)]
+
 pub fn firstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     super::methods::get_marks(engine, exp, |d| &mut d.firstmarks, 0)
 }
-#[inline(always)]
+
 pub fn botmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     super::methods::get_marks(engine, exp, |d| &mut d.botmarks, 0)
 }
-#[inline(always)]
+
 pub fn splitfirstmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     super::methods::get_marks(engine, exp, |d| &mut d.splitfirstmarks, 0)
 }
-#[inline(always)]
+
 pub fn splitbotmark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     super::methods::get_marks(engine, exp, |d| &mut d.splitbotmarks, 0)
 }
@@ -2214,9 +2214,9 @@ fn do_eqno<ET:EngineTypes>(engine:&mut EngineReferences<ET>,pos:EqNoPosition) {
         _ => todo!("throw error")
     }
 }
-#[inline(always)]
+
 pub fn eqno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) { do_eqno(engine,EqNoPosition::Right) }
-#[inline(always)]
+
 pub fn leqno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) { do_eqno(engine,EqNoPosition::Left) }
 
 pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {

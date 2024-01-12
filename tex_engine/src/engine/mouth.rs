@@ -56,7 +56,7 @@ pub trait Mouth:Sized {
     }
     fn insert_every<ET:EngineTypes<Char = C<Self>,Token = Self::Token,File = Self::File>>(&mut self,state:&ET::State,every:PrimitiveIdentifier);
     fn current_position_fmt<W:std::fmt::Write>(&self,w:W) -> std::fmt::Result;
-    #[inline(always)]
+
     fn display_position(&self) -> MouthPosition<Self> {
         MouthPosition(self)
     }
@@ -65,14 +65,14 @@ pub trait Mouth:Sized {
 
 pub struct MouthPosition<'a,M:Mouth>(&'a M);
 impl<'a,M:Mouth> Display for MouthPosition<'a,M> {
-    #[inline(always)]
+
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.current_position_fmt(f)
     }
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    #[inline(always)]
+
     pub fn push_file(&mut self,f:ET::File) {
         self.mouth.push_file(f);
     }
@@ -193,7 +193,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         }
     }
 
-    #[inline(always)]
+
     fn get_args(&mut self) -> [Vec<T>;9] {
         match std::mem::take(&mut self.args) {
             Some(a) => a,
@@ -201,7 +201,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         }
         //array_init::array_init(|_| Vec::new())
     }
-    #[inline(always)]
+
     fn return_args(&mut self,mut exp:[Vec<T>;9]) {
         for a in exp.iter_mut() { a.clear() }
         self.args = Some(exp);
@@ -241,20 +241,20 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         }
         0
     }
-    #[inline(always)]
+
     fn push_macro_exp(&mut self, mut exp: MacroExpansion<Self::Token>) {
         self.with_list(|v| exp.consume_rev(v));
         self.return_args(exp.args);
     }
-    #[inline(always)]
+
     fn push_exp(&mut self, exp: TokenListIterator<Self::Token>) {
         self.with_list(|v|v.extend(exp.ls.0.iter().rev().cloned()))
     }
-    #[inline(always)]
+
     fn push_vec(&mut self, exp: Vec<Self::Token>) {
         self.with_list(|v| v.extend(exp.into_iter().rev()))
     }
-    #[inline(always)]
+
     fn push_string(&mut self, s: StringLineSource<C<Self>>) {
         self.inputs.push(TokenSource::String(InputTokenizer::new(s)));
     }
@@ -266,12 +266,12 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         }
     }
 
-    #[inline(always)]
+
     fn requeue(&mut self,t:T) {
         self.with_list(|v| v.push(t))
     }
 
-    #[inline(always)]
+
     fn push_file(&mut self, f: F) {
         //self.clean();
         let id = f.sourceref();

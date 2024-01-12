@@ -371,15 +371,15 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
     crate::file_end!()
 }
 
-#[inline(always)]
+
 fn is_ascii_digit(u:u8) -> bool {
     u >= 48 && u <= 57
 }
-#[inline(always)]
+
 fn is_ascii_oct_digit(u:u8) -> bool {
     u >= 48 && u <= 55
 }
-#[inline(always)]
+
 fn is_ascii_hex_digit(u:u8) -> bool {
     is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
 }
@@ -913,7 +913,7 @@ type Shr<ET> = <<<ET as EngineTypes>::Num as NumSet>::Skip as Skip>::Shrink;
 const PLUS: &[u8] = b"plus";
 const MINUS: &[u8] = b"minus";
 
-#[inline(always)]
+
 fn read_skip_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> Sk<ET> {
     let base = read_dim_float(engine,is_negative,first);
     read_skip_ii(engine,base)
@@ -1174,7 +1174,7 @@ pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, i
     }
 }
 
-#[inline(always)]
+
 fn read_muskip_dim<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
     let base = read_mudim_float(engine,is_negative,first);
     kern(base,engine)

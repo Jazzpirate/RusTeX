@@ -107,7 +107,7 @@ pub struct MathFontStyle<ET:EngineTypes> {
 impl<ET:EngineTypes> MathFontStyleT<ET> for MathFontStyle<ET> {
     type Choice = ResolvedChoice<ET>;
     type Markers = PhantomData<ET>;
-    #[inline(always)]
+
     fn get_font(&self) -> &ET::Font { &self.font }
 }
 impl<ET:EngineTypes> NodeTrait<ET> for PhantomData<ET> {
@@ -430,7 +430,7 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathAtom<ET,S> {
             h + sub // TODO heuristic
         }
     }
-    #[inline(always)]
+
     fn nodetype(&self) -> NodeType { NodeType::Math }
 }
 
@@ -584,7 +584,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::VCenter{children,..} => children.iter().last().map(|c| c.depth()).unwrap_or_default()
         }
     }
-    #[inline(always)]
+
     fn nodetype(&self) -> NodeType { NodeType::Math }
 }
 

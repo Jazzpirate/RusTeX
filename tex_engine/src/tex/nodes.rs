@@ -166,7 +166,7 @@ pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
     fn width(&self) -> ET::Dim;
     fn nodetype(&self) -> NodeType;
     fn readable_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result;
-    #[inline(always)]
+
     fn readable_do_indent(indent:usize,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
         for _ in 0..indent {f.write_char(' ')?;}

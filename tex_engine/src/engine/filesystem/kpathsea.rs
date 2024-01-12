@@ -305,7 +305,7 @@ impl PathParser {
         }
         map.push((p.to_path_buf(),rec));
     }
-    #[inline(always)]
+
     fn parse_string(&mut self,s:&str) -> Vec<Vec<u8>> {
         self.parse_bytes(s.as_bytes())
     }

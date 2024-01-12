@@ -56,7 +56,7 @@ pub enum Command<ET:EngineTypes> {
     Relax
 }
 impl<ET:EngineTypes> Command<ET> {
-    #[inline(always)]
+
     pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
         Meaning{cmd:self,int,cc,escapechar}
     }
@@ -155,7 +155,7 @@ pub struct Macro<T:Token> {
     pub signature:MacroSignature<T>
 }
 impl<T:Token> Macro<T> {
-    #[inline(always)]
+
     pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self, int:&'a <T::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
         MacroMeaning{cmd:self,int,cc,escapechar}
     }

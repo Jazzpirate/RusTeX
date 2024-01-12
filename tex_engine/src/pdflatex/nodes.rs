@@ -400,29 +400,29 @@ impl<ET:EngineTypes> EngineExtension for MinimalPDFExtension<ET> {
     }
 }
 impl<ET:EngineTypes> PDFExtension<ET> for MinimalPDFExtension<ET> {
-    #[inline(always)]
+
     fn pdfmatches(&mut self) -> &mut Vec<String> {
         &mut self.matches
     }
-    #[inline(always)]
+
     fn elapsed(&mut self) -> &mut std::time::Instant {
         &mut self.elapsed
     }
-    #[inline(always)]
+
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>> { &mut self.colorstacks }
-    #[inline(always)]
+
     fn current_colorstack(&mut self) -> &mut usize { &mut self.current_colorstack }
-    #[inline(always)]
+
     fn pdfobjs(&mut self) -> &mut Vec<PDFObj> { &mut self.pdfobjs }
-    #[inline(always)]
+
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>> { &mut self.pdfxforms }
-    #[inline(always)]
+
     fn pdfannots(&mut self) -> &mut Vec<PDFAnnot<ET>> { &mut self.pdfannots }
-    #[inline(always)]
+
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>> { &mut self.pdfximages }
 
     #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
-    #[inline(always)]
+
     fn pdfium_direct(&mut self) -> &mut Option<pdfium_render::prelude::Pdfium> {
         &mut self.pdfium
     }
@@ -526,7 +526,7 @@ pub struct PDFCatalog {
 #[allow(non_snake_case)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
 impl PDFColor {
-    #[inline(always)]
+
     pub fn black() -> Self { PDFColor{R:0,G:0,B:0} }
     pub fn parse<S:AsRef<str>+std::fmt::Display>(s:S) -> Self {
         macro_rules! parse {
@@ -568,7 +568,7 @@ impl PDFColor {
     }
 }
 impl Default for PDFColor {
-    #[inline(always)]
+
     fn default() -> Self { PDFColor::black() }
 }
 impl std::fmt::Display for PDFColor {

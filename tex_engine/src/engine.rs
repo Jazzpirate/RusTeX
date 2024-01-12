@@ -68,17 +68,17 @@ pub struct Colon<'c,ET:EngineTypes> {
     out:Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
-    #[inline(always)]
+
     pub fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
-    #[inline(always)]
+
     pub fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) {
         (self.out)(engine,n)
     }
 }
 impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
-    #[inline(always)]
+
     fn default() -> Self {
         Colon { out:Box::new(|_,_|{}) }
     }
@@ -174,7 +174,7 @@ pub trait TeXEngine:Sized {
         self.initialize_plain_tex();
         super::commands::etex::register_etex_primitives(self);
     }
-    #[inline(always)]
+
     fn load_latex(&mut self) -> Result<(),TeXError> {
         self.init_file("latex.ltx")
     }

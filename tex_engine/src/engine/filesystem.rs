@@ -63,7 +63,7 @@ pub trait File:std::fmt::Display+Clone+std::fmt::Debug + 'static {
     fn path(&self) -> &Path;
     fn line_source(self) -> Option<Self::LineSource>;
     //fn write(self) -> Self::Write;
-    #[inline(always)]
+
     fn exists(&self) -> bool {
         self.path().exists()
     }
@@ -264,7 +264,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
 #[derive(Clone)]
 struct WritableVirtualFile<C:Character>(Vec<Box<[C]>>, PathBuf,string_interner::symbol::SymbolU32);
 impl<C:Character> WritableVirtualFile<C> {
-    #[inline(always)]
+
     fn new(p:PathBuf,id:string_interner::symbol::SymbolU32) -> Self {
         Self(Vec::new(),p,id)
     }
@@ -283,7 +283,7 @@ pub struct VirtualFileLineSource<C:Character> {
     source:VirtualOrPhysicalFile<C>
 }
 impl <C:Character> FileLineSource<C> for VirtualFileLineSource<C> {
-    #[inline(always)]
+
     fn path(&self) -> &Path { &self.path }
 }
 impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
@@ -329,7 +329,7 @@ pub struct VirtualFile<C:Character> {
     pub exists:bool
 }
 impl<C:Character> std::fmt::Display for VirtualFile<C> {
-    #[inline(always)]
+
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.path.display())
     }
@@ -338,13 +338,13 @@ impl<C:Character> File for VirtualFile<C> {
     type Char = C;
     type LineSource = VirtualFileLineSource<C>;
     type SourceRefID = string_interner::symbol::SymbolU32;
-    #[inline(always)]
+
     fn exists(&self) -> bool {
         self.exists
     }
-    #[inline(always)]
+
     fn sourceref(&self) -> Self::SourceRefID { self.id }
-    #[inline(always)]
+
     fn path(&self) -> &Path { &self.path }
     fn line_source(self) -> Option<Self::LineSource> {
         use std::io::BufRead;

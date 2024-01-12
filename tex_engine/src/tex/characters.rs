@@ -22,7 +22,7 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
 
     /// Convert this character to a [`DisplayableCharacter`] that calls [`display`](Self::display_fmt); useful in
     /// `format!` and `write!` macros.
-    #[inline(always)]
+
     fn display(&self) -> DisplayableCharacter<Self> { DisplayableCharacter(*self) }
 
     /// Convert this character to a `char`.
@@ -30,7 +30,7 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
 
     /// Like [`displayable`](Self::display), but for an [`Option`]`<`[`Character`]`>`. Useful for
     /// `format!` and `write!` macros specifically for the current `\ecapechar` (which may or may not be defined).
-    #[inline(always)]
+
     fn displayable_opt(c:Option<Self>) -> DisplayableCharacterOpt<Self> { DisplayableCharacterOpt(c) }
     /// The starting [`CategoryCodeScheme`] for this character type.
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
@@ -72,7 +72,7 @@ impl Character for u8 {
     const MIN: Self = 0;
     const MAX: Self = 255;
 
-    #[inline(always)]
+
     fn to_char(&self) -> char {*self as char}
     
     type Iter<'a> = ByteIterator<'a>;
@@ -80,10 +80,10 @@ impl Character for u8 {
     fn string_to_iter<'a>(string: &'a str) -> Self::Iter<'a> {
         ByteIterator(string)
     }
-    #[inline(always)]
+
     fn convert(input:Vec<u8>) -> TextLine<Self> { input.into() }
 
-    #[inline(always)]
+
     #[allow(unused_must_use)]
     fn display_fmt<W:std::fmt::Write>(&self, target:&mut W) {
         if self.is_ascii() {
@@ -128,7 +128,7 @@ impl<'a> Iterator for ByteIterator<'a> {
 }
 
 impl <'a> ExactSizeIterator for ByteIterator<'_> {
-    #[inline(always)]
+
     fn len(&self) -> usize {
         let mut num = 0usize;
         let mut iter = self.0.as_bytes().iter();
@@ -157,9 +157,9 @@ impl <'a> ExactSizeIterator for ByteIterator<'_> {
 }
 
 impl <A:Clone+Default> CharacterMap<u8,A> for [A;256] {
-    #[inline(always)]
+
     fn get(&self,c: u8) -> &A { &self[c as usize] }
-    #[inline(always)]
+
     fn get_mut(&mut self,c: u8) -> &mut A { &mut self[c as usize] }
     fn default() -> Self {
         let v = array_init::array_init(|_| A::default());
@@ -208,7 +208,7 @@ impl<C:Character> From<Vec<TextLine<C>>> for StringLineSource<C> {
     fn from(lines: Vec< TextLine<C>>) -> Self { Self { lines:lines.into_iter() } }
 }
 impl<C:Character> TextLineSource<C> for StringLineSource<C> {
-    #[inline(always)]
+
     fn get_line(&mut self) -> Option<TextLine<C>> {
         self.lines.next()
     }

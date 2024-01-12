@@ -92,18 +92,18 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         }
     }
     /// The current line
-    #[inline(always)]
+
     pub fn line(&self) -> usize { self.line }
     /// The current column
-    #[inline(always)]
+
     pub fn column(&self) -> usize { self.col + 1 }
     /// whether the file end has been reached
-    #[inline(always)]
+
     pub fn eof(&self) -> bool {
         self.eof
     }
 
-    #[inline(always)]
+
     fn get_char(&mut self) -> Option<C> {
         if self.col >= self.current_line.len() {None} else {
             let next = self.current_line[self.col];
@@ -328,7 +328,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         handler.from_chars(&self.tempstr)
     }
 
-    #[inline(always)]
+
     fn cond(i: C) -> bool {
         (Into::<C>::into(48u8) <= i && i <= Into::<C>::into(57u8)) ||
             (Into::<C>::into(97u8) <= i && i <= Into::<C>::into(102u8))

@@ -157,7 +157,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
     type CS = CS;
     type Int = I;
     type Dim = D;
-    #[inline(always)]
+
     fn has_char(&self, c: Self::Char) -> bool { self.file.defined[c as usize] }
     fn get_hyphenchar(&self) -> I {
         match self.muts.read().unwrap().hyphenchar {
@@ -203,15 +203,15 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
         }
         v[idx as usize] = d;
     }
-    #[inline(always)]
+
     fn set_at(&mut self, d: Self::Dim) {
         self.muts.write().unwrap().at = Some(d);
     }
-    #[inline(always)]
+
     fn name(&self) -> &Self::CS {
         &self.name
     }
-    #[inline(always)]
+
     fn filename(&self) -> &str {
         self.file.name()
     }
@@ -261,22 +261,22 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
         let v = &mut self.muts.write().unwrap().rps;
         v.insert(c,d);
     }
-    #[inline(always)]
+
     fn get_wd(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.widths[c as usize];
         self.get_at().scale_float(d)
     }
-    #[inline(always)]
+
     fn get_ht(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.heights[c as usize];
         self.get_at().scale_float(d)
     }
-    #[inline(always)]
+
     fn get_dp(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.depths[c as usize];
         self.get_at().scale_float(d)
     }
-    #[inline(always)]
+
     fn ligature(&self,char1:Self::Char,char2:Self::Char) -> Option<Self::Char> {
         self.file.ligs.get(&(char1,char2)).copied()
     }
