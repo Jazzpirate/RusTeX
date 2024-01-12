@@ -183,7 +183,7 @@ pub fn pdfrestore<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token
 pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let mut str = String::new();
+    let mut str = engine.aux.memory.get_string();
     engine.read_braced_string(true,true,&mut str);
     let mut scale = 0f32;
     let mut rotate = 0f32;
@@ -202,6 +202,7 @@ pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
             _ => todo!("throw error")
         }
     }
+    engine.aux.memory.return_string(str);
     crate::add_node!(ET::Stomach;engine,
         VNode::Custom(PDFNode::PDFMatrix{scale,rotate,skewx,skewy}.into()),
         HNode::Custom(PDFNode::PDFMatrix{scale,rotate,skewx,skewy}.into()),
@@ -359,8 +360,8 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
     let _subcount = if engine.read_keyword(b"subcount") {
         engine.read_int(false).into()
     } else { -1 }; // TODO use subcount
-    let mut pattern_string = engine.aux.memory.get_string();
-    let mut target_string = engine.aux.memory.get_string();
+    let mut pattern_string = String::new();
+    let mut target_string = String::new();
     if icase {pattern_string.push_str("(?i)");}
     engine.read_braced_string(false,true,&mut pattern_string);
     engine.read_braced_string(false,true,&mut target_string);
@@ -713,8 +714,8 @@ pub fn pdfshellescape<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET:
 
 
 pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
-    let mut first = engine.aux.memory.get_string();
-    let mut second = engine.aux.memory.get_string();
+    let mut first = String::new();
+    let mut second = String::new();
     engine.read_braced_string(false,true,&mut first);
     engine.read_braced_string(false,true,&mut second);
 
@@ -726,9 +727,6 @@ pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<
     } else {
         exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
     }
-
-    engine.aux.memory.return_string(first);
-    engine.aux.memory.return_string(second);
 }
 
 pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {

@@ -11,6 +11,60 @@ use crate::tex::characters::Character;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
 
+#[derive(Clone)]
+pub struct MemoryManager<T:Token> {
+    cs_interner: <T::CS as CSName<T::Char>>::Handler,
+    strings: Vec<String>,
+    bytes: Vec<Vec<u8>>,
+    token_vecs: Vec<Vec<T>>,
+    empty: TokenList<T>
+}
+impl<T:Token> MemoryManager<T> {
+    pub fn new() -> Self {
+        MemoryManager {
+            cs_interner: <T::CS as CSName<T::Char>>::Handler::default(),
+            strings: Vec::new(),
+            bytes: Vec::new(),
+            token_vecs: Vec::new(),
+            empty: TokenList(shared_vector::SharedVector::new())
+        }
+    }
+    pub fn get_bytes(&mut self) -> Vec<u8> {
+        self.bytes.pop().unwrap_or_default()
+    }
+    pub fn return_bytes(&mut self,mut b:Vec<u8>) {
+        b.clear();
+        self.bytes.push(b)
+    }
+    pub fn get_string(&mut self) -> String {
+        self.strings.pop().unwrap_or_default()
+    }
+    pub fn return_string(&mut self,_s:String) {
+        s.clear();
+        self.strings.push(s)
+    }
+    pub fn new_with_cs_interner(cs_interner:<T::CS as CSName<T::Char>>::Handler) -> Self {
+        MemoryManager {
+            cs_interner,
+            strings: Vec::new(),
+            bytes: Vec::new(),
+            token_vecs: Vec::new(),
+            empty: TokenList(shared_vector::SharedVector::new())
+        }
+    }
+    pub fn set_cs_interner(&mut self,cs_interner:<T::CS as CSName<T::Char>>::Handler) {
+        self.cs_interner = cs_interner;
+    }
+    #[inline(always)]
+    pub fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { &mut self.cs_interner }
+    #[inline(always)]
+    pub fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { &self.cs_interner }
+    #[inline(always)]
+    pub fn empty_list(&self) -> TokenList<T> { self.empty.clone() }
+}
+
+/*
+
 /// Utility component for managing memory allocation, string interning and similar
 /// tasks one might want to do.
 pub trait MemoryManager<T:Token> {
@@ -110,6 +164,8 @@ impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
     #[inline(always)]
     fn empty(&self) -> TokenList<T> { TokenList(self.empty.clone()) }
 }
+
+ */
 
 /// We always intern the names for primitive macros, for efficiency; in particular for equality checks.
 pub struct PrimitiveInterner {

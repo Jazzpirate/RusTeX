@@ -49,7 +49,6 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type State: State<ET=Self>;
     type Outputs: Outputs;
     type Mouth: Mouth<Token=Self::Token,File=Self::File>;
-    type Memory:MemoryManager<Self::Token>;
     type Gullet:Gullet<ET=Self>;
     type Stomach:Stomach<ET=Self>;
     type CustomNode:CustomNodeTrait<Self>;
@@ -57,7 +56,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type FontSystem: FontSystem<Font=Self::Font,Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
 }
 pub struct EngineAux<ET:EngineTypes> {
-    pub memory:ET::Memory,
+    pub memory:MemoryManager<ET::Token>,
     pub error_handler:ET::ErrorHandler,
     pub outputs:ET::Outputs,
     pub start_time:chrono::DateTime<chrono::Local>,
@@ -125,7 +124,6 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type MuSkip = MuSkip32;
     type Num = tex::numerics::DefaultNumSet;
     type State = state::tex_state::TeXState<Self>;
-    type Memory = utils::memory::ReuseTokenLists<Self::Token>;
     type File = VirtualFile<u8>;
     type FileSystem = filesystem::NoOutputFileSystem<u8>;
     type Outputs = LogOutputs;
@@ -200,7 +198,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
     }
     pub fn new() -> Self {
         let mut aux = EngineAux {
-            memory: ET::Memory::new(),
+            memory: MemoryManager::new(),
             outputs: ET::Outputs::new(),
             error_handler: ET::ErrorHandler::new(),
             start_time:chrono::Local::now(),

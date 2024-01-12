@@ -120,7 +120,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             endline_char:Some(ET::Char::from(b'\r')),
             escape_char:Some(ET::Char::from(b'\\')),
             newline_char:Some(ET::Char::from(b'\n')),
-            empty_list:mem.empty(),
+            empty_list:mem.empty_list(),
             parshape:Vec::new(),
             textfonts:mathfonts.clone(),
             scriptfonts:mathfonts.clone(),

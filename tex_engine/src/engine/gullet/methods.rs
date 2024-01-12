@@ -50,8 +50,7 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                     return
                 },
                 Some(o) => {
-                    let mut delim = engine.aux.memory.get_token_vec();
-                    delim.push(o.clone());
+                    let mut delim = vec!(o.clone());
                     i += 1;
                     while let Some(n) = inner.get(i) {
                         if n.is_argument_marker().is_some() {break}
@@ -59,7 +58,6 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                         i += 1;
                     }
                     read_delimited_argument(engine,&mut args[a as usize],&delim,long);
-                    engine.aux.memory.return_token_vec(delim);
                     match inner.get(i) {
                         Some(n) => {next = n; i += 1},
                         _ => return ()
@@ -547,15 +545,6 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     }
 }
 
-fn ret_hex<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> <ET::Num as NumSet>::Int {
-    let i = match <ET::Num as NumSet>::Int::from_str_radix(std::str::from_utf8(&v).unwrap(),16) {
-        Ok(i) => i,
-        Err(_) => todo!("throw error")
-    };
-    engine.aux.memory.return_bytes(v);
-    return if is_negative { -i } else { i }
-}
-
 fn ret_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:Vec<u8>,is_negative:bool) -> f64 {
     let f = f64::from_str(std::str::from_utf8(&v).unwrap()).unwrap();
     engine.aux.memory.return_bytes(v);
@@ -586,28 +575,40 @@ pub fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
     file_end!()
 }
 
+fn hex_to_num(b: u8) -> i64 {
+    match b {
+        b'0'..=b'9' => (b - b'0') as i64,
+        b'A'..=b'F' => (10 + b - b'A') as i64,
+        b'a'..=b'f' => (10 + b - b'a') as i64,
+        _ => unreachable!(),
+    }
+}
+
 pub fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
-    let mut ret = engine.aux.memory.get_bytes();
+    let mut ret = 0i64;
+    let mut empty = true;
     crate::expand_loop!(engine,
         ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other|CommandCode::Letter) if is_ascii_hex_digit(b) => {
-                ret.push(b);
+                ret = 16*ret + hex_to_num(b);
+                empty = false;
             }
-            (_,CommandCode::Space) => return ret_hex(engine,ret,is_negative),
-            _ if !ret.is_empty() => {
+            (_,CommandCode::Space) =>
+                return (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!()),
+            _ if !empty => {
                 engine.requeue(token);
-                return ret_hex(engine,ret,is_negative)
+                return (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!()) //ret_hex(engine,ret,is_negative)
             }
             _ => {
                 todo!("{}:{:?}",char,code);
             }
         }
         ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
-            return ret_hex(engine,ret,is_negative)
+            return (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())
         }
-        ResolvedToken::Cmd {token,..} if !ret.is_empty() => {
+        ResolvedToken::Cmd {token,..} if !empty => {
             engine.mouth.requeue(token);
-            return ret_hex(engine,ret,is_negative)
+            return (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())
         }
         o => todo!("{:?}; current: {:?}",o,ret)
     );

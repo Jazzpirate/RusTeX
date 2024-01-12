@@ -346,7 +346,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,g
         expansion:ret.into(),
         signature:MacroSignature {
             arity:0,
-            params:engine.aux.memory.empty().into()
+            params:engine.aux.memory.empty_list().into()
         }
     };
     engine.set_command(&cs,Some(Command::Macro(m)),globally)

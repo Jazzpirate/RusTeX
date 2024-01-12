@@ -1071,10 +1071,10 @@ pub fn input<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     }
     let is_file = !filename.starts_with("|");
     let file = engine.filesystem.get(&filename);
+    engine.aux.memory.return_string(filename);
     if is_file && !file.exists() {
         todo!("throw error")
     }
-    engine.aux.memory.return_string(filename);
     engine.aux.outputs.file_open(&file);
     engine.push_file(file)
 }
@@ -1431,7 +1431,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globa
         expansion:ret.into(),
         signature:MacroSignature {
             arity:0,
-            params:engine.aux.memory.empty().into()
+            params:engine.aux.memory.empty_list().into()
         }
     };
     engine.set_command(&cs,Some(Command::Macro(m)),globally)
@@ -1606,7 +1606,7 @@ pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
 pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
     let idx = engine.read_int(false).into();
-    let mut tks = engine.aux.memory.get_token_vec();
+    let mut tks = Vec::new();
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
     match engine.get_next() {
         Some(t) if t.is_begin_group() => (),
@@ -1623,26 +1623,15 @@ pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::
     let idx = engine.read_int(false).into();
     let mut out = engine.aux.memory.get_string();
     engine.read_braced_string(false,true,&mut out);
-    /*
-    match engine.get_next() {
-        Some(t) if t.is_begin_group() => (),
-        Some(_) => todo!("should be begingroup"),
-        None => todo!("file end")
-    }
-    ET::Gullet::expand_until_endgroup(engine,true,false,|a,s,t| {
-        t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
-                      s.get_escape_char(),&mut out).unwrap();
-    });
-
-     */
     engine.filesystem.write(idx,&out,engine.state.get_newline_char(),engine.aux);
     engine.aux.memory.return_string(out);
 }
 pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET::Token>) {
     engine.mouth.push_vec(v);
-    let mut out = String::new();
+    let mut out = engine.aux.memory.get_string();
     engine.read_braced_string(false,false,&mut out);
     engine.filesystem.write(i,&out,engine.state.get_newline_char(),engine.aux);
+    engine.aux.memory.return_string(out);
 }
 
 

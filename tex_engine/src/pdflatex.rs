@@ -66,7 +66,6 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type MuSkip = MuSkip32;
     type Num = tex::numerics::DefaultNumSet;
     type State = state::tex_state::TeXState<Self>;
-    type Memory = utils::memory::ReuseTokenLists<Self::Token>;
     type File = VirtualFile<u8>;
     type FileSystem = filesystem::NoOutputFileSystem<u8>;
     type Outputs = LogOutputs;
