@@ -12,7 +12,7 @@ use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::numerics::{Numeric, NumSet};
-use crate::tex::input_text::{Character, CharacterMap};
+use crate::tex::characters::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::engine::stomach::{SplitResult, Stomach};

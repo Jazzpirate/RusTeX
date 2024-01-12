@@ -7,7 +7,7 @@ use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::math::{MathFontStyle, MathGroup};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::types::NodeType;
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 

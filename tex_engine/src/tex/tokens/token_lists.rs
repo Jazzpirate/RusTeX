@@ -4,7 +4,7 @@ use crate::engine::utils::memory::PrimitiveIdentifier;
 use crate::prelude::{CategoryCode, CategoryCodeScheme, Character, CommandCode, CSHandler, CSName, Token};
 use crate::tex::tokens::StandardToken;
 use crate::tex::tokens::control_sequences::ResolvedCSName;
-use crate::tex::input_text::CharacterMap;
+use crate::tex::characters::CharacterMap;
 
 /// A list of [`Token`]s; conceptually, a wrapper around `Rc<[T]>`
 #[derive(Clone,Debug,PartialEq)]

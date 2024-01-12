@@ -10,9 +10,9 @@ use std::fmt::{Debug, Display, Write};
 use std::marker::PhantomData;
 use crate::engine::utils::memory::CharacterVecInterner;
 use crate::prelude::{CategoryCode, CategoryCodeScheme};
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::utils::{HMap, Ptr};
-use crate::tex::input_text::CharacterMap;
+use crate::tex::characters::CharacterMap;
 
 
 /** The name of a control sequence. */

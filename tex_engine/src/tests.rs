@@ -66,7 +66,7 @@ mod tests {
     use crate::measure;
     use log::*;
     use crate::tex::catcodes::CommandCode;
-    use crate::tex::input_text::StringLineSource;
+    use crate::tex::characters::StringLineSource;
 
     #[test]
     fn kpsewhich() { measure!(kpsewhich: {

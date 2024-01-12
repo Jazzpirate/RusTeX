@@ -16,7 +16,7 @@ use crate::utils::HMap;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use std::fmt::Write;
 use crate::engine::mouth::strings::InputTokenizer;
-use crate::tex::input_text::StringLineSource;
+use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderBody, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;

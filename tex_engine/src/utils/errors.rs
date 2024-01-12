@@ -9,7 +9,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
-use crate::tex::input_text::{Character, TextLineSource};
+use crate::tex::characters::{Character, TextLineSource};
 use crate::tex::tokens::Token;
 use crate::tex::tokens::StandardToken;
 

@@ -14,7 +14,7 @@ use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::utils::errors::ErrorHandler;
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::engine::EngineAux;
 use crate::tex::numerics::TeXInt;
 use crate::engine::TeXError;

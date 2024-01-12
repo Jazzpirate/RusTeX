@@ -6,7 +6,7 @@ use std::fmt::Formatter;
 use lazy_static::lazy_static;
 use crate::tex::tokens::token_lists::CharWrite;
 use crate::tex::tokens::control_sequences::CSName;
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 
 /** The category code of a character.
 

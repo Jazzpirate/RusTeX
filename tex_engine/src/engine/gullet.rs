@@ -11,7 +11,7 @@ use crate::engine::state::State;
 use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::tex::numerics::{MuSkip, NumSet};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;

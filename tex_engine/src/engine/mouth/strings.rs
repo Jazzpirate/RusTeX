@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use crate::tex::input_text::{TextLine, TextLineSource};
+use crate::tex::characters::{TextLine, TextLineSource};
 use crate::utils::errors::ErrorHandler;
 
 /// An [`InputTokenizer`] is in one of three states
@@ -24,7 +24,7 @@ pub enum MouthState {
 # use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
 # use tex_engine::utils::Ptr;
 # use tex_engine::tex::catcodes::CommandCode;
-# use tex_engine::tex::input_text::StringLineSource;
+# use tex_engine::tex::characters::StringLineSource;
 #
 type T = StandardToken<u8,Ptr<str>>;
 let eh = ErrorThrower;

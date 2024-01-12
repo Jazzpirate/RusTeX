@@ -9,7 +9,7 @@ use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::tokens::control_sequences::CSName;
-use crate::tex::input_text::StringLineSource;
+use crate::tex::characters::StringLineSource;
 use crate::tex::tokens::Token;
 
 pub mod strings;

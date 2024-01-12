@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use string_interner::Symbol;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler, ResolvedCSName, InternedCSName};
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
 

@@ -14,7 +14,7 @@ and [`CompactToken`] as a significantly more efficient representation.
 use std::fmt::Write;
 use std::marker::PhantomData;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
 
 pub mod control_sequences;

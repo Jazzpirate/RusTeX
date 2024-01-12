@@ -13,7 +13,7 @@ use crate::commands::Command;
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::tex::tokens::control_sequences::{CSName, InternedCSName,CSHandler};
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;

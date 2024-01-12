@@ -16,7 +16,7 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;
 use crate::tex::nodes::{NodeList, NodeTrait};
-use crate::tex::input_text::CharacterMap;
+use crate::tex::characters::CharacterMap;
 use crate::tex::nodes::math::{MathNode, MathNucleus};
 use crate::tex::types::GroupType;
 use crate::tex::nodes::math::MathAtom;

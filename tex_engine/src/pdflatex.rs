@@ -11,7 +11,7 @@ use crate::engine::stomach::StomachWithShipout;
 use crate::engine::utils::outputs::LogOutputs;
 use crate::tex;
 use crate::tex::tokens::control_sequences::InternedCSName;
-use crate::tex::input_text::Character;
+use crate::tex::characters::Character;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip32, Skip32};
 use crate::utils::errors::TeXError;
