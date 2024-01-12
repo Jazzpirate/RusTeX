@@ -15,7 +15,6 @@ use crate::tex::tokens::{StandardToken, Token};
 use crate::utils::errors::ErrorHandler;
 use crate::tex::characters::Character;
 use crate::engine::EngineAux;
-use crate::engine::TeXError;
 
 pub fn do_align<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,a:&AlignData<ET::Token,ET::Skip>) {
     let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
@@ -121,7 +120,7 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
             arg.push(t);
         }
     }
-    crate::throw!("file end")
+    crate::file_end!()
 }
 
 fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool) {

@@ -10,7 +10,7 @@ pub trait Outputs {
 
     fn errmessage<D:Display>(&self,text:D) {
         log::error!(target:"errmessage","{}",text);
-        crate::throw!("run aborted")
+        TeXError::throw("run aborted")
     }
 
     fn file_open<D:Display>(&self,text:D) {

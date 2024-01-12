@@ -320,7 +320,7 @@ pub trait Stomach {
             (a,b) => {
                 let mut str = String::new();
                 token.display_fmt(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char(),&mut str).unwrap();
-                crate::throw!("switch modes maybe: {:?} in {:?}: {}",a,b,str)
+                TeXError::throw(format!("switch modes maybe: {:?} in {:?}: {}",a,b,str)) // TODO
             }
         }
     }

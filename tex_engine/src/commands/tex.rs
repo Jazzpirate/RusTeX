@@ -29,7 +29,6 @@ use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{EqNoPosition, MathAtom, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
-use crate::utils::errors::TeXError;
 use crate::tex::tokens::token_lists::CharWrite;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;

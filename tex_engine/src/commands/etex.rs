@@ -20,7 +20,6 @@ use crate::tex::characters::CharacterMap;
 use crate::tex::nodes::math::{MathNode, MathNucleus};
 use crate::tex::types::GroupType;
 use crate::tex::nodes::math::MathAtom;
-use crate::utils::errors::TeXError;
 
 #[allow(non_snake_case)]
 pub fn eTeXversion<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {

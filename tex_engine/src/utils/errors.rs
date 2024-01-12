@@ -13,12 +13,45 @@ use crate::tex::characters::{Character, TextLineSource};
 use crate::tex::tokens::Token;
 use crate::tex::tokens::StandardToken;
 
+/// Error type for TeX errors occurring during compilation.
+#[derive(Clone)]
+pub struct TeXError {
+    pub msg:String,
+    source:Option<Box<TeXError>>,
+}
+impl Debug for TeXError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.msg)
+    }
+}
+impl Display for TeXError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{}",self.msg)
+    }
+}
+impl Error for TeXError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match &self.source {
+            Some(src) => Some(&*src),
+            None => None
+        }
+    }
+}
+impl TeXError {
+    pub fn throw<D:Display,T>(msg:D) -> T {
+        std::panic::panic_any::<_>(TeXError {
+            msg:msg.to_string(),
+            source: None
+        })
+    }
+}
+
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler {
     fn new() -> Self;
     /// Invalid character in input file/string
     fn invalid_character<T:Token,D:Display>(&self,_character:T::Char,text:D) -> Option<T> {
-        crate::throw!("! Text line contains an invalid character.\n{}",text);
+        TeXError::throw(format!("! Text line contains an invalid character.\n{}",text))
     }
     /// "Runaway argument? Paragraph ended before `\foo` was complete."
     fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
@@ -42,16 +75,16 @@ pub trait ErrorHandler {
 
     /// "Undefined control sequence"
     fn undefined_control_sequence<R,St:Display>(&self,name:St) -> R { // TODO: proper error type
-        crate::throw!("Undefined control sequence \\{}",name);
+        TeXError::throw(format!("Undefined control sequence \\{}",name))
     }
     /// "Undefined control sequence"
     fn undefined_active_character<R,C:Character>(&self,c:C) -> R { // TODO: proper error type
-        crate::throw!("Undefined active character {}",c);
+        TeXError::throw(format!("Undefined active character {}",c))
     }
 
     /// `\errormsg`
     fn error_message<R,St:Display>(&self,msg:St) -> R { // TODO: proper error type
-        crate::throw!("! {}",msg);
+        TeXError::throw(format!("! {}",msg))
     }
 }
 
@@ -153,49 +186,8 @@ impl ErrorHandler for ErrorThrower {
     fn new() -> Self { Self }
 }
 
-#[derive(Clone)]
-pub struct TeXError {
-    pub msg:String,
-    pub source:Option<Box<TeXError>>,
-}
-impl Debug for TeXError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{}",self.msg)
-    }
-}
-
-impl Display for TeXError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{}",self.msg)
-    }
-}
-impl Error for TeXError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.source {
-            Some(src) => Some(&*src),
-            None => None
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! throw {
-    ($arg:expr) => {
-        std::panic::panic_any::<_>(TeXError{
-            msg:$arg.to_string(),
-            source:std::option::Option::None
-        })
-    };
-    ($first:expr,$($arg:expr),*) => {
-        std::panic::panic_any::<_>(TeXError{
-            msg:format!($first,$($arg),*),
-            source:std::option::Option::None
-        })
-    };
-}
-
 #[macro_export]
 macro_rules! file_end {
-    () => (crate::throw!("File ended unexpectedly"));
-    ($tk:expr) => (crate::throw!("File ended unexpectedly" => $tk));
+    () => (crate::utils::errors::TeXError::throw("File ended unexpectedly"));
+    ($tk:expr) => (crate::utils::errors::TeXError::throw(format!("File ended unexpectedly: {}",$tk)));
 }

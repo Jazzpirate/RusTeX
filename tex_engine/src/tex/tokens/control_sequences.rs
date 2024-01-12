@@ -8,7 +8,6 @@
 
 use std::fmt::{Debug, Display, Write};
 use std::marker::PhantomData;
-use crate::engine::utils::memory::CharacterVecInterner;
 use crate::prelude::{CategoryCode, CategoryCodeScheme};
 use crate::tex::characters::Character;
 use crate::utils::{HMap, Ptr};
@@ -64,7 +63,7 @@ impl<C:Character> CSName<C> for Ptr<str> {
 /// Uses *consecutive* `u32` values
 pub type InternedCSName<C> = (u32,PhantomData<C>);
 impl<C:Character> CSName<C> for InternedCSName<C> {
-    type Handler = CharacterVecInterner<C>;
+    type Handler = CSInterner<C>;
     type Map<A> = CSNameVec<C,A> where A:Clone;
 }
 
@@ -158,11 +157,91 @@ impl<C:Character> CSHandler<C,Ptr<str>> for () {
     }
 }
 
-/*
-impl<C:Character> CSName<C> for InternedString {
-    type Handler = StringInterner;
-    fn as_usize(&self) -> usize {
-        self.to_usize()
+/// A [`CSHandler`] that interns control sequence names as `u32`.
+#[derive(Clone)]
+pub struct CSInterner<C:Character> {
+    map:HMap<Box<[C]>,u32>,
+    ls:Vec<C>,
+    idx:Vec<usize>
+}
+impl<C:Character> CSInterner<C> {
+    #[allow(dead_code)]
+    fn cap(&self) -> usize { self.idx.len() }
+    fn new() -> Self {
+        let mut map: HMap<Box<[C]>,u32> = HMap::default();
+        map.insert(Box::new([]),0);
+        let mut r = CSInterner {
+            map, ls:Vec::new(),idx:vec!(0)
+        };
+        r.from_static("par");
+        r
+    }
+    /// Interns a `&'static str` as a control sequence name
+    pub fn from_static(&mut self,s:&'static str) -> InternedCSName<C> {
+        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice().into())
+    }
+    /// Interns a `String` as a control sequence name
+    pub fn from_string<S:AsRef<str>>(&mut self,s:S) -> InternedCSName<C> {
+        self.intern(C::string_to_iter(s.as_ref()).collect::<Vec<_>>().as_slice().into())
+    }
+    /// Resolves a control sequence name to a sequence of [`Character`]s
+    pub fn resolve(&self,i:InternedCSName<C>) -> &[C] {
+        self.get(i.0)
+    }
+
+    fn intern(&mut self,v:&[C]) -> InternedCSName<C> {
+        match self.map.get(v) {
+            Some(x) => return (*x,PhantomData::default()),
+            None => ()
+        }
+        self.ls.extend(v);
+        let len = self.ls.len();
+        self.idx.push(len);
+        let len = self.idx.len() - 1;
+        self.map.insert(v.into(),len as u32);
+        (len as u32,PhantomData::default())
+    }
+
+    fn get(&self,i:u32) -> &[C] {
+        if i == 0 { return &[] }
+        let i = i as usize;
+        let s = self.idx[i - 1];
+        let e = self.idx[i];
+        &self.ls[s..e]
     }
 }
- */
+impl<C:Character> CSHandler<C,InternedCSName<C>> for CSInterner<C> {
+    type Resolved<'a> = DisplayCSName<'a,C>;
+    fn new(&mut self,s: &str) -> InternedCSName<C> {
+        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
+    }
+    fn from_chars(&mut self, v: &Vec<C>) -> InternedCSName<C> {
+        self.intern(v.as_slice())
+    }
+    fn par(&self) -> InternedCSName<C> { (1,PhantomData::default()) }
+    fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData::default()) }
+    fn resolve<'a>(&'a self, cs: &InternedCSName<C>) -> DisplayCSName<'a,C> {
+        DisplayCSName(self.get(cs.0))
+    }
+}
+/// Utility struct for displaying a control sequence name.
+pub struct DisplayCSName<'a,C:Character>(&'a [C]);
+impl<C:Character> Display for DisplayCSName<'_,C> {
+    fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for c in self.0 {
+            c.display_fmt(f)
+        }
+        Ok(())
+    }
+}
+
+impl<'a,C:Character> ResolvedCSName<'a,C> for DisplayCSName<'a,C> {
+    type Iter = std::iter::Copied<std::slice::Iter<'a,C>>;
+
+    fn iter(&self) -> Self::Iter { self.0.iter().copied() }
+
+    fn len(&self) -> usize { self.0.len() }
+}
+impl <C:Character> Default for CSInterner<C> {
+    fn default() -> Self { Self::new() }
+}

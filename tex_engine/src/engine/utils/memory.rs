@@ -1,14 +1,11 @@
 /*! Memory manangement and string interning. */
 
-use std::fmt::Display;
-use std::marker::PhantomData;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::tokens::control_sequences::{CSName, CSHandler, ResolvedCSName, InternedCSName};
+use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::Character;
 use crate::tex::tokens::Token;
-use crate::utils::HMap;
 
 /// Utility struct for managing memory allocation and string interning. In particular, it
 /// provides a [`CSHandler`] implementation for interning control sequence names (if applicable).
@@ -293,94 +290,3 @@ lazy_static!(
 /// A `Copy` identifier for a primitive command. Small and fast to compare.
 #[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
 pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
-
-#[derive(Clone)]
-pub struct CharacterVecInterner<C:Character> {
-    map:HMap<Box<[C]>,u32>,
-    ls:Vec<C>,
-    idx:Vec<usize>
-}
-impl<C:Character> CharacterVecInterner<C> {
-    #[allow(dead_code)]
-    fn cap(&self) -> usize { self.idx.len() }
-    fn new() -> Self {
-        let mut map: HMap<Box<[C]>,u32> = HMap::default();
-        map.insert(Box::new([]),0);
-        let mut r = CharacterVecInterner {
-            map, ls:Vec::new(),idx:vec!(0)
-        };
-        r.from_static("par");
-        r
-    }
-
-    pub fn from_static(&mut self,s:&'static str) -> InternedCSName<C> {
-        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice().into())
-    }
-
-    pub fn from_string<S:AsRef<str>>(&mut self,s:S) -> InternedCSName<C> {
-        self.intern(C::string_to_iter(s.as_ref()).collect::<Vec<_>>().as_slice().into())
-    }
-
-    pub fn resolve(&self,i:InternedCSName<C>) -> &[C] {
-        self.get(i.0)
-    }
-    fn intern(&mut self,v:&[C]) -> InternedCSName<C> {
-        match self.map.get(v) {
-            Some(x) => return (*x,PhantomData::default()),
-            None => ()
-        }
-        self.ls.extend(v);
-        let len = self.ls.len();
-        self.idx.push(len);
-        let len = self.idx.len() - 1;
-        self.map.insert(v.into(),len as u32);
-        (len as u32,PhantomData::default())
-    }
-    fn get(&self,i:u32) -> &[C] {
-        if i == 0 { return &[] }
-        let i = i as usize;
-        let s = self.idx[i - 1];
-        let e = self.idx[i];
-        &self.ls[s..e]
-    }
-}
-impl<C:Character> CSHandler<C,InternedCSName<C>> for CharacterVecInterner<C> {
-    type Resolved<'a> = DisplayCSName<'a,C>;
-
-    fn new(&mut self,s: &str) -> InternedCSName<C> {
-        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
-    }
-
-    fn from_chars(&mut self, v: &Vec<C>) -> InternedCSName<C> {
-        self.intern(v.as_slice())
-    }
-
-    fn par(&self) -> InternedCSName<C> { (1,PhantomData::default()) }
-
-    fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData::default()) }
-
-    fn resolve<'a>(&'a self, cs: &InternedCSName<C>) -> DisplayCSName<'a,C> {
-        DisplayCSName(self.get(cs.0))
-    }
-}
-pub struct DisplayCSName<'a,C:Character>(&'a [C]);
-impl<C:Character> Display for DisplayCSName<'_,C> {
-    fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for c in self.0 {
-            c.display_fmt(f)
-        }
-        Ok(())
-    }
-}
-
-impl<'a,C:Character> ResolvedCSName<'a,C> for DisplayCSName<'a,C> {
-    type Iter = std::iter::Copied<std::slice::Iter<'a,C>>;
-
-    fn iter(&self) -> Self::Iter { self.0.iter().copied() }
-
-    fn len(&self) -> usize { self.0.len() }
-}
-impl <C:Character> Default for CharacterVecInterner<C> {
-
-    fn default() -> Self { Self::new() }
-}
