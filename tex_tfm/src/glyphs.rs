@@ -29,10 +29,10 @@ impl<'a> Display for GlyphName<'a> {
 
 }
 impl Glyph {
-    #[inline(always)]
+
     pub fn name<'a>(&'a self) -> GlyphName<'a> { GlyphName(&self.0) }
 
-    #[inline(always)]
+
     pub fn is_defined(&self) -> bool {
         match self.0 {
             GlyphI::S(i) => i != 0,
@@ -40,7 +40,7 @@ impl Glyph {
             _ => true
         }
     }
-    #[inline(always)]
+
     pub fn lookup(s:&str) -> Option<Self> {
         crate::GLYPH_LOOKUP.get(s).map(|g| Glyph(GlyphI::S(*g)))
     }
@@ -56,7 +56,7 @@ impl Glyph {
     }
 }
 impl Display for Glyph {
-    #[inline(always)]
+
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0,f)
     }
@@ -78,7 +78,7 @@ impl Display for GlyphI {
     }
 }
 impl Debug for Glyph {
-    #[inline(always)]
+
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,"Glyph({})=\'{}\'",self.name(),self)
     }
@@ -89,11 +89,11 @@ pub(crate) const UNDEFINED_LIST: GlyphList = GlyphList([UNDEFINED; 256]);
 #[derive(Clone,PartialEq,Eq,Hash,Debug)]
 pub struct GlyphList(pub(crate) [Glyph; 256]);
 impl GlyphList {
-    #[inline(always)]
+
     pub fn get(&self, c:u8) -> Glyph {
         self.0[c as usize].clone()
     }
-    #[inline(always)]
+
     pub fn is_defined(&self) -> bool {
         *self == UNDEFINED_LIST
     }

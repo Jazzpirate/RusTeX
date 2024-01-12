@@ -4,7 +4,6 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::primitives::*;
-use crate::engine::utils::memory::MemoryManager;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::engine::gullet::Gullet;
 use crate::tex::numerics::NumSet;

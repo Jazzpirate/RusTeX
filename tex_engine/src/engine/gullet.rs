@@ -8,7 +8,7 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{MacroExpansion, TokenList, TokenListDisplay};
 use crate::engine::state::State;
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::characters::Character;
@@ -41,11 +41,9 @@ pub trait Gullet {
 
     fn iterate<Fn:FnMut(&mut A<Self>,&S<Self>,&mut Self,T<Self>) -> bool>(&mut self,mouth:&mut M<Self>,aux:&mut A<Self>,state:&S<Self>,mut f:Fn) {
         match self.get_align_data() {
-            None => mouth.iterate(aux,state.get_catcode_scheme(),state.get_endline_char(),|a,t|f(a,state,self,t)),
+            None => mouth.iterate(aux,state,|a,t|f(a,state,self,t)),
             Some(_) => {
-                let cc = state.get_catcode_scheme();
-                let elc = state.get_endline_char();
-                mouth.iterate(aux,cc,elc,|aux,t| {
+                mouth.iterate(aux,state,|aux,t| {
                     let data = self.get_align_data().unwrap();
                     if t.is_begin_group() {
                         data.ingroups += 1;
@@ -129,7 +127,7 @@ pub trait Gullet {
                 d.ingroups -= 1
             }
         }
-        mouth.read_until_endgroup(aux,state.get_catcode_scheme(),state.get_endline_char(),|a,t|cont(a,state,t))
+        mouth.read_until_endgroup(aux,state,|a,t|cont(a,state,t))
     }
     fn requeue(&mut self,mouth:&mut M<Self>,t:T<Self>) {
         if let Some(data) = self.get_align_data() {

@@ -2,7 +2,7 @@ use std::fmt::Display;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::tokens::token_lists::{MacroExpansion, TokenListIterator};
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
@@ -31,16 +31,16 @@ pub trait Mouth:Sized {
     fn push_vec(&mut self, exp: Vec<Self::Token>);
     fn push_macro_exp(&mut self,exp:MacroExpansion<Self::Token>);
     fn get_next_opt<ET:EngineTypes<Char = C<Self>,Token = Self::Token,File = Self::File>>(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<Self::Token>;
-    fn iterate<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,cont:Fn);
+    fn iterate<ET:EngineTypes<Char=C<Self>,Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,cont:Fn);
     fn requeue(&mut self,t:Self::Token);
     fn num_exps(&self) -> usize;
     fn line_number(&self) -> usize;
     fn endinput<ET:EngineTypes>(&mut self, aux:&EngineAux<ET>);
     fn finish(&mut self);
-    fn read_until_endgroup<ET:EngineTypes<Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token)>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<C<Self>>,endline:Option<C<Self>>,mut cont:Fn) -> Self::Token {
+    fn read_until_endgroup<ET:EngineTypes<Char=C<Self>,Token = Self::Token,File = Self::File>,Fn:FnMut(&mut EngineAux<ET>,Self::Token)>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,mut cont:Fn) -> Self::Token {
         let mut ingroups = 0;
         let mut eg:Option<Self::Token> = None;
-        self.iterate(aux,cc,endline,|a,t| {
+        self.iterate(aux,state,|a,t| {
             if t.is_end_group()  {
                 if ingroups == 0 { eg = Some(t);  return false }
                 ingroups -= 1;
@@ -325,7 +325,7 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
         None
     }
 
-    fn iterate<ET:EngineTypes<Token = T,File = F>,Fn:FnMut(&mut EngineAux<ET>,T) -> bool>(&mut self,aux:&mut EngineAux<ET>,cc:&CategoryCodeScheme<T::Char>,endline:Option<T::Char>,mut cont:Fn) {
+    fn iterate<ET:EngineTypes<Char=T::Char,Token = T,File = F>,Fn:FnMut(&mut EngineAux<ET>,T) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,mut cont:Fn) {
         loop {
             match self.inputs.last_mut() {
                 Some(TokenSource::Vec(v)) => {
@@ -337,6 +337,8 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     } else {unreachable!()}
                 }
                 Some(TokenSource::String(s)) => {
+                    let cc = state.get_catcode_scheme();
+                    let endline = state.get_endline_char();
                     loop {
                         match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) => if !cont(aux,t) { return },
@@ -346,6 +348,8 @@ impl<T:Token,F:File<Char=T::Char>> Mouth for DefaultMouth<T,F> {
                     }
                 }
                 Some(TokenSource::File(s,_)) => {
+                    let cc = state.get_catcode_scheme();
+                    let endline = state.get_endline_char();
                     loop {
                         match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) => if !cont(aux,t) { return },

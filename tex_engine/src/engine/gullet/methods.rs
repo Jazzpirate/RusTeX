@@ -4,9 +4,8 @@ use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
 use crate::engine::state::State;
-use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::PRIMITIVES;
 use crate::file_end;
-use std::str::FromStr;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
 use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
 use crate::tex::tokens::token_lists::TokenList;
@@ -16,7 +15,6 @@ use crate::tex::tokens::{StandardToken, Token};
 use crate::utils::errors::ErrorHandler;
 use crate::tex::characters::Character;
 use crate::engine::EngineAux;
-use crate::tex::numerics::TeXInt;
 use crate::engine::TeXError;
 
 pub fn do_align<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,a:&AlignData<ET::Token,ET::Skip>) {
@@ -134,16 +132,14 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
             if long {
                 engine.mouth.read_until_endgroup(
                     engine.aux,
-                    engine.state.get_catcode_scheme(),
-                    engine.state.get_endline_char(),
+                    engine.state,
                     |_, t| arg.push(t)
                 );
             } else {
                 let par = engine.aux.memory.cs_interner().par();
                 engine.mouth.read_until_endgroup(
                     engine.aux,
-                    engine.state.get_catcode_scheme(),
-                    engine.state.get_endline_char(),
+                    engine.state,
                     |_,t|
                         if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
                 );
@@ -245,7 +241,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>
                 {incond += 1;true},
             ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
-            if *name == PRIMITIVES.else_ && incond == 0 => {
+            if *name == PRIMITIVES.r#else && incond == 0 => {
                 gullet.get_conditionals().push(
                     ActiveConditional::Else(PRIMITIVES.ifcase)
                 );
@@ -285,7 +281,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>
                 {incond += 1;true},
             ResolvedToken::Cmd {cmd:Some(Command::SimpleExpandable(SimpleExpandable{name,..})),..}
-                if *name == PRIMITIVES.else_ && incond == 0 => {
+                if *name == PRIMITIVES.r#else && incond == 0 => {
                 if allowelse {
                     gullet.get_conditionals().push(
                         ActiveConditional::Else(cond)

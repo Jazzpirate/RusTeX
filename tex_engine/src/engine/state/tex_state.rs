@@ -1,6 +1,6 @@
 /*! Implementation of a plain TeX [`State`]. */
 use crate::engine::{EngineAux, EngineTypes};
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::state::{Ch, CS, Dim, State, StateChange, StateChangeTracker, StateStack, T};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;

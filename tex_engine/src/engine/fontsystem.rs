@@ -8,7 +8,6 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::fontsystem::tfm::TfmFile;
 use crate::engine::gullet::ResolvedToken;
-use crate::engine::utils::memory::MemoryManager;
 use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};

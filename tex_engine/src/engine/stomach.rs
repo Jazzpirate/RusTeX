@@ -8,7 +8,7 @@ use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::state::State;
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
 use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType, MathNodeListType, ListTarget, MathNodeList};
 use crate::tex::numerics::NumSet;

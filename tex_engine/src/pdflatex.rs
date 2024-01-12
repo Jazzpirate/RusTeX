@@ -2,7 +2,7 @@ pub mod commands;
 pub mod nodes;
 
 use nodes::{MinimalPDFExtension, PDFExtension, PDFNode};
-use crate::engine::{DefaultEngine, EngineReferences, EngineTypes, filesystem, state, TeXEngine, utils};
+use crate::engine::{DefaultEngine, EngineReferences, EngineTypes, filesystem, state, TeXEngine};
 use crate::engine::filesystem::{File, VirtualFile};
 use crate::engine::fontsystem::{TfmFont, TfmFontSystem};
 use crate::engine::gullet::DefaultGullet;

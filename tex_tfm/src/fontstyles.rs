@@ -27,47 +27,47 @@ pub struct ModifierSeq {
     pub sans_serif:bool,
 }
 impl ModifierSeq {
-    #[inline(always)]
+
     fn blackboard() -> Self {
         Self{blackboard:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn fraktur() -> Self {
         Self{fraktur:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn script() -> Self {
         Self{script:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn bold() -> Self {
         Self{bold:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn capitals() -> Self {
         Self{capitals:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn monospaced() -> Self {
         Self{monospaced:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn italic() -> Self {
         Self{italic:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn oblique() -> Self {
         Self{oblique:true,..Default::default()}
     }
-    #[inline(always)]
+
     fn sans_serif() -> Self {
         Self{sans_serif:true,..Default::default()}
     }
-    #[inline(always)]
+
     pub fn empty() -> Self {
         Self::default()
     }
-    #[inline(always)]
+
     pub fn add(&mut self, m:FontModifier) {
         match m {
             FontModifier::Blackboard => self.blackboard = true,
@@ -81,7 +81,7 @@ impl ModifierSeq {
             FontModifier::SansSerif => self.sans_serif = true,
         }
     }
-    #[inline(always)]
+
     fn has(&self, m:FontModifier) -> bool {
         match m {
             FontModifier::Blackboard => self.blackboard,
@@ -95,7 +95,7 @@ impl ModifierSeq {
             FontModifier::SansSerif => self.sans_serif,
         }
     }
-    #[inline(always)]
+
     pub fn from(mods:&[FontModifier]) -> Self {
         let mut s = Self::empty();
         for m in mods {

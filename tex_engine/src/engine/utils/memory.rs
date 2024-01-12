@@ -4,13 +4,14 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::sync::RwLock;
 use lazy_static::lazy_static;
-use string_interner::Symbol;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler, ResolvedCSName, InternedCSName};
 use crate::tex::characters::Character;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
 
+/// Utility struct for managing memory allocation and string interning. In particular, it
+/// provides a [`CSHandler`] implementation for interning control sequence names (if applicable).
 #[derive(Clone)]
 pub struct MemoryManager<T:Token> {
     cs_interner: <T::CS as CSName<T::Char>>::Handler,
@@ -20,6 +21,7 @@ pub struct MemoryManager<T:Token> {
     empty: TokenList<T>
 }
 impl<T:Token> MemoryManager<T> {
+    /// Creates a new memory manager.
     pub fn new() -> Self {
         MemoryManager {
             cs_interner: <T::CS as CSName<T::Char>>::Handler::default(),
@@ -29,27 +31,37 @@ impl<T:Token> MemoryManager<T> {
             empty: TokenList(shared_vector::SharedVector::new())
         }
     }
+    /// Provides an empty `Vec<u8>` that can be returned using [`return_bytes`](Self::return_bytes), avoiding
+    /// the need to allocate a new `Vec<u8>` every time.
     pub fn get_bytes(&mut self) -> Vec<u8> {
         self.bytes.pop().unwrap_or_default()
     }
+    /// Returns a `Vec<u8>` to the memory manager, which clears it and keeps it in memory for reuse.
     pub fn return_bytes(&mut self,mut b:Vec<u8>) {
         b.clear();
         self.bytes.push(b)
     }
+    /// Provides an empty `String` that can be returned using [`return_string`](Self::return_string), avoiding
+    /// the need to allocate a new `String` every time.
     pub fn get_string(&mut self) -> String {
         self.strings.pop().unwrap_or_default()
     }
+    /// Returns a `String` to the memory manager, which clears it and keeps it in memory for reuse.
     pub fn return_string(&mut self,mut s:String) {
         s.clear();
         self.strings.push(s)
     }
+    /// Provides an empty `Vec<T>` that can be returned using [`return_token_vec`](Self::return_token_vec), avoiding
+    /// the need to allocate a new `Vec<T>` every time.
     pub fn get_token_vec(&mut self) -> Vec<T> {
         self.token_vecs.pop().unwrap_or_default()
     }
+    /// Returns a `Vec<T>` to the memory manager, which clears it and keeps it in memory for reuse.
     pub fn return_token_vec(&mut self,mut v:Vec<T>) {
         v.clear();
         self.token_vecs.push(v)
     }
+    /// Returns a new memory manager with the given control sequence interner.
     pub fn new_with_cs_interner(cs_interner:<T::CS as CSName<T::Char>>::Handler) -> Self {
         MemoryManager {
             cs_interner,
@@ -59,122 +71,25 @@ impl<T:Token> MemoryManager<T> {
             empty: TokenList(shared_vector::SharedVector::new())
         }
     }
+    /// Sets the control sequence interner.
     pub fn set_cs_interner(&mut self,cs_interner:<T::CS as CSName<T::Char>>::Handler) {
         self.cs_interner = cs_interner;
     }
 
+    /// Returns the control sequence interner mutably.
     pub fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { &mut self.cs_interner }
 
+    /// Returns the control sequence interner.
     pub fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { &self.cs_interner }
 
+    /// Returns an empty token list.
     pub fn empty_list(&self) -> TokenList<T> { self.empty.clone() }
 }
 
-/*
-
-/// Utility component for managing memory allocation, string interning and similar
-/// tasks one might want to do.
-pub trait MemoryManager<T:Token> {
-    /// Returns the interner for control sequence names.
-    fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler;
-    /// Returns the interner for control sequence names mutably.
-    fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler;
-
-    fn get_string(&mut self) -> String {
-        String::new()
-    }
-    fn return_string(&mut self,_:String) {}
-    fn get_bytes(&mut self) -> Vec<u8> {
-        Vec::new()
-    }
-    fn return_bytes(&mut self,_:Vec<u8>) {}
-    fn get_token_vec(&mut self) -> Vec<T> {
-        Vec::new()
-    }
-    fn return_token_vec(&mut self,_:Vec<T>) {}
-    fn empty(&self) -> TokenList<T>;
-    fn new() -> Self;
-}
-impl<CS: CSName<T::Char,Handler=()>,T:Token<CS=CS>> MemoryManager<T> for () {
-
-    fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { self }
-
-    fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { self }
-
-    fn empty(&self) -> TokenList<T> { TokenList(shared_vector::SharedVector::new()) }
-    fn new() -> Self { () }
-}
-
-/// The default memory manager, which does not do any memory management.
-pub struct DefaultMemoryManager<T:Token> { phantom:PhantomData<T>
-    //handler:<T::CS as ControlSequenceName<T::Char>>::Handler
-}
-impl<T:Token> DefaultMemoryManager<T> {
-    pub fn new() -> Self {
-        DefaultMemoryManager { phantom:PhantomData::default()
-            //handler:<T::CS as ControlSequenceName<T::Char>>::Handler::default()
-        }
-    }
-}
-
-/// A memory manager that reuses allocated memory for token lists.
-#[derive(Clone)]
-pub struct ReuseTokenLists<T:Token> {
-    //factory:ReusableVectorFactory<T>,
-    handler:<T::CS as CSName<T::Char>>::Handler,
-    //strings:Vec<String>,
-    //bytes:Vec<Vec<u8>>,
-    empty:shared_vector::SharedVector<T>
-}
-impl<T:Token> MemoryManager<T> for ReuseTokenLists<T> {
-    fn new() -> Self {
-        ReuseTokenLists {
-            //factory:ReusableVectorFactory::new(32,32),
-            handler:<T::CS as CSName<T::Char>>::Handler::default(),
-            //strings:Vec::new(),
-            //bytes:Vec::new(),
-            empty:shared_vector::SharedVector::new()
-        }
-    }
-
-
-    fn cs_interner(&self) -> &<T::CS as CSName<T::Char>>::Handler { &self.handler }
-
-    fn cs_interner_mut(&mut self) -> &mut <T::CS as CSName<T::Char>>::Handler { &mut self.handler }
-
-    fn get_string(&mut self) -> String {
-        //self.strings.pop().unwrap_or_default()
-        String::new()
-    }
-
-    fn return_string(&mut self,_s:String) {
-        /*s.clear();
-        self.strings.push(s)*/
-    }
-
-    fn get_bytes(&mut self) -> Vec<u8> {
-        Vec::new()//self.bytes.pop().unwrap_or_default()
-    }
-
-    fn return_bytes(&mut self,_b:Vec<u8>) {
-        //b.clear();
-        //self.bytes.push(b)
-    }
-
-    fn get_token_vec(&mut self) -> Vec<T> {
-        Vec::new()//self.factory.get()
-    }
-
-    fn return_token_vec(&mut self, _v: Vec<T>) {
-        //self.factory.give_back(v)
-    }
-
-    fn empty(&self) -> TokenList<T> { TokenList(self.empty.clone()) }
-}
-
- */
-
-/// We always intern the names for primitive macros, for efficiency; in particular for equality checks.
+/// We always intern the names for primitive commands/macros, for efficiency; in particular for equality checks.
+/// Uses `u16` internally, i.e. allowing for up to 65536 primitives.
+///
+/// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](crate::tex::primitives::PRIMITIVES) instance.
 pub struct PrimitiveInterner {
     interner:RwLock<string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
     pub globaldefs:PrimitiveIdentifier,
@@ -187,7 +102,7 @@ pub struct PrimitiveInterner {
     pub tracingcommands:PrimitiveIdentifier,
     pub tracinggroups:PrimitiveIdentifier,
     pub tracingrestores:PrimitiveIdentifier,
-    pub else_:PrimitiveIdentifier,
+    pub r#else:PrimitiveIdentifier,
     pub fi:PrimitiveIdentifier,
     pub or:PrimitiveIdentifier,
     pub global:PrimitiveIdentifier,
@@ -265,7 +180,7 @@ impl PrimitiveInterner {
         let tracingcommands = PrimitiveIdentifier(interner.get_or_intern_static("tracingcommands"));
         let tracinggroups = PrimitiveIdentifier(interner.get_or_intern_static("tracinggroups"));
         let tracingrestores = PrimitiveIdentifier(interner.get_or_intern_static("tracingrestores"));
-        let else_ = PrimitiveIdentifier(interner.get_or_intern_static("else"));
+        let r#else = PrimitiveIdentifier(interner.get_or_intern_static("else"));
         let fi = PrimitiveIdentifier(interner.get_or_intern_static("fi"));
         let or = PrimitiveIdentifier(interner.get_or_intern_static("or"));
         let global = PrimitiveIdentifier(interner.get_or_intern_static("global"));
@@ -332,7 +247,7 @@ impl PrimitiveInterner {
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
-            tracinggroups, else_, fi, or, global, long, outer, protected, def, edef, xdef,
+            tracinggroups, r#else, fi, or, global, long, outer, protected, def, edef, xdef,
             gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
             everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
             everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
@@ -342,24 +257,24 @@ impl PrimitiveInterner {
             belowdisplayskip,iffalse,iftrue
         }
     }
+
     /// Returns the identifier for the given primitive command name, interning it if necessary.
     /// This is thread-safe, but slow, so should only be used ideally once per primitive at startup.
-
     pub fn get(&self,s:&'static str) -> PrimitiveIdentifier {
         let mut lock = self.interner.write().unwrap();
         PrimitiveIdentifier(lock.get_or_intern_static(s))
     }
 
-    pub fn printable<C:Character>(&'static self,ident:PrimitiveIdentifier,escapechar:Option<C>) -> PrintableIdentifier<C> {
+    /// Returns a struct implementing [`Display`](std::fmt::Display) for the given [`PrimitiveIdentifier`], and
+    /// optional `\escapechar` that will be prefixed - e.g.
+    /// `println!(`[`PRIMITIVES`]`.`[`printable`](Self::printable)`(`[`PRIMITIVES`]`.the, Some('\\')))`
+    /// will print `\the`.
+    pub fn printable<C:Character>(&'static self,ident:PrimitiveIdentifier,escapechar:Option<C>) -> impl std::fmt::Display {
         PrintableIdentifier(ident,escapechar,&self)
     }
 
-    pub fn with<F:FnOnce(&str)>(&'static self,ident:PrimitiveIdentifier,f:F) {
-        let lock = self.interner.read().unwrap();
-        f(lock.resolve(ident.0).unwrap())
-    }
 }
-pub struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>,&'static PrimitiveInterner);
+struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>,&'static PrimitiveInterner);
 impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let lock = self.2.interner.read().unwrap();
@@ -371,86 +286,13 @@ impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
     }
 }
 lazy_static!(
-    /// The global primitive interner.
+    /// The global [`PrimitiveInterner`].
     pub static ref PRIMITIVES:PrimitiveInterner = PrimitiveInterner::new();
 );
 
 /// A `Copy` identifier for a primitive command. Small and fast to compare.
 #[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
 pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
-impl PrimitiveIdentifier {
-
-    pub fn to_usize(&self) -> usize { self.0.to_usize() }
-}
-
-
-
-/*
-/// A `Copy` interned string for a control sequence name.
-pub type InternedString = string_interner::symbol::SymbolU32;
-type Backend = string_interner::backend::StringBackend<InternedString>;
-
-/// A string interner for control sequence names. Implements [`CSHandler`].
-#[derive(Clone)]
-pub struct StringInterner {
-    interner:string_interner::StringInterner<Backend,ahash::RandomState>,
-    empty_str:InternedString,
-    par:InternedString
-}
-impl StringInterner {
-    /// Creates a new string interner.
-    pub fn new() -> Self {
-        let mut interner = string_interner::StringInterner::<Backend,ahash::RandomState>::new();
-        StringInterner {
-            //relax:TeXStr::from_primitive(interner.get_or_intern_static("relax")),
-            //par:TeXStr::from_primitive(interner.get_or_intern_static("par")),
-            empty_str:interner.get_or_intern_static(""),
-            par:interner.get_or_intern_static("par"),
-            //noexpand_tk:TeXStr::from_primitive(interner.get_or_intern_static(NOEXPAND_INTERNAL)),
-            interner
-        }
-    }
-    /// Resolves an [`InternedString`] to a `&str`.
-
-    pub fn resolve(&self,string:InternedString) -> &str {
-        self.interner.resolve(string).unwrap()
-    }
-    /// Interns a `&static str`.
-
-    pub fn from_static(&mut self,s:&'static str) -> InternedString {
-        self.interner.get_or_intern_static(s)
-    }
-    /// Interns a string. For `&static str`s, use [`from_static`](Self::from_static) instead.
-
-    pub fn from_string<S>(&mut self,s:S) -> InternedString where S:AsRef<str> {
-        self.interner.get_or_intern(s)
-    }
-}
-impl<C:Character> CSHandler<C,InternedString> for StringInterner {
-    type Resolved<'a> = &'a str;
-
-    fn empty_str(&self) -> InternedString { self.empty_str }
-
-    fn par(&self) -> InternedString { self.par }
-
-    fn new(&mut self, s: &str) -> InternedString { self.from_string(s) }
-
-    fn resolve<'a>(&'a self, cs: &'a InternedString) -> Self::Resolved<'a> {
-        self.interner.resolve(*cs).unwrap()
-    }
-    fn from_chars(&mut self, v: &Vec<C>) -> InternedString {
-        let mut s = String::new();
-        for c in v {
-            c.display(&mut s);
-        }
-        self.from_string(s)
-    }
-}
-impl Default for StringInterner {
-
-    fn default() -> Self { Self::new() }
-}
-*/
 
 #[derive(Clone)]
 pub struct CharacterVecInterner<C:Character> {
@@ -459,7 +301,8 @@ pub struct CharacterVecInterner<C:Character> {
     idx:Vec<usize>
 }
 impl<C:Character> CharacterVecInterner<C> {
-    pub fn cap(&self) -> usize { self.idx.len() }
+    #[allow(dead_code)]
+    fn cap(&self) -> usize { self.idx.len() }
     fn new() -> Self {
         let mut map: HMap<Box<[C]>,u32> = HMap::default();
         map.insert(Box::new([]),0);

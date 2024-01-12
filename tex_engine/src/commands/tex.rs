@@ -9,7 +9,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use super::primitives::*;
 use crate::engine::state::State;
-use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::characters::{Character, CharacterMap};
@@ -586,7 +586,7 @@ pub fn multiply<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
     );
 }
 
-pub fn else_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) {
     let conds = engine.gullet.get_conditionals();
     let name = match conds.pop() {
         Some(ActiveConditional::True(id)) => {
@@ -903,7 +903,7 @@ pub fn skewchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::To
     font.set_skewchar(val);
 }
 
-pub fn if_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
+pub fn r#if<ET:EngineTypes>(engine: &mut EngineReferences<ET>, _tk:ET::Token) -> bool {
     let first = super::methods::get_if_token(engine);
     let second = super::methods::get_if_token(engine);
     first.0 == second.0
@@ -2688,7 +2688,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_assignment(engine,"toks",toks);
 
     register_simple_expandable(engine,"csname",csname);
-    register_simple_expandable(engine,"else",else_);
+    register_simple_expandable(engine, "else", r#else);
     register_simple_expandable(engine,"endinput",endinput);
     register_simple_expandable(engine,"or",or);
     register_simple_expandable(engine,"expandafter",expandafter);
@@ -2709,7 +2709,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_expandable(engine,"splitfirstmark",splitfirstmark);
     register_expandable(engine,"splitbotmark",splitbotmark);
 
-    register_conditional(engine,"if",if_);
+    register_conditional(engine, "if", r#if);
     register_conditional(engine,"ifcase",ifcase);
     register_conditional(engine,"ifcat",ifcat);
     register_conditional(engine,"ifdim",ifdim);

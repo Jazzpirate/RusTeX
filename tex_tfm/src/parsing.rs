@@ -1,28 +1,28 @@
 
 pub(crate) struct Parser<'a>(pub(crate) &'a str);
 impl<'a> Parser<'a> {
-    #[inline(always)]
+
     pub fn new(s:&'a str) -> Self {
         Parser(s.trim_start())
     }
-    #[inline(always)]
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-    #[inline(always)]
+
     pub fn ends_with(&self, c:char) -> bool {
         self.0.ends_with(c)
     }
-    #[inline(always)]
+
     pub fn starts_with(&self, c:char) -> bool {
         self.0.starts_with(c)
     }
-    #[inline(always)]
+
     pub fn starts_with_str(&self, s:&str) -> bool {
         self.0.starts_with(s)
     }
 
-    #[inline(always)]
+
     pub fn starts_with_digit(&self) -> bool {
         self.0.starts_with(|c:char| c.is_ascii_digit())
     }
@@ -37,12 +37,12 @@ impl<'a> Parser<'a> {
         ret
     }
 
-    #[inline(always)]
+
     pub fn skip(&mut self, n: usize) {
         self.0 = &self.0[n..].trim_start();
     }
 
-    #[inline(always)]
+
     pub fn drop_right(&mut self, n: usize) {
         self.0 = &self.0[..self.0.len() - n];
     }
@@ -118,14 +118,14 @@ impl<'a> Parser<'a> {
         self.0 = "";
         ret
     }
-    #[inline(always)]
+
     pub fn drop(&mut self,s:&str) -> bool {
         if self.0.starts_with(s) {
             self.skip(s.len());
             true
         } else {false }
     }
-    #[inline(always)]
+
     pub fn skip_until_endline(&mut self) {
         match self.0.find('\n') {
             Some(i) => {

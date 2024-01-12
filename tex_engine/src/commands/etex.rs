@@ -5,7 +5,7 @@ use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
 use crate::engine::state::State;
-use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::tokens::control_sequences::{CSHandler,ResolvedCSName};
 use crate::tex::tokens::{StandardToken, Token};

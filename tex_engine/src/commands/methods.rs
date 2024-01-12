@@ -7,7 +7,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachData};
-use crate::engine::utils::memory::{MemoryManager, PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::tokens::Token;
@@ -155,7 +155,7 @@ pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>)
     let mut params = shared_vector::Vector::new();
     let mut inparam = false;
     let mut ends_with_brace = None;
-    engine.mouth.iterate(engine.aux,engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|_,t| {
+    engine.mouth.iterate(engine.aux,engine.state,|_,t| {
         parse_sig_i::<ET>(&mut arity,&mut inparam,&mut ends_with_brace,&mut params,t)
     });
     match engine.gullet.get_align_data() {
