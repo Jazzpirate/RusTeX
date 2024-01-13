@@ -6,7 +6,7 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
-use crate::engine::gullet::methods::ACOrCS;
+use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::boxes::{BoxType, TeXBox};
 use crate::tex::nodes::math::UnresolvedMathFontStyle;
@@ -257,10 +257,10 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateChange<ET,S> {
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn set_command(&mut self,name:&ACOrCS<ET::Token>,cmd:Option<Command<ET>>,globally:bool) {
+    pub fn set_command(&mut self, name:&CSOrActiveChar<ET::Token>, cmd:Option<Command<ET>>, globally:bool) {
         match name {
-            ACOrCS::Active(c) => self.state.set_ac_command(self.aux,*c,cmd,globally),
-            ACOrCS::Name(cs) => self.state.set_command(self.aux,cs.clone(),cmd,globally)
+            CSOrActiveChar::Active(c) => self.state.set_ac_command(self.aux, *c, cmd, globally),
+            CSOrActiveChar::Name(cs) => self.state.set_command(self.aux, cs.clone(), cmd, globally)
         }
     }
 }

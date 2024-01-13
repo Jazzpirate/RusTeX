@@ -8,7 +8,8 @@ use crate::tex::characters::Character;
 use crate::tex::tokens::Token;
 
 /// Utility struct for managing memory allocation and string interning. In particular, it
-/// provides a [`CSHandler`] implementation for interning control sequence names (if applicable).
+/// provides a [`CSHandler`](crate::tex::tokens::control_sequences::CSHandler) implementation for interning control
+/// sequence names (if applicable).
 #[derive(Clone)]
 pub struct MemoryManager<T:Token> {
     cs_interner: <T::CS as CSName<T::Char>>::Handler,
@@ -86,7 +87,7 @@ impl<T:Token> MemoryManager<T> {
 /// We always intern the names for primitive commands/macros, for efficiency; in particular for equality checks.
 /// Uses `u16` internally, i.e. allowing for up to 65536 primitives.
 ///
-/// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](crate::tex::primitives::PRIMITIVES) instance.
+/// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](static@PRIMITIVES) instance.
 pub struct PrimitiveInterner {
     interner:RwLock<string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
     pub globaldefs:PrimitiveIdentifier,
@@ -264,7 +265,7 @@ impl PrimitiveInterner {
 
     /// Returns a struct implementing [`Display`](std::fmt::Display) for the given [`PrimitiveIdentifier`], and
     /// optional `\escapechar` that will be prefixed - e.g.
-    /// `println!(`[`PRIMITIVES`]`.`[`printable`](Self::printable)`(`[`PRIMITIVES`]`.the, Some('\\')))`
+    /// `println!(`[`PRIMITIVES`](static@PRIMITIVES)`.`[`printable`](Self::printable)`(`[`PRIMITIVES`](static@PRIMITIVES)`.the, Some('\\')))`
     /// will print `\the`.
     pub fn printable<C:Character>(&'static self,ident:PrimitiveIdentifier,escapechar:Option<C>) -> impl std::fmt::Display {
         PrintableIdentifier(ident,escapechar,&self)

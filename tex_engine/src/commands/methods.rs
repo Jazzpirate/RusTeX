@@ -2,7 +2,7 @@ use crate::commands::{Command, Expandable, Macro, MacroSignature, ResolvedToken,
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
-use crate::engine::gullet::{AlignColumn, AlignData, Gullet};
+use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use crate::engine::state::{GroupType, State};
@@ -14,6 +14,7 @@ use crate::tex::tokens::Token;
 use crate::utils::HMap;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use std::fmt::Write;
+use crate::engine::gullet::hvalign::{AlignColumn, AlignData};
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
@@ -625,7 +626,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
                 columns: self.columns.into(),
                 ingroups: 0,
                 currindex: 0,
-                recindex: self.recindex,
+                repeat_index: self.recindex,
                 omit:false,
                 span:false,
                 inner_mode:self.inner_mode,outer_mode:self.between_mode

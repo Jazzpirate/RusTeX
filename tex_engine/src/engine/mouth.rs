@@ -1,3 +1,7 @@
+/*! A [`Mouth`] provides a stream of [`Token`]s to be processed by an engine; either by tokenizing
+    a file or by returning the [`Token`]s expanded by a macro
+ */
+
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
@@ -23,7 +27,7 @@ pub mod strings;
 /// During a run, most methods provided by the [`Mouth`] should *not* be called directly, since they circumvent the [Gullet](crate::engine::Gullet),
 /// which needs to occasionally do some bookkeeping (e.g. counting braces in an `\halign`).
 /// Instead, the [`Mouth`] should if possible be accessed through the [`EngineReferences`]
-/// or the [`Gullet`] only.
+/// or the [`Gullet`](crate::engine::gullet::Gullet) only.
 ///
 /// Note that we do not require `ET:`[`EngineTypes`]`<`[`Mouth`](EngineTypes::Mouth)`=Self>` - this allows for
 /// implementing your own Mouth by just wrapping an existing implementation in a new wrapper struct and pass on functionality
@@ -52,7 +56,8 @@ pub trait Mouth<ET:EngineTypes> {
     /// This method should not be called directly, but rather through [`EngineReferences::get_next`]
     /// or [`Gullet::get_next_opt`](crate::engine::gullet::Gullet::get_next_opt).
     fn get_next_opt(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token>;
-    /// Iterate over the [`Token`]s in the [`Mouth`] until `cont` returns `false`. Can be faster than repeatedly calling [`get_next_opt`], but
+    /// Iterate over the [`Token`]s in the [`Mouth`] until `cont` returns `false`. Can be faster than repeatedly calling
+    /// [`get_next_opt`](Self::get_next_opt), but
     /// blocking both state changes and expanding macros. Useful for e.g. reading macro arguments or the expansion list
     /// in `\def`.
     /// This method should not be called directly, but rather through [`EngineReferences::iterate`]
@@ -66,7 +71,8 @@ pub trait Mouth<ET:EngineTypes> {
 
     /// Get the current [`SourceReference`] of the [`Mouth`] (file/line/column).
     fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID>;
-    /// The mouth (can) track(s) two [`SourceReference`]s: the current one (see [`current_sourceref`]) and the position
+    /// The mouth (can) track(s) two [`SourceReference`]s: the current one (see [`current_sourceref`](Self::current_sourceref))
+    /// and the position
     /// of the last [`Token`] encountered in the top-loop of an engine run that was not the result of an expansion.
     /// The latter is returned by this function. The intuition being that this one indicates the start of the macro
     ///responsible for what is currently happening, even if the Mouth is already further along because more [`Token`]s
@@ -379,11 +385,11 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
 }
 
 impl<ET:EngineTypes> DefaultMouth<ET> {
-    /// Trivial conversion between different compatible [`EngineType`]s.
+    /// Trivial conversion between different compatible [`EngineTypes`].
     pub fn into<ET2:EngineTypes<Token=ET::Token,File=ET::File>>(self) -> DefaultMouth<ET2> {
         DefaultMouth { inputs:self.inputs,args:self.args,start_ref:self.start_ref,vecs:self.vecs }
     }
-    /// Less trivial conversion between different [`EngineType`]s with compatible [`Token`]s.
+    /// Less trivial conversion between different [`EngineTypes`] with compatible [`Token`]s.
     pub fn into_tokens<ET2:EngineTypes<Char=ET::Char,File=ET::File>,F:FnMut(ET::Token) -> ET2::Token>(self,mut token:F) -> DefaultMouth<ET2> {
         DefaultMouth {
             inputs:self.inputs.into_iter().map(|s| match s {

@@ -4,7 +4,7 @@ use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, Macro
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
-use crate::engine::gullet::methods::ACOrCS;
+use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use super::primitives::*;
@@ -351,8 +351,8 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ACOrCS::Active(c),
-            StandardToken::ControlSequence(cs) => ACOrCS::Name(cs),
+                CSOrActiveChar::Active(c),
+            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
@@ -379,8 +379,8 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ACOrCS::Active(c),
-            StandardToken::ControlSequence(cs) => ACOrCS::Name(cs),
+                CSOrActiveChar::Active(c),
+            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
@@ -694,7 +694,7 @@ pub fn font_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
 
 pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,global:bool) {
     let cs = match engine.read_control_sequence() {
-        ACOrCS::Name(name) => name,
+        CSOrActiveChar::Name(name) => name,
         _ => todo!("throw error")
     };
     let mut name = engine.aux.memory.get_string();
@@ -1121,8 +1121,8 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,glob
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ACOrCS::Active(c),
-            StandardToken::ControlSequence(cs) => ACOrCS::Name(cs),
+                CSOrActiveChar::Active(c),
+            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
@@ -1156,8 +1156,8 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ACOrCS::Active(c),
-            StandardToken::ControlSequence(cs) => ACOrCS::Name(cs),
+                CSOrActiveChar::Active(c),
+            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
@@ -1227,8 +1227,8 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ACOrCS::Active(c),
-            StandardToken::ControlSequence(cs) => ACOrCS::Name(cs),
+                CSOrActiveChar::Active(c),
+            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
@@ -2549,7 +2549,7 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
             }
             data.currindex += 1;
             if data.columns.len() <= data.currindex {
-                match data.recindex {
+                match data.repeat_index {
                     Some(i) => data.currindex = i,
                     _ => ()
                 }
