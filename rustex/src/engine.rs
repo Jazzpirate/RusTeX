@@ -49,7 +49,6 @@ impl EngineTypes for Types {
     type Char = u8;
     type CSName = CSName;
     type Token = CompactToken;
-    type ErrorHandler = ErrorThrower;
     type Extension = Extension;
     type Int = i32;
     type Dim = Dim32;

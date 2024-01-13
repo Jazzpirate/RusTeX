@@ -20,7 +20,6 @@ use crate::commands::Command;
 use crate::commands::methods::get_mathchar;
 use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
-use crate::utils::errors::ErrorHandler;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::HNode;

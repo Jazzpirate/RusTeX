@@ -19,7 +19,7 @@ use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
-use crate::utils::errors::{ErrorHandler, TeXError};
+use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXError};
 
 pub mod filesystem;
 pub mod mouth;
@@ -37,7 +37,6 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Char: Character;
     type CSName: CSName<Self::Char>;
     type Token: Token<Char = Self::Char, CS = Self::CSName>;
-    type ErrorHandler: ErrorHandler;
     type Extension: EngineExtension;
     type File: File<Char=Self::Char>;
     type FileSystem: FileSystem<File=Self::File>;
@@ -57,7 +56,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
 }
 pub struct EngineAux<ET:EngineTypes> {
     pub memory:MemoryManager<ET::Token>,
-    pub error_handler:ET::ErrorHandler,
+    pub error_handler:Box<dyn ErrorHandler<ET>>,
     pub outputs:ET::Outputs,
     pub start_time:chrono::DateTime<chrono::Local>,
     pub jobname:String,
@@ -116,7 +115,6 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Char = u8;
     type CSName = InternedCSName<u8>;//InternedString;
     type Token = super::tex::tokens::CompactToken;//::StandardToken<Self::CSName,u8>;//
-    type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = ();
     type Int = i32;
     type Dim = Dim32;
@@ -200,7 +198,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
         let mut aux = EngineAux {
             memory: MemoryManager::new(),
             outputs: ET::Outputs::new(),
-            error_handler: ET::ErrorHandler::new(),
+            error_handler: ErrorThrower::new(),
             start_time:chrono::Local::now(),
             extension: ET::Extension::new(),
             jobname: String::new()

@@ -13,10 +13,11 @@
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::marker::PhantomData;
 use std::panic::PanicInfo;
-use crate::engine::mouth::strings::InputTokenizer;
+use crate::engine::EngineTypes;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
-use crate::tex::characters::{Character, TextLineSource};
+use crate::tex::characters::Character;
 use crate::tex::tokens::Token;
 use crate::tex::tokens::StandardToken;
 
@@ -85,8 +86,8 @@ fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),
 }
 
 /// Trait for error recovery, to be implemented for an engine.
-pub trait ErrorHandler {
-    fn new() -> Self;
+pub trait ErrorHandler<ET:EngineTypes> {
+    /*
     /// Invalid character in input file/string
     fn invalid_character<T:Token,D:Display>(&self,_character:T::Char,text:D) -> Option<T> {
         TeXError::throw(format!("! Text line contains an invalid character.\n{}",text))
@@ -104,33 +105,36 @@ pub trait ErrorHandler {
         todo!()
     }
 
-    fn undefined<T:Token,R>(&self, csi:&<T::CS as CSName<T::Char>>::Handler, token:T) -> R {
+     */
+
+    fn undefined(&self, csi:&<ET::CSName as CSName<ET::Char>>::Handler, token:ET::Token) {
         match token.to_enum() {
-            StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs)),
+            StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs).to_string()),
             StandardToken::Character(c,_) => self.undefined_active_character(c)
         }
     }
 
     /// "Undefined control sequence"
-    fn undefined_control_sequence<R,St:Display>(&self,name:St) -> R { // TODO: proper error type
+    fn undefined_control_sequence(&self,name:String) { // TODO: proper error type
         TeXError::throw(format!("Undefined control sequence \\{}",name))
     }
     /// "Undefined control sequence"
-    fn undefined_active_character<R,C:Character>(&self,c:C) -> R { // TODO: proper error type
-        TeXError::throw(format!("Undefined active character {}",c))
+    fn undefined_active_character(&self,c:ET::Char) { // TODO: proper error type
+        TeXError::throw(format!("Undefined active character {}",c.display()))
     }
 
     /// `\errormsg`
-    fn error_message<R,St:Display>(&self,msg:St) -> R { // TODO: proper error type
+    fn error_message(&self,msg:&str) { // TODO: proper error type
         TeXError::throw(format!("! {}",msg))
     }
 }
 
 
 /// Default [`ErrorHandler`] that just panics.
-pub struct ErrorThrower;
-impl ErrorHandler for ErrorThrower {
-    fn new() -> Self { Self }
+pub struct ErrorThrower<ET:EngineTypes>(PhantomData<ET>);
+impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {}
+impl<ET:EngineTypes> ErrorThrower<ET> {
+    pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
 }
 
 #[macro_export]

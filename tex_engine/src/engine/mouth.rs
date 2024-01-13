@@ -260,7 +260,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     }
                 }
                 TokenSource::String(s) => {
-                    match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
+                    match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
                         Ok(Some(t)) => return Some(t),
                         Ok(_) => return Some(self.end_file(aux,state)),
                         Err(_) => todo!()
@@ -269,7 +269,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                 TokenSource::File(s,_) => {
                     let cc: &CategoryCodeScheme<ET::Char> = state.get_catcode_scheme();
                     let endline: Option<ET::Char> = state.get_endline_char();
-                    match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                    match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                         Ok(Some(t)) => return Some(t),
                         Ok(_) => return Some(self.end_file(aux,state)),
                         Err(_) => todo!()
@@ -295,7 +295,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let cc = state.get_catcode_scheme();
                     let endline = state.get_endline_char();
                     loop {
-                        match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) => if !cont(aux,t) { return },
                             Ok(_) => todo!(),
                             Err(_) => todo!()
@@ -306,7 +306,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let cc = state.get_catcode_scheme();
                     let endline = state.get_endline_char();
                     loop {
-                        match s.get_next(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) => if !cont(aux,t) { return },
                             Ok(_) => todo!(),
                             Err(_) => todo!()

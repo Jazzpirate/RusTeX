@@ -58,7 +58,6 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Char = u8;
     type CSName = InternedCSName<u8>;//InternedString;
     type Token = super::tex::tokens::CompactToken;//::StandardToken<u8,Self::CSName>;//
-    type ErrorHandler = super::utils::errors::ErrorThrower;
     type Extension = MinimalPDFExtension<Self>;
     type Int = i32;
     type Dim = Dim32;

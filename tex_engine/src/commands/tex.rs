@@ -20,7 +20,6 @@ use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use std::fmt::Write;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd, skip_argument};
 use crate::engine::fontsystem::FontSystem;
-use crate::utils::errors::ErrorHandler;
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
@@ -1330,7 +1329,7 @@ pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token
     engine.read_braced_string(false,true,&mut out);
     write!(out," (line {})",engine.mouth.line_number()).unwrap();
     engine.aux.outputs.errmessage(&out);
-    engine.aux.error_handler.error_message::<(),_>(&out);
+    engine.aux.error_handler.error_message(&out);
     engine.aux.memory.return_string(out);
 }
 
@@ -1422,7 +1421,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globa
     }
     let cs = engine.read_control_sequence();
     let mut ret = shared_vector::Vector::new();
-    engine.filesystem.read(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),
+    engine.filesystem.read::<ET,_>(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),
     engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|t| ret.push(t));
 
     let m = Macro {

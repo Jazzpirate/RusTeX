@@ -69,7 +69,7 @@ pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSNa
     } else {
         let sigsrc: StringLineSource<ET::Char> = sig.into();
         let mut sigsrc = InputTokenizer::new(sigsrc);
-        while let Ok(Some(t)) = sigsrc.get_next::<ET::Token, _>(&ErrorThrower, int, scheme, None) {
+        while let Ok(Some(t)) = sigsrc.get_next::<ET>(&ErrorThrower::new(), int, scheme, None) {
             parse_sig_i::<ET>(&mut arity, &mut inparam, &mut ends_with_brace, &mut params, t);
         }
         MacroSignature { arity, params: params.into() }
@@ -80,7 +80,7 @@ pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSNa
     let mut expsrc = InputTokenizer::new(expsrc);
     let mut exp = shared_vector::Vector::new();
     let mut inparam = false;
-    while let Ok(Some(t)) = expsrc.get_next::<ET::Token,_>(&ErrorThrower,int,scheme,None) {
+    while let Ok(Some(t)) = expsrc.get_next::<ET>(&ErrorThrower::new(),int,scheme,None) {
         parse_exp_i::<ET>(arity, &mut inparam, &mut exp, t);
     }
     if let Some(e) = ends_with_brace {

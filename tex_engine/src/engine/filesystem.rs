@@ -59,10 +59,10 @@ pub trait FileSystem:Clone {
     fn close_out(&mut self,idx:u8);
     fn eof(&self,idx:u8) -> bool;
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
-    fn read<T:Token<Char=<Self::File as File>::Char>,E:ErrorHandler,F:FnMut(T)>(&mut self,
-                                                                                idx:u8, eh:&E,
-                                                                                handler:&mut <T::CS as CSName<T::Char>>::Handler,
-                                                                                cc:&CategoryCodeScheme<<Self::File as File>::Char>, endline:Option<<Self::File as File>::Char>, cont:F
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
+                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+                                                                                handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
+                                                                                cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
     );
     fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F);
 }
@@ -181,14 +181,14 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             _ => unreachable!()
         }
     }
-    fn read<T:Token<Char=C>,E:ErrorHandler,F:FnMut(T)>(&mut self,
-                                                       idx:u8, eh:&E,
-                                                       handler:&mut <T::CS as CSName<C>>::Handler,
-                                                       cc:&CategoryCodeScheme<C>, endline:Option<C>, cont:F
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
+                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+                                                                                handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
+                                                                                cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
     ) {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
-                f.read(eh,handler,cc,endline,cont);
+                f.read::<ET,_>(eh,handler,cc,endline,cont);
             }
             _ => todo!("throw File not open error")
         }
