@@ -385,27 +385,27 @@ pub trait Stomach {
         engine.state.set_current_font(engine.aux,f,global);
         insert_afterassignment(engine);
     }
-    fn assign_int_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
+    fn assign_int_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
         let val = engine.read_int(true);
         engine.state.set_int_register(engine.aux,register,val,global);
         insert_afterassignment(engine);
     }
-    fn assign_dim_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
+    fn assign_dim_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
         let val = engine.read_dim(true);
         engine.state.set_dim_register(engine.aux,register,val,global);
         insert_afterassignment(engine);
     }
-    fn assign_skip_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
+    fn assign_skip_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
         let val = engine.read_skip(true);
         engine.state.set_skip_register(engine.aux,register,val,global);
         insert_afterassignment(engine);
     }
-    fn assign_muskip_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
+    fn assign_muskip_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
         let val = engine.read_muskip(true);
         engine.state.set_muskip_register(engine.aux,register,val,global);
         insert_afterassignment(engine);
     }
-    fn assign_toks_register(engine:&mut EngineReferences<Self::ET>,register:u16,global:bool) {
+    fn assign_toks_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
         let mut had_eq = false;
         crate::expand_loop!(Self::ET; engine,
             ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
@@ -654,7 +654,7 @@ pub trait Stomach {
         let mut deletes = vec!();
         for (i,b) in first.iter_mut().enumerate() { match b {
             VNode::Insert(n,v) => {
-                let children: Box<[VNode<Self::ET>]> = match engine.state.take_box_register(*n as u16) {
+                let children: Box<[VNode<Self::ET>]> = match engine.state.take_box_register(*n) {
                     Some(TeXBox::V {children,..}) => {
                         let mut c = children.into_vec();
                         c.extend(std::mem::replace(v, vec!().into()).into_vec().into_iter());
@@ -662,7 +662,7 @@ pub trait Stomach {
                     },
                     _ => std::mem::replace(v, vec!().into())
                 };
-                engine.state.set_box_register(engine.aux,*n as u16,Some(TeXBox::V {
+                engine.state.set_box_register(engine.aux,*n,Some(TeXBox::V {
                     info: VBoxInfo::new_box(ToOrSpread::None),
                     children,
                     start:engine.mouth.current_sourceref(),

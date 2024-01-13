@@ -1,6 +1,7 @@
 use std::fmt::Formatter;
 use std::path::{Path, PathBuf};
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
+use crate::engine::utils::memory::MemoryManager;
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::{NodeTrait, NodeType};
 use crate::tex::numerics::TeXDimen;
@@ -337,7 +338,7 @@ pub enum PDFLiteralOption {
     Page
 }
 
-pub trait PDFExtension<ET:EngineTypes>: EngineExtension {
+pub trait PDFExtension<ET:EngineTypes>: EngineExtension<ET> {
     fn pdfmatches(&mut self) -> &mut Vec<String>;
     fn elapsed(&mut self) -> &mut std::time::Instant;
     fn colorstacks(&mut self) -> &mut Vec<Vec<PDFColor>>;
@@ -382,8 +383,8 @@ pub struct MinimalPDFExtension<ET:EngineTypes> {
     #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
     pdfium:Option<pdfium_render::prelude::Pdfium>
 }
-impl<ET:EngineTypes> EngineExtension for MinimalPDFExtension<ET> {
-    fn new() -> Self {
+impl<ET:EngineTypes> EngineExtension<ET> for MinimalPDFExtension<ET> {
+    fn new(_memory: &mut MemoryManager<ET::Token>) -> Self {
         Self {
             matches: Vec::new(),
             elapsed: std::time::Instant::now(),

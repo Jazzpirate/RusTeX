@@ -1,5 +1,4 @@
-use tex_engine::commands::{Command, CommandScope, Conditional};
-use tex_engine::commands::methods::make_macro;
+use tex_engine::commands::{Command, CommandScope, Conditional, Macro};
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
@@ -9,7 +8,7 @@ use tex_engine::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
 use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::tokens::CompactToken;
-use crate::engine::{AT_LETTER_SCHEME, Font, Refs, Types};
+use crate::engine::{Font, Refs, Types};
 use crate::extension::FontChange;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
@@ -21,6 +20,7 @@ use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
 use tex_engine::prelude::*;
+use tex_engine::tex::catcodes::AT_LETTER_SCHEME;
 use tex_engine::tex::nodes::boxes::{BoxType, ToOrSpread};
 
 pub struct RusTeXStomach {
@@ -271,26 +271,22 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
 }
 
 fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Types>,penalty:Option<i32>,f:F) {
-    let undefineds = vec![
-        engine.aux.memory.cs_interner_mut().new("@oddhead"),
-        engine.aux.memory.cs_interner_mut().new("@oddfoot"),
-        engine.aux.memory.cs_interner_mut().new("@evenhead"),
-        engine.aux.memory.cs_interner_mut().new("@evenfoot"),
-    ];
-    let mkboth = engine.aux.memory.cs_interner_mut().new("@mkboth");
-    let mut m = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(),&AT_LETTER_SCHEME,"#1#2","");
-    m.long = true;
-    engine.state.set_command(&engine.aux,mkboth,Some(Command::Macro(m)),true);
-    let empty = make_macro::<Types,_,_>(engine.aux.memory.cs_interner_mut(), &AT_LETTER_SCHEME, "", "");
-    for s in undefineds.into_iter() {
-        engine.state.set_command(&engine.aux, s, Some(Command::Macro(empty.clone())), true)
+    macro_rules! set_empty{
+        ($id:ident) => {
+            engine.state.set_command(&engine.aux,engine.aux.extension.$id,Some(Command::Macro(engine.aux.extension.empty.clone())),true)
+        }
     }
+    set_empty!(oddhead);
+    set_empty!(oddfoot);
+    set_empty!(evenhead);
+    set_empty!(evenfoot);
+    engine.state.set_command(&engine.aux,engine.aux.extension.mkboth,Some(Command::Macro(engine.aux.extension.gobbletwo.clone())),true);
+
     let iffalse = Command::Conditional(Conditional {
         name: PRIMITIVES.iffalse,
         expand: tex_engine::commands::tex::iffalse::<Types>,
     });
-    let specialpage = engine.aux.memory.cs_interner_mut().new("if@specialpage");
-    engine.state.set_command(&engine.aux,specialpage,Some(iffalse),true);
+    engine.state.set_command(&engine.aux,engine.aux.extension.specialpage,Some(iffalse),true);
     let data = engine.stomach.data_mut();
     data.page.insert(0,VNode::Custom(RusTeXNode::PageBegin));
     f(data);

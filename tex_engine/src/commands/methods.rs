@@ -25,245 +25,135 @@ use crate::tex::nodes::vertical::VNode;
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
 
-pub fn read_register<ET:EngineTypes>(engine: &mut EngineReferences<ET>) -> u16 {
-    let idx = engine.read_int(false).into();
-    if idx < 0 || idx > u16::MAX.into() {
-        todo!("register out of range")
-    }
-    idx as u16
+pub(crate) struct MacroParser<T:Token> {
+    arity:u8,
+    params:shared_vector::Vector<T>,
+    inparam:bool,
+    ends_with_brace:Option<T>,
+    exp:shared_vector::Vector<T>,
 }
-
-pub fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
-    match engine.get_next() {
-        Some(t) if t.is_begin_group() => (),
-        _ => todo!("throw error")
-    }
-    engine.read_until_endgroup(|_,_,_| {});
-}
-
-pub fn do_csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ET::CSName {
-    *engine.gullet.csnames() += 1;
-    let mut name = vec!();
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,..} => name.push(char),
-        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(e)),..} if e.name == PRIMITIVES.endcsname => {
-            *engine.gullet.csnames() -= 1;
-            let id = engine.aux.memory.cs_interner_mut().from_chars(&name);
-            //engine.aux.memory.return_string(name);
-            return id
+impl<T:Token> MacroParser<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            arity:0,
+            params:shared_vector::Vector::new(),
+            inparam:false,
+            ends_with_brace:None,
+            exp:shared_vector::Vector::new(),
         }
-        o => todo!("csname: {:?}",o)
-    );
-    todo!("file end")
-}
-
-pub fn make_macro<ET:EngineTypes,S1:AsRef<str>,S2:AsRef<str>>(int:&mut <ET::CSName as CSName<ET::Char>>::Handler, scheme:&CategoryCodeScheme<ET::Char>, sig:S1, exp:S2) -> Macro<ET::Token> {
-    let mut arity = 0;
-    let mut params = shared_vector::Vector::new();
-    let mut inparam = false;
-    let mut ends_with_brace = None;
-    let sig = sig.as_ref();
-    let sig = if sig.is_empty() {
-        MacroSignature { arity:0, params: params.into() }
-    } else {
-        let sigsrc: StringLineSource<ET::Char> = sig.into();
-        let mut sigsrc = InputTokenizer::new(sigsrc);
-        while let Ok(Some(t)) = sigsrc.get_next(int, scheme, None) {
-            parse_sig_i::<ET>(&mut arity, &mut inparam, &mut ends_with_brace, &mut params, t);
+    }
+    pub(crate) fn do_signature_token(&mut self, t:T) -> bool {
+        if t.is_begin_group() {
+            if self.inparam {
+                self.inparam = false;
+                self.params.push(t.clone());
+                self.ends_with_brace = Some(t);
+            }
+            return false
         }
-        MacroSignature { arity, params: params.into() }
-    };
-
-    let exp = exp.as_ref();
-    let expsrc :StringLineSource<ET::Char> = exp.into();
-    let mut expsrc = InputTokenizer::new(expsrc);
-    let mut exp = shared_vector::Vector::new();
-    let mut inparam = false;
-    while let Ok(Some(t)) = expsrc.get_next(int,scheme,None) {
-        parse_exp_i::<ET>(arity, &mut inparam, &mut exp, t);
-    }
-    if let Some(e) = ends_with_brace {
-        exp.push(e);
-    }
-    Macro {
-        long:false,outer:false,protected:false,
-        expansion:exp.into(),
-        signature:sig
-    }
-}
-
-pub fn parse_exp_i<ET:EngineTypes>(arity:u8, inparam:&mut bool, exp:&mut shared_vector::Vector<ET::Token>, t:ET::Token) {
-    if *inparam {
-        *inparam = false;
-        if t.is_param() {
-            exp.push(t);
-        } else {
-            match t.char_value() {
-                Some(c) => match c.try_into() {
-                    Ok(u) if u > 48 && u - 49 < arity => exp.push(ET::Token::argument_marker(u-49)),
-                    _ => todo!("error")
+        if self.inparam {
+            self.inparam = false;
+            if t.is_param() {
+                self.params.push(t);
+            }
+            else {
+                match t.char_value() {
+                    Some(c) => match c.try_into() {
+                        Ok(u) if u > 48 && u == 49 + self.arity => self.params.push(T::argument_marker(self.arity)),
+                        _ => todo!("error")
+                    }
+                    None => todo!("error")
                 }
-                None => todo!("error")
+                self.arity += 1
+            }
+        } else {
+            if t.is_param() {
+                self.inparam = true;
+            } else {
+                self.params.push(t);
             }
         }
-    } else {
-        if t.is_param() {
-            *inparam = true;
-        } else {
-            exp.push(t);
-        }
+        true
     }
-}
 
-pub fn parse_sig_i<ET:EngineTypes>(arity:&mut u8,inparam:&mut bool,ends_with_brace:&mut Option<ET::Token>,params:&mut shared_vector::Vector<ET::Token>,t:ET::Token) -> bool {
-    if t.is_begin_group() {
-        if *inparam {
-            params.push(t.clone());
-            *ends_with_brace = Some(t);
-        }
-        return false
-    }
-    if *inparam {
-        *inparam = false;
-        if t.is_param() {
-            params.push(t);
-        }
-        else {
-            match t.char_value() {
-                Some(c) => match c.try_into() {
-                    Ok(u) if u > 48 && u == 49 + *arity => params.push(ET::Token::argument_marker(*arity)),
-                    _ => todo!("error")
+    pub(crate) fn do_expansion_token(&mut self, t:T) {
+        if self.inparam {
+            self.inparam = false;
+            if t.is_param() {
+                self.exp.push(t);
+            } else {
+                match t.char_value() {
+                    Some(c) => match c.try_into() {
+                        Ok(u) if u > 48 && u - 49 < self.arity => self.exp.push(T::argument_marker(u-49)),
+                        _ => todo!("error")
+                    }
+                    None => todo!("error")
                 }
-                None => todo!("error")
             }
-            *arity += 1
-        }
-    } else {
-        if t.is_param() {
-            *inparam = true;
         } else {
-            params.push(t);
+            if t.is_param() {
+                self.inparam = true;
+            } else {
+                self.exp.push(t);
+            }
         }
     }
-    true
-}
 
-pub fn parse_signature<ET:EngineTypes>(engine:&mut EngineReferences<ET>)
-                                       -> (MacroSignature<ET::Token>,Option<ET::Token>) {
-    let mut arity = 0;
-    let mut params = shared_vector::Vector::new();
-    let mut inparam = false;
-    let mut ends_with_brace = None;
-    engine.mouth.iterate(engine.aux,engine.state,|_,t| {
-        parse_sig_i::<ET>(&mut arity,&mut inparam,&mut ends_with_brace,&mut params,t)
-    });
-    match engine.gullet.get_align_data() {
-        Some(data) => data.ingroups += 1,
-        _ => ()
+    pub(crate) fn close(mut self,long:bool,outer:bool,protected:bool) -> Macro<T> {
+        if let Some(t) = self.ends_with_brace {
+            self.exp.push(t);
+        }
+        Macro {
+            long,outer,protected,
+            expansion:self.exp.into(),
+            signature:MacroSignature { arity:self.arity, params:self.params.into() }
+        }
     }
-    (MacroSignature{
-        arity,params:params.into()
-    },ends_with_brace)
 }
 
-pub fn modify_int_register<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, idx:u16, globally:bool, op:O) {
+pub(in crate::commands) fn modify_int_register<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, idx:usize, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_int_register(idx);
     let new = op(old,engine);
     engine.state.set_int_register(engine.aux,idx,new,globally);
 }
 
-pub fn modify_primitive_int<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+pub(in crate::commands) fn modify_primitive_int<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_primitive_int(name);
     let new = op(old,engine);
     engine.state.set_primitive_int(engine.aux,name,new,globally);
 }
 
-pub fn modify_dim_register<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, idx:u16, globally:bool, op:O) {
+pub(in crate::commands) fn modify_dim_register<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, idx:usize, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_dim_register(idx);
     let new = op(old,engine);
     engine.state.set_dim_register(engine.aux,idx,new,globally);
 }
 
-pub fn modify_primitive_dim<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+pub(in crate::commands) fn modify_primitive_dim<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_primitive_dim(name);
     let new = op(old,engine);
     engine.state.set_primitive_dim(engine.aux,name,new,globally);
 }
 
-pub fn modify_skip_register<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>,idx:u16,globally:bool,op:O) {
+pub(in crate::commands) fn modify_skip_register<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>,idx:usize,globally:bool,op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_skip_register(idx);
     let new = op(old,engine);
     engine.state.set_skip_register(engine.aux,idx,new,globally);
 }
 
-pub fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_primitive_skip(name);
     let new = op(old,engine);
     engine.state.set_primitive_skip(engine.aux,name,new,globally);
 }
 
-#[macro_export]
-macro_rules! modify_num {
-    ($engine:ident,$globally:ident,$int:expr,$dim:expr,$skip:expr) => {
-        crate::expand_loop!($engine,
-            ResolvedToken::Cmd {cmd:Some(cm),..} => match cm {
-                Command::Int(IntCommand{name,..}) if *name == PRIMITIVES.count => {
-                    let idx = $engine.read_int(false);
-                    let idx = match idx.try_into() {
-                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
-                        _ => todo!("throw error")
-                    };
-                    return crate::commands::methods::modify_int_register($engine,idx,$globally,$int)
-                }
-                Command::IntRegister(idx) => {
-                    return crate::commands::methods::modify_int_register($engine,*idx,$globally,$int)
-                }
-                Command::PrimitiveInt(name) => {
-                    return crate::commands::methods::modify_primitive_int($engine,*name,$globally,$int)
-                }
-                Command::Dim(DimCommand{name,..}) if *name == PRIMITIVES.dimen => {
-                    let idx = $engine.read_int(false);
-                    let idx = match idx.try_into() {
-                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
-                        _ => todo!("throw error")
-                    };
-                    return crate::commands::methods::modify_dim_register($engine,idx,$globally,$dim)
-                }
-                Command::DimRegister(idx) => {
-                    return crate::commands::methods::modify_dim_register($engine,*idx,$globally,$dim)
-                }
-                Command::PrimitiveDim(name) => {
-                    return crate::commands::methods::modify_primitive_dim($engine,*name,$globally,$dim)
-                }
-                Command::Skip(SkipCommand{name,..}) if *name == PRIMITIVES.skip => {
-                    let idx = $engine.read_int(false);
-                    let idx = match idx.try_into() {
-                        Ok(i) if i >= 0 && i <= u16::MAX as i32 => i as u16,
-                        _ => todo!("throw error")
-                    };
-                    return crate::commands::methods::modify_skip_register($engine,idx,$globally,$skip)
-                }
-                Command::SkipRegister(idx) => {
-                    return crate::commands::methods::modify_skip_register($engine,*idx,$globally,$skip)
-                }
-                Command::PrimitiveSkip(name) => {
-                    return crate::commands::methods::modify_primitive_skip($engine,*name,$globally,$skip)
-                }
-                o => todo!("{:?} in \\advance",o)
-            }
-            _ => todo!("throw error")
-        );
-        todo!("file end")
-    };
-}
-
-pub fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,every:PrimitiveIdentifier) -> ToOrSpread<ET::Dim> {
+pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,every:PrimitiveIdentifier) -> ToOrSpread<ET::Dim> {
     let scaled = match engine.read_keywords(&[b"to",b"spread"]) {
         Some(b"to") => {
             let to = engine.read_dim(false);
@@ -290,7 +180,7 @@ pub fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,
     todo!("file end")
 }
 
-pub fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
+pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
     let mut exp = true;
     while let Some(t) = engine.get_next() {
         if t.is_noexpand_marker() {
@@ -318,7 +208,7 @@ pub fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option
     todo!("throw error")
 }
 
-pub enum IfxCmd<ET:EngineTypes> {
+pub(in crate::commands) enum IfxCmd<ET:EngineTypes> {
     Char(ET::Char,CommandCode),
     Undefined,
     Primitive(PrimitiveIdentifier),
@@ -327,15 +217,14 @@ pub enum IfxCmd<ET:EngineTypes> {
     Font(<ET::FontSystem as FontSystem>::Font),
     MathChar(u32),
     Macro(Macro<ET::Token>),
-    IntRegister(u16),
-    DimRegister(u16),
-    SkipRegister(u16),
-    MuSkipRegister(u16),
-    ToksRegister(u16),
-    BoxRegister(u16),
+    IntRegister(usize),
+    DimRegister(usize),
+    SkipRegister(usize),
+    MuSkipRegister(usize),
+    ToksRegister(usize),
 }
 impl<ET:EngineTypes> IfxCmd<ET> {
-    pub fn read(engine:&mut EngineReferences<ET>) -> Self {
+    pub(in crate::commands) fn read(engine:&mut EngineReferences<ET>) -> Self {
         match engine.get_next() {
             Some(t) if t.is_noexpand_marker() =>
                 IfxCmd::Noexpand(engine.get_next().unwrap()),
@@ -376,7 +265,6 @@ impl<ET:EngineTypes> IfxCmd<ET> {
                 Some(Command::PrimitiveSkip(id)) => Self::Primitive(*id),
                 Some(Command::PrimitiveMuSkip(id)) => Self::Primitive(*id),
                 Some(Command::PrimitiveToks(id)) => Self::Primitive(*id),
-                //Some(Command::BoxRegister(u)) => Self::BoxRegister(*u),
                 o => todo!("{:?}",o)
             },
         }
@@ -399,7 +287,6 @@ impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
             (Self::SkipRegister(u1),Self::SkipRegister(u2)) => u1 == u2,
             (Self::MuSkipRegister(u1),Self::MuSkipRegister(u2)) => u1 == u2,
             (Self::ToksRegister(u1),Self::ToksRegister(u2)) => u1 == u2,
-            (Self::BoxRegister(u1),Self::BoxRegister(u2)) => u1 == u2,
             (Self::Macro(m1),Self::Macro(m2)) =>
                 m1.long == m2.long && m1.outer == m2.outer && m1.protected == m2.protected &&
                     m1.signature.params == m2.signature.params &&
@@ -417,6 +304,7 @@ pub fn read_file_index<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> u8 {
     }
     idx.into() as u8
 }
+
 pub fn read_index_and_file<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (u8,ET::File) {
     let idx = read_file_index(engine);
     let mut filename = engine.aux.memory.get_string();
@@ -508,11 +396,8 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
                 return ()
             }
             Command::Assignment(a) if a.name == PRIMITIVES.toks => {
-                let u = engine.read_int(false);
-                if u < ET::Int::default() || u.into() > u16::MAX.into() {
-                    todo!("throw error")
-                }
-                for t in &engine.state.get_toks_register(u.into() as u16).0 {
+                let u = engine.read_register_index(false);
+                for t in &engine.state.get_toks_register(u).0 {
                     cont(engine.aux,engine.state,engine.gullet,t.clone())
                 }
                 return ()
@@ -948,7 +833,7 @@ pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u
             })
         } else {
             let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
-            let fam = ((mathcode >> 8) & 0xF) as usize;      // (rest % 16)
+            let fam = ((mathcode >> 8) & 0xF) as u8;      // (rest % 16)
             let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
             (rest_fam_shifted as u8, fam, char)
         }
@@ -961,7 +846,7 @@ pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u
             }
             i => {
                 cls = 0;
-                fam = i as usize;
+                fam = i as u8;
             }
         }
     }
@@ -1140,4 +1025,55 @@ pub fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option
         });
         ET::Stomach::add_node_m(engine,node);
     }),())
+}
+
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    /// reads an integer from the input stream and makes sure it's in the range of
+    /// a state register
+    pub fn read_register_index(&mut self,skip_eq:bool) -> usize {
+        let idx = self.read_int(skip_eq);
+        match ET::State::register_index(idx) {
+            Some(idx) => idx,
+            None => todo!("throw error")
+        }
+    }
+    /// reads an integer and makes sure it's in the range of a math font index (0-15)
+    pub fn mathfont_index(&mut self,skip_eq:bool) -> u8 {
+        let idx = self.read_int(skip_eq).into();
+        if idx < 0 || idx > 15 {
+            todo!("throw error")
+        }
+        idx as u8
+    }
+    /// expects a [`BeginGroup`](CommandCode::BeginGroup) token, reads until the
+    /// matching [`EndGroup`](CommandCode::EndGroup) token and discards everything
+    /// in between.
+    pub fn skip_argument(&mut self) {
+        match self.get_next() {
+            Some(t) if t.is_begin_group() => (),
+            _ => todo!("throw error")
+        }
+        self.read_until_endgroup(|_,_,_| {});
+    }
+
+    /// reads the name of a control sequence until `\endcsname` and returns the
+    /// corresponding [`CSName`](crate::token::CSName) (i.e. what `\csname` and
+    /// `\ifcsname` do)
+    pub fn read_csname(&mut self) -> ET::CSName {
+        *self.gullet.csnames() += 1;
+        let mut name = vec!();
+        crate::expand_loop!(self,
+        ResolvedToken::Tk {char,..} => name.push(char),
+        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(e)),..} if e.name == PRIMITIVES.endcsname => {
+            *self.gullet.csnames() -= 1;
+            let id = self.aux.memory.cs_interner_mut().from_chars(&name);
+            //engine.aux.memory.return_string(name);
+            return id
+        }
+        ResolvedToken::Cmd{token,..} => {
+            todo!("csname: {}",token.display(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
+        }
+    );
+        todo!("file end")
+    }
 }

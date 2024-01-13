@@ -41,9 +41,18 @@ pub trait State:Sized+Clone {
     type ET:EngineTypes;
     fn new(nullfont:Fnt<Self>,aux:&mut EngineAux<Self::ET>) -> Self;
 
+    fn register_index(i:Int<Self>) -> Option<usize> {
+        let idx: i64 = i.into();
+        if idx < 0 || idx > u16::MAX.into() {
+            None
+        } else {
+            Some(idx as usize)
+        }
+    }
+
     fn aftergroup(&mut self,token:T<Self>);
 
-    fn get_mathfonts(&self,fam:usize) -> UnresolvedMathFontStyle<Self::ET> {
+    fn get_mathfonts(&self,fam:u8) -> UnresolvedMathFontStyle<Self::ET> {
         UnresolvedMathFontStyle {
             text_font:self.get_textfont(fam).clone(),
             script_font:self.get_scriptfont(fam).clone(),
@@ -59,14 +68,14 @@ pub trait State:Sized+Clone {
     fn get_current_font(&self) -> &<Self::ET as EngineTypes>::Font;
     fn set_current_font(&mut self,aux:&mut EngineAux<Self::ET>,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
-    fn get_textfont(&self, i:usize) -> &<Self::ET as EngineTypes>::Font;
-    fn set_textfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:usize,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+    fn get_textfont(&self, i:u8) -> &<Self::ET as EngineTypes>::Font;
+    fn set_textfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:u8,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
-    fn get_scriptfont(&self, i:usize) -> &<Self::ET as EngineTypes>::Font;
-    fn set_scriptfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:usize,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+    fn get_scriptfont(&self, i:u8) -> &<Self::ET as EngineTypes>::Font;
+    fn set_scriptfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:u8,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
-    fn get_scriptscriptfont(&self, i:usize) -> &<Self::ET as EngineTypes>::Font;
-    fn set_scriptscriptfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:usize,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
+    fn get_scriptscriptfont(&self, i:u8) -> &<Self::ET as EngineTypes>::Font;
+    fn set_scriptscriptfont(&mut self,aux:&mut EngineAux<Self::ET>,idx:u8,fnt:<Self::ET as EngineTypes>::Font,globally:bool);
 
     /// get the current [`CategoryCodeScheme`]
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<Ch<Self>>;
@@ -100,34 +109,34 @@ pub trait State:Sized+Clone {
     fn set_parshape(&mut self,aux:&EngineAux<Self::ET>, parshape:Vec<(Dim<Self>,Dim<Self>)>, globally:bool);
 
     /// get an integer register value
-    fn get_int_register(&self,idx:u16) -> Int<Self>;
+    fn get_int_register(&self,idx:usize) -> Int<Self>;
     /// set an integer register value
-    fn set_int_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:Int<Self>,globally:bool);
+    fn set_int_register(&mut self,aux:&EngineAux<Self::ET>,idx:usize,v:Int<Self>,globally:bool);
     /// get a primitive integer value
     fn get_primitive_int(&self,name:PrimitiveIdentifier) -> Int<Self>;
     /// set a primitive integer value
     fn set_primitive_int(&mut self,aux:&EngineAux<Self::ET>,name:PrimitiveIdentifier,v:Int<Self>,globally:bool);
     /// get a dimen register value
-    fn get_dim_register(&self,idx:u16) -> Dim<Self>;
+    fn get_dim_register(&self,idx:usize) -> Dim<Self>;
     /// set a dimen register value
-    fn set_dim_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:Dim<Self>,globally:bool);
+    fn set_dim_register(&mut self,aux:&EngineAux<Self::ET>,idx:usize,v:Dim<Self>,globally:bool);
     /// get a skip register value
-    fn get_skip_register(&self,idx:u16) -> Skip<Self>;
+    fn get_skip_register(&self,idx:usize) -> Skip<Self>;
     /// set a skip register value
-    fn set_skip_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:Skip<Self>,globally:bool);
+    fn set_skip_register(&mut self,aux:&EngineAux<Self::ET>,idx:usize,v:Skip<Self>,globally:bool);
     /// get a muskip register value
-    fn get_muskip_register(&self,idx:u16) -> MuSkip<Self>;
+    fn get_muskip_register(&self,idx:usize) -> MuSkip<Self>;
     /// set a muskip register value
-    fn set_muskip_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:MuSkip<Self>,globally:bool);
+    fn set_muskip_register(&mut self,aux:&EngineAux<Self::ET>,idx:usize,v:MuSkip<Self>,globally:bool);
     /// get a token register value
-    fn get_toks_register(&self,idx:u16) -> &TokenList<T<Self>>;
+    fn get_toks_register(&self,idx:usize) -> &TokenList<T<Self>>;
     /// set a token register value
-    fn set_toks_register(&mut self,aux:&EngineAux<Self::ET>,idx:u16,v:TokenList<T<Self>>,globally:bool);
+    fn set_toks_register(&mut self,aux:&EngineAux<Self::ET>,idx:usize,v:TokenList<T<Self>>,globally:bool);
 
-    fn get_box_register(&self,idx:u16) -> Option<&TeXBox<Self::ET>>;
-    fn get_box_register_mut(&mut self,idx:u16) -> Option<&mut TeXBox<Self::ET>>;
-    fn take_box_register(&mut self,idx:u16) -> Option<TeXBox<Self::ET>>;
-    fn set_box_register(&mut self, aux:&EngineAux<Self::ET>, idx:u16, v:Option<TeXBox<Self::ET>>, globally:bool);
+    fn get_box_register(&self,idx:usize) -> Option<&TeXBox<Self::ET>>;
+    fn get_box_register_mut(&mut self,idx:usize) -> Option<&mut TeXBox<Self::ET>>;
+    fn take_box_register(&mut self,idx:usize) -> Option<TeXBox<Self::ET>>;
+    fn set_box_register(&mut self, aux:&EngineAux<Self::ET>, idx:usize, v:Option<TeXBox<Self::ET>>, globally:bool);
 
     /// get a primitive dimension value
     fn get_primitive_dim(&self,name:PrimitiveIdentifier) -> Dim<Self>;
@@ -184,18 +193,18 @@ pub enum StateChange<ET:EngineTypes,S:State<ET=ET>> {
     MathCode{char:ET::Char,old:u32},
     ParShape{old:Vec<(ET::Dim,ET::Dim)>},
     CurrentFont(ET::Font),
-    TextFont{idx:usize,old:ET::Font},
-    ScriptFont{idx:usize,old:ET::Font},
-    ScriptScriptFont{idx:usize,old:ET::Font},
+    TextFont{idx:u8,old:ET::Font},
+    ScriptFont{idx:u8,old:ET::Font},
+    ScriptScriptFont{idx:u8,old:ET::Font},
     EndlineChar{old:Option<ET::Char>},
     EscapeChar{old:Option<ET::Char>},
     NewlineChar{old:Option<ET::Char>},
-    IntRegister{idx:u16,old:ET::Int},
-    DimRegister{idx:u16,old:ET::Dim},
-    SkipRegister{idx:u16,old:ET::Skip},
-    MuSkipRegister{idx:u16,old:ET::MuSkip},
-    BoxRegister{idx:u16,old:Option<TeXBox<ET>>},
-    ToksRegister{idx:u16,old:TokenList<ET::Token>},
+    IntRegister{idx:usize,old:ET::Int},
+    DimRegister{idx:usize,old:ET::Dim},
+    SkipRegister{idx:usize,old:ET::Skip},
+    MuSkipRegister{idx:usize,old:ET::MuSkip},
+    BoxRegister{idx:usize,old:Option<TeXBox<ET>>},
+    ToksRegister{idx:usize,old:TokenList<ET::Token>},
     /// A change to a primitive integer value
     PrimitiveInt{name:PrimitiveIdentifier,old:ET::Int},
     /// A change to a primitive dimension value

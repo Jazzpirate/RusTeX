@@ -3,6 +3,7 @@
 */
 
 use std::fmt::Display;
+use crate::commands::methods::MacroParser;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
@@ -12,6 +13,8 @@ use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::numerics::{NumSet, TeXInt};
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
+use crate::engine::mouth::strings::InputTokenizer;
+use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 
 pub mod primitives;
@@ -65,11 +68,11 @@ pub enum Command<ET:EngineTypes> {
     MuSkip(MuSkipCommand<ET>),
     FontCmd(FontCommand<ET>),
     Font(<ET::FontSystem as FontSystem>::Font),
-    IntRegister(u16),
-    DimRegister(u16),
-    SkipRegister(u16),
-    MuSkipRegister(u16),
-    ToksRegister(u16),
+    IntRegister(usize),
+    DimRegister(usize),
+    SkipRegister(usize),
+    MuSkipRegister(usize),
+    ToksRegister(usize),
     Box(BoxCommand<ET>),
     PrimitiveInt(PrimitiveIdentifier),
     PrimitiveDim(PrimitiveIdentifier),
@@ -178,6 +181,24 @@ pub struct Macro<T:Token> {
     pub signature:MacroSignature<T>
 }
 impl<T:Token> Macro<T> {
+    pub fn new<Sig:AsRef<str>,Exp:AsRef<str>>(int:&mut <T::CS as CSName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,sig:Sig,exp:Exp) -> Self {
+        let mut parser = MacroParser::new();
+        let sig = sig.as_ref();
+        if !sig.is_empty() {
+            let sigsrc: StringLineSource<T::Char> = sig.into();
+            let mut sigsrc = InputTokenizer::new(sigsrc);
+            while let Ok(Some(t)) = sigsrc.get_next(int,cc,None) {
+                parser.do_signature_token(t);
+            }
+        }
+        let exp = exp.as_ref();
+        let expsrc: StringLineSource<T::Char> = exp.into();
+        let mut expsrc = InputTokenizer::new(expsrc);
+        while let Ok(Some(t)) = expsrc.get_next(int,cc,None) {
+            parser.do_expansion_token(t)
+        }
+        parser.close(false,false,false)
+    }
 
     pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self, int:&'a <T::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
         MacroMeaning{cmd:self,int,cc,escapechar}

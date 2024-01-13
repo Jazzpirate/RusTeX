@@ -1,11 +1,16 @@
 use pdfium_render::pdfium::Pdfium;
+use tex_engine::commands::Macro;
 use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFAnnot, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
 use tex_engine::engine::{EngineExtension, EngineTypes};
-use crate::engine::{Font, Refs, Types};
+use crate::engine::{CSName, Font, Refs, Types};
 use crate::nodes::RusTeXNode;
 use crate::shipout::ShipoutState;
 use tex_engine::engine::stomach::Stomach as StomachT;
+use tex_engine::engine::utils::memory::MemoryManager;
+use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
+use tex_engine::tex::tokens::CompactToken;
 use crate::stomach::RusTeXStomach;
+use tex_engine::prelude::CSHandler;
 
 #[derive(Debug,Clone)]
 pub(crate) struct FontChange(pub(crate) Font);
@@ -13,7 +18,15 @@ pub(crate) struct FontChange(pub(crate) Font);
 pub struct RusTeXExtension {
     pdf: MinimalPDFExtension<Types>,
     pub(crate) state:ShipoutState,
-    pub(crate) change_markers:Vec<Vec<FontChange>>
+    pub(crate) change_markers:Vec<Vec<FontChange>>,
+    pub(crate) oddhead:CSName,
+    pub(crate) oddfoot:CSName,
+    pub(crate) evenhead:CSName,
+    pub(crate) evenfoot:CSName,
+    pub(crate) mkboth:CSName,
+    pub(crate) specialpage:CSName,
+    pub(crate) gobbletwo:Macro<CompactToken>,
+    pub(crate) empty:Macro<CompactToken>,
 }
 impl RusTeXExtension {
     pub(crate) fn push(&mut self) {
@@ -23,8 +36,24 @@ impl RusTeXExtension {
         self.change_markers.pop().unwrap()
     }
 }
-impl EngineExtension for RusTeXExtension {
-    fn new() -> Self { Self { pdf: MinimalPDFExtension::new(),state:ShipoutState::default(),change_markers:vec!() } }
+impl EngineExtension<Types> for RusTeXExtension {
+    fn new(memory:&mut MemoryManager<CompactToken>) -> Self {
+        let mut ret = Self {
+            pdf: MinimalPDFExtension::new(memory),
+            state:ShipoutState::default(),
+            change_markers:vec!() ,
+            oddhead:memory.cs_interner_mut().new("@oddhead"),
+            oddfoot:memory.cs_interner_mut().new("@oddfoot"),
+            evenhead:memory.cs_interner_mut().new("@evenhead"),
+            evenfoot:memory.cs_interner_mut().new("@evenfoot"),
+            mkboth:memory.cs_interner_mut().new("@mkboth"),
+            specialpage:memory.cs_interner_mut().new("if@specialpage"),
+            gobbletwo:Macro::new(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"#1#2",""),
+            empty:Macro::new(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"",""),
+        };
+        ret.gobbletwo.long = true;
+        ret
+    }
 }
 impl PDFExtension<Types> for RusTeXExtension {
 

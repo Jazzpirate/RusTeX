@@ -37,7 +37,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Char: Character;
     type CSName: CSName<Self::Char>;
     type Token: Token<Char = Self::Char, CS = Self::CSName>;
-    type Extension: EngineExtension;
+    type Extension: EngineExtension<Self>;
     type File: File<Char=Self::Char>;
     type FileSystem: FileSystem<File=Self::File>;
     type Int:TeXInt;
@@ -195,12 +195,13 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
         self.stomach = ET::Stomach::new(&mut self.aux,&mut self.state);
     }
     pub fn new() -> Self {
+        let mut memory = MemoryManager::new();
         let mut aux = EngineAux {
-            memory: MemoryManager::new(),
             outputs: ET::Outputs::new(),
             error_handler: ErrorThrower::new(),
             start_time:chrono::Local::now(),
-            extension: ET::Extension::new(),
+            extension: ET::Extension::new(&mut memory),
+            memory,
             jobname: String::new()
         };
         let fontsystem = ET::FontSystem::new(&mut aux);
@@ -241,11 +242,11 @@ pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 /** Additional components we want to add to a [`EngineReferences`] can be implemented here.
     Notably, `()` extends this trait if we don't need any additional components.
  */
-pub trait EngineExtension {
-    fn new() -> Self;
+pub trait EngineExtension<ET:EngineTypes> {
+    fn new(memory:&mut MemoryManager<ET::Token>) -> Self;
 }
-impl EngineExtension for () {
-    fn new() -> Self { () }
+impl<ET:EngineTypes<Extension=()>> EngineExtension<ET> for () {
+    fn new(_memory:&mut MemoryManager<ET::Token>) -> Self { () }
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {

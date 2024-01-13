@@ -26,7 +26,6 @@ pub enum MouthState {
 # use tex_engine::tex::characters::StringLineSource;
 #
 type T = StandardToken<u8,Ptr<str>>;
-let eh = ErrorThrower;
 let mut cs_handler = ();
 let cc = &*DEFAULT_SCHEME_U8;
 
@@ -34,25 +33,25 @@ let string = "\\foo   \n  \n   {a}{!}";
 let input: StringLineSource<u8> = string.into();
 let mut tokenizer = InputTokenizer::new(input);
 let eol = Some(b'\r');
-let next = tokenizer.get_next(&eh,&mut cs_handler,cc,None); // \foo
+let next = tokenizer.get_next(&mut cs_handler,cc,None); // \foo
 assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));
-let next = tokenizer.get_next(&eh,&mut cs_handler,cc,eol); // \par
+let next = tokenizer.get_next(&mut cs_handler,cc,eol); // \par
 assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "par"));
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // {
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // {
 assert_eq!(next.command_code(), CommandCode::BeginGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // a
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // a
 assert_eq!(next.command_code(), CommandCode::Letter);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // }
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // }
 assert_eq!(next.command_code(), CommandCode::EndGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // {
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // {
 assert_eq!(next.command_code(), CommandCode::BeginGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // !
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // !
 assert_eq!(next.command_code(), CommandCode::Other);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // }
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // }
 assert_eq!(next.command_code(), CommandCode::EndGroup);
-let next : T = tokenizer.get_next(&eh,&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
+let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
 assert_eq!(next.command_code(), CommandCode::Space);
-assert!(tokenizer.get_next::<T,_>(&eh,&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
+assert!(tokenizer.get_next::<T>(&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
 ```
 */
 #[derive(Clone,Debug)]

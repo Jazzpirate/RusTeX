@@ -72,7 +72,6 @@ impl Character for u8 {
     const MIN: Self = 0;
     const MAX: Self = 255;
 
-
     fn to_char(&self) -> char {*self as char}
     
     type Iter<'a> = ByteIterator<'a>;
@@ -82,7 +81,6 @@ impl Character for u8 {
     }
 
     fn convert(input:Vec<u8>) -> TextLine<Self> { input.into() }
-
 
     #[allow(unused_must_use)]
     fn display_fmt<W:std::fmt::Write>(&self, target:&mut W) {

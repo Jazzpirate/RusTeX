@@ -50,8 +50,8 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
 }
 
 fn pgfhbox(engine:Refs,_token:CompactToken) {
-    let num: i64 = engine.read_int(false).into();
-    let bx = engine.state.take_box_register(num as u16).unwrap();
+    let num = engine.read_register_index(false);
+    let bx = engine.state.take_box_register(num).unwrap();
     let node = RusTeXNode::PGFEscape(bx);
     RusTeXStomach::add_node_h(engine, HNode::Custom(node));
     /*
@@ -101,8 +101,8 @@ fn pgfhbox(engine:Refs,_token:CompactToken) {
      */
 }
 fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
-    let num: i64 = engine.read_int(false).into();
-    let bx = engine.state.take_box_register(num as u16).unwrap();
+    let num = engine.read_register_index(false);
+    let bx = engine.state.take_box_register(num).unwrap();
     let getdimens = engine.aux.memory.cs_interner_mut().new("rustex!pgf!get!dimens");
     engine.requeue(CompactToken::from_cs(getdimens));
     let minx = engine.read_dim(true);

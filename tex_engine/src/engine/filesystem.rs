@@ -14,36 +14,10 @@ use crate::utils::errors::ErrorHandler;
 
 pub mod kpathsea;
 
-#[derive(Debug,Copy,Clone)]
-pub struct SourceReference<FileId:Copy> {
-    pub file: FileId,
-    pub line: usize,
-    pub column: usize
-}
-impl<FileID:Copy> SourceReference<FileID> {
-    pub fn display<'a,F:File<SourceRefID=FileID>,FS:FileSystem<File=F>>(&'a self,fs:&'a FS) -> impl std::fmt::Display + 'a {
-        DisplaySourceReference { rf:self,fs }
-    }
-}
-
-struct DisplaySourceReference<'a,FS:FileSystem> {
-    rf:&'a SourceReference<<<FS as FileSystem>::File as File>::SourceRefID>,
-    fs:&'a FS
-}
-impl<'a,FS:FileSystem> std::fmt::Display for DisplaySourceReference<'a,FS> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{} l. {} c. {}",self.fs.ref_str(self.rf.file),self.rf.line,self.rf.column)
-    }
-}
-
-pub type SourceRef<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
-
 /// A [`FileSystem`] provides access to files.
 pub trait FileSystem:Clone {
     /// The type of files provided by this [`FileSystem`].
     type File:File;
-
-    fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
     /// Creates a new [`FileSystem`] with the given working directory.
     fn new(pwd:PathBuf) -> Self;
     /// Returns the file with the given name in the file database.
@@ -53,36 +27,56 @@ pub trait FileSystem:Clone {
     /// and updating the file database.
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf;
 
+    /// Opens the file with the given index for writing (`\openout`).
     fn open_out(&mut self,idx:u8,file:Self::File);
+    /// Opens the file with the given index for reading (`\openin`).
     fn open_in(&mut self,idx:u8,file:Self::File);
+    /// Closes the file with the given index (`\closein`).
     fn close_in(&mut self,idx:u8);
+    /// Closes the file with the given index (`\closeout`).
     fn close_out(&mut self,idx:u8);
+    /// Ehether the file with the given index is at its end (`\ifeof`).
     fn eof(&self,idx:u8) -> bool;
+    /// Writes the given string to the file with the given index (`\write`).
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
+    /// Reads a line from the file with the given index and current [`CategoryCodeScheme`] (`\read`), possibly
+    /// respecting groups (i.e. will continue reading at the end of a line until all open groups are closed).
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
                                                                                 idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
     );
+    /// Reads a line from the file with the given index using [`CategoryCode::Other`](crate::tex::catcodes::CategoryCode::Other)
+    /// expect for space characters (`\readline`).
     fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F);
+
+    /// Returns a human-readable representation of a [`SourceRefID`](File::SourceRefID); e.g. the file name/path.
+    fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
 }
 
 /// A (virtual or physical) file.
 pub trait File:std::fmt::Display+Clone+std::fmt::Debug + 'static {
     /// The type of characters to be read from the file.
     type Char:Character;
+    /// A `Copy`able identifier for this file to be used in [`SourceReference`]s.
     type SourceRefID:Copy+std::fmt::Debug;
     /// The type of line sources to be read from the file.
     type LineSource: FileLineSource<Self::Char>;
+    /// Returns the path of this file.
     fn path(&self) -> &Path;
+    /// Returns a line source for this file. Used by a [`Mouth`](crate::engine::mouth::Mouth) to read from this file.
     fn line_source(self) -> Option<Self::LineSource>;
+    /// Returns whether this file exists.
     fn exists(&self) -> bool {
         self.path().exists()
     }
+    /// Returns the size of this file in bytes.
     fn size(&self) -> usize;
+    /// Returns a [`SourceRefID`](File::SourceRefID) for this file.
     fn sourceref(&self) -> Self::SourceRefID;
 }
 
+/// An abstraction over a [`TextLineSource`] that has a `Path` - i.e. represents the contents of a file.
 pub trait FileLineSource<C:Character>:TextLineSource<C> {
     fn path(&self) -> &Path;
 }
@@ -110,7 +104,6 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     type File = VirtualFile<C>;
     fn new(pwd:PathBuf) -> Self {
         Self {
-            //phantom:PhantomData::default(),
             kpse:Kpathsea::new(pwd),
             files:HMap::default(),
             write_files:Vec::new(),
@@ -273,65 +266,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     }
 }
 
-#[derive(Clone)]
-struct WritableVirtualFile<C:Character>(Vec<Box<[C]>>, PathBuf,string_interner::symbol::SymbolU32);
-impl<C:Character> WritableVirtualFile<C> {
-
-    fn new(p:PathBuf,id:string_interner::symbol::SymbolU32) -> Self {
-        Self(Vec::new(),p,id)
-    }
-}
-
-type VirtualFileContents<C> = Ptr<[TextLine<C>]>;
-
-#[derive(Debug)]
-enum VirtualOrPhysicalFile<C:Character> {
-    Virtual(VirtualFileContents<C>,usize),
-    Physical(std::io::Split<std::io::BufReader<std::fs::File>>)
-}
-#[derive(Debug)]
-pub struct VirtualFileLineSource<C:Character> {
-    path:PathBuf,
-    source:VirtualOrPhysicalFile<C>
-}
-impl <C:Character> FileLineSource<C> for VirtualFileLineSource<C> {
-
-    fn path(&self) -> &Path { &self.path }
-}
-impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
-    fn get_line(&mut self) -> Option<TextLine<C>> {
-        match &mut self.source {
-            VirtualOrPhysicalFile::Virtual(v,i) => {
-                if *i >= v.len() {
-                    None
-                } else {
-                    let ret = v[*i].clone();
-                    *i += 1;
-                    Some(ret)
-                }
-            }
-            VirtualOrPhysicalFile::Physical(f) => {
-                match f.next() {
-                    Some(Ok(mut s)) => {
-                        if let Some(b'\r') = s.last() {
-                            s.pop();
-                        }
-                        while let Some(b' ') = s.last() {
-                            s.pop();
-                            if s.last() == Some(&b'\\') {
-                                s.push(b' ');
-                                break;
-                            }
-                        }
-                        Some(C::convert(s))
-                    }
-                    _ => None
-                }
-            }
-        }
-    }
-}
-
+/// A [`File`] that may live in memory or on the physical file system.
 #[derive(Clone,Debug)]
 pub struct VirtualFile<C:Character> {
     pub path:PathBuf,
@@ -341,7 +276,6 @@ pub struct VirtualFile<C:Character> {
     pub exists:bool
 }
 impl<C:Character> std::fmt::Display for VirtualFile<C> {
-
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.path.display())
     }
@@ -391,4 +325,92 @@ impl<C:Character> File for VirtualFile<C> {
             }
         }
     }
+}
+
+/// A [`TextLineSource`] that lives in memory.
+#[derive(Debug)]
+pub struct VirtualFileLineSource<C:Character> {
+    path:PathBuf,
+    source:VirtualOrPhysicalFile<C>
+}
+impl <C:Character> FileLineSource<C> for VirtualFileLineSource<C> {
+    fn path(&self) -> &Path { &self.path }
+}
+impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
+    fn get_line(&mut self) -> Option<TextLine<C>> {
+        match &mut self.source {
+            VirtualOrPhysicalFile::Virtual(v,i) => {
+                if *i >= v.len() {
+                    None
+                } else {
+                    let ret = v[*i].clone();
+                    *i += 1;
+                    Some(ret)
+                }
+            }
+            VirtualOrPhysicalFile::Physical(f) => {
+                match f.next() {
+                    Some(Ok(mut s)) => {
+                        if let Some(b'\r') = s.last() {
+                            s.pop();
+                        }
+                        while let Some(b' ') = s.last() {
+                            s.pop();
+                            if s.last() == Some(&b'\\') {
+                                s.push(b' ');
+                                break;
+                            }
+                        }
+                        Some(C::convert(s))
+                    }
+                    _ => None
+                }
+            }
+        }
+    }
+}
+
+/// A [`SourceReference`] is a reference to a location in a file.
+#[derive(Debug,Copy,Clone)]
+pub struct SourceReference<FileId:Copy> {
+    /// The file this [`SourceReference`] refers to.
+    pub file: FileId,
+    /// The line number of this [`SourceReference`].
+    pub line: usize,
+    /// The column number of this [`SourceReference`].
+    pub column: usize
+}
+impl<FileID:Copy> SourceReference<FileID> {
+    /// Yields a [`Display`](std::fmt::Display)able version of this [`SourceReference`].
+    pub fn display<'a,F:File<SourceRefID=FileID>,FS:FileSystem<File=F>>(&'a self,fs:&'a FS) -> impl std::fmt::Display + 'a {
+        DisplaySourceReference { rf:self,fs }
+    }
+}
+pub type SourceRef<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
+
+struct DisplaySourceReference<'a,FS:FileSystem> {
+    rf:&'a SourceReference<<<FS as FileSystem>::File as File>::SourceRefID>,
+    fs:&'a FS
+}
+impl<'a,FS:FileSystem> std::fmt::Display for DisplaySourceReference<'a,FS> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{} l. {} c. {}",self.fs.ref_str(self.rf.file),self.rf.line,self.rf.column)
+    }
+}
+
+#[derive(Clone)]
+struct WritableVirtualFile<C:Character>(Vec<Box<[C]>>, PathBuf,string_interner::symbol::SymbolU32);
+impl<C:Character> WritableVirtualFile<C> {
+
+    fn new(p:PathBuf,id:string_interner::symbol::SymbolU32) -> Self {
+        Self(Vec::new(),p,id)
+    }
+}
+
+type VirtualFileContents<C> = Ptr<[TextLine<C>]>;
+
+#[derive(Debug)]
+enum VirtualOrPhysicalFile<C:Character> {
+    Virtual(VirtualFileContents<C>,usize),
+    Physical(std::io::Split<std::io::BufReader<std::fs::File>>)
 }

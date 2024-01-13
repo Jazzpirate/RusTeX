@@ -146,6 +146,22 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
                 cs.display_fmt(int,cc,escapechar,f)
         }
     }
+    /// Returns a helper struct implementing [`Display`](std::fmt::Display) for this token.
+    fn display<'a>(&'a self, int:&'a<Self::CS as CSName<Self::Char>>::Handler, cc:&'a CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>) -> DisplayToken<'a,Self> {
+        DisplayToken { tk:self, int, cc, escapechar }
+    }
+}
+
+pub struct DisplayToken<'a,T:Token> {
+    tk:&'a T,
+    int:&'a <T::CS as CSName<T::Char>>::Handler,
+    cc:&'a CategoryCodeScheme<T::Char>,
+    escapechar:Option<T::Char>
+}
+impl<'a,T:Token> std::fmt::Display for DisplayToken<'a,T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.tk.display_fmt(self.int,self.cc,self.escapechar,f)
+    }
 }
 
 /** The simplest (but not most efficient) way to represent a [`Token`] as an enum.

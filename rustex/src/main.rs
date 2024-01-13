@@ -9,6 +9,7 @@ use std::env;
 use std::path::Path;
 use clap::Parser;
 use log::info;
+use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use RusTeX::engine::Types;
 use RusTeX::files::RusTeXFileSystem;
 use RusTeX::output::RusTeXOutput;
@@ -37,7 +38,7 @@ fn test() {
 
 fn thesis() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",false,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html", &ret).unwrap();
 }
 
@@ -130,8 +131,27 @@ fn run() {
         }
         _ => {
             println!("No input/output file given. Testing latex.ltx...");
-            RusTeXEngine::initialize(true);
+            test_latex_ltx();
             println!("Done");
         }
     }
+}
+
+fn test_latex_ltx() {
+    let mut engine = DefaultEngine::<Types>::new();
+    register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
+    engine.register_primitive(Command::Unexpandable(
+        Unexpandable {
+            name:PRIMITIVES.get("rustexBREAK"),
+            scope:CommandScope::Any,
+            apply:|_,_| {
+                println!("HERE!")
+            }
+        }
+    ),"rustexBREAK");
+    engine.aux.outputs = RusTeXOutput::Print(true);
+    engine.initialize_etex();
+    register_pdftex_primitives(&mut engine);
+    engine.init_file("pdftexconfig.tex").unwrap();
+    engine.load_latex();
 }

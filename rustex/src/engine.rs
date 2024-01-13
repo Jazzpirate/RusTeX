@@ -1,14 +1,12 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
-use log::error;
-use tex_engine::commands::{Command, CommandScope, Unexpandable};
+use tex_engine::commands::{Command, CommandScope, Macro, Unexpandable};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::engine::utils::memory::PRIMITIVES;
-use tex_engine::engine::utils::outputs::LogOutputs;
 use tex_engine::tex;
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::tokens::CompactToken;
@@ -24,7 +22,7 @@ use tex_engine::engine::filesystem::FileSystem;
 use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::pdflatex::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
-use tex_engine::tex::catcodes::CategoryCodeScheme;
+use tex_engine::tex::catcodes::{AT_LETTER_SCHEME, CategoryCodeScheme};
 use tex_engine::tex::catcodes::CategoryCode;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use crate::nodes::RusTeXNode;
@@ -109,14 +107,14 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
 }
 
 fn get_engine(log:bool) -> DefaultEngine<Types> {
-    let (mut state,memory) = get_state(log);
+    let (mut state,mut memory) = get_state(log);
     let fontsystem = FONT_SYSTEM.with(|f| f.lock().unwrap().clone()).unwrap();
     let mut aux = EngineAux {
-        memory,
         outputs: RusTeXOutput::None,
         error_handler: ErrorThrower::new(),
         start_time:chrono::Local::now(),
-        extension: Extension::new(),
+        extension: Extension::new(&mut memory),
+        memory,
         jobname: String::new()
     };
     let mut mouth = DefaultMouth::new(&mut aux,&mut state);
@@ -136,31 +134,10 @@ pub trait RusTeXEngineT {
     fn do_file<S:AsRef<str>>(file:S,verbose:bool,log:bool,sourcerefs:bool) -> String;
 }
 
-lazy_static! {
-pub(crate) static ref AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
-    let mut catcodes = [CategoryCode::Other;256];
-    catcodes[123] = CategoryCode::BeginGroup;
-    catcodes[125] = CategoryCode::EndGroup;
-    catcodes[36] = CategoryCode::MathShift;
-    catcodes[38] = CategoryCode::AlignmentTab;
-    catcodes[35] = CategoryCode::Parameter;
-    catcodes[94] = CategoryCode::Superscript;
-    catcodes[95] = CategoryCode::Subscript;
-    catcodes[126] = CategoryCode::Active;
-    catcodes[92] = CategoryCode::Escape;
-    catcodes[32] = CategoryCode::Space;
-    catcodes[13] = CategoryCode::EOL;
-    catcodes[37] = CategoryCode::Comment;
-    for i in 64..91 { catcodes[i] = CategoryCode::Letter}
-    for i in 97..123 { catcodes[i] = CategoryCode::Letter}
-    catcodes
-};
-}
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
-    use tex_engine::engine::utils::memory::MemoryManager;
     let e = e.get_engine_refs();
     let name = e.aux.memory.cs_interner_mut().new(name);
-    let mut cmd = tex_engine::commands::methods::make_macro::<Types,_,_>(
+    let mut cmd = Macro::new(
         e.aux.memory.cs_interner_mut(),
         &AT_LETTER_SCHEME,sig,exp);
     if protect { cmd.protected = true }
@@ -185,7 +162,7 @@ impl RusTeXEngineT for RusTeXEngine {
 
         match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
             Ok(_) => (),
-            Err(e) => engine.aux.outputs.errmessage(e)
+            Err(e) => engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)))
         }
 
 

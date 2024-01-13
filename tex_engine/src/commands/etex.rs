@@ -190,7 +190,7 @@ pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 }
 
 pub fn ifcsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    let name = super::methods::do_csname(engine);
+    let name = engine.read_csname();
     engine.state.get_command(&name).is_some()
 }
 

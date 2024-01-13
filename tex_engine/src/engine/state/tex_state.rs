@@ -247,7 +247,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                                             aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
-                    self.textfonts[idx] = font;
+                    self.textfonts[idx as usize] = font;
                 }
                 StateChange::ScriptFont{idx,old:font} => {
                     if trace {
@@ -256,7 +256,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                                             aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
-                    self.scriptfonts[idx] = font;
+                    self.scriptfonts[idx as usize] = font;
                 }
                 StateChange::ScriptScriptFont{idx,old:font} => {
                     if trace {
@@ -265,7 +265,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                                             aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
-                    self.scriptscriptfonts[idx] = font;
+                    self.scriptscriptfonts[idx as usize] = font;
                 }
                 StateChange::ParShape {old} => {
                     if trace {
@@ -543,18 +543,18 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    fn get_textfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
-        &self.textfonts[i]
+    fn get_textfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+        &self.textfonts[i as usize]
     }
 
-    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing textfont{}={}{}}}",
                                  if g {"globally "} else {""},idx,
                                  <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 aux.memory.cs_interner().resolve(s.textfonts[idx].name())
+                                 aux.memory.cs_interner().resolve(s.textfonts[idx as usize].name())
                     ));
                 aux.outputs.write_neg1(
                     format_args!("{{into textfont{}={}{}}}",idx,
@@ -562,24 +562,24 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
-            let old = std::mem::replace(&mut s.textfonts[idx], fnt);
+            let old = std::mem::replace(&mut s.textfonts[idx as usize], fnt);
             StateChange::TextFont{idx,old}
         })
     }
 
 
-    fn get_scriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
-        &self.scriptfonts[i]
+    fn get_scriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+        &self.scriptfonts[i as usize]
     }
 
-    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing scriptfont{}={}{}}}",
                                  if g {"globally "} else {""},idx,
                                  <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 aux.memory.cs_interner().resolve(s.scriptfonts[idx].name())
+                                 aux.memory.cs_interner().resolve(s.scriptfonts[idx as usize].name())
                     ));
                 aux.outputs.write_neg1(
                     format_args!("{{into scriptfont{}={}{}}}",idx,
@@ -587,24 +587,24 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
-            let old = std::mem::replace(&mut s.scriptfonts[idx], fnt);
+            let old = std::mem::replace(&mut s.scriptfonts[idx as usize], fnt);
             StateChange::ScriptFont{idx,old}
         })
     }
 
 
-    fn get_scriptscriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
-        &self.scriptscriptfonts[i]
+    fn get_scriptscriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+        &self.scriptscriptfonts[i as usize]
     }
 
-    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing scriptscriptfont{}={}{}}}",
                                  if g {"globally "} else {""},idx,
                                  <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 aux.memory.cs_interner().resolve(s.scriptscriptfonts[idx].name())
+                                 aux.memory.cs_interner().resolve(s.scriptscriptfonts[idx as usize].name())
                     ));
                 aux.outputs.write_neg1(
                     format_args!("{{into scriptscriptfont{}={}{}}}",idx,
@@ -612,7 +612,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
-            let old = std::mem::replace(&mut s.scriptscriptfonts[idx], fnt);
+            let old = std::mem::replace(&mut s.scriptscriptfonts[idx as usize], fnt);
             StateChange::ScriptScriptFont{idx,old}
         })
     }
@@ -838,15 +838,14 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn get_int_register(&self, idx: u16) -> crate::engine::state::Int<Self> {
-        match self.int_register.get(idx as usize) {
+    fn get_int_register(&self, idx: usize) -> crate::engine::state::Int<Self> {
+        match self.int_register.get(idx) {
             Some(i) => *i,
             _ => ET::Int::default()
         }
     }
-    fn set_int_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: crate::engine::state::Int<Self>, globally: bool) {
+    fn set_int_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: crate::engine::state::Int<Self>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let idx = idx as usize;
             if s.int_register.len() <= idx {
                 s.int_register.resize(idx + 1, ET::Int::default());
             }
@@ -859,20 +858,19 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 aux.outputs.write_neg1(format_args!("{{into {}count{}={}}}",
                                                     ET::Char::displayable_opt(s.escape_char),idx,v))
             }
-            StateChange::IntRegister { idx:idx as u16, old }
+            StateChange::IntRegister { idx, old }
         });
     }
 
 
-    fn get_dim_register(&self, idx: u16) -> ET::Dim {
-        match self.dim_register.get(idx as usize) {
+    fn get_dim_register(&self, idx: usize) -> ET::Dim {
+        match self.dim_register.get(idx) {
             Some(i) => *i,
             _ => ET::Dim::default()
         }
     }
-    fn set_dim_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: ET::Dim, globally: bool) {
+    fn set_dim_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: ET::Dim, globally: bool) {
         self.change_field(globally,|s,g| {
-            let idx = idx as usize;
             if s.dim_register.len() <= idx {
                 s.dim_register.resize(idx + 1, ET::Dim::default());
             }
@@ -885,21 +883,20 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 aux.outputs.write_neg1(format_args!("{{into {}dimen{}={}}}",
                                                     ET::Char::displayable_opt(s.escape_char),idx,v));
             }
-            StateChange::DimRegister { idx:idx as u16, old }
+            StateChange::DimRegister { idx, old }
         });
     }
 
 
 
-    fn get_skip_register(&self, idx: u16) -> ET::Skip {
-        match self.skip_register.get(idx as usize) {
+    fn get_skip_register(&self, idx: usize) -> ET::Skip {
+        match self.skip_register.get(idx) {
             Some(i) => *i,
             _ => ET::Skip::default()
         }
     }
-    fn set_skip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: ET::Skip, globally: bool) {
+    fn set_skip_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: ET::Skip, globally: bool) {
         self.change_field(globally,|s,g| {
-            let idx = idx as usize;
             if s.skip_register.len() <= idx {
                 s.skip_register.resize(idx + 1, ET::Skip::default());
             }
@@ -912,20 +909,19 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 aux.outputs.write_neg1(format_args!("{{into {}skip{}={}}}",
                                                     ET::Char::displayable_opt(s.escape_char),idx,v))
             }
-            StateChange::SkipRegister { idx:idx as u16, old }
+            StateChange::SkipRegister { idx, old }
         });
     }
 
 
-    fn get_muskip_register(&self, idx: u16) -> ET::MuSkip {
-        match self.muskip_register.get(idx as usize) {
+    fn get_muskip_register(&self, idx: usize) -> ET::MuSkip {
+        match self.muskip_register.get(idx) {
             Some(i) => *i,
             _ => ET::MuSkip::default()
         }
     }
-    fn set_muskip_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: ET::MuSkip, globally: bool) {
+    fn set_muskip_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: ET::MuSkip, globally: bool) {
         self.change_field(globally,|s,g| {
-            let idx = idx as usize;
             if s.muskip_register.len() <= idx {
                 s.muskip_register.resize(idx + 1, ET::MuSkip::default());
             }
@@ -938,35 +934,34 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 aux.outputs.write_neg1(format_args!("{{into {}muskip{}={}}}",
                                                     ET::Char::displayable_opt(s.escape_char),idx,v))
             }
-            StateChange::MuSkipRegister { idx:idx as u16, old }
+            StateChange::MuSkipRegister { idx, old }
         });
     }
 
 
-    fn get_box_register(&self, idx: u16) -> Option<&TeXBox<ET>> {
-        match self.box_register.get(idx as usize) {
+    fn get_box_register(&self, idx: usize) -> Option<&TeXBox<ET>> {
+        match self.box_register.get(idx) {
             None => None,
             Some(i) => i.as_ref()
         }
     }
 
 
-    fn get_box_register_mut(&mut self, idx: u16) -> Option<&mut TeXBox<ET>> {
-        match self.box_register.get_mut(idx as usize) {
+    fn get_box_register_mut(&mut self, idx: usize) -> Option<&mut TeXBox<ET>> {
+        match self.box_register.get_mut(idx) {
             None => None,
             Some(i) => i.as_mut()
         }
     }
 
-    fn take_box_register(&mut self, idx: u16) -> Option<TeXBox<ET>> {
-        match self.box_register.get_mut(idx as usize) {
+    fn take_box_register(&mut self, idx: usize) -> Option<TeXBox<ET>> {
+        match self.box_register.get_mut(idx) {
             None => None,
             Some(i) => std::mem::take(i)
         }
     }
-    fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: Option<TeXBox<ET>>, globally: bool) {
+    fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: Option<TeXBox<ET>>, globally: bool) {
         self.change_field(globally,|s,_| {
-            let idx = idx as usize;
             if s.box_register.len() <= idx {
                 s.box_register.resize(idx + 1, None);
             }
@@ -974,21 +969,20 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{TODO: trace box register change {}}}",idx));
             }
-            StateChange::BoxRegister { idx:idx as u16, old }
+            StateChange::BoxRegister { idx, old }
         });
     }
 
 
 
-    fn get_toks_register(&self, idx: u16) -> &TokenList<ET::Token> {
-        match self.toks_register.get(idx as usize) {
+    fn get_toks_register(&self, idx: usize) -> &TokenList<ET::Token> {
+        match self.toks_register.get(idx) {
             Some(i) => i,
             _ => &self.empty_list
         }
     }
-    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: TokenList<ET::Token>, globally: bool) {
+    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: TokenList<ET::Token>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let idx = idx as usize;
             if s.toks_register.len() <= idx {
                 s.toks_register.resize(idx + 1, s.empty_list.clone());
             }
@@ -1007,7 +1001,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                                                     s.toks_register[idx].display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                                                     ))
             }
-            StateChange::ToksRegister { idx:idx as u16, old }
+            StateChange::ToksRegister { idx, old }
         });
     }
 

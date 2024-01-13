@@ -208,7 +208,7 @@ pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 
 
 pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    crate::commands::methods::skip_argument(engine)
+    engine.skip_argument()
 }
 
 pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
@@ -346,8 +346,8 @@ pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Ve
 
 pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     // TODO
-    crate::commands::methods::skip_argument(engine);
-    crate::commands::methods::skip_argument(engine);
+    engine.skip_argument();
+    engine.skip_argument();
 }
 
 pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token)
@@ -568,7 +568,7 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> usize
     if engine.read_keyword(b"resources") {
         engine.read_braced_string(true,true,&mut resources);
     }
-    let idx = crate::commands::methods::read_register(engine);
+    let idx = engine.read_register_index(false);
     let bx = engine.state.take_box_register(idx);
     engine.aux.extension.pdfxforms().push(PDFXForm {
         attr,resources,bx

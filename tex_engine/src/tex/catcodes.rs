@@ -3,6 +3,7 @@ Category codes
  */
 
 use std::fmt::Formatter;
+use const_for::const_for;
 use lazy_static::lazy_static;
 use crate::tex::tokens::token_lists::CharWrite;
 use crate::tex::tokens::control_sequences::CSName;
@@ -146,78 +147,100 @@ impl TryFrom<u8> for CategoryCode {
 pub type CategoryCodeScheme<Char> = <Char as Character>::CharMap<CategoryCode>;
 
 
-lazy_static! {
-    /** The [`CategoryCodeScheme`] where all characters have [`CategoryCode::Other`] (12) except for
-           the space character, which has [`CategoryCode::Space`] (10).
-     */
-    pub static ref OTHER_SCHEME_U8 : CategoryCodeScheme<u8> = {
-        let mut catcodes = [CategoryCode::Other;256];
-        catcodes[32] = CategoryCode::Space;
-        catcodes
-    };
-    /**
-    The default [`CategoryCodeScheme`] for TeX, pre latex.ltx.
+/** The [`CategoryCodeScheme`] where all characters have [`CategoryCode::Other`] (12) except for
+          the space character, which has [`CategoryCode::Space`] (10).
+ */
+pub static OTHER_SCHEME_U8 : CategoryCodeScheme<u8> = {
+    let mut catcodes = [CategoryCode::Other;256];
+    catcodes[32] = CategoryCode::Space;
+    catcodes
+};
 
-    All characters have [`CategoryCode::Other`] (12) except for:
+/**
+The default [`CategoryCodeScheme`] for TeX, pre latex.ltx.
 
-    | Character    | Category Code   |
-    |--------------|-----------------
-     | ` `          | [`Space`](CategoryCode::Space)|
-    | a-z, A-Z     | [`Letter`](CategoryCode::Letter) |
-    | `\`          | [`Escape`](CategoryCode::Other)  |
-    | `\r`         | [`EOL`](CategoryCode::EOL)       |
-    | `%`          | [`Comment`](CategoryCode::Comment)|
-     */
-    pub static ref STARTING_SCHEME_U8 : CategoryCodeScheme<u8> = {
-        let mut catcodes = [CategoryCode::Other;256];
-        catcodes[92] = CategoryCode::Escape;
-        catcodes[32] = CategoryCode::Space;
-        catcodes[13] = CategoryCode::EOL;
-        catcodes[37] = CategoryCode::Comment;
-        for i in 65..91 { catcodes[i] = CategoryCode::Letter}
-        for i in 97..123 { catcodes[i] = CategoryCode::Letter}
-        catcodes
-    };
-        /**
-        The default [`CategoryCodeScheme`] used almost everywhere in LaTeX.
+All characters have [`CategoryCode::Other`] (12) except for:
 
-        All characters have [`CategoryCode::Other`] (12) except for:
+| Character    | Category Code   |
+|--------------|-----------------
+ | ` `          | [`Space`](CategoryCode::Space)|
+| a-z, A-Z     | [`Letter`](CategoryCode::Letter) |
+| `\`          | [`Escape`](CategoryCode::Other)  |
+| `\r`         | [`EOL`](CategoryCode::EOL)       |
+| `%`          | [`Comment`](CategoryCode::Comment)|
+ */
+pub static STARTING_SCHEME_U8 : CategoryCodeScheme<u8> = {
+    let mut catcodes = [CategoryCode::Other;256];
+    catcodes[92] = CategoryCode::Escape;
+    catcodes[32] = CategoryCode::Space;
+    catcodes[13] = CategoryCode::EOL;
+    catcodes[37] = CategoryCode::Comment;
+    const_for!(i in 65..91 => catcodes[i] = CategoryCode::Letter);
+    const_for!(i in 97..123 => catcodes[i] = CategoryCode::Letter);
+    catcodes
+};
 
-        | Character    | Category Code   |
-        |--------------|-----------------
-         | ` `          | [`Space`](CategoryCode::Space)|
-        | a-z, A-Z     | [`Letter`](CategoryCode::Letter) |
-        | `\`          | [`Escape`](CategoryCode::Other)  |
-        | `\r`         | [`EOL`](CategoryCode::EOL)       |
-        | `%`          | [`Comment`](CategoryCode::Comment)|
-        | `~`          | [`Active`](CategoryCode::Active)  |
-        | `#`          | [`Parameter`](CategoryCode::Parameter)|
-        | `^`          | [`Superscript`](CategoryCode::Superscript)|
-        | `_`          | [`Subscript`](CategoryCode::Subscript)|
-        | `{`          | [`BeginGroup`](CategoryCode::BeginGroup)|
-        | `}`          | [`EndGroup`](CategoryCode::EndGroup)|
-        | `$`          | [`MathShift`](CategoryCode::MathShift)|
-        | `&`          | [`AlignmentTab`](CategoryCode::AlignmentTab)|
-         */
-    pub static ref DEFAULT_SCHEME_U8 : CategoryCodeScheme<u8> = {
-        let mut catcodes = [CategoryCode::Other;256];
-        catcodes[123] = CategoryCode::BeginGroup;
-        catcodes[125] = CategoryCode::EndGroup;
-        catcodes[36] = CategoryCode::MathShift;
-        catcodes[38] = CategoryCode::AlignmentTab;
-        catcodes[35] = CategoryCode::Parameter;
-        catcodes[94] = CategoryCode::Superscript;
-        catcodes[95] = CategoryCode::Subscript;
-        catcodes[126] = CategoryCode::Active;
-        catcodes[92] = CategoryCode::Escape;
-        catcodes[32] = CategoryCode::Space;
-        catcodes[13] = CategoryCode::EOL;
-        catcodes[37] = CategoryCode::Comment;
-        for i in 65..91 { catcodes[i] = CategoryCode::Letter}
-        for i in 97..123 { catcodes[i] = CategoryCode::Letter}
-        catcodes
-    };
-}
+/**
+The default [`CategoryCodeScheme`] used almost everywhere in LaTeX.
+
+All characters have [`CategoryCode::Other`] (12) except for:
+
+| Character    | Category Code   |
+|--------------|-----------------
+ | ` `          | [`Space`](CategoryCode::Space)|
+| a-z, A-Z     | [`Letter`](CategoryCode::Letter) |
+| `\`          | [`Escape`](CategoryCode::Other)  |
+| `\r`         | [`EOL`](CategoryCode::EOL)       |
+| `%`          | [`Comment`](CategoryCode::Comment)|
+| `~`          | [`Active`](CategoryCode::Active)  |
+| `#`          | [`Parameter`](CategoryCode::Parameter)|
+| `^`          | [`Superscript`](CategoryCode::Superscript)|
+| `_`          | [`Subscript`](CategoryCode::Subscript)|
+| `{`          | [`BeginGroup`](CategoryCode::BeginGroup)|
+| `}`          | [`EndGroup`](CategoryCode::EndGroup)|
+| `$`          | [`MathShift`](CategoryCode::MathShift)|
+| `&`          | [`AlignmentTab`](CategoryCode::AlignmentTab)|
+ */
+pub static DEFAULT_SCHEME_U8 : CategoryCodeScheme<u8> = {
+    let mut catcodes = [CategoryCode::Other;256];
+    catcodes[123] = CategoryCode::BeginGroup;
+    catcodes[125] = CategoryCode::EndGroup;
+    catcodes[36] = CategoryCode::MathShift;
+    catcodes[38] = CategoryCode::AlignmentTab;
+    catcodes[35] = CategoryCode::Parameter;
+    catcodes[94] = CategoryCode::Superscript;
+    catcodes[95] = CategoryCode::Subscript;
+    catcodes[126] = CategoryCode::Active;
+    catcodes[92] = CategoryCode::Escape;
+    catcodes[32] = CategoryCode::Space;
+    catcodes[13] = CategoryCode::EOL;
+    catcodes[37] = CategoryCode::Comment;
+    const_for!(i in 65..91 => catcodes[i] = CategoryCode::Letter);
+    const_for!(i in 97..123 => catcodes[i] = CategoryCode::Letter);
+    catcodes
+};
+
+
+/// Like [`DEFAULT_SCHEME_U8`](static@DEFAULT_SCHEME_U8), but with `@` as a letter.
+/// (i.e. as after `\makeatletter`)
+pub static AT_LETTER_SCHEME : CategoryCodeScheme<u8> = {
+    let mut catcodes = [CategoryCode::Other;256];
+    catcodes[123] = CategoryCode::BeginGroup;
+    catcodes[125] = CategoryCode::EndGroup;
+    catcodes[36] = CategoryCode::MathShift;
+    catcodes[38] = CategoryCode::AlignmentTab;
+    catcodes[35] = CategoryCode::Parameter;
+    catcodes[94] = CategoryCode::Superscript;
+    catcodes[95] = CategoryCode::Subscript;
+    catcodes[126] = CategoryCode::Active;
+    catcodes[92] = CategoryCode::Escape;
+    catcodes[32] = CategoryCode::Space;
+    catcodes[13] = CategoryCode::EOL;
+    catcodes[37] = CategoryCode::Comment;
+    const_for!(i in 64..91 => catcodes[i] = CategoryCode::Letter);
+    const_for!(i in 97..123 => catcodes[i] = CategoryCode::Letter);
+    catcodes
+};
 
 /// After scanning a file, [`CategoryCode`]s such as [`EOL`](CategoryCode::EOL),
 /// [`Comment`](CategoryCode::Comment) or [`Invalid`](CategoryCode::Invalid)

@@ -63,27 +63,27 @@ impl State for RusTeXState {
     }
 
 
-    fn get_textfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+    fn get_textfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
         self.0.get_textfont(i)
     }
 
-    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.0.set_textfont(aux,idx,fnt,globally)
     }
 
-    fn get_scriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+    fn get_scriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
         self.0.get_scriptfont(i)
     }
 
-    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.0.set_scriptfont(aux,idx,fnt,globally)
     }
 
-    fn get_scriptscriptfont(&self, i: usize) -> &<Self::ET as EngineTypes>::Font {
+    fn get_scriptscriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
         self.0.get_scriptscriptfont(i)
     }
 
-    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: usize, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
         self.0.set_scriptscriptfont(aux,idx,fnt,globally)
     }
 
@@ -188,96 +188,75 @@ impl State for RusTeXState {
         self.0.set_parshape(aux,parshape,globally)
     }
 
-
-    fn get_int_register(&self, idx: u16) -> i32 {
+    fn get_int_register(&self, idx: usize) -> i32 {
         self.0.get_int_register(idx)
     }
 
-
-    fn set_int_register(&mut self, aux: &EngineAux<Types>, idx: u16, v: i32, globally: bool) {
+    fn set_int_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: i32, globally: bool) {
         self.0.set_int_register(aux,idx,v,globally)
     }
-
 
     fn get_primitive_int(&self, name: PrimitiveIdentifier) -> i32 {
         self.0.get_primitive_int(name)
     }
 
-
     fn set_primitive_int(&mut self, aux: &EngineAux<Types>, name: PrimitiveIdentifier, v: i32, globally: bool) {
         self.0.set_primitive_int(aux,name,v,globally)
     }
 
-
-    fn get_dim_register(&self, idx: u16) -> Dim32 {
+    fn get_dim_register(&self, idx: usize) -> Dim32 {
         self.0.get_dim_register(idx)
     }
 
-
-    fn set_dim_register(&mut self, aux: &EngineAux<Types>, idx: u16, v: Dim32, globally: bool) {
+    fn set_dim_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: Dim32, globally: bool) {
         self.0.set_dim_register(aux,idx,v,globally)
     }
 
-
-    fn get_skip_register(&self, idx: u16) -> Skip32<Dim32> {
+    fn get_skip_register(&self, idx: usize) -> Skip32<Dim32> {
         self.0.get_skip_register(idx)
     }
 
-
-    fn set_skip_register(&mut self, aux: &EngineAux<Types>, idx: u16, v: Skip32<Dim32>, globally: bool) {
+    fn set_skip_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: Skip32<Dim32>, globally: bool) {
         self.0.set_skip_register(aux,idx,v,globally)
     }
 
-
-    fn get_muskip_register(&self, idx: u16) -> MuSkip32 {
+    fn get_muskip_register(&self, idx: usize) -> MuSkip32 {
         self.0.get_muskip_register(idx)
     }
 
-
-    fn set_muskip_register(&mut self, aux: &EngineAux<Types>, idx: u16, v: MuSkip32, globally: bool) {
+    fn set_muskip_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: MuSkip32, globally: bool) {
         self.0.set_muskip_register(aux,idx,v,globally)
     }
-
-
-    fn get_toks_register(&self, idx: u16) -> &TokenList<CompactToken> {
+    fn get_toks_register(&self, idx: usize) -> &TokenList<CompactToken> {
         self.0.get_toks_register(idx)
     }
-
-
-    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: u16, v: TokenList<CompactToken>, globally: bool) {
+    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: TokenList<CompactToken>, globally: bool) {
         self.0.set_toks_register(aux,idx,v,globally)
     }
 
-
-    fn get_box_register(&self, idx: u16) -> Option<&TeXBox<Types>> {
+    fn get_box_register(&self, idx: usize) -> Option<&TeXBox<Types>> {
         self.0.get_box_register(idx)
     }
 
-
-    fn get_box_register_mut(&mut self, idx: u16) -> Option<&mut TeXBox<Types>> {
+    fn get_box_register_mut(&mut self, idx: usize) -> Option<&mut TeXBox<Types>> {
         self.0.get_box_register_mut(idx)
     }
 
-
-    fn take_box_register(&mut self, idx: u16) -> Option<TeXBox<Types>> {
+    fn take_box_register(&mut self, idx: usize) -> Option<TeXBox<Types>> {
         self.0.take_box_register(idx)
     }
 
-
-    fn set_box_register(&mut self, aux: &EngineAux<Types>, idx: u16, v: Option<TeXBox<Types>>, globally: bool) {
+    fn set_box_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: Option<TeXBox<Types>>, globally: bool) {
         self.0.set_box_register(aux,idx,v,globally)
     }
-
 
     fn get_primitive_dim(&self, name: PrimitiveIdentifier) -> Dim32 {
         self.0.get_primitive_dim(name)
     }
 
-
     fn set_primitive_dim(&mut self, aux: &EngineAux<Types>, name: PrimitiveIdentifier, v: Dim32, globally: bool) {
         self.0.set_primitive_dim(aux,name,v,globally)
     }
-
 
     fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> Skip32<Dim32> {
         self.0.get_primitive_skip(name)
