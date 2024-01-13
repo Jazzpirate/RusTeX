@@ -331,7 +331,7 @@ pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,
 }
 
 pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
-    let idx = super::methods::read_file_index(engine);
+    let idx = engine.read_file_index();
     if !engine.read_keyword("to".as_bytes()) {
         todo!("throw error")
     }
@@ -413,7 +413,7 @@ pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
         Some(GroupType::LeftRight) => (),
         _ => todo!("error?")
     }
-    let del = match super::methods::read_opt_delimiter(engine) {
+    let del = match engine.read_opt_delimiter() {
         None => todo!("error?"),
         Some(c) => c
     };

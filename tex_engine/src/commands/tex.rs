@@ -24,7 +24,7 @@ use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeList, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{EqNoPosition, MathAtom, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::token_lists::CharWrite;
@@ -923,7 +923,7 @@ pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
 }
 
 pub fn ifeof<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    let idx = super::methods::read_file_index(engine);
+    let idx = engine.read_file_index();
     engine.filesystem.eof(idx)
 }
 
@@ -1234,12 +1234,12 @@ pub fn mathchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
         todo!("matchchardef out of range")
     }
     let i = i as u32;
-    let ret = super::methods::get_mathchar(engine, i, None);
+    let ret = MathChar::from_u32(i, engine.state, None);
     ET::Stomach::add_node_m(engine, MathNode::Atom(ret.to_atom()));
 }
 
 pub fn left<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let del = super::methods::read_opt_delimiter(engine);
+    let del = engine.read_opt_delimiter();
     engine.stomach.data_mut().open_lists.push(
         NodeList::Math {
             children: MathNodeList::new(),
@@ -1253,7 +1253,7 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     if engine.state.get_group_type() != Some(GroupType::LeftRight) {
         todo!("throw error")
     }
-    let del = super::methods::read_opt_delimiter(engine);
+    let del = engine.read_opt_delimiter();
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Math{children,start,tp:MathNodeListType::LeftRight(left)}) => {
             engine.state.pop(engine.aux,engine.mouth);
@@ -1384,11 +1384,11 @@ pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
-    let (idx,file) = super::methods::read_index_and_file(engine);
+    let (idx,file) = engine.read_filename_and_index();
     Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file)}))
 }
 pub fn openout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let (idx,file) = super::methods::read_index_and_file(engine);
+    let (idx,file) = engine.read_filename_and_index();
     engine.filesystem.open_out(idx,file)
 }
 
@@ -1401,7 +1401,7 @@ pub fn prevdepth_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::T
 }
 
 pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
-    let idx = super::methods::read_file_index(engine);
+    let idx = engine.read_file_index();
     if !engine.read_keyword("to".as_bytes()) {
         todo!("throw error")
     }
@@ -1568,22 +1568,22 @@ pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 }
 
 pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let (idx,file) = super::methods::read_index_and_file(engine);
+    let (idx,file) = engine.read_filename_and_index();
     engine.filesystem.open_in(idx,file)
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
                                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
-    let idx = super::methods::read_file_index(engine);
+    let idx = engine.read_file_index();
     Some(Box::new(move |engine| {engine.filesystem.close_out(idx)}))
 }
 pub fn closeout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let idx = super::methods::read_file_index(engine);
+    let idx = engine.read_file_index();
     engine.filesystem.close_out(idx)
 }
 
 pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let idx = super::methods::read_file_index(engine);
+    let idx = engine.read_file_index();
     engine.filesystem.close_in(idx)
 }
 
@@ -1630,7 +1630,7 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 
 
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
-    super::methods::do_the(engine, |_, _, _, t|exp.push(t))
+    engine.do_the(|_, _, _, t|exp.push(t))
 }
 
 pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
@@ -1769,7 +1769,7 @@ pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
 
 pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let num = engine.read_int(false);
-    let delim = super::methods::get_delimiter(engine,num);
+    let delim = Delimiter::from_int(num,engine.state);
     ET::Stomach::add_node_m(engine,MathNode::Atom(delim.small.to_atom()))
 }
 
@@ -2135,7 +2135,7 @@ pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
     if i < 0 || i > u32::MAX as i64 {
         todo!("matchchar out of range")
     }
-    let char = super::methods::get_mathchar(engine,i as u32,None);
+    let char = MathChar::from_u32(i as u32, engine.state, None);
     engine.read_char_or_math_group(|(char,style),engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Accent{
@@ -2163,7 +2163,7 @@ pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     if i < 0 || i > u32::MAX as i64 {
         todo!("matchchar out of range")
     }
-    let char = super::methods::get_mathchar(engine,i as u32,None);
+    let char = MathChar::from_u32(i as u32, engine.state, None);
     engine.read_char_or_math_group(|(char,style),engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Radical{
@@ -2222,8 +2222,8 @@ pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 }
 
 pub fn overwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let left = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
-    let right = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let left = engine.read_opt_delimiter().map(|d| (d.small.char,d.small.style));
+    let right = engine.read_opt_delimiter().map(|d| (d.small.char,d.small.style));
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
             //let v = std::mem::take(v);
@@ -2261,8 +2261,8 @@ pub fn above<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 }
 
 pub fn abovewithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let left = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
-    let right = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let left = engine.read_opt_delimiter().map(|d| (d.small.char,d.small.style));
+    let right = engine.read_opt_delimiter().map(|d| (d.small.char,d.small.style));
     let sep = engine.read_dim(false);
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
@@ -2300,8 +2300,8 @@ pub fn atop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 }
 
 pub fn atopwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let left = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
-    let right = super::methods::read_opt_delimiter(engine).map(|d| (d.small.char,d.small.style));
+    let left = engine.read_opt_delimiter().map(|d| (d.small.char,d.small.style));
+    let right = engine.read_opt_delimiter().map(|d| (d.small.char,d.small.style));
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math {children:ch@MathNodeList::Simple(_),..}) => {
             //let v = std::mem::take(v);

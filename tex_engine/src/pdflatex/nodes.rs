@@ -357,9 +357,10 @@ pub trait PDFExtension<ET:EngineTypes>: EngineExtension<ET> {
             Some(p) => Some(p),
             r => {
                 #[cfg(feature="pdfium-dyn")]
-                let lib = match Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path("./"))
-                    .or_else(|_| Pdfium::bind_to_system_library()) {
-                    Ok(r) => r,
+                let lib = match std::env::current_exe().map(|d| d.parent().map(|d|
+                    Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(d)).ok()
+                )).ok().flatten().flatten().or_else(|| Pdfium::bind_to_system_library().ok()) {
+                    Some(r) => r,
                     _ => return None
                 };
                 #[cfg(feature="pdfium-static")]

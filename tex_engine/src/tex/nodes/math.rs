@@ -4,12 +4,14 @@ use std::marker::PhantomData;
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::Font;
+use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::{Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{TeXBox, ToOrSpread};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
 use crate::tex::numerics::NumSet;
+use crate::engine::state::State;
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub struct MathStyle {
@@ -891,10 +893,59 @@ impl<ET:EngineTypes> MathChar<ET> {
         let kernel = MathNucleus::Simple { cls:self.cls, kernel:MathKernel::Char { char:self.char, style:self.style }, limits:None };
         MathAtom { nucleus: kernel,sup:None,sub:None }
     }
+    pub fn from_u32(mathcode:u32, state:&ET::State, source:Option<ET::Char>) -> Self {
+        let (mut cls,mut fam,pos) = {
+            if mathcode == 0 {
+                (0,0,match source {
+                    Some(c) => c.try_into().ok().unwrap(),
+                    _ => 0
+                })
+            } else {
+                let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
+                let fam = ((mathcode >> 8) & 0xF) as u8;      // (rest % 16)
+                let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
+                (rest_fam_shifted as u8, fam, char)
+            }
+        };
+        if cls == 7 {
+            let i = state.get_primitive_int(PRIMITIVES.fam).into();
+            match i {
+                i if i < 0 || i > 15 => {
+                    cls = 0;
+                }
+                i => {
+                    cls = 0;
+                    fam = i as u8;
+                }
+            }
+        }
+        let cls = MathClass::from(cls);
+        let char = ET::Char::from(pos);
+        MathChar {
+            char,
+            cls,
+            style:state.get_mathfonts(fam)
+        }
+    }
 }
 
 #[derive(Clone,Debug)]
 pub struct Delimiter<ET:EngineTypes> {
     pub small:MathChar<ET>,
     pub large:MathChar<ET>,
+}
+impl<ET:EngineTypes> Delimiter<ET> {
+    pub fn from_int(num:ET::Int,state:&ET::State) -> Self {
+        let num = num.into();
+        if num < 0 || num > u32::MAX.into() {
+            todo!("throw error")
+        }
+        let num = num as u32;
+        let large = num & 0xFFF;
+        let small = num >> 12;
+        Delimiter {
+            small:MathChar::from_u32(small, state, None),
+            large:MathChar::from_u32(large, state, None)
+        }
+    }
 }

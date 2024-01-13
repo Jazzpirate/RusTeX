@@ -4,7 +4,6 @@ Category codes
 
 use std::fmt::Formatter;
 use const_for::const_for;
-use lazy_static::lazy_static;
 use crate::tex::tokens::token_lists::CharWrite;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::Character;

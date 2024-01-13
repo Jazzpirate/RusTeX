@@ -15,7 +15,6 @@ use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::Token;
 use crate::commands::Command;
-use crate::commands::methods::get_mathchar;
 use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::engine::fontsystem::Font;
@@ -139,7 +138,7 @@ pub trait Stomach {
 
     fn do_mathchar(engine:&mut EngineReferences<Self::ET>,code:u32,_token:Tk<Self>) {
         if !engine.stomach.data_mut().mode().is_math() { todo!("throw error") }
-        let ret = get_mathchar(engine, code, None);
+        let ret = MathChar::from_u32(code, engine.state, None);
         Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
     }
 
@@ -260,7 +259,7 @@ pub trait Stomach {
                 if code == 32768 {
                     engine.mouth.requeue(Tk::<Self>::from_char_cat(char,CommandCode::Active));
                 } else {
-                    let ret = get_mathchar(engine, code, Some(char));
+                    let ret = MathChar::from_u32(code, engine.state, Some(char));
                     Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
                 }
             }
@@ -1204,11 +1203,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             },
             ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
             ResolvedToken::Tk {char,code:CommandCode::Other | CommandCode::Letter,..} => {
-                let mc = get_mathchar(self, self.state.get_mathcode(char), Some(char));
+                let mc = MathChar::from_u32(self.state.get_mathcode(char),self.state, Some(char));
                 return f(s,self,mc)
             },
             ResolvedToken::Cmd{cmd:Some(Command::MathChar(u)),..} => {
-                let mc = get_mathchar(self, *u, None);
+                let mc = MathChar::from_u32(*u, self.state,None);
                 return f(s,self,mc)
             }
             ResolvedToken::Tk {code,..} => {

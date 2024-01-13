@@ -1,3 +1,6 @@
+/*! Utility methods for [`Command`]s.
+*/
+
 use crate::commands::{Command, Expandable, Macro, MacroSignature, ResolvedToken, SimpleExpandable, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::FileSystem;
@@ -9,18 +12,16 @@ use crate::engine::state::{GroupType, State};
 use crate::engine::stomach::{Stomach, StomachData};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::expand_loop;
-use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
+use crate::tex::catcodes::CommandCode;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
-use crate::tex::tokens::control_sequences::{CSName, CSHandler};
+use crate::tex::tokens::control_sequences::CSHandler;
 use std::fmt::Write;
 use crate::engine::gullet::hvalign::{AlignColumn, AlignData};
-use crate::engine::mouth::strings::InputTokenizer;
-use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderBody, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, MathAtom, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
@@ -297,135 +298,7 @@ impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
     }
 }
 
-pub fn read_file_index<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> u8 {
-    let idx = engine.read_int(false);
-    if idx < ET::Int::default() || idx.into() > 255 {
-        todo!("throw error")
-    }
-    idx.into() as u8
-}
-
-pub fn read_index_and_file<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (u8,ET::File) {
-    let idx = read_file_index(engine);
-    let mut filename = engine.aux.memory.get_string();
-    engine.read_string(true,&mut filename);
-    if filename.is_empty() {
-        todo!("throw error")
-    }
-    let file = engine.filesystem.get(&filename);
-    engine.aux.memory.return_string(filename);
-    (idx,file)
-}
-
-pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(engine: &mut EngineReferences<ET>,mut cont:F) {
-    expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(c),token} => match c {
-            Command::Int(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::Dim(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::Skip(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::MuSkip(ic) => {
-                let val = (ic.read)(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::IntRegister(u) => {
-                let val = engine.state.get_int_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::DimRegister(u) => {
-                let val = engine.state.get_dim_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::SkipRegister(u) => {
-                let val = engine.state.get_skip_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::MuSkipRegister(u) => {
-                let val = engine.state.get_muskip_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveInt(u) => {
-                let val = engine.state.get_primitive_int(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveDim(u) => {
-                let val = engine.state.get_primitive_dim(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveSkip(u) => {
-                let val = engine.state.get_primitive_skip(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::PrimitiveMuSkip(u) => {
-                let val = engine.state.get_primitive_muskip(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::CharDef(c) => {
-                let val : u64 = (*c).into();
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
-                return ()
-            }
-            Command::MathChar(u) => {
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",*u).unwrap();
-                return ()
-            }
-            Command::ToksRegister(u) => {
-                for t in &engine.state.get_toks_register(*u).0 {
-                    cont(engine.aux,engine.state,engine.gullet,t.clone())
-                }
-                return ()
-            }
-            Command::Assignment(a) if a.name == PRIMITIVES.toks => {
-                let u = engine.read_register_index(false);
-                for t in &engine.state.get_toks_register(u).0 {
-                    cont(engine.aux,engine.state,engine.gullet,t.clone())
-                }
-                return ()
-            }
-            Command::PrimitiveToks(n) => {
-                for t in &engine.state.get_primitive_tokens(*n).0 {
-                    cont(engine.aux,engine.state,engine.gullet,t.clone())
-                }
-                return ()
-            }
-            Command::Font(fnt) => {
-                let t = fnt.name();
-                cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
-                return ()
-            }
-            Command::FontCmd(fnt) => {
-                let fnt = (fnt.read)(engine,token);
-                let t = fnt.name();
-                cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
-                return ()
-            }
-            o => todo!("Here: {:?} in \\the - {}",o,engine.mouth.current_sourceref().display(engine.filesystem))
-        }
-        o => todo!("{:?} in \\the",o)
-    );
-}
-
-pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
+pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     let mut v = shared_vector::Vector::new();
     engine.expand_until_bgroup(false);
     engine.expand_until_endgroup(true,true,|_,_,t| v.push(t));
@@ -450,31 +323,14 @@ pub fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     data.page.push(VNode::Mark(idx, v.into()));
 }
 
-pub fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
+pub(crate) fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
     match f(engine.stomach.data_mut()).get(&idx) {
         Some(v) => exp.extend(v.0.iter().cloned()),
         _ => ()
     }
 }
 
-impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn expand(&mut self,t:ET::Token) {
-        match ET::Gullet::resolve(self.state,t) {
-            ResolvedToken::Cmd{cmd: Some(cmd),token} => match cmd {
-                Command::Macro(m) => ET::Gullet::do_macro(self,m.clone(),token),
-                Command::Conditional(cond) => ET::Gullet::do_conditional(self,cond.name,token,cond.expand,false),
-                Command::Expandable(e) => ET::Gullet::do_expandable(self,e.name,token,e.expand),
-                Command::SimpleExpandable(e) => ET::Gullet::do_simple_expandable(self,e.name,token,e.expand),
-                _ => self.requeue(token)
-            }
-            ResolvedToken::Cmd{token,..} | ResolvedToken::Tk {token,..} =>
-                self.requeue(token)
-        }
-    }
-}
-
-
-pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>) { // TODO use to
+pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>) { // TODO use to
     engine.gullet.push_align(AlignData::dummy());
     engine.expand_until_bgroup(true);
     let data = read_align_preamble(engine,inner,between);
@@ -483,7 +339,7 @@ pub fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,b
     start_align_row(engine,inner);
 }
 
-pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType) -> AlignData<ET::Token,ET::Skip> {
+fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType) -> AlignData<ET::Token,ET::Skip> {
     struct AlignmentDataBuilder<ET:EngineTypes> {
         columns: shared_vector::Vector<AlignColumn<ET::Token,ET::Skip>>,
         recindex:Option<usize>,
@@ -590,7 +446,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
     todo!("throw file end error")
 }
 
-pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
+pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
     if let Some(d) = engine.gullet.get_align_data() {
         d.currindex = 0
     } else { todo!("throw error") }
@@ -679,7 +535,7 @@ pub fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     todo!("file end")
 }
 
-pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
+pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
     match engine.gullet.get_align_data() {
         None => todo!("throw error"),
         Some(data) => {
@@ -705,14 +561,14 @@ pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     }
 }
 
-pub fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
+pub(in crate::commands) fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
     match inner_mode {
         BoxType::Vertical => pop_align_cell_v(state,aux,stomach,mouth),
         _ => pop_align_cell_h(state,aux,stomach,mouth)
     }
 }
 
-pub fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
+fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start,spans) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignCell(start,i)}) => (children,start,i),
         _ => todo!("throw error")
@@ -729,7 +585,7 @@ pub fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<
         _ => todo!("throw error")
     }
 }
-pub fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
+fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start,spans) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignCell(start,i)}) => (children,start,i),
         _ => todo!("throw error")
@@ -747,14 +603,14 @@ pub fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<
     }
 }
 
-pub fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
+pub(in crate::commands) fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth,inner_mode:BoxType) {
     match inner_mode {
         BoxType::Vertical => pop_align_row_v::<ET>(stomach,mouth),
         _ => pop_align_row_h::<ET>(stomach,mouth)
     }
 }
 
-pub fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
+fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Vertical{children,tp:VerticalNodeListType::VAlignRow(start)}) => (children,start),
         _ => todo!("throw error")
@@ -772,7 +628,7 @@ pub fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::M
     }
 }
 
-pub fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
+fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::HAlignRow(start)}) => (children,start),
         _ => todo!("throw error")
@@ -790,77 +646,10 @@ pub fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::M
     }
 }
 
-pub const END_TEMPLATE: &str = "!\"$%&/(endtemplate)\\&%$\"!";
-pub const END_TEMPLATE_ROW: &str = "!\"$%&/(endtemplate_row)\\&%$\"!";
+pub(crate) const END_TEMPLATE: &str = "!\"$%&/(endtemplate)\\&%$\"!";
+pub(crate) const END_TEMPLATE_ROW: &str = "!\"$%&/(endtemplate_row)\\&%$\"!";
 
-pub fn read_opt_delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Option<Delimiter<ET>> {
-    crate::expand_loop!(engine,
-        ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} if *name == PRIMITIVES.delimiter => {
-            let num = engine.read_int(false);
-            return Some(get_delimiter(engine,num))
-        }
-        ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
-            let num = engine.state.get_delcode(char);
-            if num == ET::Int::default() {return None} else {
-                return Some(get_delimiter(engine,num))
-            };
-        }
-        o => todo!("??? {:?}",o)
-    );
-    todo!("file end")
-}
-
-pub fn get_delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,num:ET::Int) -> Delimiter<ET> {
-    let num = num.into();
-    if num < 0 || num > u32::MAX.into() {
-        todo!("throw error")
-    }
-    let num = num as u32;
-    let large = num & 0xFFF;
-    let small = num >> 12;
-    Delimiter {
-        small:get_mathchar(engine, small, None),
-        large:get_mathchar(engine, large, None)
-    }
-}
-
-pub fn get_mathchar<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mathcode:u32, char:Option<ET::Char>) -> MathChar<ET> {
-    let (mut cls,mut fam,pos) = {
-        if mathcode == 0 {
-            (0,0,match char {
-                Some(c) => c.try_into().ok().unwrap(),
-                _ => 0
-            })
-        } else {
-            let char = (mathcode & 0xFF) as u8;           // num % (16 * 16)
-            let fam = ((mathcode >> 8) & 0xF) as u8;      // (rest % 16)
-            let rest_fam_shifted = (mathcode >> 12) & 0xF;  // (((rest - fam) / 16) % 16)
-            (rest_fam_shifted as u8, fam, char)
-        }
-    };
-    if cls == 7 {
-        let i = engine.state.get_primitive_int(PRIMITIVES.fam).into();
-        match i {
-            i if i < 0 || i > 15 => {
-                cls = 0;
-            }
-            i => {
-                cls = 0;
-                fam = i as u8;
-            }
-        }
-    }
-    let cls = MathClass::from(cls);
-    let char = ET::Char::from(pos);
-    MathChar {
-        char,
-        cls,
-        style:engine.state.get_mathfonts(fam)
-    }
-}
-
-
-pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> bool,h:fn(&HNode<ET>) -> bool,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> bool) {
+pub(crate) fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> bool,h:fn(&HNode<ET>) -> bool,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> bool) {
     let data = engine.stomach.data_mut();
     match data.open_lists.last_mut() {
         None => (),//todo!("throw error: Not allowed in vertical"), <- not entirely true; if there's contributed stuff not yet migrated to the current page, it's allowed
@@ -913,7 +702,7 @@ pub fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) ->
 }
 
 
-pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> Option<R>,h:fn(&HNode<ET>) -> Option<R>,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> Option<R>) -> Option<R> {
+pub(crate) fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>) -> Option<R>,h:fn(&HNode<ET>) -> Option<R>,m:fn(&MathNode<ET,UnresolvedMathFontStyle<ET>>) -> Option<R>) -> Option<R> {
     let data = engine.stomach.data_mut();
     match data.open_lists.last_mut() {
         None => for n in data.page.iter().rev() {
@@ -942,7 +731,7 @@ pub fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<ET>
     None
 }
 
-pub fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) {
+pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) {
     match engine.read_keywords(&[b"width",b"height",b"depth"]) {
         Some(_) => todo!("leaders with dimensions"),
         _ => crate::expand_loop!(engine,
@@ -990,7 +779,7 @@ pub fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType
     todo!("file end")
 }
 
-pub fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<ET>,tp:LeaderType) {
+fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<ET>,tp:LeaderType) {
     crate::expand_loop!(engine,
         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} => {
             let skip = match *name {
@@ -1011,7 +800,7 @@ pub fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBo
     todo!("file end")
 }
 
-pub fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>) {
+pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>) {
     engine.read_char_or_math_group(|_,engine,mc| ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom())),
                                    move |_| ListTarget::<ET,_>::new(move |engine,children,start| {
         let node = MathNode::Atom(MathAtom {
@@ -1028,6 +817,21 @@ pub fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    /// expands the [`Token`] if it is expandable, otherwise requeues it
+    pub fn expand(&mut self,t:ET::Token) {
+        match ET::Gullet::resolve(self.state,t) {
+            ResolvedToken::Cmd{cmd: Some(cmd),token} => match cmd {
+                Command::Macro(m) => ET::Gullet::do_macro(self,m.clone(),token),
+                Command::Conditional(cond) => ET::Gullet::do_conditional(self,cond.name,token,cond.expand,false),
+                Command::Expandable(e) => ET::Gullet::do_expandable(self,e.name,token,e.expand),
+                Command::SimpleExpandable(e) => ET::Gullet::do_simple_expandable(self,e.name,token,e.expand),
+                _ => self.requeue(token)
+            }
+            ResolvedToken::Cmd{token,..} | ResolvedToken::Tk {token,..} =>
+                self.requeue(token)
+        }
+    }
+
     /// reads an integer from the input stream and makes sure it's in the range of
     /// a state register
     pub fn read_register_index(&mut self,skip_eq:bool) -> usize {
@@ -1063,17 +867,171 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         *self.gullet.csnames() += 1;
         let mut name = vec!();
         crate::expand_loop!(self,
-        ResolvedToken::Tk {char,..} => name.push(char),
-        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(e)),..} if e.name == PRIMITIVES.endcsname => {
-            *self.gullet.csnames() -= 1;
-            let id = self.aux.memory.cs_interner_mut().from_chars(&name);
-            //engine.aux.memory.return_string(name);
-            return id
+            ResolvedToken::Tk {char,..} => name.push(char),
+            ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(e)),..} if e.name == PRIMITIVES.endcsname => {
+                *self.gullet.csnames() -= 1;
+                let id = self.aux.memory.cs_interner_mut().from_chars(&name);
+                //engine.aux.memory.return_string(name);
+                return id
+            }
+            ResolvedToken::Cmd{token,..} => {
+                todo!("csname: {}",token.display(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
+            }
+        );
+        todo!("file end")
+    }
+    /// reads a number from the input stream and makes sure it's in the range of
+    /// a file input/output stream index (0-255)
+    pub fn read_file_index(&mut self) -> u8 {
+        let idx = self.read_int(false).into();
+        if idx < 0 || idx > 255 {
+            todo!("throw error")
         }
-        ResolvedToken::Cmd{token,..} => {
-            todo!("csname: {}",token.display(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
+        idx as u8
+    }
+
+    /// reads a number from the input stream, making sure it's in the range of
+    /// a file input/output stream index (0-255), and subsequently reads a filename
+    /// - i.e. the first two steps of `\openin` or `\openout`
+    pub fn read_filename_and_index(&mut self) -> (u8,ET::File) {
+        let idx = self.read_file_index();
+        let mut filename = self.aux.memory.get_string();
+        self.read_string(true,&mut filename);
+        if filename.is_empty() {
+            todo!("throw error")
         }
-    );
+        let file = self.filesystem.get(&filename);
+        self.aux.memory.return_string(filename);
+        (idx,file)
+    }
+
+    /// `\the`, but using a continuation function; this is used for both [`the`](super::tex::the)
+    /// as well as in [`expand_until_endgroup`](Self::expand_until_endgroup)
+    /// to speed things up
+    pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,mut cont:F) {
+        expand_loop!(self,
+            ResolvedToken::Cmd {cmd:Some(c),token} => match c {
+                Command::Int(ic) => {
+                    let val = (ic.read)(self,token);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::Dim(ic) => {
+                    let val = (ic.read)(self,token);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::Skip(ic) => {
+                    let val = (ic.read)(self,token);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::MuSkip(ic) => {
+                    let val = (ic.read)(self,token);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::IntRegister(u) => {
+                    let val = self.state.get_int_register(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::DimRegister(u) => {
+                    let val = self.state.get_dim_register(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::SkipRegister(u) => {
+                    let val = self.state.get_skip_register(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::MuSkipRegister(u) => {
+                    let val = self.state.get_muskip_register(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::PrimitiveInt(u) => {
+                    let val = self.state.get_primitive_int(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::PrimitiveDim(u) => {
+                    let val = self.state.get_primitive_dim(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::PrimitiveSkip(u) => {
+                    let val = self.state.get_primitive_skip(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::PrimitiveMuSkip(u) => {
+                    let val = self.state.get_primitive_muskip(*u);
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::CharDef(c) => {
+                    let val : u64 = (*c).into();
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
+                    return ()
+                }
+                Command::MathChar(u) => {
+                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",*u).unwrap();
+                    return ()
+                }
+                Command::ToksRegister(u) => {
+                    for t in &self.state.get_toks_register(*u).0 {
+                        cont(self.aux,self.state,self.gullet,t.clone())
+                    }
+                    return ()
+                }
+                Command::Assignment(a) if a.name == PRIMITIVES.toks => {
+                    let u = self.read_register_index(false);
+                    for t in &self.state.get_toks_register(u).0 {
+                        cont(self.aux,self.state,self.gullet,t.clone())
+                    }
+                    return ()
+                }
+                Command::PrimitiveToks(n) => {
+                    for t in &self.state.get_primitive_tokens(*n).0 {
+                        cont(self.aux,self.state,self.gullet,t.clone())
+                    }
+                    return ()
+                }
+                Command::Font(fnt) => {
+                    let t = fnt.name();
+                    cont(self.aux,self.state,self.gullet,ET::Token::from_cs(t.clone()));
+                    return ()
+                }
+                Command::FontCmd(fnt) => {
+                    let fnt = (fnt.read)(self,token);
+                    let t = fnt.name();
+                    cont(self.aux,self.state,self.gullet,ET::Token::from_cs(t.clone()));
+                    return ()
+                }
+                o => todo!("Here: {:?} in \\the - {}",o,self.mouth.current_sourceref().display(self.filesystem))
+            }
+            o => todo!("{:?} in \\the",o)
+        );
+    }
+
+    /// reads a [`Delimiter`] from the input stream;
+    /// e.g. from `\delimiter` or the `\delcode` of the next character
+    pub fn read_opt_delimiter(&mut self) -> Option<Delimiter<ET>> {
+        crate::expand_loop!(self,
+            ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(Unexpandable{name,..})),..} if *name == PRIMITIVES.delimiter => {
+                let num = self.read_int(false);
+                return Some(Delimiter::from_int(num,self.state))
+            }
+            ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
+                let num = self.state.get_delcode(char);
+                if num == ET::Int::default() {return None} else {
+                    return Some(Delimiter::from_int(num,self.state))
+                };
+            }
+            o => todo!("??? {:?}",o)
+        );
         todo!("file end")
     }
 }

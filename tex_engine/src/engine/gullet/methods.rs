@@ -181,7 +181,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
             }
             ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.the => {
-                crate::commands::methods::do_the(engine, |a, s, _, t| {
+                engine.do_the(|a, s, _, t| {
                     if t.is_param() && edef_like {
                         cont(a,s,t.clone());
                     }
