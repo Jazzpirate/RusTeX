@@ -20,16 +20,17 @@ pub fn do_align<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,a:&A
     let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
     mouth.requeue(end_align);
     if !a.omit {
-        mouth.push_exp(a.columns[a.currindex].right.clone().into_iter(None));
+        mouth.push_exp(&a.columns[a.currindex].right);
     }
 }
 
 pub fn do_cr<ET:EngineTypes>(mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,a:&AlignData<ET::Token,ET::Skip>) {
-    mouth.insert_every::<ET>(state, PRIMITIVES.everycr);
+    let everycr = state.get_primitive_tokens(PRIMITIVES.everycr);
+    mouth.push_exp(everycr);
     let end = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE_ROW));
     mouth.requeue(end);
     if !a.omit {
-        mouth.push_exp(a.columns[a.currindex].right.clone().into_iter(None));
+        mouth.push_exp(&a.columns[a.currindex].right);
     }
 }
 

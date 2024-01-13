@@ -283,7 +283,7 @@ pub fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,
         ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
         ResolvedToken::Cmd {cmd:Some(Command::Char{code:CommandCode::BeginGroup,..}),..} => {
             engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
-            engine.mouth.insert_every::<ET>(&engine.state,every);
+            engine.insert_every(every);
             return scaled
         }
         o => todo!("throw error: {:?}",o)
@@ -535,7 +535,7 @@ pub fn do_the<ET:EngineTypes,F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gull
                 cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
                 return ()
             }
-            o => todo!("Here: {:?} in \\the - {}",o,engine.mouth.display_position())
+            o => todo!("Here: {:?} in \\the - {}",o,engine.mouth.current_sourceref().display(engine.filesystem))
         }
         o => todo!("{:?} in \\the",o)
     );
@@ -679,7 +679,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
                 if *id == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true),
             ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                 if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
-                engine.mouth.insert_every::<ET>(engine.state,PRIMITIVES.everycr);
+                engine.insert_every(PRIMITIVES.everycr);
                 return cols.into()
             },
             ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
@@ -799,7 +799,7 @@ pub fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:Box
     match engine.gullet.get_align_data() {
         None => todo!("throw error"),
         Some(data) => {
-            if !data.omit { engine.mouth.push_exp(data.columns[data.currindex].left.clone().into_iter(None)); }
+            if !data.omit { engine.mouth.push_exp(&data.columns[data.currindex].left); }
             if data.span {
                 data.span = false
             } else {

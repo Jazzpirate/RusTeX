@@ -69,7 +69,7 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type File = VirtualFile<u8>;
     type FileSystem = filesystem::NoOutputFileSystem<u8>;
     type Outputs = LogOutputs;
-    type Mouth = DefaultMouth<Self::Token,Self::File>;
+    type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
     type CustomNode = PDFNode<Self>;
     type Stomach = StomachWithShipout<Self>;

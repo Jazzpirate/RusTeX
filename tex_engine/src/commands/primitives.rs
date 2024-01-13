@@ -23,7 +23,7 @@ macro_rules! cmtodo {
             name:id,
             expand:|e,_| crate::utils::errors::TeXError::throw(format!("Not yet implemented: \\{} at {}",
                 stringify!($name),
-                crate::engine::mouth::Mouth::display_position(e.mouth)
+                crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
         });
         $engine.register_primitive(command,stringify!($name));
@@ -53,7 +53,7 @@ macro_rules! cmstodo {
             scope:crate::commands::CommandScope::Any,
             apply:|e,_| crate::utils::errors::TeXError::throw(format!("Not yet implemented: \\{} at {}",
                 stringify!($name),
-                crate::engine::mouth::Mouth::display_position(e.mouth)
+                crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
         });
         $engine.register_primitive(command,stringify!($name));

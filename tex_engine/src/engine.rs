@@ -19,7 +19,7 @@ use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
-use crate::utils::errors::{catch, ErrorHandler, TeXError};
+use crate::utils::errors::{ErrorHandler, TeXError};
 
 pub mod filesystem;
 pub mod mouth;
@@ -48,7 +48,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,Skip=Self::Skip,MuSkip=Self::MuSkip>;
     type State: State<ET=Self>;
     type Outputs: Outputs;
-    type Mouth: Mouth<Token=Self::Token,File=Self::File>;
+    type Mouth: Mouth<Self>;
     type Gullet:Gullet<ET=Self>;
     type Stomach:Stomach<ET=Self>;
     type CustomNode:CustomNodeTrait<Self>;
@@ -127,7 +127,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type File = VirtualFile<u8>;
     type FileSystem = filesystem::NoOutputFileSystem<u8>;
     type Outputs = LogOutputs;
-    type Mouth = DefaultMouth<Self::Token,Self::File>;
+    type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
     type CustomNode = ();
     type Stomach = StomachWithShipout<Self>;
@@ -139,7 +139,7 @@ pub trait TeXEngine:Sized {
     type Types:EngineTypes;
     fn register_primitive(&mut self,cmd:Command<Self::Types>,name:&str);
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
-    fn init_file(&mut self,s:&str) -> Result<(),TeXError> {catch( ||{
+    fn init_file(&mut self,s:&str) -> Result<(),TeXError> {TeXError::catch(|| {
         log::debug!("Initializing with file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
@@ -148,14 +148,14 @@ pub trait TeXEngine:Sized {
         comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
-    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {catch( ||{
+    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {TeXError::catch(||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
         let file = comps.filesystem.get(s);
         comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.push_file(file);
-        comps.mouth.insert_every::<Self::Types>(&comps.state,PRIMITIVES.everyjob);
+        comps.insert_every(PRIMITIVES.everyjob);
         comps.aux.start_time = chrono::Local::now();
         //comps.aux.elapsed = std::time::Instant::now();
         //debug_log!(debug =>"Here: {}",comps.preview());
@@ -260,7 +260,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     pub fn top_loop(&mut self) {
-        crate::expand_loop!(self.mouth.update_start_ref() => self,
+        crate::expand_loop!(ET::Stomach::every_top(self) => self,
             ResolvedToken::Tk { code:CommandCode::Noexpand,.. } => {self.get_next();},
             ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),

@@ -20,6 +20,21 @@ pub struct SourceReference<FileId:Copy> {
     pub line: usize,
     pub column: usize
 }
+impl<FileID:Copy> SourceReference<FileID> {
+    pub fn display<'a,F:File<SourceRefID=FileID>,FS:FileSystem<File=F>>(&'a self,fs:&'a FS) -> impl std::fmt::Display + 'a {
+        DisplaySourceReference { rf:self,fs }
+    }
+}
+
+struct DisplaySourceReference<'a,FS:FileSystem> {
+    rf:&'a SourceReference<<<FS as FileSystem>::File as File>::SourceRefID>,
+    fs:&'a FS
+}
+impl<'a,FS:FileSystem> std::fmt::Display for DisplaySourceReference<'a,FS> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{} l. {} c. {}",self.fs.ref_str(self.rf.file),self.rf.line,self.rf.column)
+    }
+}
 
 pub type SourceRef<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
 
@@ -59,11 +74,8 @@ pub trait File:std::fmt::Display+Clone+std::fmt::Debug + 'static {
     type SourceRefID:Copy+std::fmt::Debug;
     /// The type of line sources to be read from the file.
     type LineSource: FileLineSource<Self::Char>;
-    //type Write: WriteOpenFile<Self::Char>;
     fn path(&self) -> &Path;
     fn line_source(self) -> Option<Self::LineSource>;
-    //fn write(self) -> Self::Write;
-
     fn exists(&self) -> bool {
         self.path().exists()
     }

@@ -486,7 +486,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
             //crate::debug_log!(error => "Here: {}",engine.preview());
         }
         if m.signature.params.is_empty() {
-            engine.mouth.push_exp(m.expansion.into_iter(None));
+            engine.mouth.push_exp(&m.expansion);
             return;
         }
         let mut args = engine.mouth.get_args();
@@ -503,7 +503,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
         }
         if m.signature.arity == 0 {
             engine.mouth.return_args(args);
-            engine.mouth.push_exp(m.expansion.into_iter(None));
+            engine.mouth.push_exp(&m.expansion);
         } else {
             engine.mouth.push_macro_exp(MacroExpansion::new(m.expansion,args))
         }

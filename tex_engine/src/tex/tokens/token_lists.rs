@@ -1,6 +1,5 @@
 use std::fmt::{Arguments, Display, Write};
 use std::marker::PhantomData;
-use crate::engine::utils::memory::PrimitiveIdentifier;
 use crate::prelude::{CategoryCode, CategoryCodeScheme, Character, CommandCode, CSHandler, CSName, Token};
 use crate::tex::tokens::StandardToken;
 use crate::tex::tokens::control_sequences::ResolvedCSName;
@@ -30,16 +29,6 @@ impl<T:Token> TokenList<T> {
             cc,
             escapechar,
             double_par
-        }
-    }
-
-    /// returns an iterator over the tokens in this list. `name` is the optional
-    /// [`PrimitiveIdentifier`] representing the source of this list; e.g. `everypar`.
-    pub fn into_iter(self,name:Option<PrimitiveIdentifier>) -> TokenListIterator<T> {
-        TokenListIterator {
-            name,
-            ls:self,
-            index:0
         }
     }
 }
@@ -211,21 +200,6 @@ impl<'a,T:Token,F:FnMut(T)> std::fmt::Write for Otherize<'a,T,F> {
 impl<T:Token> From<shared_vector::Vector<T>> for TokenList<T> {
     fn from(value: shared_vector::Vector<T>) -> Self {
         Self(value.into())
-    }
-}
-
-/// An iterator over [`Token`]s in a [`TokenList`]
-pub struct TokenListIterator<T:Token> {
-    pub name:Option<PrimitiveIdentifier>,
-    pub ls:TokenList<T>,
-    index:usize
-}
-impl<T:Token> Iterator for TokenListIterator<T> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        let r = self.ls.0.get(self.index).cloned();
-        self.index += 1;
-        r
     }
 }
 

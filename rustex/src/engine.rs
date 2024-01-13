@@ -60,7 +60,7 @@ impl EngineTypes for Types {
     type File = VirtualFile<u8>;
     type FileSystem = crate::files::RusTeXFileSystem;
     type Outputs = RusTeXOutput;
-    type Mouth = DefaultMouth<Self::Token,Self::File>;
+    type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
     type CustomNode = RusTeXNode;
     type Stomach = RusTeXStomach;

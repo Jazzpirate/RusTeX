@@ -3,10 +3,17 @@
    An instance of [`ErrorHandler`] provides methods that get called when errors occur during compilation.
    The signatures of these methods reflect where they are called and what needs to be returned in order
    to recover from the error.
+
+    Alternatively, we can throw a [`TeXError`] which will abort compilation. Good practice would be to
+    pass our errors around using `Result` and `?`, but that would require a lot of boilerplate code,
+    and lots of pattern matching, which is usually perfectly harmless, but in performance critical
+    code, it introduces non-ngligible overhead. So instead, we panic! with a [`TeXError`], and catch
+    it at the top level of the engine to abort compilation.
  */
 
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::panic::PanicInfo;
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use crate::tex::characters::{Character, TextLineSource};
@@ -16,6 +23,7 @@ use crate::tex::tokens::StandardToken;
 /// Error type for TeX errors occurring during compilation.
 #[derive(Clone)]
 pub struct TeXError {
+    /// Error message
     pub msg:String,
     source:Option<Box<TeXError>>,
 }
@@ -38,11 +46,41 @@ impl Error for TeXError {
     }
 }
 impl TeXError {
-    pub fn throw<D:Display,T>(msg:D) -> T {
+    /// Throw a TeX error.
+    pub fn throw<D:Display>(msg:D) -> ! {
         std::panic::panic_any::<_>(TeXError {
             msg:msg.to_string(),
             source: None
         })
+    }
+
+    /// Catch a TeX error and return a `Result`
+    pub fn catch<R,F:FnOnce() -> R>(f:F) -> Result<R,TeXError> {
+        let old = std::panic::take_hook();
+        let nf = move |p:&PanicInfo<'_>| panic_hook(&old,p);
+        std::panic::set_hook(Box::new(nf));
+        let r = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+            Ok(x) => Ok(x),
+            Err(e) => {
+                match e.downcast::<TeXError>() {
+                    Ok(e) => Err(*e),
+                    Err(e) => {
+                        //std::panic::set_hook(old.into());
+                        std::panic::resume_unwind(e)
+                    }
+                }
+            }
+        };
+        let _ = std::panic::take_hook();
+        //std::panic::set_hook(old);
+        r
+    }
+}
+
+fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),info:&std::panic::PanicInfo<'_>) {
+    match info.payload().downcast_ref::<TeXError>() {
+        Some(_) => (),
+        _ => old(info)
     }
 }
 
@@ -88,97 +126,6 @@ pub trait ErrorHandler {
     }
 }
 
-/*
-struct MyPanicHook{
-    old:Box<dyn Fn(&std::panic::PanicInfo<'_>) + Sync + Send>
-}
-*/
-
-fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),info:&std::panic::PanicInfo<'_>) {
-    match info.payload().downcast_ref::<TeXError>() {
-        Some(_) => (),
-        _ => old(info)
-    }
-    // TODO keep the stack trace or something:
-    /*
-    // If this is a double panic, make sure that we print a backtrace
-// for this panic. Otherwise only print it if logging is enabled.
-let backtrace = if info.force_no_backtrace() {
-    None
-} else if panic_count::get_count() >= 2 {
-    BacktraceStyle::full()
-} else {
-    crate::panic::get_backtrace_style()
-};
-
-// The current implementation always returns `Some`.
-let location = info.location().unwrap();
-
-let msg = match info.payload().downcast_ref::<&'static str>() {
-    Some(s) => *s,
-    None => match info.payload().downcast_ref::<String>() {
-        Some(s) => &s[..],
-        None => "Box<dyn Any>",
-    },
-};
-let thread = thread_info::current_thread();
-let name = thread.as_ref().and_then(|t| t.name()).unwrap_or("<unnamed>");
-
-let write = |err: &mut dyn crate::io::Write| {
-    let _ = writeln!(err, "thread '{name}' panicked at {location}:\n{msg}");
-
-    static FIRST_PANIC: AtomicBool = AtomicBool::new(true);
-
-    match backtrace {
-        Some(BacktraceStyle::Short) => {
-            drop(backtrace::print(err, crate::backtrace_rs::PrintFmt::Short))
-        }
-        Some(BacktraceStyle::Full) => {
-            drop(backtrace::print(err, crate::backtrace_rs::PrintFmt::Full))
-        }
-        Some(BacktraceStyle::Off) => {
-            if FIRST_PANIC.swap(false, Ordering::SeqCst) {
-                let _ = writeln!(
-                    err,
-                    "note: run with `RUST_BACKTRACE=1` environment variable to display a \
-                         backtrace"
-                );
-            }
-        }
-        // If backtraces aren't supported or are forced-off, do nothing.
-        None => {}
-    }
-};
-
-if let Some(local) = set_output_capture(None) {
-    write(&mut *local.lock().unwrap_or_else(|e| e.into_inner()));
-    set_output_capture(Some(local));
-} else if let Some(mut out) = panic_output() {
-    write(&mut out);
-}
-     */
-}
-
-pub fn catch<R,F:FnOnce() -> R>(f:F) -> Result<R,TeXError> {
-    let old/*: std::sync::Arc<dyn Fn(&std::panic::PanicInfo<'_>) + Sync + Send>*/ = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |p| panic_hook(&old,p)));
-    let r = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
-        Ok(x) => Ok(x),
-        Err(e) => {
-            match e.downcast::<TeXError>() {
-                Ok(e) => Err(*e),
-                Err(e) => {
-                    //std::panic::take_hook();
-                    //std::panic::set_hook(old.into());
-                    std::panic::resume_unwind(e)
-                } //Err(TeXError{msg:format!("Panic: {:?}",e),source:None})
-            }
-        }
-    };
-    let _ = std::panic::take_hook();
-    //std::panic::set_hook(old);
-    r
-}
 
 /// Default [`ErrorHandler`] that just panics.
 pub struct ErrorThrower;
