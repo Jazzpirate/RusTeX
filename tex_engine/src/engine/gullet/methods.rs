@@ -234,7 +234,7 @@ pub fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
     };
     let mut curr_int = <ET::Num as NumSet>::Int::default();
     let one = <ET::Num as NumSet>::Int::from(1);
-    engine.gullet.iterate(engine.mouth,engine.aux,engine.state,move |_,state,gullet,t| {
+    engine.iterate(move |_,state,gullet,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>
@@ -274,7 +274,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
         for _ in 0..ic { conds.pop();}
         (ic,conds.pop().unwrap().name())
     };
-    engine.gullet.iterate(engine.mouth,engine.aux,engine.state,move |_,state,gullet,t| {
+    engine.iterate(move |_,state,gullet,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::resolve(state,t) {
             ResolvedToken::Cmd {cmd:Some(Command::Conditional(_)),..} =>

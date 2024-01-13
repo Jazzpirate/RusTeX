@@ -15,7 +15,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::panic::PanicInfo;
-use crate::engine::{EngineAux, EngineTypes};
+use crate::engine::EngineTypes;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use crate::tex::characters::{Character, StringLineSource};
 use crate::tex::tokens::Token;

@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use crate::tex::characters::{TextLine, TextLineSource};
-use crate::utils::errors::ErrorHandler;
 
 /// An [`InputTokenizer`] is in one of three states
 #[derive(Copy,Clone,PartialEq,Eq,Debug)]

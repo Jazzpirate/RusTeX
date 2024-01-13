@@ -45,13 +45,18 @@ pub trait Mouth<ET:EngineTypes> {
     fn push_macro_exp(&mut self,exp:MacroExpansion<ET::Token>);
     /// Push a [`Token`] back to the [`Mouth`]. This is useful for e.g. `\futurelet`, `\expandafter`, or when
     /// reading keywords, numbers, dimensions, etc. that often read "too far ahead" and need to back up.
+    /// This method should not be called directly, but rather through [`EngineReferences::requeue`]
+    /// or [`Gullet::requeue`](crate::engine::gullet::Gullet::requeue).
     fn requeue(&mut self,t:ET::Token);
-
     /// Get the next [`Token`] from the [`Mouth`]. Returns `None` if the [`Mouth`] is empty.
+    /// This method should not be called directly, but rather through [`EngineReferences::get_next`]
+    /// or [`Gullet::get_next_opt`](crate::engine::gullet::Gullet::get_next_opt).
     fn get_next_opt(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token>;
     /// Iterate over the [`Token`]s in the [`Mouth`] until `cont` returns `false`. Can be faster than repeatedly calling [`get_next_opt`], but
     /// blocking both state changes and expanding macros. Useful for e.g. reading macro arguments or the expansion list
     /// in `\def`.
+    /// This method should not be called directly, but rather through [`EngineReferences::iterate`]
+    /// or [`Gullet::iterate`](crate::engine::gullet::Gullet::iterate).
     fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,cont:Fn);
     /// `\endinput` - removes the last file from the [`Mouth`] without inserting `\everyeof` or an [`EOF`](crate::tex::catcodes::CommandCode::EOF)
     /// [`Token`].
@@ -81,6 +86,8 @@ pub trait Mouth<ET:EngineTypes> {
 
     /// Convenience method reading [`Token`]s in the [`Mouth`] until the next [EndGroup](crate::tex::catcodes::CommandCode::EndGroup)
     ///[`Token`] is encountered and returns that. Useful whenever a group is to be taken; e.g. when reading macro arguments.
+    /// This method should not be called directly, but rather through [`EngineReferences::read_until_endgroup`]
+    /// or [`Gullet::read_until_endgroup`](crate::engine::gullet::Gullet::read_until_endgroup).
     fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,ET::Token)>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,mut cont:Fn) -> ET::Token {
         let mut ingroups = 0;
         let mut eg:Option<ET::Token> = None;
@@ -372,6 +379,33 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
 }
 
 impl<ET:EngineTypes> DefaultMouth<ET> {
+    /// Trivial conversion between different compatible [`EngineType`]s.
+    pub fn into<ET2:EngineTypes<Token=ET::Token,File=ET::File>>(self) -> DefaultMouth<ET2> {
+        DefaultMouth { inputs:self.inputs,args:self.args,start_ref:self.start_ref,vecs:self.vecs }
+    }
+    /// Less trivial conversion between different [`EngineType`]s with compatible [`Token`]s.
+    pub fn into_tokens<ET2:EngineTypes<Char=ET::Char,File=ET::File>,F:FnMut(ET::Token) -> ET2::Token>(self,mut token:F) -> DefaultMouth<ET2> {
+        DefaultMouth {
+            inputs:self.inputs.into_iter().map(|s| match s {
+                TokenSource::String(s) => TokenSource::String(s),
+                TokenSource::File(s,id) => TokenSource::File(s,id),
+                TokenSource::Vec(v) => TokenSource::Vec(v.into_iter().map(|t|token(t)).collect())
+            }).collect(),
+            args:self.args.map(|[a0,a1,a2,a3,a4,a5,a6,a7,a8]| [
+                a0.into_iter().map(|t| token(t)).collect(),
+                a1.into_iter().map(|t| token(t)).collect(),
+                a2.into_iter().map(|t| token(t)).collect(),
+                a3.into_iter().map(|t| token(t)).collect(),
+                a4.into_iter().map(|t| token(t)).collect(),
+                a5.into_iter().map(|t| token(t)).collect(),
+                a6.into_iter().map(|t| token(t)).collect(),
+                a7.into_iter().map(|t| token(t)).collect(),
+                a8.into_iter().map(|t| token(t)).collect()
+            ]),
+            start_ref:self.start_ref,
+            vecs:self.vecs.into_iter().map(|v| v.into_iter().map(|t| token(t)).collect()).collect()
+        }
+    }
     fn with_list<Fn:FnOnce(&mut Vec<ET::Token>)>(&mut self,f:Fn) {
         match self.inputs.last_mut() {
             Some(TokenSource::Vec(v)) => f(v),

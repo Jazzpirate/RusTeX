@@ -17,4 +17,5 @@ pub mod prelude {
     pub use crate::tex::tokens::Token;
     pub use crate::tex::tokens::control_sequences::{CSName,CSHandler,ResolvedCSName,InternedCSName};
     pub use crate::tex::tokens::token_lists::{CharWrite, TokenList};
+    pub use crate::engine::EngineTypes;
 }

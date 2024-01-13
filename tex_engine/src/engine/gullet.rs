@@ -1,4 +1,3 @@
-
 pub mod methods;
 
 use std::marker::PhantomData;
@@ -16,29 +15,27 @@ use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::types::BoxType;
 
-type M<G> = <<G as Gullet>::ET as EngineTypes>::Mouth;
-type A<G> = EngineAux<<G as Gullet>::ET>;
-type S<G> = <<G as Gullet>::ET as EngineTypes>::State;
-type T<G> = <<G as Gullet>::ET as EngineTypes>::Token;
-type C<G> = <<G as Gullet>::ET as EngineTypes>::Char;
-type Int<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Int;
-type Dim<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Dim;
-type Skip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::Skip;
-type MSkip<G> = <<<G as Gullet>::ET as EngineTypes>::Num as NumSet>::MuSkip;
+/// A [`Gullet`] is the part of the engine that reads tokens from the input stream and expands them;
+/// including conditionals etc.
+/// Additionally, it takes care of reading keywords, strings (e.g. filenames in `\input`),
+/// integers, dimensions, skips...
+/// Basically, all processing of [`Token`]s that does not result in scoped [`State`] changes or
+/// [nodes](crate::tex::nodes::NodeTrait) in the [`Stomach`](crate::engine::stomach::Stomach).
+///
+/// As part of that, it has to do some bookkeeping already when reading [`Token`]s from the
+/// [`Mouth`] and therefore implements wrapper methods around its methods as well.
+pub trait Gullet<ET:EngineTypes> {
+    /// Instantiate a new Gullet
+    fn new(aux:&mut EngineAux<ET>,state:&mut ET::State,mouth:&mut ET::Mouth) -> Self;
 
-pub trait Gullet {
-    type ET:EngineTypes<Gullet=Self>;
-
-    fn new(aux:&mut EngineAux<Self::ET>,state:&mut S<Self>,mouth:&mut M<Self>) -> Self;
-
-    fn push_align(&mut self,ad:AlignData<T<Self>,Skip<Self>>);
-    fn pop_align(&mut self) -> Option<AlignData<T<Self>,Skip<Self>>>;
-    fn get_align_data(&mut self) -> Option<&mut AlignData<T<Self>,Skip<Self>>>;
-    fn get_conditional(&self) -> Option<ActiveConditional<Self::ET>>;
-    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<Self::ET>>;
+    fn push_align(&mut self,ad:AlignData<ET::Token,ET::Skip>);
+    fn pop_align(&mut self) -> Option<AlignData<ET::Token,ET::Skip>>;
+    fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Skip>>;
+    fn get_conditional(&self) -> Option<ActiveConditional<ET>>;
+    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET>>;
     fn csnames(&mut self) -> &mut usize;
 
-    fn iterate<Fn:FnMut(&mut A<Self>,&S<Self>,&mut Self,T<Self>) -> bool>(&mut self,mouth:&mut M<Self>,aux:&mut A<Self>,state:&S<Self>,mut f:Fn) {
+    fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut Self,ET::Token) -> bool>(&mut self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,mut f:Fn) {
         match self.get_align_data() {
             None => mouth.iterate(aux,state,|a,t|f(a,state,self,t)),
             Some(_) => {
@@ -74,10 +71,7 @@ pub trait Gullet {
         }
     }
 
-    fn get_next_opt(&mut self,
-        mouth:&mut M<Self>,
-        aux:&mut A<Self>,
-        state:&<Self::ET as EngineTypes>::State) -> Option<T<Self>> {
+    fn get_next_opt(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token> {
         match self.get_align_data() {
             None => mouth.get_next_opt(aux,state),
             Some(a) => match mouth.get_next_opt(aux,state) {
@@ -115,10 +109,7 @@ pub trait Gullet {
         }
     }
 
-    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&<Self::ET as EngineTypes>::State,T<Self>)>(&mut self,
-                                                                           mouth:&mut M<Self>,
-                                                                           aux:&mut A<Self>,
-                                                                           state:&<Self::ET as EngineTypes>::State,mut cont:Fn) -> T<Self> {
+    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State,mut cont:Fn) -> ET::Token {
         match self.get_align_data() {
             None => (),
             Some(d) => {
@@ -128,7 +119,8 @@ pub trait Gullet {
         }
         mouth.read_until_endgroup(aux,state,|a,t|cont(a,state,t))
     }
-    fn requeue(&mut self,mouth:&mut M<Self>,t:T<Self>) {
+
+    fn requeue(&mut self,mouth:&mut ET::Mouth,t:ET::Token) {
         if let Some(data) = self.get_align_data() {
             if t.is_begin_group() {
                 if data.ingroups == 0 { todo!() }
@@ -141,32 +133,31 @@ pub trait Gullet {
         mouth.requeue(t)
     }
 
-
-    fn read_int(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> Int<Self> {
+    fn read_int(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::Int {
         methods::read_int(engine,skip_eq)
     }
 
-    fn read_dim(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> Dim<Self> {
+    fn read_dim(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::Dim {
         methods::read_dim(engine,skip_eq)
     }
 
-    fn read_skip(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> Skip<Self> {
+    fn read_skip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::Skip {
         methods::read_skip(engine,skip_eq)
     }
 
-    fn read_muskip(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> MSkip<Self> {
+    fn read_muskip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::MuSkip {
         methods::read_muskip(engine,skip_eq)
     }
 
-    fn read_mudim(engine:&mut EngineReferences<Self::ET>,skip_eq:bool) -> <MSkip<Self> as MuSkip>::Base {
+    fn read_mudim(engine:&mut EngineReferences<ET>,skip_eq:bool) -> <ET::MuSkip as MuSkip>::Base {
         methods::read_mukern(engine,skip_eq)
     }
 
-
-    fn read_chars(engine:& mut EngineReferences<Self::ET>,kws:&[u8]) -> Result<u8,T<Self>> {
+    fn read_chars(engine:& mut EngineReferences<ET>,kws:&[u8]) -> Result<u8,ET::Token> {
         methods::read_chars(engine,kws)
     }
-    fn resolve<'a>(state:&'a S<Self>,token:T<Self>) -> ResolvedToken<'a,Self::ET> {
+
+    fn resolve<'a>(state:&'a ET::State,token:ET::Token) -> ResolvedToken<'a,ET> {
         match token.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 ResolvedToken::Cmd{token,cmd:state.get_ac_command(c)},
@@ -176,33 +167,33 @@ pub trait Gullet {
         }
     }
 
-    fn do_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,&mut Vec<T<Self>>,T<Self>)) {
+    fn do_expandable(engine: &mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         let mut exp = Vec::new();// ExpansionContainer::new(engine.aux.memory.get_token_vec());
         f(engine,&mut exp,token);
         engine.mouth.push_vec(exp);
     }
-    fn do_macro(engine: &mut EngineReferences<Self::ET>,m:Macro<T<Self>>,token:T<Self>);
+    fn do_macro(engine: &mut EngineReferences<ET>,m:Macro<ET::Token>,token:ET::Token);
 
-    fn do_simple_expandable(engine: &mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,T<Self>)) {
+    fn do_simple_expandable(engine: &mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,ET::Token)) {
         engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
         f(engine,token)
     }
 
-    fn read_string(engine:&mut EngineReferences<Self::ET>,skip_eq:bool,target:&mut String) {
+    fn read_string(engine:&mut EngineReferences<ET>,skip_eq:bool,target:&mut String) {
         methods::read_string(engine,skip_eq,target)
     }
 
-    fn read_keyword(engine:&mut EngineReferences<Self::ET>,kw:&[u8]) -> bool {
+    fn read_keyword(engine:&mut EngineReferences<ET>,kw:&[u8]) -> bool {
         methods::read_keyword(engine,kw,None)
     }
 
-    fn read_keywords<'a>(engine:&mut EngineReferences<Self::ET>,kw:&'a[&'a[u8]]) -> Option<&'a[u8]>     {
+    fn read_keywords<'a>(engine:&mut EngineReferences<ET>,kw:&'a[&'a[u8]]) -> Option<&'a[u8]>     {
         methods::read_keywords(engine,kw,None)
     }
 
-    fn do_conditional(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:T<Self>,f:fn(&mut EngineReferences<Self::ET>,T<Self>) -> bool,unless:bool) {
-        let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > Int::<Self>::default();
+    fn do_conditional(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,ET::Token) -> bool,unless:bool) {
+        let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > ET::Int::default();
         let index = engine.gullet.get_conditionals().len();
         engine.gullet.get_conditionals().push(ActiveConditional::Unfinished(name));
         if trace {
@@ -235,14 +226,14 @@ pub trait Gullet {
                 if engine.gullet.get_conditionals().len() > index {
                     engine.aux.outputs.write_neg1(
                         format_args!("{{{}else: {} (level {}) entered on line {}}}",
-                                     <C<Self> as Character>::displayable_opt(engine.state.get_escape_char()),
+                                     ET::Char::displayable_opt(engine.state.get_escape_char()),
                                      PRIMITIVES.printable(name,engine.state.get_escape_char()),
                                      index+1,engine.mouth.line_number()
                         ));
                 } else {
                     engine.aux.outputs.write_neg1(
                         format_args!("{{{}fi: {} (level {}) entered on line {}}}",
-                                     <C<Self> as Character>::displayable_opt(engine.state.get_escape_char()),
+                                     ET::Char::displayable_opt(engine.state.get_escape_char()),
                                      PRIMITIVES.printable(name,engine.state.get_escape_char()),
                                      index+1,engine.mouth.line_number()
                         ));
@@ -250,7 +241,7 @@ pub trait Gullet {
             }
         }
     }
-    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<Self::ET>,&S<Self>,T<Self>)>(engine:&mut EngineReferences<Self::ET>,expand_protected:bool,edef_like:bool,cont:Fn);
+    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,cont:Fn);
 }
 
 #[derive(Copy,Clone,Eq,PartialEq,Debug)]
@@ -323,6 +314,9 @@ impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
+    pub fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token) -> bool>(&mut self,mut f:Fn) {
+        self.gullet.iterate(self.mouth,self.aux,self.state,|a,s,g,t|f(a,s,g,t))
+    }
 
     pub fn requeue(&mut self,t:ET::Token) {
         self.gullet.requeue(self.mouth,t)
@@ -419,10 +413,9 @@ pub struct DefaultGullet<ET:EngineTypes> {
     csnames:usize,
     phantom:PhantomData<ET>
 }
-impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
-    type ET = ET;
+impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
 
-    fn new(_aux: &mut EngineAux<Self::ET>, _state: &mut S<Self>, _mouth: &mut M<Self>) -> Self {
+    fn new(_aux: &mut EngineAux<ET>, _state: &mut ET::State, _mouth: &mut ET::Mouth) -> Self {
         DefaultGullet {
             align_data:Vec::new(),
             phantom:PhantomData::default(),
@@ -435,21 +428,21 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     fn csnames(&mut self) -> &mut usize { &mut self.csnames }
 
 
-    fn push_align(&mut self, ad: AlignData<T<Self>,Skip<Self>>) {
+    fn push_align(&mut self, ad: AlignData<ET::Token,ET::Skip>) {
         self.align_data.push(ad)
     }
 
 
-    fn pop_align(&mut self) -> Option<AlignData<T<Self>, Skip<Self>>> {
+    fn pop_align(&mut self) -> Option<AlignData<ET::Token, ET::Skip>> {
         self.align_data.pop()
     }
 
-    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<Self::ET>, &S<Self>, T<Self>)>(engine: &mut EngineReferences<Self::ET>, expand_protected: bool, edef_like: bool, cont: Fn) {
+    fn expand_until_endgroup<Fn: FnMut(&mut EngineAux<ET>, &ET::State, ET::Token)>(engine: &mut EngineReferences<ET>, expand_protected: bool, edef_like: bool, cont: Fn) {
         methods::expand_until_endgroup(engine,expand_protected,edef_like,cont);
     }
 
-    fn do_macro(engine: &mut EngineReferences<Self::ET>, m: Macro<T<Self>>, token: T<Self>) {
-        let trace = engine.state.get_primitive_int(PRIMITIVES.tracingcommands) > Int::<Self>::default();
+    fn do_macro(engine: &mut EngineReferences<ET>, m: Macro<ET::Token>, token: ET::Token) {
+        let trace = engine.state.get_primitive_int(PRIMITIVES.tracingcommands) > ET::Int::default();
         if trace {
             match token.to_enum() {
                 StandardToken::ControlSequence(cs) => {
@@ -497,7 +490,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
         }
     }
 
-    fn get_align_data(&mut self) -> Option<&mut AlignData<T<Self>,Skip<Self>>> {
+    fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Skip>> {
         self.align_data.last_mut()
     }
 

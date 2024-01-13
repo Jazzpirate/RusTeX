@@ -22,7 +22,6 @@ use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderBody, Leaders, 
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::VNode;
-use crate::utils::errors::ErrorThrower;
 use crate::tex::nodes::NodeTrait;
 use crate::tex::types::TeXMode;
 

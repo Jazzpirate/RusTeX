@@ -48,7 +48,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type State: State<ET=Self>;
     type Outputs: Outputs;
     type Mouth: Mouth<Self>;
-    type Gullet:Gullet<ET=Self>;
+    type Gullet:Gullet<Self>;
     type Stomach:Stomach<ET=Self>;
     type CustomNode:CustomNodeTrait<Self>;
     type Font:Font<Char=Self::Char,Int=Self::Int, Dim=Self::Dim,CS=Self::CSName>;
@@ -305,18 +305,18 @@ macro_rules! expand {
         crate::expand!(ET;$engine,$tk;$($case)*)
     };
     ($ET:ty; $engine:ident,$tk:expr;$($case:tt)*) => {
-        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::resolve(
+        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::resolve(
             &$engine.state,$tk
         );
         match cmd {
             crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Macro(m)),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::do_macro($engine,m.clone(),token),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),token),
             crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Conditional(cond)),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::do_conditional($engine,cond.name,token,cond.expand,false),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,cond.name,token,cond.expand,false),
             crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Expandable(e)),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::do_expandable($engine,e.name,token,e.expand),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,e.name,token,e.expand),
             crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::SimpleExpandable(e)),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet>::do_simple_expandable($engine,e.name,token,e.expand),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,e.name,token,e.expand),
             $($case)*
         }
     }
