@@ -1,10 +1,9 @@
 pub mod methods;
 use crate::engine::TeXError;
 
-use crate::commands::{CommandScope, Unexpandable};
+use crate::commands::{CommandScope, ResolvedToken, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
-use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::state::{GroupType, State};

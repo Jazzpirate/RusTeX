@@ -1,8 +1,8 @@
-use crate::commands::{Command, Expandable, Macro, MacroSignature, SimpleExpandable, Unexpandable};
+use crate::commands::{Command, Expandable, Macro, MacroSignature, ResolvedToken, SimpleExpandable, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
-use crate::engine::gullet::{AlignColumn, AlignData, Gullet, ResolvedToken};
+use crate::engine::gullet::{AlignColumn, AlignData, Gullet};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use crate::engine::state::{GroupType, State};

@@ -1,4 +1,4 @@
-use crate::commands::{Command, IntCommand, SimpleExpandable};
+use crate::commands::{ActiveConditional, Command, IntCommand, ResolvedToken, SimpleExpandable};
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CommandCode;
@@ -7,7 +7,7 @@ use crate::engine::state::State;
 use crate::engine::utils::memory::PRIMITIVES;
 use crate::file_end;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
-use crate::engine::gullet::{ActiveConditional, AlignData, Gullet, ResolvedToken};
+use crate::engine::gullet::{AlignData, Gullet};
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::tex::numerics::TeXDimen;

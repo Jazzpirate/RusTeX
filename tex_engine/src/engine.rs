@@ -2,14 +2,14 @@
     some output format.
 */
 use std::fmt::Debug;
-use crate::engine::gullet::{DefaultGullet, Gullet, ResolvedToken};
+use crate::engine::gullet::{DefaultGullet, Gullet};
 use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
 use crate::{tex};
 use crate::tex::catcodes::CommandCode;
-use crate::commands::Command;
+use crate::commands::{Command, ResolvedToken};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
@@ -309,13 +309,13 @@ macro_rules! expand {
             &$engine.state,$tk
         );
         match cmd {
-            crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Macro(m)),token} =>
+            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Macro(m)),token} =>
                 <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),token),
-            crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Conditional(cond)),token} =>
+            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Conditional(cond)),token} =>
                 <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,cond.name,token,cond.expand,false),
-            crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Expandable(e)),token} =>
+            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Expandable(e)),token} =>
                 <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,e.name,token,e.expand),
-            crate::engine::gullet::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::SimpleExpandable(e)),token} =>
+            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::SimpleExpandable(e)),token} =>
                 <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,e.name,token,e.expand),
             $($case)*
         }

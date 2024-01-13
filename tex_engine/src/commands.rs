@@ -9,7 +9,7 @@ use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::tokens::token_lists::{StringCharWrite, TokenList, CharWrite};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::tokens::control_sequences::CSName;
-use crate::tex::numerics::NumSet;
+use crate::tex::numerics::{NumSet, TeXInt};
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
@@ -18,6 +18,30 @@ pub mod primitives;
 pub mod tex;
 pub mod etex;
 pub mod methods;
+
+#[derive(Debug)]
+pub enum ResolvedToken<'a,ET:EngineTypes> {
+    Tk{token:ET::Token,char:ET::Char,code:CommandCode},
+    Cmd{token:ET::Token,cmd:Option<&'a Command<ET>>},
+}
+
+#[derive(Copy,Clone,Eq,PartialEq,Debug)]
+pub enum ActiveConditional<I:TeXInt> {
+    Unfinished(PrimitiveIdentifier),
+    Case(I),
+    True(PrimitiveIdentifier),
+    Else(PrimitiveIdentifier),
+}
+impl<I:TeXInt> ActiveConditional<I> {
+    pub fn name(&self) -> PrimitiveIdentifier {
+        match self {
+            ActiveConditional::Unfinished(n) => *n,
+            ActiveConditional::Case(_) => PRIMITIVES.ifcase,
+            ActiveConditional::True(n) => *n,
+            ActiveConditional::Else(n) => *n,
+        }
+    }
+}
 
 /// A command.
 #[derive(Clone,Debug)]

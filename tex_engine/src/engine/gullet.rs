@@ -1,7 +1,7 @@
 pub mod methods;
 
 use std::marker::PhantomData;
-use crate::commands::{Command, Macro, Unexpandable};
+use crate::commands::{ActiveConditional, Command, Macro, ResolvedToken, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{MacroExpansion, TokenList, TokenListDisplay};
@@ -31,8 +31,8 @@ pub trait Gullet<ET:EngineTypes> {
     fn push_align(&mut self,ad:AlignData<ET::Token,ET::Skip>);
     fn pop_align(&mut self) -> Option<AlignData<ET::Token,ET::Skip>>;
     fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Skip>>;
-    fn get_conditional(&self) -> Option<ActiveConditional<ET>>;
-    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET>>;
+    fn get_conditional(&self) -> Option<ActiveConditional<ET::Int>>;
+    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET::Int>>;
     fn csnames(&mut self) -> &mut usize;
 
     fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut Self,ET::Token) -> bool>(&mut self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,mut f:Fn) {
@@ -244,31 +244,6 @@ pub trait Gullet<ET:EngineTypes> {
     fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,cont:Fn);
 }
 
-#[derive(Copy,Clone,Eq,PartialEq,Debug)]
-pub enum ActiveConditional<ET:EngineTypes> {
-    Unfinished(PrimitiveIdentifier),
-    Case(<ET::Num as NumSet>::Int),
-    True(PrimitiveIdentifier),
-    Else(PrimitiveIdentifier),
-}
-impl<ET:EngineTypes> ActiveConditional<ET> {
-    pub fn name(&self) -> PrimitiveIdentifier {
-        match self {
-            ActiveConditional::Unfinished(n) => *n,
-            ActiveConditional::Case(_) => PRIMITIVES.ifcase,
-            ActiveConditional::True(n) => *n,
-            ActiveConditional::Else(n) => *n,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum ResolvedToken<'a,ET:EngineTypes> {
-    Tk{token:ET::Token,char:ET::Char,code:CommandCode},
-    Cmd{token:ET::Token,cmd:Option<&'a Command<ET>>},
-}
-
-
 #[derive(Clone,Debug)]
 pub struct AlignColumn<T:Token,Sk: crate::tex::numerics::Skip> {
     pub left: TokenList<T>,
@@ -409,7 +384,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 pub struct DefaultGullet<ET:EngineTypes> {
     align_data:Vec<AlignData<ET::Token,ET::Skip>>,
-    conditionals:Vec<ActiveConditional<ET>>,
+    conditionals:Vec<ActiveConditional<ET::Int>>,
     csnames:usize,
     phantom:PhantomData<ET>
 }
@@ -494,11 +469,11 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
         self.align_data.last_mut()
     }
 
-    fn get_conditional(&self) -> Option<ActiveConditional<ET>> {
+    fn get_conditional(&self) -> Option<ActiveConditional<ET::Int>> {
         self.conditionals.last().cloned()
     }
 
-    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET>> {
+    fn get_conditionals(&mut self) -> &mut Vec<ActiveConditional<ET::Int>> {
         &mut self.conditionals
     }
 }

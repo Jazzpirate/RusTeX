@@ -1,7 +1,6 @@
 use crate::cmtodo;
-use crate::commands::{Command, CommandScope, Macro, MacroSignature};
+use crate::commands::{Command, CommandScope, Macro, MacroSignature, ResolvedToken};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
-use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
 use crate::engine::state::{GroupType, State};

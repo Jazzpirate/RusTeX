@@ -1,9 +1,9 @@
 use chrono::{Datelike, Timelike};
 use crate::{add_node, cmstodo, cmstodos, cmtodo, cmtodos, expand_loop};
-use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, CommandScope, SkipCommand, Unexpandable, Whatsit};
+use crate::commands::{Command, DimCommand, FontCommand, IntCommand, Macro, MacroSignature, MuSkipCommand, CommandScope, SkipCommand, Unexpandable, Whatsit, ActiveConditional, ResolvedToken};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::engine::gullet::{ActiveConditional, Gullet, ResolvedToken};
+use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::ACOrCS;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
