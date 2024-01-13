@@ -155,7 +155,7 @@ pub trait TeXEngine:Sized {
         comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.push_file(file);
-        comps.insert_every(PRIMITIVES.everyjob);
+        comps.push_every(PRIMITIVES.everyjob);
         comps.aux.start_time = chrono::Local::now();
         //comps.aux.elapsed = std::time::Instant::now();
         //debug_log!(debug =>"Here: {}",comps.preview());

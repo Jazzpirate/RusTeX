@@ -200,7 +200,7 @@ pub trait Stomach {
                 engine.stomach.data_mut().open_lists.push(NodeList::Math {children:MathNodeList::new(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
                 engine.state.push(engine.aux,GroupType::Math{display},engine.mouth.line_number());
                 engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
-                engine.insert_every(every);
+                engine.push_every(every);
             }
             CommandCode::Other | CommandCode::Letter => {
                 let code = engine.state.get_mathcode(char);
@@ -635,7 +635,7 @@ pub trait Stomach {
 
         engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
-        engine.insert_every(PRIMITIVES.output);
+        engine.push_every(PRIMITIVES.output);
         engine.get_next(); // '{':BeginGroup
 
         //crate::debug_log!(debug => "Here: {} at {}",engine.mouth.display_position(),engine.preview());
@@ -689,7 +689,7 @@ pub trait Stomach {
                 Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref,preskip:None}))
             }
         }
-        engine.insert_every(PRIMITIVES.everypar)
+        engine.push_every(PRIMITIVES.everypar)
     }
 
     fn close_paragraph(engine:&mut EngineReferences<Self::ET>) {

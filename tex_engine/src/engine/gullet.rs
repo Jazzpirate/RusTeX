@@ -1,7 +1,6 @@
 
 pub mod methods;
 
-use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use crate::commands::{Command, Macro, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
@@ -420,15 +419,6 @@ pub struct DefaultGullet<ET:EngineTypes> {
     csnames:usize,
     phantom:PhantomData<ET>
 }
-struct Dots(usize);
-impl Display for Dots {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for _ in 0..self.0 {
-            write!(f,".")?;
-        }
-        Ok(())
-    }
-}
 impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
     type ET = ET;
 
@@ -463,8 +453,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
         if trace {
             match token.to_enum() {
                 StandardToken::ControlSequence(cs) => {
-                    engine.aux.outputs.write_neg1(format_args!("~.{}{}{} {}",
-                                                               Dots(engine.mouth.num_exps()),
+                    engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
                                                                ET::Char::displayable_opt(engine.state.get_escape_char()),
                                                                engine.aux.memory.cs_interner().resolve(&cs),
                                                                m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
@@ -475,8 +464,7 @@ impl<ET:EngineTypes<Gullet=Self>> Gullet for DefaultGullet<ET> {
                     }
                 }
                 StandardToken::Character(c,_) => {
-                    engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
-                                                               Dots(engine.mouth.num_exps()),
+                    engine.aux.outputs.write_neg1(format_args!("~.{} {}",
                                                                c.display(),
                                                                m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
                     ));

@@ -14,25 +14,68 @@ use crate::tex::tokens::Token;
 
 pub mod strings;
 
+/// A [`Mouth`] provides a stream of [`Token`]s to be processed by an engine; either by tokenizing
+/// a file or by returning the [`Token`]s expanded by a macro. Since a TeX engine spends most of its
+/// time processing and expanding [`Token`]s, the [`Mouth`] is likely the most performance critical component of the engine.
+///
+/// [`DefaultMouth`] is the default implementation of [`Mouth`] that has been quite well optimized.
+///
+/// During a run, most methods provided by the [`Mouth`] should *not* be called directly, since they circumvent the [Gullet](crate::engine::Gullet),
+/// which needs to occasionally do some bookkeeping (e.g. counting braces in an `\halign`).
+/// Instead, the [`Mouth`] should if possible be accessed through the [`EngineReferences`]
+/// or the [`Gullet`] only.
 pub trait Mouth<ET:EngineTypes> {
+    /// Create a new [`Mouth`]. May use [`EngineAux`] and [`State`], although in practice, the default implementation doesn't.
     fn new(aux:&mut EngineAux<ET>,state:&mut ET::State) -> Self;
-    fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID>;
-    fn start_ref(&self) -> SourceReference<<ET::File as File>::SourceRefID>;
-    fn update_start_ref(&mut self);
-    fn get_args(&mut self) -> [Vec<ET::Token>;9];
-    fn return_args(&mut self,args:[Vec<ET::Token>;9]);
+    /// Push a file to the [`Mouth`]. The [`Mouth`] will tokenize the file contents and return the [`Token`]s lazily.
     fn push_file(&mut self,f:ET::File);
+    /// Push a string to the [`Mouth`]. The [`Mouth`] will tokenize the string and return the [`Token`]s lazily.
     fn push_string(&mut self,s:StringLineSource<ET::Char>);
+    /// Push a [`TokenList`] to the [`Mouth`] - e.g. from a token register or `\everypar`.
     fn push_exp(&mut self,exp:&TokenList<ET::Token>);
+    /// Push a [`Vec`] of [`Token`]s to the [`Mouth`]. This is occasionally useful for things like `\write`.
     fn push_vec(&mut self, exp: Vec<ET::Token>);
+    /// Push a [`MacroExpansion`] (with arguments already read) to the [`Mouth`]. The [`Mouth`] will return the [`Token`]s lazily,
+    /// resolving the parameter tokens in the expansion in the process.
     fn push_macro_exp(&mut self,exp:MacroExpansion<ET::Token>);
-    fn get_next_opt(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token>;
-    fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,cont:Fn);
+    /// Push a [`Token`] back to the [`Mouth`]. This is useful for e.g. `\futurelet`, `\expandafter`, or when
+    /// reading keywords, numbers, dimensions, etc. that often read "too far ahead" and need to back up.
     fn requeue(&mut self,t:ET::Token);
-    fn num_exps(&self) -> usize;
-    fn line_number(&self) -> usize;
+
+    /// Get the next [`Token`] from the [`Mouth`]. Returns `None` if the [`Mouth`] is empty.
+    fn get_next_opt(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token>;
+    /// Iterate over the [`Token`]s in the [`Mouth`] until `cont` returns `false`. Can be faster than repeatedly calling [`get_next_opt`], but
+    /// blocking both state changes and expanding macros. Useful for e.g. reading macro arguments or the expansion list
+    /// in `\def`.
+    fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,cont:Fn);
+    /// `\endinput` - removes the last file from the [`Mouth`] without inserting `\everyeof` or an [`EOF`](crate::tex::catcodes::CommandCode::EOF)
+    /// [`Token`].
     fn endinput(&mut self, aux:&EngineAux<ET>);
+    /// clears the mouth at the end of a run, if desired.
     fn finish(&mut self);
+
+    /// Get the current [`SourceReference`] of the [`Mouth`] (file/line/column).
+    fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID>;
+    /// The mouth (can) track(s) two [`SourceReference`]s: the current one (see [`current_sourceref`]) and the position
+    /// of the last [`Token`] encountered in the top-loop of an engine run that was not the result of an expansion.
+    /// The latter is returned by this function. The intuition being that this one indicates the start of the macro
+    ///responsible for what is currently happening, even if the Mouth is already further along because more [`Token`]s
+    ///have been eaten as arguments to a macro etc.
+    fn start_ref(&self) -> SourceReference<<ET::File as File>::SourceRefID>;
+    /// Tells the mouth to update the start reference to the current [`SourceReference`] (see [`start_ref`](Self::start_ref)).
+    fn update_start_ref(&mut self);
+    /// The current line number in the top-most file in the [`Mouth`].
+    fn line_number(&self) -> usize;
+    /// We (can) reuse an array of Token vectors for macro arguments and reuse it to avoid frequent memory allocations.
+    /// This method provides such an array. If it is not pushed to the mouth using [`push_macro_exp`](Self::push_macro_exp),
+    /// later, it should be given back to the mouth using [`return_args`](Self::return_args) later.
+    fn get_args(&mut self) -> [Vec<ET::Token>;9];
+    /// Return the array of Token vectors to the mouth. Should only be called with an array that was previously obtained
+    /// using [`get_args`](Self::get_args).
+    fn return_args(&mut self,args:[Vec<ET::Token>;9]);
+
+    /// Convenience method reading [`Token`]s in the [`Mouth`] until the next [EndGroup](crate::tex::catcodes::CommandCode::EndGroup)
+    ///[`Token`] is encountered and returns that. Useful whenever a group is to be taken; e.g. when reading macro arguments.
     fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,ET::Token)>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,mut cont:Fn) -> ET::Token {
         let mut ingroups = 0;
         let mut eg:Option<ET::Token> = None;
@@ -51,70 +94,28 @@ pub trait Mouth<ET:EngineTypes> {
         eg.unwrap()
     }
 
+    /// For debugging purposes, this method returns a string representation of the upcoming stuff in the [`Mouth`].
     fn preview(&self, int:&<ET::CSName as CSName<ET::Char>>::Handler, cc:&CategoryCodeScheme<ET::Char>, esc:Option<ET::Char>) -> String;
 }
 
-impl<ET:EngineTypes> EngineReferences<'_,ET> {
-
-    pub fn push_file(&mut self,f:ET::File) {
-        self.mouth.push_file(f);
-    }
-}
-
-pub enum TokenSource<T:Token,F:File<Char=T::Char>> {
+enum TokenSource<T:Token,F:File<Char=T::Char>> {
     String(InputTokenizer<T::Char,StringLineSource<T::Char>>),
     File(InputTokenizer<T::Char,F::LineSource>, F::SourceRefID),
     Vec(Vec<T>)
 }
 
-
+/// The default implementation of [`Mouth`]. Well optimized to be fast, but at the cost of not keeping track
+/// of "the depth of current macro expansions" - I found that to be an acceptable loss, since afaict, the only thing that
+/// is done with that information
+/// is to print a corresponding number of `.`s if `\tracingcommands` is set. By omitting that and just concatenating
+/// all expansions into a single Vec from which to `pop()`, we gain a massive speedup.
 pub struct DefaultMouth<ET:EngineTypes> {
     inputs:Vec<TokenSource<ET::Token,ET::File>>,
     args:Option<[Vec<ET::Token>;9]>,
     start_ref:Vec<SourceReference<<ET::File as File>::SourceRefID>>,
     vecs:Vec<Vec<ET::Token>>
 }
-impl<ET:EngineTypes> DefaultMouth<ET> {
-    /*
-fn clean(&mut self) {
-    loop {
-        match self.inputs.last_mut() {
-            Some(TokenSource::Expansion(e)) =>
-                if !e.has_next() {
-                    self.inputs.pop();
-                    continue
-                } else {
-                    break
-                }
-            Some(TokenSource::TokenList(e)) =>
-                if !e.has_next() {
-                    self.inputs.pop();
-                    continue
-                } else {
-                    break
-                }
-            _ => break
-        }
-    }
-}
-     */
-    fn with_list<Fn:FnOnce(&mut Vec<ET::Token>)>(&mut self,f:Fn) {
-        match self.inputs.last_mut() {
-            Some(TokenSource::Vec(v)) => f(v),
-            _ => {
-                let v = match self.vecs.pop() {
-                    Some(mut v) => {f(&mut v);v}
-                    None => {
-                        let mut v = Vec::new();
-                        f(&mut v);
-                        v
-                    }
-                };
-                self.inputs.push(TokenSource::Vec(v));
-            }
-        };
-    }
-}
+
 impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     fn new(_aux: &mut EngineAux<ET>, _state: &mut ET::State) -> Self {
         Self {
@@ -201,17 +202,6 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         }
     }
 
-    fn num_exps(&self) -> usize {
-        let ret = 0;
-        /*for s in self.inputs.iter().rev() {
-            match s {
-                TokenSource::Expansion(_) => ret += 1,
-                TokenSource::TokenList(_) => ret += 1,
-                _ => return ret
-            }
-        }*/
-        return ret
-    }
     fn line_number(&self) -> usize {
         for s in self.inputs.iter().rev() {
             match s {
@@ -352,13 +342,23 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 }
 
-impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn preview(&self) -> String {
-        self.mouth.preview(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char())
-    }
-}
-
 impl<ET:EngineTypes> DefaultMouth<ET> {
+    fn with_list<Fn:FnOnce(&mut Vec<ET::Token>)>(&mut self,f:Fn) {
+        match self.inputs.last_mut() {
+            Some(TokenSource::Vec(v)) => f(v),
+            _ => {
+                let v = match self.vecs.pop() {
+                    Some(mut v) => {f(&mut v);v}
+                    None => {
+                        let mut v = Vec::new();
+                        f(&mut v);
+                        v
+                    }
+                };
+                self.inputs.push(TokenSource::Vec(v));
+            }
+        };
+    }
     fn end_file(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> ET::Token {
         match self.inputs.pop() {
             Some(TokenSource::File(f,_)) => {
@@ -382,8 +382,17 @@ impl<ET:EngineTypes> DefaultMouth<ET> {
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn insert_every(&mut self,every:PrimitiveIdentifier) {
+    /// Push a file to the [`Mouth`] (see [`Mouth::push_file`]).
+    pub fn push_file(&mut self,f:ET::File) {
+        self.mouth.push_file(f);
+    }
+    /// Insert the value of a primitive token list (e.g. `\everypar`) into the [`Mouth`].
+    pub fn push_every(&mut self, every:PrimitiveIdentifier) {
         let tks = self.state.get_primitive_tokens(every);
         self.mouth.push_exp(tks);
+    }
+    /// Useful for debugging (see [`Mouth::preview`]).
+    pub fn preview(&self) -> String {
+        self.mouth.preview(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char())
     }
 }

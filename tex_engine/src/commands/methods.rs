@@ -283,7 +283,7 @@ pub fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,
         ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
         ResolvedToken::Cmd {cmd:Some(Command::Char{code:CommandCode::BeginGroup,..}),..} => {
             engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
-            engine.insert_every(every);
+            engine.push_every(every);
             return scaled
         }
         o => todo!("throw error: {:?}",o)
@@ -679,7 +679,7 @@ pub fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inne
                 if *id == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true),
             ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                 if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
-                engine.insert_every(PRIMITIVES.everycr);
+                engine.push_every(PRIMITIVES.everycr);
                 return cols.into()
             },
             ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
