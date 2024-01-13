@@ -1,7 +1,7 @@
 /*! Implementation of a plain TeX [`State`]. */
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::state::{Ch, CS, Dim, State, StateChange, StateChangeTracker, StateStack, T};
+use crate::engine::state::{Ch, CS, Dim, GroupType, State, StateChange, StateChangeTracker, StateStack, T};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
 use crate::engine::mouth::Mouth;
@@ -10,7 +10,6 @@ use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::characters::CharacterMap;
-use crate::tex::types::GroupType;
 use crate::utils::HMap;
 use crate::engine::FontSystem;
 

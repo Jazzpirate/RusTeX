@@ -1,11 +1,10 @@
 use tex_engine::commands::Command;
 use tex_engine::engine::{EngineAux, EngineTypes, state};
-use tex_engine::engine::state::{State, StateChangeTracker, StateStack};
+use tex_engine::engine::state::{GroupType, State, StateChangeTracker, StateStack};
 use tex_engine::engine::utils::memory::PrimitiveIdentifier;
 use tex_engine::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::tokens::CompactToken;
-use tex_engine::tex::types::{GroupType, MathStyle, TeXMode};
 use crate::engine::{CSName, Font, Types};
 use crate::stomach::CLOSE_FONT;
 use tex_engine::tex::tokens::Token;

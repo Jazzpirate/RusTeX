@@ -1,11 +1,10 @@
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::tex::nodes::{HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
-use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::boxes::{BoxType, TeXBox};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::types::{BoxType, TeXMode};
-use crate::engine::stomach::Stomach;
+use crate::engine::stomach::{Stomach, TeXMode};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
 use crate::engine::utils::memory::PRIMITIVES;

@@ -3,5 +3,4 @@ pub mod catcodes;
 pub mod characters;
 pub mod tokens;
 pub mod numerics;
-pub mod types;
 pub mod nodes;

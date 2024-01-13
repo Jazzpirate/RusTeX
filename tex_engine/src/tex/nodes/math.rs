@@ -5,12 +5,63 @@ use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::Font;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
+use crate::tex::nodes::{Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{TeXBox, ToOrSpread};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
-use crate::tex::types::{MathClass, MathStyle, MathStyleType, NodeType};
 use crate::tex::numerics::NumSet;
+
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub struct MathStyle {
+    pub cramped: bool,
+    pub style:MathStyleType
+}
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum MathStyleType { Display, Text, Script, ScriptScript }
+
+impl MathStyle {
+    pub fn sup(self) -> Self {
+        match self.style {
+            MathStyleType::Text | MathStyleType::Display => MathStyle{cramped:self.cramped, style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
+        }
+    }
+
+    pub fn cramp(mut self) -> Self {
+        self.cramped = true;
+        self
+    }
+
+    pub fn sub(self) -> Self { self.sup().cramp() }
+    pub fn numerator(self) -> Self {
+        match self.style {
+            MathStyleType::Display => MathStyle{cramped:self.cramped, style:MathStyleType::Text},
+            MathStyleType::Text => MathStyle{cramped:self.cramped, style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
+        }
+    }
+
+    pub fn denominator(self) -> Self {
+        self.numerator().cramp()
+    }
+}
+
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+pub enum MathClass { Ord = 0, Op = 1, Bin = 2, Rel = 3, Open = 4, Close = 5, Punct = 6 }
+impl From<u8> for MathClass {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => MathClass::Ord,
+            1 => MathClass::Op,
+            2 => MathClass::Bin,
+            3 => MathClass::Rel,
+            4 => MathClass::Open,
+            5 => MathClass::Close,
+            6 => MathClass::Punct,
+            _ => panic!("Invalid math class {}",v)
+        }
+    }
+}
 
 #[derive(Debug,Clone)]
 pub struct UnresolvedMathFontStyle<ET:EngineTypes> {

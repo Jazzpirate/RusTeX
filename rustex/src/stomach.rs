@@ -3,28 +3,25 @@ use tex_engine::commands::methods::make_macro;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
-use tex_engine::engine::state::State;
+use tex_engine::engine::state::{GroupType, State};
 use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData};
 use tex_engine::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
 use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::tokens::CompactToken;
-use tex_engine::tex::types::{BoxType, GroupType};
 use crate::engine::{AT_LETTER_SCHEME, Font, Refs, Types};
 use crate::extension::FontChange;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
-use tex_engine::engine::stomach::methods::add_node_v;
-use tex_engine::tex::nodes::boxes::{TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::nodes::vertical::VNode;
-use tex_engine::tex::types::TeXMode;
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
 use tex_engine::prelude::*;
+use tex_engine::tex::nodes::boxes::{BoxType, ToOrSpread};
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,

@@ -17,7 +17,7 @@ use crate::pdflatex::FileWithMD5;
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::types::TeXMode;
+use crate::engine::stomach::TeXMode;
 
 pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)

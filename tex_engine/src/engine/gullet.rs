@@ -10,10 +10,10 @@ use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::characters::Character;
+use crate::tex::nodes::boxes::BoxType;
 use crate::tex::numerics::{MuSkip, NumSet};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;
-use crate::tex::types::BoxType;
 
 /// A [`Gullet`] is the part of the engine that reads tokens from the input stream and expands them;
 /// including conditionals etc.

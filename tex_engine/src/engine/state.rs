@@ -8,12 +8,24 @@ use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
 use crate::engine::gullet::methods::ACOrCS;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::boxes::{BoxType, TeXBox};
 use crate::tex::nodes::math::UnresolvedMathFontStyle;
 use crate::tex::numerics::NumSet;
 use crate::tex::tokens::Token;
-use crate::tex::types::GroupType;
 use crate::utils::Ptr;
+
+/// The type of a group, e.g. `{...}`, `\begingroup...\endgroup`, `$...$`.
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum GroupType {
+    /// A group delimited by `{` and `}`.
+    Character,
+    /// A group delimited by `\begingroup` and `\endgroup`.
+    ControlSequence,
+    /// A box (e.g. `\hbox` or `\vbox`), or a math group.
+    Box(BoxType),
+    Math{display:bool},
+    LeftRight
+}
 
 type Ch<S> = <<S as State>::ET as EngineTypes>::Char;
 type Int<S> = <<<S as State>::ET as EngineTypes>::Num as NumSet>::Int;

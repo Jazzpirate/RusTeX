@@ -5,13 +5,12 @@ use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuFill, MuSkip32, Skip, Skip32}
 use crate::engine::{Bx, Font, Refs, SRef, Types};
 use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
 use tex_engine::tex::nodes::NodeTrait;
-use tex_engine::tex::types::{MathClass, MathStyleType};
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::engine::stomach::ParLineSpec;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
-use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
+use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
 use crate::shipout::{do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};

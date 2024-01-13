@@ -4,7 +4,7 @@ use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
-use crate::engine::state::State;
+use crate::engine::state::{GroupType, State};
 use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::tokens::control_sequences::{CSHandler,ResolvedCSName};
@@ -18,7 +18,6 @@ use crate::engine::stomach::Stomach;
 use crate::tex::nodes::{NodeList, NodeTrait};
 use crate::tex::characters::CharacterMap;
 use crate::tex::nodes::math::{MathNode, MathNucleus};
-use crate::tex::types::GroupType;
 use crate::tex::nodes::math::MathAtom;
 
 #[allow(non_snake_case)]

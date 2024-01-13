@@ -7,12 +7,11 @@ use crate::engine::fontsystem::FontSystem;
 use crate::engine::gullet::ResolvedToken;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::engine::state::State;
+use crate::engine::state::{GroupType, State};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::CommandCode;
 use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType, MathNodeListType, ListTarget, MathNodeList};
 use crate::tex::numerics::NumSet;
-use crate::tex::types::{BoxType, GroupType, MathClass, TeXMode};
 use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::Token;
@@ -21,9 +20,9 @@ use crate::commands::methods::get_mathchar;
 use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::engine::fontsystem::Font;
-use crate::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
+use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathAtom, MathChar, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{MathAtom, MathChar, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::NodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
@@ -33,6 +32,62 @@ type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
 type St<S> = <<S as Stomach>::ET as EngineTypes>::State;
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
+
+
+/// The mode the engine is currently in, e.g. horizontal mode or vertical mode.
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum TeXMode {
+    /// The mode the engine is in at the start of a document, outside of boxes or paragraphs
+    Vertical,
+    /// The mode the engine is in inside a vertical box
+    InternalVertical,
+    /// The mode the engine is in inside a paragraph
+    Horizontal,
+    /// The mode the engine is in inside a horizontal box
+    RestrictedHorizontal,
+    /// The mode the engine is in inside an inline math box
+    InlineMath,
+    /// The mode the engine is in inside a display math box
+    DisplayMath
+}
+impl TeXMode {
+    /// Returns true if the mode is vertical or internal vertical
+    pub fn is_vertical(&self) -> bool {
+        match self {
+            TeXMode::Vertical | TeXMode::InternalVertical => true,
+            _ => false
+        }
+    }
+    /// Returns true if the mode is horizontal or restricted horizontal
+    pub fn is_horizontal(&self) -> bool {
+        match self {
+            TeXMode::Horizontal | TeXMode::RestrictedHorizontal => true,
+            _ => false
+        }
+    }
+    /// Returns true if the mode is inline math or display math
+    pub fn is_math(&self) -> bool {
+        match self {
+            TeXMode::InlineMath | TeXMode::DisplayMath => true,
+            _ => false
+        }
+    }
+    /// Returns true if the mode is horizontal, restricted horizontal, inline math, or display math
+    pub fn h_or_m(&self) -> bool {
+        match self {
+            TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::InlineMath | TeXMode::DisplayMath => true,
+            _ => false
+        }
+    }
+}
+impl From<BoxType> for TeXMode {
+    fn from(bt: BoxType) -> Self {
+        match bt {
+            BoxType::Horizontal => TeXMode::RestrictedHorizontal,
+            BoxType::Vertical => TeXMode::InternalVertical,
+        }
+    }
+}
 
 pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     match std::mem::take(engine.stomach.afterassignment()) {

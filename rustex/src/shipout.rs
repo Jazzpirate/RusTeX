@@ -3,7 +3,6 @@ mod annotations;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use tex_engine::tex::types::{BoxType, MathClass, MathStyleType};
 use crate::engine::{Bx, Font, Refs, SRef, Types};
 use std::fmt::Write;
 use std::vec::IntoIter;
@@ -18,7 +17,7 @@ use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
-use tex_engine::tex::nodes::math::{MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
+use tex_engine::tex::nodes::math::{MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
 use tex_tfm::glyphs::Glyph;

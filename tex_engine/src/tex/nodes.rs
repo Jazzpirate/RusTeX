@@ -8,7 +8,6 @@ use std::fmt::{Debug, Display, Formatter, Write};
 use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::{SourceRef, SourceReference};
-use crate::tex::types::NodeType;
 use crate::engine::filesystem::File;
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
@@ -17,6 +16,50 @@ use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathNode, UnresolvedMathF
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
 use crate::utils::Ptr;
+
+/// The type of a [`Node`](crate::tex::nodes::NodeTrait), as returned
+/// by `\lastnodetype`
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum NodeType {
+    /// A character node, e.g. `a` or `1`.
+    Char = 0,
+    /// A horizontal list node, e.g. `\hbox{...}`.
+    HList = 1,
+    /// A vertical list node, e.g. `\vbox{...}`.
+    VList = 2,
+    /// A rule node, e.g. `\hrule`.
+    Rule = 3,
+    /// An insertion node as produced by `\insert`.
+    Insertion = 4,
+    /// A mark node as produced by `\mark`.
+    Mark = 5,
+    /// An adjust node as produced by `\vadjust`.
+    Adjust = 6,
+    /// A ligature node as produced by the ligaturing algorithm.
+    Ligature = 7,
+    /// A discretionary node as produced by the discretionary algorithm.
+    Discretionary = 8,
+    /// A whatsit node, e.g. `\special`.
+    WhatsIt = 9,
+    /// A math node.
+    Math = 10,
+    /// A glue node, e.g. `\hskip`.
+    Glue = 11,
+    /// A kern node, e.g. `\kern`.
+    Kern = 12,
+    /// A penalty node as produced by `\penalty`.
+    Penalty = 13,
+    /// An unset node, e.g. `\unskip`.
+    Unset = 14,
+    /// A math character node, e.g. `a` or `1` in math mode.
+    MathChar = 15,
+}
+impl NodeType {
+    /// Returns the numeric value of the node type, as returned by `\lastnodetype`.
+    pub fn to_u8(&self) -> u8 {
+        *self as u8
+    }
+}
 
 #[derive(Debug,Clone,Copy,PartialEq,Eq)]
 pub enum LeaderType {

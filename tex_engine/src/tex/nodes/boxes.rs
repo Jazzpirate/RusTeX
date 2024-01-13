@@ -3,12 +3,39 @@ use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::stomach::ParLineSpec;
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
+use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, NodeType, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::TeXDimen;
-use crate::tex::types::NodeType;
 use crate::tex::numerics::Skip;
+
+
+/// The type of a box, e.g. `\hbox` or `\vbox`.
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum BoxType {
+    /// A horizontal box, e.g. `\hbox`.
+    Horizontal,
+    /// A vertical box, e.g. `\vbox`.
+    Vertical,
+}
+impl BoxType {
+    /// Horizontal -> Vertical, Vertical -> Horizontal
+    pub fn other(&self) -> Self {
+        match self {
+            BoxType::Horizontal => BoxType::Vertical,
+            BoxType::Vertical => BoxType::Horizontal,
+        }
+    }
+}
+impl Display for BoxType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoxType::Horizontal => write!(f, "hbox"),
+            BoxType::Vertical => write!(f, "vbox"),
+            //BoxType::InlineMath | BoxType::DisplayMath => write!(f, "math shift")
+        }
+    }
+}
 
 #[derive(Debug,Clone,PartialEq,Eq)]
 pub enum ToOrSpread<D:TeXDimen> {

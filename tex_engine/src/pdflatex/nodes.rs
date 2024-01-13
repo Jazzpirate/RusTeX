@@ -2,9 +2,8 @@ use std::fmt::Formatter;
 use std::path::{Path, PathBuf};
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
 use crate::tex::nodes::boxes::TeXBox;
-use crate::tex::nodes::NodeTrait;
+use crate::tex::nodes::{NodeTrait, NodeType};
 use crate::tex::numerics::TeXDimen;
-use crate::tex::types::NodeType;
 use crate::tex::nodes::CustomNodeTrait;
 
 #[derive(Debug,Clone)]

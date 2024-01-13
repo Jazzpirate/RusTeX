@@ -1,9 +1,8 @@
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{Leaders, NodeTrait, WhatsitNode};
+use crate::tex::nodes::{Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::TeXBox;
-use crate::tex::types::NodeType;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 
