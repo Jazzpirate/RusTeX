@@ -1,4 +1,3 @@
-use crate::engine::EngineTypes;
 use crate::prelude::*;
 use crate::tex::characters::{TextLine, TextLineSource};
 use crate::utils::errors::ErrorHandler;
@@ -130,19 +129,19 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
     /// `\read` - read a line of input as [`Character`]s in the currenct [`CategoryCodeScheme`], respecting
     /// braces ([`CategoryCode::BeginGroup`] and [`EndGroup`](CategoryCode::EndGroup)) and passing each token to the
     /// given function.
-    pub fn read<ET:EngineTypes<Char=C>,F:FnMut(ET::Token)>(&mut self, eh:&Box<dyn ErrorHandler<ET>>, handler:&mut CSH<ET::Token>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) {
+    pub fn read<T:Token<Char=C>,F:FnMut(T)>(&mut self, handler:&mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) {
         let mut ingroups = 0;
         let line = self.line;
         while self.line == line || ingroups > 0 {
             match self.get_char() {
                 None => {
                     if self.eof {return}
-                    if let Some(n) =self.return_endline::<ET::Token>(cc, endline, handler.par()) {
+                    if let Some(n) =self.return_endline::<T>(cc, endline, handler.par()) {
                         f(n)
                     }
                     return ()
                 }
-                Some(c) => match self.check_char::<ET>(eh, handler, cc, endline, c) {
+                Some(c) => match self.check_char::<T>(handler, cc, endline, c) {
                     Ok(None) if self.line == line || ingroups > 0 => (),
                     Ok(None) => return (),
                     Ok(Some(tk)) => {
@@ -161,17 +160,17 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
 
     /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacterError`]
     /// on encountering a character of code [`CategoryCode::Invalid`].
-    pub fn get_next<ET:EngineTypes<Char=C>>(&mut self, eh:&Box<dyn ErrorHandler<ET>>, handler: &mut CSH<ET::Token>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<ET::Token>,InvalidCharacterError<C>> { loop {
+    pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacterError<C>> { loop {
         match self.get_char() {
             None if self.eof => return Ok(None),
-            None => match self.return_endline::<ET::Token>(cc, endline, handler.par()) {
+            None => match self.return_endline::<T>(cc, endline, handler.par()) {
                 Some(e) => {
                     //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
                     return Ok(Some(e))
                 }
                 None => ()
             }
-            Some(c) => match self.check_char::<ET>(eh, handler, cc, endline, c)? {
+            Some(c) => match self.check_char::<T>(handler, cc, endline, c)? {
                 Some(t) => return Ok(Some(t)),
                 None => ()
             }
@@ -221,19 +220,19 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         ret
     }
 
-    fn check_char<ET:EngineTypes<Char=C>>(&mut self, eh:&Box<dyn ErrorHandler<ET>>, handler:&mut CSH<ET::Token>, cc:&CategoryCodeScheme<C>, endline:Option<C>, c:C) -> Result<Option<ET::Token>,InvalidCharacterError<C>> {
+    fn check_char<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, c:C) -> Result<Option<T>,InvalidCharacterError<C>> {
         use CategoryCode::*;
         match cc.get(c) {
             EOL if self.state == MouthState::NewLine => {
                 self.next_line();
                 Ok(Some(self.do_par(handler.par())))
             }
-            EOL => Ok(self.return_endline::<ET::Token>(cc, endline, handler.par())),
+            EOL => Ok(self.return_endline::<T>(cc, endline, handler.par())),
             Space if self.state == MouthState::SkipBlank => Ok(None),
             Space if self.state == MouthState::NewLine => Ok(None),
             Space => {
                 self.state = MouthState::SkipBlank;
-                Ok(Some(ET::Token::space()))
+                Ok(Some(T::space()))
             }
             Ignored => Ok(None),
             Comment => {
@@ -242,17 +241,17 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                 Ok(None)
             }
             Invalid => Err(InvalidCharacterError(c)),
-            Escape => Ok(Some(self.get_escape::<ET::Token>(handler, cc, endline))),
+            Escape => Ok(Some(self.get_escape::<T>(handler, cc, endline))),
             Superscript => match self.maybe_superscript(c) {
-                Some(c) => self.check_char::<ET>(eh, handler, cc, endline, c),
+                Some(c) => self.check_char::<T>(handler, cc, endline, c),
                 None => {
                     self.state = MouthState::MidLine;
-                    Ok(Some(ET::Token::from_char_cat(c,CommandCode::Superscript)))
+                    Ok(Some(T::from_char_cat(c,CommandCode::Superscript)))
                 }
             }
             cc => {
                 self.state = MouthState::MidLine;
-                Ok(Some(ET::Token::from_char_cat(c,(*cc).into())))
+                Ok(Some(T::from_char_cat(c,(*cc).into())))
             }
         }
     }

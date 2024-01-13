@@ -24,6 +24,11 @@ pub mod strings;
 /// which needs to occasionally do some bookkeeping (e.g. counting braces in an `\halign`).
 /// Instead, the [`Mouth`] should if possible be accessed through the [`EngineReferences`]
 /// or the [`Gullet`] only.
+///
+/// Note that we do not require `ET:`[`EngineTypes`]`<`[`Mouth`](EngineTypes::Mouth)`=Self>` - this allows for
+/// implementing your own Mouth by just wrapping an existing implementation in a new wrapper struct and pass on functionality
+/// to the inner Mouth, which would otherwise
+/// fail since `ET::Mouth` would be the outer wrapper struct, not the inner one.
 pub trait Mouth<ET:EngineTypes> {
     /// Create a new [`Mouth`]. May use [`EngineAux`] and [`State`], although in practice, the default implementation doesn't.
     fn new(aux:&mut EngineAux<ET>,state:&mut ET::State) -> Self;
@@ -260,19 +265,31 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     }
                 }
                 TokenSource::String(s) => {
-                    match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
+                    match s.get_next(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
                         Ok(Some(t)) => return Some(t),
                         Ok(_) => return Some(self.end_file(aux,state)),
-                        Err(_) => todo!()
+                        Err(ic) => {
+                            match aux.error_handler.invalid_character(state, ic.0){
+                                Some(s) => self.push_string(s),
+                                _ => ()
+                            }
+                            return self.get_next_opt(aux,state)
+                        }
                     }
                 }
                 TokenSource::File(s,_) => {
                     let cc: &CategoryCodeScheme<ET::Char> = state.get_catcode_scheme();
                     let endline: Option<ET::Char> = state.get_endline_char();
-                    match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                    match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
                         Ok(Some(t)) => return Some(t),
                         Ok(_) => return Some(self.end_file(aux,state)),
-                        Err(_) => todo!()
+                        Err(ic) => {
+                            match aux.error_handler.invalid_character(state, ic.0){
+                                Some(s) => self.push_string(s),
+                                _ => ()
+                            }
+                            return self.get_next_opt(aux,state)
+                        }
                     }
                 }
             }
@@ -295,10 +312,16 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let cc = state.get_catcode_scheme();
                     let endline = state.get_endline_char();
                     loop {
-                        match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) => if !cont(aux,t) { return },
                             Ok(_) => todo!(),
-                            Err(_) => todo!()
+                            Err(ic) => {
+                                match aux.error_handler.invalid_character(state, ic.0){
+                                    Some(s) => self.push_string(s),
+                                    _ => ()
+                                }
+                                return self.iterate(aux,state,cont)
+                            }
                         }
                     }
                 }
@@ -306,10 +329,16 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let cc = state.get_catcode_scheme();
                     let endline = state.get_endline_char();
                     loop {
-                        match s.get_next::<ET>(&aux.error_handler, aux.memory.cs_interner_mut(), cc, endline) {
+                        match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) => if !cont(aux,t) { return },
                             Ok(_) => todo!(),
-                            Err(_) => todo!()
+                            Err(ic) => {
+                                match aux.error_handler.invalid_character(state, ic.0){
+                                    Some(s) => self.push_string(s),
+                                    _ => ()
+                                }
+                                return self.iterate(aux,state,cont)
+                            }
                         }
                     }
                 }

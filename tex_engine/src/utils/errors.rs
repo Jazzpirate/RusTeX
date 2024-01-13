@@ -15,9 +15,9 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::panic::PanicInfo;
-use crate::engine::EngineTypes;
+use crate::engine::{EngineAux, EngineTypes};
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
-use crate::tex::characters::Character;
+use crate::tex::characters::{Character, StringLineSource};
 use crate::tex::tokens::Token;
 use crate::tex::tokens::StandardToken;
 
@@ -87,6 +87,9 @@ fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),
 
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler<ET:EngineTypes> {
+    fn invalid_character(&self,_state:&ET::State,c:ET::Char) -> Option<StringLineSource<ET::Char>> {
+        TeXError::throw(format!("! Text line contains an invalid character.\n{}",c.display()))
+    }
     /*
     /// Invalid character in input file/string
     fn invalid_character<T:Token,D:Display>(&self,_character:T::Char,text:D) -> Option<T> {

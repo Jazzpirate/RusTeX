@@ -188,7 +188,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     ) {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
-                f.read::<ET,_>(eh,handler,cc,endline,cont);
+                f.read(handler,cc,endline,cont);
             }
             _ => todo!("throw File not open error")
         }
