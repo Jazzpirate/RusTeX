@@ -27,7 +27,7 @@ pub enum MouthState {
 #
 type T = StandardToken<u8,Ptr<str>>;
 let mut cs_handler = ();
-let cc = &*DEFAULT_SCHEME_U8;
+let cc = &DEFAULT_SCHEME_U8;
 
 let string = "\\foo   \n  \n   {a}{!}";
 let input: StringLineSource<u8> = string.into();
