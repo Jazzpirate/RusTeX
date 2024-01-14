@@ -249,12 +249,12 @@ pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut
     let font = state.fonts.first().unwrap();
     inner.style("max-width",dim_to_string(pagewidth));
     let textwidth = state.widths.first().copied().unwrap();
-    let scale = (textwidth.0 as f64) / (pagewidth.0 as f64);
+    let scale = (textwidth.0 as f32) / (pagewidth.0 as f32);
     inner.style("--document-width",format!("calc({:.2} * min(100vw,{}))",scale,dim_to_string(pagewidth)));
-    let margin = (pagewidth.0 as f64 - (textwidth.0 as f64)) / (2.0 * pagewidth.0 as f64) * 100.0;
+    let margin = (pagewidth.0 as f32 - (textwidth.0 as f32)) / (2.0 * pagewidth.0 as f32) * 100.0;
     inner.style("padding-left",format!("{:.2}%",margin));
     inner.style("padding-right",format!("{:.2}%",margin));
-    inner.style("line-height",format!("{:.2}",state.lineskip.factor(font) / (font.get_at().0 as f64)));
+    inner.style("line-height",format!("{:.2}",state.lineskip.factor(font) / (font.get_at().0 as f32)));
     page.children.push(HTMLChild::Node(inner));
 
     page.style("font-size",dim_to_string(font.get_at()));

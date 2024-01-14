@@ -13,7 +13,7 @@ use super::nodes::{ColorStackAction, PDFAnnot, PDFBoxSpec, PDFCatalog, PDFColor,
 use crate::engine::fontsystem::Font;
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
-use crate::pdflatex::FileWithMD5;
+use crate::pdflatex::{FileWithMD5, FontWithLpRp};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
@@ -264,23 +264,27 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     }
 }
 
-pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
+pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int
+    where ET::Font: FontWithLpRp {
     let fnt = engine.read_font();
     let char = engine.read_charcode(false);
     fnt.get_lp(char)
 }
-pub fn lpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
+pub fn lpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool)
+    where ET::Font: FontWithLpRp {
     let mut fnt = engine.read_font();
     let char = engine.read_charcode(false);
     let code = engine.read_int(true);
     fnt.set_lp(char,code)
 }
-pub fn rpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
+pub fn rpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int
+    where ET::Font: FontWithLpRp {
     let fnt = engine.read_font();
     let char = engine.read_charcode(false);
     fnt.get_rp(char)
 }
-pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
+pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool)
+    where ET::Font: FontWithLpRp {
     let mut fnt = engine.read_font();
     let char = engine.read_charcode(false);
     let code = engine.read_int(true);
@@ -771,7 +775,8 @@ const PRIMITIVE_TOKS:&[&'static str] = &[
 pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     where <E::Types as EngineTypes>::Extension : PDFExtension<E::Types>,
     <E::Types as EngineTypes>::CustomNode: From<PDFNode<E::Types>>,
-          <E::Types as EngineTypes>::File: FileWithMD5 {
+          <E::Types as EngineTypes>::File: FileWithMD5,
+          <E::Types as EngineTypes>::Font: FontWithLpRp {
 
     register_expandable(engine,"leftmarginkern",leftmarginkern);
     register_expandable(engine,"rightmarginkern",rightmarginkern);

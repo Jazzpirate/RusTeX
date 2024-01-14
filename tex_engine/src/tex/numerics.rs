@@ -34,9 +34,9 @@ pub trait TeXInt:Numeric<Self> + From<i32> + TryFrom<i64> + Into<i64> + TryInto<
 /// A TeX dimension. By default [`Dim32`].
 pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output=Self> + Sub<Self,Output=Self> + Neg<Output=Self> + Into<i64> + std::iter::Sum {
     fn units() -> &'static[&'static [u8]];
-    fn scale_float(&self,times:f64) -> Self;
+    fn scale_float(&self,times:f32) -> Self;
     fn from_sp(sp:i32) -> Self;
-    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,f:f64,dim:&[u8]) -> Self;
+    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,f:f32,dim:&[u8]) -> Self;
 }
 
 /// The default [`NumSet`] used in plain TeX.
@@ -62,7 +62,7 @@ impl NumSet for DefaultNumSet {
         Self::Skip::new(base,stretch,shrink)
     }
     fn mudim_to_dim(mudim: <Self::MuSkip as MuSkip>::Base, em: Self::Dim) -> Self::Dim {
-        Dim32(((mudim.0 as f64 / 65536.0) * (em.0 as f64) / 18.0).round() as i32)
+        Dim32(((mudim.0 as f32 / 65536.0) * (em.0 as f32) / 18.0).round() as i32)
     }
 
     fn dim_to_int(dim: Self::Dim) -> Self::Int {
@@ -73,7 +73,7 @@ impl NumSet for DefaultNumSet {
 impl Numeric<i32> for i32 {
 
     fn scale(&self, times: i32, div: i32) -> Self {
-        ((*self as f64 * times as f64) / (div as f64)).round() as i32
+        ((*self as f32 * times as f32) / (div as f32)).round() as i32
     }
 }
 impl TeXInt for i32 {
@@ -166,14 +166,14 @@ const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc"
 
 impl TeXDimen for Dim32 {
 
-    fn scale_float(&self, times: f64) -> Self {
-        Self((self.0 as f64 * times).floor() as i32)
+    fn scale_float(&self, times: f32) -> Self {
+        Self((self.0 as f32 * times).floor() as i32)
     }
 
     fn from_sp(sp: i32) -> Self { Self(sp) }
 
     fn units() -> &'static[&'static [u8]] { DEFAULT_UNITS }
-    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self {
+    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self {
         match dim {
             b"sp" => Self(float.round() as i32),
             b"pt" => Self((float*65536.0).round() as i32),
@@ -187,12 +187,12 @@ impl TeXDimen for Dim32 {
             b"em" => {
                 let f = engine.state.get_current_font();
                 let em = f.get_dim(5);
-                Self((float*(em.0 as f64)).round() as i32)
+                Self((float*(em.0 as f32)).round() as i32)
             }
             b"ex" => {
                 let f = engine.state.get_current_font();
                 let em = f.get_dim(4);
-                Self((float*(em.0 as f64)).round() as i32)
+                Self((float*(em.0 as f32)).round() as i32)
             }
             _ => unreachable!()
         }
@@ -217,10 +217,10 @@ pub trait Skip:Copy + Eq + Default + Debug + Display + Neg<Output=Self> {
     fn new(base:Self::Base,stretch:Option<Self::Stretch>,shrink:Option<Self::Shrink>) -> Self;
     fn stretch_units() -> &'static[&'static [u8]];
     fn shrink_units() -> &'static[&'static [u8]];
-    fn stretch_from_dimen<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f64,dimen:Self::Base) -> Self::Stretch;
-    fn shrink_from_dimen<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f64,dimen:Self::Base) -> Self::Shrink;
-    fn stretch_from_float<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Stretch;
-    fn shrink_from_float<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Shrink;
+    fn stretch_from_dimen<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f32,dimen:Self::Base) -> Self::Stretch;
+    fn shrink_from_dimen<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f32,dimen:Self::Base) -> Self::Shrink;
+    fn stretch_from_float<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Stretch;
+    fn shrink_from_float<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Shrink;
 }
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -291,7 +291,7 @@ impl<D:TeXDimen> Skip for Skip32<D> {
     fn stretch_units() -> &'static[&'static [u8]] { STRETCH_SHRINK_UNITS }
 
     fn shrink_units() -> &'static[&'static [u8]] { STRETCH_SHRINK_UNITS }
-    fn stretch_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Stretch {
+    fn stretch_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Stretch {
         match dim {
             b"fil" => Fill::fil((float * 65536.0).round() as i32),
             b"fill" => Fill::fill((float * 65536.0).round() as i32),
@@ -299,16 +299,16 @@ impl<D:TeXDimen> Skip for Skip32<D> {
         }
     }
 
-    fn shrink_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Shrink {
+    fn shrink_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Shrink {
         Self::stretch_from_float(engine,float,dim)
     }
 
-    fn stretch_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
+    fn stretch_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f32, dimen: Self::Base) -> Self::Stretch {
         let d = dimen.scale_float(float);
         Fill::pt(d)
     }
 
-    fn shrink_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f64, dimen: Self::Base) -> Self::Stretch {
+    fn shrink_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f32, dimen: Self::Base) -> Self::Stretch {
         let d = dimen.scale_float(float);
         Fill::pt(d)
     }
@@ -364,10 +364,10 @@ pub trait MuSkip:Copy + Eq + Ord + Default + Debug + Display + Neg<Output=Self> 
     fn units() -> &'static[&'static [u8]];
     fn stretch_units() -> &'static[&'static [u8]];
     fn shrink_units() -> &'static[&'static [u8]];
-    fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Base;
+    fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Base;
     fn new(base:Self::Base,stretch:Option<Self::Stretch>,shrink:Option<Self::Shrink>) -> Self;
-    fn stretch_from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Stretch;
-    fn shrink_from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Shrink;
+    fn stretch_from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Stretch;
+    fn shrink_from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Shrink;
 }
 
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -391,7 +391,7 @@ impl MuSkip for MuSkip32 {
     type Stretch = MuFill;
     type Shrink = MuFill;
 
-    fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self::Base {
+    fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Base {
         match dim {
             b"mu" => Mu((float*65536.0).round() as i32),
             _ => unreachable!()
@@ -409,7 +409,7 @@ impl MuSkip for MuSkip32 {
     fn new(base: Self::Base, stretch: Option<Self::Stretch>, shrink: Option<Self::Shrink>) -> Self {
         Self{base,stretch,shrink}
     }
-    fn stretch_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Stretch {
+    fn stretch_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Stretch {
         match dim {
             b"fil" => MuFill::fil((float * 65536.0).round() as i32),
             b"fill" => MuFill::fill((float * 65536.0).round() as i32),
@@ -417,7 +417,7 @@ impl MuSkip for MuSkip32 {
         }
     }
 
-    fn shrink_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self::Shrink {
+    fn shrink_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Shrink {
         Self::stretch_from_float(engine,float,dim)
     }
 }

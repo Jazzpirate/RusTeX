@@ -625,26 +625,26 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
         Command::IntRegister(u) => {
             let i = engine.state.get_int_register(u);
             let i = if is_negative {-i} else {i};
-            let i = i.into() as f64;
+            let i = i.into() as f32;
             read_unit_or_dim(engine,i)
         }
         Command::PrimitiveInt(u) => {
             let i = engine.state.get_primitive_int(u);
             let i = if is_negative {-i} else {i};
-            let i = i.into() as f64;
+            let i = i.into() as f32;
             read_unit_or_dim(engine,i)
         }
         Command::Int(ic) => {
             let i = if is_negative {-(ic.read)(engine,token)} else {(ic.read)(engine,token)};
-            let f = i.into() as f64;
+            let f = i.into() as f32;
             read_unit_or_dim(engine,f)
         }
         Command::CharDef(c) => {
-            let val = if is_negative {-(c.into() as f64)} else {c.into() as f64};
+            let val = if is_negative {-(c.into() as f32)} else {c.into() as f32};
             read_unit_or_dim(engine,val)
         }
         Command::MathChar(c) => {
-            let val = if is_negative {-(c as f64)} else {c as f64};
+            let val = if is_negative {-(c as f32)} else {c as f32};
             read_unit_or_dim(engine,val)
         }
         Command::DimRegister(u) => {
@@ -676,20 +676,20 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
 }
 
 fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> <ET::Num as NumSet>::Dim {
-    let mut ret = 0f64;
+    let mut ret = 0f32;
     let mut in_decimal = first == b'.';
-    let mut fac = 10f64;
+    let mut fac = 10f32;
     if !in_decimal {
-        ret = (first - b'0') as f64;
+        ret = (first - b'0') as f32;
     }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
-                    ret += (b - b'0') as f64 / fac;
+                    ret += (b - b'0') as f32 / fac;
                     fac *= 10.0;
                 } else {
-                    ret = 10.0*ret + ((b - b'0') as f64);
+                    ret = 10.0*ret + ((b - b'0') as f32);
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
@@ -718,7 +718,7 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
     todo!("read_dim_inner")
 }
 
-fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) -> <ET::Num as NumSet>::Dim {
+fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) -> <ET::Num as NumSet>::Dim {
     crate::expand_loop!(engine,
         ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
@@ -753,7 +753,7 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) 
     todo!("file end")
 }
 
-fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64, mut first:Option<(u8, ET::Token)>) -> <ET::Num as NumSet>::Dim {
+fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f32, mut first:Option<(u8, ET::Token)>) -> <ET::Num as NumSet>::Dim {
     let is_true = match &first {
         Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
@@ -763,7 +763,7 @@ fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64
     };
     if is_true {
         let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
-        float *= Into::<i64>::into(mag) as f64 / 1000.0;
+        float *= Into::<i64>::into(mag) as f32 / 1000.0;
     }
     let units = <ET::Num as NumSet>::Dim::units();
     match read_keywords(engine,units,first) {
@@ -799,28 +799,28 @@ pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_ne
         Command::IntRegister(u) => {
             let base = engine.state.get_int_register(u);
             let base = if is_negative {-base} else {base};
-            let base = read_unit_or_dim(engine,base.into() as f64);
+            let base = read_unit_or_dim(engine,base.into() as f32);
             read_skip_ii(engine,base)
         }
         Command::PrimitiveInt(u) => {
             let base = engine.state.get_primitive_int(u);
             let base = if is_negative {-base} else {base};
-            let base = read_unit_or_dim(engine,base.into() as f64);
+            let base = read_unit_or_dim(engine,base.into() as f32);
             read_skip_ii(engine,base)
         }
         Command::Int(ic) => {
             let base = (ic.read)(engine,token);
             let base = if is_negative {-base} else {base};
-            let base = read_unit_or_dim(engine,base.into() as f64);
+            let base = read_unit_or_dim(engine,base.into() as f32);
             read_skip_ii(engine,base)
         }
         Command::CharDef(c) => {
             let val:u64 = c.into();
-            let base = read_unit_or_dim(engine,val as f64);
+            let base = read_unit_or_dim(engine,val as f32);
             read_skip_ii(engine,base)
         }
         Command::MathChar(u) => {
-            let base = read_unit_or_dim(engine,u as f64);
+            let base = read_unit_or_dim(engine,u as f32);
             read_skip_ii(engine,base)
         }
         Command::DimRegister(u) => {
@@ -914,20 +914,20 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
     crate::file_end!()
 }
 fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Str<ET> {
-    let mut ret = 0f64;
+    let mut ret = 0f32;
     let mut in_decimal = first == b'.';
-    let mut scale = 10f64;
+    let mut scale = 10f32;
     if !in_decimal {
-        ret = (first - b'0') as f64;
+        ret = (first - b'0') as f32;
     }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
-                    ret += (b - b'0') as f64 / scale;
+                    ret += (b - b'0') as f32 / scale;
                     scale *= 10.0;
                 } else {
-                    ret = 10.0*ret + ((b - b'0') as f64);
+                    ret = 10.0*ret + ((b - b'0') as f32);
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
@@ -955,7 +955,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
     );
     todo!("read_dim_inner")
 }
-fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> Str<ET> {
+fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f32,mut first:Option<(u8,ET::Token)>) -> Str<ET> {
     let is_true = match &first {
         Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
@@ -965,7 +965,7 @@ fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:
     };
     if is_true {
         let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
-        float *= Into::<i64>::into(mag) as f64 / 1000.0;
+        float *= Into::<i64>::into(mag) as f32 / 1000.0;
     }
     let units = Sk::<ET>::stretch_units();
     match read_keywords(engine,units,first) {
@@ -998,20 +998,20 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
     crate::file_end!()
 }
 fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Shr<ET> {
-    let mut ret = 0f64;
+    let mut ret = 0f32;
     let mut in_decimal = first == b'.';
-    let mut scale = 10f64;
+    let mut scale = 10f32;
     if !in_decimal {
-        ret = (first - b'0') as f64;
+        ret = (first - b'0') as f32;
     }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
-                    ret += (b - b'0') as f64 / scale;
+                    ret += (b - b'0') as f32 / scale;
                     scale *= 10.0;
                 } else {
-                    ret = 10.0*ret + ((b - b'0') as f64);
+                    ret = 10.0*ret + ((b - b'0') as f32);
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
@@ -1039,7 +1039,7 @@ fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
     );
     todo!("read_dim_inner")
 }
-fn read_shrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> Shr<ET> {
+fn read_shrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f32,mut first:Option<(u8,ET::Token)>) -> Shr<ET> {
     let is_true = match &first {
         Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
@@ -1049,7 +1049,7 @@ fn read_shrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f
     };
     if is_true {
         let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
-        float *= Into::<i64>::into(mag) as f64 / 1000.0;
+        float *= Into::<i64>::into(mag) as f32 / 1000.0;
     }
     let units = Sk::<ET>::shrink_units();
     match read_keywords(engine,units,first) {
@@ -1112,13 +1112,13 @@ pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, i
         }
         Command::CharDef(c) => {
             let base = c.into() as i64;
-            let base = (if is_negative {-base} else {base}) as f64;
+            let base = (if is_negative {-base} else {base}) as f32;
             let base = read_mudim_unit(engine,base,None);
             kern(base,engine)
         }
         Command::IntRegister(u) => {
             let base = engine.state.get_int_register(u);
-            let base = (if is_negative {-base} else {base}).into() as f64;
+            let base = (if is_negative {-base} else {base}).into() as f32;
             let base = read_mudim_unit(engine,base,None);
             kern(base,engine)
         }
@@ -1133,20 +1133,20 @@ fn read_muskip_dim<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 }
 
 fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MB<ET> {
-    let mut ret = 0f64;
+    let mut ret = 0f32;
     let mut in_decimal = first == b'.';
-    let mut fac = 10f64;
+    let mut fac = 10f32;
     if !in_decimal {
-        ret = (first - b'0') as f64;
+        ret = (first - b'0') as f32;
     }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
-                    ret += (b - b'0') as f64 / fac;
+                    ret += (b - b'0') as f32 / fac;
                     fac *= 10.0;
                 } else {
-                    ret = 10.0*ret + ((b - b'0') as f64);
+                    ret = 10.0*ret + ((b - b'0') as f32);
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
@@ -1170,7 +1170,7 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
     todo!("read_dim_inner")
 }
 
-fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64, first:Option<(u8, ET::Token)>) -> MB<ET> {
+fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f32, first:Option<(u8, ET::Token)>) -> MB<ET> {
     let units = MS::<ET>::units();
     match read_keywords(engine,units,first) {
         Some(d) => MS::<ET>::from_float(engine,float,d),
@@ -1218,20 +1218,20 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
     crate::file_end!()
 }
 fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSt<ET> {
-    let mut ret = 0f64;
+    let mut ret = 0f32;
     let mut in_decimal = first == b'.';
-    let mut fac = 10f64;
+    let mut fac = 10f32;
     if !in_decimal {
-        ret = (first - b'0') as f64;
+        ret = (first - b'0') as f32;
     }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
-                    ret += (b - b'0') as f64 / fac;
+                    ret += (b - b'0') as f32 / fac;
                     fac *= 10.0;
                 } else {
-                    ret = 10.0*ret + ((b - b'0') as f64);
+                    ret = 10.0*ret + ((b - b'0') as f32);
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
@@ -1254,7 +1254,7 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     );
     todo!("read_dim_inner")
 }
-fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64,first:Option<(u8,ET::Token)>) -> MSt<ET> {
+fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32,first:Option<(u8,ET::Token)>) -> MSt<ET> {
     let units = MS::<ET>::stretch_units();
     match read_keywords(engine,units,first) {
         Some(d) => MS::<ET>::stretch_from_float(engine,float,d),
@@ -1281,20 +1281,20 @@ fn read_mushrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSh<ET> {
 }
 
 fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSh<ET> {
-    let mut ret = 0f64;
+    let mut ret = 0f32;
     let mut in_decimal = first == b'.';
-    let mut fac = 10f64;
+    let mut fac = 10f32;
     if !in_decimal {
-        ret = (first - b'0') as f64;
+        ret = (first - b'0') as f32;
     }
     crate::expand_loop!(engine,
         ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
-                    ret += (b - b'0') as f64 / fac;
+                    ret += (b - b'0') as f32 / fac;
                     fac *= 10.0;
                 } else {
-                    ret = 10.0*ret + ((b - b'0') as f64);
+                    ret = 10.0*ret + ((b - b'0') as f32);
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
@@ -1318,7 +1318,7 @@ fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_nega
     todo!("read_dim_inner")
 }
 
-fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64,first:Option<(u8,ET::Token)>) -> MSh<ET> {
+fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32,first:Option<(u8,ET::Token)>) -> MSh<ET> {
     let units = MS::<ET>::shrink_units();
     match read_keywords(engine,units,first) {
         Some(d) => MS::<ET>::shrink_from_float(engine,float,d),

@@ -86,14 +86,20 @@ impl Kpathsea {
     }
 }
 
+/// The "base" part of [`Kpathsea`] holding information about the "global" parts of the file database, which is
+/// (or should be) shared between all instances. Never needs to be instantiated directly;
+/// use the canoncial [`KPATHSEA`] instance instead.
 #[derive(Clone,Debug)]
 pub struct KpathseaBase {
+    /// The paths to search before the working directory.
     pub pre: HMap<String,PathBuf>,
+    /// Whether to search recursively in the working directory.
     pub recdot:bool,
+    /// The paths to search after the working directory.
     pub post: HMap<String,PathBuf>,
 }
 impl KpathseaBase {
-    pub fn new() -> KpathseaBase {
+    fn new() -> KpathseaBase {
         let vars = Self::get_vars();
         let home = if cfg!(target_os = "windows") {
             std::env::vars().find(|x| x.0 == "HOMEDRIVE").unwrap().1 +
@@ -118,6 +124,7 @@ impl KpathseaBase {
         KpathseaBase { pre, recdot:dot, post }
     }
 
+    /// Search for a file in the database; basically `kpsewhich <file>`, but without the working directory.
     pub fn which<S:AsRef<str>>(&self,filestr:S) -> Option<PathBuf> {
         let filestr = filestr.as_ref();
         if Path::new(filestr).is_absolute() {

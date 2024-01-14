@@ -150,7 +150,7 @@ mod tests {
         engine.do_file_pdf(testpath.to_str().unwrap(),|_,_| {}).unwrap_or_else(|e| {
             //let pos = engine.mouth.display_position().to_string();
             //let cap = engine.aux.memory.cs_interner().cap();
-            //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
+            //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
             panic!("{}",e.msg);
         });
 
@@ -186,7 +186,7 @@ mod tests {
         }).unwrap_or_else(|e| {
             let pos = engine.mouth.display_position().to_string();
             let cap = engine.aux.memory.cs_interner().cap();
-            error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
+            error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
             panic!("{}",e.msg);
         });
     }

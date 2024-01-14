@@ -23,18 +23,18 @@ pub(crate) trait MuAdd {
 impl MuAdd for Mu {
     fn merge(&mut self,sk2:Dim32,f:&Font) {
         let em = f.get_dim(5);
-        let nb = (((sk2.0 as f64) * 18.0 / (em.0 as f64)) * 65536.0) as i32;
+        let nb = (((sk2.0 as f32) * 18.0 / (em.0 as f32)) * 65536.0) as i32;
         self.0 += nb;
     }
 }
 /*
 pub(crate) fn mu_to_dim(mu:Mu,f:&Font) -> Dim32 {
     let em = f.get_dim(5);
-    Dim32(((mu.0 as f64) * (em.0 as f64) / 65536.0 / 18.0) as i32)
+    Dim32(((mu.0 as f32) * (em.0 as f32) / 65536.0 / 18.0) as i32)
 }
 pub(crate) fn muskip_to_skip(ms:MuSkip32,f:&Font) -> Skip32<Dim32> {
     let em : Dim32 = f.get_dim(5);
-    let base = em.scale_float((ms.base.0 as f64) / (65536.0 * 18.0));
+    let base = em.scale_float((ms.base.0 as f32) / (65536.0 * 18.0));
     let stretch = match ms.stretch {
         Some(MuFill::mu(i)) => Some(Fill::pt(Dim32(i))),
         Some(MuFill::fil(i)) => Some(Fill::fil(i)),

@@ -1,3 +1,4 @@
+/*! Fonts */
 mod tfm;
 
 use std::collections::BTreeMap;
@@ -12,46 +13,86 @@ use crate::tex::characters::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
 use crate::utils::{HMap, Ptr};
 
+/// A font system provides [`Font`]s, which in turn provide various information about [`Character`]s (or, rather, glyphs)
+/// in that font.
 pub trait FontSystem:Clone+std::fmt::Debug {
+    /// The type of [`Character`]s used by this font system.
     type Char:Character;
+    /// The type of [control sequences](CSName) used to give a name to a font; returned by e.g. `\the` when followed
+    /// by a font.
     type CS: CSName<Self::Char>;
+    /// The type of [`TeXInt`]s used by this font system, for e.g. `\skewchar`, `\hyphenchar` etc. - these
+    /// numbers may escape the actual character range of the font, so we use [`TeXInt`]s instead of [`Character`]s.
     type Int:TeXInt;
+    /// The type of [`Font`]s provided by this font system.
     type Font:Font<Char=Self::Char,CS=Self::CS, Dim=Self::Dim,Int=Self::Int>;
+    /// The type of [`TeXDimen`]s used by this font system, for e.g. `\fontdimen`, `\fontcharwd` etc.
     type Dim:TeXDimen;
+    /// Returns the `\nullfont`.
     fn null(&self) -> Self::Font;
+    /// Creates a new font system.
     fn new<ET:EngineTypes<Char=Self::Char,CSName=Self::CS>>(aux:&mut EngineAux<ET>) -> Self;
+    /// Creates a new font with the given macroname and filepath (in plain TeX a `.tfm`-file).
     fn new_font<S:AsRef<str>,F:FileSystem>(&mut self,path:S,macroname:<Self::Font as Font>::CS,fs:&mut F) -> Self::Font;
 }
 
+/// A font provides various information about [`Character`]s (or, rather, glyphs) in that font. Since in the [`Stomach`](crate::engine::Stomach)
+/// every glyph in the output is directly associated with a [`Font`], we clone them a lot, so they should be cheap to clone;
+/// e.g. using `Rc` or `Arc` is a good idea.
 pub trait Font:Clone+std::fmt::Debug {
+    /// The type of [`Character`]s used by this font.
     type Char:Character;
+    /// The type of [`TeXDimen`]s used by this font, for e.g. `\fontdimen`, `\fontcharwd` etc.
     type Dim:TeXDimen;
+    /// The type of [`TeXInt`]s used by this font, for e.g. `\skewchar`, `\hyphenchar` etc. - these
+    /// numbers may escape the actual character range of the font, so we use [`TeXInt`]s instead of [`Character`]s.
     type Int:TeXInt;
+    /// The type of [control sequences](CSName) used to give a name to a font; returned by e.g. `\the` when followed
+    /// by a font.
     type CS: CSName<Self::Char>;
+    /// The size of the font; initially provided by the font itself, but can be set via e.g. `\font\foo=cmr10 at 12pt`.
     fn get_at(&self) -> Self::Dim;
+    /// Returns whether the size of the font has been set via e.g. `at ...`.
     fn has_at_set(&self) -> bool;
+    /// Sets the size of the font.
     fn set_at(&mut self,d:Self::Dim);
+    /// Returns the name of the font as a [`CSName`]; used by e.g. `\the\font`.
     fn name(&self) -> &Self::CS;
+    /// Returns the filename of the font.
     fn filename(&self) -> &str;
+    /// Returns the `\fontdimen` at the given index (-1); i.e. `\fontdimen5` returns `get_dim(4)`.
     fn get_dim(&self,idx:u16) -> Self::Dim;
+    /// Sets the `\fontdimen` at the given index (-1); i.e. `\fontdimen5=...` calls `set_dim(4)`.
     fn set_dim(&mut self,idx:u16,d:Self::Dim);
+    /// Returns the `\hyphenchar` of this font.
     fn get_hyphenchar(&self) -> Self::Int;
+    /// Sets the `\hyphenchar` of this font.
     fn set_hyphenchar(&mut self,c:Self::Int);
+    /// Returns the `\skewchar` of this font.
     fn get_skewchar(&self) -> Self::Int;
+    /// Sets the `\skewchar` of this font.
     fn set_skewchar(&mut self,c:Self::Int);
+    /// Returns whether this font has a glyph for the given [`Character`].
     fn has_char(&self,c:Self::Char) -> bool;
+    /// Writes a human-readable representation of this font to the given [`std::fmt::Write`]r
+    /// - i.e. `<`[`name()`](Self::name)`>[ at <`[`get_at()`](Self::get_at)`>]`
     fn display<W:std::fmt::Write>(&self, i:&<Self::CS as CSName<Self::Char>>::Handler, w:W) -> std::fmt::Result;
+    /// Returns the width the given [`Character`] in this font.
     fn get_wd(&self,c:Self::Char) -> Self::Dim;
+    /// Returns the height the given [`Character`] in this font.
     fn get_ht(&self,c:Self::Char) -> Self::Dim;
+    /// Returns the depth the given [`Character`] in this font.
     fn get_dp(&self,c:Self::Char) -> Self::Dim;
+    /// Returns the litalic correction of the given [`Character`] in this font.
     fn get_ic(&self,c:Self::Char) -> Self::Dim;
+    /// Sets the litalic correction of the given [`Character`] in this font.
     fn set_ic(&mut self,c:Self::Char,d:Self::Dim);
-    fn get_lp(&self,c:Self::Char) -> Self::Int;
-    fn set_lp(&mut self,c:Self::Char,d:Self::Int);
-    fn get_rp(&self,c:Self::Char) -> Self::Int;
-    fn set_rp(&mut self,c:Self::Char,d:Self::Int);
+    /// Returns the ligature of the given [`Character`]s in this font, if any; e.g. most fonts
+    /// combine `-` and `-` into an endash.
     fn ligature(&self,c1:Self::Char,c2:Self::Char) -> Option<Self::Char>;
 }
+
+/// A font system for `.tfm`-files, as used by plain TeX, eTeX and pdfTeX for [`Character`]`=u8`
 #[derive(Clone,Debug)]
 pub struct TfmFontSystem<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> {
     files:HMap<PathBuf,Ptr<TfmFile>>,
@@ -122,20 +163,23 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
 }
 
 #[derive(Default)]
-struct Mutables<I:TeXInt,D:TeXDimen + Numeric<I>>  {
+pub(crate) struct Mutables<I:TeXInt,D:TeXDimen + Numeric<I>>  {
     at:Option<D>,
-    lps:HMap<u8,I>,
-    rps:HMap<u8,I>,
+    #[cfg(feature="pdflatex")]
+    pub(crate) lps:HMap<u8,I>,
+    #[cfg(feature="pdflatex")]
+    pub(crate) rps:HMap<u8,I>,
     ics:HMap<u8,D>,
     hyphenchar:Option<I>,
     skewchar:Option<I>,
     dimens:Vec<D>
 }
 
+/// See [`TfmFont`].
 pub struct TfmFontI<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>>  {
     file:Ptr<TfmFile>,
     name:CS,
-    muts:RwLock<Mutables<I,D>>
+    pub(crate) muts:RwLock<Mutables<I,D>>
 }
 impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> PartialEq for TfmFontI<I,D,CS> {
     fn eq(&self, other: &Self) -> bool {
@@ -149,6 +193,8 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> std::fmt::Debug for TfmFon
 
 }
 
+/// A [`Font`] represented by a `.tfm`-file, as used by plain TeX, eTeX and pdfTeX for [`Character`]`=u8`;
+/// defined as `Rc<`[`TfmFontI`]`>` for clonability.
 pub type TfmFont<I,D,CS> = Ptr<TfmFontI<I,D,CS>>;
 impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
     type Char = u8;
@@ -236,30 +282,6 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
         v.insert(c,d);
     }
 
-    fn get_lp(&self, c: Self::Char) -> I {
-        let v = &mut self.muts.write().unwrap().lps;
-        match v.get(&c) {
-            Some(d) => *d,
-            None => I::default()
-        }
-    }
-    fn set_lp(&mut self, c: Self::Char, d: I) {
-        let v = &mut self.muts.write().unwrap().lps;
-        v.insert(c,d);
-    }
-
-    fn get_rp(&self, c: Self::Char) -> I {
-        let v = &mut self.muts.write().unwrap().rps;
-        match v.get(&c) {
-            Some(d) => *d,
-            None => I::default()
-        }
-    }
-    fn set_rp(&mut self, c: Self::Char, d: I) {
-        let v = &mut self.muts.write().unwrap().rps;
-        v.insert(c,d);
-    }
-
     fn get_wd(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.widths[c as usize];
         self.get_at().scale_float(d)
@@ -281,6 +303,8 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    /// reads a font from the input stream (e.g. `\font` for the current font
+    /// or a font defined via `\font\foo=...`).
     pub fn read_font(&mut self) -> <ET::FontSystem as FontSystem>::Font {
         crate::expand_loop!(self,
             ResolvedToken::Cmd {cmd:Some(c),token} => match c {

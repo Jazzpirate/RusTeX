@@ -4,22 +4,25 @@ pub mod nodes;
 use nodes::{MinimalPDFExtension, PDFExtension, PDFNode};
 use crate::engine::{DefaultEngine, EngineReferences, EngineTypes, filesystem, state, TeXEngine};
 use crate::engine::filesystem::{File, VirtualFile};
-use crate::engine::fontsystem::{TfmFont, TfmFontSystem};
+use crate::engine::fontsystem::{Font, TfmFont, TfmFontSystem};
 use crate::engine::gullet::DefaultGullet;
 use crate::engine::mouth::DefaultMouth;
 use crate::engine::stomach::StomachWithShipout;
 use crate::engine::utils::outputs::LogOutputs;
+use crate::prelude::CSName;
 use crate::tex;
 use crate::tex::tokens::control_sequences::InternedCSName;
 use crate::tex::characters::Character;
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::numerics::{Dim32, MuSkip32, Skip32};
+use crate::tex::numerics::{Dim32, MuSkip32, Numeric, Skip32, TeXDimen, TeXInt};
 use crate::utils::errors::TeXError;
 
 pub trait PDFTeXEngine: TeXEngine
     where <Self::Types as EngineTypes>::Extension: PDFExtension<Self::Types>,
           <Self::Types as EngineTypes>::CustomNode: From<PDFNode<Self::Types>>,
-          <Self::Types as EngineTypes>::File: FileWithMD5 {
+          <Self::Types as EngineTypes>::File: FileWithMD5,
+            <Self::Types as EngineTypes>::Font: FontWithLpRp,
+{
     fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
@@ -48,6 +51,39 @@ impl<C:Character> FileWithMD5 for VirtualFile<C> {
                 md5::compute(v)
             }
         }
+    }
+}
+
+pub trait FontWithLpRp: Font {
+    fn get_lp(&self,c:Self::Char) -> Self::Int;
+    fn set_lp(&mut self,c:Self::Char,d:Self::Int);
+    fn get_rp(&self,c:Self::Char) -> Self::Int;
+    fn set_rp(&mut self,c:Self::Char,d:Self::Int);
+}
+
+impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontWithLpRp for TfmFont<I,D,CS> {
+    fn get_lp(&self, c: Self::Char) -> I {
+        let v = &mut self.muts.write().unwrap().lps;
+        match v.get(&c) {
+            Some(d) => *d,
+            None => I::default()
+        }
+    }
+    fn set_lp(&mut self, c: Self::Char, d: I) {
+        let v = &mut self.muts.write().unwrap().lps;
+        v.insert(c,d);
+    }
+
+    fn get_rp(&self, c: Self::Char) -> I {
+        let v = &mut self.muts.write().unwrap().rps;
+        match v.get(&c) {
+            Some(d) => *d,
+            None => I::default()
+        }
+    }
+    fn set_rp(&mut self, c: Self::Char, d: I) {
+        let v = &mut self.muts.write().unwrap().rps;
+        v.insert(c,d);
     }
 }
 
@@ -84,5 +120,7 @@ impl<A> PDFTeXEngine for A where
     A:TeXEngine,
     <A::Types as EngineTypes>::Extension : PDFExtension<A::Types>,
     <A::Types as EngineTypes>::CustomNode: From<PDFNode<A::Types>>,
-    <A::Types as EngineTypes>::File: FileWithMD5 {}
+    <A::Types as EngineTypes>::File: FileWithMD5,
+    <A::Types as EngineTypes>::Font: FontWithLpRp
+{}
 

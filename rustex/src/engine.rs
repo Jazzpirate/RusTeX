@@ -167,7 +167,7 @@ impl RusTeXEngineT for RusTeXEngine {
 
 
         //let cap = engine.aux.memory.cs_interner().cap();
-        //println!("\n\nCapacity: {} of {} ({:.2}%)",cap,0x8000_0000,(cap as f64 / (0x8000_0000u32 as f64)) * 100.0);
+        //println!("\n\nCapacity: {} of {} ({:.2}%)",cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
 
 
 

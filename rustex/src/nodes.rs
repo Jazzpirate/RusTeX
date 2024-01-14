@@ -12,21 +12,21 @@ use crate::state::RusTeXState;
 
 #[derive(Debug,Clone,Default,PartialEq)]
 pub struct LineSkip {
-    pub baselineskip:f64,
-    pub lineskip:f64,
-    pub lineskiplimit:f64,
+    pub baselineskip:f32,
+    pub lineskip:f32,
+    pub lineskiplimit:f32,
 }
 impl LineSkip {
     pub fn get(state:&RusTeXState) -> Self {
         Self {
-            baselineskip:state.get_primitive_skip(PRIMITIVES.baselineskip).base.0 as f64,
-            lineskip:state.get_primitive_skip(PRIMITIVES.lineskip).base.0 as f64,
-            lineskiplimit:state.get_primitive_dim(PRIMITIVES.lineskiplimit).0 as f64,
+            baselineskip:state.get_primitive_skip(PRIMITIVES.baselineskip).base.0 as f32,
+            lineskip:state.get_primitive_skip(PRIMITIVES.lineskip).base.0 as f32,
+            lineskiplimit:state.get_primitive_dim(PRIMITIVES.lineskiplimit).0 as f32,
         }
     }
-    pub fn factor(&self,font:&Font) -> f64 {
+    pub fn factor(&self,font:&Font) -> f32 {
         use tex_engine::engine::fontsystem::Font;
-        let at = font.get_at().0 as f64;
+        let at = font.get_at().0 as f32;
         if self.baselineskip >= (self.lineskiplimit + at) {
             self.baselineskip
         } else { at + self.lineskip }

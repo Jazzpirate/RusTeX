@@ -2,19 +2,32 @@ use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::PathBuf;
 
+/// A TeX Font Metric file.
 #[derive(Debug)]
 pub struct TfmFile {
+    /// The hyphen character.
     pub hyphenchar:u8,
+    /// The skew character.
     pub skewchar:u8,
-    pub dimen:Vec<f64>,
-    pub size : i64,
+    /// `\fontdimen` parameters (as (originally) fixed-point numbers); to be scaled by `size`.
+    pub dimen:Vec<f32>,
+    /// The design size of the font in scaled points
+    pub size : i32,
+    /// The type string of the font as read from the `.tfm`-file.
     pub typestr : String,
+    /// Which characters in the font have glyphs.
     pub defined:[bool;256],
-    pub widths:[f64;256],
-    pub heights: [f64;256],
-    pub depths: [f64;256],
-    pub ics:[f64;256],
+    /// The widths of the characters in the font (as (originally) fixed-point numbers); to be scaled by `size`.
+    pub widths:[f32;256],
+    /// The heights of the characters in the font (as (originally) fixed-point numbers); to be scaled by `size`.
+    pub heights: [f32;256],
+    /// The depths of the characters in the font (as (originally) fixed-point numbers); to be scaled by `size`.
+    pub depths: [f32;256],
+    /// The italic correction of the characters in the font (as (originally) fixed-point numbers); to be scaled by `size`.
+    pub ics:[f32;256],
+    /// The ligatures of the font.
     pub ligs:BTreeMap<(u8,u8),u8>,
+    /// The path to the `.tfm`-file.
     pub filepath:PathBuf,
 }
 
@@ -37,12 +50,12 @@ impl TfmFile {
         let hyphenchar : u8 = 45;
         let skewchar : u8 = 255;
         let mut dimen = vec!();
-        let mut size: i64 = 65536;
+        let mut size: i32 = 65536;
         let mut typestr = "".to_string();
-        let mut widths: [f64;256] = [0.0;256];
-        let mut heights: [f64;256] = [0.0;256];
-        let mut depths: [f64;256] = [0.0;256];
-        let mut ics: [f64;256] = [0.0;256];
+        let mut widths: [f32;256] = [0.0;256];
+        let mut heights: [f32;256] = [0.0;256];
+        let mut depths: [f32;256] = [0.0;256];
+        let mut ics: [f32;256] = [0.0;256];
         let mut defined = [false;256];
         let mut ligs:BTreeMap<(u8,u8),u8> = BTreeMap::new();
 
@@ -67,7 +80,7 @@ impl TfmFile {
         assert_eq!(lf,6+lh+(ec-bc+1)+nw+nh+nd+ni+nk+nl+ne+np);
         state.skip(1);
 
-        size = ((size as f64) * state.read_float()).round() as i64;
+        size = ((size as f32) * state.read_float()).round() as i32;
 
         if lh >= 12 {
             let mut sv : Vec<u8> = vec!();
@@ -89,10 +102,10 @@ impl TfmFile {
         let finfo_table : Vec<FInfoEntry> = (bc..(ec+1)).map(|i| state.read_fifo(i as u8)).collect();
         assert_eq!(state.i,lh + 6 + (ec-bc+1));
 
-        let widthls : Vec<f64> = (0..nw).map(|_| state.read_float()).collect();
-        let heightls: Vec<f64> = (0..nh).map(|_| state.read_float()).collect();
-        let depthls: Vec<f64> = (0..nd).map(|_| state.read_float()).collect();
-        let italicls: Vec<f64> = (0..ni).map(|_| state.read_float()).collect();
+        let widthls : Vec<f32> = (0..nw).map(|_| state.read_float()).collect();
+        let heightls: Vec<f32> = (0..nh).map(|_| state.read_float()).collect();
+        let depthls: Vec<f32> = (0..nd).map(|_| state.read_float()).collect();
+        let italicls: Vec<f32> = (0..ni).map(|_| state.read_float()).collect();
 
         let mut lig_kerns: Vec<(u8, u8, u8, u8)> = vec!();
         for _ in 0..nl {
@@ -175,11 +188,11 @@ impl FontState {
         let i2 = ((self.buf[2] as u16) << 8) | (self.buf[3] as u16);
         (i1,i2)
     }
-    fn read_float(&mut self) -> f64 {
+    fn read_float(&mut self) -> f32 {
         self.read_word();
         let int = ((self.buf[0] as i32) << 24) | ((self.buf[1] as i32) << 16) |
             ((self.buf[2] as i32) << 8) | (self.buf[3] as i32);
-        let f = ((int & 0x7fffffff) as f64) / ((1 << 20) as f64);
+        let f = ((int & 0x7fffffff) as f32) / ((1 << 20) as f32);
         if int < 0 {-f} else {f}
     }
     fn skip(&mut self, len:usize) {

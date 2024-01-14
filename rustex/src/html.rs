@@ -18,8 +18,8 @@ use crate::files::RusTeXFileSystem;
 use super::shipout::nodes::Alignment;
 
 
-fn dim_to_px(d:i32) -> f64{
-    d as f64 / 65536.0 * 1.5
+fn dim_to_px(d:i32) -> f32{
+    d as f32 / 65536.0 * 1.5
 }
 
 
@@ -34,7 +34,7 @@ pub(crate) fn dim_to_string(d:Dim32) -> String {
 
 
 pub(crate) fn mudim_to_string(d:Mu) -> String {
-    format!("{:.5}",(d.0 as f64) / 18.0 / 65536.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
+    format!("{:.5}",(d.0 as f32) / 18.0 / 65536.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
 }
 
 type Ref = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
@@ -930,7 +930,7 @@ impl HTMLNode {
             }*/
             f.write_char('>')?;
             if let Some(w) = s.inner_width {
-                let pctg = w.0 as f64 / (top_width.0 as f64);
+                let pctg = w.0 as f32 / (top_width.0 as f32);
                 wd = Some(w);
                 f.write_str(&format!("<span style=\"display:contents;--temp-width:calc({:.2} * var(--document-width))\">",pctg))?;
             }
@@ -987,7 +987,7 @@ impl HTMLNode {
                 None
             }
             Some(w) if w != top_width => {
-                let pctg = w.0 as f64 / (top_width.0 as f64);
+                let pctg = w.0 as f32 / (top_width.0 as f32);
                 self.style("--temp-width",format!("calc({:.2} * var(--document-width))",pctg));
                 self.class("rustex-withwidth");
                 Some(w)
