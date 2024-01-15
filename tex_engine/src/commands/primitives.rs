@@ -16,21 +16,6 @@ type MuSkip<E> = <<<E as TeXEngine>::Types as EngineTypes>::Num as NumSet>::MuSk
 type Font<E> = <<<E as TeXEngine>::Types as EngineTypes>::FontSystem as FontSystem>::Font;
 
 #[macro_export]
-macro_rules! cmtodo {
-    ($engine:ident,$name:ident) => {{
-        let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
-        let command = crate::commands::Command::SimpleExpandable(crate::commands::SimpleExpandable{
-            name:id,
-            expand:|e,_| crate::utils::errors::TeXError::throw(format!("Not yet implemented: \\{} at {}",
-                stringify!($name),
-                crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
-            ))
-        });
-        $engine.register_primitive(command,stringify!($name));
-    }};
-}
-
-#[macro_export]
 macro_rules! cmtodos {
     ($engine:ident,$($name:ident),*) => {
         $(cmtodo!($engine,$name);)*
@@ -45,6 +30,22 @@ macro_rules! cmstodos {
 }
 
 #[macro_export]
+macro_rules! cmtodo {
+    ($engine:ident,$name:ident) => {{
+        let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
+        let command = crate::commands::Command::SimpleExpandable(crate::commands::SimpleExpandable{
+            name:id,
+            expand:|e,_| crate::utils::errors::TeXError::throw(format!("Not yet implemented: \\{} at {}",
+                stringify!($name),
+                crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
+            ))
+        });
+        let refs = $engine.get_engine_refs();
+        refs.state.register_primitive(refs.aux,id,command);
+    }};
+}
+
+#[macro_export]
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {{
         let id = crate::engine::utils::memory::PRIMITIVES.get(stringify!($name));
@@ -56,7 +57,8 @@ macro_rules! cmstodo {
                 crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
         });
-        $engine.register_primitive(command,stringify!($name));
+        let refs = $engine.get_engine_refs();
+        refs.state.register_primitive(refs.aux,id,command);
     }};
 }
 
@@ -71,8 +73,7 @@ pub fn register_expandable<E:TeXEngine>(
         expand:f
     });
     let refs = engine.get_engine_refs();
-    let name = refs.aux.memory.cs_interner_mut().new(name);
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new [`SimpleExpandable`] primitive and registers it with the engine.
@@ -86,8 +87,7 @@ pub fn register_simple_expandable<E:TeXEngine>(
         expand:f
     });
     let refs = engine.get_engine_refs();
-    let name = refs.aux.memory.cs_interner_mut().new(name);
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new [`Conditional`] primitive and registers it with the engine.
@@ -101,8 +101,7 @@ pub fn register_conditional<E:TeXEngine>(
         expand:f
     });
     let refs = engine.get_engine_refs();
-    let name = refs.aux.memory.cs_interner_mut().new(name);
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new [`Unexpandable`] primitive and registers it with the engine.
@@ -117,8 +116,7 @@ pub fn register_unexpandable<E:TeXEngine>(
         apply:f
     });
     let refs = engine.get_engine_refs();
-    let name = refs.aux.memory.cs_interner_mut().new(name);
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command)
 }
 
 /// Creates a new primitive named integer value and registers it with the engine.
@@ -126,8 +124,7 @@ pub fn register_primitive_int<E:TeXEngine>(engine:&mut E,names:&[&'static str]) 
     let refs = engine.get_engine_refs();
     for name in names {
         let id = PRIMITIVES.get(*name);
-        let name = refs.aux.memory.cs_interner_mut().new(name);
-        refs.state.set_command(refs.aux, name, Some(Command::PrimitiveInt(id)), true);
+        refs.state.register_primitive(refs.aux,id,Command::PrimitiveInt(id));
     }
 }
 
@@ -139,11 +136,10 @@ pub fn register_int<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::Int(IntCommand{
         name:id,read,assign
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
@@ -154,11 +150,10 @@ pub fn register_dim<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::Dim(DimCommand{
         name:id,read,assign
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
@@ -169,11 +164,10 @@ pub fn register_skip<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::Skip(SkipCommand{
         name:id,read,assign
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
@@ -184,11 +178,10 @@ pub fn register_muskip<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::MuSkip(MuSkipCommand{
         name:id,read,assign
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
@@ -199,11 +192,10 @@ pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::FontCmd(FontCommand{
         name:id,read,assign
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive command that yields a
@@ -213,11 +205,10 @@ pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::Box(BoxCommand{
         name:id,read
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive assignment command.
@@ -226,11 +217,10 @@ pub fn register_assignment<E:TeXEngine>(engine:&mut E,name:&'static str,
 ) {
     let refs = engine.get_engine_refs();
     let id = PRIMITIVES.get(name);
-    let name = refs.aux.memory.cs_interner_mut().new(name);
     let command = Command::Assignment(Assignment{
         name:id,assign
     });
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }
 
 /// Creates a new primitive named dimension and registers it with the engine.
@@ -238,8 +228,7 @@ pub fn register_primitive_dim<E:TeXEngine>(engine:&mut E,names:&[&'static str]) 
     let refs = engine.get_engine_refs();
     for name in names {
         let id = PRIMITIVES.get(*name);
-        let name = refs.aux.memory.cs_interner_mut().new(name);
-        refs.state.set_command(refs.aux, name, Some(Command::PrimitiveDim(id)), true);
+        refs.state.register_primitive(refs.aux,id,Command::PrimitiveDim(id));
     }
 }
 
@@ -248,8 +237,7 @@ pub fn register_primitive_skip<E:TeXEngine>(engine:&mut E,names:&[&'static str])
     let refs = engine.get_engine_refs();
     for name in names {
         let id = PRIMITIVES.get(*name);
-        let name = refs.aux.memory.cs_interner_mut().new(name);
-        refs.state.set_command(refs.aux, name, Some(Command::PrimitiveSkip(id)), true);
+        refs.state.register_primitive(refs.aux,id,Command::PrimitiveSkip(id));
     }
 }
 
@@ -258,8 +246,7 @@ pub fn register_primitive_muskip<E:TeXEngine>(engine:&mut E,names:&[&'static str
     let refs = engine.get_engine_refs();
     for name in names {
         let id = PRIMITIVES.get(*name);
-        let name = refs.aux.memory.cs_interner_mut().new(name);
-        refs.state.set_command(refs.aux, name, Some(Command::PrimitiveMuSkip(id)), true);
+        refs.state.register_primitive(refs.aux,id,Command::PrimitiveMuSkip(id));
     }
 }
 
@@ -268,8 +255,7 @@ pub fn register_primitive_toks<E:TeXEngine>(engine:&mut E,names:&[&'static str])
     let refs = engine.get_engine_refs();
     for name in names {
         let id = PRIMITIVES.get(*name);
-        let name = refs.aux.memory.cs_interner_mut().new(name);
-        refs.state.set_command(refs.aux, name, Some(Command::PrimitiveToks(id)), true);
+        refs.state.register_primitive(refs.aux,id,Command::PrimitiveToks(id));
     }
 }
 
@@ -285,6 +271,5 @@ pub fn register_whatsit<E:TeXEngine>(
         name:id,get,immediate
     });
     let refs = engine.get_engine_refs();
-    let name = refs.aux.memory.cs_interner_mut().new(name);
-    refs.state.set_command(refs.aux,name,Some(command),true);
+    refs.state.register_primitive(refs.aux,id,command);
 }

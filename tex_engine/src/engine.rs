@@ -14,7 +14,7 @@ use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
 use crate::tex::characters::Character;
-use crate::tex::tokens::control_sequences::{CSName, InternedCSName,CSHandler};
+use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
@@ -135,7 +135,6 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
 
 pub trait TeXEngine:Sized {
     type Types:EngineTypes;
-    fn register_primitive(&mut self,cmd:Command<Self::Types>,name:&str);
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
     fn init_file(&mut self,s:&str) -> Result<(),TeXError> {TeXError::catch(|| {
         log::debug!("Initializing with file {}",s);
@@ -220,10 +219,6 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
 }
 impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
     type Types = ET;
-    fn register_primitive(&mut self,cmd: Command<ET>, name: &str) {
-        let name = self.aux.memory.cs_interner_mut().new(name);
-        self.state.set_command(&self.aux,name,Some(cmd),true);
-    }
     fn get_engine_refs(&mut self) -> EngineReferences<ET> {
         EngineReferences {
             aux: &mut self.aux,

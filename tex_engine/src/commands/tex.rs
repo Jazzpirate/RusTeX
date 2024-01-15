@@ -614,14 +614,14 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}else: {} (level {}) entered on line {}}}",
                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         PRIMITIVES.printable(name,engine.state.get_escape_char()),index,engine.mouth.line_number()));
+                         name.display(engine.state.get_escape_char()),index,engine.mouth.line_number()));
     }
     crate::engine::gullet::methods::false_loop(engine,index,false,false);
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}fi: {} (level {}) entered on line {}}}",
                          <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         PRIMITIVES.printable(name, engine.state.get_escape_char()),
+                         name.display(engine.state.get_escape_char()),
                          index, engine.mouth.line_number()));
     }
 }
@@ -1083,7 +1083,7 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}fi: {} (level {}) entered on line {}}}",
                          <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         PRIMITIVES.printable(name,engine.state.get_escape_char()),index,engine.mouth.line_number()));
+                         name.display(engine.state.get_escape_char()),index,engine.mouth.line_number()));
     }
 }
 

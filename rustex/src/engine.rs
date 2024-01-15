@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
+use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use tex_engine::commands::{Command, CommandScope, Macro, Unexpandable};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
@@ -22,7 +23,7 @@ use tex_engine::engine::filesystem::FileSystem;
 use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::pdflatex::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
-use tex_engine::tex::catcodes::{AT_LETTER_SCHEME, CategoryCodeScheme};
+use tex_engine::tex::catcodes::{AT_LETTER_SCHEME, CategoryCodeScheme, DEFAULT_SCHEME_U8};
 use tex_engine::tex::catcodes::CategoryCode;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use crate::nodes::RusTeXNode;
@@ -82,15 +83,16 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
-                engine.register_primitive(Command::Unexpandable(
+                let rbreak = PRIMITIVES.get("rustexBREAK");
+                engine.state.register_primitive(&mut engine.aux,rbreak,Command::Unexpandable(
                     Unexpandable {
-                        name:PRIMITIVES.get("rustexBREAK"),
+                        name:rbreak,
                         scope:CommandScope::Any,
                         apply:|_,_| {
                             println!("HERE!")
                         }
                     }
-                ),"rustexBREAK");
+                ));
                 engine.initialize_pdflatex();
                 register_command(&mut engine, true, "LaTeX", "",
                                  "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",

@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::filesystem::{SourceRef, SourceReference};
 use crate::engine::filesystem::File;
-use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
+use crate::engine::utils::memory::PrimitiveIdentifier;
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathNode, UnresolvedMathFontStyle};
@@ -254,7 +254,7 @@ impl<ET:EngineTypes> std::fmt::Debug for WhatsitNode<ET> {
 }
 impl<ET:EngineTypes> WhatsitNode<ET> {
     pub fn new(f:Box<dyn FnOnce(&mut EngineReferences<ET>)>, name:PrimitiveIdentifier) -> Self {
-        WhatsitNode(PRIMITIVES.printable::<ET::Char>(name, None).to_string(),
+        WhatsitNode(name.display::<ET::Char>(None).to_string(),
                                      Ptr::new(RefCell::new(Some(f)))
         )
     }

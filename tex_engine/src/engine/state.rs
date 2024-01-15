@@ -155,6 +155,9 @@ pub trait State:Sized+Clone {
     /// set a primitive token list
     fn set_primitive_tokens(&mut self,aux:&EngineAux<Self::ET>,name:PrimitiveIdentifier,v:TokenList<T<Self>>,globally:bool);
 
+    fn register_primitive(&mut self,aux:&mut EngineAux<Self::ET>,primitive_identifier: PrimitiveIdentifier,cmd:Command<Self::ET>);
+    fn get_primitive(&self,primitive:&str) -> Option<&Command<Self::ET>>;
+
     fn get_command(&self, name:&CS<Self>) -> Option<&Command<Self::ET>>;
     fn set_command(&mut self,aux:&EngineAux<Self::ET>, name:CS<Self>, cmd:Option<Command<Self::ET>>, globally:bool);
 

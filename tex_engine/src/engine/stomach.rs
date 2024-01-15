@@ -119,7 +119,7 @@ pub trait Stomach {
         apply:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
     ) {
         if Self::maybe_switch_mode(engine,scope,token.clone()) {
-            engine.trace_command(|engine| PRIMITIVES.printable(name, engine.state.get_escape_char()));
+            engine.trace_command(|engine| name.display(engine.state.get_escape_char()));
             apply(engine, token)
         }
     }
@@ -131,7 +131,7 @@ pub trait Stomach {
         assign:fn(&mut EngineReferences<Self::ET>,Tk<Self>,bool),
         global:bool
     ) {
-        engine.trace_command(|engine| PRIMITIVES.printable(name,engine.state.get_escape_char()));
+        engine.trace_command(|engine| name.display(engine.state.get_escape_char()));
         assign(engine,token,global);
         insert_afterassignment(engine);
     }
@@ -495,25 +495,25 @@ pub trait Stomach {
         )
     }
     fn assign_primitive_int(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         let val = engine.read_int(true);
         engine.state.set_primitive_int(engine.aux,name,val,global);
         insert_afterassignment(engine);
     }
     fn assign_primitive_dim(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         let val = engine.read_dim(true);
         engine.state.set_primitive_dim(engine.aux,name,val,global);
         insert_afterassignment(engine);
     }
     fn assign_primitive_skip(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         let val = engine.read_skip(true);
         engine.state.set_primitive_skip(engine.aux,name,val,global);
         insert_afterassignment(engine);
     }
     fn assign_primitive_muskip(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         let val = engine.read_muskip(true);
         engine.state.set_primitive_muskip(engine.aux,name,val,global);
         insert_afterassignment(engine);

@@ -18,6 +18,7 @@ use crate::tex::nodes::horizontal::HNode;
 use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::engine::stomach::TeXMode;
+use crate::prelude::CSHandler;
 
 pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)
@@ -683,6 +684,18 @@ pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
     }
 }
 
+pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    use crate::commands::Command;
+    let name = engine.read_csname();
+    let s = engine.aux.memory.cs_interner_mut().resolve(&name).to_string();
+    match engine.state.get_primitive(&s) {
+        None => todo!("??? {}",s),
+        Some(c) => {
+            crate::do_cmd!(engine,tk,c)
+        }
+    }
+}
+
 
 pub fn pdflastximage<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
     where ET::Extension : PDFExtension<ET> {
@@ -824,6 +837,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_int(engine,"pdflastxform",pdflastxform,None);
     register_unexpandable(engine,"pdfximage",CommandScope::Any,pdfximage);
     register_unexpandable(engine,"pdfrefximage",CommandScope::Any,pdfrefximage);
+    register_unexpandable(engine,"pdfprimitive",CommandScope::Any,pdfprimitive);
     register_int(engine,"pdflastximage",pdflastximage,None);
     register_int(engine,"pdflastannot",pdflastannot,None);
 
@@ -913,7 +927,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfnames);
     cmtodo!(engine,pdfnobuiltintounicode);
     cmtodo!(engine,pdfnoligatures);
-    cmtodo!(engine,pdfprimitive);
     cmtodo!(engine,pdfrunninglinkoff);
     cmtodo!(engine,pdfrunninglinkon);
     cmtodo!(engine,pdfsavepos);

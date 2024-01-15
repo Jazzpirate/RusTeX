@@ -154,7 +154,7 @@ impl<'a,ET:EngineTypes> Meaning<'a,ET> {
             Command::PrimitiveMuSkip(name) |
             Command::PrimitiveToks(name) |
             Command::Whatsit(Whatsit{name,..}) => {
-                write!(f,"{}",PRIMITIVES.printable(*name,self.escapechar)).unwrap();
+                write!(f,"{}",name.display(self.escapechar)).unwrap();
             },
         }
     }

@@ -1,3 +1,4 @@
+use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use tex_engine::commands::{Command, CommandScope, Expandable, Unexpandable};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::engine::utils::memory::PRIMITIVES;
@@ -29,20 +30,22 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
         ("rustex!pgf!end", pgfend)
     ];
     for (s,c) in all {
-        engine.register_primitive(Command::Unexpandable(
+        let id = PRIMITIVES.get(s);
+        engine.state.register_primitive(&mut engine.aux,id,Command::Unexpandable(
             Unexpandable {
-                name:PRIMITIVES.get(s),
+                name:id,
                 scope:CommandScope::SwitchesToHorizontalOrMath,
                 apply:*c
             }
-        ),s);
+        ));
     }
-    engine.register_primitive(Command::Expandable(
+    let flushpath =PRIMITIVES.get("rustex!pgf!flushpath");
+    engine.state.register_primitive(&mut engine.aux,flushpath,Command::Expandable(
         Expandable {
-            name:PRIMITIVES.get("rustex!pgf!flushpath"),
+            name:flushpath,
             expand:pgfflushpath
         }
-    ),"rustex!pgf!flushpath");
+    ));
     register_command(engine, true, "rustex!pgf!get!dimens", "",
                      "=\\pgf@picminx =\\pgf@picminy =\\pgf@picmaxx =\\pgf@picmaxy",
                      true, false

@@ -220,7 +220,7 @@ pub trait Gullet<ET:EngineTypes> {
     /// Expand the given expandable [`Token`] with its given expansion function. See also
     /// [`Expandable`](crate::commands::Expandable).
     fn do_expandable(engine: &mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)) {
-        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         let mut exp = Vec::new();// ExpansionContainer::new(engine.aux.memory.get_token_vec());
         f(engine,&mut exp,token);
         engine.mouth.push_vec(exp);
@@ -231,7 +231,7 @@ pub trait Gullet<ET:EngineTypes> {
     /// Expand the given expandable [`Token`] with its given simple expansion function. See also
     /// [`SimpleExpandable`](crate::commands::SimpleExpandable).
     fn do_simple_expandable(engine: &mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,ET::Token)) {
-        engine.trace_command(|engine| format!("{}", PRIMITIVES.printable(name,engine.state.get_escape_char())));
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         f(engine,token)
     }
 
@@ -242,7 +242,7 @@ pub trait Gullet<ET:EngineTypes> {
         engine.gullet.get_conditionals().push(ActiveConditional::Unfinished(name));
         if trace {
             //crate::debug_log!(error => "Here: {}",engine.preview());
-            engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",PRIMITIVES.printable(name,engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
+            engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",name.display(engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
         }
         let mut ret = f(engine,token);
         if unless { ret = !ret }
@@ -271,14 +271,14 @@ pub trait Gullet<ET:EngineTypes> {
                     engine.aux.outputs.write_neg1(
                         format_args!("{{{}else: {} (level {}) entered on line {}}}",
                                      ET::Char::displayable_opt(engine.state.get_escape_char()),
-                                     PRIMITIVES.printable(name,engine.state.get_escape_char()),
+                                     name.display(engine.state.get_escape_char()),
                                      index+1,engine.mouth.line_number()
                         ));
                 } else {
                     engine.aux.outputs.write_neg1(
                         format_args!("{{{}fi: {} (level {}) entered on line {}}}",
                                      ET::Char::displayable_opt(engine.state.get_escape_char()),
-                                     PRIMITIVES.printable(name,engine.state.get_escape_char()),
+                                     name.display(engine.state.get_escape_char()),
                                      index+1,engine.mouth.line_number()
                         ));
                 }

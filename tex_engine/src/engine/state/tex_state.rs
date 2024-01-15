@@ -22,6 +22,7 @@ use crate::tex::tokens::control_sequences::CSNameMap;
 #[derive(Clone)]
 pub struct TeXState<ET:EngineTypes> {
     stack:StateStack<ET,Self>,
+    primitives:HMap<&'static str,Command<ET>>,
     catcodes: CategoryCodeScheme<ET::Char>,
     sfcodes: <ET::Char as Character>::CharMap<u16>,
     lccodes: <ET::Char as Character>::CharMap<ET::Char>,
@@ -98,6 +99,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         let mathfonts = array_init::array_init(|_| nullfont.clone());
         Self {
             stack: StateStack::new(),
+            primitives:HMap::default(),
             catcodes: ET::Char::starting_catcode_scheme(),
             sfcodes: CharacterMap::default(),
             delcodes: CharacterMap::default(),
@@ -127,6 +129,14 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
+    fn register_primitive(&mut self,aux:&mut EngineAux<ET>, primitive_identifier: PrimitiveIdentifier,cmd: Command<Self::ET>) {
+        // TODO self.primitives.insert(PRIMITIVES.as_str(primitive_identifier),cmd.clone());
+        let name = aux.memory.cs_interner_mut().new(&primitive_identifier.display::<ET::Char>(None).to_string());
+        self.commands.insert(name,cmd);
+    }
+    fn get_primitive(&self, primitive: &str) -> Option<&Command<Self::ET>> {
+        self.primitives.get(primitive)
+    }
 
     fn get_group_type(&self) -> Option<GroupType> {
         self.stack.stack.last().map(|lvl| lvl.group_type)
@@ -397,7 +407,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            name.display(self.escape_char),
                                                             old));
                     }
                     self.primitive_ints.insert(name,old);
@@ -406,7 +416,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            name.display(self.escape_char),
                                                             old));
                     }
                     self.primitive_dims.insert(name,old);
@@ -415,7 +425,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            name.display(self.escape_char),
                                                             old));
                     }
                     self.primitive_skips.insert(name,old);
@@ -424,7 +434,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            name.display(self.escape_char),
                                                             old));
                     }
                     self.primitive_muskips.insert(name,old);
@@ -433,7 +443,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
                                                             <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            PRIMITIVES.printable(name,self.escape_char),
+                                                            name.display(self.escape_char),
                                                             old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
                                                             ));
                     }
@@ -830,8 +840,8 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         self.change_field(globally,|s,g| {
             let old = s.primitive_ints.insert(name,v).unwrap_or(ET::Int::default());
             if s.tracing_assigns() {
-                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
-                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
             }
             StateChange::PrimitiveInt { name, old }
         });
@@ -1019,12 +1029,12 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}={}}}",
                                  if g {"globally "} else {""},
-                                 PRIMITIVES.printable(name,s.escape_char),
+                                 name.display(s.escape_char),
                                  old.display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                     ));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}={}}}",
-                                 PRIMITIVES.printable(name,s.escape_char),
+                                 name.display(s.escape_char),
                                  s.primitive_toks.get(&name).unwrap().display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)))
             }
             StateChange::PrimitiveToks { name, old }
@@ -1042,8 +1052,8 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         self.change_field(globally,|s,g| {
             let old = s.primitive_dims.insert(name,v).unwrap_or(ET::Dim::default());
             if s.tracing_assigns() {
-                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
-                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
             }
             StateChange::PrimitiveDim { name, old }
         });
@@ -1060,8 +1070,8 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         self.change_field(globally,|s,g| {
             let old = s.primitive_skips.insert(name,v).unwrap_or(ET::Skip::default());
             if s.tracing_assigns() {
-                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
-                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
             }
             StateChange::PrimitiveSkip { name, old }
         });
@@ -1078,8 +1088,8 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         self.change_field(globally,|s,g| {
             let old = s.primitive_muskips.insert(name,v).unwrap_or(ET::MuSkip::default());
             if s.tracing_assigns() {
-                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},PRIMITIVES.printable(name,s.escape_char),old));
-                aux.outputs.write_neg1(format_args!("{{into {}={}}}",PRIMITIVES.printable(name,s.escape_char),v))
+                aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
+                aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
             }
             StateChange::PrimitiveMuSkip { name, old }
         });

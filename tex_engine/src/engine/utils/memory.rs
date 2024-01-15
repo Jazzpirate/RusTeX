@@ -263,15 +263,29 @@ impl PrimitiveInterner {
         PrimitiveIdentifier(lock.get_or_intern_static(s))
     }
 
+}
+lazy_static!(
+    /// The global [`PrimitiveInterner`].
+    pub static ref PRIMITIVES:PrimitiveInterner = PrimitiveInterner::new();
+);
+
+/// A `Copy` identifier for a primitive command. Small and fast to compare.
+#[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
+pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
+impl PrimitiveIdentifier {
     /// Returns a struct implementing [`Display`](std::fmt::Display) for the given [`PrimitiveIdentifier`], and
     /// optional `\escapechar` that will be prefixed - e.g.
     /// `println!(`[`PRIMITIVES`](static@PRIMITIVES)`.`[`printable`](Self::printable)`(`[`PRIMITIVES`](static@PRIMITIVES)`.the, Some('\\')))`
     /// will print `\the`.
-    pub fn printable<C:Character>(&'static self,ident:PrimitiveIdentifier,escapechar:Option<C>) -> impl std::fmt::Display {
-        PrintableIdentifier(ident,escapechar,&self)
+    pub fn display<C:Character>(self,escapechar:Option<C>) -> impl std::fmt::Display {
+        PrintableIdentifier(self,escapechar,&PRIMITIVES)
     }
-
+    pub fn as_u16(&self) -> u16 {
+        use string_interner::Symbol;
+        self.0.to_usize() as u16
+    }
 }
+
 struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>,&'static PrimitiveInterner);
 impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
     fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -283,11 +297,3 @@ impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
         write!(f,"{}",lock.resolve(self.0.0).unwrap())
     }
 }
-lazy_static!(
-    /// The global [`PrimitiveInterner`].
-    pub static ref PRIMITIVES:PrimitiveInterner = PrimitiveInterner::new();
-);
-
-/// A `Copy` identifier for a primitive command. Small and fast to compare.
-#[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
-pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);

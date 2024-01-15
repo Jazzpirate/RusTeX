@@ -45,26 +45,28 @@ fn thesis() {
 fn notes() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     // /home/jazzpirate/work/MathHub/MiKoMH/AI/source/search/slides/ts-ex.en.tex
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",false,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",true,true,true);
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/CompLog/source/kr/tikz/axioms2.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html", &ret).unwrap();
 }
 
 fn profile() {
     use tex_engine::engine::filesystem::FileSystem;
+    use tex_engine::engine::state::State;
     println!("Profiling...");
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let mut engine = DefaultEngine::<Types>::new();
     register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
-    engine.register_primitive(Command::Unexpandable(
+    let rbreak = PRIMITIVES.get("rustexBREAK");
+    engine.state.register_primitive(&mut engine.aux,rbreak,Command::Unexpandable(
         Unexpandable {
-            name:PRIMITIVES.get("rustexBREAK"),
+            name:rbreak,
             scope:CommandScope::Any,
             apply:|_,_| {
                 println!("HERE!")
             }
         }
-    ),"rustexBREAK");
+    ));
     engine.aux.outputs = RusTeXOutput::Print(false);
     engine.initialize_etex();
     register_pdftex_primitives(&mut engine);
@@ -138,17 +140,19 @@ fn run() {
 }
 
 fn test_latex_ltx() {
+    use tex_engine::engine::state::State;
     let mut engine = DefaultEngine::<Types>::new();
     register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
-    engine.register_primitive(Command::Unexpandable(
+    let rbreak = PRIMITIVES.get("rustexBREAK");
+    engine.state.register_primitive(&mut engine.aux,rbreak,Command::Unexpandable(
         Unexpandable {
-            name:PRIMITIVES.get("rustexBREAK"),
+            name:rbreak,
             scope:CommandScope::Any,
             apply:|_,_| {
                 println!("HERE!")
             }
         }
-    ),"rustexBREAK");
+    ));
     engine.aux.outputs = RusTeXOutput::Print(true);
     engine.initialize_etex();
     register_pdftex_primitives(&mut engine);
