@@ -298,7 +298,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
         let idx = id.as_u16() as usize;
         self.commands.get(idx)
     }
-    pub fn get_name(&self,s:&str) -> Option<&Command<ET>> {
-        self.names.get(s).and_then(|&idx| self.commands.get(idx as usize))
+    pub fn get_name(&self,s:&str) -> Option<PrimitiveIdentifier> {
+        self.names.get(s).map(|&u| PrimitiveIdentifier::try_from_u16(u)).flatten()
     }
 }

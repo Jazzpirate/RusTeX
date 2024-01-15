@@ -181,7 +181,7 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
 pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
     let mut exp = true;
     while let Some(t) = engine.get_next() {
-        if t.command_code() == CommandCode::Noexpand {
+        if t.is_primitive() == Some(PRIMITIVES.noexpand) {
             exp = false;
             continue
         }
@@ -224,7 +224,7 @@ pub(in crate::commands) enum IfxCmd<ET:EngineTypes> {
 impl<ET:EngineTypes> IfxCmd<ET> {
     pub(in crate::commands) fn read(engine:&mut EngineReferences<ET>) -> Self {
         match engine.get_next() {
-            Some(t) if t.command_code() == CommandCode::Noexpand =>
+            Some(t) if t.is_primitive() == Some(PRIMITIVES.noexpand) =>
                 IfxCmd::Noexpand(engine.get_next().unwrap()),
             Some(t) => Self::resolve(engine.resolve(t)),
             _ => todo!("throw error")
@@ -407,7 +407,7 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
                     cols.in_v = false;
                 }
             }
-            ResolvedToken::Tk {code:CommandCode::Noexpand,..} => {
+            ResolvedToken::Tk {code:CommandCode::Primitive,token,..} if token.is_primitive() == Some(PRIMITIVES.noexpand) => {
                 if let Some(n) = engine.mouth.get_next_opt(engine.aux,engine.state) {
                     cols.push(n);
                 } else { unreachable!() }

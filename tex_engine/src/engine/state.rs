@@ -6,6 +6,7 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
+use crate::commands::primitives::PrimitiveCommands;
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::boxes::{BoxType, TeXBox};
@@ -61,7 +62,7 @@ pub trait State:Sized+Clone {
     }
 
     fn register_primitive(&mut self,aux:&mut EngineAux<Self::ET>,primitive_identifier: PrimitiveIdentifier,name:&'static str,cmd:Command<Self::ET>);
-    fn get_primitive(&self,primitive:&str) -> Option<&Command<Self::ET>>;
+    fn primitives(&self) -> &PrimitiveCommands<Self::ET>;
 
     fn push(&mut self,aux:&mut EngineAux<Self::ET>, group_type: GroupType,line_number:usize);
     fn pop(&mut self,aux:&mut EngineAux<Self::ET>,mouth: &mut <Self::ET as EngineTypes>::Mouth);

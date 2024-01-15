@@ -329,6 +329,9 @@ pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
                 StandardToken::ControlSequence(cs) => {
                     tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
                 }
+                StandardToken::Primitive(id) => {
+                    tokenizer.push_cs(a.memory.cs_interner_mut().new(&id.display::<ET::Char>(None).to_string()),a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
+                }
             }
         }
     });
@@ -682,15 +685,13 @@ pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
     }
 }
 
-pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     use crate::commands::Command;
     let name = engine.read_csname();
     let s = engine.aux.memory.cs_interner_mut().resolve(&name).to_string();
-    match engine.state.get_primitive(&s) {
-        None => todo!("??? {}",s),
-        Some(c) => {
-            crate::do_cmd!(engine,tk,c)
-        }
+    match engine.state.primitives().get_name(&s) {
+        None => (),
+        Some(s) => engine.requeue(ET::Token::primitive(s))
     }
 }
 
@@ -718,11 +719,9 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token
     }
 }
 
-
 pub fn pdfshellescape<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(2)
 }
-
 
 pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let mut first = String::new();
@@ -835,7 +834,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_int(engine,"pdflastxform",pdflastxform,None);
     register_unexpandable(engine,"pdfximage",CommandScope::Any,pdfximage);
     register_unexpandable(engine,"pdfrefximage",CommandScope::Any,pdfrefximage);
-    register_unexpandable(engine,"pdfprimitive",CommandScope::Any,pdfprimitive);
+    register_simple_expandable(engine,"pdfprimitive",pdfprimitive);
     register_int(engine,"pdflastximage",pdflastximage,None);
     register_int(engine,"pdflastannot",pdflastannot,None);
 

@@ -23,9 +23,9 @@ path = "src/lib.rs"
 #strip = "none"
 
 [profile.release]
-opt-level = 3
+opt-level = 2
 lto = true
-debug = 2
+#debug = 2
 
 [features]
 default = []

@@ -135,9 +135,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         let name = aux.memory.cs_interner_mut().new(&primitive_identifier.display::<ET::Char>(None).to_string());
         self.commands.insert(name,cmd);
     }
-    fn get_primitive(&self, primitive: &str) -> Option<&Command<Self::ET>> {
-        self.primitives.get_name(primitive)
-    }
+    fn primitives(&self) -> &PrimitiveCommands<Self::ET> { &self.primitives }
 
     fn get_group_type(&self) -> Option<GroupType> {
         self.stack.stack.last().map(|lvl| lvl.group_type)

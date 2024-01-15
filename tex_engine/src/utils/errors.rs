@@ -113,7 +113,8 @@ pub trait ErrorHandler<ET:EngineTypes> {
     fn undefined(&self, csi:&<ET::CSName as CSName<ET::Char>>::Handler, token:ET::Token) {
         match token.to_enum() {
             StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs).to_string()),
-            StandardToken::Character(c,_) => self.undefined_active_character(c)
+            StandardToken::Character(c,_) => self.undefined_active_character(c),
+            _ => unreachable!()
         }
     }
 

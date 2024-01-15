@@ -1,4 +1,5 @@
 use tex_engine::commands::Command;
+use tex_engine::commands::primitives::PrimitiveCommands;
 use tex_engine::engine::{EngineAux, EngineTypes, state};
 use tex_engine::engine::state::{GroupType, State, StateChangeTracker, StateStack};
 use tex_engine::engine::utils::memory::PrimitiveIdentifier;
@@ -30,10 +31,9 @@ impl State for RusTeXState {
         self.0.register_primitive(aux,primitive_identifier,name,cmd)
     }
 
-    fn get_primitive(&self,primitive:&str) -> Option<&Command<Self::ET>> {
-        self.0.get_primitive(primitive)
+    fn primitives(&self) -> &PrimitiveCommands<Self::ET> {
+        self.0.primitives()
     }
-
 
     fn aftergroup(&mut self, token: CompactToken) { self.0.aftergroup(token) }
 

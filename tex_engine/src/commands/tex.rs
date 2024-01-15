@@ -1127,6 +1127,8 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,glob
             }
             StandardToken::ControlSequence(cs) =>
                 engine.state.get_command(&cs).cloned(),
+            StandardToken::Primitive(id) =>
+                engine.state.primitives().get_id(id).cloned(),
             StandardToken::Character(c,CommandCode::Active) =>
                 engine.state.get_ac_command(c).cloned(),
             StandardToken::Character(c,cc) =>
@@ -1163,7 +1165,9 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
         StandardToken::Character(c,CommandCode::Active) =>
             engine.state.get_ac_command(c).cloned(),
         StandardToken::Character(c,cc) =>
-            Some(Command::Char{char:c,code:cc})
+            Some(Command::Char{char:c,code:cc}),
+        StandardToken::Primitive(id) =>
+            engine.state.primitives().get_id(id).cloned(),
     };
     engine.set_command(&cm,cmd,globally);
     engine.requeue(second);
@@ -1176,7 +1180,6 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
     let state = &engine.state;
     engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
         match t.to_enum() {
-            StandardToken::ControlSequence(_) => exp.push(t),
             StandardToken::Character(c,cc) => {
                 let lccode = state.get_lccode(c);
                 if lccode == ET::Char::default() {
@@ -1185,6 +1188,7 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
                     exp.push(ET::Token::from_char_cat(lccode,cc))
                 }
             }
+            _ => exp.push(t)
         }
     });
     engine.mouth.push_vec(exp);
@@ -1196,7 +1200,6 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
     let state = &engine.state;
     engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
         match t.to_enum() {
-            StandardToken::ControlSequence(_) => exp.push(t),
             StandardToken::Character(c,cc) => {
                 let uccode = state.get_uccode(c);
                 if uccode == ET::Char::default() {
@@ -1205,6 +1208,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
                     exp.push(ET::Token::from_char_cat(uccode,cc))
                 }
             }
+            _ => exp.push(t),
         }
     });
     engine.mouth.push_vec(exp);
@@ -1360,7 +1364,7 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
                 Command::SimpleExpandable(_) |
                 Command::Conditional(_) => {
                     engine.mouth.requeue(token);
-                    engine.mouth.requeue(ET::Token::noexpand_marker());
+                    engine.mouth.requeue(ET::Token::primitive(PRIMITIVES.noexpand));
                 }
                 _ => engine.mouth.requeue(token)
             };
@@ -1560,6 +1564,7 @@ pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
                             }
                         }
                     }
+                    _ => todo!("\"emergency stop\"")
                 }
             }
         }

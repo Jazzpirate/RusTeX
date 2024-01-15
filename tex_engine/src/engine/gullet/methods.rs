@@ -65,7 +65,7 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
     let mut remove_braces:Option<Option<usize>> = None;
     while let Some(t) = engine.get_next() {
         match t.command_code() {
-            CommandCode::Noexpand => continue,
+            CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => continue,
             CommandCode::BeginGroup if !ends_with_bgroup => {
                 if arg.is_empty() { remove_braces = Some(None) }
                 arg.push(t);
@@ -116,7 +116,8 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
 fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool) {
     while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
         match t.command_code() {
-            CommandCode::Noexpand | CommandCode::Space => continue,
+            CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => continue,
+            CommandCode::Space => continue,
             CommandCode::BeginGroup => {
                 if long {
                     engine.mouth.read_until_endgroup(
@@ -158,7 +159,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 cont(engine.aux,engine.state,t);
                 continue
             }
-            CommandCode::Noexpand => {
+            CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => {
                 let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
                 cont(engine.aux,engine.state,next);
                 continue
@@ -173,6 +174,11 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     ET::Gullet::do_macro(engine,m.clone(),token),
                 ResolvedToken::Cmd{cmd: Some(Command::Conditional(cond)),token} =>
                     ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
+                ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
+                if e.name == PRIMITIVES.noexpand => {
+                    let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
+                    cont(engine.aux,engine.state,next);
+                }
                 ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.unexpanded => {
                     engine.expand_until_bgroup(false);
@@ -447,6 +453,7 @@ fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:b
                     todo!("throw error here")
                 }
             }
+            _ => todo!("throw error here")
         },
         None => todo!("throw error here")
     }

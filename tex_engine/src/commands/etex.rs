@@ -18,6 +18,7 @@ use crate::tex::nodes::{NodeList, NodeTrait};
 use crate::tex::characters::CharacterMap;
 use crate::tex::nodes::math::{MathNode, MathNucleus};
 use crate::tex::nodes::math::MathAtom;
+use crate::tex::characters::Character;
 
 #[allow(non_snake_case)]
 pub fn eTeXversion<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
@@ -154,6 +155,11 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
                     tokenizer.push_char(c),
                 StandardToken::ControlSequence(cs) => {
                     tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
+                }
+                StandardToken::Primitive(id) => {
+                    tokenizer.push_cs(a.memory.cs_interner_mut().new("pdfprimitive"),a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
+                    let name = a.memory.cs_interner_mut().new(&id.display::<ET::Char>(None).to_string());
+                    tokenizer.push_cs(name,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
                 }
             }
         }
@@ -375,6 +381,30 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
                 }
                 if res.len() == 1 {
                     let c = res.iter().next().unwrap();
+                    match state.get_catcode_scheme().get(c) {
+                        CategoryCode::Letter => f(b' '.into()),
+                        _ => ()
+                    }
+                } else {
+                    f(b' '.into())
+                }
+            }
+            StandardToken::Primitive(id) => {
+                if let Some(esc) = escapechar {
+                    f(esc);
+                }
+                for c in ET::Char::string_to_iter("pdfprimitive") {
+                    f(c)
+                }
+                f(b' '.into());
+                let s = id.display::<ET::Char>(None).to_string();
+                let res = ET::Char::string_to_iter(&s);
+                for c in res {
+                    f(c)
+                }
+                let mut res = ET::Char::string_to_iter(&s);
+                if res.len() == 1 {
+                    let c = res.next().unwrap();
                     match state.get_catcode_scheme().get(c) {
                         CategoryCode::Letter => f(b' '.into()),
                         _ => ()

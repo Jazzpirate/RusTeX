@@ -4,7 +4,6 @@ Category codes
 
 use std::fmt::Formatter;
 use const_for::const_for;
-use crate::prelude::CommandCode::{Active, AlignmentTab, Argument, BeginGroup, EndGroup, EOF, Escape, Letter, MathShift, Noexpand, Other, Parameter, Space, Subscript, Superscript};
 use crate::tex::tokens::token_lists::CharWrite;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::Character;
@@ -267,8 +266,8 @@ pub enum CommandCode {
     Superscript = 7,
     /// Subscript character (8); usually `_`
     Subscript = 8,
-    /// `\noexpand` marker
-    Noexpand = 9,
+    /// marker for a primitive command
+    Primitive = 9,
     /// Space character (10); usually ` `
     Space = 10,
     /// Letter character (11), usually a-z and A-Z
@@ -307,7 +306,7 @@ impl CommandCode {
             Parameter => 6,
             Superscript => 7,
             Subscript => 8,
-            Noexpand => 9,
+            Primitive => 9,
             Space => 10,
             Letter => 11,
             Other => 12,
@@ -353,7 +352,7 @@ impl TryFrom<u8> for CommandCode {
             6 => Parameter,
             7 => Superscript,
             8 => Subscript,
-            9 => Noexpand,
+            9 => Primitive,
             10 => Space,
             11 => Letter,
             12 => Other,

@@ -1,7 +1,7 @@
 pub mod methods;
 use crate::engine::TeXError;
 
-use crate::commands::{CommandScope, ResolvedToken, Unexpandable};
+use crate::commands::{CommandScope, ResolvedToken, SimpleExpandable, Unexpandable};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::Mouth;
@@ -309,8 +309,9 @@ pub trait Stomach {
                 return
             }}
         }
-        crate::expand_loop!(Self::ET;engine,
-            ResolvedToken::Tk { code:CommandCode::Noexpand, .. } => {engine.get_next();},
+        crate::expand_loop!(Self::ET;t => {
+            if t.is_primitive() == Some(PRIMITIVES.noexpand) { engine.get_next(); continue}
+        };engine,
             ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } =>
                 char!(char),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
@@ -710,8 +711,10 @@ pub trait Stomach {
                 engine.stomach.data_mut().in_output = false;
                 return
             }
+            if next.is_primitive() == Some(PRIMITIVES.noexpand) {
+                engine.get_next();continue
+            }
             crate::expand!(Self::ET;engine,next;
-                ResolvedToken::Tk { code:CommandCode::Noexpand, .. } => {engine.get_next();},
                 ResolvedToken::Tk { char, code, token } => Self::do_char(engine, token, char, code),
                 ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, *char, *code),
                 ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),

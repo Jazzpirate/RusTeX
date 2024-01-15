@@ -104,7 +104,7 @@ pub trait Mouth<ET:EngineTypes> {
                     if ingroups == 0 { eg = Some(t);  return false }
                     ingroups -= 1;
                 }
-                CommandCode::Noexpand => return true,
+                CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => return true,
                 _ => (),
             }
             cont(a,t);

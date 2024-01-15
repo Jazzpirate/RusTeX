@@ -94,6 +94,7 @@ pub trait CharWrite<C:Character,CS: CSName<C>>: std::fmt::Write {
         match t.to_enum() {
             StandardToken::Character(c,_) => self.push_char(c),
             StandardToken::ControlSequence(cs) => self.push_cs(cs,int,cc,escapechar),
+            StandardToken::Primitive(id) => self.push_cs(int.get(&id.display::<C>(None).to_string()).expect("Something went wrong"),int,cc,escapechar),
         }
     }
 }

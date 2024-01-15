@@ -11,9 +11,9 @@ path = "src/lib.rs"
 name = "RusTeX"
 path = "src/main.rs"
 
-#[profile.dev]
-#opt-level = 3
-#lto = true
+[profile.dev]
+#opt-level = 2
+#lto = "fat"
 #debug = 1
 
 #split-debuginfo = "off"

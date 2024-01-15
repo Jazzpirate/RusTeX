@@ -254,8 +254,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     pub fn top_loop(&mut self) {
-        crate::expand_loop!(ET::Stomach::every_top(self) => self,
-            ResolvedToken::Tk { code:CommandCode::Noexpand,.. } => {self.get_next();},
+        crate::expand_loop!(ET::Stomach::every_top(self) => tk => {
+            if tk.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next();continue}
+        }; self,
             ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),
             ResolvedToken::Cmd{cmd: None,token} => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
@@ -288,9 +289,23 @@ macro_rules! expand_loop {
             $then;
         }
     }};
+    ($then:expr => $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
+        $then;
+        while let Some($tk) = $engine.get_next() {
+            $first;
+            crate::expand!(ET;$engine,$tk;$($case)*);
+            $then;
+        }
+    }};
     ($ET:ty; $engine:ident,$($case:tt)*) => {{
         while let Some(tk) = $engine.get_next() {
             crate::expand!($ET;$engine,tk;$($case)*);
+        }
+    }};
+    ($ET:ty; $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
+        while let Some($tk) = $engine.get_next() {
+            $first;
+            crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }}
 }

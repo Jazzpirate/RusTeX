@@ -122,6 +122,8 @@ pub trait CSHandler<C:Character,CS: CSName<C>>:Default+Clone {
     fn par(&self) -> CS;
     /// Returns the name of the empty control sequence.
     fn empty_str(&self) -> CS;
+    /// Creates a control sequence name from a string slice iff it is a previously interned control sequence name.
+    fn get(&self,s:&str) -> Option<CS>;
 }
 
 impl<'a,C:Character> ResolvedCSName<'a,C> for &'a str {
@@ -140,13 +142,11 @@ impl<C:Character> CSHandler<C,Ptr<str>> for () {
     fn new(&mut self,s: &str) -> Ptr<str> {
         s.into()
     }
-
+    fn get(&self, s: &str) -> Option<Ptr<str>> { Some(s.into()) }
     fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Resolved<'a> {
         &*cs
     }
-
     fn par(&self) -> Ptr<str> { "par".to_string().into() }
-
     fn empty_str(&self) -> Ptr<str> { "".to_string().into() }
     fn from_chars(&mut self, v: &Vec<C>) -> Ptr<str> {
         let mut s = String::new();
@@ -214,6 +214,9 @@ impl<C:Character> CSHandler<C,InternedCSName<C>> for CSInterner<C> {
     type Resolved<'a> = DisplayCSName<'a,C>;
     fn new(&mut self,s: &str) -> InternedCSName<C> {
         self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
+    }
+    fn get(&self, s: &str) -> Option<InternedCSName<C>> {
+        self.map.get(C::string_to_iter(s).collect::<Vec<_>>().as_slice()).map(|i| (*i,PhantomData::default()))
     }
     fn from_chars(&mut self, v: &Vec<C>) -> InternedCSName<C> {
         self.intern(v.as_slice())

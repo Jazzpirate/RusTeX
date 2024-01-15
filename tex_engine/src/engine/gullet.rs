@@ -213,7 +213,9 @@ pub trait Gullet<ET:EngineTypes> {
                 ResolvedToken::Cmd{token,cmd:state.get_ac_command(c)},
             StandardToken::Character(c,o) => return ResolvedToken::Tk{token,char:c,code:o},
             StandardToken::ControlSequence(cs) =>
-                ResolvedToken::Cmd{token,cmd:state.get_command(&cs)}
+                ResolvedToken::Cmd{token,cmd:state.get_command(&cs)},
+            StandardToken::Primitive(id) =>
+                ResolvedToken::Cmd{token,cmd:state.primitives().get_id(id)}
         }
     }
 
@@ -338,6 +340,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
                     ));
                     //engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
                 }
+                _ => unreachable!()
             }
             //crate::debug_log!(error => "Here: {}",engine.preview());
         }

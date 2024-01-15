@@ -13,6 +13,7 @@ and [`CompactToken`] as a significantly more efficient representation.
 
 use std::fmt::Write;
 use std::marker::PhantomData;
+use crate::engine::utils::memory::PrimitiveIdentifier;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::characters::Character;
 use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
@@ -33,8 +34,9 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     fn from_cs(cs:Self::CS) -> Self;
     /// Create a new space token.
     fn space() -> Self;
-    /// Create a new noexpand marker token.
-    fn noexpand_marker() -> Self;
+
+    /// Create a new token representing a [primitive](PrimitiveIdentifier) [`Command`](crate::commands::Command).
+    fn primitive(id:PrimitiveIdentifier) -> Self;
     /// Create a new argument marker token. `i` needs to be in the range `0..=8`.
     fn argument_marker(i:u8) -> Self;
     /// Create a new end-of-file token.
@@ -55,7 +57,8 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     fn command_code(&self) -> CommandCode {
         match self.to_enum() {
             StandardToken::ControlSequence(_) => CommandCode::Escape,
-            StandardToken::Character(_, cat) => cat
+            StandardToken::Character(_, cat) => cat,
+            StandardToken::Primitive(_) => CommandCode::Primitive
         }
     }
 
@@ -65,6 +68,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
         match self.to_enum() {
             StandardToken::ControlSequence(_) => true,
             StandardToken::Character(_, CommandCode::Active) => true,
+            StandardToken::Primitive(_) => true,
             _ => false
         }
     }
@@ -77,8 +81,13 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             _ => false
         }
     }
+    fn is_primitive(&self) -> Option<PrimitiveIdentifier> {
+        match self.to_enum() {
+            StandardToken::Primitive(id) => Some(id),
+            _ => None
+        }
+    }
     /// Check if this token is a argument token, and if so, return its number (in the range `0..=8`).
-
     fn is_argument_marker(&self) -> Option<u8> {
         match self.to_enum() {
             StandardToken::Character(c, CommandCode::Argument) => Some(c.try_into().ok().unwrap()),
@@ -96,7 +105,8 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             StandardToken::Character(_,CommandCode::Space) => f.write_char(' '),
             StandardToken::Character(c,_) => Ok(c.display_fmt(f)),
             StandardToken::ControlSequence(cs) =>
-                cs.display_fmt(int,cc,escapechar,f)
+                cs.display_fmt(int,cc,escapechar,f),
+            StandardToken::Primitive(id) => write!(f,"{}pdfprimitive {}",Self::Char::displayable_opt(escapechar),id.display(escapechar))
         }
     }
     /// Returns a helper struct implementing [`Display`](std::fmt::Display) for this token.
@@ -124,7 +134,8 @@ impl<'a,T:Token> std::fmt::Display for DisplayToken<'a,T> {
 #[derive(Clone,Copy,Eq,Debug)]
 pub enum StandardToken<Char:Character,CS: CSName<Char>> {
     ControlSequence(CS),
-    Character(Char,CommandCode)
+    Character(Char,CommandCode),
+    Primitive(PrimitiveIdentifier)
 }
 impl<Char:Character,CS: CSName<Char>> PartialEq for StandardToken<Char,CS> {
     fn eq(&self,other:&Self) -> bool {
@@ -132,6 +143,7 @@ impl<Char:Character,CS: CSName<Char>> PartialEq for StandardToken<Char,CS> {
             (StandardToken::ControlSequence(a), StandardToken::ControlSequence(b)) => a==b,
             (StandardToken::Character(_, CommandCode::Space), StandardToken::Character(_, CommandCode::Space)) => true,
             (StandardToken::Character(a1, a2), StandardToken::Character(b1, b2)) => a1==b1 && a2==b2,
+            (StandardToken::Primitive(a), StandardToken::Primitive(b)) => a==b,
             _ => false
         }
     }
@@ -152,8 +164,8 @@ impl<Char:Character,CS: CSName<Char>> Token for StandardToken<Char,CS> {
 
     fn from_char_cat(c:Char,cat:CommandCode) -> Self { StandardToken::Character(c, cat) }
 
-    fn noexpand_marker() -> Self {
-        Self::Character(Char::from(32),CommandCode::Noexpand)
+    fn primitive(id: PrimitiveIdentifier) -> Self {
+        Self::Primitive(id)
     }
 
     fn argument_marker(i: u8) -> Self {
@@ -227,7 +239,14 @@ impl Token for CompactToken {
 
     fn eof() -> Self { Self::from_char_cat(0,CommandCode::EOF) }
 
-    fn noexpand_marker() -> Self { Self::from_char_cat(0,CommandCode::Noexpand) }
+    fn primitive(id: PrimitiveIdentifier) -> Self {
+        Self(0x8000_0000 | ((CommandCode::Primitive.as_byte() as u32) << 16) |(id.as_u16() as u32))
+    }
+    fn is_primitive(&self) -> Option<PrimitiveIdentifier> {
+        if !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Primitive.as_byte() {
+           PrimitiveIdentifier::try_from_u16((self.0 & 0x0000_FFFF) as u16)
+        } else { None }
+    }
 
     fn argument_marker(i: u8) -> Self { Self::from_char_cat(i,CommandCode::Argument) }
 
@@ -240,7 +259,10 @@ impl Token for CompactToken {
     }
 
     fn is_cs_or_active(&self) -> bool {
-        self.is_string() || (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Active.as_byte()
+        self.is_string() || {
+            let cc = ((self.0 & 0x00FF_0000) >> 16) as u8;
+            cc == CommandCode::Active.as_byte() || cc == CommandCode::Primitive.as_byte()
+        }
     }
 
     fn is_cs(&self,name:&Self::CS) -> bool {
