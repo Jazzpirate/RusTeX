@@ -695,7 +695,7 @@ pub trait Stomach {
         let depth = engine.state.get_group_level();
         while let Some(next) = engine.get_next() {
             //println!("HERE: {}",engine.preview());
-            if engine.state.get_group_level() == depth && next.is_end_group() {
+            if engine.state.get_group_level() == depth && next.command_code() == CommandCode::EndGroup {
                 engine.state.pop(engine.aux,engine.mouth);
                 match engine.stomach.data_mut().open_lists.pop() {
                     Some(NodeList::Vertical {children,tp:VerticalNodeListType::Page}) => {

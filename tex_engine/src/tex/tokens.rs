@@ -85,54 +85,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             _ => None
         }
     }
-    /// Check if this token is a `\noexpand` marker.
 
-    fn is_noexpand_marker(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::Noexpand) => true,
-            _ => false
-        }
-    }
-    /// Check if this token has [`CommandCode::BeginGroup`].
-
-    fn is_begin_group(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::BeginGroup) => true,
-            _ => false
-        }
-    }
-    /// Check if this token has [`CommandCode::EndGroup`].
-
-    fn is_end_group(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::EndGroup) => true,
-            _ => false
-        }
-    }
-    /// Check if this token has [`CommandCode::Space`].
-
-    fn is_space(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::Space) => true,
-            _ => false
-        }
-    }
-    /// Check if this token has [`CommandCode::AlignmentTab`].
-
-    fn is_align_tab(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::AlignmentTab) => true,
-            _ => false
-        }
-    }
-    /// Check if this token has [`CommandCode::Parameter`].
-
-    fn is_param(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::Character(_, CommandCode::Parameter) => true,
-            _ => false
-        }
-    }
     /// Display this token to a writer, using the given [`CSHandler`](control_sequences::CSHandler) (in case it is a control sequence).
     /// In that case, we also need the current `\escapechar` to optionally insert it in front of the control sequence
     /// name, and the current [`CategoryCodeScheme`] to determine whether or not to insert a space afterwards - which
@@ -294,31 +247,7 @@ impl Token for CompactToken {
         self.0 == name.0
     }
 
-    fn is_space(&self) -> bool {
-        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Space.as_byte()
-    }
-
-    fn is_noexpand_marker(&self) -> bool {
-        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Noexpand.as_byte()
-    }
-
     fn is_argument_marker(&self) -> Option<u8> {
         if !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Argument.as_byte() {Some(self.u8())} else { None }
-    }
-
-    fn is_begin_group(&self) -> bool {
-        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::BeginGroup.as_byte()
-    }
-
-    fn is_end_group(&self) -> bool {
-        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::EndGroup.as_byte()
-    }
-
-    fn is_align_tab(&self) -> bool {
-        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::AlignmentTab.as_byte()
-    }
-
-    fn is_param(&self) -> bool {
-        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Parameter.as_byte()
     }
 }

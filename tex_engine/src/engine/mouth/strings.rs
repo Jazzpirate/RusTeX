@@ -143,9 +143,9 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                     Ok(None) if self.line == line || ingroups > 0 => (),
                     Ok(None) => return (),
                     Ok(Some(tk)) => {
-                        if tk.is_begin_group() {
+                        if tk.command_code() == CommandCode::BeginGroup {
                             ingroups += 1
-                        } else if tk.is_end_group() {
+                        } else if tk.command_code() == CommandCode::EndGroup {
                             ingroups -= 1
                         }
                         f(tk)

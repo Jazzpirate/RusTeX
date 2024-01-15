@@ -265,7 +265,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
     pub fn expand_until_bgroup(&mut self,allow_let:bool) {
         while let Some(tk) = self.get_next() {
-            if tk.is_begin_group() {return }
+            if tk.command_code() == CommandCode::BeginGroup {return }
             crate::expand!(self,tk;
                 ResolvedToken::Cmd {cmd: Some(Command::Char {code:CommandCode::BeginGroup,..}),..} if allow_let =>
                     return,

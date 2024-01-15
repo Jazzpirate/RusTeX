@@ -61,27 +61,32 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
 fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,delim:&Vec<ET::Token>,long:bool) {
     let par = engine.aux.memory.cs_interner().par();
     let last = delim.last().unwrap();
-    let ends_with_bgroup = last.is_begin_group();
+    let ends_with_bgroup = last.command_code() == CommandCode::BeginGroup;
     let mut remove_braces:Option<Option<usize>> = None;
     while let Some(t) = engine.get_next() {
-        if t.is_noexpand_marker() { continue }
-        if t.is_begin_group() && !ends_with_bgroup {
-            if arg.is_empty() { remove_braces = Some(None) }
-            arg.push(t);
-            let r = if long { engine.read_until_endgroup(
-                |_,_,t| arg.push(t)
-            ) } else { engine.read_until_endgroup(
-                |_,_,t| if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
-            ) };
-            arg.push(r);
-            match remove_braces {
-                Some(ref mut n@None) => *n = Some(arg.len()),
-                _ => ()
+        match t.command_code() {
+            CommandCode::Noexpand => continue,
+            CommandCode::BeginGroup if !ends_with_bgroup => {
+                if arg.is_empty() { remove_braces = Some(None) }
+                arg.push(t);
+                let r = if long {
+                    engine.read_until_endgroup(
+                        |_, _, t| arg.push(t)
+                    )
+                } else {
+                    engine.read_until_endgroup(
+                        |_, _, t| if t.is_cs(&par) { todo!("\\par in read_argument") } else { arg.push(t) }
+                    )
+                };
+                arg.push(r);
+                match remove_braces {
+                    Some(ref mut n @ None) => *n = Some(arg.len()),
+                    _ => ()
+                }
+                continue
             }
-            continue
-        }
-        if !long {
-            if t.is_cs(&par) {todo!("\\par in read_argument")}
+            CommandCode::Escape if !long && t.is_cs(&par) => {todo!("\\par in read_argument")}
+            _ => ()
         }
         if t == *last {
             arg.push(t);
@@ -110,25 +115,27 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
 
 fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool) {
     while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
-        if t.is_noexpand_marker() { continue }
-        if t.is_space() { continue }
-        if t.is_begin_group() {
-            if long {
-                engine.mouth.read_until_endgroup(
-                    engine.aux,
-                    engine.state,
-                    |_, t| arg.push(t)
-                );
-            } else {
-                let par = engine.aux.memory.cs_interner().par();
-                engine.mouth.read_until_endgroup(
-                    engine.aux,
-                    engine.state,
-                    |_,t|
-                        if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
-                );
+        match t.command_code() {
+            CommandCode::Noexpand | CommandCode::Space => continue,
+            CommandCode::BeginGroup => {
+                if long {
+                    engine.mouth.read_until_endgroup(
+                        engine.aux,
+                        engine.state,
+                        |_, t| arg.push(t)
+                    );
+                } else {
+                    let par = engine.aux.memory.cs_interner().par();
+                    engine.mouth.read_until_endgroup(
+                        engine.aux,
+                        engine.state,
+                        |_,t|
+                            if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
+                    );
+                }
+                return
             }
-            return
+            _ => ()
         }
         arg.push(t);
         return
@@ -139,70 +146,69 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
 pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
     let mut ingroups = 0;
     while let Some(t) = engine.get_next() {
-        if t.is_end_group()  {
-            if ingroups == 0 { return }
-            ingroups -= 1;
-            cont(engine.aux,engine.state,t);
-            continue
-        }
-        if t.is_begin_group() {
-            ingroups += 1;
-            cont(engine.aux,engine.state,t);
-            continue
-        }
-        if t.is_noexpand_marker() {
-            let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
-            cont(engine.aux,engine.state,next);
-            continue
-        }
-        if !t.is_cs_or_active() {
-            cont(engine.aux,engine.state,t);
-            continue
-        }
-        match engine.resolve(t) {
-            ResolvedToken::Tk{token,..} => {
-                cont(engine.aux,engine.state,token)
+        match t.command_code() {
+            CommandCode::EndGroup => {
+                if ingroups == 0 { return }
+                ingroups -= 1;
+                cont(engine.aux,engine.state,t);
+                continue
             }
-            ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
-                cont(engine.aux,engine.state,token),
-            ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} =>
-                ET::Gullet::do_macro(engine,m.clone(),token),
-            ResolvedToken::Cmd{cmd: Some(Command::Conditional(cond)),token} =>
-                ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
-            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
+            CommandCode::BeginGroup => {
+                ingroups += 1;
+                cont(engine.aux,engine.state,t);
+                continue
+            }
+            CommandCode::Noexpand => {
+                let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
+                cont(engine.aux,engine.state,next);
+                continue
+            }
+            CommandCode::Escape | CommandCode::Active => match engine.resolve(t) {
+                ResolvedToken::Tk{token,..} => {
+                    cont(engine.aux,engine.state,token)
+                }
+                ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
+                    cont(engine.aux,engine.state,token),
+                ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} =>
+                    ET::Gullet::do_macro(engine,m.clone(),token),
+                ResolvedToken::Cmd{cmd: Some(Command::Conditional(cond)),token} =>
+                    ET::Gullet::do_conditional(engine,cond.name,token,cond.expand,false),
+                ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.unexpanded => {
-                engine.expand_until_bgroup(false);
-                engine.read_until_endgroup(|a,s,t|{
-                    if edef_like && t.is_param() {
-                        cont(a,s,t.clone());
-                    }
-                    cont(a,s,t)
-                });
-            }
-            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
+                    engine.expand_until_bgroup(false);
+                    engine.read_until_endgroup(|a,s,t|{
+                        if edef_like && t.command_code() == CommandCode::Parameter {
+                            cont(a,s,t.clone());
+                        }
+                        cont(a,s,t)
+                    });
+                }
+                ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),..}
                 if e.name == PRIMITIVES.the => {
-                engine.do_the(|a, s, _, t| {
-                    if t.is_param() && edef_like {
-                        cont(a,s,t.clone());
-                    }
-                    cont(a,s,t)
-                })
-            }
-            ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),..}
+                    engine.do_the(|a, s, _, t| {
+                        if t.command_code() == CommandCode::Parameter && edef_like {
+                            cont(a,s,t.clone());
+                        }
+                        cont(a,s,t)
+                    })
+                }
+                ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),..}
                 if e.name == PRIMITIVES.noexpand => {
-                match engine.get_next() {
-                    Some(t) if !t.is_end_group() =>
-                        cont(engine.aux,engine.state,t),
-                    _ => todo!("throw error")
+                    match engine.get_next() {
+                        Some(t) if t.command_code() != CommandCode::EndGroup =>
+                            cont(engine.aux,engine.state,t),
+                        _ => todo!("throw error")
+                    }
+                }
+                ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),token} =>
+                    ET::Gullet::do_simple_expandable(engine, e.name, token, e.expand),
+                ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token} =>
+                    ET::Gullet::do_expandable(engine,e.name,token,e.expand),
+                ResolvedToken::Cmd{token,..} => {
+                    cont(engine.aux,engine.state,token)
                 }
             }
-            ResolvedToken::Cmd{cmd: Some(Command::SimpleExpandable(e)),token} =>
-                ET::Gullet::do_simple_expandable(engine, e.name, token, e.expand),
-            ResolvedToken::Cmd{cmd: Some(Command::Expandable(e)),token} =>
-                ET::Gullet::do_expandable(engine,e.name,token,e.expand),
-            ResolvedToken::Cmd{token,..} => {
-                cont(engine.aux,engine.state,token)
-            }
+            _ => cont(engine.aux,engine.state,t)
         }
     }
     todo!("throw error")

@@ -141,12 +141,13 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
-    engine.read_until_endgroup(|a,st,t| {
-        if t.is_space() {f(t)}
-        else if t.is_param() {
-            f(t.clone());f(t)
+    engine.read_until_endgroup(|a,st,t| match t.command_code() {
+        CommandCode::Space => f(t),
+        CommandCode::Parameter => {
+            f(t.clone());
+            f(t)
         }
-        else {
+        _ => {
             let mut tokenizer = Otherize::new(&mut f);
             match t.to_enum() {
                 StandardToken::Character(c, _) =>
@@ -161,7 +162,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 
 pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     match engine.get_next() {
-        Some(t) if t.is_begin_group() => {
+        Some(t) if t.command_code() == CommandCode::BeginGroup => {
             ET::Gullet::expand_until_endgroup(engine,false,false,|_,_,t| exp.push(t));
         }
         _ => todo!("throw errors")

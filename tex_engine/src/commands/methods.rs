@@ -44,20 +44,24 @@ impl<T:Token> MacroParser<T> {
         }
     }
     pub(crate) fn do_signature_token(&mut self, t:T) -> bool {
-        if t.is_begin_group() {
-            if self.inparam {
+        match t.command_code() {
+            CommandCode::BeginGroup => {
+                if self.inparam {
                 self.inparam = false;
                 self.params.push(t.clone());
                 self.ends_with_brace = Some(t);
+                }
+                return false
             }
-            return false
-        }
-        if self.inparam {
-            self.inparam = false;
-            if t.is_param() {
+            CommandCode::Parameter if self.inparam => {
+                self.inparam = false;
                 self.params.push(t);
             }
-            else {
+            CommandCode::Parameter => {
+                self.inparam = true;
+            }
+            _ if self.inparam => {
+                self.inparam = false;
                 match t.char_value() {
                     Some(c) => match c.try_into() {
                         Ok(u) if u > 48 && u == 49 + self.arity => self.params.push(T::argument_marker(self.arity)),
@@ -65,24 +69,22 @@ impl<T:Token> MacroParser<T> {
                     }
                     None => todo!("error")
                 }
-                self.arity += 1
+                self.arity += 1;
             }
-        } else {
-            if t.is_param() {
-                self.inparam = true;
-            } else {
-                self.params.push(t);
-            }
+            _ => self.params.push(t),
         }
         true
     }
 
     pub(crate) fn do_expansion_token(&mut self, t:T) {
-        if self.inparam {
-            self.inparam = false;
-            if t.is_param() {
+        match t.command_code() {
+            CommandCode::Parameter if self.inparam => {
+                self.inparam = false;
                 self.exp.push(t);
-            } else {
+            }
+            CommandCode::Parameter => self.inparam = true,
+            _ if self.inparam => {
+                self.inparam = false;
                 match t.char_value() {
                     Some(c) => match c.try_into() {
                         Ok(u) if u > 48 && u - 49 < self.arity => self.exp.push(T::argument_marker(u-49)),
@@ -91,12 +93,7 @@ impl<T:Token> MacroParser<T> {
                     None => todo!("error")
                 }
             }
-        } else {
-            if t.is_param() {
-                self.inparam = true;
-            } else {
-                self.exp.push(t);
-            }
+            _ => self.exp.push(t),
         }
     }
 
@@ -184,7 +181,7 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
 pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
     let mut exp = true;
     while let Some(t) = engine.get_next() {
-        if t.is_noexpand_marker() {
+        if t.command_code() == CommandCode::Noexpand {
             exp = false;
             continue
         }
@@ -227,7 +224,7 @@ pub(in crate::commands) enum IfxCmd<ET:EngineTypes> {
 impl<ET:EngineTypes> IfxCmd<ET> {
     pub(in crate::commands) fn read(engine:&mut EngineReferences<ET>) -> Self {
         match engine.get_next() {
-            Some(t) if t.is_noexpand_marker() =>
+            Some(t) if t.command_code() == CommandCode::Noexpand =>
                 IfxCmd::Noexpand(engine.get_next().unwrap()),
             Some(t) => Self::resolve(engine.resolve(t)),
             _ => todo!("throw error")
@@ -854,7 +851,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// in between.
     pub fn skip_argument(&mut self) {
         match self.get_next() {
-            Some(t) if t.is_begin_group() => (),
+            Some(t) if t.command_code() == CommandCode::BeginGroup => (),
             _ => todo!("throw error")
         }
         self.read_until_endgroup(|_,_,_| {});

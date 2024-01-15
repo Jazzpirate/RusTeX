@@ -59,17 +59,18 @@ pub trait Gullet<ET:EngineTypes> {
             Some(_) => {
                 mouth.iterate(aux,state,|aux,t| {
                     let data = self.get_align_data().unwrap();
-                    if t.is_begin_group() {
-                        data.ingroups += 1;
-                        f(aux, state, self, t)
-                    } else if t.is_end_group() {
-                        if data.ingroups == 0 { todo!() }
-                        data.ingroups -= 1;
-                        f(aux, state, self, t)
-                    } else if data.ingroups == data.groupval() && t.is_align_tab() {
-                        todo!()
-                    } else if data.ingroups == data.groupval() && t.is_cs_or_active() {
-                        match Self::resolve(state, t) {
+                    match t.command_code() {
+                        CommandCode::BeginGroup => {
+                            data.ingroups += 1;
+                            f(aux,state,self,t)
+                        }
+                        CommandCode::EndGroup => {
+                            if data.ingroups == 0 { todo!() }
+                            data.ingroups -= 1;
+                            f(aux,state,self,t)
+                        }
+                        CommandCode::AlignmentTab if data.ingroups == data.groupval() => { todo!() }
+                        CommandCode::Escape | CommandCode::Active if data.ingroups == data.groupval() => match Self::resolve(state, t) {
                             ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
                             if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
                                 todo!()
@@ -81,8 +82,7 @@ pub trait Gullet<ET:EngineTypes> {
                             ResolvedToken::Tk { token, .. } | ResolvedToken::Cmd { token, .. } =>
                                 f(aux, state, self, token)
                         }
-                    } else {
-                        f(aux, state, self, t)
+                        _ => f(aux,state,self,t)
                     }
                 });
             }
@@ -96,27 +96,25 @@ pub trait Gullet<ET:EngineTypes> {
         match self.get_align_data() {
             None => mouth.get_next_opt(aux,state),
             Some(a) => match mouth.get_next_opt(aux,state) {
-                Some(t) if t.is_begin_group()  => {
-                    a.ingroups += 1; Some(t)
-                },
-                Some(t) if a.ingroups == a.groupval() && t.is_align_tab() => {
-                    a.on_alignment_tab(mouth,aux);
-                    self.get_next_opt(mouth,aux,state)
-                }
-                Some(t) if t.is_end_group() => {
-                    if a.ingroups == 0 { todo!("throw error") }
-                    a.ingroups -= 1;
-                    Some(t)
-                },
-                Some(t) if a.ingroups == a.groupval() && t.is_cs_or_active() => {
-                    match Self::resolve(state,t) {
+                Some(t) => match t.command_code() {
+                    CommandCode::BeginGroup => { a.ingroups += 1; Some(t) }
+                    CommandCode::EndGroup => {
+                        if a.ingroups == 0 { todo!("throw error") }
+                        a.ingroups -= 1;
+                        Some(t)
+                    }
+                    CommandCode::AlignmentTab if a.ingroups == a.groupval() => {
+                        a.on_alignment_tab(mouth,aux);
+                        self.get_next_opt(mouth,aux,state)
+                    }
+                    CommandCode::Escape | CommandCode::Active if a.ingroups == a.groupval() => match Self::resolve(state,t) {
                         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-                            if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
+                        if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
                             a.on_cr(mouth,aux,state);
                             return self.get_next_opt(mouth,aux,state)
                         }
                         ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
-                            if *name == PRIMITIVES.span => {
+                        if *name == PRIMITIVES.span => {
                             a.span = true;
                             a.on_alignment_tab(mouth,aux);
                             self.get_next_opt(mouth,aux,state)
@@ -124,8 +122,9 @@ pub trait Gullet<ET:EngineTypes> {
                         ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} =>
                             Some(token)
                     }
+                    _ => Some(t)
                 }
-                o => o
+                None => None
             }
         }
     }
@@ -149,11 +148,12 @@ pub trait Gullet<ET:EngineTypes> {
     /// See also [`EngineReferences::requeue`].
     fn requeue(&mut self,mouth:&mut ET::Mouth,t:ET::Token) {
         if let Some(data) = self.get_align_data() {
-            if t.is_begin_group() {
+            let cc = t.command_code();
+            if cc == CommandCode::BeginGroup {
                 if data.ingroups == 0 { todo!() }
                 data.ingroups -= 1;
             }
-            else if t.is_end_group() {
+            else if cc == CommandCode::EndGroup {
                 data.ingroups += 1;
             }
         }
@@ -434,9 +434,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn read_braced_string(&mut self,skip_ws:bool, expand_protected:bool, mut str:&mut String) {
         loop {
             match self.get_next() {
-                Some(t) if t.is_begin_group() => break,
-                Some(t) if t.is_space() && skip_ws => (),
-                Some(o) => todo!("should be begingroup: {:?}",o.to_enum()),
+                Some(t) => match t.command_code() {
+                    CommandCode::BeginGroup => break,
+                    CommandCode::Space if skip_ws => (),
+                    _ => todo!("should be begingroup: {:?}",t.to_enum()),
+                }
                 None => todo!("file end")
             }
         }

@@ -318,12 +318,10 @@ pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
     engine.expand_until_bgroup(false);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
-    engine.expand_until_endgroup(true,false,|a,st,t|{
-        if t.is_space() {f(t)}
-        else if t.is_param() {
-            f(t.clone());f(t)
-        }
-        else {
+    engine.expand_until_endgroup(true,false,|a,st,t| match t.command_code() {
+        CommandCode::Space => f(t),
+        CommandCode::Parameter => { f(t.clone());f(t)}
+        _ => {
             let mut tokenizer = Otherize::new(&mut f);
             match t.to_enum() {
                 StandardToken::Character(c, _) =>

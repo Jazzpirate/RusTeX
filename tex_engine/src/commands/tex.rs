@@ -1011,7 +1011,7 @@ pub fn ifx<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> b
 
 pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     while let Some(next) = engine.get_next() {
-        if !next.is_space() {
+        if next.command_code() != CommandCode::Space {
             match ET::Gullet::resolve(engine.state,next) {
                 ResolvedToken::Cmd { cmd: Some(Command::Char{code:CommandCode::Space,..}), .. } => (),
                 ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} => {
@@ -1542,7 +1542,7 @@ pub fn lower<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     match engine.get_next() {
         Some(t) => {
-            if t.is_space() {exp.push(t)}
+            if t.command_code() == CommandCode::Space {exp.push(t)}
             else {
                 match t.to_enum() {
                     StandardToken::Character(c, _) => exp.push(ET::Token::from_char_cat(c, CommandCode::Other)),
@@ -1593,7 +1593,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
     let mut tks = Vec::new();
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
     match engine.get_next() {
-        Some(t) if t.is_begin_group() => (),
+        Some(t) if t.command_code() == CommandCode::BeginGroup => (),
         Some(_) => todo!("should be begingroup"),
         None => todo!("file end")
     }

@@ -10,7 +10,7 @@ use crate::tex::tokens::token_lists::MacroExpansion;
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
-use crate::prelude::TokenList;
+use crate::prelude::{CommandCode, TokenList};
 use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::StringLineSource;
@@ -98,14 +98,15 @@ pub trait Mouth<ET:EngineTypes> {
         let mut ingroups = 0;
         let mut eg:Option<ET::Token> = None;
         self.iterate(aux,state,|a,t| {
-            if t.is_end_group()  {
-                if ingroups == 0 { eg = Some(t);  return false }
-                ingroups -= 1;
+            match t.command_code() {
+                CommandCode::BeginGroup => ingroups += 1,
+                CommandCode::EndGroup => {
+                    if ingroups == 0 { eg = Some(t);  return false }
+                    ingroups -= 1;
+                }
+                CommandCode::Noexpand => return true,
+                _ => (),
             }
-            if t.is_begin_group() {
-                ingroups += 1;
-            }
-            if t.is_noexpand_marker() { return true }
             cont(a,t);
             true
         });
