@@ -4,6 +4,7 @@ use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::state::{Ch, CS, Dim, GroupType, State, StateChange, StateChangeTracker, StateStack, T};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::Command;
+use crate::commands::primitives::PrimitiveCommands;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::utils::outputs::Outputs;
@@ -22,7 +23,7 @@ use crate::tex::tokens::control_sequences::CSNameMap;
 #[derive(Clone)]
 pub struct TeXState<ET:EngineTypes> {
     stack:StateStack<ET,Self>,
-    primitives:HMap<&'static str,Command<ET>>,
+    primitives:PrimitiveCommands<ET>,
     catcodes: CategoryCodeScheme<ET::Char>,
     sfcodes: <ET::Char as Character>::CharMap<u16>,
     lccodes: <ET::Char as Character>::CharMap<ET::Char>,
@@ -99,7 +100,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         let mathfonts = array_init::array_init(|_| nullfont.clone());
         Self {
             stack: StateStack::new(),
-            primitives:HMap::default(),
+            primitives:PrimitiveCommands::new(),
             catcodes: ET::Char::starting_catcode_scheme(),
             sfcodes: CharacterMap::default(),
             delcodes: CharacterMap::default(),
@@ -129,13 +130,13 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
-    fn register_primitive(&mut self,aux:&mut EngineAux<ET>, primitive_identifier: PrimitiveIdentifier,cmd: Command<Self::ET>) {
-        // TODO self.primitives.insert(PRIMITIVES.as_str(primitive_identifier),cmd.clone());
+    fn register_primitive(&mut self,aux:&mut EngineAux<ET>, primitive_identifier: PrimitiveIdentifier,name:&'static str,cmd: Command<Self::ET>) {
+        self.primitives.register(name,primitive_identifier,cmd.clone());
         let name = aux.memory.cs_interner_mut().new(&primitive_identifier.display::<ET::Char>(None).to_string());
         self.commands.insert(name,cmd);
     }
     fn get_primitive(&self, primitive: &str) -> Option<&Command<Self::ET>> {
-        self.primitives.get(primitive)
+        self.primitives.get_name(primitive)
     }
 
     fn get_group_type(&self) -> Option<GroupType> {

@@ -26,8 +26,8 @@ impl State for RusTeXState {
     fn new(nullfont: Font, aux: &mut EngineAux<Types>) -> Self {
         Self(state::tex_state::TeXState::new(nullfont, aux))
     }
-    fn register_primitive(&mut self,aux:&mut EngineAux<Types>, primitive_identifier: PrimitiveIdentifier, cmd: Command<Self::ET>) {
-        self.0.register_primitive(aux,primitive_identifier,cmd)
+    fn register_primitive(&mut self,aux:&mut EngineAux<Types>, primitive_identifier: PrimitiveIdentifier,name:&'static str, cmd: Command<Self::ET>) {
+        self.0.register_primitive(aux,primitive_identifier,name,cmd)
     }
 
     fn get_primitive(&self,primitive:&str) -> Option<&Command<Self::ET>> {

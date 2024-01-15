@@ -31,7 +31,7 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     ];
     for (s,c) in all {
         let id = PRIMITIVES.get(s);
-        engine.state.register_primitive(&mut engine.aux,id,Command::Unexpandable(
+        engine.state.register_primitive(&mut engine.aux,id,s,Command::Unexpandable(
             Unexpandable {
                 name:id,
                 scope:CommandScope::SwitchesToHorizontalOrMath,
@@ -40,7 +40,7 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
         ));
     }
     let flushpath =PRIMITIVES.get("rustex!pgf!flushpath");
-    engine.state.register_primitive(&mut engine.aux,flushpath,Command::Expandable(
+    engine.state.register_primitive(&mut engine.aux,flushpath,"rustex!pgf!flushpath",Command::Expandable(
         Expandable {
             name:flushpath,
             expand:pgfflushpath

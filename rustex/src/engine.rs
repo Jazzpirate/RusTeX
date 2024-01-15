@@ -84,7 +84,7 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
                 let rbreak = PRIMITIVES.get("rustexBREAK");
-                engine.state.register_primitive(&mut engine.aux,rbreak,Command::Unexpandable(
+                engine.state.register_primitive(&mut engine.aux,rbreak,"rustexBREAK",Command::Unexpandable(
                     Unexpandable {
                         name:rbreak,
                         scope:CommandScope::Any,

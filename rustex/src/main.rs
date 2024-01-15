@@ -58,7 +58,7 @@ fn profile() {
     let mut engine = DefaultEngine::<Types>::new();
     register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
     let rbreak = PRIMITIVES.get("rustexBREAK");
-    engine.state.register_primitive(&mut engine.aux,rbreak,Command::Unexpandable(
+    engine.state.register_primitive(&mut engine.aux,rbreak,"rustexBREAK",Command::Unexpandable(
         Unexpandable {
             name:rbreak,
             scope:CommandScope::Any,
@@ -144,7 +144,7 @@ fn test_latex_ltx() {
     let mut engine = DefaultEngine::<Types>::new();
     register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
     let rbreak = PRIMITIVES.get("rustexBREAK");
-    engine.state.register_primitive(&mut engine.aux,rbreak,Command::Unexpandable(
+    engine.state.register_primitive(&mut engine.aux,rbreak,"rustexBREAK",Command::Unexpandable(
         Unexpandable {
             name:rbreak,
             scope:CommandScope::Any,
