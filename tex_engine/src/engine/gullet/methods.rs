@@ -171,7 +171,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
                     cont(engine.aux,engine.state,token),
                 ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} =>
-                    ET::Gullet::do_macro(engine,m.clone(),token),
+                    ET::Gullet::do_macro(engine,m,token),
                 ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)}),token} =>
                     ET::Gullet::do_conditional(engine,name,token,cond,false),
                 ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if name == PRIMITIVES.noexpand => {
