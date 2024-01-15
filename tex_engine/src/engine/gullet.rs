@@ -107,7 +107,7 @@ pub trait Gullet<ET:EngineTypes> {
                         a.on_alignment_tab(mouth,aux);
                         self.get_next_opt(mouth,aux,state)
                     }
-                    CommandCode::Escape | CommandCode::Active if a.ingroups == a.groupval() => match Self::resolve(state,t) {
+                    CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if a.ingroups == a.groupval() => match Self::resolve(state,t) {
                         ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                         if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
                             a.on_cr(mouth,aux,state);

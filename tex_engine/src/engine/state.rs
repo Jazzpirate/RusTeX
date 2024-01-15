@@ -235,6 +235,7 @@ impl<ET:EngineTypes,S:State<ET=ET>> StateChange<ET,S> {
     /// Check if this state change is equivalent to another one, i.e. if it needs to be rolled back
     /// when a group ends, or is superseded by a previous change
     pub fn equiv(&self,other:&Self) -> bool {
+        if std::mem::discriminant(self) != std::mem::discriminant(other) { return false; }
         match (self,other) {
             (StateChange::Catcode{char:c1,..},StateChange::Catcode{char:c2,..}) => c1 == c2,
             (StateChange::SfCode {char:c1,..},StateChange::SfCode{char:c2,..}) => c1 == c2,
