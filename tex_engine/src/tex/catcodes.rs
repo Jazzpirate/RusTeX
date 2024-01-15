@@ -4,6 +4,7 @@ Category codes
 
 use std::fmt::Formatter;
 use const_for::const_for;
+use crate::prelude::CommandCode::{Active, AlignmentTab, Argument, BeginGroup, EndGroup, EOF, Escape, Letter, MathShift, Noexpand, Other, Parameter, Space, Subscript, Superscript};
 use crate::tex::tokens::token_lists::CharWrite;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::Character;
@@ -294,10 +295,7 @@ impl CommandCode {
         }.unwrap();
         f.push_char(c);
     }
-}
-
-impl Into<u8> for CommandCode {
-    fn into(self) -> u8 {
+    pub const fn as_byte(self) -> u8 {
         use CommandCode::*;
         match self {
             Escape => 0,
@@ -318,6 +316,7 @@ impl Into<u8> for CommandCode {
         }
     }
 }
+
 
 impl From<CategoryCode> for CommandCode {
     fn from(value: CategoryCode) -> Self {

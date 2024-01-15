@@ -233,9 +233,9 @@ impl CompactToken {
         }
     }
 
-    fn commandcode_value(&self) -> u8 { ((self.0 & 0x0000_FF00) >> 8) as u8 }
+    fn commandcode_value(&self) -> u8 { ((self.0 & 0x00FF_0000) >> 16) as u8 }
 
-    fn catcode(&self) -> CommandCode {
+    fn code(&self) -> CommandCode {
         CommandCode::try_from(self.commandcode_value()).unwrap()
     }
 
@@ -245,8 +245,8 @@ impl PartialEq for CompactToken {
     fn eq(&self,other:&Self) -> bool {
         self.0 == other.0 || {
             if self.is_string() || other.is_string() { return false}
-            let cc1 = self.catcode();
-            let cc2 = other.catcode();
+            let cc1 = self.code();
+            let cc2 = other.code();
             if cc1 == CommandCode::Space && cc2 == CommandCode::Space {return true}
             if cc1 != cc2 {return false}
             self.u8() == other.u8()
@@ -260,73 +260,65 @@ impl Token for CompactToken {
     fn to_enum(&self) -> StandardToken<u8,InternedCSName<u8>> {
         match self.as_string() {
             Some(s) => StandardToken::ControlSequence(s),
-            None => StandardToken::Character(self.u8(), self.catcode())
+            None => StandardToken::Character(self.u8(), self.code())
         }
     }
 
     fn from_cs(cs: Self::CS) -> Self { Self(cs.0) }
 
-    fn space() -> Self { Self(0x8000_0000 | (10 << 8) | 32) }
-
-    fn eof() -> Self { Self(0x8000_0000 | (5 << 8) | 0) }
-
     fn from_char_cat(c:u8,cat:CommandCode) -> Self {
-        let c = u32::from(c);
-        let cat = u32::from(Into::<u8>::into(cat));
-        let r = 0x8000_0000 | (cat << 8) |c;
-        Self(r)
+        Self(0x8000_0000 | ((cat.as_byte() as u32) << 16) |(c as u32))
     }
 
-    fn noexpand_marker() -> Self { Self(0x8000_0000 | (9 << 8) | 0) }
+    fn space() -> Self { Self::from_char_cat(32,CommandCode::Space) }
 
-    fn argument_marker(i: u8) -> Self {
-        Self(0x8000_0000 | (14 << 8) | u32::from(i))
-    }
+    fn eof() -> Self { Self::from_char_cat(0,CommandCode::EOF) }
+
+    fn noexpand_marker() -> Self { Self::from_char_cat(0,CommandCode::Noexpand) }
+
+    fn argument_marker(i: u8) -> Self { Self::from_char_cat(i,CommandCode::Argument) }
 
     fn command_code(&self) -> CommandCode {
-        if self.is_string() { CommandCode::Escape } else { self.catcode() }
+        if self.is_string() { CommandCode::Escape } else { self.code() }
     }
 
     fn char_value(&self) -> Option<Self::Char> {
         if self.is_string() { None } else { Some(self.u8()) }
     }
 
-
     fn is_cs_or_active(&self) -> bool {
-        self.is_string() || ((self.0 & 0x0000_FF00) >> 8) == 13
+        self.is_string() || (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Active.as_byte()
     }
-
 
     fn is_cs(&self,name:&Self::CS) -> bool {
         self.0 == name.0
     }
 
     fn is_space(&self) -> bool {
-        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 10
+        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Space.as_byte()
     }
 
     fn is_noexpand_marker(&self) -> bool {
-        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 9
+        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Noexpand.as_byte()
     }
 
     fn is_argument_marker(&self) -> Option<u8> {
-        if !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 14 {Some(self.u8())} else { None }
+        if !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Argument.as_byte() {Some(self.u8())} else { None }
     }
 
     fn is_begin_group(&self) -> bool {
-        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 1
+        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::BeginGroup.as_byte()
     }
 
     fn is_end_group(&self) -> bool {
-        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 2
+        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::EndGroup.as_byte()
     }
 
     fn is_align_tab(&self) -> bool {
-        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 4
+        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::AlignmentTab.as_byte()
     }
 
-
     fn is_param(&self) -> bool {
-        !self.is_string() && ((self.0 & 0x0000_FF00) >> 8) == 6
+        !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Parameter.as_byte()
     }
 }

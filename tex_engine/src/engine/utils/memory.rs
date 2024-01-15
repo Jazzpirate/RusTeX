@@ -284,6 +284,10 @@ impl PrimitiveIdentifier {
         use string_interner::Symbol;
         self.0.to_usize() as u16
     }
+    pub fn try_from_u16(u:u16) -> Option<Self> {
+        use string_interner::Symbol;
+        string_interner::symbol::SymbolU16::try_from_usize(u as usize).map(PrimitiveIdentifier)
+    }
 }
 
 struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>,&'static PrimitiveInterner);

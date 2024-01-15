@@ -1,12 +1,13 @@
 /*! Methods for registering primitives */
 use crate::commands::{Assignment, BoxCommand, Command, Conditional, DimCommand, Expandable, FontCommand, IntCommand, MuSkipCommand, CommandScope, SimpleExpandable, SkipCommand, Unexpandable, Whatsit};
-use crate::engine::utils::memory::PRIMITIVES;
+use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::state::State;
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 use crate::tex::numerics::NumSet;
+use crate::utils::HMap;
 
 type Tk<E> = <<E as TeXEngine>::Types as EngineTypes>::Token;
 type Int<E> = <<<E as TeXEngine>::Types as EngineTypes>::Num as NumSet>::Int;
@@ -272,4 +273,25 @@ pub fn register_whatsit<E:TeXEngine>(
     });
     let refs = engine.get_engine_refs();
     refs.state.register_primitive(refs.aux,id,command);
+}
+
+pub struct PrimitiveCommands<ET:EngineTypes> {
+    commands: Vec<Command<ET>>,
+    names:HMap<&'static str,u16>
+}
+impl<ET:EngineTypes> PrimitiveCommands<ET> {
+    pub fn register(&mut self,name:&'static str,id:PrimitiveIdentifier,cmd: Command<ET>) {
+        let idx = id.as_u16() as usize;
+        if idx >= self.commands.len() {
+            self.commands.resize(idx+1,Command::Relax);
+        }
+        self.names.insert(name,idx as u16);
+    }
+    pub fn get_id(&self,id:PrimitiveIdentifier) -> Option<&Command<ET>> {
+        let idx = id.as_u16() as usize;
+        self.commands.get(idx)
+    }
+    pub fn get_name(&self,s:&str) -> Option<&Command<ET>> {
+        self.names.get(s).and_then(|&idx| self.commands.get(idx as usize))
+    }
 }
