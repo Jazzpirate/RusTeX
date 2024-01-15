@@ -23,9 +23,15 @@ pub mod etex;
 pub mod methods;
 
 #[derive(Debug)]
-pub enum ResolvedToken<'a,ET:EngineTypes> {
+pub enum ResolvedToken<ET:EngineTypes> {
     Tk{token:ET::Token,char:ET::Char,code:CommandCode},
-    Cmd{token:ET::Token,cmd:Option<&'a Command<ET>>},
+    Cmd{token:ET::Token,cmd:Option<Command<ET>>},
+}
+
+#[derive(Debug)]
+pub enum CharOrPrimitive<ET:EngineTypes> {
+    Char(ET::Char,CommandCode),
+    Primitive(PrimitiveIdentifier),
 }
 
 #[derive(Copy,Clone,Eq,PartialEq,Debug)]
@@ -51,39 +57,66 @@ impl<I:TeXInt> ActiveConditional<I> {
 pub enum Command<ET:EngineTypes> {
     /// A user defined [`Macro`], to be expanded (unless [protected](Macro::protected))
     Macro(Macro<ET::Token>),
-    /// A conditional, e.g. `\ifnum`, `\ifx`, etc.
-    Conditional(Conditional<ET>),
-    /// An expandable primitive, e.g. `\the`, `\number`, etc.
-    Expandable(Expandable<ET>),
-    SimpleExpandable(SimpleExpandable<ET>),
-    /// A primitive that cannot be expanded, e.g. `\relax`, `\end`, etc.
-    Unexpandable(Unexpandable<ET>),
-    Assignment(Assignment<ET>),
     Char{char:ET::Char,code:CommandCode},
     CharDef(ET::Char),
     MathChar(u32),
-    Int(IntCommand<ET>),
-    Dim(DimCommand<ET>),
-    Skip(SkipCommand<ET>),
-    MuSkip(MuSkipCommand<ET>),
-    FontCmd(FontCommand<ET>),
     Font(<ET::FontSystem as FontSystem>::Font),
     IntRegister(usize),
     DimRegister(usize),
     SkipRegister(usize),
     MuSkipRegister(usize),
     ToksRegister(usize),
-    Box(BoxCommand<ET>),
-    PrimitiveInt(PrimitiveIdentifier),
-    PrimitiveDim(PrimitiveIdentifier),
-    PrimitiveSkip(PrimitiveIdentifier),
-    PrimitiveMuSkip(PrimitiveIdentifier),
-    PrimitiveToks(PrimitiveIdentifier),
-    Whatsit(Whatsit<ET>),
-    Relax
+    Primitive{name:PrimitiveIdentifier,cmd:PrimitiveCommand<ET>},
 }
-impl<ET:EngineTypes> Command<ET> {
 
+/// A command.
+#[derive(Copy,Clone,Debug)]
+pub enum PrimitiveCommand<ET:EngineTypes> {
+    /// A conditional, e.g. `\ifnum`, `\ifx`, etc.
+    Conditional(fn(&mut EngineReferences<ET>,ET::Token) -> bool),
+    /// An expandable primitive, e.g. `\the`, `\number`, etc.
+    Expandable(fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)),
+    SimpleExpandable(fn(&mut EngineReferences<ET>,ET::Token)),
+    /// A primitive that cannot be expanded, e.g. `\relax`, `\end`, etc.
+    Unexpandable{
+        scope: CommandScope,
+        apply:fn(&mut EngineReferences<ET>,ET::Token)
+    },
+    Assignment(fn(&mut EngineReferences<ET>,ET::Token,bool)),
+    Int {
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Int,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+    },
+    Dim {
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Dim,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+    },
+    Skip {
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Skip,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+    },
+    MuSkip {
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::MuSkip,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+    },
+    FontCmd{
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::FontSystem as FontSystem>::Font,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+    },
+    Box(fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>),
+    PrimitiveInt,
+    PrimitiveDim,
+    PrimitiveSkip,
+    PrimitiveMuSkip,
+    PrimitiveToks,
+    Whatsit {
+        get:fn(&mut EngineReferences<ET>, ET::Token) -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>,
+        immediate:fn(&mut EngineReferences<ET>,ET::Token)
+    },
+    Relax,
+}
+
+impl<ET:EngineTypes> Command<ET> {
     pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
         Meaning{cmd:self,int,cc,escapechar}
     }
@@ -133,27 +166,7 @@ impl<'a,ET:EngineTypes> Meaning<'a,ET> {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"toks{}",i).unwrap();
             },
-            Command::Relax => {
-                if let Some(e) = self.escapechar { f.push_char(e)}
-                f.write_str("relax").unwrap();
-            },
-            Command::Conditional(Conditional{name,..}) |
-            Command::Expandable(Expandable{name,..}) |
-            Command::SimpleExpandable(SimpleExpandable{name,..}) |
-            Command::Unexpandable(Unexpandable{name,..}) |
-            Command::Assignment(Assignment{name,..}) |
-            Command::Int(IntCommand{name,..}) |
-            Command::Dim(DimCommand{name,..}) |
-            Command::Skip(SkipCommand{name,..}) |
-            Command::MuSkip(MuSkipCommand{name,..}) |
-            Command::FontCmd(FontCommand{name,..}) |
-            Command::Box(BoxCommand{name,..}) |
-            Command::PrimitiveInt(name) |
-            Command::PrimitiveDim(name) |
-            Command::PrimitiveSkip(name) |
-            Command::PrimitiveMuSkip(name) |
-            Command::PrimitiveToks(name) |
-            Command::Whatsit(Whatsit{name,..}) => {
+            Command::Primitive{name,..} => {
                 write!(f,"{}",name.display(self.escapechar)).unwrap();
             },
         }
@@ -239,88 +252,7 @@ impl<'a,ET:EngineTypes> Display for MacroMeaning<'a,ET> {
     }
 }
 
-#[derive(Clone,Debug)]
-pub struct Conditional<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub expand:fn(&mut EngineReferences<ET>,ET::Token) -> bool
-}
-
-#[derive(Clone,Debug)]
-pub struct Expandable<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub expand:fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)
-}
-
-#[derive(Clone,Debug)]
-pub struct SimpleExpandable<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub expand:fn(&mut EngineReferences<ET>,ET::Token)
-}
-
-#[derive(Clone,Debug)]
-pub struct Unexpandable<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub scope: CommandScope,
-    pub apply:fn(&mut EngineReferences<ET>,ET::Token)
-}
-
-#[derive(Clone,Debug)]
-pub struct Assignment<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub assign:fn(&mut EngineReferences<ET>,ET::Token,bool)
-}
-
-#[derive(Clone,Debug)]
-pub struct IntCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Int,
-    pub assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
-}
-
-#[derive(Clone,Debug)]
-pub struct DimCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Dim,
-    pub assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
-}
-
-#[derive(Clone,Debug)]
-pub struct SkipCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Skip,
-    pub assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
-}
-
-#[derive(Clone,Debug)]
-pub struct MuSkipCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::MuSkip,
-    pub assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
-}
-
-#[derive(Clone,Debug)]
-pub struct FontCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::FontSystem as FontSystem>::Font,
-    pub assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
-}
-
-#[derive(Clone,Debug)]
-pub struct BoxCommand<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub read:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>,
-}
-
 #[derive(Clone,Debug,Copy)]
 pub enum CommandScope {
     SwitchesToVertical,SwitchesToHorizontal,MathOnly,Any,SwitchesToHorizontalOrMath
-}
-
-
-#[derive(Clone,Debug)]
-pub struct Whatsit<ET:EngineTypes> {
-    pub name:PrimitiveIdentifier,
-    pub get:fn(&mut EngineReferences<ET>, ET::Token)
-               -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>,
-    pub immediate:fn(&mut EngineReferences<ET>,ET::Token)
 }

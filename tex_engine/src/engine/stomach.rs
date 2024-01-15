@@ -1,7 +1,7 @@
 pub mod methods;
 use crate::engine::TeXError;
 
-use crate::commands::{CommandScope, ResolvedToken, SimpleExpandable, Unexpandable};
+use crate::commands::{CharOrPrimitive, CommandScope, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::mouth::Mouth;
@@ -24,6 +24,7 @@ use crate::tex::nodes::math::{MathAtom, MathChar, MathClass, MathFontStyle, Math
 use crate::tex::nodes::NodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
+use crate::engine::gullet::Gullet;
 
 type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
 type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
@@ -315,8 +316,8 @@ pub trait Stomach {
             ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } =>
                 char!(char),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
-                char!(*char),
-            ResolvedToken::Cmd{ cmd:Some(Command::Unexpandable (Unexpandable{name,..})),.. } if *name == PRIMITIVES.char => {
+                char!(char),
+            ResolvedToken::Cmd{ cmd:Some(Command::Primitive{name,..}),.. } if name == PRIMITIVES.char => {
                 let char = engine.read_charcode(false);
                 char!(char)
             }
@@ -326,7 +327,7 @@ pub trait Stomach {
             ResolvedToken::Tk { char, code, token } =>
                 end!(Self::do_char(engine,token,char,code)),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char, code}),token} =>
-                end!(Self::do_char(engine,token,*char,*code)),
+                end!(Self::do_char(engine,token,char,code)),
             ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
             ResolvedToken::Cmd{cmd: Some(cmd),token} => {
                 end!(crate::do_cmd!(Self::ET;engine,token,cmd))
@@ -423,14 +424,14 @@ pub trait Stomach {
                 }
                 _ => todo!("throw error")
             }
-            ResolvedToken::Cmd {cmd:Some(Command::PrimitiveToks(name)),..} => {
-                let tks = engine.state.get_primitive_tokens(*name).clone();
+            ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks}),..} => {
+                let tks = engine.state.get_primitive_tokens(name).clone();
                 engine.state.set_toks_register(engine.aux,register,tks,global);
                 insert_afterassignment(engine);
                 return ()
             }
             ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} => {
-                let tks = engine.state.get_toks_register(*u).clone();
+                let tks = engine.state.get_toks_register(u).clone();
                 engine.state.set_toks_register(engine.aux,register,tks,global);
                 insert_afterassignment(engine);
                 return ()
@@ -462,8 +463,8 @@ pub trait Stomach {
                 }
                 _ => todo!("throw error")
             }
-            ResolvedToken::Cmd {cmd:Some(Command::PrimitiveToks(n)),..} => {
-                let tks = engine.state.get_primitive_tokens(*n);
+            ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks}),..} => {
+                let tks = engine.state.get_primitive_tokens(name);
                 let tks = if name == PRIMITIVES.output {
                     let mut ntk = shared_vector::Vector::new();
                     ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
@@ -478,7 +479,7 @@ pub trait Stomach {
                 return ()
             }
             ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} => {
-                let tks = engine.state.get_toks_register(*u);
+                let tks = engine.state.get_toks_register(u);
                 let tks = if name == PRIMITIVES.output {
                     let mut ntk = shared_vector::Vector::new();
                     ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
@@ -716,7 +717,7 @@ pub trait Stomach {
             }
             crate::expand!(Self::ET;engine,next;
                 ResolvedToken::Tk { char, code, token } => Self::do_char(engine, token, char, code),
-                ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, *char, *code),
+                ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, char, code),
                 ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
                 ResolvedToken::Cmd{cmd: Some(cmd),token} => crate::do_cmd!(Self::ET;engine,token,cmd)
             );
@@ -732,14 +733,12 @@ pub trait Stomach {
             tp:HorizontalNodeListType::Paragraph(sref),
             children:vec!()
         });
-        match engine.resolve(token) {
-            ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
-                if u.name == PRIMITIVES.indent => {
+        match <Self::ET as EngineTypes>::Gullet::char_or_primitive(engine.state,&token) {
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.indent => {
                 Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref,preskip:None}))
             },
-            ResolvedToken::Cmd{cmd:Some(Command::Unexpandable(u)),..}
-                if u.name == PRIMITIVES.noindent => (),
-            ResolvedToken::Cmd {token,..} | ResolvedToken::Tk {token,..} => {
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.noindent => (),
+            _ => {
                 engine.mouth.requeue(token);
                 Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref,preskip:None}))
             }
@@ -786,8 +785,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         crate::expand_loop!(self,
             ResolvedToken::Tk {char,code:CommandCode::Other,..} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
             ResolvedToken::Tk { code:CommandCode::Space,..} => (),
-            ResolvedToken::Cmd {cmd:Some(Command::Box(b)),token} =>
-                return (b.read)(self,token),
+            ResolvedToken::Cmd {cmd:Some(Command::Primitive {cmd:PrimitiveCommand::Box(b),..}),token,..} =>
+                return b(self,token),
             _ => todo!("error")
         );
         todo!("file end")
@@ -1204,13 +1203,13 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 self.stomach.data_mut().open_lists.push(list);
                 return
             },
-            ResolvedToken::Cmd {cmd:Some(Command::Relax),..} => (),
+            ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..}),..} => (),
             ResolvedToken::Tk {char,code:CommandCode::Other | CommandCode::Letter,..} => {
                 let mc = MathChar::from_u32(self.state.get_mathcode(char),self.state, Some(char));
                 return f(s,self,mc)
             },
             ResolvedToken::Cmd{cmd:Some(Command::MathChar(u)),..} => {
-                let mc = MathChar::from_u32(*u, self.state,None);
+                let mc = MathChar::from_u32(u, self.state,None);
                 return f(s,self,mc)
             }
             ResolvedToken::Tk {code,..} => {

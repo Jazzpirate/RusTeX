@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use tex_engine::commands::{Command, CommandScope, Macro, Unexpandable};
+use tex_engine::commands::{Command, CommandScope, Macro, PrimitiveCommand};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
@@ -83,16 +83,12 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
-                let rbreak = PRIMITIVES.get("rustexBREAK");
-                engine.state.register_primitive(&mut engine.aux,rbreak,"rustexBREAK",Command::Unexpandable(
-                    Unexpandable {
-                        name:rbreak,
-                        scope:CommandScope::Any,
-                        apply:|_,_| {
-                            println!("HERE!")
-                        }
+                engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
+                    scope:CommandScope::Any,
+                    apply:|_,_| {
+                        println!("HERE!")
                     }
-                ));
+                });
                 engine.initialize_pdflatex();
                 register_command(&mut engine, true, "LaTeX", "",
                                  "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",
@@ -167,11 +163,8 @@ impl RusTeXEngineT for RusTeXEngine {
             Err(e) => engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)))
         }
 
-
         //let cap = engine.aux.memory.cs_interner().cap();
         //println!("\n\nCapacity: {} of {} ({:.2}%)",cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
-
-
 
         // ----------------
         let out = std::mem::take(&mut engine.aux.extension.state.output);
@@ -189,19 +182,8 @@ impl RusTeXEngineT for RusTeXEngine {
                        shipout::POSTAMBLE).unwrap();
             });
         }
-        //std::fs::write(crate::shipout::TEST_FILE, &format!("{}{}{}", crate::shipout::PREAMBLE,
-        //                                                   page.displayable(&engine.fontsystem.glyphmaps,&engine.filesystem,*state.widths.first().unwrap(),&null,do_refs),
-        //                                                   crate::shipout::POSTAMBLE)).unwrap();
-        //println!("HERE");
-        //state.output = page.children;
-        // ----------------
-
-
-        //engine.do_file_pdf(file.as_ref(),|e,n| super::shipout::shipout_paginated(e,n)).unwrap();
-
 
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));
         ret
     }
-
 }

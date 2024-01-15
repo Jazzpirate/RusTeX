@@ -1,4 +1,4 @@
-use tex_engine::commands::Command;
+use tex_engine::commands::{Command, PrimitiveCommand};
 use tex_engine::commands::primitives::PrimitiveCommands;
 use tex_engine::engine::{EngineAux, EngineTypes, state};
 use tex_engine::engine::state::{GroupType, State, StateChangeTracker, StateStack};
@@ -27,8 +27,8 @@ impl State for RusTeXState {
     fn new(nullfont: Font, aux: &mut EngineAux<Types>) -> Self {
         Self(state::tex_state::TeXState::new(nullfont, aux))
     }
-    fn register_primitive(&mut self,aux:&mut EngineAux<Types>, primitive_identifier: PrimitiveIdentifier,name:&'static str, cmd: Command<Self::ET>) {
-        self.0.register_primitive(aux,primitive_identifier,name,cmd)
+    fn register_primitive(&mut self,aux:&mut EngineAux<Types>, name:&'static str, cmd: PrimitiveCommand<Self::ET>) {
+        self.0.register_primitive(aux,name,cmd)
     }
 
     fn primitives(&self) -> &PrimitiveCommands<Self::ET> {

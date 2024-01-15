@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::commands::Command;
+use crate::commands::{Command, PrimitiveCommand};
 use crate::commands::primitives::PrimitiveCommands;
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
@@ -61,7 +61,7 @@ pub trait State:Sized+Clone {
         }
     }
 
-    fn register_primitive(&mut self,aux:&mut EngineAux<Self::ET>,primitive_identifier: PrimitiveIdentifier,name:&'static str,cmd:Command<Self::ET>);
+    fn register_primitive(&mut self,aux:&mut EngineAux<Self::ET>,name:&'static str,cmd:PrimitiveCommand<Self::ET>);
     fn primitives(&self) -> &PrimitiveCommands<Self::ET>;
 
     fn push(&mut self,aux:&mut EngineAux<Self::ET>, group_type: GroupType,line_number:usize);

@@ -5,7 +5,7 @@ pub mod methods;
 pub mod hvalign;
 
 use std::marker::PhantomData;
-use crate::commands::{ActiveConditional, Command, Macro, ResolvedToken, Unexpandable};
+use crate::commands::{ActiveConditional, CharOrPrimitive, Command, Macro, ResolvedToken};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::gullet::hvalign::AlignData;
 use crate::engine::mouth::Mouth;
@@ -70,17 +70,14 @@ pub trait Gullet<ET:EngineTypes> {
                             f(aux,state,self,t)
                         }
                         CommandCode::AlignmentTab if data.ingroups == data.groupval() => { todo!() }
-                        CommandCode::Escape | CommandCode::Active if data.ingroups == data.groupval() => match Self::resolve(state, t) {
-                            ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
-                            if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
+                        CommandCode::Escape | CommandCode::Active if data.ingroups == data.groupval() => match Self::char_or_primitive(state, &t) {
+                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                                 todo!()
                             }
-                            ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
-                            if *name == PRIMITIVES.span => {
+                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
                                 todo!()
                             }
-                            ResolvedToken::Tk { token, .. } | ResolvedToken::Cmd { token, .. } =>
-                                f(aux, state, self, token)
+                           _ => f(aux, state, self, t)
                         }
                         _ => f(aux,state,self,t)
                     }
@@ -107,20 +104,17 @@ pub trait Gullet<ET:EngineTypes> {
                         a.on_alignment_tab(mouth,aux);
                         self.get_next_opt(mouth,aux,state)
                     }
-                    CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if a.ingroups == a.groupval() => match Self::resolve(state,t) {
-                        ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
-                        if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
+                    CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if a.ingroups == a.groupval() => match Self::char_or_primitive(state,&t) {
+                        Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                             a.on_cr(mouth,aux,state);
                             return self.get_next_opt(mouth,aux,state)
                         }
-                        ResolvedToken::Cmd { cmd: Some(Command::Unexpandable(Unexpandable { name, .. })), .. }
-                        if *name == PRIMITIVES.span => {
+                        Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
                             a.span = true;
                             a.on_alignment_tab(mouth,aux);
                             self.get_next_opt(mouth,aux,state)
                         }
-                        ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} =>
-                            Some(token)
+                        _ => Some(t)
                     }
                     _ => Some(t)
                 }
@@ -205,17 +199,37 @@ pub trait Gullet<ET:EngineTypes> {
         methods::read_chars(engine,kws)
     }
 
-    /// Inspect the given [`Token`] and return a reference to its current definition, if any.
+    /// Inspect the given [`Token`] and return its current definition, if any.
     /// See also [`EngineReferences::resolve`].
-    fn resolve<'a>(state:&'a ET::State,token:ET::Token) -> ResolvedToken<'a,ET> {
+    fn resolve(state:&ET::State,token:ET::Token) -> ResolvedToken<ET> {
         match token.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ResolvedToken::Cmd{token,cmd:state.get_ac_command(c)},
+                ResolvedToken::Cmd{token,cmd:state.get_ac_command(c).cloned()},
             StandardToken::Character(c,o) => return ResolvedToken::Tk{token,char:c,code:o},
             StandardToken::ControlSequence(cs) =>
-                ResolvedToken::Cmd{token,cmd:state.get_command(&cs)},
+                ResolvedToken::Cmd{token,cmd:state.get_command(&cs).cloned()},
             StandardToken::Primitive(id) =>
-                ResolvedToken::Cmd{token,cmd:state.primitives().get_id(id)}
+                ResolvedToken::Cmd{token,cmd:state.primitives().get_id(id).map(|p| Command::Primitive {name:id,cmd:p.clone()}) }
+        }
+    }
+
+    fn char_or_primitive(state:&ET::State,token:&ET::Token) -> Option<CharOrPrimitive<ET>> {
+        match token.to_enum() {
+            StandardToken::Primitive(id) => Some(CharOrPrimitive::Primitive(id)),
+            StandardToken::Character(c,CommandCode::Active) => match state.get_ac_command(c) {
+                Some(Command::Primitive {name,..}) => Some(CharOrPrimitive::Primitive(*name)),
+                Some(Command::Char {char,code}) => Some(CharOrPrimitive::Char(*char,*code)),
+                Some(Command::CharDef(c)) => Some(CharOrPrimitive::Char(*c,CommandCode::Other)),
+                _ => None
+            }
+            StandardToken::ControlSequence(cs) => match state.get_command(&cs) {
+                Some(Command::Primitive {name,..}) => Some(CharOrPrimitive::Primitive(*name)),
+                Some(Command::Char {char,code}) => Some(CharOrPrimitive::Char(*char,*code)),
+                Some(Command::CharDef(c)) => Some(CharOrPrimitive::Char(*c,CommandCode::Other)),
+                _ => None
+            }
+            StandardToken::Character(c,code) => Some(CharOrPrimitive::Char(c,code)),
+            _ => None
         }
     }
 
@@ -472,7 +486,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn read_chars(&mut self,kws:&[u8]) -> Result<u8,ET::Token> {
         ET::Gullet::read_chars(self,kws)
     }
-    /// Inspect the given [`Token`] and return a reference to its current definition, if any.
+    /// Inspect the given [`Token`] and return its current definition, if any.
     pub fn resolve(&self,token:ET::Token) -> ResolvedToken<ET> {
         ET::Gullet::resolve(self.state,token)
     }
