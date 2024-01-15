@@ -292,6 +292,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
         if idx >= self.commands.len() {
             self.commands.resize(idx+1,Command::Relax);
         }
+        self.commands[idx] = cmd;
         self.names.insert(name,idx as u16);
     }
     pub fn get_id(&self,id:PrimitiveIdentifier) -> Option<&Command<ET>> {
