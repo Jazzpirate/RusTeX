@@ -190,7 +190,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         };
         let trace = self.tracing_restores();
 
-        let (gt,ag,mut ch) = self.stack.pop();
+        let (gt,ag,ch) = self.stack.pop();
 
         if traceg {
             match gt {
