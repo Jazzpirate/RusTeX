@@ -1,3 +1,4 @@
+use crate::commands::primitives::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::tex::nodes::{HorizontalNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::boxes::{BoxType, TeXBox};
@@ -7,7 +8,6 @@ use crate::tex::nodes::vertical::VNode;
 use crate::engine::stomach::{Stomach, TeXMode};
 use crate::engine::state::State;
 use crate::engine::mouth::Mouth;
-use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 

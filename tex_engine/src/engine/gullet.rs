@@ -6,12 +6,12 @@ pub mod hvalign;
 
 use std::marker::PhantomData;
 use crate::commands::{ActiveConditional, CharOrPrimitive, Command, Macro, ResolvedToken};
+use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::gullet::hvalign::AlignData;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::MacroExpansion;
 use crate::engine::state::State;
-use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::characters::Character;
@@ -214,6 +214,9 @@ pub trait Gullet<ET:EngineTypes> {
         }
     }
 
+    /// Inspects the [`Token`] and returns either the [`PrimitiveIdentifier`] or the [`Character`] and [`CommandCode`]
+    /// or None if the token is neither a primitive nor a character. Useful for e.g. quick checks in an `\halign` whether the
+    /// token is a specific primitive (`\cr`,`\crcr`,`\span`) or a character (`&`, space).
     fn char_or_primitive(state:&ET::State,token:&ET::Token) -> Option<CharOrPrimitive<ET>> {
         match token.to_enum() {
             StandardToken::Primitive(id) => Some(CharOrPrimitive::Primitive(id)),

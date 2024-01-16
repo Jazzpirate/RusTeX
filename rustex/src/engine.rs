@@ -7,7 +7,6 @@ use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
-use tex_engine::engine::utils::memory::PRIMITIVES;
 use tex_engine::tex;
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::tokens::CompactToken;

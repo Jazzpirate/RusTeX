@@ -1,10 +1,10 @@
 use std::cell::OnceCell;
 use std::fmt::{Debug, Formatter, Write};
 use std::marker::PhantomData;
+use crate::commands::primitives::PRIMITIVES;
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::Font;
-use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::{Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{TeXBox, ToOrSpread};

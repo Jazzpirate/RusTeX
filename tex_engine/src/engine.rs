@@ -3,13 +3,14 @@
 */
 use std::fmt::Debug;
 use crate::engine::gullet::{DefaultGullet, Gullet};
-use crate::engine::utils::memory::{MemoryManager, PRIMITIVES};
+use crate::engine::utils::memory::{MemoryManager};
 use crate::engine::mouth::{DefaultMouth, Mouth};
 use crate::engine::state::State;
 use crate::engine::stomach::{Stomach, StomachWithShipout};
 use crate::{tex};
 use crate::tex::catcodes::CommandCode;
 use crate::commands::{Command, ResolvedToken};
+use crate::commands::primitives::PRIMITIVES;
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
 use crate::engine::utils::outputs::{LogOutputs, Outputs};

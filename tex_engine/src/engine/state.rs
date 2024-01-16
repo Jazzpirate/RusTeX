@@ -3,10 +3,9 @@ pub mod tex_state;
 
 use std::sync::Mutex;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
-use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::{Command, PrimitiveCommand};
-use crate::commands::primitives::PrimitiveCommands;
+use crate::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::boxes::{BoxType, TeXBox};

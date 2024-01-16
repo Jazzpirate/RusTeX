@@ -1,8 +1,7 @@
 use tex_engine::commands::{Command, PrimitiveCommand};
-use tex_engine::commands::primitives::PrimitiveCommands;
+use tex_engine::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier};
 use tex_engine::engine::{EngineAux, EngineTypes, state};
 use tex_engine::engine::state::{GroupType, State, StateChangeTracker, StateStack};
-use tex_engine::engine::utils::memory::PrimitiveIdentifier;
 use tex_engine::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
 use tex_engine::tex::tokens::CompactToken;

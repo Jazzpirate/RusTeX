@@ -1,9 +1,11 @@
-/*! Methods for registering primitives */
+/*! Methods for [`PrimitiveCommand`]s and for registering new ones */
+use std::sync::RwLock;
+use lazy_static::lazy_static;
 use crate::commands::{Command, CommandScope, PrimitiveCommand};
-use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::state::State;
+use crate::prelude::Character;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 use crate::tex::numerics::NumSet;
 use crate::utils::HMap;
@@ -58,7 +60,7 @@ macro_rules! cmstodo {
     }};
 }
 
-/// Creates a new [`Expandable`] primitive and registers it with the engine.
+/// Creates a new expandable primitive and registers it with the engine.
 pub fn register_expandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
@@ -68,7 +70,7 @@ pub fn register_expandable<E:TeXEngine>(
     refs.state.register_primitive(refs.aux,name,command);
 }
 
-/// Creates a new [`SimpleExpandable`] primitive and registers it with the engine.
+/// Creates a new simple expandable primitive (which does not produce new tokens) and registers it with the engine.
 pub fn register_simple_expandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
@@ -78,7 +80,7 @@ pub fn register_simple_expandable<E:TeXEngine>(
     refs.state.register_primitive(refs.aux,name,command);
 }
 
-/// Creates a new [`Conditional`] primitive and registers it with the engine.
+/// Creates a new conditional primitive and registers it with the engine.
 pub fn register_conditional<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
@@ -88,7 +90,7 @@ pub fn register_conditional<E:TeXEngine>(
     refs.state.register_primitive(refs.aux,name,command);
 }
 
-/// Creates a new [`Unexpandable`] primitive and registers it with the engine.
+/// Creates a new unexpandable primitive and registers it with the engine.
 pub fn register_unexpandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
@@ -213,7 +215,7 @@ pub fn register_primitive_toks<E:TeXEngine>(engine:&mut E,names:&[&'static str])
     }
 }
 
-/// Creates a new [`Whatsit`] primitive and registers it with the engine.
+/// Creates a new "Whatsit" primitive and registers it with the engine.
 pub fn register_whatsit<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
@@ -225,20 +227,23 @@ pub fn register_whatsit<E:TeXEngine>(
     refs.state.register_primitive(refs.aux,name,command);
 }
 
+/// A store for all primitive commands.
 #[derive(Clone)]
 pub struct PrimitiveCommands<ET:EngineTypes> {
     commands: Vec<Command<ET>>,
     names:HMap<&'static str,u16>
 }
 impl<ET:EngineTypes> PrimitiveCommands<ET> {
+    /// Creates a new store for primitive commands. Usually kept in an engine's [`State`] component.
     pub fn new() -> Self {
         Self {
             commands: Vec::new(),
             names: HMap::default()
         }
     }
+    /// Registers a new primitive command.
     pub fn register(&mut self,name:&'static str,cmd: PrimitiveCommand<ET>) -> PrimitiveIdentifier {
-        let id = PRIMITIVES.get(name);
+        let id = PRIMITIVES.new_id(name);
         let idx = id.as_u16() as usize;
         if idx >= self.commands.len() {
             self.commands.resize(idx+1,Command::Primitive{name:id,cmd:PrimitiveCommand::Relax});
@@ -247,11 +252,231 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
         self.names.insert(name,idx as u16);
         id
     }
+    /// Return the primitive command with the given identifier.
     pub fn get_id(&self,id:PrimitiveIdentifier) -> Option<&Command<ET>> {
         let idx = id.as_u16() as usize;
         self.commands.get(idx)
     }
+    /// Return the [`PrimitiveIdentifier`] of the primitive command with the given name.
     pub fn get_name(&self,s:&str) -> Option<PrimitiveIdentifier> {
         self.names.get(s).map(|&u| PrimitiveIdentifier::try_from_u16(u)).flatten()
+    }
+}
+
+/// We always intern the names for primitive commands/macros, for efficiency; in particular for equality checks.
+/// Uses `u16` internally, i.e. allowing for up to 65536 primitives.
+///
+/// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](static@PRIMITIVES) instance.
+pub struct PrimitiveInterner {
+    interner:RwLock<string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
+    pub globaldefs:PrimitiveIdentifier,
+    pub relax:PrimitiveIdentifier,
+    pub mag:PrimitiveIdentifier,
+    pub fam:PrimitiveIdentifier,
+    pub ifcase:PrimitiveIdentifier,
+    pub tracingifs:PrimitiveIdentifier,
+    pub tracingassigns:PrimitiveIdentifier,
+    pub tracingcommands:PrimitiveIdentifier,
+    pub tracinggroups:PrimitiveIdentifier,
+    pub tracingrestores:PrimitiveIdentifier,
+    pub r#else:PrimitiveIdentifier,
+    pub fi:PrimitiveIdentifier,
+    pub or:PrimitiveIdentifier,
+    pub global:PrimitiveIdentifier,
+    pub long:PrimitiveIdentifier,
+    pub outer:PrimitiveIdentifier,
+    pub protected:PrimitiveIdentifier,
+    pub def:PrimitiveIdentifier,
+    pub edef:PrimitiveIdentifier,
+    pub xdef:PrimitiveIdentifier,
+    pub gdef:PrimitiveIdentifier,
+    pub everyeof:PrimitiveIdentifier,
+    pub everyhbox:PrimitiveIdentifier,
+    pub everyvbox:PrimitiveIdentifier,
+    pub everyjob:PrimitiveIdentifier,
+    pub count:PrimitiveIdentifier,
+    pub noexpand:PrimitiveIdentifier,
+    pub unexpanded:PrimitiveIdentifier,
+    pub endcsname:PrimitiveIdentifier,
+    pub the:PrimitiveIdentifier,
+    pub toks:PrimitiveIdentifier,
+    pub vsize:PrimitiveIdentifier,
+    pub output:PrimitiveIdentifier,
+    pub badness:PrimitiveIdentifier,
+    pub outputpenalty:PrimitiveIdentifier,
+    pub dimen:PrimitiveIdentifier,
+    pub skip:PrimitiveIdentifier,
+    pub everypar:PrimitiveIdentifier,
+    pub indent:PrimitiveIdentifier,
+    pub noindent:PrimitiveIdentifier,
+    pub hangindent:PrimitiveIdentifier,
+    pub hangafter:PrimitiveIdentifier,
+    pub leftskip:PrimitiveIdentifier,
+    pub rightskip:PrimitiveIdentifier,
+    pub hsize:PrimitiveIdentifier,
+    pub pdfpagewidth:PrimitiveIdentifier,
+    pub everymath:PrimitiveIdentifier,
+    pub everydisplay:PrimitiveIdentifier,
+    pub char:PrimitiveIdentifier,
+    pub tabskip:PrimitiveIdentifier,
+    pub cr:PrimitiveIdentifier,
+    pub crcr:PrimitiveIdentifier,
+    pub everycr:PrimitiveIdentifier,
+    pub span:PrimitiveIdentifier,
+    pub noalign:PrimitiveIdentifier,
+    pub omit:PrimitiveIdentifier,
+    pub baselineskip:PrimitiveIdentifier,
+    pub lineskip:PrimitiveIdentifier,
+    pub lineskiplimit:PrimitiveIdentifier,
+    pub parindent:PrimitiveIdentifier,
+    pub hrule:PrimitiveIdentifier,
+    pub vrule:PrimitiveIdentifier,
+    pub vskip:PrimitiveIdentifier,
+    pub hskip:PrimitiveIdentifier,
+    pub vfil:PrimitiveIdentifier,
+    pub hfil:PrimitiveIdentifier,
+    pub vfill:PrimitiveIdentifier,
+    pub hfill:PrimitiveIdentifier,
+    pub parskip:PrimitiveIdentifier,
+    pub delimiter:PrimitiveIdentifier,
+    pub abovedisplayskip:PrimitiveIdentifier,
+    pub belowdisplayskip:PrimitiveIdentifier,
+    pub iffalse:PrimitiveIdentifier,
+    pub iftrue:PrimitiveIdentifier,
+}
+impl PrimitiveInterner {
+    fn new() -> Self {
+        let mut interner = string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>::new();
+        let globaldefs = PrimitiveIdentifier(interner.get_or_intern_static("globaldefs"));
+        let relax = PrimitiveIdentifier(interner.get_or_intern_static("relax"));
+        let mag = PrimitiveIdentifier(interner.get_or_intern_static("mag"));
+        let fam = PrimitiveIdentifier(interner.get_or_intern_static("fam"));
+        let ifcase = PrimitiveIdentifier(interner.get_or_intern_static("ifcase"));
+        let tracingifs = PrimitiveIdentifier(interner.get_or_intern_static("tracingifs"));
+        let tracingassigns = PrimitiveIdentifier(interner.get_or_intern_static("tracingassigns"));
+        let tracingcommands = PrimitiveIdentifier(interner.get_or_intern_static("tracingcommands"));
+        let tracinggroups = PrimitiveIdentifier(interner.get_or_intern_static("tracinggroups"));
+        let tracingrestores = PrimitiveIdentifier(interner.get_or_intern_static("tracingrestores"));
+        let r#else = PrimitiveIdentifier(interner.get_or_intern_static("else"));
+        let fi = PrimitiveIdentifier(interner.get_or_intern_static("fi"));
+        let or = PrimitiveIdentifier(interner.get_or_intern_static("or"));
+        let global = PrimitiveIdentifier(interner.get_or_intern_static("global"));
+        let long = PrimitiveIdentifier(interner.get_or_intern_static("long"));
+        let outer = PrimitiveIdentifier(interner.get_or_intern_static("outer"));
+        let protected = PrimitiveIdentifier(interner.get_or_intern_static("protected"));
+        let def = PrimitiveIdentifier(interner.get_or_intern_static("def"));
+        let edef = PrimitiveIdentifier(interner.get_or_intern_static("edef"));
+        let xdef = PrimitiveIdentifier(interner.get_or_intern_static("xdef"));
+        let gdef = PrimitiveIdentifier(interner.get_or_intern_static("gdef"));
+        let everyeof = PrimitiveIdentifier(interner.get_or_intern_static("everyeof"));
+        let everyhbox = PrimitiveIdentifier(interner.get_or_intern_static("everyhbox"));
+        let everyvbox = PrimitiveIdentifier(interner.get_or_intern_static("everyvbox"));
+        let everyjob = PrimitiveIdentifier(interner.get_or_intern_static("everyjob"));
+        let count = PrimitiveIdentifier(interner.get_or_intern_static("count"));
+        let noexpand = PrimitiveIdentifier(interner.get_or_intern_static("noexpand"));
+        let endcsname = PrimitiveIdentifier(interner.get_or_intern_static("endcsname"));
+        let unexpanded = PrimitiveIdentifier(interner.get_or_intern_static("unexpanded"));
+        let the = PrimitiveIdentifier(interner.get_or_intern_static("the"));
+        let toks = PrimitiveIdentifier(interner.get_or_intern_static("toks"));
+        let vsize = PrimitiveIdentifier(interner.get_or_intern_static("vsize"));
+        let output = PrimitiveIdentifier(interner.get_or_intern_static("output"));
+        let badness = PrimitiveIdentifier(interner.get_or_intern_static("badness"));
+        let outputpenalty = PrimitiveIdentifier(interner.get_or_intern_static("outputpenalty"));
+        let dimen = PrimitiveIdentifier(interner.get_or_intern_static("dimen"));
+        let skip = PrimitiveIdentifier(interner.get_or_intern_static("skip"));
+        let everypar = PrimitiveIdentifier(interner.get_or_intern_static("everypar"));
+        let indent = PrimitiveIdentifier(interner.get_or_intern_static("indent"));
+        let noindent = PrimitiveIdentifier(interner.get_or_intern_static("noindent"));
+        let hangindent = PrimitiveIdentifier(interner.get_or_intern_static("hangindent"));
+        let hangafter = PrimitiveIdentifier(interner.get_or_intern_static("hangafter"));
+        let leftskip = PrimitiveIdentifier(interner.get_or_intern_static("leftskip"));
+        let rightskip = PrimitiveIdentifier(interner.get_or_intern_static("rightskip"));
+        let hsize = PrimitiveIdentifier(interner.get_or_intern_static("hsize"));
+        let pdfpagewidth = PrimitiveIdentifier(interner.get_or_intern_static("pdfpagewidth"));
+        let everymath = PrimitiveIdentifier(interner.get_or_intern_static("everymath"));
+        let everydisplay = PrimitiveIdentifier(interner.get_or_intern_static("everydisplay"));
+        let char = PrimitiveIdentifier(interner.get_or_intern_static("char"));
+        let tabskip = PrimitiveIdentifier(interner.get_or_intern_static("tabskip"));
+        let cr = PrimitiveIdentifier(interner.get_or_intern_static("cr"));
+        let crcr = PrimitiveIdentifier(interner.get_or_intern_static("crcr"));
+        let everycr = PrimitiveIdentifier(interner.get_or_intern_static("everycr"));
+        let span = PrimitiveIdentifier(interner.get_or_intern_static("span"));
+        let noalign = PrimitiveIdentifier(interner.get_or_intern_static("noalign"));
+        let omit = PrimitiveIdentifier(interner.get_or_intern_static("omit"));
+        let baselineskip = PrimitiveIdentifier(interner.get_or_intern_static("baselineskip"));
+        let lineskip = PrimitiveIdentifier(interner.get_or_intern_static("lineskip"));
+        let lineskiplimit = PrimitiveIdentifier(interner.get_or_intern_static("lineskiplimit"));
+        let parindent = PrimitiveIdentifier(interner.get_or_intern_static("parindent"));
+        let hrule = PrimitiveIdentifier(interner.get_or_intern_static("hrule"));
+        let vrule = PrimitiveIdentifier(interner.get_or_intern_static("vrule"));
+        let vskip = PrimitiveIdentifier(interner.get_or_intern_static("vskip"));
+        let hskip = PrimitiveIdentifier(interner.get_or_intern_static("hskip"));
+        let vfil = PrimitiveIdentifier(interner.get_or_intern_static("vfil"));
+        let hfil = PrimitiveIdentifier(interner.get_or_intern_static("hfil"));
+        let vfill = PrimitiveIdentifier(interner.get_or_intern_static("vfill"));
+        let hfill = PrimitiveIdentifier(interner.get_or_intern_static("hfill"));
+        let parskip = PrimitiveIdentifier(interner.get_or_intern_static("parskip"));
+        let delimiter = PrimitiveIdentifier(interner.get_or_intern_static("delimiter"));
+        let abovedisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("abovedisplayskip"));
+        let belowdisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("belowdisplayskip"));
+        let iffalse = PrimitiveIdentifier(interner.get_or_intern_static("iffalse"));
+        let iftrue = PrimitiveIdentifier(interner.get_or_intern_static("iftrue"));
+        PrimitiveInterner{
+            interner:RwLock::new(interner),
+            globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
+            tracinggroups, r#else, fi, or, global, long, outer, protected, def, edef, xdef,
+            gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
+            everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
+            everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
+            pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
+            noalign,omit,baselineskip,lineskip,lineskiplimit,parindent,hrule,vrule,
+            vskip,hskip,vfil,hfil,vfill,hfill,parskip,delimiter,abovedisplayskip,
+            belowdisplayskip,iffalse,iftrue
+        }
+    }
+
+    fn new_id(&self, s:&'static str) -> PrimitiveIdentifier {
+        let mut lock = self.interner.write().unwrap();
+        PrimitiveIdentifier(lock.get_or_intern_static(s))
+    }
+
+}
+lazy_static!(
+    /// The global [`PrimitiveInterner`].
+    pub static ref PRIMITIVES:PrimitiveInterner = PrimitiveInterner::new();
+);
+
+/// A `Copy` identifier for a primitive command. Small and fast to compare.
+#[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
+pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
+impl PrimitiveIdentifier {
+    /// Returns a struct implementing [`Display`](std::fmt::Display) for the given [`PrimitiveIdentifier`], and
+    /// optional `\escapechar` that will be prefixed - e.g.
+    /// `println!(`[`PRIMITIVES`](static@PRIMITIVES)`.`[`printable`](Self::printable)`(`[`PRIMITIVES`](static@PRIMITIVES)`.the, Some('\\')))`
+    /// will print `\the`.
+    pub fn display<C:Character>(self,escapechar:Option<C>) -> impl std::fmt::Display {
+        PrintableIdentifier(self,escapechar)
+    }
+    /// Returns the `u16` value of the identifier.
+    pub fn as_u16(&self) -> u16 {
+        use string_interner::Symbol;
+        self.0.to_usize() as u16
+    }
+    /// Returns the identifier for the given `u16` value, if it exists.
+    pub fn try_from_u16(u:u16) -> Option<Self> {
+        use string_interner::Symbol;
+        string_interner::symbol::SymbolU16::try_from_usize(u as usize).map(PrimitiveIdentifier)
+    }
+}
+
+struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>);
+impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
+    fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let lock = PRIMITIVES.interner.read().unwrap();
+        match self.1 {
+            None => (),
+            Some(c) => c.display_fmt(f)
+        }
+        write!(f,"{}",lock.resolve(self.0.0).unwrap())
     }
 }

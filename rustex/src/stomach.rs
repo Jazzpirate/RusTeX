@@ -1,10 +1,10 @@
 use tex_engine::commands::{Command, CommandScope, Macro, PrimitiveCommand};
+use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::{GroupType, State};
 use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData};
-use tex_engine::engine::utils::memory::{MemoryManager, PRIMITIVES};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
 use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::tokens::CompactToken;

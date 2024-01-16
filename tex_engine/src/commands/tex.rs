@@ -9,7 +9,6 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use super::primitives::*;
 use crate::engine::state::{GroupType, State};
-use crate::engine::utils::memory::PRIMITIVES;
 use crate::tex::catcodes::{CategoryCode, CommandCode};
 use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::characters::{Character, CharacterMap};

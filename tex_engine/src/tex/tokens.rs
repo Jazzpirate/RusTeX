@@ -13,7 +13,7 @@ and [`CompactToken`] as a significantly more efficient representation.
 
 use std::fmt::Write;
 use std::marker::PhantomData;
-use crate::engine::utils::memory::PrimitiveIdentifier;
+use crate::commands::primitives::PrimitiveIdentifier;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::characters::Character;
 use crate::tex::tokens::control_sequences::{CSName, InternedCSName};

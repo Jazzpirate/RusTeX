@@ -4,9 +4,9 @@
 
 use std::fmt::Display;
 use crate::commands::methods::MacroParser;
+use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
-use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::tokens::token_lists::{StringCharWrite, TokenList, CharWrite};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::tokens::control_sequences::CSName;

@@ -2,10 +2,10 @@
     a file or by returning the [`Token`]s expanded by a macro
  */
 
+use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
-use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::tex::tokens::token_lists::MacroExpansion;
 use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;

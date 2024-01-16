@@ -1,12 +1,12 @@
 /*! Default implementations for [`Gullet`] methods.
 */
 use crate::commands::{ActiveConditional, CharOrPrimitive, Command, PrimitiveCommand, ResolvedToken};
+use crate::commands::primitives::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
 use crate::engine::state::State;
-use crate::engine::utils::memory::PRIMITIVES;
 use crate::file_end;
 use crate::engine::gullet::Gullet;
 use crate::tex::tokens::token_lists::TokenList;

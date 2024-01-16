@@ -1,13 +1,13 @@
 /*! Data structures for `\halign` and `\valign` */
 
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
+use crate::commands::primitives::PRIMITIVES;
 use crate::engine::{EngineAux, EngineTypes};
 use crate::prelude::{Token, TokenList};
 use crate::tex::nodes::boxes::BoxType;
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
-use crate::engine::utils::memory::PRIMITIVES;
 
 /// Specification on a column in an `\halign` (or a row in a `\valign`); in particular:
 /// - the alignment template for the column (or row)

@@ -1,7 +1,6 @@
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use tex_engine::commands::{Command, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
-use tex_engine::engine::utils::memory::PRIMITIVES;
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Refs, register_command, Types};
 use tex_engine::engine::TeXEngine;
