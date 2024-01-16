@@ -686,7 +686,6 @@ pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 }
 
 pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    use crate::commands::Command;
     let name = engine.read_csname();
     let s = engine.aux.memory.cs_interner_mut().resolve(&name).to_string();
     match engine.state.primitives().get_name(&s) {

@@ -229,8 +229,7 @@ pub trait Gullet<ET:EngineTypes> {
                 Some(Command::CharDef(c)) => Some(CharOrPrimitive::Char(*c,CommandCode::Other)),
                 _ => None
             }
-            StandardToken::Character(c,code) => Some(CharOrPrimitive::Char(c,code)),
-            _ => None
+            StandardToken::Character(c,code) => Some(CharOrPrimitive::Char(c,code))
         }
     }
 

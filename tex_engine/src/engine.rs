@@ -381,7 +381,7 @@ macro_rules! do_cmd {
                 <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,*name,false),
             crate::commands::Command::MathChar(u) =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,$token),
-            crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Relax} => (),
+            crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Relax,..} => (),
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Int { .. },..} |
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Dim { .. },..} |
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },..} |
