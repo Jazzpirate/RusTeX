@@ -7,7 +7,7 @@ use crate::engine::filesystem::{File, VirtualFile};
 use crate::engine::fontsystem::{Font, TfmFont, TfmFontSystem};
 use crate::engine::gullet::DefaultGullet;
 use crate::engine::mouth::DefaultMouth;
-use crate::engine::stomach::StomachWithShipout;
+use crate::engine::stomach::DefaultStomach;
 use crate::engine::utils::outputs::LogOutputs;
 use crate::prelude::CSName;
 use crate::tex;
@@ -100,14 +100,14 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Skip = Skip32<Dim32>;
     type MuSkip = MuSkip32;
     type Num = tex::numerics::DefaultNumSet;
-    type State = state::tex_state::TeXState<Self>;
+    type State = state::tex_state::DefaultState<Self>;
     type File = VirtualFile<u8>;
     type FileSystem = filesystem::NoOutputFileSystem<u8>;
     type Outputs = LogOutputs;
     type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
     type CustomNode = PDFNode<Self>;
-    type Stomach = StomachWithShipout<Self>;
+    type Stomach = DefaultStomach<Self>;
     type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }

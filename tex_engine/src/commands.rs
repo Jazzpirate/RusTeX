@@ -25,7 +25,7 @@ pub mod methods;
 #[derive(Debug)]
 pub enum ResolvedToken<'a,ET:EngineTypes> {
     Tk{char:ET::Char,code:CommandCode},
-    Cmd(Option<&'a Command<ET>>),
+    Cmd(Option<&'a TeXCommand<ET>>),
 }
 
 #[derive(Debug)]
@@ -54,7 +54,7 @@ impl<I:TeXInt> ActiveConditional<I> {
 
 /// A command.
 #[derive(Clone,Debug)]
-pub enum Command<ET:EngineTypes> {
+pub enum TeXCommand<ET:EngineTypes> {
     /// A user defined [`Macro`], to be expanded (unless [protected](Macro::protected))
     Macro(Macro<ET::Token>),
     Char{char:ET::Char,code:CommandCode},
@@ -116,14 +116,14 @@ pub enum PrimitiveCommand<ET:EngineTypes> {
     Relax,
 }
 
-impl<ET:EngineTypes> Command<ET> {
+impl<ET:EngineTypes> TeXCommand<ET> {
     pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
         Meaning{cmd:self,int,cc,escapechar}
     }
 }
 
 pub struct Meaning<'a,ET:EngineTypes>{
-    cmd:&'a Command<ET>,
+    cmd:&'a TeXCommand<ET>,
     int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler,
     cc:&'a CategoryCodeScheme<ET::Char>,
     escapechar:Option<ET::Char>
@@ -131,42 +131,42 @@ pub struct Meaning<'a,ET:EngineTypes>{
 impl<'a,ET:EngineTypes> Meaning<'a,ET> {
     fn write_chars<W: CharWrite<ET::Char,ET::CSName>>(&self, f:&mut W) {
         match self.cmd {
-            Command::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
-            Command::Char{char,code} =>
+            TeXCommand::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
+            TeXCommand::Char{char,code} =>
                 code.meaning(*char,f),
-            Command::CharDef(c) => {
+            TeXCommand::CharDef(c) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"char\"{:X}",Into::<u64>::into(*c)).unwrap();
             },
-            Command::MathChar(u) => {
+            TeXCommand::MathChar(u) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"mathchar\"{:X}",u).unwrap();
             },
-            Command::Font(i) => {
+            TeXCommand::Font(i) => {
                 write!(f,"select font ").unwrap();
                 i.display(self.int,f).unwrap();
             },
-            Command::IntRegister(i) => {
+            TeXCommand::IntRegister(i) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"count{}",i).unwrap();
             },
-            Command::DimRegister(i) => {
+            TeXCommand::DimRegister(i) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"dimen{}",i).unwrap();
             },
-            Command::SkipRegister(i) => {
+            TeXCommand::SkipRegister(i) => {
                 if let Some(e) = self.escapechar { f.push_char(e) }
                 write!(f, "skip{}", i).unwrap();
             }
-            Command::MuSkipRegister(i) => {
+            TeXCommand::MuSkipRegister(i) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"muskip{}",i).unwrap();
             },
-            Command::ToksRegister(i) => {
+            TeXCommand::ToksRegister(i) => {
                 if let Some(e) = self.escapechar { f.push_char(e)}
                 write!(f,"toks{}",i).unwrap();
             },
-            Command::Primitive{name,..} => {
+            TeXCommand::Primitive{name,..} => {
                 write!(f,"{}",name.display(self.escapechar)).unwrap();
             },
         }

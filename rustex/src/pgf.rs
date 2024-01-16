@@ -1,5 +1,5 @@
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use tex_engine::commands::{Command, CommandScope, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Refs, register_command, Types};
@@ -110,7 +110,7 @@ fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {
     let path = engine.aux.memory.cs_interner_mut().new("pgf@sys@svgpath");
     let empty = engine.state.get_command(&engine.aux.memory.cs_interner_mut().new("pgfutil@empty")).cloned();
     match engine.state.get_command(&path) {
-        Some(Command::Macro(m)) => ret.extend(m.expansion.0.iter().cloned()),
+        Some(TeXCommand::Macro(m)) => ret.extend(m.expansion.0.iter().cloned()),
         _ => todo!("error"),
     };
     engine.state.set_command(engine.aux,path,empty,true);

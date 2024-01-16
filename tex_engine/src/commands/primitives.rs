@@ -1,7 +1,7 @@
 /*! Methods for [`PrimitiveCommand`]s and for registering new ones */
 use std::sync::RwLock;
 use lazy_static::lazy_static;
-use crate::commands::{Command, CommandScope, PrimitiveCommand};
+use crate::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::fontsystem::FontSystem;
 use crate::engine::state::State;
@@ -230,7 +230,7 @@ pub fn register_whatsit<E:TeXEngine>(
 /// A store for all primitive commands.
 #[derive(Clone)]
 pub struct PrimitiveCommands<ET:EngineTypes> {
-    commands: Vec<Command<ET>>,
+    commands: Vec<TeXCommand<ET>>,
     names:HMap<&'static str,u16>
 }
 impl<ET:EngineTypes> PrimitiveCommands<ET> {
@@ -246,14 +246,14 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
         let id = PRIMITIVES.new_id(name);
         let idx = id.as_u16() as usize;
         if idx >= self.commands.len() {
-            self.commands.resize(idx+1,Command::Primitive{name:id,cmd:PrimitiveCommand::Relax});
+            self.commands.resize(idx+1, TeXCommand::Primitive{name:id,cmd:PrimitiveCommand::Relax});
         }
-        self.commands[idx] = Command::Primitive{name:id,cmd};
+        self.commands[idx] = TeXCommand::Primitive{name:id,cmd};
         self.names.insert(name,idx as u16);
         id
     }
     /// Return the primitive command with the given identifier.
-    pub fn get_id(&self,id:PrimitiveIdentifier) -> Option<&Command<ET>> {
+    pub fn get_id(&self,id:PrimitiveIdentifier) -> Option<&TeXCommand<ET>> {
         let idx = id.as_u16() as usize;
         self.commands.get(idx)
     }

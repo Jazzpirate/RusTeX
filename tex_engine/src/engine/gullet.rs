@@ -5,7 +5,7 @@ pub mod methods;
 pub mod hvalign;
 
 use std::marker::PhantomData;
-use crate::commands::{ActiveConditional, CharOrPrimitive, Command, Macro, ResolvedToken};
+use crate::commands::{ActiveConditional, CharOrPrimitive, TeXCommand, Macro, ResolvedToken};
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::gullet::hvalign::AlignData;
@@ -25,6 +25,7 @@ use crate::tex::tokens::control_sequences::CSHandler;
 /// integers, dimensions, skips...
 /// Basically, all processing of [`Token`]s that does not result in scoped [`State`] changes or
 /// [nodes](crate::tex::nodes::NodeTrait) in the [`Stomach`](crate::engine::stomach::Stomach).
+/// The canonical implementation of a [`Gullet`] is [`DefaultGullet`].
 ///
 /// As part of that, it has to do some bookkeeping already when reading [`Token`]s from the
 /// [`Mouth`] and therefore implements wrapper methods around its methods as well.
@@ -53,21 +54,20 @@ pub trait Gullet<ET:EngineTypes> {
     /// Wrapper around [`Mouth::iterate`] that, in case we are in an `\halign` or `\valign`,
     /// make sure to replace `&`, `\cr` etc. with the appropriate tokens.
     /// See also [`EngineReferences::iterate`].
-    fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut Self,ET::Token) -> bool>(&mut self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,mut f:Fn) {
+    fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token) -> bool>(&mut self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,mut f:Fn) {
         match self.get_align_data() {
-            None => mouth.iterate(aux,state,|a,t|f(a,state,self,t)),
-            Some(_) => {
+            None => mouth.iterate(aux,state,|a,t|f(a,state,t)),
+            Some(data) => {
                 mouth.iterate(aux,state,|aux,t| {
-                    let data = self.get_align_data().unwrap();
                     match t.command_code() {
                         CommandCode::BeginGroup => {
                             data.ingroups += 1;
-                            f(aux,state,self,t)
+                            f(aux,state,t)
                         }
                         CommandCode::EndGroup => {
                             if data.ingroups == 0 { todo!() }
                             data.ingroups -= 1;
-                            f(aux,state,self,t)
+                            f(aux,state,t)
                         }
                         CommandCode::AlignmentTab if data.ingroups == data.groupval() => { todo!() }
                         CommandCode::Escape | CommandCode::Active if data.ingroups == data.groupval() => match Self::char_or_primitive(state, &t) {
@@ -77,9 +77,9 @@ pub trait Gullet<ET:EngineTypes> {
                             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
                                 todo!()
                             }
-                           _ => f(aux, state, self, t)
+                           _ => f(aux, state, t)
                         }
-                        _ => f(aux,state,self,t)
+                        _ => f(aux,state,t)
                     }
                 });
             }
@@ -221,15 +221,15 @@ pub trait Gullet<ET:EngineTypes> {
         match token.to_enum() {
             StandardToken::Primitive(id) => Some(CharOrPrimitive::Primitive(id)),
             StandardToken::Character(c,CommandCode::Active) => match state.get_ac_command(c) {
-                Some(Command::Primitive {name,..}) => Some(CharOrPrimitive::Primitive(*name)),
-                Some(Command::Char {char,code}) => Some(CharOrPrimitive::Char(*char,*code)),
-                Some(Command::CharDef(c)) => Some(CharOrPrimitive::Char(*c,CommandCode::Other)),
+                Some(TeXCommand::Primitive {name,..}) => Some(CharOrPrimitive::Primitive(*name)),
+                Some(TeXCommand::Char {char,code}) => Some(CharOrPrimitive::Char(*char, *code)),
+                Some(TeXCommand::CharDef(c)) => Some(CharOrPrimitive::Char(*c, CommandCode::Other)),
                 _ => None
             }
             StandardToken::ControlSequence(cs) => match state.get_command(&cs) {
-                Some(Command::Primitive {name,..}) => Some(CharOrPrimitive::Primitive(*name)),
-                Some(Command::Char {char,code}) => Some(CharOrPrimitive::Char(*char,*code)),
-                Some(Command::CharDef(c)) => Some(CharOrPrimitive::Char(*c,CommandCode::Other)),
+                Some(TeXCommand::Primitive {name,..}) => Some(CharOrPrimitive::Primitive(*name)),
+                Some(TeXCommand::Char {char,code}) => Some(CharOrPrimitive::Char(*char, *code)),
+                Some(TeXCommand::CharDef(c)) => Some(CharOrPrimitive::Char(*c, CommandCode::Other)),
                 _ => None
             }
             StandardToken::Character(c,code) => Some(CharOrPrimitive::Char(c,code))
@@ -397,8 +397,8 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Yields [`Token`]s from the input stream until and passes them on to `cont` until `cont` returns `false`.
-    pub fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token) -> bool>(&mut self,mut cont:Fn) {
-        self.gullet.iterate(self.mouth,self.aux,self.state,|a,s,g,t| cont(a, s, g, t))
+    pub fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token) -> bool>(&mut self,mut cont:Fn) {
+        self.gullet.iterate(self.mouth,self.aux,self.state,|a,s,t| cont(a, s, t))
     }
 
     /// Push the provided [`Token`] back onto the input stream.

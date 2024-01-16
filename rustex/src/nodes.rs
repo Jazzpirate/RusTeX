@@ -2,7 +2,7 @@ use std::fmt::Write;
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::pdflatex::nodes::PDFNode;
 use tex_engine::engine::state::State;
-use tex_engine::engine::stomach::ParLineSpec;
+use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::{CustomNodeTrait, NodeTrait, NodeType};
 use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::tex::numerics::{Dim32, Skip32};

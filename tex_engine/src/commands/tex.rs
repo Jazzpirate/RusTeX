@@ -1,6 +1,6 @@
 use chrono::{Datelike, Timelike};
 use crate::{add_node, cmstodo, cmstodos, cmtodo, cmtodos, expand_loop};
-use crate::commands::{Command, Macro, MacroSignature, CommandScope, ActiveConditional, ResolvedToken, PrimitiveCommand, CharOrPrimitive};
+use crate::commands::{TeXCommand, Macro, MacroSignature, CommandScope, ActiveConditional, ResolvedToken, PrimitiveCommand, CharOrPrimitive};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
@@ -14,12 +14,13 @@ use crate::tex::numerics::{Numeric, NumSet};
 use crate::tex::characters::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::{StandardToken, Token};
-use crate::engine::stomach::{SplitResult, Stomach, TeXMode};
+use crate::engine::stomach::{Stomach, TeXMode};
 use std::fmt::Write;
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW, IfxCmd, MacroParser};
 use crate::engine::fontsystem::FontSystem;
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
+use crate::engine::stomach::methods::SplitResult;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeList, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
 use crate::tex::nodes::horizontal::HNode;
@@ -212,7 +213,7 @@ pub fn delcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
 pub fn chardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let name = engine.read_control_sequence();
     let char = engine.read_charcode(true);
-    let cmd = Command::CharDef(char);
+    let cmd = TeXCommand::CharDef(char);
     engine.set_command(&name,Some(cmd),globally)
 }
 
@@ -246,7 +247,7 @@ pub fn char_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 pub fn csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let name = engine.read_csname();
     if engine.state.get_command(&name).is_none() {
-        engine.state.set_command(engine.aux,name.clone(),Some(Command::Primitive {name:PRIMITIVES.relax,cmd:PrimitiveCommand::Relax}),false)
+        engine.state.set_command(engine.aux, name.clone(), Some(TeXCommand::Primitive {name:PRIMITIVES.relax,cmd:PrimitiveCommand::Relax}), false)
     }
     engine.mouth.requeue(ET::Token::from_cs(name))
 }
@@ -299,35 +300,35 @@ pub fn muskip_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 pub fn countdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let name = engine.read_control_sequence();
     let i = engine.read_register_index(true);
-    let cmd = Command::IntRegister(i);
+    let cmd = TeXCommand::IntRegister(i);
     engine.set_command(&name,Some(cmd),globally)
 }
 
 pub fn dimendef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let name = engine.read_control_sequence();
     let i = engine.read_register_index(true);
-    let cmd = Command::DimRegister(i);
+    let cmd = TeXCommand::DimRegister(i);
     engine.set_command(&name,Some(cmd),globally)
 }
 
 pub fn skipdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let name = engine.read_control_sequence();
     let i = engine.read_register_index(true);
-    let cmd = Command::SkipRegister(i);
+    let cmd = TeXCommand::SkipRegister(i);
     engine.set_command(&name,Some(cmd),globally)
 }
 
 pub fn muskipdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let name = engine.read_control_sequence();
     let i = engine.read_register_index(true);
-    let cmd = Command::MuSkipRegister(i);
+    let cmd = TeXCommand::MuSkipRegister(i);
     engine.set_command(&name,Some(cmd),globally)
 }
 
 pub fn toksdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let name = engine.read_control_sequence();
     let i = engine.read_register_index(true);
-    let cmd = Command::ToksRegister(i);
+    let cmd = TeXCommand::ToksRegister(i);
     engine.set_command(&name,Some(cmd),globally)
 }
 
@@ -342,10 +343,10 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:
         None => todo!("file end error")
     };
     let mut parser = MacroParser::new();
-    engine.iterate(|_,_,_,t| parser.do_signature_token(t));
+    engine.iterate(|_,_,t| parser.do_signature_token(t));
     engine.read_until_endgroup(|_,_,t| parser.do_expansion_token(t));
     let cmd = parser.close(long,outer,protected);
-    engine.set_command(&cm,Some(Command::Macro(cmd)),globally)
+    engine.set_command(&cm, Some(TeXCommand::Macro(cmd)), globally)
 }
 
 pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
@@ -360,10 +361,10 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer
     };
 
     let mut parser = MacroParser::new();
-    engine.iterate(|_,_,_,t| parser.do_signature_token(t));
+    engine.iterate(|_,_,t| parser.do_signature_token(t));
     engine.expand_until_endgroup(false,true,|_,_,t| parser.do_expansion_token(t));
     let cmd = parser.close(long,outer,protected);
-    engine.set_command(&cm,Some(Command::Macro(cmd)),globally)
+    engine.set_command(&cm, Some(TeXCommand::Macro(cmd)), globally)
 }
 
 
@@ -424,7 +425,7 @@ pub fn wd_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,_g
 pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,protected:bool,_globally:bool) {
     let allow_others = !outer && !long && !protected;
     crate::expand_loop!(engine,token,
-        ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::Assignment(a)})) => match *name {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::Assignment(a)})) => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.long => return self::long(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.protected => return super::etex::protected(engine,token,outer,long,protected,true),
@@ -436,42 +437,42 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,out
             n if allow_others => return ET::Stomach::do_assignment(engine,n,token,*a,true),
             _ => todo!("throw error")
         }
-        ResolvedToken::Cmd(Some(Command::IntRegister(u))) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::IntRegister(u))) if allow_others =>
             return ET::Stomach::assign_int_register(engine,*u,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt})) if allow_others =>
             return ET::Stomach::assign_primitive_int(engine,*name,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Int {assign:Some(f),..},name})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Int {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
-        ResolvedToken::Cmd(Some(Command::DimRegister(u))) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::DimRegister(u))) if allow_others =>
             return ET::Stomach::assign_dim_register(engine,*u,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim})) if allow_others =>
             return ET::Stomach::assign_primitive_dim(engine,*name,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Dim {assign:Some(f),..},name})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Dim {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
-        ResolvedToken::Cmd(Some(Command::SkipRegister(u))) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::SkipRegister(u))) if allow_others =>
             return ET::Stomach::assign_skip_register(engine,*u,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip})) if allow_others =>
             return ET::Stomach::assign_primitive_skip(engine,*name,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Skip {assign:Some(f),..},name})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Skip {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
-        ResolvedToken::Cmd(Some(Command::MuSkipRegister(u))) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::MuSkipRegister(u))) if allow_others =>
             return ET::Stomach::assign_muskip_register(engine,*u,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveMuSkip})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveMuSkip})) if allow_others =>
             return ET::Stomach::assign_primitive_muskip(engine,*name,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::MuSkip {assign:Some(f),..},name})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::MuSkip {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
-        ResolvedToken::Cmd(Some(Command::ToksRegister(u))) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::ToksRegister(u))) if allow_others =>
             return ET::Stomach::assign_toks_register(engine,*u,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) if allow_others =>
             return ET::Stomach::assign_primitive_toks(engine,*name,true),
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::FontCmd {assign:Some(f),..},name})) if allow_others =>
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         o => todo!("\\global {:?}",o)
     )
 }
 pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_outer:bool,long:bool,protected:bool,globally:bool) {
     crate::expand_loop!(engine,token,
-        ResolvedToken::Cmd(Some(Command::Primitive{name,..})) => match *name {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.long => return self::long(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.protected => return super::etex::protected(engine,token,true,long,protected,globally),
@@ -488,7 +489,7 @@ pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_out
 
 pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,_long:bool,protected:bool,globally:bool) {
     crate::expand_loop!(engine,token,
-        ResolvedToken::Cmd(Some(Command::Primitive{name,..})) => match *name {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.long => return self::long(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.protected => return super::etex::protected(engine,token,outer,true,protected,globally),
@@ -507,34 +508,34 @@ macro_rules! modify_num {
     ($engine:ident,$globally:ident,$int:expr,$dim:expr,$skip:expr) => {
         crate::expand_loop!($engine,token,
             ResolvedToken::Cmd(Some(cm)) => match cm {
-                Command::Primitive{name,..} if *name == PRIMITIVES.count => {
+                TeXCommand::Primitive{name,..} if *name == PRIMITIVES.count => {
                     let idx = $engine.read_register_index(false);
                     return crate::commands::methods::modify_int_register($engine,idx,$globally,$int)
                 }
-                Command::IntRegister(idx) => {
+                TeXCommand::IntRegister(idx) => {
                     return crate::commands::methods::modify_int_register($engine,*idx,$globally,$int)
                 }
-                Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt} => {
+                TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt} => {
                     return crate::commands::methods::modify_primitive_int($engine,*name,$globally,$int)
                 }
-                Command::Primitive{name,..} if *name == PRIMITIVES.dimen => {
+                TeXCommand::Primitive{name,..} if *name == PRIMITIVES.dimen => {
                     let idx = $engine.read_register_index(false);
                     return crate::commands::methods::modify_dim_register($engine,idx,$globally,$dim)
                 }
-                Command::DimRegister(idx) => {
+                TeXCommand::DimRegister(idx) => {
                     return crate::commands::methods::modify_dim_register($engine,*idx,$globally,$dim)
                 }
-                Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim} => {
+                TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim} => {
                     return crate::commands::methods::modify_primitive_dim($engine,*name,$globally,$dim)
                 }
-                Command::Primitive{name,..} if *name == PRIMITIVES.skip => {
+                TeXCommand::Primitive{name,..} if *name == PRIMITIVES.skip => {
                     let idx = $engine.read_register_index(false);
                     return crate::commands::methods::modify_skip_register($engine,idx,$globally,$skip)
                 }
-                Command::SkipRegister(idx) => {
+                TeXCommand::SkipRegister(idx) => {
                     return crate::commands::methods::modify_skip_register($engine,*idx,$globally,$skip)
                 }
-                Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
+                TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
                     return crate::commands::methods::modify_primitive_skip($engine,*name,$globally,$skip)
                 }
                 o => todo!("{:?} in \\advance",o)
@@ -716,7 +717,7 @@ pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
         }
         _ => ()
     }
-    engine.state.set_command(engine.aux,cs,Some(Command::Font(font)),global)
+    engine.state.set_command(engine.aux, cs, Some(TeXCommand::Font(font)), global)
 }
 
 
@@ -1034,11 +1035,11 @@ pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
 
 pub fn immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     expand_loop!(engine,token,
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Whatsit { immediate,.. },..})) => {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Whatsit { immediate,.. },..})) => {
             return immediate(engine,token)
         },
         ResolvedToken::Tk {char,code} => ET::Stomach::do_char(engine,token,char,code),
-        ResolvedToken::Cmd(Some(Command::Char {char,code})) => ET::Stomach::do_char(engine,token,*char,*code),
+        ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => ET::Stomach::do_char(engine,token,*char,*code),
         ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
         ResolvedToken::Cmd(Some(c)) =>
             crate::do_cmd!(engine,token,c)
@@ -1131,7 +1132,7 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,glob
             StandardToken::Character(c,CommandCode::Active) =>
                 engine.state.get_ac_command(c).cloned(),
             StandardToken::Character(c,cc) =>
-                Some(Command::Char{char:c,code:cc})
+                Some(TeXCommand::Char{char:c,code:cc})
         };
         engine.set_command(&cm,cmd,globally);
         return
@@ -1164,7 +1165,7 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
         StandardToken::Character(c,CommandCode::Active) =>
             engine.state.get_ac_command(c).cloned(),
         StandardToken::Character(c,cc) =>
-            Some(Command::Char{char:c,code:cc}),
+            Some(TeXCommand::Char{char:c,code:cc}),
         StandardToken::Primitive(id) =>
             engine.state.primitives().get_id(id).cloned(),
     };
@@ -1228,7 +1229,7 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
         todo!("matchchardef out of range")
     }
     let i = i as u32;
-    engine.set_command(&cm,Some(Command::MathChar(i)),globally)
+    engine.set_command(&cm, Some(TeXCommand::MathChar(i)), globally)
 }
 
 pub fn mathchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
@@ -1358,8 +1359,8 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
             engine.requeue(token),
         ResolvedToken::Cmd(Some(cm)) => {
             match cm {
-                Command::Macro(_) |
-                Command::Primitive {cmd:
+                TeXCommand::Macro(_) |
+                TeXCommand::Primitive {cmd:
                     PrimitiveCommand::Expandable(_) |
                     PrimitiveCommand::SimpleExpandable(_) |
                     PrimitiveCommand::Conditional(_),..} => {
@@ -1422,7 +1423,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globa
             params:engine.aux.memory.empty_list().into()
         }
     };
-    engine.set_command(&cs,Some(Command::Macro(m)),globally)
+    engine.set_command(&cs, Some(TeXCommand::Macro(m)), globally)
 }
 
 const ROMAN: &[(u8, i64)] = &[(b'm', 0),(b'd', 2),(b'c', 5),(b'l', 2),(b'x', 5),(b'v', 2),(b'i', 5)];
@@ -2560,13 +2561,13 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
             let mode = data.inner_mode;
             crate::expand_loop!(engine,token,
                 ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
-                ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::EndGroup,..})) => {
+                ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::EndGroup,..})) => {
                     todo!("close align?")
                 }
                 ResolvedToken::Tk{code:CommandCode::Space,..} => (),
                 /*ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                     if *name == PRIMITIVES.crcr => (),*/
-                ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.omit => {
+                ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.omit => {
                     engine.gullet.get_align_data().unwrap().omit = true;
                     return super::methods::open_align_cell(engine,mode)
                 },
@@ -2760,8 +2761,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         let refs = engine.get_engine_refs();
         let relax = refs.aux.memory.cs_interner_mut().new("relax");
         let nullfont = refs.aux.memory.cs_interner_mut().new("nullfont");
-        refs.state.set_command(refs.aux,relax,Some(Command::Primitive {name:PRIMITIVES.relax,cmd:PrimitiveCommand::Relax}),true);
-        refs.state.set_command(refs.aux,nullfont,Some(Command::Font(refs.fontsystem.null())),true)
+        refs.state.set_command(refs.aux, relax, Some(TeXCommand::Primitive {name:PRIMITIVES.relax,cmd:PrimitiveCommand::Relax}), true);
+        refs.state.set_command(refs.aux, nullfont, Some(TeXCommand::Font(refs.fontsystem.null())), true)
     }
     register_unexpandable(engine,"mark",CommandScope::Any,mark);
     register_unexpandable(engine,"/",CommandScope::Any,char_slash);

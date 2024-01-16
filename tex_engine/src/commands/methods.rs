@@ -1,7 +1,7 @@
-/*! Utility methods for [`Command`]s.
+/*! Utility methods for [`TeXCommand`]s.
 */
 
-use crate::commands::{CharOrPrimitive, Command, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
+use crate::commands::{CharOrPrimitive, TeXCommand, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
@@ -166,9 +166,9 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
     let mut ate_relax = scaled == ToOrSpread::None;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..})) if !ate_relax => ate_relax = true,
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) if !ate_relax => ate_relax = true,
         ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
-        ResolvedToken::Cmd(Some(Command::Char{code:CommandCode::BeginGroup,..})) => {
+        ResolvedToken::Cmd(Some(TeXCommand::Char{code:CommandCode::BeginGroup,..})) => {
             engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
             engine.push_every(every);
             return scaled
@@ -188,15 +188,15 @@ pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineRefere
         match engine.resolve(&token) {
             ResolvedToken::Tk {char,code} => return (Some(char),code),
             ResolvedToken::Cmd(cmd) => match cmd {
-                Some(Command::Macro(m)) if exp =>
+                Some(TeXCommand::Macro(m)) if exp =>
                     ET::Gullet::do_macro(engine,m.clone(),token),
-                Some(Command::Primitive {name,cmd:PrimitiveCommand::Conditional(cond)}) if exp =>
+                Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Conditional(cond)}) if exp =>
                     ET::Gullet::do_conditional(engine,*name,token,*cond,false),
-                Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(e)}) if exp =>
+                Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Expandable(e)}) if exp =>
                     ET::Gullet::do_expandable(engine,*name,token,*e),
-                Some(Command::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)}) if exp =>
+                Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)}) if exp =>
                     ET::Gullet::do_simple_expandable(engine,*name,token,*e),
-                Some(Command::Char {char,code},..) => {
+                Some(TeXCommand::Char {char,code}, ..) => {
                     return (Some(*char),*code)
                 }
                 _ => return (None,CommandCode::Escape)
@@ -234,18 +234,18 @@ impl<ET:EngineTypes> IfxCmd<ET> {
         match r {
             ResolvedToken::Tk {char,code,..} => Self::Char(char,code),
             ResolvedToken::Cmd(cmd) => match cmd {
-                Some(Command::Char {char,code}) => Self::Char(*char,*code),
+                Some(TeXCommand::Char {char,code}) => Self::Char(*char, *code),
                 None => Self::Undefined,
-                Some(Command::Macro(m)) => Self::Macro(m.clone()),
-                Some(Command::CharDef(c)) => Self::Chardef(*c),
-                Some(Command::Font(f)) => Self::Font(f.clone()),
-                Some(Command::MathChar(u)) => Self::MathChar(*u),
-                Some(Command::IntRegister(u)) => Self::IntRegister(*u),
-                Some(Command::DimRegister(u)) => Self::DimRegister(*u),
-                Some(Command::SkipRegister(u)) => Self::SkipRegister(*u),
-                Some(Command::MuSkipRegister(u)) => Self::MuSkipRegister(*u),
-                Some(Command::ToksRegister(u)) => Self::ToksRegister(*u),
-                Some(Command::Primitive{name,..}) => Self::Primitive(*name)
+                Some(TeXCommand::Macro(m)) => Self::Macro(m.clone()),
+                Some(TeXCommand::CharDef(c)) => Self::Chardef(*c),
+                Some(TeXCommand::Font(f)) => Self::Font(f.clone()),
+                Some(TeXCommand::MathChar(u)) => Self::MathChar(*u),
+                Some(TeXCommand::IntRegister(u)) => Self::IntRegister(*u),
+                Some(TeXCommand::DimRegister(u)) => Self::DimRegister(*u),
+                Some(TeXCommand::SkipRegister(u)) => Self::SkipRegister(*u),
+                Some(TeXCommand::MuSkipRegister(u)) => Self::MuSkipRegister(*u),
+                Some(TeXCommand::ToksRegister(u)) => Self::ToksRegister(*u),
+                Some(TeXCommand::Primitive{name,..}) => Self::Primitive(*name)
             },
         }
     }
@@ -433,13 +433,13 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
     while let Some(token) = engine.mouth.get_next_opt(engine.aux,engine.state) {
         crate::expand!(engine,token;
             ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
-            ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::EndGroup,..})) => {
+            ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::EndGroup,..})) => {
                 engine.gullet.pop_align();
                 return ET::Stomach::close_align(engine)
             }
             ResolvedToken::Tk{code:CommandCode::Space,..} => (),
-            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.crcr => (),
-            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.noalign => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.crcr => (),
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.noalign => {
                 engine.expand_until_bgroup(true);
                 engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(
@@ -474,7 +474,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                 );
                 return
             }
-            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.omit => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.omit => {
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
@@ -711,7 +711,7 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
     match engine.read_keywords(&[b"width",b"height",b"depth"]) {
         Some(_) => todo!("leaders with dimensions"),
         _ => crate::expand_loop!(engine,token,
-            ResolvedToken::Cmd(Some(Command::Primitive {cmd:PrimitiveCommand::Box(read),..})) => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Box(read),..})) => {
                 match read(engine,token) {
                     Ok(None) => todo!(),
                     Ok(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp),
@@ -728,7 +728,7 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                     }
                 }
             }
-            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.hrule || *name == PRIMITIVES.vrule => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.hrule || *name == PRIMITIVES.vrule => {
                 let mut width = None;
                 let mut height = None;
                 let mut depth = None;
@@ -756,7 +756,7 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
 
 fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<ET>,tp:LeaderType) {
     crate::expand_loop!(engine,token,
-        ResolvedToken::Cmd(Some(Command::Primitive{name,..})) => {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => {
             let skip = match *name {
                 n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false)),
                 n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false)),
@@ -796,10 +796,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn expand(&mut self,token:ET::Token) {
         match self.resolve(&token) {
             ResolvedToken::Cmd(Some(cmd)) => match cmd {
-                Command::Macro(m) => ET::Gullet::do_macro(self,m.clone(),token),
-                Command::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)} => ET::Gullet::do_conditional(self,*name,token,*cond,false),
-                Command::Primitive{name,cmd:PrimitiveCommand::Expandable(expand)} => ET::Gullet::do_expandable(self,*name,token,*expand),
-                Command::Primitive{name,cmd:PrimitiveCommand::SimpleExpandable(exp)} => ET::Gullet::do_simple_expandable(self,*name,token,*exp),
+                TeXCommand::Macro(m) => ET::Gullet::do_macro(self, m.clone(), token),
+                TeXCommand::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)} => ET::Gullet::do_conditional(self, *name, token, *cond, false),
+                TeXCommand::Primitive{name,cmd:PrimitiveCommand::Expandable(expand)} => ET::Gullet::do_expandable(self, *name, token, *expand),
+                TeXCommand::Primitive{name,cmd:PrimitiveCommand::SimpleExpandable(exp)} => ET::Gullet::do_simple_expandable(self, *name, token, *exp),
                 _ => self.requeue(token)
             }
             _ => self.requeue(token)
@@ -842,7 +842,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         let mut namev = vec!();
         crate::expand_loop!(self,token,
             ResolvedToken::Tk {char,..} => namev.push(char),
-            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.endcsname => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.endcsname => {
                 *self.gullet.csnames() -= 1;
                 let id = self.aux.memory.cs_interner_mut().from_chars(&namev);
                 //engine.aux.memory.return_string(name);
@@ -885,100 +885,100 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,mut cont:F) {
         expand_loop!(self,token,
             ResolvedToken::Cmd(Some(c)) => match c {
-                Command::Primitive{cmd:PrimitiveCommand::Int{read,..},..} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::Int{read,..},..} => {
                     let val = read(self,token);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::Dim{read,..},..} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::Dim{read,..},..} => {
                     let val = read(self,token);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::Skip{read,..},..} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::Skip{read,..},..} => {
                     let val = read(self,token);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::MuSkip{read,..},..} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::MuSkip{read,..},..} => {
                     let val = read(self,token);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::IntRegister(u) => {
+                TeXCommand::IntRegister(u) => {
                     let val = self.state.get_int_register(*u);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::DimRegister(u) => {
+                TeXCommand::DimRegister(u) => {
                     let val = self.state.get_dim_register(*u);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::SkipRegister(u) => {
+                TeXCommand::SkipRegister(u) => {
                     let val = self.state.get_skip_register(*u);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::MuSkipRegister(u) => {
+                TeXCommand::MuSkipRegister(u) => {
                     let val = self.state.get_muskip_register(*u);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::PrimitiveInt,name} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveInt,name} => {
                     let val = self.state.get_primitive_int(*name);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::PrimitiveDim,name} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveDim,name} => {
                     let val = self.state.get_primitive_dim(*name);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::PrimitiveSkip,name} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveSkip,name} => {
                     let val = self.state.get_primitive_skip(*name);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::PrimitiveMuSkip,name} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveMuSkip,name} => {
                     let val = self.state.get_primitive_muskip(*name);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::CharDef(c) => {
+                TeXCommand::CharDef(c) => {
                     let val : u64 = (*c).into();
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
                     return ()
                 }
-                Command::MathChar(u) => {
+                TeXCommand::MathChar(u) => {
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",u).unwrap();
                     return ()
                 }
-                Command::ToksRegister(u) => {
+                TeXCommand::ToksRegister(u) => {
                     for t in &self.state.get_toks_register(*u).0 {
                         cont(self.aux,self.state,self.gullet,t.clone())
                     }
                     return ()
                 }
-                Command::Primitive{name,..} if *name == PRIMITIVES.toks => {
+                TeXCommand::Primitive{name,..} if *name == PRIMITIVES.toks => {
                     let u = self.read_register_index(false);
                     for t in &self.state.get_toks_register(u).0 {
                         cont(self.aux,self.state,self.gullet,t.clone())
                     }
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::PrimitiveToks,name} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveToks,name} => {
                     for t in &self.state.get_primitive_tokens(*name).0 {
                         cont(self.aux,self.state,self.gullet,t.clone())
                     }
                     return ()
                 }
-                Command::Font(fnt) => {
+                TeXCommand::Font(fnt) => {
                     let t = fnt.name();
                     cont(self.aux,self.state,self.gullet,ET::Token::from_cs(t.clone()));
                     return ()
                 }
-                Command::Primitive{cmd:PrimitiveCommand::FontCmd{read,..},..} => {
+                TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd{read,..},..} => {
                     let fnt = read(self,token);
                     let t = fnt.name();
                     cont(self.aux,self.state,self.gullet,ET::Token::from_cs(t.clone()));
@@ -994,7 +994,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// e.g. from `\delimiter` or the `\delcode` of the next character
     pub fn read_opt_delimiter(&mut self) -> Option<Delimiter<ET>> {
         crate::expand_loop!(self,token,
-            ResolvedToken::Cmd(Some(Command::Primitive {name,..}))  if *name == PRIMITIVES.delimiter => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..}))  if *name == PRIMITIVES.delimiter => {
                 let num = self.read_int(false);
                 return Some(Delimiter::from_int(num,self.state))
             }

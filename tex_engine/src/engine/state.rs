@@ -4,12 +4,13 @@ pub mod tex_state;
 
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::commands::{Command, PrimitiveCommand};
+use crate::commands::{TeXCommand, PrimitiveCommand};
 use crate::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::boxes::{BoxType, TeXBox};
 use crate::tex::nodes::math::UnresolvedMathFontStyle;
+use crate::tex::tokens::control_sequences::CSName;
 
 /// The type of a group, e.g. `{...}`, `\begingroup...\endgroup`, `$...$`.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -27,7 +28,7 @@ pub enum GroupType {
 }
 
 /// A TeX state; holds all the different parameters, equivalents, registers etc.
-/// The canoncial implementation is [`TeXState`](tex_state::TeXState).
+/// The canoncial implementation is [`TeXState`](tex_state::DefaultState).
 ///
 /// Note that we do not require `ET:`[`EngineTypes`]`<`[`State`](EngineTypes::State)`=Self>` - this allows for
 /// implementing your own State by just wrapping an existing implementation in a new wrapper struct and pass on functionality
@@ -46,7 +47,7 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
         }
     }
 
-    /// Set the current `\aftergroup` [`Token`]
+    /// Append a [`Token`] to be inserted when the current group ends (i.e. `\aftergroup`)
     fn aftergroup(&mut self,token:ET::Token);
 
     /// Get the current set of mathfonts (text, script, scriptscript)
@@ -65,7 +66,7 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
     fn primitives(&self) -> &PrimitiveCommands<ET>;
     /// push a new group level to the scoping stack; `line_number` is used for `\tracinggroups`
     fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize);
-    /// pop a group level from the scoping stack. Needs the mouth to insert the `\aftergroup` [`Token`] (if set)
+    /// pop a group level from the scoping stack. Needs the mouth to insert the `\aftergroup` [`Token`]s (if set)
     fn pop(&mut self,aux:&mut EngineAux<ET>,mouth: &mut ET::Mouth);
     /// The current [`GroupType] (i.e. `\currentgrouptype`).
     fn get_group_type(&self) -> Option<GroupType>;
@@ -179,13 +180,13 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
     /// Set a primitive token list
     fn set_primitive_tokens(&mut self,aux:&EngineAux<ET>,name:PrimitiveIdentifier,v:TokenList<ET::Token>,globally:bool);
     /// Get the current definition for the control sequence name
-    fn get_command(&self, name:&ET::CSName) -> Option<&Command<ET>>;
+    fn get_command(&self, name:&ET::CSName) -> Option<&TeXCommand<ET>>;
     /// Set the current definition for the control sequence name
-    fn set_command(&mut self,aux:&EngineAux<ET>, name:ET::CSName, cmd:Option<Command<ET>>, globally:bool);
+    fn set_command(&mut self, aux:&EngineAux<ET>, name:ET::CSName, cmd:Option<TeXCommand<ET>>, globally:bool);
     /// Get the current definition for the active character
-    fn get_ac_command(&self, c:ET::Char) -> Option<&Command<ET>>;
+    fn get_ac_command(&self, c:ET::Char) -> Option<&TeXCommand<ET>>;
     /// Set the current definition for the active character
-    fn set_ac_command(&mut self,aux:&EngineAux<ET>, c:ET::Char, cmd:Option<Command<ET>>, globally:bool);
+    fn set_ac_command(&mut self, aux:&EngineAux<ET>, c:ET::Char, cmd:Option<TeXCommand<ET>>, globally:bool);
 }
 
 /// Convenience trait for tracking state changes in a [`StateStack`] and rolling them back
@@ -194,7 +195,11 @@ pub trait StateChangeTracker<ET:EngineTypes>:State<ET> {
     /// Get the current [`StateStack`]
     fn stack(&mut self) -> &mut StateStack<ET>;
     /// Change a field of the state, and add the change to the [`StateStack`]. Also takes care of inspecting
-    /// and considering the current `\globaldefs` value.
+    /// and considering the current `\globaldefs` value and passes on the *actual* computed `globally` value
+    /// to the continuation function, which should return the [`StateChange`] containg the *old* value.
+    ///
+    /// For example, on `\count5=4`, you could call this function like this:
+    /// `self.change_field(false,|slf,g| `[`StateChange::IntRegister`]`(5,std::mem::replace(&mut slf.int_registers[5],4)))`
     fn change_field<F:FnOnce(&mut Self,bool) -> StateChange<ET>>(&mut self,globally:bool,f:F) {
         let globaldefs = self.get_primitive_int(PRIMITIVES.globaldefs);
         let zero = ET::Int::default();
@@ -209,7 +214,7 @@ pub trait StateChangeTracker<ET:EngineTypes>:State<ET> {
 }
 
 /// A change to a [`State`], to be potentially rolled back when a group ends.
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub enum StateChange<ET:EngineTypes> {
     Catcode{char:ET::Char,old:CategoryCode},
     SfCode{char:ET::Char,old:u16},
@@ -236,8 +241,8 @@ pub enum StateChange<ET:EngineTypes> {
     PrimitiveToks{name:PrimitiveIdentifier,old:TokenList<ET::Token>},
     PrimitiveSkip{name:PrimitiveIdentifier,old:ET::Skip},
     PrimitiveMuSkip{name:PrimitiveIdentifier,old:ET::MuSkip},
-    Command{name:ET::CSName,old:Option<Command<ET>>},
-    AcCommand{ char:ET::Char,old:Option<Command<ET>>},
+    Command{name:ET::CSName,old:Option<TeXCommand<ET>>},
+    AcCommand{ char:ET::Char,old:Option<TeXCommand<ET>>},
     // /// A custom state change, to be implemented by the engine, if additional state change types are needed
     //Custom{ change:Ptr<Mutex<Option<Box<dyn CustomStateChange<ET>>>>>},
 }
@@ -250,61 +255,21 @@ pub trait CustomStateChange<ET:EngineTypes> {
     fn restore(&mut self,aux:&EngineAux<ET>,state:&mut ET::State,trace:bool);
 } */
 
-impl<ET:EngineTypes> StateChange<ET> {
-    /// Check if this state change is equivalent to another one, i.e. if it needs to be rolled back
-    /// when a group ends, or is superseded by a previous change
-    pub fn equiv(&self,other:&Self) -> bool {
-        if std::mem::discriminant(self) != std::mem::discriminant(other) { return false; }
-        match (self,other) {
-            (StateChange::Catcode{char:c1,..},StateChange::Catcode{char:c2,..}) => c1 == c2,
-            (StateChange::SfCode {char:c1,..},StateChange::SfCode{char:c2,..}) => c1 == c2,
-            (StateChange::LcCode {char:c1,..},StateChange::LcCode{char:c2,..}) => c1 == c2,
-            (StateChange::UcCode {char:c1,..},StateChange::UcCode{char:c2,..}) => c1 == c2,
-            (StateChange::MathCode {char:c1,..},StateChange::MathCode{char:c2,..}) => c1 == c2,
-            (StateChange::CurrentFont(_),StateChange::CurrentFont(_)) => true,
-            (StateChange::TextFont{idx:i1,..},StateChange::TextFont{idx:i2,..}) => i1 == i2,
-            (StateChange::ScriptFont{idx:i1,..},StateChange::ScriptFont{idx:i2,..}) => i1 == i2,
-            (StateChange::ScriptScriptFont{idx:i1,..},StateChange::ScriptScriptFont{idx:i2,..}) => i1 == i2,
-            (StateChange::EndlineChar{..},StateChange::EndlineChar{..}) => true,
-            (StateChange::EscapeChar{..},StateChange::EscapeChar{..}) => true,
-            (StateChange::NewlineChar{..},StateChange::NewlineChar{..}) => true,
-            (StateChange::ParShape{..},StateChange::ParShape{..}) => true,
-            (StateChange::DelCode {char:c1,..},StateChange::DelCode{char:c2,..}) => c1 == c2,
-            (StateChange::IntRegister {idx:i1,..},StateChange::IntRegister{idx:i2,..}) => i1 == i2,
-            (StateChange::DimRegister {idx:i1,..},StateChange::DimRegister{idx:i2,..}) => i1 == i2,
-            (StateChange::SkipRegister {idx:i1,..},StateChange::SkipRegister{idx:i2,..}) => i1 == i2,
-            (StateChange::MuSkipRegister {idx:i1,..},StateChange::MuSkipRegister{idx:i2,..}) => i1 == i2,
-            (StateChange::ToksRegister {idx:i1,..},StateChange::ToksRegister{idx:i2,..}) => i1 == i2,
-            (StateChange::BoxRegister {idx:i1,..},StateChange::BoxRegister{idx:i2,..}) => i1 == i2,
-            (StateChange::PrimitiveInt{name:n1,..},StateChange::PrimitiveInt{name:n2,..}) => n1 == n2,
-            (StateChange::PrimitiveDim{name:n1,..},StateChange::PrimitiveDim{name:n2,..}) => n1 == n2,
-            (StateChange::PrimitiveSkip{name:n1,..},StateChange::PrimitiveSkip{name:n2,..}) => n1 == n2,
-            (StateChange::PrimitiveMuSkip{name:n1,..},StateChange::PrimitiveMuSkip{name:n2,..}) => n1 == n2,
-            (StateChange::PrimitiveToks{name:n1,..},StateChange::PrimitiveToks{name:n2,..}) => n1 == n2,
-            (StateChange::Command{name:c1,..},StateChange::Command{name:c2,..}) => c1 == c2,
-            (StateChange::AcCommand{ char:c1,..},StateChange::AcCommand{ char:c2,..}) => c1 == c2,
-            //(StateChange::Custom{ change:e1},StateChange::Custom{ change:e2}) => e1.equiv(&***e2),
-            _ => false
-        }
-    }
-}
-
 /// A level of the [`StateStack`], to be rolled back when a group ends
 #[derive(Clone)]
 pub struct StackLevel<ET:EngineTypes> {
     /// The type of the group
     pub group_type:GroupType,
-    /// The `\aftergroup` [`Token`] to be inserted when the group ends
+    /// The `\aftergroup` [`Token`]s to be inserted when the group ends
     pub aftergroup:Vec<ET::Token>,
-    /// The changes to be rolled back when the group ends
-    pub changes:Vec<StateChange<ET>>,
-    //keep_track:Vec<C>
+    changes:Vec<StateChangeI<ET>>
 }
 
 /// A stack of [`StateChange`]s, to be rolled back when a group ends
 pub struct StateStack<ET:EngineTypes> {
+    /// The stack of [`StackLevel`]s
     pub stack:Vec<StackLevel<ET>>,
-    vecs:Vec<Vec<StateChange<ET>>>
+    vecs:Vec<Vec<StateChangeI<ET>>>
 }
 impl<ET:EngineTypes> Clone for StateStack<ET> {
     fn clone(&self) -> Self {
@@ -313,14 +278,8 @@ impl<ET:EngineTypes> Clone for StateStack<ET> {
             vecs:vec!()
         }
     }
-
 }
 impl<ET:EngineTypes> StateStack<ET> {
-    /// Memory management; gives back a Vec<StateChange> to the pool to avoid frequent allocations
-    pub fn give_back(&mut self,mut lvl:StackLevel<ET>) {
-        lvl.changes.clear();
-        self.vecs.push(lvl.changes);
-    }
     /// Create a new [`StateStack`]
     pub fn new() -> Self { Self { stack:vec!(),vecs:vec!() } }
     /// Push a new stack level onto the stack with the given [`GroupType`], as a new group begins
@@ -335,16 +294,28 @@ impl<ET:EngineTypes> StateStack<ET> {
         };
         self.stack.push(lvl);
     }
+    /// Pop a stack level from the stack, as a group ends. Returns the [`GroupType`], the `\aftergroup` [`Token`]s,
+    /// and an iterator over the [`StateChange`]s to be rolled back.
+    pub fn pop<'a>(&'a mut self) -> (GroupType,Vec<ET::Token>,ChangeIter<'a,ET>) {
+        let lvl = self.stack.pop().unwrap();
+        (lvl.group_type,lvl.aftergroup,ChangeIter { stack:self, chs:lvl.changes })
+    }
     /// Register a global state change, never to be rolled back;
     /// if there is a stack level, remove any equivalent previous changes
     pub fn add_change_globally(&mut self,change:StateChange<ET>) {
+        let change = change.into();
         if self.stack.is_empty() { return; }
         for lvl in &mut self.stack {
-            lvl.changes.retain(|c| !c.equiv(&change));
+            for c in lvl.changes.iter_mut() {
+                if c.equiv(&change) {
+                    *c = StateChangeI::None;
+                }
+            }
         }
     }
     /// Register a local state change, to be rolled back when the current group ends
     pub fn add_change_locally(&mut self,change:StateChange<ET>) {
+        let change = change.into();
         match self.stack.last_mut() {
             Some(lvl) => {
                 if lvl.changes.iter().all(|c| !c.equiv(&change)) {
@@ -356,9 +327,76 @@ impl<ET:EngineTypes> StateStack<ET> {
     }
 }
 
+/// An iterator over [`StateChange`]s to be rolled back when a group ends. Iterated over using [`ChangeIter::close`].
+pub struct ChangeIter<'a,ET:EngineTypes> {
+    stack:&'a mut StateStack<ET>,
+    chs:Vec<StateChangeI<ET>>
+}
+impl<'a,ET:EngineTypes> ChangeIter<'a,ET> {
+    /// Close the iterator, rolling back any changes
+    pub fn close<F:FnMut(StateChange<ET>)>(mut self,mut f:F) {
+        for ch in self.chs.drain(..) {
+            if let StateChangeI::Ch {ch,..} = ch {
+                f(ch);
+            }
+        }
+        self.stack.vecs.push(self.chs);
+    }
+}
+
+#[derive(Clone)]
+enum StateChangeI<ET:EngineTypes> {
+    None,
+    Ch {
+        id:(std::mem::Discriminant<StateChange<ET>>,usize),ch:StateChange<ET>
+    }
+}
+impl<ET:EngineTypes> StateChangeI<ET> {
+    fn equiv(&self,other:&StateChangeI<ET>) -> bool {
+        match (self,other) {
+            (StateChangeI::Ch{id:id1,..},StateChangeI::Ch{id:id2,..})
+            => id1 == id2,
+            _  => false
+        }
+    }
+}
+impl<ET:EngineTypes> From<StateChange<ET>> for StateChangeI<ET> {
+    fn from(value: StateChange<ET>) -> Self {
+        match &value {
+            StateChange::Catcode{char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+            StateChange::SfCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+            StateChange::LcCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+            StateChange::UcCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+            StateChange::MathCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+            StateChange::CurrentFont(_) => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
+            StateChange::EndlineChar{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
+            StateChange::EscapeChar{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
+            StateChange::NewlineChar{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
+            StateChange::ParShape{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
+            StateChange::TextFont{idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx as usize), ch:value },
+            StateChange::ScriptFont{idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx as usize), ch:value },
+            StateChange::ScriptScriptFont{idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx as usize), ch:value },
+            StateChange::DelCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+            StateChange::IntRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
+            StateChange::DimRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
+            StateChange::SkipRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
+            StateChange::MuSkipRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
+            StateChange::ToksRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
+            StateChange::BoxRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
+            StateChange::PrimitiveInt{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
+            StateChange::PrimitiveDim{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
+            StateChange::PrimitiveSkip{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
+            StateChange::PrimitiveMuSkip{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
+            StateChange::PrimitiveToks{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
+            StateChange::Command{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.id()), ch:value },
+            StateChange::AcCommand{ char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
+        }
+    }
+}
+
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Set the current definition of the provided control sequence name or active character
-    pub fn set_command(&mut self, name:&CSOrActiveChar<ET::Token>, cmd:Option<Command<ET>>, globally:bool) {
+    pub fn set_command(&mut self, name:&CSOrActiveChar<ET::Token>, cmd:Option<TeXCommand<ET>>, globally:bool) {
         match name {
             CSOrActiveChar::Active(c) => self.state.set_ac_command(self.aux, *c, cmd, globally),
             CSOrActiveChar::Name(cs) => self.state.set_command(self.aux, cs.clone(), cmd, globally)

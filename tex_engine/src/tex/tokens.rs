@@ -35,7 +35,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     /// Create a new space token.
     fn space() -> Self;
 
-    /// Create a new token representing a [primitive](PrimitiveIdentifier) [`Command`](crate::commands::Command).
+    /// Create a new token representing a [primitive](PrimitiveIdentifier) [`Command`](crate::commands::TeXCommand).
     fn primitive(id:PrimitiveIdentifier) -> Self;
     /// Create a new argument marker token. `i` needs to be in the range `0..=8`.
     fn argument_marker(i:u8) -> Self;

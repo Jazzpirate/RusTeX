@@ -12,8 +12,8 @@ use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType
 use crate::tex::numerics::NumSet;
 use crate::utils::HMap;
 use crate::tex::numerics::TeXDimen;
-use crate::tex::tokens::Token;
-use crate::commands::Command;
+use crate::tex::tokens::{StandardToken, Token};
+use crate::commands::TeXCommand;
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
@@ -25,13 +25,7 @@ use crate::tex::nodes::NodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::Skip;
 use crate::engine::gullet::Gullet;
-
-type Tk<S> = <<S as Stomach>::ET as EngineTypes>::Token;
-type Ch<S> = <<S as Stomach>::ET as EngineTypes>::Char;
-type St<S> = <<S as Stomach>::ET as EngineTypes>::State;
-type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
-type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
-
+use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
 
 /// The mode the engine is currently in, e.g. horizontal mode or vertical mode.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -88,36 +82,38 @@ impl From<BoxType> for TeXMode {
     }
 }
 
-pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
-    match std::mem::take(engine.stomach.afterassignment()) {
-        Some(t) => engine.requeue(t),
-        _ => ()
-    }
-}
-
-pub trait Stomach {
-    type ET:EngineTypes<Stomach = Self>;
-    fn new(aux:&mut EngineAux<Self::ET>,state:&mut St<Self>) -> Self;
-    fn afterassignment(&mut self) -> &mut Option<Tk<Self>>;
-    fn data_mut(&mut self) -> &mut StomachData<Self::ET>;
-    fn every_top(engine:&mut EngineReferences<Self::ET>) {
+/// The [`Stomach`] is the part of the engine that processes (unexpandable) 
+/// commands, collects [nodes](`NodeTrait`) in (horizontal or vertical) lists, and builds pages.
+///
+/// The vast majority of the methods implemented by this trait take a [`EngineReferences`] as their first argument
+/// and have a default implementation already.
+/// As such, we could have attached them to [`EngineReferences`] directly, but we put them here in a
+/// separate trait instead so we can overwrite the methods easily - e.g. add `trigger` code when a paragraph is opened/closed etc.
+pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
+    /// Constructs a new [`Stomach`].
+    fn new(aux:&mut EngineAux<ET>,state:&mut ET::State) -> Self;
+    /// Mutable reference to the current `\afterassignment` [`Token`].
+    fn afterassignment(&mut self) -> &mut Option<ET::Token>;
+    /// The current list(s)
+    fn data_mut(&mut self) -> &mut StomachData<ET>;
+    /// To be executed at every iteration of the top-level loop - i.e. in between all unexpandable commands
+    fn every_top(engine:&mut EngineReferences<ET>) {
         engine.mouth.update_start_ref();
     }
-
-    fn flush(engine:&mut EngineReferences<Self::ET>) {
+    /// To be executed at the end of a document - flushes the current page
+    fn flush(engine:&mut EngineReferences<ET>) {
         let open_groups = std::mem::take(&mut engine.stomach.data_mut().open_lists);
         if !open_groups.is_empty() { todo!("throw error") }
         Self::add_node_v(engine,VNode::Penalty(-10000));
         engine.stomach.data_mut().page.clear();
     }
-
-
+    /// Execute the provided [Unexpandable](PrimitiveCommand::Unexpandable) command
     fn do_unexpandable(
-        engine:&mut EngineReferences<Self::ET>,
+        engine:&mut EngineReferences<ET>,
         name:PrimitiveIdentifier,
         scope: CommandScope,
-        token:Tk<Self>,
-        apply:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
+        token:ET::Token,
+        apply:fn(&mut EngineReferences<ET>,ET::Token)
     ) {
         if Self::maybe_switch_mode(engine,scope,token.clone()) {
             engine.trace_command(|engine| name.display(engine.state.get_escape_char()));
@@ -125,240 +121,136 @@ pub trait Stomach {
         }
     }
 
+    /// Execute the provided [Assignment](PrimitiveCommand::Assignment) command and insert `\afterassignment` if necessary
     fn do_assignment(
-        engine:&mut EngineReferences<Self::ET>,
+        engine:&mut EngineReferences<ET>,
         name:PrimitiveIdentifier,
-        token:Tk<Self>,
-        assign:fn(&mut EngineReferences<Self::ET>,Tk<Self>,bool),
+        token:ET::Token,
+        assign:fn(&mut EngineReferences<ET>,ET::Token,bool),
         global:bool
     ) {
         engine.trace_command(|engine| name.display(engine.state.get_escape_char()));
         assign(engine,token,global);
-        insert_afterassignment(engine);
+        methods::insert_afterassignment(engine);
     }
 
-    fn do_mathchar(engine:&mut EngineReferences<Self::ET>,code:u32,_token:Tk<Self>) {
-        if !engine.stomach.data_mut().mode().is_math() { todo!("throw error") }
-        let ret = MathChar::from_u32(code, engine.state, None);
-        Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
+    /// Execute the provided [Font](TeXCommand::Font) assignment and insert `\afterassignment` if necessary
+    fn assign_font(engine:&mut EngineReferences<ET>, _token:ET::Token, f:ET::Font, global:bool) {
+        engine.state.set_current_font(engine.aux,f,global);
+        methods::insert_afterassignment(engine);
     }
-
-    fn add_box(engine:&mut EngineReferences<Self::ET>,bx:TeXBox<Self::ET>,target:BoxTarget<Self::ET>) {
-        if target.is_some() {
-            target.call(engine,bx)
-        } else {
+    /// Assign a value to a [count register](TeXCommand::IntRegister) and insert `\afterassignment` if necessary
+    fn assign_int_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
+        let val = engine.read_int(true);
+        engine.state.set_int_register(engine.aux,register,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [dimen register](TeXCommand::DimRegister) and insert `\afterassignment` if necessary
+    fn assign_dim_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
+        let val = engine.read_dim(true);
+        engine.state.set_dim_register(engine.aux,register,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [skip register](TeXCommand::SkipRegister) and insert `\afterassignment` if necessary
+    fn assign_skip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
+        let val = engine.read_skip(true);
+        engine.state.set_skip_register(engine.aux,register,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [muskip register](TeXCommand::MuskipRegister) and insert `\afterassignment` if necessary
+    fn assign_muskip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
+        let val = engine.read_muskip(true);
+        engine.state.set_muskip_register(engine.aux,register,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [token register](TeXCommand::ToksRegister) and insert `\afterassignment` if necessary
+    fn assign_toks_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
+        methods::assign_toks_register(engine,register,global)
+    }
+    /// Assign a value to a [primitive token list](PrimitiveCommand::PrimitiveToks) and insert `\afterassignment` if necessary
+    fn assign_primitive_toks(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
+        methods::assign_primitive_toks(engine,name,global)
+    }
+    /// Assign a value to a [primitive integer value](PrimitiveCommand::PrimitiveInt) and insert `\afterassignment` if necessary
+    fn assign_primitive_int(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
+        let val = engine.read_int(true);
+        engine.state.set_primitive_int(engine.aux,name,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [primitive dimension value](PrimitiveCommand::PrimitiveDim) and insert `\afterassignment` if necessary
+    fn assign_primitive_dim(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
+        let val = engine.read_dim(true);
+        engine.state.set_primitive_dim(engine.aux,name,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [primitive skip value](PrimitiveCommand::PrimitiveSkip) and insert `\afterassignment` if necessary
+    fn assign_primitive_skip(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
+        let val = engine.read_skip(true);
+        engine.state.set_primitive_skip(engine.aux,name,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Assign a value to a [primitive muskip value](PrimitiveCommand::PrimitiveMuSkip) and insert `\afterassignment` if necessary
+    fn assign_primitive_muskip(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
+        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
+        let val = engine.read_muskip(true);
+        engine.state.set_primitive_muskip(engine.aux,name,val,global);
+        methods::insert_afterassignment(engine);
+    }
+    /// Executes a [Whatsit](PrimitiveCommand::Whatsit) command
+    fn do_whatsit(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,read:fn(&mut EngineReferences<ET>,ET::Token)
+                                                                                                          -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>) {
+        if let Some(ret) = read(engine,token) {
+            let wi = WhatsitNode::new(ret, name);
             match engine.stomach.data_mut().mode() {
-                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
-                    Self::add_node_h(engine,HNode::Box(bx))
-                }
-                TeXMode::Vertical | TeXMode::InternalVertical => {
-                    Self::add_node_v(engine,VNode::Box(bx))
-                }
-                _ => Self::add_node_m(engine,MathNode::Atom(MathAtom {
-                    nucleus: MathNucleus::Simple{kernel:MathKernel::Box(bx),limits:None,cls:MathClass::Ord},
-                    sub:None,sup:None
-                }))
+                TeXMode::Vertical | TeXMode::InternalVertical => Self::add_node_v(engine,VNode::Whatsit(wi)),
+                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => Self::add_node_h(engine,HNode::Whatsit(wi)),
+                _ => Self::add_node_m(engine,MathNode::Whatsit(wi))
             }
         }
     }
-
-
-    fn close_box(engine:&mut EngineReferences<Self::ET>, bt:BoxType) {
-        methods::close_box(engine,bt)
-    }
-    fn do_char(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>,char:Ch<Self>,code:CommandCode) {
-        match code {
-            CommandCode::EOF => (),
-            CommandCode::Space if engine.stomach.data_mut().mode().is_horizontal() =>
-                Self::add_node_h(engine,HNode::Space),
-            CommandCode::Space => (),
-            CommandCode::BeginGroup if engine.stomach.data_mut().mode().is_math() => {
-                engine.state.push(engine.aux,GroupType::Math {
-                    display: engine.stomach.data_mut().mode() == TeXMode::DisplayMath
-                },engine.mouth.line_number());
-                engine.stomach.data_mut().open_lists.push(NodeList::new_math(engine.mouth.start_ref()));
-            },
-            CommandCode::EndGroup if engine.stomach.data_mut().mode().is_math() => {
-                let ls = engine.stomach.data_mut().open_lists.pop();
-                match ls {
-                    Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) if t.is_some() => {
-                        engine.state.pop(engine.aux,engine.mouth);
-                        let (children,None) = children.close(start,engine.mouth.current_sourceref()) else { unreachable!() };
-                        t.call(engine,children,start);
-                    }
-                    Some(NodeList::Math {children,start,tp:MathNodeListType::Target(_)}) => {
-                        match children {
-                            MathNodeList::Simple(v) =>
-                                Self::add_node_m(engine,MathNode::Atom(MathAtom{
-                                    nucleus:MathNucleus::Inner(MathKernel::List {children:v.into(),start,end:engine.mouth.current_sourceref()}),
-                                    sub:None,sup:None
-                                })),
-                            MathNodeList::Over {top,sep,bottom,left,right} => Self::add_node_m(engine,MathNode::Over {
-                                start,end:engine.mouth.current_sourceref(),
-                                top:top.into(),bottom:bottom.into(),sep,left,right
-                            }),
-                            MathNodeList::EqNo {..} => todo!("throw error")
-                        }
-                        engine.state.pop(engine.aux,engine.mouth);
-                    }
-                    _ => todo!("error")
-                }
-            },
-            CommandCode::BeginGroup =>
-                engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number()),
-            CommandCode::EndGroup => {
-                match engine.state.get_group_type() {
-                    Some(GroupType::Character) =>
-                        engine.state.pop(engine.aux,engine.mouth),
-                    Some(GroupType::Box(bt)) =>
-                        Self::close_box(engine, bt),
-                    o => todo!("throw error; group type {:?}",o)
-                }
-            }
-            CommandCode::Other | CommandCode::Letter if engine.stomach.data_mut().mode().is_horizontal() =>
-                Self::do_word(engine,char),
-            CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.stomach.data_mut().mode().is_vertical() =>
-                Self::open_paragraph(engine,token),
-            CommandCode::MathShift if engine.stomach.data_mut().mode().is_math() => match engine.stomach.data_mut().open_lists.pop() {
-                Some(NodeList::Math{children,start,tp:MathNodeListType::Top {display}}) => {
-                    if display {match engine.get_next() {
-                        Some(tk) if tk.command_code() == CommandCode::MathShift => (),
-                        _ => todo!("throw error")
-                    }}
-                    engine.state.pop(engine.aux,engine.mouth);
-                    let (children,eqno) = children.close(start,engine.mouth.current_sourceref());
-                    let group = MathGroup::<Self::ET,MathFontStyle<Self::ET>>::close(
-                        if display {Some((
-                            engine.state.get_primitive_skip(PRIMITIVES.abovedisplayskip),
-                            engine.state.get_primitive_skip(PRIMITIVES.belowdisplayskip)
-                        ))} else {None},
-                        start,engine.mouth.current_sourceref(),children,eqno);
-                    Self::add_node_h(engine,HNode::MathGroup(group));
-                }
-                _ => todo!("error")
-            }
-            CommandCode::MathShift => {
-                let (display,every) = match engine.stomach.data_mut().mode() {
-                    TeXMode::Horizontal => {
-                        match engine.get_next() {
-                            Some(tk) if tk.command_code() == CommandCode::MathShift => (true,PRIMITIVES.everydisplay),
-                            Some(o) => {
-                                engine.requeue(o);(false,PRIMITIVES.everymath)
-                            }
-                            _ => todo!("file end")
-                        }
-                    }
-                    _ => (false,PRIMITIVES.everymath)
-                };
-                engine.stomach.data_mut().open_lists.push(NodeList::Math {children:MathNodeList::new(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
-                engine.state.push(engine.aux,GroupType::Math{display},engine.mouth.line_number());
-                engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
-                engine.push_every(every);
-            }
-            CommandCode::Other | CommandCode::Letter => {
-                let code = engine.state.get_mathcode(char);
-                if code == 32768 {
-                    engine.mouth.requeue(Tk::<Self>::from_char_cat(char,CommandCode::Active));
-                } else {
-                    let ret = MathChar::from_u32(code, engine.state, Some(char));
-                    Self::add_node_m(engine,MathNode::Atom(ret.to_atom()));
-                }
-            }
-            CommandCode::Superscript if engine.stomach.data_mut().mode().is_math() => {
-                Self::do_superscript(engine)
-            }
-            CommandCode::Subscript if engine.stomach.data_mut().mode().is_math() => {
-                Self::do_subscript(engine)
-            }
-            _ => todo!("{} > {:?}",char,code)
-        }
-    }
-
-
-    fn do_superscript(engine:&mut EngineReferences<Self::ET>) {
-        do_xscript(engine,Script::Super)
-    }
-
-
-    fn do_subscript(engine:&mut EngineReferences<Self::ET>) {
-        do_xscript(engine,Script::Sub)
-    }
-
-    fn do_word(engine:&mut EngineReferences<Self::ET>,char:Ch<Self>) {
-        // TODO trace
-        let mut current = char;
-        macro_rules! char {
-            ($c:expr) => {{
-                let font = engine.state.get_current_font().clone();
-                match font.ligature(current,$c) {
-                    Some(c) => {
-                        current = c;
-                    }
-                    None => {
-                        engine.stomach.add_char(engine.state,current,font);
-                        current = $c;
-                    }
-                }
-            }};
-        }
-        macro_rules! end {
-            ($e:expr) => {{
-                let font = engine.state.get_current_font().clone();
-                engine.stomach.add_char(engine.state,current,font);
-                $e;
-                engine.stomach.data_mut().spacefactor = 1000;
-                return
-            }}
-        }
-        crate::expand_loop!(Self::ET;token => {
-            if token.is_primitive() == Some(PRIMITIVES.noexpand) { engine.get_next(); continue}
-        };engine,
-            ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other } =>
-                char!(char),
-            ResolvedToken::Cmd(Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other})) =>
-                char!(*char),
-            ResolvedToken::Cmd(Some(Command::Primitive{name,..})) if *name == PRIMITIVES.char => {
-                let char = engine.read_charcode(false);
-                char!(char)
-            }
-            ResolvedToken::Tk { code:CommandCode::Space, .. } |
-            ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::Space,..})) =>
-                end!(Self::add_node_h(engine,HNode::Space)),
-            ResolvedToken::Tk { char, code } =>
-                end!(Self::do_char(engine,token,char,code)),
-            ResolvedToken::Cmd(Some(Command::Char {char, code})) =>
-                end!(Self::do_char(engine,token,*char,*code)),
-            ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
-            ResolvedToken::Cmd(Some(cmd)) => {
-                end!(crate::do_cmd!(Self::ET;engine,token,cmd))
-            }
-        );
-        todo!()
-    }
-    fn add_char(&mut self,state:&St<Self>,char:Ch<Self>,font:<<Self::ET as EngineTypes>::FontSystem as FontSystem>::Font) {
-        let sf = state.get_sfcode(char);
-        let data = self.data_mut();
-        if sf > 1000 && data.spacefactor < 1000 {
-            data.spacefactor = 1000;
-        } else { data.spacefactor = sf as i32; }
-        match self.data_mut().open_lists.last_mut() {
-            Some(NodeList::Horizontal {children,..}) => {
-                children.push(HNode::Char {
-                    char,font
-                });
-            }
-            _ => todo!("throw error")
-        }
-    }
-    fn do_box(engine:&mut EngineReferences<Self::ET>,_name:PrimitiveIdentifier,token:Tk<Self>,bx:fn(&mut EngineReferences<Self::ET>,Tk<Self>) -> Result<Option<TeXBox<Self::ET>>,BoxInfo<Self::ET>>) {
+    /// Executes a [Box](PrimitiveCommand::Box) command
+    fn do_box(engine:&mut EngineReferences<ET>,_name:PrimitiveIdentifier,token:ET::Token,bx:fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>) {
         match bx(engine,token) {
-            Ok(Some(bx)) => Self::add_box(engine,bx,BoxTarget::none()),
+            Ok(Some(bx)) => methods::add_box(engine,bx,BoxTarget::none()),
             Ok(None) => (),
             Err(bi) =>
                 engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()))
         }
     }
-    fn maybe_switch_mode(engine:&mut EngineReferences<Self::ET>, scope: CommandScope, token:Tk<Self>) -> bool {
+
+    /// Processes a character depending on the current [`TeXMode`] and its [`CommandCode`]
+    fn do_char(engine:&mut EngineReferences<ET>,token:ET::Token,char:ET::Char,code:CommandCode) {
+        methods::do_char(engine,token,char,code)
+    }
+    /// Processes a mathchar value (assumes we are in math mode)
+    fn do_mathchar(engine:&mut EngineReferences<ET>,code:u32,token:Option<ET::Token>) {
+        let ret = match token.map(|t| t.to_enum()) {
+            Some(StandardToken::Character(char,_)) if code == 32768 => {
+                engine.mouth.requeue(ET::Token::from_char_cat(char, CommandCode::Active));
+                return
+            }
+            Some(StandardToken::Character(char,_)) =>
+                MathChar::from_u32(code, engine.state, Some(char)),
+            _ => MathChar::from_u32(code, engine.state, None)
+        };
+        ET::Stomach::add_node_m(engine, MathNode::Atom(ret.to_atom()));
+    }
+
+    /// Closes a node list belonging to a [`TeXBox`] and adds it to the
+    /// corresponding node list
+    fn close_box(engine:&mut EngineReferences<ET>, bt:BoxType) {
+        methods::close_box(engine,bt)
+    }
+
+    /// Switches the current [`TeXMode`] (if necessary) by opening/closing a paragraph, or throws an error
+    /// if neither action is possible or would not result in a compatible mode.
+    /// If a paragraph is opened or closed, the provided token is requeued to be reprocessed afterwards in
+    /// horizontal/vertical mode, and `false` is returned (as to not process the triggering command
+    /// further). Otherwise, all is well and `true` is returned.
+    fn maybe_switch_mode(engine:&mut EngineReferences<ET>, scope: CommandScope, token:ET::Token) -> bool {
         match (scope,engine.stomach.data_mut().mode()) {
             (CommandScope::Any, _) => true,
             (CommandScope::SwitchesToHorizontal | CommandScope::SwitchesToHorizontalOrMath, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => true,
@@ -382,157 +274,8 @@ pub trait Stomach {
         }
     }
 
-    fn do_font(engine:&mut EngineReferences<Self::ET>,_token:Tk<Self>,f:Fnt<Self::ET>,global:bool) {
-        engine.state.set_current_font(engine.aux,f,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_int_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
-        let val = engine.read_int(true);
-        engine.state.set_int_register(engine.aux,register,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_dim_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
-        let val = engine.read_dim(true);
-        engine.state.set_dim_register(engine.aux,register,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_skip_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
-        let val = engine.read_skip(true);
-        engine.state.set_skip_register(engine.aux,register,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_muskip_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
-        let val = engine.read_muskip(true);
-        engine.state.set_muskip_register(engine.aux,register,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_toks_register(engine:&mut EngineReferences<Self::ET>,register:usize,global:bool) {
-        let mut had_eq = false;
-        crate::expand_loop!(Self::ET; engine,tk,
-            ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
-                (_,CommandCode::Space) => (),
-                (Ok(b'='),CommandCode::Other) if !had_eq => {
-                    if had_eq { todo!("throw error") }
-                    had_eq = true;
-                }
-                (_,CommandCode::BeginGroup) => {
-                    let mut tks = shared_vector::Vector::new();
-                    engine.read_until_endgroup(|_,_,t| tks.push(t));
-                    engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
-                    insert_afterassignment(engine);
-                    return ()
-                }
-                _ => todo!("throw error")
-            }
-            ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) => {
-                let tks = engine.state.get_primitive_tokens(*name).clone();
-                engine.state.set_toks_register(engine.aux,register,tks,global);
-                insert_afterassignment(engine);
-                return ()
-            }
-            ResolvedToken::Cmd(Some(Command::ToksRegister(u))) => {
-                let tks = engine.state.get_toks_register(*u).clone();
-                engine.state.set_toks_register(engine.aux,register,tks,global);
-                insert_afterassignment(engine);
-                return ()
-            }
-            _ => todo!("throw error")
-        )
-    }
-    fn assign_primitive_toks(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        let mut had_eq = false;
-        crate::expand_loop!(Self::ET; engine,tk,
-            ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
-                (_,CommandCode::Space) => (),
-                (Ok(b'='),CommandCode::Other) if !had_eq => {
-                    if had_eq { todo!("throw error") }
-                    had_eq = true;
-                }
-                (_,CommandCode::BeginGroup) => {
-                    let mut tks = shared_vector::Vector::new();
-                    if name == PRIMITIVES.output {
-                        tks.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                        engine.read_until_endgroup(|_,_,t| tks.push(t));
-                        tks.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-                    } else {
-                        engine.read_until_endgroup(|_,_,t| tks.push(t));
-                    }
-                    engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
-                    insert_afterassignment(engine);
-                    return ()
-                }
-                _ => todo!("throw error")
-            }
-            ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) => {
-                let tks = engine.state.get_primitive_tokens(*name);
-                let tks = if *name == PRIMITIVES.output {
-                    let mut ntk = shared_vector::Vector::new();
-                    ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                    ntk.extend_from_slice(tks.0.as_slice());
-                    ntk.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-                    ntk.into()
-                } else {
-                    tks.clone()
-                };
-                engine.state.set_primitive_tokens(engine.aux,*name,tks,global);
-                insert_afterassignment(engine);
-                return ()
-            }
-            ResolvedToken::Cmd(Some(Command::ToksRegister(u))) => {
-                let tks = engine.state.get_toks_register(*u);
-                let tks = if name == PRIMITIVES.output {
-                    let mut ntk = shared_vector::Vector::new();
-                    ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                    ntk.extend_from_slice(tks.0.as_slice());
-                    ntk.push(Tk::<Self>::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-                    ntk.into()
-                } else {
-                    tks.clone()
-                };
-                engine.state.set_primitive_tokens(engine.aux,name,tks,global);
-                insert_afterassignment(engine);
-                return ()
-            }
-            _ => todo!("throw error")
-        )
-    }
-    fn assign_primitive_int(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_int(true);
-        engine.state.set_primitive_int(engine.aux,name,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_primitive_dim(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_dim(true);
-        engine.state.set_primitive_dim(engine.aux,name,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_primitive_skip(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_skip(true);
-        engine.state.set_primitive_skip(engine.aux,name,val,global);
-        insert_afterassignment(engine);
-    }
-    fn assign_primitive_muskip(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,global:bool) {
-        engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_muskip(true);
-        engine.state.set_primitive_muskip(engine.aux,name,val,global);
-        insert_afterassignment(engine);
-    }
-    fn do_whatsit(engine:&mut EngineReferences<Self::ET>,name:PrimitiveIdentifier,token:Tk<Self>,read:fn(&mut EngineReferences<Self::ET>,Tk<Self>)
-                                                                                -> Option<Box<dyn FnOnce(&mut EngineReferences<Self::ET>)>>) {
-        if let Some(ret) = read(engine,token) {
-            let wi = WhatsitNode::new(ret, name);
-            match engine.stomach.data_mut().mode() {
-                TeXMode::Vertical | TeXMode::InternalVertical => Self::add_node_v(engine,VNode::Whatsit(wi)),
-                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => Self::add_node_h(engine,HNode::Whatsit(wi)),
-                _ => Self::add_node_m(engine,MathNode::Whatsit(wi))
-            }
-        }
-    }
-
-    fn open_align(engine:&mut EngineReferences<Self::ET>,_inner:BoxType,between:BoxType) {
+    /// Opens an `\halign` or `\valign`
+    fn open_align(engine:&mut EngineReferences<ET>,_inner:BoxType,between:BoxType) {
         engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
         engine.stomach.data_mut().open_lists.push(
         if between == BoxType::Vertical {
@@ -547,7 +290,8 @@ pub trait Stomach {
         });
     }
 
-    fn close_align(engine:&mut EngineReferences<Self::ET>) {
+    /// Closes an `\halign` or `\valign`
+    fn close_align(engine:&mut EngineReferences<ET>) {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
                 engine.state.pop(engine.aux,&mut engine.mouth);
@@ -573,7 +317,8 @@ pub trait Stomach {
         };
     }
 
-    fn add_node_m(engine:&mut EngineReferences<Self::ET>,node: MathNode<Self::ET,UnresolvedMathFontStyle<Self::ET>>) {
+    /// Adds a node to the current math list (i.e. assumes we're in math mode)
+    fn add_node_m(engine:&mut EngineReferences<ET>,node: MathNode<ET,UnresolvedMathFontStyle<ET>>) {
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Math {children,..}) => {
                 children.push(node);
@@ -583,7 +328,8 @@ pub trait Stomach {
         }
     }
 
-    fn add_node_h(engine:&mut EngineReferences<Self::ET>,node: HNode<Self::ET>) {
+    /// Adds a node to the current horizontal list (i.e. assumes we're in (restricted) horizontal mode)
+    fn add_node_h(engine:&mut EngineReferences<ET>,node: HNode<ET>) {
         if let HNode::Penalty(i) = node {
             engine.stomach.data_mut().lastpenalty = i;
         }
@@ -596,144 +342,39 @@ pub trait Stomach {
         }
     }
 
-
-    fn add_node_v(engine:&mut EngineReferences<Self::ET>,node: VNode<Self::ET>) {
+    /// Adds a node to the current vertical list (i.e. assumes we're in (internal) vertical mode)
+    fn add_node_v(engine:&mut EngineReferences<ET>,node: VNode<ET>) {
         methods::add_node_v(engine,node)
     }
 
-
-    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>,penalty:Option<i32>) {
+    /// Checks whether the output routine should occur; either because the page is
+    /// full enough, or because the provided penalty is `Some`
+    /// (and assumed to be <= -10000) and the page is not empty.
+    fn maybe_do_output(engine:&mut EngineReferences<ET>, penalty:Option<i32>) {
         let data = engine.stomach.data_mut();
         if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() && (data.pagetotal >= data.pagegoal || penalty.is_some()) {
-            Self::do_shipout_output(engine, penalty)
+            Self::do_output(engine, penalty)
         }
     }
 
-    fn do_shipout_output(engine:&mut EngineReferences<Self::ET>, forced:Option<i32>) {
-        let data = engine.stomach.data_mut();
-        let page = std::mem::take(&mut data.page);
-        let goal = data.pagegoal;
-        data.pagetotal = <Self::ET as EngineTypes>::Dim::default();
-        data.page_contains_boxes = false;
-        // TODO more precisely
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.badness,(10).into(),true);
-
-        let SplitResult{mut first,rest,split_penalty} = match forced {
-            Some(p) => SplitResult{first:page.into(),rest:vec!().into(),split_penalty:Some(p)},
-            _ => Self::split_vertical(engine,page,goal)
-        };
-
-        let split_penalty = split_penalty.unwrap_or(0);
-
-        engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
-
-        let data = engine.stomach.data_mut();
-
-        data.open_lists.push(NodeList::Vertical {
-            tp: VerticalNodeListType::Page,
-            children: vec!()
-        });
-
-        data.in_output = true;
-        data.deadcycles += 1;
-        /* INSERTS:
-            1. read vbox => \box n = b
-
-            g = \pagegoal
-            t = \pagetotal
-            q = \insertpenalties (accumulated for the current page)
-            d = \pagedepth (<= \maxdepth)
-            z = \pageshrink
-            x = b.height() + b.depth()
-            f = \count n / 1000
-
-            if (\box n is empty) {
-                g -= h*f + w
-            } else {}
-        */
-
-        let mut deletes = vec!();
-        for (i,b) in first.iter_mut().enumerate() { match b {
-            VNode::Insert(n,v) => {
-                let children: Box<[VNode<Self::ET>]> = match engine.state.take_box_register(*n) {
-                    Some(TeXBox::V {children,..}) => {
-                        let mut c = children.into_vec();
-                        c.extend(std::mem::replace(v, vec!().into()).into_vec().into_iter());
-                        c.into()
-                    },
-                    _ => std::mem::replace(v, vec!().into())
-                };
-                engine.state.set_box_register(engine.aux,*n,Some(TeXBox::V {
-                    info: VBoxInfo::new_box(ToOrSpread::None),
-                    children,
-                    start:engine.mouth.current_sourceref(),
-                    end:engine.mouth.current_sourceref(),
-                }),true);
-                deletes.push(i)
-            }
-            _ => ()
-        }}
-        let mut j = 0;
-        for i in deletes { first.remove(i - j);j += 1; }
-
-        engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,split_penalty.into(),true);
-
-        let bx = TeXBox::V {
-            children:first.into(),
-            info:VBoxInfo::new_box(ToOrSpread::None),
-            start:engine.mouth.current_sourceref(),
-            end:engine.mouth.current_sourceref(),
-        };
-
-        //crate::debug_log!(debug => "Here: {} \n\n {}",bx.readable(),engine.mouth.display_position());
-
-        engine.state.set_box_register(engine.aux,255,Some(bx),false);
-
-        engine.push_every(PRIMITIVES.output);
-        engine.get_next(); // '{':BeginGroup
-
-        //crate::debug_log!(debug => "Here: {} at {}",engine.mouth.display_position(),engine.preview());
-
-        let depth = engine.state.get_group_level();
-        while let Some(next) = engine.get_next() {
-            //println!("HERE: {}",engine.preview());
-            if engine.state.get_group_level() == depth && next.command_code() == CommandCode::EndGroup {
-                engine.state.pop(engine.aux,engine.mouth);
-                match engine.stomach.data_mut().open_lists.pop() {
-                    Some(NodeList::Vertical {children,tp:VerticalNodeListType::Page}) => {
-                        engine.stomach.data_mut().pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX);
-                        for c in children {
-                            Self::add_node_v(engine, c);
-                        }
-                        for r in rest.into_iter() { Self::add_node_v(engine,r) }
-                    }
-                    _ => todo!("throw error")
-                }
-                engine.stomach.data_mut().in_output = false;
-                return
-            }
-            if next.is_primitive() == Some(PRIMITIVES.noexpand) {
-                engine.get_next();continue
-            }
-            crate::expand!(Self::ET;engine,next;
-                ResolvedToken::Tk { char, code } => Self::do_char(engine, next, char, code),
-                ResolvedToken::Cmd(Some(Command::Char {char, code})) => Self::do_char(engine, next, *char, *code),
-                ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),next),
-                ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(Self::ET;engine,next,cmd)
-            );
-        }
-        todo!("file end")
+    /// Actually calls the output routine
+    fn do_output(engine:&mut EngineReferences<ET>, caused_penalty:Option<i32>) {
+        methods::do_output(engine, caused_penalty)
     }
 
-    fn split_vertical(engine:&mut EngineReferences<Self::ET>, nodes: Vec<VNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<Self::ET>;
+    /// Split a vertical list for the provided target height
+    fn split_vertical(engine:&mut EngineReferences<ET>, nodes: Vec<VNode<ET>>, target: <ET as EngineTypes>::Dim) -> SplitResult<ET> {
+        methods::vsplit_roughly(engine,nodes,target)
+    }
 
-    fn open_paragraph(engine:&mut EngineReferences<Self::ET>,token:Tk<Self>) {
+    /// Open a new paragraph; assumed to be called in (internal) vertical mode
+    fn open_paragraph(engine:&mut EngineReferences<ET>,token:ET::Token) {
         let sref = engine.mouth.start_ref();
         engine.stomach.data_mut().open_lists.push(NodeList::Horizontal {
             tp:HorizontalNodeListType::Paragraph(sref),
             children:vec!()
         });
-        match <Self::ET as EngineTypes>::Gullet::char_or_primitive(engine.state,&token) {
+        match <ET as EngineTypes>::Gullet::char_or_primitive(engine.state,&token) {
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.indent => {
                 Self::add_node_h(engine,HNode::Box(TeXBox::H {children:vec!().into(),info:HBoxInfo::ParIndent(engine.state.get_primitive_dim(PRIMITIVES.parindent)), start:sref, end:sref,preskip:None}))
             },
@@ -746,14 +387,15 @@ pub trait Stomach {
         engine.push_every(PRIMITIVES.everypar)
     }
 
-    fn close_paragraph(engine:&mut EngineReferences<Self::ET>) {
+    /// Close a paragraph; assumed to be called in horizontal mode
+    fn close_paragraph(engine:&mut EngineReferences<ET>) {
         let ls = &mut engine.stomach.data_mut().open_lists;
         match ls.pop() {
             Some(NodeList::Horizontal{tp:HorizontalNodeListType::Paragraph(sourceref),children}) => {
                 if children.is_empty() {
                     let _ = engine.state.take_parshape();
-                    engine.state.set_primitive_int(engine.aux,PRIMITIVES.hangafter,Int::<Self::ET>::default(),false);
-                    engine.state.set_primitive_dim(engine.aux,PRIMITIVES.hangindent,<Self::ET as EngineTypes>::Dim::default(),false);
+                    engine.state.set_primitive_int(engine.aux,PRIMITIVES.hangafter,ET::Int::default(),false);
+                    engine.state.set_primitive_dim(engine.aux,PRIMITIVES.hangindent,ET::Dim::default(),false);
                     return
                 }
                 let spec = ParLineSpec::make(engine.state,engine.aux);
@@ -763,13 +405,14 @@ pub trait Stomach {
         }
     }
 
-    fn split_paragraph(engine:&mut EngineReferences<Self::ET>, specs:Vec<ParLineSpec<Self::ET>>, children:Vec<HNode<Self::ET>>, sourceref:SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
+    /// Split a paragraph into lines and add them (as horizontal boxes) to the current vertical list
+    fn split_paragraph(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<HNode<ET>>, start_ref:SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         let parskip = engine.state.get_primitive_skip(PRIMITIVES.parskip);
-        if parskip != <Self::ET as EngineTypes>::Skip::default() {
+        if parskip != <ET as EngineTypes>::Skip::default() {
             Self::add_node_v(engine,VNode::VSkip(parskip));
         }
-        let ret = split_paragraph_roughly(engine,specs,children,sourceref);
+        let ret = methods::split_paragraph_roughly(engine, specs, children, start_ref);
         for line in ret {
             match line {
                 ParLine::Adjust(n) => Self::add_node_v(engine,n),
@@ -779,83 +422,7 @@ pub trait Stomach {
     }
 }
 
-impl<ET:EngineTypes> EngineReferences<'_,ET> {
-    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, BoxInfo<ET>> {
-        let mut read_eq = !skip_eq;
-        crate::expand_loop!(self,token,
-            ResolvedToken::Tk {char,code:CommandCode::Other} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
-            ResolvedToken::Tk { code:CommandCode::Space,..} => (),
-            ResolvedToken::Cmd(Some(Command::Primitive {cmd:PrimitiveCommand::Box(b),..})) =>
-                return b(self,token),
-            _ => todo!("error")
-        );
-        todo!("file end")
-    }
-}
-#[derive(Debug,Clone,Hash,Eq,PartialEq)]
-pub struct ParLineSpec<ET:EngineTypes> {
-    pub leftskip:ET::Skip,
-    pub rightskip:ET::Skip,
-    pub target:ET::Dim
-}
-impl<ET:EngineTypes> ParLineSpec<ET> {
-    pub fn make(state:&mut ET::State,aux:&mut EngineAux<ET>) -> Vec<ParLineSpec<ET>> {
-        let parshape = state.take_parshape(); // (left-indent,width)*
-        let hangindent = state.get_primitive_dim(PRIMITIVES.hangindent); // left-indent
-        let hangafter = state.get_primitive_int(PRIMITIVES.hangafter).into();
-        state.set_primitive_int(aux,PRIMITIVES.hangafter,ET::Int::default(),false);
-        state.set_primitive_dim(aux,PRIMITIVES.hangindent,ET::Dim::default(),false);
-        let leftskip = state.get_primitive_skip(PRIMITIVES.leftskip);
-        let rightskip = state.get_primitive_skip(PRIMITIVES.rightskip);
-        let hsize = state.get_primitive_dim(PRIMITIVES.hsize);
-        if parshape.is_empty() {
-            if hangindent == ET::Dim::default() || hangafter == 0 {
-                vec!(ParLineSpec {
-                    target:hsize + -(leftskip.base() + rightskip.base()),
-                    leftskip,rightskip
-                })
-            } else {
-                if hangafter < 0 {
-                    let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|_| ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
-                        leftskip:leftskip.add(hangindent),rightskip
-                    }).collect();
-                    r.push(ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base()),
-                        leftskip,rightskip
-                    });
-                    r
-                } else {
-                    let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|_| ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base()),
-                        leftskip,rightskip
-                    }).collect();
-                    r.push(ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
-                        leftskip:leftskip.add(hangindent),rightskip
-                    });
-                    r
-                }
-            }
-        } else {
-            parshape.into_iter().map(|(i,l)| {
-                let left = leftskip.add(i);
-                let target = l + -(leftskip.base() + rightskip.base());
-                let right = rightskip.add(hsize + -(l + i));
-                ParLineSpec {
-                    leftskip:left,rightskip:right,target
-                }
-            }).collect()
-        }
-    }
-}
-
-pub struct SplitResult<ET:EngineTypes> {
-    pub first:Vec<VNode<ET>>,
-    pub rest:Vec<VNode<ET>>,
-    pub split_penalty:Option<i32>
-}
-
+/// All the mutable data of the [`Stomach`] - i.e. the current page, the current list(s), etc.
 #[derive(Clone,Debug)]
 pub struct StomachData<ET:EngineTypes> {
     pub page:Vec<VNode<ET>>,
@@ -883,12 +450,7 @@ pub struct StomachData<ET:EngineTypes> {
     pub inserts:Vec<(usize,Box<[VNode<ET>]>)>
 }
 impl <ET:EngineTypes> StomachData<ET> {
-    /*pub fn get_list(&mut self) -> &mut Vec<TeXNode<ET>> {
-        match self.open_lists.last_mut() {
-            Some(ls) => &mut ls.children,
-            None => &mut self.page
-        }
-    }*/
+    /// The current [`TeXMode`] (indicating the type of node list currently open)
     pub fn mode(&self) -> TeXMode {
         match self.open_lists.last() {
             Some(NodeList::Horizontal{tp:HorizontalNodeListType::Paragraph(..),..}) => TeXMode::Horizontal,
@@ -909,6 +471,7 @@ impl <ET:EngineTypes> StomachData<ET> {
             None => TeXMode::Vertical
         }
     }
+    /// Constructs a new [`StomachData`]
     pub fn new() -> Self {
         StomachData {
             page:vec!(),
@@ -938,263 +501,51 @@ impl <ET:EngineTypes> StomachData<ET> {
     }
 }
 
-pub struct StomachWithShipout<ET:EngineTypes<Stomach=Self>> {
-    afterassignment:Option<Tk<Self>>,
+/// Default implementation of a [`Stomach`]
+pub struct DefaultStomach<ET:EngineTypes/*<Stomach=Self>*/> {
+    afterassignment:Option<ET::Token>,
     data:StomachData<ET>,
 }
-impl<ET:EngineTypes<Stomach=Self>> Stomach for StomachWithShipout<ET> {
-    type ET = ET;
-    fn new(_aux: &mut EngineAux<Self::ET>, _state: &mut St<Self>) -> Self {
-        StomachWithShipout {
+impl<ET:EngineTypes/*<Stomach=Self>*/> Stomach<ET> for DefaultStomach<ET> {
+    fn new(_aux: &mut EngineAux<ET>, _state: &mut ET::State) -> Self {
+        DefaultStomach {
             afterassignment:None,
             data:StomachData::new()
         }
     }
 
-    fn afterassignment(&mut self) -> &mut Option<Tk<Self>> {
+    fn afterassignment(&mut self) -> &mut Option<ET::Token> {
         &mut self.afterassignment
     }
 
-    fn data_mut(&mut self) -> &mut StomachData<Self::ET> {
+    fn data_mut(&mut self) -> &mut StomachData<ET> {
         &mut self.data
     }
-
-
-    fn split_vertical(engine: &mut EngineReferences<Self::ET>, nodes: Vec<VNode<Self::ET>>, target: <Self::ET as EngineTypes>::Dim) -> SplitResult<ET> {
-        vsplit_roughly(engine, nodes, target)
-    }
-}
-
-pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nodes: Vec<VNode<ET>>, mut target: ET::Dim) -> SplitResult<ET> {
-    let data = engine.stomach.data_mut();
-    data.topmarks.clear();
-    std::mem::swap(&mut data.botmarks,&mut data.topmarks);
-    data.firstmarks.clear();
-    data.splitfirstmarks.clear();
-    data.splitbotmarks.clear();
-    let mut split = nodes.len();
-    let iter = nodes.iter().enumerate();
-    for (i,n) in iter {
-        match n {
-            VNode::Mark(i, v) => {
-                if !data.firstmarks.contains_key(&i) {
-                    data.firstmarks.insert(*i,v.clone());
-                }
-                data.botmarks.insert(*i,v.clone());
-            }
-            VNode::Insert(_,bx) => {
-                target = target - bx.iter().map(|c| c.height() + c.depth()).sum(); // - n.depth() ?
-                if target < ET::Dim::default() {
-                    split = i;
-                    break
-                }
-            }
-            _ => {
-                target = target - (n.height() + n.depth()); // - n.depth() ?
-                if target < ET::Dim::default() {
-                    split = i;
-                    break
-                }
-            }
-        }
-    };
-    let mut rest = nodes.split_off(split);
-    let split_penalty = match rest.first() {
-        Some(VNode::Penalty(p)) => {
-            let p = *p;
-            rest.remove(0);
-            Some(p)
-        }
-        _ => None
-    };
-
-    for n in &rest {
-        match n {
-            VNode::Mark(i, v) => {
-                if !data.splitfirstmarks.contains_key(&i) {
-                    data.splitfirstmarks.insert(*i,v.clone());
-                }
-                data.splitbotmarks.insert(*i,v.clone());
-            }
-            _ => ()
-        }
-    }
-    SplitResult{first:nodes,rest:rest,split_penalty}
-}
-
-pub enum ParLine<ET:EngineTypes> {
-    Line(TeXBox<ET>),//{contents:Vec<TeXNode<ET>>, broken_early:bool },
-    Adjust(VNode<ET>)
-}
-
-pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<HNode<ET>>,start:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
-    let mut ret : Vec<ParLine<ET>> = Vec::new();
-    let mut hgoals = specs.into_iter();
-    let mut nodes = children.into_iter();
-    let mut line_spec = hgoals.next().unwrap();
-    let mut target = line_spec.target;
-    let mut currstart = start;
-    let mut currend = currstart.clone();
-    let mut curr_height = ET::Dim::default();
-    let mut curr_depth = ET::Dim::default();
-    'A:loop {
-        let mut line = vec!();
-        let mut reinserts = vec!();
-
-        macro_rules! next_line {
-            ($b:literal) => {
-                if !line.is_empty() {
-                    let start = currstart.clone();
-                    currstart = currend.clone();
-                    ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
-                        spec:line_spec.clone(),
-                        ends_with_line_break:$b,
-                        inner_height:std::mem::take(&mut curr_height),
-                        inner_depth:std::mem::take(&mut curr_depth)
-                    },preskip:None}));
-                }
-                for c in reinserts {
-                    ret.push(ParLine::Adjust(c));
-                }
-                match hgoals.next() {
-                    None => (),
-                    Some(e) => line_spec = e
-                }
-                target = line_spec.target;
-            };
-        }
-
-        loop {
-            match nodes.next() {
-                None => {
-                    if !line.is_empty() {
-                        let start = currstart.clone();
-                        currstart = currend.clone();
-                        ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
-                            spec:line_spec.clone(),
-                            ends_with_line_break:false,
-                            inner_height:std::mem::take(&mut curr_height),
-                            inner_depth:std::mem::take(&mut curr_depth)
-                        },preskip:None}));
-                    }
-                    for c in reinserts {
-                        ret.push(ParLine::Adjust(c));
-                    }
-                    break 'A
-                }
-                Some(HNode::Mark(i, m)) =>
-                    reinserts.push(VNode::Mark(i,m)),
-                Some(HNode::Insert(n,ch)) =>
-                    reinserts.push(VNode::Insert(n,ch)),
-                Some(HNode::VAdjust(ls)) => reinserts.extend(ls.into_vec().into_iter()),
-                Some(g@HNode::MathGroup(MathGroup {display:Some(_),..})) => {
-                    let (a,b) = if let HNode::MathGroup(MathGroup {display:Some((a,b)),..}) = &g {
-                        (*a,*b)
-                    } else { unreachable!() };
-                    let ht = g.height();
-                    let dp = g.depth();
-                    //reinserts.push(VNode::VSkip(a));
-                    next_line!(false);
-                    ret.push(ParLine::Line(TeXBox::H {children:vec!(g).into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
-                        spec:line_spec.clone(),
-                        ends_with_line_break:false,
-                        inner_height:ht + dp + a.base() + b.base(),
-                        inner_depth:ET::Dim::default()
-                    },preskip:None}));
-                    //ret.push(ParLine::Adjust(VNode::VSkip(b)));
-                    continue 'A
-                }
-                Some(HNode::Penalty(i)) if i <= -10000 => {
-                    next_line!(true); // TODO mark somehow
-                    continue 'A
-                }
-                Some(HNode::Penalty(_)) => (),
-                Some(n@HNode::Space | n@HNode::Hss | n@HNode::HSkip(_) | n@HNode::HFil | n@HNode::HFill) if target <= ET::Dim::default() => {
-                    line.push(n);
-                    break
-                }
-                Some(node) => {
-                    target = target + (-node.width());
-                    curr_height = curr_height.max(node.height());
-                    curr_depth = curr_depth.max(node.depth());
-                    line.push(node);
-                }
-            }
-        }
-        next_line!(false);
-    }
-    ret
-}
-
-pub enum Script {
-    Super,Sub
-}
-impl Script {
-    pub fn invalid<ET:EngineTypes>(&self, a:&MathAtom<ET,UnresolvedMathFontStyle<ET>>) -> bool {
-        match self {
-            Script::Super => a.sup.is_some(),
-            Script::Sub => a.sub.is_some()
-        }
-    }
-    pub fn merge<ET:EngineTypes>(self,n:MathNode<ET,UnresolvedMathFontStyle<ET>>,a:&mut MathAtom<ET,UnresolvedMathFontStyle<ET>>) {
-        match self {
-            Script::Sub => a.sub = Some(vec!(n).into()),
-            Script::Super => a.sup = Some(vec!(n).into())
-        }
-    }
-    pub fn tp<ET:EngineTypes>(&self) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>> {
-        match self {
-            Script::Super => ListTarget::<ET,_>::new(
-                |engine,children,_| if let Some(NodeList::Math{children:ch,..}) = engine.stomach.data_mut().open_lists.last_mut() {
-                    if let Some(MathNode::Atom(a)) = ch.list_mut().last_mut() {
-                        a.sup = Some(children.into())
-                    } else {unreachable!()}
-                } else {unreachable!()}
-            ),
-            _ => ListTarget::<ET,_>::new(
-                |engine,children,_| if let Some(NodeList::Math{children:ch,..}) = engine.stomach.data_mut().open_lists.last_mut() {
-                    if let Some(MathNode::Atom(a)) = ch.list_mut().last_mut() {
-                        a.sub = Some(children.into())
-                    } else {unreachable!()}
-                } else {unreachable!()}
-            )
-        }
-    }
-}
-
-fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) {
-    match engine.stomach.data_mut().open_lists.last_mut() {
-        Some(NodeList::Math { children, .. }) => {
-            match children.list_mut().last() {
-                Some(MathNode::Atom(a)) if script.invalid(a) => {
-                    todo!("throw double xscript error")
-                },
-                Some(MathNode::Atom(_)) => (),
-                _ => children.push(MathNode::Atom(MathAtom::empty())),
-            }
-        }
-        _ => unreachable!()
-    }
-    engine.read_char_or_math_group(|script,engine,c| {
-        match engine.stomach.data_mut().open_lists.last_mut() {
-            Some(NodeList::Math { children, .. }) => {
-                match children.list_mut().last_mut() {
-                    Some(MathNode::Atom(a)) =>
-                        script.merge(MathNode::Atom(c.to_atom()),a),
-                    _ => unreachable!()
-                }
-            }
-            _ => unreachable!()
-        }
-    },|script| script.tp(),script)
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    /// read a box from the current input stream
+    pub fn read_box(&mut self,skip_eq:bool) -> Result<Option<TeXBox<ET>>, BoxInfo<ET>> {
+        let mut read_eq = !skip_eq;
+        crate::expand_loop!(self,token,
+            ResolvedToken::Tk {char,code:CommandCode::Other} if !read_eq && matches!(char.try_into(),Ok(b'=')) => read_eq = true,
+            ResolvedToken::Tk { code:CommandCode::Space,..} => (),
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Box(b),..})) =>
+                return b(self,token),
+            _ => todo!("error")
+        );
+        todo!("file end")
+    }
+
+    /// read a math char or group from the current input stream. Assumes we are in math mode.
+    /// (e.g. `\mathop X` or `\mathop{ \alpha + \beta }`).
+    /// In the latter case a new list is opened in processed "asynchronously". When the list is closed,
+    /// the second continuation is called with the list as argument.
     pub fn read_char_or_math_group<S,F1:FnOnce(S,&mut Self,MathChar<ET>),F2:FnOnce(S) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,f:F1,tp:F2,s:S) {
         crate::expand_loop!(self,token,
             ResolvedToken::Tk {code:CommandCode::Space,..} => (),
             ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
-            ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::BeginGroup,..})) => {
+            ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::BeginGroup,..})) => {
                 self.state.push(self.aux,GroupType::Math {
                     display:self.stomach.data_mut().mode() == TeXMode::DisplayMath
                 },self.mouth.line_number());
@@ -1203,12 +554,12 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 self.stomach.data_mut().open_lists.push(list);
                 return
             },
-            ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..})) => (),
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) => (),
             ResolvedToken::Tk {char,code:CommandCode::Other | CommandCode::Letter} => {
                 let mc = MathChar::from_u32(self.state.get_mathcode(char),self.state, Some(char));
                 return f(s,self,mc)
             },
-            ResolvedToken::Cmd(Some(Command::MathChar(u))) => {
+            ResolvedToken::Cmd(Some(TeXCommand::MathChar(u))) => {
                 let mc = MathChar::from_u32(*u, self.state,None);
                 return f(s,self,mc)
             }

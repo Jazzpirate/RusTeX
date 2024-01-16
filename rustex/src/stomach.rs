@@ -1,10 +1,10 @@
-use tex_engine::commands::{Command, CommandScope, Macro, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, CommandScope, Macro, PrimitiveCommand};
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::{GroupType, State};
-use tex_engine::engine::stomach::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult, Stomach, StomachData};
+use tex_engine::engine::stomach::{Stomach, StomachData};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
 use tex_engine::tex::numerics::{Dim32, Skip32};
 use tex_engine::tex::tokens::CompactToken;
@@ -13,6 +13,7 @@ use crate::extension::FontChange;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
+use tex_engine::engine::stomach::methods::{insert_afterassignment, ParLine, ParLineSpec, split_paragraph_roughly, SplitResult};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathNode, MathNucleus};
 use tex_engine::tex::nodes::NodeTrait;
@@ -29,8 +30,7 @@ pub struct RusTeXStomach {
     prevent_shipout:bool,
     pub continuous:bool
 }
-impl Stomach for RusTeXStomach {
-    type ET = Types;
+impl Stomach<Types> for RusTeXStomach {
 
     fn new(_aux: &mut EngineAux<Types>, _state: &mut RusTeXState) -> Self {
         Self { afterassignment:None, data:StomachData::new(), prevent_shipout:false,continuous:false }
@@ -48,7 +48,7 @@ impl Stomach for RusTeXStomach {
         vsplit(engine, nodes, target)
     }
 
-    fn do_font(engine: Refs, _token: CompactToken, f: Font, global: bool) {
+    fn assign_font(engine: Refs, _token: CompactToken, f: Font, global: bool) {
         let g = global || engine.aux.extension.change_markers.len() == 0;
         tex_engine::add_node!(Self;engine,
                        VNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
@@ -62,7 +62,7 @@ impl Stomach for RusTeXStomach {
         insert_afterassignment(engine);
     }
 
-    fn close_box(engine:&mut EngineReferences<Self::ET>, bt:BoxType) {
+    fn close_box(engine:&mut EngineReferences<Types>, bt:BoxType) {
         let markers = std::mem::take(engine.aux.extension.change_markers.last_mut().unwrap());
         for _ in markers {
             tex_engine::add_node!(Self;engine,
@@ -74,7 +74,7 @@ impl Stomach for RusTeXStomach {
         tex_engine::engine::stomach::methods::close_box(engine,bt)
     }
 
-    fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<HNode<Types>>, sourceref: SourceReference<<<Self::ET as EngineTypes>::File as File>::SourceRefID>) {
+    fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<HNode<Types>>, sourceref: SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         let ret = split_paragraph_roughly(engine,specs.clone(),children,sourceref.clone());
         engine.stomach.prevent_shipout = true;
@@ -98,7 +98,7 @@ impl Stomach for RusTeXStomach {
         }
     }
     /*
-    fn add_node_v(engine: &mut EngineReferences<Self::ET>, node: VNode<Self::ET>) {
+    fn add_node_v(engine: &mut EngineReferences<Types>, node: VNode<Types>) {
         if engine.stomach.data.in_output
         match node {
             VNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd) => (),
@@ -107,22 +107,22 @@ impl Stomach for RusTeXStomach {
     }
      */
 
-    fn maybe_shipout(engine:&mut EngineReferences<Self::ET>,penalty:Option<i32>) {
+    fn maybe_do_output(engine:&mut EngineReferences<Types>, penalty:Option<i32>) {
         if engine.stomach.prevent_shipout { return }
         let continuous = engine.stomach.continuous;
         let data = engine.stomach.data_mut();
         if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() {
             if continuous {
-                data.pagegoal = <Self::ET as EngineTypes>::Dim::from_sp(i32::MAX / 3);
+                data.pagegoal = <Types as EngineTypes>::Dim::from_sp(i32::MAX / 3);
                 engine.state.set_primitive_dim(engine.aux,PRIMITIVES.vsize,data.pagegoal,true);
-                if data.page_contains_boxes && data.pagetotal > <Self::ET as EngineTypes>::Dim::from_sp(6553600 * 5) {
+                if data.page_contains_boxes && data.pagetotal > <Types as EngineTypes>::Dim::from_sp(6553600 * 5) {
                     do_shipout(engine,penalty.or(Some(-10000)),|_|());
                     engine.stomach.data_mut().page_contains_boxes = true;
                 } else if penalty.is_some() {
                     do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip32::new(Dim32(655360),None,None))));
                 }
             } else if data.pagetotal >= data.pagegoal || penalty.is_some() {
-                RusTeXStomach::do_shipout_output(engine,penalty)
+                RusTeXStomach::do_output(engine, penalty)
             }
         }
     }
@@ -142,7 +142,7 @@ impl Stomach for RusTeXStomach {
             });
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignBegin))
     }
-    fn close_align(engine: &mut EngineReferences<Self::ET>) {
+    fn close_align(engine: &mut EngineReferences<Types>) {
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignEnd));
         match engine.stomach.data_mut().open_lists.pop() {
             Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
@@ -273,20 +273,20 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
 fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Types>,penalty:Option<i32>,f:F) {
     macro_rules! set_empty{
         ($id:ident) => {
-            engine.state.set_command(&engine.aux,engine.aux.extension.$id,Some(Command::Macro(engine.aux.extension.empty.clone())),true)
+            engine.state.set_command(&engine.aux,engine.aux.extension.$id,Some(TeXCommand::Macro(engine.aux.extension.empty.clone())),true)
         }
     }
     set_empty!(oddhead);
     set_empty!(oddfoot);
     set_empty!(evenhead);
     set_empty!(evenfoot);
-    engine.state.set_command(&engine.aux,engine.aux.extension.mkboth,Some(Command::Macro(engine.aux.extension.gobbletwo.clone())),true);
+    engine.state.set_command(&engine.aux, engine.aux.extension.mkboth, Some(TeXCommand::Macro(engine.aux.extension.gobbletwo.clone())), true);
 
-    let iffalse = Command::Primitive{cmd:PrimitiveCommand::Conditional(tex_engine::commands::tex::iffalse::<Types>),name:PRIMITIVES.iffalse};
+    let iffalse = TeXCommand::Primitive{cmd:PrimitiveCommand::Conditional(tex_engine::commands::tex::iffalse::<Types>),name:PRIMITIVES.iffalse};
     engine.state.set_command(&engine.aux,engine.aux.extension.specialpage,Some(iffalse),true);
     let data = engine.stomach.data_mut();
     data.page.insert(0,VNode::Custom(RusTeXNode::PageBegin));
     f(data);
     data.page.push(VNode::Custom(RusTeXNode::PageEnd));
-    RusTeXStomach::do_shipout_output(engine,penalty)
+    RusTeXStomach::do_output(engine, penalty)
 }

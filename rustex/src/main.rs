@@ -14,7 +14,7 @@ use RusTeX::engine::Types;
 use RusTeX::files::RusTeXFileSystem;
 use RusTeX::output::RusTeXOutput;
 use RusTeX::stomach::{CLOSE_FONT, close_font};
-use tex_engine::commands::{Command, CommandScope, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;

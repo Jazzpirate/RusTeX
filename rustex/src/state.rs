@@ -1,4 +1,4 @@
-use tex_engine::commands::{Command, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, PrimitiveCommand};
 use tex_engine::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier};
 use tex_engine::engine::{EngineAux, EngineTypes, state};
 use tex_engine::engine::state::{GroupType, State, StateChangeTracker, StateStack};
@@ -14,7 +14,7 @@ use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::prelude::*;
 
 #[derive(Clone)]
-pub struct RusTeXState(state::tex_state::TeXState<Types>);
+pub struct RusTeXState(state::tex_state::DefaultState<Types>);
 impl StateChangeTracker<Types> for RusTeXState {
 
 
@@ -23,7 +23,7 @@ impl StateChangeTracker<Types> for RusTeXState {
 impl State<Types> for RusTeXState {
 
     fn new(nullfont: Font, aux: &mut EngineAux<Types>) -> Self {
-        Self(state::tex_state::TeXState::new(nullfont, aux))
+        Self(state::tex_state::DefaultState::new(nullfont, aux))
     }
     fn register_primitive(&mut self,aux:&mut EngineAux<Types>, name:&'static str, cmd: PrimitiveCommand<Types>) {
         self.0.register_primitive(aux,name,cmd)
@@ -293,22 +293,22 @@ impl State<Types> for RusTeXState {
     }
 
 
-    fn get_command(&self, name: &CSName) -> Option<&Command<Types>> {
+    fn get_command(&self, name: &CSName) -> Option<&TeXCommand<Types>> {
         self.0.get_command(name)
     }
 
 
-    fn set_command(&mut self, aux: &EngineAux<Types>, name: CSName, cmd: Option<Command<Types>>, globally: bool) {
+    fn set_command(&mut self, aux: &EngineAux<Types>, name: CSName, cmd: Option<TeXCommand<Types>>, globally: bool) {
         self.0.set_command(aux,name,cmd,globally)
     }
 
 
-    fn get_ac_command(&self, c: u8) -> Option<&Command<Types>> {
+    fn get_ac_command(&self, c: u8) -> Option<&TeXCommand<Types>> {
         self.0.get_ac_command(c)
     }
 
 
-    fn set_ac_command(&mut self, aux: &EngineAux<Types>, c: u8, cmd: Option<Command<Types>>, globally: bool) {
+    fn set_ac_command(&mut self, aux: &EngineAux<Types>, c: u8, cmd: Option<TeXCommand<Types>>, globally: bool) {
         self.0.set_ac_command(aux,c,cmd,globally)
     }
 }

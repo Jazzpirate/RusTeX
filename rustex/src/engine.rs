@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 use lazy_static::lazy_static;
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use tex_engine::commands::{Command, CommandScope, Macro, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, CommandScope, Macro, PrimitiveCommand};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
@@ -78,7 +78,7 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
         match &mut *guard {
             Some((s, m)) =>return  (s.clone(), m.clone()),
             n => {
-                let start = std::time::Instant::now();
+                //let start = std::time::Instant::now();
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
@@ -139,7 +139,7 @@ pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name
         &AT_LETTER_SCHEME,sig,exp);
     if protect { cmd.protected = true }
     if long { cmd.long = true }
-    e.state.set_command(&e.aux,name,Some(Command::Macro(cmd)),globally)
+    e.state.set_command(&e.aux, name, Some(TeXCommand::Macro(cmd)), globally)
 }
 
 /*pub struct RusTeXEngine {

@@ -2,7 +2,7 @@
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::state::{GroupType, State, StateChange, StateChangeTracker, StateStack};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::commands::{Command, PrimitiveCommand};
+use crate::commands::{TeXCommand, PrimitiveCommand};
 use crate::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
@@ -17,7 +17,7 @@ use crate::tex::tokens::control_sequences::CSNameMap;
 
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
-pub struct TeXState<ET:EngineTypes> {
+pub struct DefaultState<ET:EngineTypes> {
     stack:StateStack<ET>,
     primitives:PrimitiveCommands<ET>,
     catcodes: CategoryCodeScheme<ET::Char>,
@@ -37,8 +37,8 @@ pub struct TeXState<ET:EngineTypes> {
     muskip_register:Vec<ET::MuSkip>,
     toks_register:Vec<TokenList<ET::Token>>,
     box_register:Vec<Option<TeXBox<ET>>>,
-    commands:<ET::CSName as CSName<ET::Char>>::Map<Command<ET>>,//Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
-    ac_commands:<ET::Char as Character>::CharMap<Option<Command<ET>>>,
+    commands:<ET::CSName as CSName<ET::Char>>::Map<TeXCommand<ET>>,//Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
+    ac_commands:<ET::Char as Character>::CharMap<Option<TeXCommand<ET>>>,
     endline_char:Option<ET::Char>,
     escape_char:Option<ET::Char>,
     newline_char:Option<ET::Char>,
@@ -49,7 +49,7 @@ pub struct TeXState<ET:EngineTypes> {
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
 }
-impl<ET:EngineTypes> TeXState<ET> {
+impl<ET:EngineTypes> DefaultState<ET> {
     fn tracing_assigns(&self) -> bool {
         match self.primitive_ints.get(&PRIMITIVES.tracingassigns) {
             Some(v) if *v > ET::Int::default() => true,
@@ -64,11 +64,11 @@ impl<ET:EngineTypes> TeXState<ET> {
     }
 }
 
-impl<ET:EngineTypes> StateChangeTracker<ET> for TeXState<ET> {
+impl<ET:EngineTypes> StateChangeTracker<ET> for DefaultState<ET> {
     fn stack(&mut self) -> &mut StateStack<ET> { &mut self.stack }
 }
 
-impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
+impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
     fn new(nullfont:ET::Font,aux:&mut EngineAux<ET>) -> Self {
         let mem = &aux.memory;
         let mut lccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
@@ -125,7 +125,7 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
     fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd: PrimitiveCommand<ET>) {
         let id = self.primitives.register(name,cmd.clone());
         let name = aux.memory.cs_interner_mut().new(name);
-        self.commands.insert(name,Command::Primitive {name:id, cmd});
+        self.commands.insert(name, TeXCommand::Primitive {name:id, cmd});
     }
     fn primitives(&self) -> &PrimitiveCommands<ET> { &self.primitives }
 
@@ -137,14 +137,12 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         self.stack.stack.len()
     }
 
-
     fn aftergroup(&mut self, token: ET::Token) {
         match self.stack.stack.last_mut() {
             None => (),
             Some(lvl) => lvl.aftergroup.push(token)
         }
     }
-
 
     fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize) {
         self.stack.push(group_type);
@@ -182,46 +180,48 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             }
         }
     }
+
     fn pop(&mut self,aux:&mut EngineAux<ET>,mouth: &mut ET::Mouth) {
-        let mut lvl = match self.stack.stack.pop() {
-            Some(lvl) => lvl,
-            _ => todo!("throw error")
-        };
-        let trace = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
+        let len = self.stack.stack.len();
+        if len == 0 { todo!("throw error") }
+        let traceg = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
             Some(v) if *v > ET::Int::default() => true,
             _ => false
         };
-        if trace {
-            match lvl.group_type {
+        let trace = self.tracing_restores();
+
+        let (gt,ag,mut ch) = self.stack.pop();
+
+        if traceg {
+            match gt {
                 GroupType::ControlSequence =>
                     aux.outputs.write_neg1(format_args!(
                         "{{leaving semi simple group (level {}) at line {}}}",
-                        self.stack.stack.len() + 1, mouth.line_number()
+                        len, mouth.line_number()
                     )),
                 GroupType::Character =>
                     aux.outputs.write_neg1(format_args!(
                         "{{leaving simple group (level {}) at line {}}}",
-                        self.stack.stack.len() + 1, mouth.line_number()
+                        len, mouth.line_number()
                     )),
                 GroupType::Box(bt) =>
                     aux.outputs.write_neg1(format_args!(
                         "{{leaving {} group (level {}) at line {}}}",bt,
-                        self.stack.stack.len() + 1, mouth.line_number()
+                        len, mouth.line_number()
                     )),
                 GroupType::Math { ..} =>
                     aux.outputs.write_neg1(format_args!(
                         "{{leaving math shift group (level {}) at line {}}}",
-                        self.stack.stack.len() + 1, mouth.line_number()
+                        len, mouth.line_number()
                     )),
                 GroupType::LeftRight =>
                     aux.outputs.write_neg1(format_args!(
                         "{{leaving math left group (level {}) at line {}}}",
-                        self.stack.stack.len() + 1, mouth.line_number()
+                        len, mouth.line_number()
                     )),
             }
         }
-        let trace = self.tracing_restores();
-        for c in lvl.changes.drain(..) {
+        ch.close(|c| {
             match c {
                 //StateChange::Custom { change } => change.restore(aux,self,trace),
                 StateChange::Catcode {char,old} => {
@@ -493,14 +493,11 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
                     }
                 }*/
             }
+        });
+        if !ag.is_empty() {
+            mouth.push_vec(ag)
         }
-        if !lvl.aftergroup.is_empty() {
-            mouth.push_vec(std::mem::take(&mut lvl.aftergroup))
-        }
-        self.stack.give_back(lvl);
     }
-
-
 
     fn get_parshape(&self) -> &Vec<(ET::Dim,ET::Dim)> {
         &self.parshape
@@ -520,11 +517,9 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_current_font(&self) -> &ET::Font {
         &self.current_font
     }
-
     fn set_current_font(&mut self, aux: &mut EngineAux<ET>, fnt: ET::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -548,7 +543,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
     fn get_textfont(&self, i: u8) -> &<ET as EngineTypes>::Font {
         &self.textfonts[i as usize]
     }
-
     fn set_textfont(&mut self, aux: &mut EngineAux<ET>, idx: u8, fnt: <ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -569,11 +563,9 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_scriptfont(&self, i: u8) -> &<ET as EngineTypes>::Font {
         &self.scriptfonts[i as usize]
     }
-
     fn set_scriptfont(&mut self, aux: &mut EngineAux<ET>, idx: u8, fnt: <ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -594,11 +586,9 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_scriptscriptfont(&self, i: u8) -> &<ET as EngineTypes>::Font {
         &self.scriptscriptfonts[i as usize]
     }
-
     fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<ET>, idx: u8, fnt: <ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
@@ -619,7 +609,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_catcode_scheme(&self) -> &CategoryCodeScheme<ET::Char> { &self.catcodes }
     fn set_catcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, cc: CategoryCode, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -636,7 +625,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::Catcode { char: c, old }
         })
     }
-
 
     fn get_sfcode(&self,c:ET::Char) -> u16 { *self.sfcodes.get(c) }
     fn set_sfcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:u16, globally: bool) {
@@ -658,7 +646,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_delcode(&self,c:ET::Char) -> ET::Int { *self.delcodes.get(c) }
     fn set_delcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Int, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -678,7 +665,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::DelCode { char: c, old }
         })
     }
-
 
     fn get_lccode(&self,c:ET::Char) -> ET::Char { *self.lccodes.get(c) }
     fn set_lccode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Char, globally: bool) {
@@ -700,7 +686,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_uccode(&self,c:ET::Char) -> ET::Char { *self.uccodes.get(c) }
     fn set_uccode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:ET::Char, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -721,7 +706,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_mathcode(&self,c:ET::Char) -> u32 { *self.mathcodes.get(c) }
     fn set_mathcode(&mut self,aux:&EngineAux<ET>, c: ET::Char, val:u32, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -741,8 +725,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::MathCode { char: c, old }
         })
     }
-
-
 
     fn get_endline_char(&self) -> Option<ET::Char> { self.endline_char }
     fn set_endline_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
@@ -769,7 +751,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_escape_char(&self) -> Option<ET::Char> { self.escape_char }
     fn set_escape_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
         self.change_field(globally, |s,g| {
@@ -794,7 +775,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::EscapeChar { old }
         })
     }
-
 
     fn get_newline_char(&self) -> Option<ET::Char> { self.newline_char }
     fn set_newline_char(&mut self,aux:&EngineAux<ET>, c: Option<ET::Char>, globally: bool) {
@@ -821,7 +801,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         })
     }
 
-
     fn get_primitive_int(&self, name: PrimitiveIdentifier) -> ET::Int {
         match self.primitive_ints.get(&name) {
             Some(i) => *i,
@@ -838,7 +817,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::PrimitiveInt { name, old }
         });
     }
-
 
     fn get_int_register(&self, idx: usize) -> ET::Int {
         match self.int_register.get(idx) {
@@ -864,7 +842,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
     fn get_dim_register(&self, idx: usize) -> ET::Dim {
         match self.dim_register.get(idx) {
             Some(i) => *i,
@@ -888,8 +865,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::DimRegister { idx, old }
         });
     }
-
-
 
     fn get_skip_register(&self, idx: usize) -> ET::Skip {
         match self.skip_register.get(idx) {
@@ -915,7 +890,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
     fn get_muskip_register(&self, idx: usize) -> ET::MuSkip {
         match self.muskip_register.get(idx) {
             Some(i) => *i,
@@ -940,22 +914,18 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
     fn get_box_register(&self, idx: usize) -> Option<&TeXBox<ET>> {
         match self.box_register.get(idx) {
             None => None,
             Some(i) => i.as_ref()
         }
     }
-
-
     fn get_box_register_mut(&mut self, idx: usize) -> Option<&mut TeXBox<ET>> {
         match self.box_register.get_mut(idx) {
             None => None,
             Some(i) => i.as_mut()
         }
     }
-
     fn take_box_register(&mut self, idx: usize) -> Option<TeXBox<ET>> {
         match self.box_register.get_mut(idx) {
             None => None,
@@ -974,8 +944,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::BoxRegister { idx, old }
         });
     }
-
-
 
     fn get_toks_register(&self, idx: usize) -> &TokenList<ET::Token> {
         match self.toks_register.get(idx) {
@@ -1007,7 +975,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
     fn get_primitive_tokens(&self, name: PrimitiveIdentifier) -> &TokenList<ET::Token> {
         match self.primitive_toks.get(&name) {
             Some(i) => i,
@@ -1033,7 +1000,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
     fn get_primitive_dim(&self, name: PrimitiveIdentifier) -> ET::Dim {
         match self.primitive_dims.get(&name) {
             Some(i) => *i,
@@ -1050,7 +1016,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
             StateChange::PrimitiveDim { name, old }
         });
     }
-
 
     fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> ET::Skip {
         match self.primitive_skips.get(&name) {
@@ -1069,7 +1034,6 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
     fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> ET::MuSkip {
         match self.primitive_muskips.get(&name) {
             Some(i) => *i,
@@ -1087,11 +1051,10 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-
-    fn get_command(&self, name: &ET::CSName) -> Option<&Command<ET>> {
+    fn get_command(&self, name: &ET::CSName) -> Option<&TeXCommand<ET>> {
         self.commands.get(name)
     }
-    fn set_command(&mut self,aux:&EngineAux<ET>, name: ET::CSName, cmd: Option<Command<ET>>, globally: bool) {
+    fn set_command(&mut self, aux:&EngineAux<ET>, name: ET::CSName, cmd: Option<TeXCommand<ET>>, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = match cmd {
                 None => {
@@ -1160,10 +1123,10 @@ impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
         });
     }
 
-    fn get_ac_command(&self, c: ET::Char) -> Option<&Command<ET>> {
+    fn get_ac_command(&self, c: ET::Char) -> Option<&TeXCommand<ET>> {
         self.ac_commands.get(c).as_ref()
     }
-    fn set_ac_command(&mut self, _aux: &EngineAux<ET>, c: ET::Char, cmd: Option<Command<ET>>, globally: bool) {
+    fn set_ac_command(&mut self, _aux: &EngineAux<ET>, c: ET::Char, cmd: Option<TeXCommand<ET>>, globally: bool) {
         self.change_field(globally,|s,_| {
             let old = std::mem::replace(s.ac_commands.get_mut(c), cmd);
             StateChange::AcCommand { char: c, old }

@@ -1,5 +1,5 @@
 use crate::cmtodo;
-use crate::commands::{CharOrPrimitive, Command, CommandScope, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
+use crate::commands::{CharOrPrimitive, TeXCommand, CommandScope, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
@@ -32,7 +32,7 @@ pub fn eTeXrevision<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,exp:&mut 
 fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
 >(engine:&mut EngineReferences<ET>,
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> R,
-  cmd:fn(&mut EngineReferences<ET>,bool,Command<ET>,ET::Token) -> R
+  cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> R
 ) -> R {
     let (is_negative,r) = crate::engine::gullet::methods::read_numeric(engine, false);
     match r {
@@ -89,7 +89,7 @@ impl<ET:EngineTypes,R:Numeric<ET::Int>> std::fmt::Display for Summand<ET,R> {
 fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
     engine:&mut EngineReferences<ET>,
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> R,
-  cmd:fn(&mut EngineReferences<ET>,bool,Command<ET>,ET::Token) -> R
+  cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> R
 ) -> (R,ET::Token) {
     let mut prev : Option<R> = None;
     let mut curr = Summand::<ET,R>::new(expr_inner(engine,byte,cmd));
@@ -274,7 +274,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
             |d,e| crate::engine::gullet::methods::read_muskip_ii(e, d)
         )
     }
-    fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,cmd:Command<ET>,tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
+    fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
         crate::engine::gullet::methods::read_muskip_command(
             engine,is_negative,cmd,tk,|d,e| crate::engine::gullet::methods::read_muskip_ii(e, d),|s| s
         )
@@ -317,7 +317,7 @@ pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 
 pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,_protected:bool,globally:bool) {
     crate::expand_loop!(engine,token,
-        ResolvedToken::Cmd(Some(Command::Primitive{name,..})) => match *name {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return super::tex::outer(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.long => return super::tex::long(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.protected => return self::protected(engine,token,outer,long,true,globally),
@@ -348,7 +348,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,g
             params:engine.aux.memory.empty_list().into()
         }
     };
-    engine.set_command(&cs,Some(Command::Macro(m)),globally)
+    engine.set_command(&cs, Some(TeXCommand::Macro(m)), globally)
 }
 
 
@@ -426,7 +426,7 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     match engine.get_next() {
         None => todo!("file end"),
         Some(t) => match engine.resolve(&t) {
-            ResolvedToken::Cmd(Some(Command::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)})) => {
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)})) => {
                 ET::Gullet::do_conditional(engine,*name,t,*cnd,true)
             }
             _ => todo!("throw error")

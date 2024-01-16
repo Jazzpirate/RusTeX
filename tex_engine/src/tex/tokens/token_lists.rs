@@ -214,9 +214,7 @@ impl<T:Token> MacroExpansion<T> {
     pub fn consume_rev(&mut self, v:&mut Vec<T>) {
         for t in self.ls.0.iter().rev() {
             if let Some(i) = t.is_argument_marker() {
-                for t in self.args[i as usize].iter().rev() {
-                    v.push(t.clone());
-                }
+                v.extend(self.args[i as usize].iter().rev().cloned())
             } else {
                 v.push(t.clone());
             }

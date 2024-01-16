@@ -7,6 +7,7 @@
 */
 
 use std::fmt::{Debug, Display, Write};
+use std::hash::Hash;
 use std::marker::PhantomData;
 use crate::prelude::{CategoryCode, CategoryCodeScheme};
 use crate::tex::characters::Character;
@@ -18,7 +19,7 @@ use crate::tex::characters::CharacterMap;
 pub trait CSName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
     /// The type of the handler for this control sequence name.
     type Handler: CSHandler<C,Self>;
-    /// The type used for mapping control sequence names to e.g. [`Command`](crate::commands::Command)s.
+    /// The type used for mapping control sequence names to e.g. [`Command`](crate::commands::TeXCommand)s.
     type Map<A>:CSNameMap<C,Self,A> where A:Clone;
     fn display_fmt<W:Write>(&self, int:&Self::Handler, cc:&CategoryCodeScheme<C>, escapechar:Option<C>, f: &mut W) -> std::fmt::Result {
         let res = int.resolve(self);
@@ -33,9 +34,10 @@ pub trait CSName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
             write!(f," ")
         }
     }
+    fn id(&self) -> usize;
 }
 
-/// How to map control sequence names to e.g. [`Command`](crate::commands::Command)s.
+/// How to map control sequence names to e.g. [`Command`](crate::commands::TeXCommand)s.
 pub trait CSNameMap<C:Character,CS:CSName<C>,A:Clone>:Clone+Default {
     /// Returns the value associated with the given control sequence name, if any.
     fn get(&self,cs:&CS) -> Option<&A>;
@@ -57,6 +59,12 @@ impl<C:Character,CS:CSName<C>,A:Clone> CSNameMap<C,CS,A> for HMap<CS,A> {
 impl<C:Character> CSName<C> for Ptr<str> {
     type Handler = ();
     type Map<A> = HMap<Self,A> where A:Clone;
+    fn id(&self) -> usize {
+        use std::hash::Hasher;
+        let mut hash = std::hash::DefaultHasher::new();
+        self.hash(&mut hash);
+        hash.finish() as usize
+    }
 }
 
 /// A control sequence name that has been interned.
@@ -65,6 +73,7 @@ pub type InternedCSName<C> = (u32,PhantomData<C>);
 impl<C:Character> CSName<C> for InternedCSName<C> {
     type Handler = CSInterner<C>;
     type Map<A> = CSNameVec<C,A> where A:Clone;
+    fn id(&self) -> usize { self.0 as usize }
 }
 
 /// A [`CSNameMap`] that uses a [`Vec`] to store the values for [`InternedCSName`].

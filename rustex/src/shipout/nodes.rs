@@ -7,7 +7,7 @@ use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim
 use tex_engine::tex::nodes::NodeTrait;
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
-use tex_engine::engine::stomach::ParLineSpec;
+use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
