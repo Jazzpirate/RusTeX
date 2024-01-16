@@ -1,6 +1,6 @@
 /*! Implementation of a plain TeX [`State`]. */
 use crate::engine::{EngineAux, EngineTypes};
-use crate::engine::state::{Ch, CS, Dim, GroupType, State, StateChange, StateChangeTracker, StateStack, T};
+use crate::engine::state::{GroupType, State, StateChange, StateChangeTracker, StateStack};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::{Command, PrimitiveCommand};
 use crate::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier, PRIMITIVES};
@@ -11,9 +11,6 @@ use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::characters::CharacterMap;
 use crate::utils::HMap;
-use crate::engine::FontSystem;
-
-type Fnt<ET> = <<ET as EngineTypes>::FontSystem as FontSystem>::Font;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::tokens::control_sequences::CSNameMap;
@@ -21,7 +18,7 @@ use crate::tex::tokens::control_sequences::CSNameMap;
 /// Default implementation of a plain TeX [`State`].
 #[derive(Clone)]
 pub struct TeXState<ET:EngineTypes> {
-    stack:StateStack<ET,Self>,
+    stack:StateStack<ET>,
     primitives:PrimitiveCommands<ET>,
     catcodes: CategoryCodeScheme<ET::Char>,
     sfcodes: <ET::Char as Character>::CharMap<u16>,
@@ -45,15 +42,14 @@ pub struct TeXState<ET:EngineTypes> {
     endline_char:Option<ET::Char>,
     escape_char:Option<ET::Char>,
     newline_char:Option<ET::Char>,
-    current_font:Fnt<ET>,
-    textfonts:[Fnt<ET>;16],
-    scriptfonts:[Fnt<ET>;16],
-    scriptscriptfonts:[Fnt<ET>;16],
+    current_font:ET::Font,
+    textfonts:[ET::Font;16],
+    scriptfonts:[ET::Font;16],
+    scriptscriptfonts:[ET::Font;16],
     empty_list:TokenList<ET::Token>,
     parshape:Vec<(ET::Dim,ET::Dim)>,
 }
 impl<ET:EngineTypes> TeXState<ET> {
-
     fn tracing_assigns(&self) -> bool {
         match self.primitive_ints.get(&PRIMITIVES.tracingassigns) {
             Some(v) if *v > ET::Int::default() => true,
@@ -68,15 +64,12 @@ impl<ET:EngineTypes> TeXState<ET> {
     }
 }
 
-impl<ET:EngineTypes> StateChangeTracker<Self> for TeXState<ET> {
-
-    fn stack(&mut self) -> &mut StateStack<ET,Self> { &mut self.stack }
+impl<ET:EngineTypes> StateChangeTracker<ET> for TeXState<ET> {
+    fn stack(&mut self) -> &mut StateStack<ET> { &mut self.stack }
 }
 
-
-impl<ET:EngineTypes> State for TeXState<ET>  {
-    type ET = ET;
-    fn new(nullfont:Fnt<ET>,aux:&mut EngineAux<ET>) -> Self {
+impl<ET:EngineTypes> State<ET> for TeXState<ET>  {
+    fn new(nullfont:ET::Font,aux:&mut EngineAux<ET>) -> Self {
         let mem = &aux.memory;
         let mut lccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
         let mut uccodes: <ET::Char as Character>::CharMap<ET::Char> = CharacterMap::default();
@@ -129,12 +122,12 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
-    fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd: PrimitiveCommand<Self::ET>) {
+    fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd: PrimitiveCommand<ET>) {
         let id = self.primitives.register(name,cmd.clone());
         let name = aux.memory.cs_interner_mut().new(name);
         self.commands.insert(name,Command::Primitive {name:id, cmd});
     }
-    fn primitives(&self) -> &PrimitiveCommands<Self::ET> { &self.primitives }
+    fn primitives(&self) -> &PrimitiveCommands<ET> { &self.primitives }
 
     fn get_group_type(&self) -> Option<GroupType> {
         self.stack.stack.last().map(|lvl| lvl.group_type)
@@ -145,7 +138,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn aftergroup(&mut self, token: T<Self>) {
+    fn aftergroup(&mut self, token: ET::Token) {
         match self.stack.stack.last_mut() {
             None => (),
             Some(lvl) => lvl.aftergroup.push(token)
@@ -492,12 +485,13 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
                     }
                     *self.ac_commands.get_mut(char) = old;
                 }
+                /*
                 StateChange::Custom {change:c} => {
                     let mut m = c.lock().unwrap().take();
                     if let Some(ref mut c) = m {
                         c.restore(aux,self,trace);
                     }
-                }
+                }*/
             }
         }
         if !lvl.aftergroup.is_empty() {
@@ -508,15 +502,15 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
 
 
 
-    fn get_parshape(&self) -> &Vec<(Dim<Self>,Dim<Self>)> {
+    fn get_parshape(&self) -> &Vec<(ET::Dim,ET::Dim)> {
         &self.parshape
     }
-    fn take_parshape(&mut self) -> Vec<(Dim<Self>,Dim<Self>)> {
+    fn take_parshape(&mut self) -> Vec<(ET::Dim,ET::Dim)> {
         let sh = std::mem::take(&mut self.parshape);
         self.stack.add_change_locally(StateChange::ParShape { old: sh.clone() });
         sh
     }
-    fn set_parshape(&mut self, aux: &EngineAux<Self::ET>, parshape: Vec<(Dim<Self>,Dim<Self>)>, globally: bool) {
+    fn set_parshape(&mut self, aux: &EngineAux<ET>, parshape: Vec<(ET::Dim,ET::Dim)>, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing parshape}}",if g {"globally "} else {""}));
@@ -527,11 +521,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn get_current_font(&self) -> &crate::engine::state::Fnt<Self> {
+    fn get_current_font(&self) -> &ET::Font {
         &self.current_font
     }
 
-    fn set_current_font(&mut self, aux: &mut EngineAux<Self::ET>, fnt: crate::engine::state::Fnt<Self>, globally: bool) {
+    fn set_current_font(&mut self, aux: &mut EngineAux<ET>, fnt: ET::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
@@ -551,11 +545,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         })
     }
 
-    fn get_textfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+    fn get_textfont(&self, i: u8) -> &<ET as EngineTypes>::Font {
         &self.textfonts[i as usize]
     }
 
-    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_textfont(&mut self, aux: &mut EngineAux<ET>, idx: u8, fnt: <ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
@@ -576,11 +570,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn get_scriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+    fn get_scriptfont(&self, i: u8) -> &<ET as EngineTypes>::Font {
         &self.scriptfonts[i as usize]
     }
 
-    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptfont(&mut self, aux: &mut EngineAux<ET>, idx: u8, fnt: <ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
@@ -601,11 +595,11 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn get_scriptscriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+    fn get_scriptscriptfont(&self, i: u8) -> &<ET as EngineTypes>::Font {
         &self.scriptscriptfonts[i as usize]
     }
 
-    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<ET>, idx: u8, fnt: <ET as EngineTypes>::Font, globally: bool) {
         self.change_field(globally, |s,g| {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
@@ -846,13 +840,13 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn get_int_register(&self, idx: usize) -> crate::engine::state::Int<Self> {
+    fn get_int_register(&self, idx: usize) -> ET::Int {
         match self.int_register.get(idx) {
             Some(i) => *i,
             _ => ET::Int::default()
         }
     }
-    fn set_int_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: crate::engine::state::Int<Self>, globally: bool) {
+    fn set_int_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: ET::Int, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.int_register.len() <= idx {
                 s.int_register.resize(idx + 1, ET::Int::default());
@@ -877,7 +871,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             _ => ET::Dim::default()
         }
     }
-    fn set_dim_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: ET::Dim, globally: bool) {
+    fn set_dim_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: ET::Dim, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.dim_register.len() <= idx {
                 s.dim_register.resize(idx + 1, ET::Dim::default());
@@ -903,7 +897,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             _ => ET::Skip::default()
         }
     }
-    fn set_skip_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: ET::Skip, globally: bool) {
+    fn set_skip_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: ET::Skip, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.skip_register.len() <= idx {
                 s.skip_register.resize(idx + 1, ET::Skip::default());
@@ -928,7 +922,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             _ => ET::MuSkip::default()
         }
     }
-    fn set_muskip_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: ET::MuSkip, globally: bool) {
+    fn set_muskip_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: ET::MuSkip, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.muskip_register.len() <= idx {
                 s.muskip_register.resize(idx + 1, ET::MuSkip::default());
@@ -968,7 +962,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             Some(i) => std::mem::take(i)
         }
     }
-    fn set_box_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: Option<TeXBox<ET>>, globally: bool) {
+    fn set_box_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: Option<TeXBox<ET>>, globally: bool) {
         self.change_field(globally,|s,_| {
             if s.box_register.len() <= idx {
                 s.box_register.resize(idx + 1, None);
@@ -989,7 +983,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             _ => &self.empty_list
         }
     }
-    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: TokenList<ET::Token>, globally: bool) {
+    fn set_toks_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: TokenList<ET::Token>, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.toks_register.len() <= idx {
                 s.toks_register.resize(idx + 1, s.empty_list.clone());
@@ -1020,7 +1014,7 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
             _ => &self.empty_list
         }
     }
-    fn set_primitive_tokens(&mut self, aux: &EngineAux<Self::ET>, name: PrimitiveIdentifier, v: TokenList<ET::Token>, globally: bool) {
+    fn set_primitive_tokens(&mut self, aux: &EngineAux<ET>, name: PrimitiveIdentifier, v: TokenList<ET::Token>, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = s.primitive_toks.insert(name,v).unwrap_or(s.empty_list.clone());
             if s.tracing_assigns() {
@@ -1094,10 +1088,10 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
     }
 
 
-    fn get_command(&self, name: &CS<Self>) -> Option<&Command<Self::ET>> {
+    fn get_command(&self, name: &ET::CSName) -> Option<&Command<ET>> {
         self.commands.get(name)
     }
-    fn set_command(&mut self,aux:&EngineAux<ET>, name: CS<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
+    fn set_command(&mut self,aux:&EngineAux<ET>, name: ET::CSName, cmd: Option<Command<ET>>, globally: bool) {
         self.change_field(globally,|s,g| {
             let old = match cmd {
                 None => {
@@ -1166,10 +1160,10 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         });
     }
 
-    fn get_ac_command(&self, c: Ch<Self>) -> Option<&Command<Self::ET>> {
+    fn get_ac_command(&self, c: ET::Char) -> Option<&Command<ET>> {
         self.ac_commands.get(c).as_ref()
     }
-    fn set_ac_command(&mut self, _aux: &EngineAux<Self::ET>, c: Ch<Self>, cmd: Option<Command<Self::ET>>, globally: bool) {
+    fn set_ac_command(&mut self, _aux: &EngineAux<ET>, c: ET::Char, cmd: Option<Command<ET>>, globally: bool) {
         self.change_field(globally,|s,_| {
             let old = std::mem::replace(s.ac_commands.get_mut(c), cmd);
             StateChange::AcCommand { char: c, old }

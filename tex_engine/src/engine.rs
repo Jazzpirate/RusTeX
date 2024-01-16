@@ -46,7 +46,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Skip:Skip<Base = Self::Dim> + Numeric<Self::Int>;
     type MuSkip:MuSkip + Numeric<Self::Int>;
     type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,Skip=Self::Skip,MuSkip=Self::MuSkip>;
-    type State: State<ET=Self>;
+    type State: State<Self>;
     type Outputs: Outputs;
     type Mouth: Mouth<Self>;
     type Gullet:Gullet<Self>;

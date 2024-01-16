@@ -15,35 +15,34 @@ use tex_engine::prelude::*;
 
 #[derive(Clone)]
 pub struct RusTeXState(state::tex_state::TeXState<Types>);
-impl StateChangeTracker<state::tex_state::TeXState<Types>> for RusTeXState {
+impl StateChangeTracker<Types> for RusTeXState {
 
 
-    fn stack(&mut self) -> &mut StateStack<Types,state::tex_state::TeXState<Types>> { self.0.stack() }
+    fn stack(&mut self) -> &mut StateStack<Types> { self.0.stack() }
 }
-impl State for RusTeXState {
-    type ET = Types;
+impl State<Types> for RusTeXState {
 
     fn new(nullfont: Font, aux: &mut EngineAux<Types>) -> Self {
         Self(state::tex_state::TeXState::new(nullfont, aux))
     }
-    fn register_primitive(&mut self,aux:&mut EngineAux<Types>, name:&'static str, cmd: PrimitiveCommand<Self::ET>) {
+    fn register_primitive(&mut self,aux:&mut EngineAux<Types>, name:&'static str, cmd: PrimitiveCommand<Types>) {
         self.0.register_primitive(aux,name,cmd)
     }
 
-    fn primitives(&self) -> &PrimitiveCommands<Self::ET> {
+    fn primitives(&self) -> &PrimitiveCommands<Types> {
         self.0.primitives()
     }
 
     fn aftergroup(&mut self, token: CompactToken) { self.0.aftergroup(token) }
 
 
-    fn push(&mut self, aux: &mut EngineAux<Self::ET>, group_type: GroupType, line_number: usize) {
+    fn push(&mut self, aux: &mut EngineAux<Types>, group_type: GroupType, line_number: usize) {
         self.0.push(aux,group_type,line_number);
         aux.extension.push();
     }
 
 
-    fn pop(&mut self, aux: &mut EngineAux<Self::ET>, mouth: &mut <Self::ET as EngineTypes>::Mouth) {
+    fn pop(&mut self, aux: &mut EngineAux<Types>, mouth: &mut <Types as EngineTypes>::Mouth) {
         self.0.pop(aux,mouth);
         let closefont = CompactToken::from_cs(
             aux.memory.cs_interner_mut().new(CLOSE_FONT)
@@ -69,27 +68,27 @@ impl State for RusTeXState {
     }
 
 
-    fn get_textfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+    fn get_textfont(&self, i: u8) -> &<Types as EngineTypes>::Font {
         self.0.get_textfont(i)
     }
 
-    fn set_textfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_textfont(&mut self, aux: &mut EngineAux<Types>, idx: u8, fnt: <Types as EngineTypes>::Font, globally: bool) {
         self.0.set_textfont(aux,idx,fnt,globally)
     }
 
-    fn get_scriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+    fn get_scriptfont(&self, i: u8) -> &<Types as EngineTypes>::Font {
         self.0.get_scriptfont(i)
     }
 
-    fn set_scriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptfont(&mut self, aux: &mut EngineAux<Types>, idx: u8, fnt: <Types as EngineTypes>::Font, globally: bool) {
         self.0.set_scriptfont(aux,idx,fnt,globally)
     }
 
-    fn get_scriptscriptfont(&self, i: u8) -> &<Self::ET as EngineTypes>::Font {
+    fn get_scriptscriptfont(&self, i: u8) -> &<Types as EngineTypes>::Font {
         self.0.get_scriptscriptfont(i)
     }
 
-    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Self::ET>, idx: u8, fnt: <Self::ET as EngineTypes>::Font, globally: bool) {
+    fn set_scriptscriptfont(&mut self, aux: &mut EngineAux<Types>, idx: u8, fnt: <Types as EngineTypes>::Font, globally: bool) {
         self.0.set_scriptscriptfont(aux,idx,fnt,globally)
     }
 
@@ -236,7 +235,7 @@ impl State for RusTeXState {
     fn get_toks_register(&self, idx: usize) -> &TokenList<CompactToken> {
         self.0.get_toks_register(idx)
     }
-    fn set_toks_register(&mut self, aux: &EngineAux<Self::ET>, idx: usize, v: TokenList<CompactToken>, globally: bool) {
+    fn set_toks_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: TokenList<CompactToken>, globally: bool) {
         self.0.set_toks_register(aux,idx,v,globally)
     }
 
