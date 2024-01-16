@@ -164,21 +164,21 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 cont(engine.aux,engine.state,next);
                 continue
             }
-            CommandCode::Escape | CommandCode::Active => match engine.resolve(t) {
-                ResolvedToken::Tk{token,..} => {
-                    cont(engine.aux,engine.state,token)
+            CommandCode::Escape | CommandCode::Active => match engine.resolve(&t) {
+                ResolvedToken::Tk{..} => {
+                    cont(engine.aux,engine.state,t)
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
-                    cont(engine.aux,engine.state,token),
-                ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} =>
-                    ET::Gullet::do_macro(engine,m.clone(),token),
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)}),token} =>
-                    ET::Gullet::do_conditional(engine,*name,token,*cond,false),
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.noexpand => {
+                ResolvedToken::Cmd(Some(Command::Macro(m))) if m.protected && !expand_protected =>
+                    cont(engine.aux,engine.state,t),
+                ResolvedToken::Cmd(Some(Command::Macro(m))) =>
+                    ET::Gullet::do_macro(engine,m.clone(),t),
+                ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)})) =>
+                    ET::Gullet::do_conditional(engine,*name,t,*cond,false),
+                ResolvedToken::Cmd(Some(Command::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
                     let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
                     cont(engine.aux,engine.state,next);
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.unexpanded => {
+                ResolvedToken::Cmd(Some(Command::Primitive{name,..})) if *name == PRIMITIVES.unexpanded => {
                     engine.expand_until_bgroup(false);
                     engine.read_until_endgroup(|a,s,t|{
                         if edef_like && t.command_code() == CommandCode::Parameter {
@@ -187,7 +187,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                         cont(a,s,t)
                     });
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.the => {
+                ResolvedToken::Cmd(Some(Command::Primitive{name,..})) if *name == PRIMITIVES.the => {
                     engine.do_the(|a, s, _, t| {
                         if t.command_code() == CommandCode::Parameter && edef_like {
                             cont(a,s,t.clone());
@@ -195,19 +195,19 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                         cont(a,s,t)
                     })
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.noexpand => {
+                ResolvedToken::Cmd(Some(Command::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
                     match engine.get_next() {
                         Some(t) if t.command_code() != CommandCode::EndGroup =>
                             cont(engine.aux,engine.state,t),
                         _ => todo!("throw error")
                     }
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)}),token} =>
-                    ET::Gullet::do_simple_expandable(engine, *name, token, *e),
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(e)}),token} =>
-                    ET::Gullet::do_expandable(engine,*name,token,*e),
-                ResolvedToken::Cmd{token,..} => {
-                    cont(engine.aux,engine.state,token)
+                ResolvedToken::Cmd(Some(Command::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)})) =>
+                    ET::Gullet::do_simple_expandable(engine, *name, t, *e),
+                ResolvedToken::Cmd(Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(e)})) =>
+                    ET::Gullet::do_expandable(engine,*name,t,*e),
+                ResolvedToken::Cmd(_) => {
+                    cont(engine.aux,engine.state,t)
                 }
             }
             _ => cont(engine.aux,engine.state,t)
@@ -309,7 +309,7 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
     let mut quoted = false;
     let mut had_eq = !skip_eq;
     let mut was_quoted = false;
-    crate::expand_loop!(engine,
+    crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code,..} => match code {
             CommandCode::Space if ret.is_empty() && !was_quoted => (),
             CommandCode::Space if quoted => ret.push(' '),
@@ -326,10 +326,10 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
                 }
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::CharDef(c)),..} => c.display_fmt(ret),
-        ResolvedToken::Cmd {cmd:Some(Command::Char{char,..}),..} => char.display_fmt(ret),
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..}),..} if !quoted => return,
-        ResolvedToken::Cmd {token,..} if !quoted => {
+        ResolvedToken::Cmd(Some(Command::CharDef(c))) => c.display_fmt(ret),
+        ResolvedToken::Cmd(Some(Command::Char{char,..})) => char.display_fmt(ret),
+        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..})) if !quoted => return,
+        ResolvedToken::Cmd(_) if !quoted => {
             engine.mouth.requeue(token);
             return
         }
@@ -361,7 +361,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
                                     -> (bool,Result<u8,(Command<ET>,ET::Token)>) {
     let mut is_negative = false;
     let mut had_eq = !skip_eq;
-    crate::expand_loop!(engine,
+    crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) => {
@@ -375,7 +375,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
             _ => todo!("number expected; got: {} {:?} -- l. {}",(char.try_into().ok().unwrap() as char),code,engine.mouth.line_number())
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),..} => match ((*char).try_into(),code) {
+        ResolvedToken::Cmd(Some(Command::Char {char,code})) => match ((*char).try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) => {
                 if had_eq { todo!("throw error") }
@@ -388,8 +388,8 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
             _ => todo!("number expected")
         }
-        ResolvedToken::Cmd {cmd:None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
-        ResolvedToken::Cmd {cmd:Some(cmd),token} => return (is_negative,Err((cmd.clone(),token)))
+        ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
+        ResolvedToken::Cmd(Some(cmd)) => return (is_negative,Err((cmd.clone(),token)))
     );
     todo!("file end")
 }
@@ -417,17 +417,17 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 /// reads a character literal triggered by a backtick, when a number is expected
 fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
     let next = engine.mouth.get_next_opt(engine.aux, engine.state);
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{code,token,..} => {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{code,..} => {
             if code != CommandCode::Space {
                 engine.requeue(token);
             }
             break
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+        ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::Space,..})) => {
             break
         }
-        ResolvedToken::Cmd {token,..} => {
+        ResolvedToken::Cmd(_) => {
             engine.mouth.requeue(token);
             break
         }
@@ -525,8 +525,8 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
 
 fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> <ET::Num as NumSet>::Int {
     let mut ret = (first - b'0') as i32;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 ret = 10*ret + ((b - b'0') as i32);
             }
@@ -536,10 +536,10 @@ fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+        ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::Space,..})) => {
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
-        ResolvedToken::Cmd {token,..} => {
+        ResolvedToken::Cmd(_) => {
             engine.mouth.requeue(token);
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
@@ -559,8 +559,8 @@ fn hex_to_num(b: u8) -> i64 {
 fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
     let mut ret = 0i64;
     let mut empty = true;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other|CommandCode::Letter) if is_ascii_hex_digit(b) => {
                 ret = 16*ret + hex_to_num(b);
                 empty = false;
@@ -575,10 +575,10 @@ fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 todo!("{}:{:?}",char,code);
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+        ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::Space,..})) => {
             return (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())
         }
-        ResolvedToken::Cmd {token,..} if !empty => {
+        ResolvedToken::Cmd(_) if !empty => {
             engine.mouth.requeue(token);
             return (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())
         }
@@ -589,8 +589,8 @@ fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
 
 fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
     let mut ret = 0i32;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_oct_digit(b) => {
                 ret = 8*ret + ((b - b'0') as i32);
             }
@@ -600,10 +600,10 @@ fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => {
+        ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::Space,..})) => {
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
-        ResolvedToken::Cmd {token,..} => {
+        ResolvedToken::Cmd(_) => {
             engine.mouth.requeue(token);
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
@@ -696,8 +696,8 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
     if !in_decimal {
         ret = (first - b'0') as f32;
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
                     ret += (b - b'0') as f32 / fac;
@@ -722,7 +722,7 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
                 todo!("{}:{:?}",char,code);
             }
         }
-        ResolvedToken::Cmd {cmd:Some(c),token} => {
+        ResolvedToken::Cmd(Some(c)) => {
             let base = read_dim_command(engine,false,c.clone(),token);
             let f = if is_negative {-ret} else {ret};
             return base.scale_float(f)
@@ -733,8 +733,8 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
 }
 
 fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) -> <ET::Num as NumSet>::Dim {
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other | CommandCode::Letter) => {
                 return read_dim_unit(engine,float,Some((b,token)))
             }
@@ -743,12 +743,12 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
                 todo!("{}:{:?}",char,code);
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Char{char,code:CommandCode::Other | CommandCode::Letter}),token} => match (*char).try_into() {
+        ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::Space,..})) => (),
+        ResolvedToken::Cmd(Some(Command::Char{char,code:CommandCode::Other | CommandCode::Letter})) => match (*char).try_into() {
             Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
             _ => todo!("throw error")
         }
-        ResolvedToken::Cmd {cmd:Some(cmd),..} => match cmd {
+        ResolvedToken::Cmd(Some(cmd)) => match cmd {
             Command::DimRegister(u) => {
                 let base = engine.state.get_dim_register(*u);
                 let scale = (float * 65536.0).round() as i32;
@@ -761,7 +761,7 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
             }
             o => todo!("command in read_unit_or_dim: {:?}",o)
         }
-        ResolvedToken::Cmd {cmd:None,token} =>
+        ResolvedToken::Cmd(None) =>
             engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token)
     );
     todo!("file end")
@@ -906,8 +906,8 @@ fn read_skip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:<ET::Num 
 
 fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
     let mut is_negative = false;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code } => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'-'),CommandCode::Other) => {
                 is_negative =!is_negative;
@@ -917,7 +917,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
             (Ok(b','|b'.'),CommandCode::Other) => return read_stretch_float(engine,is_negative,b'.'),
             _ => todo!("error?")
         }
-        ResolvedToken::Cmd {cmd,..} => match cmd {
+        ResolvedToken::Cmd(cmd) => match cmd {
             Some(Command::DimRegister(u)) => {
                 let base = engine.state.get_dim_register(*u);
                 return Sk::<ET>::stretch_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
@@ -934,8 +934,8 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
     if !in_decimal {
         ret = (first - b'0') as f32;
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
                     ret += (b - b'0') as f32 / scale;
@@ -960,7 +960,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
                 todo!("{}:{:?}",char,code);
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
+        ResolvedToken::Cmd(Some(Command::DimRegister(u))) => {
             let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
             return Sk::<ET>::stretch_from_dimen(engine,scale,base)
@@ -990,8 +990,8 @@ fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:
 
 fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
     let mut is_negative = false;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'-'),CommandCode::Other) => {
                 is_negative =!is_negative;
@@ -1001,7 +1001,7 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
             (Ok(b','|b'.'),CommandCode::Other) => return read_shrink_float(engine,is_negative,b'.'),
             _ => todo!("error?")
         }
-        ResolvedToken::Cmd {cmd,..} => match cmd {
+        ResolvedToken::Cmd(cmd) => match cmd {
             Some(Command::DimRegister(u)) => {
                 let base = engine.state.get_dim_register(*u);
                 return Sk::<ET>::shrink_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
@@ -1018,8 +1018,8 @@ fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
     if !in_decimal {
         ret = (first - b'0') as f32;
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
                     ret += (b - b'0') as f32 / scale;
@@ -1044,7 +1044,7 @@ fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
                 todo!("{}:{:?}",char,code);
             }
         }
-        ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
+        ResolvedToken::Cmd(Some(Command::DimRegister(u))) => {
             let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
             return Sk::<ET>::shrink_from_dimen(engine,scale,base)
@@ -1153,8 +1153,8 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
     if !in_decimal {
         ret = (first - b'0') as f32;
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
                     ret += (b - b'0') as f32 / fac;
@@ -1216,8 +1216,8 @@ pub(crate) fn read_muskip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, b
 
 fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
     let mut is_negative = false;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'-'),CommandCode::Other) => {
                 is_negative =!is_negative;
@@ -1238,8 +1238,8 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     if !in_decimal {
         ret = (first - b'0') as f32;
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
                     ret += (b - b'0') as f32 / fac;
@@ -1278,8 +1278,8 @@ fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f3
 
 fn read_mushrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSh<ET> {
     let mut is_negative = false;
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk{char,code,..} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'-'),CommandCode::Other) => {
                 is_negative =!is_negative;
@@ -1301,8 +1301,8 @@ fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_nega
     if !in_decimal {
         ret = (first - b'0') as f32;
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
                 if in_decimal {
                     ret += (b - b'0') as f32 / fac;
@@ -1348,8 +1348,8 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
         ret.push(b.to_ascii_lowercase());
         read.push(t);
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) if ret.is_empty() => (),
             (Ok(b),_) => {
                 ret.push(b.to_ascii_lowercase());
@@ -1374,7 +1374,7 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
                 return false
             }
         }
-        ResolvedToken::Cmd {token,..} => {
+        ResolvedToken::Cmd(_) => {
             read.push(token);
             for t in read.into_iter().rev() {engine.requeue(t)}
             //engine.aux.memory.return_bytes(ret);
@@ -1393,8 +1393,8 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
         ret.push(b.to_ascii_lowercase());
         read.push(t);
     }
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {token,char,code} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) if ret.is_empty() => (),
             (Ok(b),_) => {
                 ret.push(b.to_ascii_lowercase());
@@ -1443,7 +1443,7 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
                 }
             }
         }
-        ResolvedToken::Cmd {token,..} => {
+        ResolvedToken::Cmd(_) => {
             let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
             match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
                 Some((i,_)) => {
@@ -1467,8 +1467,8 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
 
 /// Default implementation for [`Gullet::read_chars`].
 pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) -> Result<u8,ET::Token> {
-    crate::expand_loop!(engine,
-        ResolvedToken::Tk {char,code,token} => match (char.try_into(),code) {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b),_) if kws.contains(&b) => {
                 return Ok(b)
@@ -1477,7 +1477,7 @@ pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) ->
                 return Err(token)
             }
         }
-        ResolvedToken::Cmd {token,..} => {
+        ResolvedToken::Cmd(_) => {
             return Err(token)
         }
     );
@@ -1493,15 +1493,15 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Reads a control sequence or active character from the [`Mouth`] and returns it as a
     /// [`CSOrActiveChar`].
     pub fn read_control_sequence(&mut self) -> CSOrActiveChar<ET::Token> {
-        while let Some(tk) = self.get_next() {
-            match self.resolve(tk) {
-                ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(f)}),token} =>
+        while let Some(token) = self.get_next() {
+            match self.resolve(&token) {
+                ResolvedToken::Cmd(Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(f)})) =>
                     ET::Gullet::do_expandable(self,*name,token,*f),
-                ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::SimpleExpandable(f)}),token} =>
+                ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::SimpleExpandable(f)})) =>
                     ET::Gullet::do_simple_expandable(self,*name,token,*f),
-                ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(f)}),token} =>
+                ResolvedToken::Cmd(Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(f)})) =>
                     ET::Gullet::do_conditional(self,*name,token,*f,false),
-                ResolvedToken::Cmd {token,..} => {
+                ResolvedToken::Cmd(_) => {
                     let ret = match token.to_enum() {
                         StandardToken::Character(c, CommandCode::Active) => CSOrActiveChar::Active(c),
                         StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),

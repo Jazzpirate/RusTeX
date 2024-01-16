@@ -164,11 +164,11 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
         _ => ToOrSpread::None
     };
     let mut ate_relax = scaled == ToOrSpread::None;
-    crate::expand_loop!(engine,
+    crate::expand_loop!(engine,token,
         ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..}),..} if !ate_relax => ate_relax = true,
+        ResolvedToken::Cmd(Some(Command::Primitive{cmd:PrimitiveCommand::Relax,..})) if !ate_relax => ate_relax = true,
         ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
-        ResolvedToken::Cmd {cmd:Some(Command::Char{code:CommandCode::BeginGroup,..}),..} => {
+        ResolvedToken::Cmd(Some(Command::Char{code:CommandCode::BeginGroup,..})) => {
             engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
             engine.push_every(every);
             return scaled
@@ -180,14 +180,14 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
 
 pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
     let mut exp = true;
-    while let Some(t) = engine.get_next() {
-        if t.is_primitive() == Some(PRIMITIVES.noexpand) {
+    while let Some(token) = engine.get_next() {
+        if token.is_primitive() == Some(PRIMITIVES.noexpand) {
             exp = false;
             continue
         }
-        match engine.resolve(t) {
-            ResolvedToken::Tk {char,code,..} => return (Some(char),code),
-            ResolvedToken::Cmd {cmd,token} => match cmd {
+        match engine.resolve(&token) {
+            ResolvedToken::Tk {char,code} => return (Some(char),code),
+            ResolvedToken::Cmd(cmd) => match cmd {
                 Some(Command::Macro(m)) if exp =>
                     ET::Gullet::do_macro(engine,m.clone(),token),
                 Some(Command::Primitive {name,cmd:PrimitiveCommand::Conditional(cond)}) if exp =>
@@ -226,14 +226,14 @@ impl<ET:EngineTypes> IfxCmd<ET> {
         match engine.get_next() {
             Some(t) if t.is_primitive() == Some(PRIMITIVES.noexpand) =>
                 IfxCmd::Noexpand(engine.get_next().unwrap()),
-            Some(t) => Self::resolve(engine.resolve(t)),
+            Some(t) => Self::resolve(engine.resolve(&t)),
             _ => todo!("throw error")
         }
     }
     fn resolve(r:ResolvedToken<ET>) -> Self {
         match r {
             ResolvedToken::Tk {char,code,..} => Self::Char(char,code),
-            ResolvedToken::Cmd {cmd,..} => match cmd {
+            ResolvedToken::Cmd(cmd) => match cmd {
                 Some(Command::Char {char,code}) => Self::Char(*char,*code),
                 None => Self::Undefined,
                 Some(Command::Macro(m)) => Self::Macro(m.clone()),
@@ -430,16 +430,16 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
         d.currindex = 0
     } else { todo!("throw error") }
     // avoid the gullet here as to not throw an error on '}'!
-    while let Some(tk) = engine.mouth.get_next_opt(engine.aux,engine.state) {
-        crate::expand!(engine,tk;
+    while let Some(token) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        crate::expand!(engine,token;
             ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
-            ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::EndGroup,..}),..} => {
+            ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::EndGroup,..})) => {
                 engine.gullet.pop_align();
                 return ET::Stomach::close_align(engine)
             }
             ResolvedToken::Tk{code:CommandCode::Space,..} => (),
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if *name == PRIMITIVES.crcr => (),
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if *name == PRIMITIVES.noalign => {
+            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.crcr => (),
+            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.noalign => {
                 engine.expand_until_bgroup(true);
                 engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(
@@ -474,7 +474,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                 );
                 return
             }
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if *name == PRIMITIVES.omit => {
+            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.omit => {
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
@@ -490,7 +490,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                 engine.gullet.get_align_data().unwrap().omit = true;
                 return open_align_cell(engine,mode)
             }
-            ResolvedToken::Tk{token,..} | ResolvedToken::Cmd {token,..} => {
+            ResolvedToken::Tk{..} | ResolvedToken::Cmd(_) => {
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
@@ -710,8 +710,8 @@ pub(crate) fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VN
 pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) {
     match engine.read_keywords(&[b"width",b"height",b"depth"]) {
         Some(_) => todo!("leaders with dimensions"),
-        _ => crate::expand_loop!(engine,
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {cmd:PrimitiveCommand::Box(read),..}),token} => {
+        _ => crate::expand_loop!(engine,token,
+            ResolvedToken::Cmd(Some(Command::Primitive {cmd:PrimitiveCommand::Box(read),..})) => {
                 match read(engine,token) {
                     Ok(None) => todo!(),
                     Ok(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp),
@@ -728,7 +728,7 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                     }
                 }
             }
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if *name == PRIMITIVES.hrule || *name == PRIMITIVES.vrule => {
+            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.hrule || *name == PRIMITIVES.vrule => {
                 let mut width = None;
                 let mut height = None;
                 let mut depth = None;
@@ -755,8 +755,8 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
 }
 
 fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<ET>,tp:LeaderType) {
-    crate::expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),..} => {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Cmd(Some(Command::Primitive{name,..})) => {
             let skip = match *name {
                 n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false)),
                 n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false)),
@@ -793,17 +793,16 @@ pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// expands the [`Token`] if it is expandable, otherwise requeues it
-    pub fn expand(&mut self,t:ET::Token) {
-        match self.resolve(t) {
-            ResolvedToken::Cmd{cmd: Some(cmd),token} => match cmd {
+    pub fn expand(&mut self,token:ET::Token) {
+        match self.resolve(&token) {
+            ResolvedToken::Cmd(Some(cmd)) => match cmd {
                 Command::Macro(m) => ET::Gullet::do_macro(self,m.clone(),token),
                 Command::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)} => ET::Gullet::do_conditional(self,*name,token,*cond,false),
                 Command::Primitive{name,cmd:PrimitiveCommand::Expandable(expand)} => ET::Gullet::do_expandable(self,*name,token,*expand),
                 Command::Primitive{name,cmd:PrimitiveCommand::SimpleExpandable(exp)} => ET::Gullet::do_simple_expandable(self,*name,token,*exp),
                 _ => self.requeue(token)
             }
-            ResolvedToken::Cmd{token,..} | ResolvedToken::Tk {token,..} =>
-                self.requeue(token)
+            _ => self.requeue(token)
         }
     }
 
@@ -841,15 +840,15 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn read_csname(&mut self) -> ET::CSName {
         *self.gullet.csnames() += 1;
         let mut namev = vec!();
-        crate::expand_loop!(self,
+        crate::expand_loop!(self,token,
             ResolvedToken::Tk {char,..} => namev.push(char),
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if *name == PRIMITIVES.endcsname => {
+            ResolvedToken::Cmd(Some(Command::Primitive {name,..})) if *name == PRIMITIVES.endcsname => {
                 *self.gullet.csnames() -= 1;
                 let id = self.aux.memory.cs_interner_mut().from_chars(&namev);
                 //engine.aux.memory.return_string(name);
                 return id
             }
-            ResolvedToken::Cmd{token,..} => {
+            ResolvedToken::Cmd(_) => {
                 todo!("csname: {}",token.display(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
             }
         );
@@ -884,8 +883,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// as well as in [`expand_until_endgroup`](Self::expand_until_endgroup)
     /// to speed things up
     pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,mut cont:F) {
-        expand_loop!(self,
-            ResolvedToken::Cmd {cmd:Some(c),token} => match c {
+        expand_loop!(self,token,
+            ResolvedToken::Cmd(Some(c)) => match c {
                 Command::Primitive{cmd:PrimitiveCommand::Int{read,..},..} => {
                     let val = read(self,token);
                     write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
@@ -994,8 +993,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a [`Delimiter`] from the input stream;
     /// e.g. from `\delimiter` or the `\delcode` of the next character
     pub fn read_opt_delimiter(&mut self) -> Option<Delimiter<ET>> {
-        crate::expand_loop!(self,
-            ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..}  if *name == PRIMITIVES.delimiter => {
+        crate::expand_loop!(self,token,
+            ResolvedToken::Cmd(Some(Command::Primitive {name,..}))  if *name == PRIMITIVES.delimiter => {
                 let num = self.read_int(false);
                 return Some(Delimiter::from_int(num,self.state))
             }

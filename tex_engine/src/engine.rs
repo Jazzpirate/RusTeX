@@ -254,13 +254,13 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     pub fn top_loop(&mut self) {
-        crate::expand_loop!(ET::Stomach::every_top(self) => tk => {
-            if tk.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next();continue}
+        crate::expand_loop!(ET::Stomach::every_top(self) => token => {
+            if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next();continue}
         }; self,
-            ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
-            ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),
-            ResolvedToken::Cmd{cmd: None,token} => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
-            ResolvedToken::Cmd{cmd: Some(cmd),token} => crate::do_cmd!(self,token,cmd)
+            ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code),
+            ResolvedToken::Cmd(Some(Command::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code),
+            ResolvedToken::Cmd(None) => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
+            ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(self,token,cmd)
         );
     }
 
@@ -268,7 +268,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         while let Some(tk) = self.get_next() {
             if tk.command_code() == CommandCode::BeginGroup {return }
             crate::expand!(self,tk;
-                ResolvedToken::Cmd {cmd: Some(Command::Char {code:CommandCode::BeginGroup,..}),..} if allow_let =>
+                ResolvedToken::Cmd(Some(Command::Char {code:CommandCode::BeginGroup,..})) if allow_let =>
                     return,
                 _ => todo!("error")
             );
@@ -279,13 +279,13 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 #[macro_export]
 macro_rules! expand_loop {
-    ($engine:ident,$($case:tt)*) => {{
-        crate::expand_loop!(ET;$engine,$($case)*)
+    ($engine:ident,$tk:ident,$($case:tt)*) => {{
+        crate::expand_loop!(ET;$engine,$tk,$($case)*)
     }};
-    ($then:expr => $engine:ident,$($case:tt)*) => {{
+    ($then:expr => $engine:ident,$tk:ident,$($case:tt)*) => {{
         $then;
-        while let Some(tk) = $engine.get_next() {
-            crate::expand!(ET;$engine,tk;$($case)*);
+        while let Some($tk) = $engine.get_next() {
+            crate::expand!(ET;$engine,$tk;$($case)*);
             $then;
         }
     }};
@@ -297,9 +297,9 @@ macro_rules! expand_loop {
             $then;
         }
     }};
-    ($ET:ty; $engine:ident,$($case:tt)*) => {{
-        while let Some(tk) = $engine.get_next() {
-            crate::expand!($ET;$engine,tk;$($case)*);
+    ($ET:ty; $engine:ident,$tk:ident,$($case:tt)*) => {{
+        while let Some($tk) = $engine.get_next() {
+            crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
@@ -315,17 +315,17 @@ macro_rules! expand {
     ($engine:ident,$tk:expr;$($case:tt)*) => {
         crate::expand!(ET;$engine,$tk;$($case)*)
     };
-    ($ET:ty; $engine:ident,$tk:expr;$($case:tt)*) => {
-        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::resolve($engine.state,$tk);
+    ($ET:ty; $engine:ident,$token:expr;$($case:tt)*) => {
+        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::resolve($engine.state,&$token);
         match cmd {
-            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Macro(m)),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),token),
-            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Conditional(cond)}),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,token,*cond,false),
-            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Expandable(e)}),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,token,*e),
-            crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::SimpleExpandable(e)}),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,token,*e),
+            crate::commands::ResolvedToken::Cmd(Some(crate::commands::Command::Macro(m))) =>
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),$token),
+            crate::commands::ResolvedToken::Cmd(Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Conditional(cond)})) =>
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,$token,*cond,false),
+            crate::commands::ResolvedToken::Cmd(Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Expandable(e)})) =>
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,$token,*e),
+            crate::commands::ResolvedToken::Cmd(Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::SimpleExpandable(e)})) =>
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,$token,*e),
             $($case)*
         }
     }

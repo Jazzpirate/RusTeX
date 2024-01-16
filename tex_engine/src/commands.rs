@@ -24,8 +24,8 @@ pub mod methods;
 
 #[derive(Debug)]
 pub enum ResolvedToken<'a,ET:EngineTypes> {
-    Tk{token:ET::Token,char:ET::Char,code:CommandCode},
-    Cmd{token:ET::Token,cmd:Option<&'a Command<ET>>},
+    Tk{char:ET::Char,code:CommandCode},
+    Cmd(Option<&'a Command<ET>>),
 }
 
 #[derive(Debug)]
