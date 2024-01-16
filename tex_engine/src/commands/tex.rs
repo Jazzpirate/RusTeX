@@ -425,7 +425,7 @@ pub fn wd_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,_g
 pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,protected:bool,_globally:bool) {
     let allow_others = !outer && !long && !protected;
     crate::expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::Assignment(a)}),token} => match name {
+        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::Assignment(a)}),token} => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.long => return self::long(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.protected => return super::etex::protected(engine,token,outer,long,protected,true),
@@ -434,45 +434,45 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,out
             n if n == PRIMITIVES.edef => return self::edef(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.xdef => return self::xdef(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.gdef => return self::gdef(engine,token,outer,long,protected,true),
-            n if allow_others => return ET::Stomach::do_assignment(engine,n,token,a,true),
+            n if allow_others => return ET::Stomach::do_assignment(engine,n,token,*a,true),
             _ => todo!("throw error")
         }
         ResolvedToken::Cmd {cmd:Some(Command::IntRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_int_register(engine,u,true),
+            return ET::Stomach::assign_int_register(engine,*u,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt}),..} if allow_others =>
-            return ET::Stomach::assign_primitive_int(engine,name,true),
+            return ET::Stomach::assign_primitive_int(engine,*name,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::Int {assign:Some(f),..},name}),token} if allow_others =>
-            return ET::Stomach::do_assignment(engine,name,token,f,true),
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_dim_register(engine,u,true),
+            return ET::Stomach::assign_dim_register(engine,*u,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim}),..} if allow_others =>
-            return ET::Stomach::assign_primitive_dim(engine,name,true),
+            return ET::Stomach::assign_primitive_dim(engine,*name,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::Dim {assign:Some(f),..},name}),token} if allow_others =>
-            return ET::Stomach::do_assignment(engine,name,token,f,true),
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd {cmd:Some(Command::SkipRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_skip_register(engine,u,true),
+            return ET::Stomach::assign_skip_register(engine,*u,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip}),..} if allow_others =>
-            return ET::Stomach::assign_primitive_skip(engine,name,true),
+            return ET::Stomach::assign_primitive_skip(engine,*name,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::Skip {assign:Some(f),..},name}),token} if allow_others =>
-            return ET::Stomach::do_assignment(engine,name,token,f,true),
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd {cmd:Some(Command::MuSkipRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_muskip_register(engine,u,true),
+            return ET::Stomach::assign_muskip_register(engine,*u,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveMuSkip}),..} if allow_others =>
-            return ET::Stomach::assign_primitive_muskip(engine,name,true),
+            return ET::Stomach::assign_primitive_muskip(engine,*name,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::MuSkip {assign:Some(f),..},name}),token} if allow_others =>
-            return ET::Stomach::do_assignment(engine,name,token,f,true),
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} if allow_others =>
-            return ET::Stomach::assign_toks_register(engine,u,true),
+            return ET::Stomach::assign_toks_register(engine,*u,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks}),..} if allow_others =>
-            return ET::Stomach::assign_primitive_toks(engine,name,true),
+            return ET::Stomach::assign_primitive_toks(engine,*name,true),
         ResolvedToken::Cmd {cmd:Some(Command::Primitive{cmd:PrimitiveCommand::FontCmd {assign:Some(f),..},name}),token} if allow_others =>
-            return ET::Stomach::do_assignment(engine,name,token,f,true),
+            return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         o => todo!("\\global {:?}",o)
     )
 }
 pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_outer:bool,long:bool,protected:bool,globally:bool) {
     crate::expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),token} => match name {
+        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),token} => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.long => return self::long(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.protected => return super::etex::protected(engine,token,true,long,protected,globally),
@@ -489,7 +489,7 @@ pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_out
 
 pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,_long:bool,protected:bool,globally:bool) {
     crate::expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),token} => match name {
+        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),token} => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.long => return self::long(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.protected => return super::etex::protected(engine,token,outer,true,protected,globally),
@@ -508,35 +508,35 @@ macro_rules! modify_num {
     ($engine:ident,$globally:ident,$int:expr,$dim:expr,$skip:expr) => {
         crate::expand_loop!($engine,
             ResolvedToken::Cmd {cmd:Some(cm),..} => match cm {
-                Command::Primitive{name,..} if name == PRIMITIVES.count => {
+                Command::Primitive{name,..} if *name == PRIMITIVES.count => {
                     let idx = $engine.read_register_index(false);
                     return crate::commands::methods::modify_int_register($engine,idx,$globally,$int)
                 }
                 Command::IntRegister(idx) => {
-                    return crate::commands::methods::modify_int_register($engine,idx,$globally,$int)
+                    return crate::commands::methods::modify_int_register($engine,*idx,$globally,$int)
                 }
                 Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt} => {
-                    return crate::commands::methods::modify_primitive_int($engine,name,$globally,$int)
+                    return crate::commands::methods::modify_primitive_int($engine,*name,$globally,$int)
                 }
-                Command::Primitive{name,..} if name == PRIMITIVES.dimen => {
+                Command::Primitive{name,..} if *name == PRIMITIVES.dimen => {
                     let idx = $engine.read_register_index(false);
                     return crate::commands::methods::modify_dim_register($engine,idx,$globally,$dim)
                 }
                 Command::DimRegister(idx) => {
-                    return crate::commands::methods::modify_dim_register($engine,idx,$globally,$dim)
+                    return crate::commands::methods::modify_dim_register($engine,*idx,$globally,$dim)
                 }
                 Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim} => {
-                    return crate::commands::methods::modify_primitive_dim($engine,name,$globally,$dim)
+                    return crate::commands::methods::modify_primitive_dim($engine,*name,$globally,$dim)
                 }
-                Command::Primitive{name,..} if name == PRIMITIVES.skip => {
+                Command::Primitive{name,..} if *name == PRIMITIVES.skip => {
                     let idx = $engine.read_register_index(false);
                     return crate::commands::methods::modify_skip_register($engine,idx,$globally,$skip)
                 }
                 Command::SkipRegister(idx) => {
-                    return crate::commands::methods::modify_skip_register($engine,idx,$globally,$skip)
+                    return crate::commands::methods::modify_skip_register($engine,*idx,$globally,$skip)
                 }
                 Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
-                    return crate::commands::methods::modify_primitive_skip($engine,name,$globally,$skip)
+                    return crate::commands::methods::modify_primitive_skip($engine,*name,$globally,$skip)
                 }
                 o => todo!("{:?} in \\advance",o)
             }
@@ -1039,7 +1039,7 @@ pub fn immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
             return immediate(engine,token)
         },
         ResolvedToken::Tk {token,char,code} => ET::Stomach::do_char(engine,token,char,code),
-        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),token} => ET::Stomach::do_char(engine,token,char,code),
+        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),token} => ET::Stomach::do_char(engine,token,*char,*code),
         ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
         ResolvedToken::Cmd {cmd:Some(c),token} =>
             crate::do_cmd!(engine,token,c)
@@ -1128,7 +1128,7 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,glob
             StandardToken::ControlSequence(cs) =>
                 engine.state.get_command(&cs).cloned(),
             StandardToken::Primitive(id) =>
-                engine.state.primitives().get_id(id).map(|p| Command::Primitive {name:id,cmd:p.clone()}),
+                engine.state.primitives().get_id(id).cloned(),
             StandardToken::Character(c,CommandCode::Active) =>
                 engine.state.get_ac_command(c).cloned(),
             StandardToken::Character(c,cc) =>
@@ -1167,7 +1167,7 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
         StandardToken::Character(c,cc) =>
             Some(Command::Char{char:c,code:cc}),
         StandardToken::Primitive(id) =>
-            engine.state.primitives().get_id(id).map(|p| Command::Primitive {name:id,cmd:p.clone()}),
+            engine.state.primitives().get_id(id).cloned(),
     };
     engine.set_command(&cm,cmd,globally);
     engine.requeue(second);
@@ -2567,7 +2567,7 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
                 ResolvedToken::Tk{code:CommandCode::Space,..} => (),
                 /*ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
                     if *name == PRIMITIVES.crcr => (),*/
-                ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if name == PRIMITIVES.omit => {
+                ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,..}),..} if *name == PRIMITIVES.omit => {
                     engine.gullet.get_align_data().unwrap().omit = true;
                     return super::methods::open_align_cell(engine,mode)
                 },

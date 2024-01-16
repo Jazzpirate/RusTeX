@@ -318,7 +318,7 @@ pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 
 pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,_protected:bool,globally:bool) {
     crate::expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),token} => match name {
+        ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,..}),token} => match *name {
             n if n == PRIMITIVES.outer => return super::tex::outer(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.long => return super::tex::long(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.protected => return self::protected(engine,token,outer,long,true,globally),
@@ -428,7 +428,7 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
         None => todo!("file end"),
         Some(t) => match engine.resolve(t) {
             ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)}),token} => {
-                ET::Gullet::do_conditional(engine,name,token,cnd,true)
+                ET::Gullet::do_conditional(engine,*name,token,*cnd,true)
             }
             _ => todo!("throw error")
         }

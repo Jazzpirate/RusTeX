@@ -201,15 +201,16 @@ pub trait Gullet<ET:EngineTypes> {
 
     /// Inspect the given [`Token`] and return its current definition, if any.
     /// See also [`EngineReferences::resolve`].
-    fn resolve(state:&ET::State,token:ET::Token) -> ResolvedToken<ET> {
+    fn resolve<'a>(state:&'a ET::State,token:ET::Token) -> ResolvedToken<'a,ET> {
         match token.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                ResolvedToken::Cmd{token,cmd:state.get_ac_command(c).cloned()},
+                ResolvedToken::Cmd{token,cmd:state.get_ac_command(c)},
             StandardToken::Character(c,o) => return ResolvedToken::Tk{token,char:c,code:o},
             StandardToken::ControlSequence(cs) =>
-                ResolvedToken::Cmd{token,cmd:state.get_command(&cs).cloned()},
+                ResolvedToken::Cmd{token,cmd:state.get_command(&cs)},
             StandardToken::Primitive(id) =>
-                ResolvedToken::Cmd{token,cmd:state.primitives().get_id(id).map(|p| Command::Primitive {name:id,cmd:p.clone()}) }
+                ResolvedToken::Cmd{token,cmd:state.primitives().get_id(id)}
+                //ResolvedToken::Cmd{token,cmd:state.primitives().get_id(id).map(|p| Command::Primitive {name:id,cmd:p.clone()}) }
         }
     }
 
@@ -487,7 +488,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         ET::Gullet::read_chars(self,kws)
     }
     /// Inspect the given [`Token`] and return its current definition, if any.
-    pub fn resolve(&self,token:ET::Token) -> ResolvedToken<ET> {
+    pub fn resolve(&self,token:ET::Token) -> ResolvedToken<'_,ET> {
         ET::Gullet::resolve(self.state,token)
     }
 }

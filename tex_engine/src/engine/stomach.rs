@@ -316,8 +316,8 @@ pub trait Stomach {
             ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other, .. } =>
                 char!(char),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char,code:CommandCode::Letter|CommandCode::Other}),.. } =>
-                char!(char),
-            ResolvedToken::Cmd{ cmd:Some(Command::Primitive{name,..}),.. } if name == PRIMITIVES.char => {
+                char!(*char),
+            ResolvedToken::Cmd{ cmd:Some(Command::Primitive{name,..}),.. } if *name == PRIMITIVES.char => {
                 let char = engine.read_charcode(false);
                 char!(char)
             }
@@ -327,7 +327,7 @@ pub trait Stomach {
             ResolvedToken::Tk { char, code, token } =>
                 end!(Self::do_char(engine,token,char,code)),
             ResolvedToken::Cmd{ cmd:Some(Command::Char {char, code}),token} =>
-                end!(Self::do_char(engine,token,char,code)),
+                end!(Self::do_char(engine,token,*char,*code)),
             ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
             ResolvedToken::Cmd{cmd: Some(cmd),token} => {
                 end!(crate::do_cmd!(Self::ET;engine,token,cmd))
@@ -425,13 +425,13 @@ pub trait Stomach {
                 _ => todo!("throw error")
             }
             ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks}),..} => {
-                let tks = engine.state.get_primitive_tokens(name).clone();
+                let tks = engine.state.get_primitive_tokens(*name).clone();
                 engine.state.set_toks_register(engine.aux,register,tks,global);
                 insert_afterassignment(engine);
                 return ()
             }
             ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} => {
-                let tks = engine.state.get_toks_register(u).clone();
+                let tks = engine.state.get_toks_register(*u).clone();
                 engine.state.set_toks_register(engine.aux,register,tks,global);
                 insert_afterassignment(engine);
                 return ()
@@ -464,8 +464,8 @@ pub trait Stomach {
                 _ => todo!("throw error")
             }
             ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks}),..} => {
-                let tks = engine.state.get_primitive_tokens(name);
-                let tks = if name == PRIMITIVES.output {
+                let tks = engine.state.get_primitive_tokens(*name);
+                let tks = if *name == PRIMITIVES.output {
                     let mut ntk = shared_vector::Vector::new();
                     ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
                     ntk.extend_from_slice(tks.0.as_slice());
@@ -474,12 +474,12 @@ pub trait Stomach {
                 } else {
                     tks.clone()
                 };
-                engine.state.set_primitive_tokens(engine.aux,name,tks,global);
+                engine.state.set_primitive_tokens(engine.aux,*name,tks,global);
                 insert_afterassignment(engine);
                 return ()
             }
             ResolvedToken::Cmd {cmd:Some(Command::ToksRegister(u)),..} => {
-                let tks = engine.state.get_toks_register(u);
+                let tks = engine.state.get_toks_register(*u);
                 let tks = if name == PRIMITIVES.output {
                     let mut ntk = shared_vector::Vector::new();
                     ntk.push(Tk::<Self>::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
@@ -717,7 +717,7 @@ pub trait Stomach {
             }
             crate::expand!(Self::ET;engine,next;
                 ResolvedToken::Tk { char, code, token } => Self::do_char(engine, token, char, code),
-                ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, char, code),
+                ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => Self::do_char(engine, token, *char, *code),
                 ResolvedToken::Cmd{cmd: None,token} => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
                 ResolvedToken::Cmd{cmd: Some(cmd),token} => crate::do_cmd!(Self::ET;engine,token,cmd)
             );
@@ -1209,7 +1209,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 return f(s,self,mc)
             },
             ResolvedToken::Cmd{cmd:Some(Command::MathChar(u)),..} => {
-                let mc = MathChar::from_u32(u, self.state,None);
+                let mc = MathChar::from_u32(*u, self.state,None);
                 return f(s,self,mc)
             }
             ResolvedToken::Tk {code,..} => {

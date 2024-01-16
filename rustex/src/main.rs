@@ -23,10 +23,10 @@ use tex_engine::pdflatex::PlainPDFTeXEngine;
 
 fn main() {
     //profile()
-    //thesis()
+    thesis()
     //run()
     //test()
-    notes()
+    //notes()
     //test2()
 }
 

@@ -258,7 +258,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             if tk.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next();continue}
         }; self,
             ResolvedToken::Tk { char, code, token } => ET::Stomach::do_char(self, token, char, code),
-            ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, char, code),
+            ResolvedToken::Cmd {token,cmd:Some(Command::Char {char, code})} => ET::Stomach::do_char(self, token, *char, *code),
             ResolvedToken::Cmd{cmd: None,token} => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
             ResolvedToken::Cmd{cmd: Some(cmd),token} => crate::do_cmd!(self,token,cmd)
         );
@@ -316,16 +316,16 @@ macro_rules! expand {
         crate::expand!(ET;$engine,$tk;$($case)*)
     };
     ($ET:ty; $engine:ident,$tk:expr;$($case:tt)*) => {
-        let cmd = $engine.resolve($tk);
+        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::resolve($engine.state,$tk);
         match cmd {
             crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Macro(m)),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m,token),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),token),
             crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Conditional(cond)}),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,name,token,cond,false),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,token,*cond,false),
             crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Expandable(e)}),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,name,token,e),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,token,*e),
             crate::commands::ResolvedToken::Cmd{cmd: Some(crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::SimpleExpandable(e)}),token} =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,name,token,e),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,token,*e),
             $($case)*
         }
     }
@@ -338,56 +338,56 @@ macro_rules! do_cmd {
     };
     ($ET:ty;$engine:ident,$token:expr,$cmd:ident) => {
         match $cmd {
-            crate::commands::Command::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, char, CommandCode::Other),
+            crate::commands::Command::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Unexpandable { scope, apply }} =>
-                <$ET as EngineTypes>::Stomach::do_unexpandable($engine, name, scope,$token, apply),
+                <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, *scope,$token, *apply),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Assignment(assign)} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, name, $token, assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Int {  assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, name, $token, assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Dim { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, name, $token, assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Skip { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, name, $token, assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::MuSkip { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, name, $token, assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::FontCmd { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, name, $token, assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Box(read)} =>
-                <$ET as EngineTypes>::Stomach::do_box($engine, name, $token, read),
+                <$ET as EngineTypes>::Stomach::do_box($engine, *name, $token, *read),
             crate::commands::Command::Font(f) =>
-                <$ET as EngineTypes>::Stomach::do_font($engine, $token, f,false),
+                <$ET as EngineTypes>::Stomach::do_font($engine, $token, f.clone(),false),
             crate::commands::Command::IntRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_int_register($engine, u,false),
+                <$ET as EngineTypes>::Stomach::assign_int_register($engine, *u,false),
             crate::commands::Command::DimRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_dim_register($engine, u,false),
+                <$ET as EngineTypes>::Stomach::assign_dim_register($engine, *u,false),
             crate::commands::Command::SkipRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_skip_register($engine, u,false),
+                <$ET as EngineTypes>::Stomach::assign_skip_register($engine, *u,false),
             crate::commands::Command::MuSkipRegister(u) =>
-               <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, u,false),
+               <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false),
             crate::commands::Command::ToksRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_toks_register($engine, u,false),
+                <$ET as EngineTypes>::Stomach::assign_toks_register($engine, *u,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Whatsit { get, .. }} =>
-                <$ET as EngineTypes>::Stomach::do_whatsit($engine, name,$token, get),
+                <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveInt} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveDim} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,*name,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveSkip} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,*name,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveMuSkip} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveToks} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,*name,false),
             crate::commands::Command::MathChar(u) =>
-                <$ET as EngineTypes>::Stomach::do_mathchar($engine,u,$token),
+                <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,$token),
             crate::commands::Command::Primitive{name,cmd:crate::commands::PrimitiveCommand::Relax} => (),
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Int { .. },..} |
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Dim { .. },..} |
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },..} |
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },..} |
             crate::commands::Command::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },..} =>
-                crate::engine::do_error($engine,$cmd),
+                crate::engine::do_error($engine,$cmd.clone()),
             crate::commands::Command::Macro(_) |
             crate::commands::Command::Primitive{ cmd:crate::commands::PrimitiveCommand::Conditional { .. } |
                 crate::commands::PrimitiveCommand::Expandable { .. } |

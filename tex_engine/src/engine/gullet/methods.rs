@@ -171,14 +171,14 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} if m.protected && !expand_protected =>
                     cont(engine.aux,engine.state,token),
                 ResolvedToken::Cmd{cmd: Some(Command::Macro(m)),token} =>
-                    ET::Gullet::do_macro(engine,m,token),
+                    ET::Gullet::do_macro(engine,m.clone(),token),
                 ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)}),token} =>
-                    ET::Gullet::do_conditional(engine,name,token,cond,false),
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if name == PRIMITIVES.noexpand => {
+                    ET::Gullet::do_conditional(engine,*name,token,*cond,false),
+                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.noexpand => {
                     let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
                     cont(engine.aux,engine.state,next);
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if name == PRIMITIVES.unexpanded => {
+                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.unexpanded => {
                     engine.expand_until_bgroup(false);
                     engine.read_until_endgroup(|a,s,t|{
                         if edef_like && t.command_code() == CommandCode::Parameter {
@@ -187,7 +187,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                         cont(a,s,t)
                     });
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if name == PRIMITIVES.the => {
+                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.the => {
                     engine.do_the(|a, s, _, t| {
                         if t.command_code() == CommandCode::Parameter && edef_like {
                             cont(a,s,t.clone());
@@ -195,7 +195,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                         cont(a,s,t)
                     })
                 }
-                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if name == PRIMITIVES.noexpand => {
+                ResolvedToken::Cmd{cmd: Some(Command::Primitive{name,..}),..} if *name == PRIMITIVES.noexpand => {
                     match engine.get_next() {
                         Some(t) if t.command_code() != CommandCode::EndGroup =>
                             cont(engine.aux,engine.state,t),
@@ -203,9 +203,9 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     }
                 }
                 ResolvedToken::Cmd{cmd: Some(Command::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)}),token} =>
-                    ET::Gullet::do_simple_expandable(engine, name, token, e),
+                    ET::Gullet::do_simple_expandable(engine, *name, token, *e),
                 ResolvedToken::Cmd{cmd: Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(e)}),token} =>
-                    ET::Gullet::do_expandable(engine,name,token,e),
+                    ET::Gullet::do_expandable(engine,*name,token,*e),
                 ResolvedToken::Cmd{token,..} => {
                     cont(engine.aux,engine.state,token)
                 }
@@ -253,7 +253,7 @@ pub(crate) fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usi
             }
             Some(CharOrPrimitive::Primitive(name)) => {
                 match state.primitives().get_id(name) {
-                    Some(PrimitiveCommand::Conditional(_)) => incond += 1,
+                    Some(Command::Primitive{cmd:PrimitiveCommand::Conditional(_),..}) => incond += 1,
                     _ => ()
                 }
                 true
@@ -294,7 +294,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
             }
             Some(CharOrPrimitive::Primitive(name)) => {
                 match state.primitives().get_id(name) {
-                    Some(PrimitiveCommand::Conditional(_)) => incond += 1,
+                    Some(Command::Primitive{cmd:PrimitiveCommand::Conditional(_),..}) => incond += 1,
                     _ => ()
                 }
                 true
@@ -375,7 +375,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
             _ => todo!("number expected; got: {} {:?} -- l. {}",(char.try_into().ok().unwrap() as char),code,engine.mouth.line_number())
         }
-        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),..} => match (char.try_into(),code) {
+        ResolvedToken::Cmd {cmd:Some(Command::Char {char,code}),..} => match ((*char).try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) => {
                 if had_eq { todo!("throw error") }
@@ -744,18 +744,18 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
             }
         }
         ResolvedToken::Cmd {cmd:Some(Command::Char {code:CommandCode::Space,..}),..} => (),
-        ResolvedToken::Cmd {cmd:Some(Command::Char{char,code:CommandCode::Other | CommandCode::Letter}),token} => match char.try_into() {
+        ResolvedToken::Cmd {cmd:Some(Command::Char{char,code:CommandCode::Other | CommandCode::Letter}),token} => match (*char).try_into() {
             Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
             _ => todo!("throw error")
         }
         ResolvedToken::Cmd {cmd:Some(cmd),..} => match cmd {
             Command::DimRegister(u) => {
-                let base = engine.state.get_dim_register(u);
+                let base = engine.state.get_dim_register(*u);
                 let scale = (float * 65536.0).round() as i32;
                 return base.scale(scale.into(),65536.into())
             }
             Command::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
-                let base = engine.state.get_primitive_skip(name).base();
+                let base = engine.state.get_primitive_skip(*name).base();
                 let scale = (float * 65536.0).round() as i32;
                 return base.scale(scale.into(),65536.into())
             }
@@ -919,7 +919,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
         }
         ResolvedToken::Cmd {cmd,..} => match cmd {
             Some(Command::DimRegister(u)) => {
-                let base = engine.state.get_dim_register(u);
+                let base = engine.state.get_dim_register(*u);
                 return Sk::<ET>::stretch_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
             }
             o => todo!("command in read_stretch: {:?}",o)
@@ -961,7 +961,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
             }
         }
         ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
-            let base = engine.state.get_dim_register(u);
+            let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
             return Sk::<ET>::stretch_from_dimen(engine,scale,base)
         }
@@ -1003,7 +1003,7 @@ fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
         }
         ResolvedToken::Cmd {cmd,..} => match cmd {
             Some(Command::DimRegister(u)) => {
-                let base = engine.state.get_dim_register(u);
+                let base = engine.state.get_dim_register(*u);
                 return Sk::<ET>::shrink_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
             }
             o => todo!("command in read_stretch: {:?}",o)
@@ -1045,7 +1045,7 @@ fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
             }
         }
         ResolvedToken::Cmd {cmd:Some(Command::DimRegister(u)),..} => {
-            let base = engine.state.get_dim_register(u);
+            let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
             return Sk::<ET>::shrink_from_dimen(engine,scale,base)
         }
@@ -1496,11 +1496,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         while let Some(tk) = self.get_next() {
             match self.resolve(tk) {
                 ResolvedToken::Cmd {cmd:Some(Command::Primitive {name,cmd:PrimitiveCommand::Expandable(f)}),token} =>
-                    ET::Gullet::do_expandable(self,name,token,f),
+                    ET::Gullet::do_expandable(self,*name,token,*f),
                 ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::SimpleExpandable(f)}),token} =>
-                    ET::Gullet::do_simple_expandable(self,name,token,f),
+                    ET::Gullet::do_simple_expandable(self,*name,token,*f),
                 ResolvedToken::Cmd {cmd:Some(Command::Primitive{name,cmd:PrimitiveCommand::Conditional(f)}),token} =>
-                    ET::Gullet::do_conditional(self,name,token,f,false),
+                    ET::Gullet::do_conditional(self,*name,token,*f,false),
                 ResolvedToken::Cmd {token,..} => {
                     let ret = match token.to_enum() {
                         StandardToken::Character(c, CommandCode::Active) => CSOrActiveChar::Active(c),
