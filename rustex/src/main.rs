@@ -14,7 +14,7 @@ use RusTeX::engine::Types;
 use RusTeX::files::RusTeXFileSystem;
 use RusTeX::output::RusTeXOutput;
 use RusTeX::stomach::{CLOSE_FONT, close_font};
-use tex_engine::commands::{Command, CommandScope, Unexpandable};
+use tex_engine::commands::{Command, CommandScope, PrimitiveCommand};
 use tex_engine::commands::primitives::register_unexpandable;
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::engine::utils::memory::PRIMITIVES;
@@ -57,16 +57,12 @@ fn profile() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let mut engine = DefaultEngine::<Types>::new();
     register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
-    let rbreak = PRIMITIVES.get("rustexBREAK");
-    engine.state.register_primitive(&mut engine.aux,rbreak,"rustexBREAK",Command::Unexpandable(
-        Unexpandable {
-            name:rbreak,
-            scope:CommandScope::Any,
-            apply:|_,_| {
-                println!("HERE!")
-            }
+    engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
+        scope:CommandScope::Any,
+        apply:|_,_| {
+            println!("HERE!")
         }
-    ));
+    });
     engine.aux.outputs = RusTeXOutput::Print(false);
     engine.initialize_etex();
     register_pdftex_primitives(&mut engine);
@@ -143,16 +139,16 @@ fn test_latex_ltx() {
     use tex_engine::engine::state::State;
     let mut engine = DefaultEngine::<Types>::new();
     register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
-    let rbreak = PRIMITIVES.get("rustexBREAK");
-    engine.state.register_primitive(&mut engine.aux,rbreak,"rustexBREAK",Command::Unexpandable(
-        Unexpandable {
-            name:rbreak,
-            scope:CommandScope::Any,
-            apply:|_,_| {
-                println!("HERE!")
-            }
+    engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
+        scope:CommandScope::Any,
+        apply:|_,_| {
+            println!("HERE!")
         }
-    ));
+    });
+
+    //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingcommands,1,true);
+    //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingifs,1,true);
+
     engine.aux.outputs = RusTeXOutput::Print(true);
     engine.initialize_etex();
     register_pdftex_primitives(&mut engine);

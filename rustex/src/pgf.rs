@@ -1,5 +1,5 @@
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use tex_engine::commands::{Command, CommandScope, Expandable, Unexpandable};
+use tex_engine::commands::{Command, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::engine::utils::memory::PRIMITIVES;
 use tex_engine::tex::tokens::CompactToken;
@@ -30,22 +30,12 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
         ("rustex!pgf!end", pgfend)
     ];
     for (s,c) in all {
-        let id = PRIMITIVES.get(s);
-        engine.state.register_primitive(&mut engine.aux,id,s,Command::Unexpandable(
-            Unexpandable {
-                name:id,
-                scope:CommandScope::SwitchesToHorizontalOrMath,
-                apply:*c
-            }
-        ));
+        engine.state.register_primitive(&mut engine.aux,s,PrimitiveCommand::Unexpandable {
+            scope:CommandScope::SwitchesToHorizontalOrMath,
+            apply:*c
+        });
     }
-    let flushpath =PRIMITIVES.get("rustex!pgf!flushpath");
-    engine.state.register_primitive(&mut engine.aux,flushpath,"rustex!pgf!flushpath",Command::Expandable(
-        Expandable {
-            name:flushpath,
-            expand:pgfflushpath
-        }
-    ));
+    engine.state.register_primitive(&mut engine.aux,"rustex!pgf!flushpath",PrimitiveCommand::Expandable(pgfflushpath));
     register_command(engine, true, "rustex!pgf!get!dimens", "",
                      "=\\pgf@picminx =\\pgf@picminy =\\pgf@picmaxx =\\pgf@picmaxy",
                      true, false

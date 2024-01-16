@@ -1,5 +1,5 @@
 use crate::cmtodo;
-use crate::commands::{Command, CommandScope, Macro, MacroSignature, ResolvedToken};
+use crate::commands::{CharOrPrimitive, Command, CommandScope, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
@@ -228,10 +228,9 @@ pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     if !r.is_cs_or_active() {
         engine.requeue(r)
     } else {
-        match engine.resolve(r) {
-            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.requeue(token)
+        match ET::Gullet::char_or_primitive(engine.state,&r) {
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+            _ => engine.requeue(r),
         }
     }
     i
@@ -245,10 +244,9 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     if !r.is_cs_or_active() {
         engine.requeue(r)
     } else {
-        match engine.resolve(r) {
-            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.requeue(token)
+        match ET::Gullet::char_or_primitive(engine.state,&r) {
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+            _ => engine.requeue(r),
         }
     }
     i
@@ -262,10 +260,9 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
     if !r.is_cs_or_active() {
         engine.requeue(r)
     } else {
-        match engine.resolve(r) {
-            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.requeue(token)
+        match ET::Gullet::char_or_primitive(engine.state,&r) {
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+            _ => engine.requeue(r),
         }
     }
     i
@@ -289,10 +286,9 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
     if !r.is_cs_or_active() {
         engine.requeue(r)
     } else {
-        match engine.resolve(r) {
-            ResolvedToken::Cmd { cmd: Some(Command::Relax), .. } => (),
-            ResolvedToken::Cmd { token, .. } => engine.requeue(token),
-            ResolvedToken::Tk { token, .. } => engine.requeue(token)
+        match ET::Gullet::char_or_primitive(engine.state,&r) {
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+            _ => engine.requeue(r),
         }
     }
     i
@@ -321,8 +317,8 @@ pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 }
 
 pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,_protected:bool,globally:bool) {
-    crate::expand_loop!(engine,
-        ResolvedToken::Cmd {cmd:Some(Command::Assignment(a)),token} => match a.name {
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Cmd(Some(Command::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return super::tex::outer(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.long => return super::tex::long(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.protected => return self::protected(engine,token,outer,long,true,globally),
@@ -430,9 +426,9 @@ pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     match engine.get_next() {
         None => todo!("file end"),
-        Some(t) => match ET::Gullet::resolve(engine.state,t) {
-            ResolvedToken::Cmd {cmd:Some(Command::Conditional(cnd)),token} => {
-                ET::Gullet::do_conditional(engine,cnd.name,token,cnd.expand,true)
+        Some(t) => match engine.resolve(&t) {
+            ResolvedToken::Cmd(Some(Command::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)})) => {
+                ET::Gullet::do_conditional(engine,*name,t,*cnd,true)
             }
             _ => todo!("throw error")
         }

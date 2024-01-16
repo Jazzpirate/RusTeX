@@ -4,7 +4,7 @@ mod tfm;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::RwLock;
-use crate::commands::{Command, ResolvedToken};
+use crate::commands::{Command, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::fontsystem::tfm::TfmFile;
@@ -306,12 +306,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a font from the input stream (e.g. `\font` for the current font
     /// or a font defined via `\font\foo=...`).
     pub fn read_font(&mut self) -> <ET::FontSystem as FontSystem>::Font {
-        crate::expand_loop!(self,
-            ResolvedToken::Cmd {cmd:Some(c),token} => match c {
+        crate::expand_loop!(self,token,
+            ResolvedToken::Cmd(Some(c)) => match c {
                 Command::Font(f) => return f.clone(),
-                Command::FontCmd(f) => {
-                    let f = f.read;
-                    return f(self,token)
+                Command::Primitive{cmd:PrimitiveCommand::FontCmd{read,..},..} => {
+                    return read(self,token)
                 }
                 _ => todo!("error")
             }

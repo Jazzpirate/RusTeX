@@ -1,4 +1,4 @@
-use tex_engine::commands::{Command, CommandScope, Conditional, Macro};
+use tex_engine::commands::{Command, CommandScope, Macro, PrimitiveCommand};
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::engine::fontsystem::FontSystem;
@@ -282,10 +282,7 @@ fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Ty
     set_empty!(evenfoot);
     engine.state.set_command(&engine.aux,engine.aux.extension.mkboth,Some(Command::Macro(engine.aux.extension.gobbletwo.clone())),true);
 
-    let iffalse = Command::Conditional(Conditional {
-        name: PRIMITIVES.iffalse,
-        expand: tex_engine::commands::tex::iffalse::<Types>,
-    });
+    let iffalse = Command::Primitive{cmd:PrimitiveCommand::Conditional(tex_engine::commands::tex::iffalse::<Types>),name:PRIMITIVES.iffalse};
     engine.state.set_command(&engine.aux,engine.aux.extension.specialpage,Some(iffalse),true);
     let data = engine.stomach.data_mut();
     data.page.insert(0,VNode::Custom(RusTeXNode::PageBegin));

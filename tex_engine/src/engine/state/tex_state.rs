@@ -3,7 +3,7 @@ use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::utils::memory::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::state::{Ch, CS, Dim, GroupType, State, StateChange, StateChangeTracker, StateStack, T};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use crate::commands::Command;
+use crate::commands::{Command, PrimitiveCommand};
 use crate::commands::primitives::PrimitiveCommands;
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
@@ -130,10 +130,10 @@ impl<ET:EngineTypes> State for TeXState<ET>  {
         }
     }
 
-    fn register_primitive(&mut self,aux:&mut EngineAux<ET>, primitive_identifier: PrimitiveIdentifier,name:&'static str,cmd: Command<Self::ET>) {
-        self.primitives.register(name,primitive_identifier,cmd.clone());
-        let name = aux.memory.cs_interner_mut().new(&primitive_identifier.display::<ET::Char>(None).to_string());
-        self.commands.insert(name,cmd);
+    fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd: PrimitiveCommand<Self::ET>) {
+        let id = self.primitives.register(name,cmd.clone());
+        let name = aux.memory.cs_interner_mut().new(name);
+        self.commands.insert(name,Command::Primitive {name:id, cmd});
     }
     fn primitives(&self) -> &PrimitiveCommands<Self::ET> { &self.primitives }
 
