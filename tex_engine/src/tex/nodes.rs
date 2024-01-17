@@ -35,23 +35,22 @@ pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
     /// additional `indent` value to indent the string
     fn display_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result;
 
-    /// Produces a `\n` followed by `indent`-many spaces - i.e. does the indentation for
-    /// [`Self::display_fmt`].
-    fn readable_do_indent(indent:usize,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_char('\n')?;
-        for _ in 0..indent {f.write_char(' ')?;}
-        Ok(())
-    }
     /// Returns a helper struct that implements [`Display`] and uses [`Self::display_fmt`]
     /// to yield a human-readable string.
-    fn display(&self) -> ReadableNode<ET,Self> where Self:Sized {
-        ReadableNode(self,PhantomData)
-    }
+    fn display(&self) -> ReadableNode<ET,Self> { ReadableNode(self,PhantomData) }
     /// Whether this node is "opaque"; meaning: When considering a list of nodes (e.g. in `\unskip`
     /// or `\lastbox`, this node should not be considered. Useful for annotation/marker nodes
     /// some engine wants to insert, without impacting algorithms that inspect e.g. the last node
     /// of the current list.
     fn opaque(&self) -> bool { false }
+}
+
+/// Produces a `\n` followed by `indent`-many spaces - i.e. does the indentation for
+/// [`crate::tex::nodes::NodeTrait::display_fmt`].
+pub fn display_do_indent(indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_char('\n')?;
+    for _ in 0..indent {f.write_char(' ')?;}
+    Ok(())
 }
 
 /// Helper struct that implements [`Display`] and uses [`NodeTrait::display_fmt`] to yield a
@@ -64,7 +63,7 @@ impl<'a,ET:EngineTypes,N: NodeTrait<ET>> Display for ReadableNode<'a,ET,N> {
 }
 
 /// Trait to implement for engine-specific new node types. Needs to implement [`NodeTrait`]
-/// and [`Into`]`<ET::CustomNode>`. Is implemented by `()` for engines that do not have
+/// and [`Into`]`<`[`ET::CustomNode`](EngineTypes::CustomNode)`>`. Is implemented by `()` for engines that do not have
 /// additional node types beyond the default ones.
 pub trait CustomNodeTrait<ET:EngineTypes>:NodeTrait<ET> where Self:Into<ET::CustomNode> {
     /// Return this node as a [`VNode`].
@@ -126,7 +125,7 @@ pub struct Leaders<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Self::readable_do_indent(indent,f)?;
+        display_do_indent(indent,f)?;
         write!(f, "<leaders")?;
         match self.tp {
             LeaderType::Normal => {},
@@ -143,7 +142,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
         }
         write!(f, ">")?;
         //self.bx.readable_fmt(indent+2, f)?;
-        Self::readable_do_indent(indent,f)?;
+        display_do_indent(indent,f)?;
         write!(f, "</leaders>")
     }
     fn height(&self) -> ET::Dim {
@@ -275,7 +274,7 @@ impl<ET:EngineTypes> NodeList<ET> {
 /// after the node list of the box is closed, it should be put into the box register with index 5 instead.
 /// This struct abstracts over that by carrying a continuation function to be called when the box is closed.
 ///
-/// TODO: rethink this in light of [`ListTarget`]. `.clone()` will not clone the function itself
+/// TODO: rethink this in light of [`ListTarget`].
 pub struct BoxTarget<ET:EngineTypes>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,TeXBox<ET>)>>);
 impl<ET:EngineTypes> crate::tex::nodes::BoxTarget<ET> {
     /// Create a new box target from the given continuation function.
@@ -309,7 +308,7 @@ impl<ET:EngineTypes> Clone for crate::tex::nodes::BoxTarget<ET> {
 /// as a vertical adjustment, `a^{...}` adds it to the superscript-field of the `a`.character etc.
 /// This struct abstracts over that by carrying a continuation function to be called when the list is closed.
 ///
-/// TODO: rethink this in light of [`BoxTarget`]. `.clone()` will not clone the function itself
+/// TODO: rethink this in light of [`BoxTarget`].
 pub struct ListTarget<ET:EngineTypes,N:NodeTrait<ET>>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>)>>);
 impl<ET:EngineTypes,N:NodeTrait<ET>> ListTarget<ET,N> {
     /// Create a new list target from the given continuation function.

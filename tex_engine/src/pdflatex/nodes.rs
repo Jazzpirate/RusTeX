@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::engine::{EngineExtension, EngineReferences, EngineTypes};
 use crate::engine::utils::memory::MemoryManager;
 use crate::tex::nodes::boxes::TeXBox;
-use crate::tex::nodes::{NodeTrait, NodeType};
+use crate::tex::nodes::{display_do_indent, NodeTrait, NodeType};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::CustomNodeTrait;
 
@@ -274,7 +274,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
         _ => false
     } }
     fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Self::readable_do_indent(indent,f)?;
+        display_do_indent(indent,f)?;
         match self {
             PDFNode::PDFDest(PDFDest {structnum,id,dest}) =>
                 write!(f,"<pdfdest structnum=\"{:?}\", id=\"{:?}\", dest=\"{:?}\">",structnum,id,dest),
@@ -293,7 +293,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
                 if let Some(bx) = &x.bx {
                     bx.display_fmt(indent+2, f)?;
                 }
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f,"</pdfxform>")
             }
             PDFNode::XImage(img) =>

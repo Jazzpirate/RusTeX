@@ -6,7 +6,7 @@ use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::fontsystem::Font;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{Leaders, ListTarget, NodeTrait, NodeType, WhatsitNode};
+use crate::tex::nodes::{display_do_indent, Leaders, ListTarget, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{TeXBox, ToOrSpread};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
@@ -150,7 +150,7 @@ pub struct UnresolvedMathChoice<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> MathChoiceT<ET> for UnresolvedMathChoice<ET> {
     fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        MathNode::<ET,MathFontStyle<ET>>::readable_do_indent(indent, f)?;
+        display_do_indent(indent, f)?;
         f.write_str("<unresolved_choice>")?;
         for c in self.display.iter() {
             c.display_fmt(indent + 2, f)?;
@@ -164,7 +164,7 @@ impl<ET:EngineTypes> MathChoiceT<ET> for UnresolvedMathChoice<ET> {
         for c in self.scriptscript.iter() {
             c.display_fmt(indent + 2, f)?;
         }
-        MathNode::<ET,MathFontStyle<ET>>::readable_do_indent(indent, f)?;
+        display_do_indent(indent, f)?;
         f.write_str("</unresolved_choice>")
     }
     fn width(&self) -> ET::Dim {
@@ -292,43 +292,43 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MathNode::Penalty(p) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
             MathNode::Mark(i, _) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
             },
             MathNode::Over { top, sep, bottom, left, right, .. } => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<over")?;
                 if let Some(s) = sep {
                     write!(f, " sep={}",s)?;
                 }
                 f.write_char('>')?;
                 if let Some((l,_)) = left {
-                    Self::readable_do_indent(indent+2,f)?;
+                    display_do_indent(indent+2,f)?;
                     write!(f, "<left-delim = {}/>",l)?;
                 }
-                Self::readable_do_indent(indent+2,f)?;
+                display_do_indent(indent+2,f)?;
                 f.write_str("<top>")?;
                 for c in top.iter() {
                     c.display_fmt(indent + 4, f)?;
                 }
-                Self::readable_do_indent(indent+2,f)?;
+                display_do_indent(indent+2,f)?;
                 f.write_str("</top>")?;
-                Self::readable_do_indent(indent+2,f)?;
+                display_do_indent(indent+2,f)?;
                 f.write_str("<bottom>")?;
                 for c in bottom.iter() {
                     c.display_fmt(indent + 4, f)?;
                 }
-                Self::readable_do_indent(indent+2,f)?;
+                display_do_indent(indent+2,f)?;
                 f.write_str("</bottom>")?;
                 if let Some((r,_)) = right {
-                    Self::readable_do_indent(indent+2,f)?;
+                    display_do_indent(indent+2,f)?;
                     write!(f, "<right-delim = {}/>",r)?;
                 }
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 write!(f, "</over>")
             },
             MathNode::Marker(m) => m.display_fmt(indent, f),
@@ -348,7 +348,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
                 write!(f, ">")
             },
             MathNode::Whatsit(w) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "{:?}",w)
             }
             MathNode::HSkip(s) => write!(f, "<hskip:{}>",s),
@@ -457,31 +457,31 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathAtom<ET,S> {
 }
 impl <ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathAtom<ET,S> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Self::readable_do_indent(indent, f)?;
+        display_do_indent(indent, f)?;
         if self.sub.is_none() || self.sup.is_none() {
             return self.nucleus.display_fmt(indent, f);
         }
         f.write_str("<atom>")?;
         self.nucleus.display_fmt(indent + 2, f)?;
         if let Some(sup) = &self.sup {
-            Self::readable_do_indent(indent + 2, f)?;
+            display_do_indent(indent + 2, f)?;
             f.write_str("<sup>")?;
             for c in sup.iter() {
                 c.display_fmt(indent + 4, f)?;
             }
-            Self::readable_do_indent(indent + 2, f)?;
+            display_do_indent(indent + 2, f)?;
             f.write_str("</sup>")?;
         }
         if let Some(sub) = &self.sub {
-            Self::readable_do_indent(indent + 2, f)?;
+            display_do_indent(indent + 2, f)?;
             f.write_str("<sub>")?;
             for c in sub.iter() {
                 c.display_fmt(indent + 4, f)?;
             }
-            Self::readable_do_indent(indent + 2, f)?;
+            display_do_indent(indent + 2, f)?;
             f.write_str("</sub>")?;
         }
-        Self::readable_do_indent(indent, f)?;
+        display_do_indent(indent, f)?;
         f.write_str("</atom>")
     }
     fn height(&self) -> ET::Dim {
@@ -576,24 +576,24 @@ pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
 }
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Self::readable_do_indent(indent, f)?;
+        display_do_indent(indent, f)?;
         match self {
             MathNucleus::Simple{cls:MathClass::Op,kernel,limits} => {
                 write!(f, "<mathop limits={:?}>",limits)?;
                 kernel.display_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</mathop>")
             }
             MathNucleus::Simple{cls,kernel,..} => {
                 write!(f, "<math{:?}>",cls)?;
                 kernel.display_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 write!(f,"</math{:?}>",cls)
             }
             MathNucleus::Inner(k) => {
                 write!(f, "<mathinner>")?;
                 k.display_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</mathinner>")
             }
             MathNucleus::LeftRight {left,right,children,..} => {
@@ -607,7 +607,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 if let Some((r,_)) = right {
                     write!(f, "<right = {}/>",r)?;
                 }
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</leftright>")
             }
             MathNucleus::Middle(c,_) => {
@@ -616,13 +616,13 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
             MathNucleus::Overline(k) => {
                 write!(f, "<overline>")?;
                 k.display_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</overline>")
             }
             MathNucleus::Underline(k) => {
                 write!(f, "<underline>")?;
                 k.display_fmt(indent + 2, f)?;
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</underline>")
             }
             MathNucleus::Accent{accent,inner} => {
@@ -630,7 +630,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 for i in inner.iter() {
                     i.display_fmt(indent + 2, f)?;
                 }
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</accent>")
             }
             MathNucleus::Radical{rad,inner} => {
@@ -638,7 +638,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 for i in inner.iter() {
                     i.display_fmt(indent + 2, f)?;
                 }
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</radical>")
             }
             MathNucleus::VCenter{children,..} => {
@@ -646,7 +646,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
                 for c in children.iter() {
                     c.display_fmt(indent + 2, f)?;
                 }
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</vcenter>")
             }
         }
@@ -721,7 +721,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathKernel<ET,S> {
         match self {
             MathKernel::Empty => Ok(()),
             MathKernel::Char { char, .. } => {
-                Self::readable_do_indent(indent, f)?;
+                display_do_indent(indent, f)?;
                 write!(f, "<char:{}/>",char)
             }
             MathKernel::Box(b) => b.display_fmt(indent, f),
@@ -785,12 +785,12 @@ pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
 }
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathGroup<ET,S> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Self::readable_do_indent(indent,f)?;
+        display_do_indent(indent,f)?;
         write!(f, "<{}math>",if self.display.is_some() {"display"} else {""})?;
         for c in self.children.iter() {
             c.display_fmt(indent+2, f)?;
         }
-        Self::readable_do_indent(indent, f)?;
+        display_do_indent(indent, f)?;
         write!(f, "</{}math>",if self.display.is_some() {"display"} else {""})
     }
     fn height(&self) -> ET::Dim {

@@ -460,9 +460,9 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                         },
                         _ => NodeList::Vertical {
                             children:vec!(),
-                            tp:VerticalNodeListType::Box(VBoxInfo::VAlignRow,engine.mouth.start_ref(),BoxTarget::new(
+                            tp:VerticalNodeListType::Box(VBoxInfo::VAlignColumn,engine.mouth.start_ref(),BoxTarget::new(
                                 move |engine,l| {
-                                    if let TeXBox::V {children,info:VBoxInfo::VAlignRow,..} = l  {
+                                    if let TeXBox::V {children,info:VBoxInfo::VAlignColumn,..} = l  {
                                         for c in children.into_vec() {
                                             ET::Stomach::add_node_v(engine,c);
                                         }
@@ -594,7 +594,7 @@ fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth
     };
     let bx = TeXBox::V {
         children:children.into(),start,
-        info: VBoxInfo::VAlignRow,
+        info: VBoxInfo::VAlignColumn,
         end: mouth.current_sourceref(),
     };
     match stomach.data_mut().open_lists.last_mut() {

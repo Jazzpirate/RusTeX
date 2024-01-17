@@ -2,7 +2,7 @@ use crate::engine::EngineTypes;
 use crate::engine::filesystem::{File, SourceRef, SourceReference};
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{BoxTarget, Leaders, NodeTrait, NodeType, WhatsitNode};
+use crate::tex::nodes::{BoxTarget, display_do_indent, Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox};
 use crate::tex::nodes::math::{MathFontStyle, MathGroup};
 use crate::tex::nodes::vertical::VNode;
@@ -45,13 +45,13 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
     fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HNode::Penalty(p) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
             HNode::Leaders(l) => l.display_fmt(indent, f),
             HNode::Box(b) => b.display_fmt(indent, f),
             HNode::Mark(i, _) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
             },
             HNode::VRule { width, height, depth, .. } => {
@@ -68,21 +68,21 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 write!(f, ">")
             },
             HNode::Insert(n,ch) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f,"<insert {}>",n)?;
                 for c in ch.iter() {
                     c.display_fmt(indent + 2, f)?;
                 }
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f,"</insert>")
             },
             HNode::VAdjust(ls) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 f.write_str("<vadjust>")?;
                 for c in ls.iter() {
                     c.display_fmt(indent+2, f)?;
                 }
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 f.write_str("</vadjust>")
             },
             HNode::MathGroup(mg) => {
@@ -91,7 +91,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Char { char, .. } =>
                 Ok(char.display_fmt(f)),
             HNode::Whatsit(w) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "{:?}",w)
             }
             HNode::HSkip(s) => write!(f, "<hskip:{}>",s),

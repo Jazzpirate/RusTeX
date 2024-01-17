@@ -1,7 +1,7 @@
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{BoxTarget, Leaders, NodeTrait, NodeType, WhatsitNode};
+use crate::tex::nodes::{BoxTarget, display_do_indent, Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
@@ -52,7 +52,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
     fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VNode::Penalty(p) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
             VNode::Leaders(l) => l.display_fmt(indent, f),
@@ -77,20 +77,20 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
             }
             VNode::Box(b) => b.display_fmt(indent, f),
             VNode::Mark(i, _) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
             },
             VNode::Insert(n,ch) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f,"<insert {}>",n)?;
                 for c in ch.iter() {
                     c.display_fmt(indent + 2, f)?;
                 }
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f,"</insert>")
             },
             VNode::Whatsit(w) => {
-                Self::readable_do_indent(indent,f)?;
+                display_do_indent(indent,f)?;
                 write!(f, "{:?}",w)
             }
             VNode::Custom(n) => n.display_fmt(indent, f)
