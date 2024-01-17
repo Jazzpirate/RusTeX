@@ -1,4 +1,4 @@
-/*! Commands - primitives, macros, etc. The B-book largely calls these
+/*! [Commands](TeXCommand) - [primitives](PrimitiveCommand), [macros](Macro), etc. The B-book largely calls these
 "equivalents", but we use the more standard term "command" instead.
 */
 
@@ -22,26 +22,37 @@ pub mod tex;
 pub mod etex;
 pub mod methods;
 
+/// A [`Token`] that has been resolved to a [`TeXCommand`] or a character (if not a control sequence / active character).
 #[derive(Debug)]
 pub enum ResolvedToken<'a,ET:EngineTypes> {
+    /// The token is a simple character with the given [`CommandCode`].
     Tk{char:ET::Char,code:CommandCode},
+    /// The token is a control sequence or active character, which
+    ///is currently defined as the give [`TeXCommand`] (or undefined).
     Cmd(Option<&'a TeXCommand<ET>>),
 }
 
+/// See [`Gullet::char_or_primitive`](crate::engine::gullet::Gullet::char_or_primitive).
 #[derive(Debug)]
 pub enum CharOrPrimitive<ET:EngineTypes> {
     Char(ET::Char,CommandCode),
     Primitive(PrimitiveIdentifier),
 }
 
+/// A currently active conditional, e.g. `\ifnum`, `\ifx`, etc.
 #[derive(Copy,Clone,Eq,PartialEq,Debug)]
 pub enum ActiveConditional<I:TeXInt> {
+    /// An unfinished conditional, e.g. `\ifnum` before both numbers have been read.
     Unfinished(PrimitiveIdentifier),
+    /// `\ifcase` of the provided number
     Case(I),
+    /// A conditional that has evaluated to true
     True(PrimitiveIdentifier),
+    /// A conditional that has evaluated to false after the matching `\else` branch
     Else(PrimitiveIdentifier),
 }
 impl<I:TeXInt> ActiveConditional<I> {
+    /// The (original, primitive) name of the conditional.
     pub fn name(&self) -> PrimitiveIdentifier {
         match self {
             ActiveConditional::Unfinished(n) => *n,
@@ -57,71 +68,110 @@ impl<I:TeXInt> ActiveConditional<I> {
 pub enum TeXCommand<ET:EngineTypes> {
     /// A user defined [`Macro`], to be expanded (unless [protected](Macro::protected))
     Macro(Macro<ET::Token>),
+    /// A character with the given [`CommandCode`]; e.g. the result of `\let\foo={`.
     Char{char:ET::Char,code:CommandCode},
+    /// A character defined via `\chardef\foo...`.
     CharDef(ET::Char),
+    /// A math character defined via `\mathchardef\foo...`.
     MathChar(u32),
+    /// A font defined via `\font\foo...`.
     Font(<ET::FontSystem as FontSystem>::Font),
+    /// An integer register defined via `\countdef\foo...`.
     IntRegister(usize),
+    /// A dimension register defined via `\dimendef\foo...`.
     DimRegister(usize),
+    /// A skip register defined via `\skipdef\foo...`.
     SkipRegister(usize),
+    /// A muskip register defined via `\muskipdef\foo...`.
     MuSkipRegister(usize),
+    /// A token register defined via `\toksdef\foo...`.
     ToksRegister(usize),
+    /// A [primitive command](PrimitiveCommand), e.g. `\relax`, `\endgroup`, `\count` etc.
     Primitive{name:PrimitiveIdentifier,cmd:PrimitiveCommand<ET>},
 }
 
-/// A command.
+/// A *primitive* command defined from the outset. All of the `fn` methods
+/// are called with (at least) the current [`EngineReferences`] and the [`Token`] that
+/// triggered the command.
 #[derive(Copy,Clone,Debug)]
 pub enum PrimitiveCommand<ET:EngineTypes> {
     /// A conditional, e.g. `\ifnum`, `\ifx`, etc.
     Conditional(fn(&mut EngineReferences<ET>,ET::Token) -> bool),
-    /// An expandable primitive, e.g. `\the`, `\number`, etc.
+    /// An expandable primitive, e.g. `\the`, `\number`, etc. - should push its expansion to the `Vec` argument.
     Expandable(fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)),
+    /// An expandable primitive that does not actually produce any tokens, or does via more complicated means
+    /// than simply returning a `Vec<ET::Token>` - e.g. `\csname`, `\input`, `\else`, etc.
     SimpleExpandable(fn(&mut EngineReferences<ET>,ET::Token)),
-    /// A primitive that cannot be expanded, e.g. `\relax`, `\end`, etc.
+    /// A primitive that cannot be expanded, e.g. `\relax`, `\end`, etc. See [`CommandScope`].
     Unexpandable{
         scope: CommandScope,
         apply:fn(&mut EngineReferences<ET>,ET::Token)
     },
+    /// An assignment primitive, e.g. `\def`, `\advance` - basically, an unexpandable primitive that
+    /// causes `\afterassignment` to be inserted.
     Assignment(fn(&mut EngineReferences<ET>,ET::Token,bool)),
+    /// A primitive that yields an integer value if one is expected, or optionally can assign one if not;
+    /// e.g. `\count`.
     Int {
         read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Int,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
+    /// A primitive that yields a dimension value if one is expected, or optionally can assign one if not;
+    /// e.g. `\dimen`.
     Dim {
         read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Dim,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
+    /// A primitive that yields a skip value if one is expected, or optionally can assign one if not;
+    /// e.g. `\skip`.
     Skip {
         read:fn(&mut EngineReferences<ET>,ET::Token) -> Skip<ET::Dim>,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
+    /// A primitive that yields a muskip value if one is expected, or optionally can assign one if not;
+    /// e.g. `\muskip`.
     MuSkip {
         read:fn(&mut EngineReferences<ET>,ET::Token) -> MuSkip<ET::MuDim>,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
+    /// A primitive that yields a [`Font`] if one is expected, or optionally can assign one if not;
+    /// e.g. `\font`.
     FontCmd{
         read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Font,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
+    /// A primitive that yields either a finished [`TeXBox`], or opens a new one, depending on
+    /// the case of the return value. Used for e.g. `\setbox` or `\raise`, which may be followed by
+    /// a finished box (e.g. `\box0`) or a new box (e.g. `\hbox{...}`).
     Box(fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>),
+    /// A primitive assignable integer value, e.g. `\hangindent` or `\tolerance`.
     PrimitiveInt,
+    /// A primitive assignable dimension value, e.g. `\parindent` or `\hsize`.
     PrimitiveDim,
+    /// A primitive assignable skip value, e.g. `\parskip` or `\lineskip`.
     PrimitiveSkip,
+    /// A primitive assignable muskip value, e.g. `\thinmuskip` or `\medmuskip`.
     PrimitiveMuSkip,
+    /// A primitive assignable token list, e.g. `\everypar` or `\output`.
     PrimitiveToks,
+    /// A Whatsit, e.g. `\write`, `\special`, etc. - if following an `\immediate`, the `immediate` function
+    /// is called, otherwise, `get` may return a (boxed) continuation to be called at shipout.
     Whatsit {
         get:fn(&mut EngineReferences<ET>, ET::Token) -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>,
         immediate:fn(&mut EngineReferences<ET>,ET::Token)
     },
+    /// `\relax` - does nothing.
     Relax,
 }
 
 impl<ET:EngineTypes> TeXCommand<ET> {
+    /// returns a helper struct for displaying the `\meaning` of this command; implements [`Display`].
     pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
         Meaning{cmd:self,int,cc,escapechar}
     }
 }
 
+/// A helper struct for displaying the `\meaning` of a [`TeXCommand`]; implements [`Display`].
 pub struct Meaning<'a,ET:EngineTypes>{
     cmd:&'a TeXCommand<ET>,
     int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler,
@@ -129,7 +179,8 @@ pub struct Meaning<'a,ET:EngineTypes>{
     escapechar:Option<ET::Char>
 }
 impl<'a,ET:EngineTypes> Meaning<'a,ET> {
-    fn write_chars<W: CharWrite<ET::Char,ET::CSName>>(&self, f:&mut W) {
+    /// Write the meaning directly to a [`CharWrite`].
+    pub fn write_chars<W: CharWrite<ET::Char,ET::CSName>>(&self, f:&mut W) {
         match self.cmd {
             TeXCommand::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
             TeXCommand::Char{char,code} =>
@@ -179,21 +230,32 @@ impl<'a,ET:EngineTypes> Display for Meaning<'a,ET> {
     }
 }
 
+/// A macro signature, e.g. `#1#2#3` or `#1t#2\foo{`.
 #[derive(Clone,Debug)]
 pub struct MacroSignature<T:Token> {
+    /// The number of parameters, e.g. `3` in `#1#2#3`.
     pub arity:u8,
+    /// The token list specifying the parameters, e.g. `[#1,#2,#3]` in `#1#2#3`.
     pub params:TokenList<T>
 }
 
+/// A macro, e.g. the result of `\def\foo#1#2{...}`.
 #[derive(Clone,Debug)]
 pub struct Macro<T:Token> {
+    /// Whether the macro is protected, e.g. the result of `\protected\def`.
     pub protected:bool,
+    /// Whether the macro is long, e.g. the result of `\long\def`.
     pub long:bool,
+    /// Whether the macro is outer, e.g. the result of `\outer\def`.
     pub outer:bool,
+    /// The expansion of the macro, e.g. `...` in `\def\foo#1#2{...}`.
     pub expansion:TokenList<T>,
+    /// The signatureof the macro, e.g. `#1#2` in `\def\foo#1#2{...}`.
     pub signature:MacroSignature<T>
 }
 impl<T:Token> Macro<T> {
+    /// Convenience method for creating a new macro from a signature and expansion as strings; given the provided [`CategoryCodeScheme`].
+    /// Allows for e.g. `as_point = Macro::new(int,`[`&DEFAULT_SCHEME_U8`](crate::tex::catcodes::DEFAULT_SCHEME_U8)`,"#1#2","(#1,#2)")`.
     pub fn new<Sig:AsRef<str>,Exp:AsRef<str>>(int:&mut <T::CS as CSName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,sig:Sig,exp:Exp) -> Self {
         let mut parser = MacroParser::new();
         let sig = sig.as_ref();
@@ -213,9 +275,11 @@ impl<T:Token> Macro<T> {
         parser.close(false,false,false)
     }
 
-    pub fn meaning<'a,ET:EngineTypes<Token=T,Char=T::Char>>(&'a self, int:&'a <T::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> MacroMeaning<'a,ET> {
+    /// returns a helper struct for displaying the `\meaning` of this command; implements [`Display`].
+    pub fn meaning<'a>(&'a self, int:&'a <T::CS as CSName<T::Char>>::Handler, cc:&'a CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>) -> impl Display + 'a {
         MacroMeaning{cmd:self,int,cc,escapechar}
     }
+    /// Write the meaning directly to a [`CharWrite`].
     pub fn meaning_char<F: CharWrite<T::Char,T::CS>>(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>,f: &mut F) {
         if self.protected {
             if let Some(e) = escapechar { f.push_char(e) }
@@ -234,25 +298,37 @@ impl<T:Token> Macro<T> {
         write!(f,"->").unwrap();
         self.expansion.display(int, cc, escapechar, true).fmt_cw(f).unwrap();
     }
-    pub fn meaning_fmt(&self, int:&<T::CS as CSName<T::Char>>::Handler, cc:&CategoryCodeScheme<T::Char>, escapechar:Option<T::Char>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.meaning_char(int, cc, escapechar, &mut StringCharWrite::new(f));
+}
+
+struct MacroMeaning<'a,T:Token>{
+    cmd:&'a Macro<T>,
+    int:&'a <T::CS as CSName<T::Char>>::Handler,
+    cc:&'a CategoryCodeScheme<T::Char>,
+    escapechar:Option<T::Char>
+}
+impl<'a,T:Token> Display for MacroMeaning<'a,T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.cmd.meaning_char(self.int, self.cc, self.escapechar, &mut StringCharWrite::new(f));
         Ok(())
     }
 }
 
-pub struct MacroMeaning<'a,ET:EngineTypes>{
-    cmd:&'a Macro<ET::Token>,
-    int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler,
-    cc:&'a CategoryCodeScheme<ET::Char>,
-    escapechar:Option<ET::Char>
-}
-impl<'a,ET:EngineTypes> Display for MacroMeaning<'a,ET> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.cmd.meaning_fmt(self.int, self.cc, self.escapechar, f)
-    }
-}
-
+/// The scope of a [`PrimitiveCommand::Unexpandable`].
 #[derive(Clone,Debug,Copy)]
 pub enum CommandScope {
-    SwitchesToVertical,SwitchesToHorizontal,MathOnly,Any,SwitchesToHorizontalOrMath
+    /// The command is only valid in vertical mode. If occuring in horizontal mode, it will
+    /// close the current paragraph, i.e. switch to vertical mode.
+    /// In restricted horizontal or math mode, it will throw an error.
+    SwitchesToVertical,
+    /// The command is only valid in horizontal mode. If occuring in (internal) vertical mode, it will
+    /// open a new paragraph, i.e. switch to horizontal mode. In math mode, it will throw an error.
+    SwitchesToHorizontal,
+    /// The command is only valid in math mode. If occuring in non-math mode, it will
+    /// throw an error
+    MathOnly,
+    /// The command is only valid in horizontal or math mode. If occuring in vertical mode, it will
+    /// open a new paragraph, i.e. switch to horizontal mode.
+    SwitchesToHorizontalOrMath,
+    /// The command is valid anywhere and will not switch modes.
+    Any
 }

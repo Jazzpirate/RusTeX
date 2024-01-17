@@ -11,6 +11,7 @@ pub mod pdflatex;
 #[doc(hidden)]
 pub mod tests;
 
+/// Default `pub use` prelude for the crate
 pub mod prelude {
     pub use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
     pub use crate::tex::characters::{Character, CharacterMap};

@@ -343,7 +343,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
                     engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
                                                                ET::Char::displayable_opt(engine.state.get_escape_char()),
                                                                engine.aux.memory.cs_interner().resolve(&cs),
-                                                               m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
+                                                               m.meaning(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
                     ));
                     engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
                     if engine.aux.memory.cs_interner().resolve(&cs).to_string() == "lst@ReplaceIn@" {
@@ -353,7 +353,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
                 StandardToken::Character(c,_) => {
                     engine.aux.outputs.write_neg1(format_args!("~.{} {}",
                                                                c.display(),
-                                                               m.meaning::<ET>(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
+                                                               m.meaning(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
                     ));
                     //engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
                 }
