@@ -6,10 +6,10 @@ Used by instantiating a [Kpathsea] instance with the working directory.
 ```rust
 use tex_engine::engine::filesystem::kpathsea::Kpathsea;
 let kpse = Kpathsea::new(std::env::current_dir().unwrap());
-assert!(kpse.kpsewhich("latex.ltx").path.to_str().unwrap().ends_with("tex/latex/base/latex.ltx"));
-assert!(kpse.kpsewhich("article.cls").path.to_str().unwrap().ends_with("tex/latex/base/article.cls"));
+assert!(kpse.kpsewhich("latex.ltx").path.to_str().unwrap().replace('\\' ,"/").ends_with("tex/latex/base/latex.ltx"));
+assert!(kpse.kpsewhich("article.cls").path.to_str().unwrap().replace('\\' ,"/").ends_with("tex/latex/base/article.cls"));
 // as expected, the `.tex` file extension is optional:
-assert!(kpse.kpsewhich("expl3-code").path.to_str().unwrap().ends_with("tex/latex/l3kernel/expl3-code.tex"));
+assert!(kpse.kpsewhich("expl3-code").path.to_str().unwrap().replace('\\' ,"/").ends_with("tex/latex/l3kernel/expl3-code.tex"));
 ```
 */
 
@@ -100,7 +100,7 @@ pub struct KpathseaBase {
 }
 impl KpathseaBase {
     fn new() -> KpathseaBase {
-        let vars = Self::get_vars();
+        let mut vars = Self::get_vars();
         let home = if cfg!(target_os = "windows") {
             std::env::vars().find(|x| x.0 == "HOMEDRIVE").unwrap().1 +
                 &std::env::vars().find(|x| x.0 == "HOMEPATH").unwrap().1
@@ -108,7 +108,7 @@ impl KpathseaBase {
             std::env::vars().find(|x| x.0 == "HOME").unwrap().1
         };
 
-        let paths = Self::paths_to_scan(&vars);
+        let paths = Self::paths_to_scan(&mut vars);
         let mut parser = PathParser {
             vars,
             diddot:false,
@@ -205,7 +205,7 @@ impl KpathseaBase {
         vars
     }
 
-    fn paths_to_scan(vars:&HMap<String,String>) -> Vec<String> {
+    fn paths_to_scan(vars:&mut HMap<String,String>) -> Vec<String> {
         let mut todo = [NamedVar("TEXINPUTS",false),NamedVar("VARTEXFONTS",false),NamedVar("VFFONTS",false),NamedVar("TFMFONTS",false),NamedVar("T1FONTS",false),NamedVar("ENCFONTS",false)];
 
         let mut ret = vec!();
@@ -218,7 +218,10 @@ impl KpathseaBase {
                     }
                 }
                 ret.push(v);
-            }
+            } else {match vars.entry(k) {
+                Entry::Occupied(_) => (),
+                Entry::Vacant(e) => {e.insert(v);}
+            }}
         }
         for td in todo.iter().filter(|x| !x.1) {
             if let Some(v) = vars.get(td.0) {

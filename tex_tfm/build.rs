@@ -127,7 +127,8 @@ impl TableParser {
         if !self.s.starts_with('-') {return false}
         self.s = &self.s[1..].trim_start();
         let idx = self.s.find('\n').unwrap();
-        let (name,rest) = self.s.split_at(idx);
+        let (mut name,rest) = self.s.split_at(idx);
+        if name.ends_with('\r') {name = &name[..name.len()-1]}
         self.s = rest[1..].trim_start();
         assert!(self.s.starts_with('|'));
         self.s = self.s[self.s.find('\n').unwrap()..].trim_start();
