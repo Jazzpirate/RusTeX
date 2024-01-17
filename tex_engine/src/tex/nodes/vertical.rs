@@ -160,6 +160,13 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
             _ => false
         }
     }
+    fn sourceref(&self) -> Option<(&SourceRef<ET>, &SourceRef<ET>)> {
+        match self {
+            VNode::HRule { start, end, .. } => Some((start, end)),
+            VNode::Box(b) => b.sourceref(),
+            _ => None
+        }
+    }
 }
 
 /// The kinds of vertical lists that can occur. TODO: rethink this

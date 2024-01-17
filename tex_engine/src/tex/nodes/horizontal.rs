@@ -191,6 +191,15 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             _ => false
         }
     }
+
+    fn sourceref(&self) -> Option<(&SourceRef<ET>, &SourceRef<ET>)> {
+        match self {
+            HNode::VRule { start, end, .. } => Some((start, end)),
+            HNode::Box(b) => b.sourceref(),
+            HNode::MathGroup(mg) => mg.sourceref(),
+            _ => None
+        }
+    }
 }
 
 /// The kinds of horizontal lists that can occur.

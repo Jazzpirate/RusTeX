@@ -587,4 +587,10 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
         TeXBox::H {..} => NodeType::HList,
         TeXBox::V {..} => NodeType::VList,
     }}
+    fn sourceref(&self) -> Option<(&SourceRef<ET>, &SourceRef<ET>)> {
+        match self {
+            TeXBox::H { start, end, .. } => Some((start, end)),
+            TeXBox::V { start, end, .. } => Some((start, end)),
+        }
+    }
 }

@@ -418,6 +418,9 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
 }
 
 /// All the mutable data of the [`Stomach`] - i.e. the current page, the current list(s), etc.
+///
+/// TODO: should be overhauled; this is just a rough approximation of what needs to happen and can be made
+/// more efficient *and* more correct.
 #[derive(Clone,Debug)]
 pub struct StomachData<ET:EngineTypes> {
     pub page:Vec<VNode<ET>>,

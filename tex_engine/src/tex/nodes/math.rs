@@ -19,6 +19,9 @@ use crate::engine::state::State;
 /// an `\atop` comes later that shifts the font style), and a resolved form,
 /// where the fonts have been determined and are fixed.
 /// The parameter `S:`[`MathFontStyleT`] makes the distinction between the two forms.
+///
+/// TODO: this should be overhauled; the unresolved nodes shouldn't (need to) implement [`NodeTrait`],
+/// let alone carry three fonts around.
 #[derive(Clone,Debug)]
 pub enum MathNode<ET:EngineTypes,S:MathFontStyleT<ET>> {
     /// A math atom node (see [`MathAtom`])
@@ -326,6 +329,9 @@ impl From<u8> for MathClass {
 /// This trait is implemented for exactly two types that indicate
 /// whether we are in the unresolved [`UnresolvedMathFontStyle`] or resolved
 /// ([`MathFontStyle`]) state.
+///
+/// TODO: should be overhauled; this is an artifact of [`MathNode`]
+/// implementing [`NodeTrait`] even unresolved, which is technically nonsensical.
 pub trait MathFontStyleT<ET:EngineTypes>:Clone+Debug {
     /// The type of the choice node, which is either [`UnresolvedMathChoice`] or [`ResolvedChoice`].
     type Choice:MathChoiceT<ET>;
@@ -868,6 +874,9 @@ impl<ET:EngineTypes> NodeTrait<ET> for MathGroup<ET> {
         })
     }
     fn nodetype(&self) -> NodeType { NodeType::Math }
+    fn sourceref(&self) -> Option<(&SourceRef<ET>, &SourceRef<ET>)> {
+        Some((&self.start,&self.end))
+    }
 }
 
 impl<ET:EngineTypes> MathGroup<ET> {

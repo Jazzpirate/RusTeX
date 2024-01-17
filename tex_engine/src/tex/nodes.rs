@@ -43,6 +43,7 @@ pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
     /// some engine wants to insert, without impacting algorithms that inspect e.g. the last node
     /// of the current list.
     fn opaque(&self) -> bool { false }
+    fn sourceref(&self) -> Option<(&SourceRef<ET>,&SourceRef<ET>)> { None }
 }
 
 /// Produces a `\n` followed by `indent`-many spaces - i.e. does the indentation for

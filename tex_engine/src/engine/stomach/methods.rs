@@ -791,7 +791,7 @@ pub enum ParLine<ET:EngineTypes> {
 }
 
 /// Rough implementation of paragraph breaking
-pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<HNode<ET>>,start:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
+pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<HNode<ET>>,start:SourceReference<<ET::File as File>::SourceRefID>) -> Vec<ParLine<ET>> {
     let mut ret : Vec<ParLine<ET>> = Vec::new();
     let mut hgoals = specs.into_iter();
     let mut nodes = children.into_iter();
@@ -808,9 +808,8 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
         macro_rules! next_line {
             ($b:literal) => {
                 if !line.is_empty() {
-                    let start = currstart.clone();
-                    currstart = currend.clone();
-                    ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
+                    let start = std::mem::replace(&mut currstart,currend.clone());
+                    ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:engine.mouth.current_sourceref(),info:HBoxInfo::ParLine {
                         spec:line_spec.clone(),
                         ends_with_line_break:$b,
                         inner_height:std::mem::take(&mut curr_height),
@@ -832,8 +831,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
             match nodes.next() {
                 None => {
                     if !line.is_empty() {
-                        let start = currstart.clone();
-                        currstart = currend.clone();
+                        let start = std::mem::replace(&mut currstart,currend.clone());
                         ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
                             spec:line_spec.clone(),
                             ends_with_line_break:false,
@@ -851,21 +849,17 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                 Some(HNode::Insert(n,ch)) =>
                     reinserts.push(VNode::Insert(n,ch)),
                 Some(HNode::VAdjust(ls)) => reinserts.extend(ls.into_vec().into_iter()),
-                Some(g@HNode::MathGroup(MathGroup {display:Some(_),..})) => {
-                    let (a,b) = if let HNode::MathGroup(MathGroup {display:Some((a,b)),..}) = &g {
-                        (*a,*b)
-                    } else { unreachable!() };
+                Some(HNode::MathGroup(g@MathGroup {display:Some(_),..})) => {
                     let ht = g.height();
                     let dp = g.depth();
-                    //reinserts.push(VNode::VSkip(a));
+                    let (a,b) = g.display.unwrap();
                     next_line!(false);
-                    ret.push(ParLine::Line(TeXBox::H {children:vec!(g).into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
+                    ret.push(ParLine::Line(TeXBox::H {start:g.start.clone(),end:g.end.clone(),children:vec!(HNode::MathGroup(g)).into(),info:HBoxInfo::ParLine {
                         spec:line_spec.clone(),
                         ends_with_line_break:false,
                         inner_height:ht + dp + a.base + b.base,
                         inner_depth:ET::Dim::default()
                     },preskip:None}));
-                    //ret.push(ParLine::Adjust(VNode::VSkip(b)));
                     continue 'A
                 }
                 Some(HNode::Penalty(i)) if i <= -10000 => {
@@ -878,6 +872,10 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     break
                 }
                 Some(node) => {
+                    match node.sourceref() {
+                        Some((_,b)) => currend = b.clone(),
+                        _ => ()
+                    }
                     target = target + (-node.width());
                     curr_height = curr_height.max(node.height());
                     curr_depth = curr_depth.max(node.depth());

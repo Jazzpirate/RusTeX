@@ -1,3 +1,5 @@
+/*! Adds support for `pdflatex` nodes and primitive commands to the engine. Requires the `pdflatex` feature to be enabled.
+*/
 pub mod commands;
 pub mod nodes;
 
