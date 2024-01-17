@@ -347,24 +347,21 @@ pub trait PDFExtension<ET:EngineTypes>: EngineExtension<ET> {
     fn pdfannots(&mut self) -> &mut Vec<PDFAnnot<ET>>;
     fn pdfxforms(&mut self) -> &mut Vec<PDFXForm<ET>>;
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>>;
-    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    #[cfg(feature="pdfium")]
     fn pdfium_direct(&mut self) -> &mut Option<pdfium_render::prelude::Pdfium>;
 
-    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    #[cfg(feature="pdfium")]
     fn pdfium(&mut self) -> Option<&pdfium_render::prelude::Pdfium> {
         use pdfium_render::prelude::*;
         match self.pdfium_direct() {
             Some(p) => Some(p),
             r => {
-                #[cfg(feature="pdfium-dyn")]
                 let lib = match std::env::current_exe().map(|d| d.parent().map(|d|
                     Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(d)).ok()
                 )).ok().flatten().flatten().or_else(|| Pdfium::bind_to_system_library().ok()) {
                     Some(r) => r,
                     _ => return None
                 };
-                #[cfg(feature="pdfium-static")]
-                let lib = Pdfium::bind_to_statically_linked_library().unwrap();
                 *r = Some(Pdfium::new(lib));
                 r.as_ref()
             }
@@ -381,7 +378,7 @@ pub struct MinimalPDFExtension<ET:EngineTypes> {
     pdfxforms:Vec<PDFXForm<ET>>,
     pdfximages:Vec<PDFXImage<ET>>,
     pdfannots:Vec<PDFAnnot<ET>>,
-    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    #[cfg(feature="pdfium")]
     pdfium:Option<pdfium_render::prelude::Pdfium>
 }
 impl<ET:EngineTypes> EngineExtension<ET> for MinimalPDFExtension<ET> {
@@ -395,7 +392,7 @@ impl<ET:EngineTypes> EngineExtension<ET> for MinimalPDFExtension<ET> {
             pdfannots:Vec::new(),
             pdfxforms:Vec::new(),
             pdfximages:Vec::new(),
-            #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+            #[cfg(feature="pdfium")]
             pdfium:None
         }
     }
@@ -422,8 +419,7 @@ impl<ET:EngineTypes> PDFExtension<ET> for MinimalPDFExtension<ET> {
 
     fn pdfximages(&mut self) -> &mut Vec<PDFXImage<ET>> { &mut self.pdfximages }
 
-    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
-
+    #[cfg(feature="pdfium")]
     fn pdfium_direct(&mut self) -> &mut Option<pdfium_render::prelude::Pdfium> {
         &mut self.pdfium
     }
@@ -450,7 +446,7 @@ pub struct PDFAnnot<ET:EngineTypes> {
 pub enum PDFImage {
     None,
     Img(image::DynamicImage),
-    #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+    #[cfg(feature="pdfium")]
     PDF(image::DynamicImage)
 }
 impl PDFImage {
@@ -458,7 +454,7 @@ impl PDFImage {
         match self {
             PDFImage::None => 20,
             PDFImage::Img(img) => img.width(),
-            #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+            #[cfg(feature="pdfium")]
             PDFImage::PDF(img) => img.width()
         }
     }
@@ -466,7 +462,7 @@ impl PDFImage {
         match self {
             PDFImage::None => 20,
             PDFImage::Img(img) => img.height(),
-            #[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+            #[cfg(feature="pdfium")]
             PDFImage::PDF(img) => img.width()
         }
     }
@@ -485,7 +481,7 @@ pub struct PDFXImage<ET:EngineTypes> {
     pub img:PDFImage
 }
 
-#[cfg(any(feature="pdfium-dyn",feature="pdfium-static"))]
+#[cfg(feature="pdfium")]
 pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(path:&Path,ext:&mut E) -> PDFImage {
     use pdfium_render::prelude::PdfRenderConfig;
     match ext.pdfium() {
@@ -493,8 +489,8 @@ pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(path:&Path,ext:&mut E) ->
         Some(pdfium) => {
             match pdfium.load_pdf_from_file(&path,None) {
                 Ok(doc) => {
-                    let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
-                    match doc.pages().iter().next().unwrap().render_with_config(&cfg) {
+                    //let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
+                    match doc.pages().iter().next().unwrap().render_with_config(&PdfRenderConfig::new()) {//.render_with_config(&cfg) {
                         Ok(bmp) => PDFImage::PDF(bmp.as_image()),
                         _ => PDFImage::None
                     }
@@ -505,7 +501,7 @@ pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(path:&Path,ext:&mut E) ->
     }
 }
 
-#[cfg(not(any(feature="pdfium-dyn",feature="pdfium-static")))]
+#[cfg(not(feature="pdfium"))]
 pub fn pdf_as_image<ET:EngineTypes,E:PDFExtension<ET>>(_path:&Path,_ext:&mut E) -> PDFImage { PDFImage::None }
 
 

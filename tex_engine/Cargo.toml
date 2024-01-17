@@ -30,8 +30,8 @@ lto = true
 [features]
 default = []
 pdflatex = ["md5","image","regex"]
-pdfium-dyn = ["pdflatex","pdfium-render"]
-pdfium-static = ["pdflatex","pdfium-render/static"]
+pdfium = ["pdflatex","pdfium-render"]
+#pdfium-static = ["pdflatex","pdfium-render/static"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -41,8 +41,8 @@ pdfium-static = ["pdflatex","pdfium-render/static"]
 
 [dev-dependencies]
 env_logger = "0.10.1"
-rand = "0.8.5"
-ansi_term = "0.12.1"
+#rand = "0.8.5"
+#ansi_term = "0.12.1"
 
 [dependencies]
 lazy_static = "1.4.0"
