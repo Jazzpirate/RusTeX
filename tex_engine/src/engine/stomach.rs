@@ -78,7 +78,7 @@ impl From<BoxType> for TeXMode {
 }
 
 /// The [`Stomach`] is the part of the engine that processes (unexpandable) 
-/// commands, collects [nodes](`NodeTrait`) in (horizontal or vertical) lists, and builds pages.
+/// commands, collects [nodes](crate::tex::nodes::NodeTrait) in (horizontal or vertical) lists, and builds pages.
 ///
 /// The vast majority of the methods implemented by this trait take a [`EngineReferences`] as their first argument
 /// and have a default implementation already.
@@ -152,7 +152,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         engine.state.set_skip_register(engine.aux,register,val,global);
         methods::insert_afterassignment(engine);
     }
-    /// Assign a value to a [muskip register](TeXCommand::MuskipRegister) and insert `\afterassignment` if necessary
+    /// Assign a value to a [muskip register](TeXCommand::MuSkipRegister) and insert `\afterassignment` if necessary
     fn assign_muskip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
         let val = engine.read_muskip(true);
         engine.state.set_muskip_register(engine.aux,register,val,global);

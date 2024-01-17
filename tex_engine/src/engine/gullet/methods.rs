@@ -919,7 +919,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> StretchShri
         ResolvedToken::Cmd(cmd) => match cmd {
             Some(TeXCommand::DimRegister(u)) => {
                 let base = engine.state.get_dim_register(*u);
-                return StretchShrink::from_dimen(engine,if is_negative {-1.0} else {1.0},base)
+                return StretchShrink::Dim(if is_negative {-base} else {base})
             }
             o => todo!("command in read_stretch: {:?}",o)
         }
@@ -962,7 +962,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
         ResolvedToken::Cmd(Some(TeXCommand::DimRegister(u))) => {
             let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
-            return StretchShrink::from_dimen(engine,scale,base)
+            return StretchShrink::Dim(base.scale_float(scale))
         }
         o => todo!("command in read_stretch_inner: {:?}",o)
     );

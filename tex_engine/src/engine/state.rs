@@ -48,7 +48,7 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
         }
     }
 
-    /// Append a [`Token`] to be inserted when the current group ends (i.e. `\aftergroup`)
+    /// Append a [`Token`](crate::tex::tokens::Token) to be inserted when the current group ends (i.e. `\aftergroup`)
     fn aftergroup(&mut self,token:ET::Token);
 
     /// Get the current set of mathfonts (text, script, scriptscript)
@@ -67,7 +67,7 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
     fn primitives(&self) -> &PrimitiveCommands<ET>;
     /// push a new group level to the scoping stack; `line_number` is used for `\tracinggroups`
     fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize);
-    /// pop a group level from the scoping stack. Needs the mouth to insert the `\aftergroup` [`Token`]s (if set)
+    /// pop a group level from the scoping stack. Needs the mouth to insert the `\aftergroup` [`Token`](crate::tex::tokens::Token)s (if set)
     fn pop(&mut self,aux:&mut EngineAux<ET>,mouth: &mut ET::Mouth);
     /// The current [`GroupType] (i.e. `\currentgrouptype`).
     fn get_group_type(&self) -> Option<GroupType>;
@@ -261,7 +261,7 @@ pub trait CustomStateChange<ET:EngineTypes> {
 pub struct StackLevel<ET:EngineTypes> {
     /// The type of the group
     pub group_type:GroupType,
-    /// The `\aftergroup` [`Token`]s to be inserted when the group ends
+    /// The `\aftergroup` [`Token`](crate::tex::tokens::Token)s to be inserted when the group ends
     pub aftergroup:Vec<ET::Token>,
     changes:Vec<StateChangeI<ET>>
 }
@@ -295,7 +295,7 @@ impl<ET:EngineTypes> StateStack<ET> {
         };
         self.stack.push(lvl);
     }
-    /// Pop a stack level from the stack, as a group ends. Returns the [`GroupType`], the `\aftergroup` [`Token`]s,
+    /// Pop a stack level from the stack, as a group ends. Returns the [`GroupType`], the `\aftergroup` [`Token`](crate::tex::tokens::Token)s,
     /// and an iterator over the [`StateChange`]s to be rolled back.
     pub fn pop<'a>(&'a mut self) -> (GroupType,Vec<ET::Token>,ChangeIter<'a,ET>) {
         let lvl = self.stack.pop().unwrap();

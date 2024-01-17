@@ -3,11 +3,10 @@ use std::sync::RwLock;
 use lazy_static::lazy_static;
 use crate::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
-use crate::engine::fontsystem::FontSystem;
 use crate::engine::state::State;
 use crate::prelude::Character;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
-use crate::tex::numerics::{MuSkip, NumSet, Skip};
+use crate::tex::numerics::{MuSkip, Skip};
 use crate::utils::HMap;
 
 #[macro_export]
@@ -445,7 +444,7 @@ pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
 impl PrimitiveIdentifier {
     /// Returns a struct implementing [`Display`](std::fmt::Display) for the given [`PrimitiveIdentifier`], and
     /// optional `\escapechar` that will be prefixed - e.g.
-    /// `println!(`[`PRIMITIVES`](static@PRIMITIVES)`.`[`printable`](Self::printable)`(`[`PRIMITIVES`](static@PRIMITIVES)`.the, Some('\\')))`
+    /// `println!(`[`PRIMITIVES`](static@PRIMITIVES)`.the.`[`display`](Self::display)`(Some('\\'))`
     /// will print `\the`.
     pub fn display<C:Character>(self,escapechar:Option<C>) -> impl std::fmt::Display {
         PrintableIdentifier(self,escapechar)

@@ -18,7 +18,7 @@ use crate::tex::characters::Character;
 use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::numerics::{Dim32, Mu, MuDim, MuSkip, Numeric, NumSet, Skip, TeXDimen, TeXInt};
+use crate::tex::numerics::{Dim32, Mu, MuDim, Numeric, NumSet, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
 use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXError};
 

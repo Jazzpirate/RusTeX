@@ -1,7 +1,7 @@
 /*! A [Token] is -- conceptually -- either a [control sequence](CSName),
 or a pair of a [character](Character) and a [`CategoryCode`](super::catcodes::CategoryCode). In practice, we use
 [`CommandCode`] instead, which omits "impossible" codes (e.g. [`Invalid`](super::catcodes::CategoryCode::Invalid) or
-[`Comment`](super::catcodes::CategoryCode::Comment)) and adds internal ones (e.g. [`Noexpand`](CommandCode::Noexpand) or
+[`Comment`](super::catcodes::CategoryCode::Comment)) and adds internal ones (e.g. [`Primitive`](CommandCode::Primitive) or
 [`Argument`](CommandCode::Argument)).
 
 The "canonical" way to represent a [`Token`] is [`StandardToken`], which is an enum with two variants.

@@ -10,7 +10,7 @@ use crate::engine::fontsystem::FontSystem;
 use crate::tex::tokens::token_lists::{StringCharWrite, TokenList, CharWrite};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::tokens::control_sequences::CSName;
-use crate::tex::numerics::{MuSkip, NumSet, Skip, TeXInt};
+use crate::tex::numerics::{MuSkip, Skip, TeXInt};
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
 use crate::engine::mouth::strings::InputTokenizer;

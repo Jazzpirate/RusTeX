@@ -2,7 +2,6 @@
 
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
-use std::num::ParseIntError;
 use std::ops::{Add, Div, Mul, Neg};
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::fontsystem::Font;
@@ -11,9 +10,13 @@ use std::ops::Sub;
 
 /// Bundles the various numerical types used in some engine, and converts between them.
 pub trait NumSet: Clone+Debug {
+    /// The integer type (canonically `i32`)
     type Int:TeXInt;
+    /// The dimension type (canonically `Dim32`)
     type Dim:TeXDimen+Numeric<Self::Int>;
+    /// The mu dimension type (canonically `Mu`)
     type MuDim:MuDim+Numeric<Self::Int>;
+    /// Converts a [`MuSkip`] to a [`Skip`], using the current font's `em`.
     fn muskip_to_skip(muskip: MuSkip<Self::MuDim>, em: Self::Dim) -> Skip<Self::Dim> {
         let base = Self::mudim_to_dim(muskip.base,em);
         let stretch = muskip.stretch.map(|s| match s {
@@ -30,10 +33,13 @@ pub trait NumSet: Clone+Debug {
         });
         Skip::new(base,stretch,shrink)
     }
+    /// Converts a [`Self::MuDim`] to a [`Self::Dim`], using the current font's `em`.
     fn mudim_to_dim(mudim:Self::MuDim,em:Self::Dim) -> Self::Dim;
+    /// Converts a [`Self::Dim`] to a [`Self::Int`].
     fn dim_to_int(dim:Self::Dim) -> Self::Int;
 }
 
+/// Generalization of integers, dimensions, skips, etc. In particular, provides a [`scale`](Self::scale) method to scale all of them by their integer type.
 pub trait Numeric<I:TeXInt>: Eq + Ord + Neg<Output=Self> + Add<Self,Output=Self> + Mul<I,Output=Self> + Div<I,Output=Self> + Copy + Default + Debug + Display {
     fn scale(&self,times:I,div:I) -> Self;
 }
@@ -41,18 +47,39 @@ pub trait Numeric<I:TeXInt>: Eq + Ord + Neg<Output=Self> + Add<Self,Output=Self>
 /// A TeX integer. By default `i32`.
 pub trait TeXInt:Numeric<Self> + From<i32> + TryFrom<i64> + Into<i64> + TryInto<i32> + Debug + Display +
     std::str::FromStr {
+    /// The minimum value of this integer type.
     const MIN:Self;
+    /// The maximum value of this integer type.
     const MAX:Self;
 }
 /// A TeX dimension. By default [`Dim32`].
 pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output=Self> + Sub<Self,Output=Self> + Neg<Output=Self> + Into<i64> + std::iter::Sum {
+    /// The units used in this dimension. By default [`DEFAULT_UNITS`].
     const UNITS: &'static[&'static [u8]] = DEFAULT_UNITS;
+    /// Scales this dimension by a floating-point number.
     fn scale_float(&self,times:f32) -> Self;
+    /// Make a new dimension from a value in "scaled points" (`sp` = `1/65536 pt`).
     fn from_sp(sp:i32) -> Self;
+    /// Make a new dimension from a floating-point number and a unit. The unit is assumed to be in [`Self::UNITS`].
     fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,f:f32,dim:&[u8]) -> Self;
 }
 
-/// The default [`NumSet`] used in plain TeX.
+/// The default units for dimension values used in plain TeX:
+/// - sp (scaled points)
+/// - pt (points) = 65536sp
+/// - pc (picas) = 12pt
+/// - in (inches) = 72.27pt
+/// - bp (big points) = 1/72 in
+/// - cm (centimeters) = 2.54in
+/// - mm (millimeters) = 0.1mm
+/// - dd (didot points) = 1238/1157 pt
+/// - cc (cicero) = 12 dd
+/// - em (width of a capital M) = (`\fontdimen6` of the current font)
+/// - ex (height of an x) = (`\fontdimen5` of the current font)
+pub const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc",b"sp",b"em",b"ex"];
+
+/// The default [`NumSet`] used in plain TeX, using `i32`, [`Dim32`] and [`Mu`] for integers, dimensions and mu
+/// dimensions, respectively.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub struct DefaultNumSet;
 impl NumSet for DefaultNumSet {
@@ -62,7 +89,6 @@ impl NumSet for DefaultNumSet {
     fn mudim_to_dim(mudim: Mu, em: Dim32) -> Dim32 {
         Dim32(((mudim.0 as f32 / 65536.0) * (em.0 as f32) / 18.0).round() as i32)
     }
-
     fn dim_to_int(dim: Dim32) -> i32 {
         dim.0
     }
@@ -111,7 +137,8 @@ impl Mul<i32> for Dim32 {
     }
 }
 impl Dim32 {
-    fn display_num(num:i32,unit:&str,f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    /// Display a number representing 65536 * `unit` (e.g. `pt` in scaled points).
+    pub fn display_num(num:i32,unit:&str,f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut val = num;
         if val < 0 {
             write!(f,"-")?;
@@ -147,8 +174,6 @@ impl Display for Dim32 {
 impl Into<i64> for Dim32 {
     fn into(self) -> i64 { self.0 as i64 }
 }
-
-const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc",b"sp",b"em",b"ex"];
 
 impl TeXDimen for Dim32 {
     fn scale_float(&self, times: f32) -> Self {
@@ -186,50 +211,23 @@ impl std::iter::Sum for Dim32 {
     }
 }
 
+/// The units for strech/shrink values: `fil`, `fill` and `filll`.
 pub const STRETCH_SHRINK_UNITS:&[&[u8]] = &[b"fil",b"fill",b"filll"];
 
+/// A skip a.k.a. glue value, i.e. a dimension with optional stretch and shrink components.
 #[derive(Clone,Copy,Eq,PartialEq,Debug,Default)]
 pub struct Skip<D:TeXDimen> {
     pub base:D,
     pub stretch:Option<StretchShrink<D>>,
     pub shrink:Option<StretchShrink<D>>
 }
-impl<D:TeXDimen> Add<D> for Skip<D> {
-    type Output = Self;
-    fn add(self, rhs: D) -> Self::Output {
-        Self{base:self.base+rhs,stretch:self.stretch,shrink:self.shrink}
-    }
-}
-impl<D:TeXDimen> Skip<D> {
-    pub fn new(base: D, stretch: Option<StretchShrink<D>>, shrink: Option<StretchShrink<D>>) -> Self {
-        Self{base,stretch:match stretch {
-            Some(StretchShrink::Dim(d)) if d == D::default() => None,
-            Some(StretchShrink::Fil(0) | StretchShrink::Fill(0) | StretchShrink::Filll(0)) => None,
-            _ => stretch
-        },shrink:match shrink {
-            Some(StretchShrink::Dim(d)) if d == D::default() => None,
-            Some(StretchShrink::Fil(0) | StretchShrink::Fill(0) | StretchShrink::Filll(0)) => None,
-            _ => shrink
-        }}
-    }
-}
-/*
-pub trait Skip:Copy + Eq + Default + Debug + Display + Neg<Output=Self> {
-    type Base : TeXDimen;
-    fn base(self) -> Self::Base;
-    fn stretch(&self) -> Option<StretchShrink<Self::Base>>;
-    fn shrink(&self) -> Option<StretchShrink<Self::Base>>;
-    fn add(self,other:Self::Base) -> Self;
-    fn new(base:Self::Base,stretch:Option<StretchShrink<Self::Base>>,shrink:Option<StretchShrink<Self::Base>>) -> Self;
-    fn stretch_from_dimen<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f32,dimen:Self::Base) -> StretchShrink<Self::Base>;
-    fn stretch_from_float<ET:EngineTypes<Skip=Self,Dim=Self::Base>>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> StretchShrink<Self::Base>;
-}
 
- */
-
-#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+/// A stretch/shrink component of a [`Skip`].
+#[derive(Clone,Copy,Eq,PartialEq,Debug,Ord)]
 pub enum StretchShrink<D:TeXDimen> { Dim(D), Fil(i32), Fill(i32), Filll(i32) }
 impl<D:TeXDimen> StretchShrink<D> {
+    /// Returns a new [`StretchShrink`] from a floating-point number and a unit. The unit is assumed to be
+    /// `fil`, `fill`, `filll` or in [`D::UNITS`](TeXDimen::UNITS).
     pub fn from_float<ET: EngineTypes<Dim=D>>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self {
         match dim {
             b"fil" => Self::Fil((float * 65536.0).round() as i32),
@@ -238,22 +236,40 @@ impl<D:TeXDimen> StretchShrink<D> {
             _ => Self::Dim(D::from_float(engine, float, dim))
         }
     }
-    pub fn from_dimen<ET: EngineTypes<Dim=D>>(_engine: &EngineReferences<ET>, float: f32, dimen: D) -> Self {
-        let d = dimen.scale_float(float);
-        Self::Dim(d)
+}
+impl<D:TeXDimen> Add<StretchShrink<D>> for StretchShrink<D> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self,rhs) {
+            (Self::Dim(d1),Self::Dim(d2)) => Self::Dim(d1+d2),
+            (Self::Fil(i1),Self::Fil(i2)) => Self::Fil(i1+i2),
+            (Self::Fill(i1),Self::Fill(i2)) => Self::Fill(i1+i2),
+            (Self::Filll(i1),Self::Filll(i2)) => Self::Filll(i1+i2),
+            _ => self.max(rhs)
+        }
+    }
+}
+impl<D:TeXDimen> PartialOrd for StretchShrink<D> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self,other) {
+            (Self::Dim(d1),Self::Dim(d2)) => d1.partial_cmp(d2),
+            (Self::Fil(i1),Self::Fil(i2)) => i1.partial_cmp(i2),
+            (Self::Fill(i1),Self::Fill(i2)) => i1.partial_cmp(i2),
+            (Self::Filll(i1),Self::Filll(i2)) => i1.partial_cmp(i2),
+            (Self::Filll(_),_) => Some(Ordering::Greater),
+            (_,Self::Filll(_)) => Some(Ordering::Less),
+            (Self::Fill(_),_) => Some(Ordering::Greater),
+            (_,Self::Fill(_)) => Some(Ordering::Less),
+            (Self::Fil(_),_) => Some(Ordering::Greater),
+            (_,Self::Fil(_)) => Some(Ordering::Less),
+        }
     }
 }
 
-
-//#[derive(Clone,Copy,Eq,PartialEq,Debug,Default)]
-//pub struct Skip32<D:TeXDimen>{pub base:D,pub stretch:Option<StretchShrink<D>>,pub shrink:Option<StretchShrink<D>>}
-impl<I:TeXInt,D:TeXDimen+Numeric<I>> Numeric<I> for Skip<D> {
-    fn scale(&self, times: I, div: I) -> Self {
-        Self{
-            base:self.base.scale(times,div),
-            stretch:self.stretch.clone(),
-            shrink:self.shrink.clone()
-        }
+impl<D:TeXDimen> Add<D> for Skip<D> {
+    type Output = Self;
+    fn add(self, rhs: D) -> Self::Output {
+        Self{base:self.base+rhs,stretch:self.stretch,shrink:self.shrink}
     }
 }
 impl<D:TeXDimen> PartialOrd for Skip<D> {
@@ -269,7 +285,21 @@ impl<D:TeXDimen> Ord for Skip<D> {
 impl<D:TeXDimen> Add<Self> for Skip<D> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        Self{base:self.base+rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+        Self{
+            base:self.base+rhs.base,
+            stretch:match (self.stretch,rhs.stretch) {
+                (Some(a),Some(b)) => Some(a+b),
+                (Some(a),None) => Some(a),
+                (None,Some(b)) => Some(b),
+                _ => None
+            },
+            shrink:match (self.shrink,rhs.shrink) {
+                (Some(a),Some(b)) => Some(a+b),
+                (Some(a),None) => Some(a),
+                (None,Some(b)) => Some(b),
+                _ => None
+            },
+        }
     }
 }
 impl<I:TeXInt,D:TeXDimen+Numeric<I>> Div<I> for Skip<D> {
@@ -284,32 +314,7 @@ impl<I:TeXInt,D:TeXDimen+Numeric<I>> Mul<I> for Skip<D> {
         self.scale(rhs,1.into())
     }
 }
-/*
-impl<D:TeXDimen> Skip for Skip32<D> {
-    type Base = D;
-    fn base(self) -> Self::Base { self.base }
-    fn stretch(&self) -> Option<Self::Stretch> { self.stretch }
-    fn shrink(&self) -> Option<Self::Shrink> { self.shrink }
-    fn new(base: D, stretch: Option<StretchShrink<D>>, shrink: Option<StretchShrink<D>>) -> Self {
-        Self{base,stretch,shrink}
-    }
-    fn add(self, other: Self::Base) -> Self {
-        Self{base:self.base+other,stretch:self.stretch,shrink:self.shrink}
-    }
-    fn stretch_from_float<ET: EngineTypes<Skip=Self,Dim=D>>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Stretch {
-        match dim {
-            b"fil" => StretchShrink::Fil((float * 65536.0).round() as i32),
-            b"fill" => StretchShrink::Fill((float * 65536.0).round() as i32),
-            _ => StretchShrink::Dim(D::from_float(engine, float, dim))
-        }
-    }
-    fn stretch_from_dimen<ET: EngineTypes<Skip=Self,Dim=D>>(_engine: &EngineReferences<ET>, float: f32, dimen: Self::Base) -> Self::Stretch {
-        let d = dimen.scale_float(float);
-        StretchShrink::Dim(d)
-    }
-}
 
- */
 impl<D:TeXDimen> Display for Skip<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"{}",self.base)?;
@@ -354,12 +359,40 @@ impl<D:TeXDimen> Neg for Skip<D> {
         }
     }
 }
+impl<D:TeXDimen> Skip<D> {
+    pub fn new(base: D, stretch: Option<StretchShrink<D>>, shrink: Option<StretchShrink<D>>) -> Self {
+        Self{base,stretch:match stretch {
+            Some(StretchShrink::Dim(d)) if d == D::default() => None,
+            Some(StretchShrink::Fil(0) | StretchShrink::Fill(0) | StretchShrink::Filll(0)) => None,
+            _ => stretch
+        },shrink:match shrink {
+            Some(StretchShrink::Dim(d)) if d == D::default() => None,
+            Some(StretchShrink::Fil(0) | StretchShrink::Fill(0) | StretchShrink::Filll(0)) => None,
+            _ => shrink
+        }}
+    }
+}
 
+
+impl<I:TeXInt,D:TeXDimen+Numeric<I>> Numeric<I> for Skip<D> {
+    fn scale(&self, times: I, div: I) -> Self {
+        Self{
+            base:self.base.scale(times,div),
+            stretch:self.stretch.clone(),
+            shrink:self.shrink.clone()
+        }
+    }
+}
+
+/// A math dimension; i.e. the base component of an `\mskip`
 pub trait MuDim:Display+Debug+Clone+Copy+Neg<Output=Self>+Add<Output=Self>+PartialEq+Ord+Default {
+    /// The set of math units; by default, only `mu`
     const UNITS:&'static[&'static [u8]] = &[b"mu"];
+    /// Converts a floating-point number and a unit to a [`Self`]. The unit is assumed to be in [`Self::UNITS`].
     fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self;
 }
 
+/// A math skip/glue consisting of a [`MuDim`] and optional stretch and shrink components.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub struct MuSkip<M:MuDim> {
     pub base:M,
@@ -367,6 +400,7 @@ pub struct MuSkip<M:MuDim> {
     pub shrink:Option<MuStretchShrink<M>>,
 }
 impl<M:MuDim> MuSkip<M> {
+    /// Returns a new [`MuSkip`] from a [`MuDim`] and optional stretch and shrink components.
     pub fn new(base: M, stretch: Option<MuStretchShrink<M>>, shrink: Option<MuStretchShrink<M>>) -> Self {
         Self{base,stretch:match stretch {
             Some(MuStretchShrink::Mu(d)) if d == M::default() => None,
@@ -380,26 +414,15 @@ impl<M:MuDim> MuSkip<M> {
     }
 
 }
-/*
-pub trait MuSkip:Copy + Eq + Ord + Default + Debug + Display + Neg<Output=Self> {
-    type Base: MuDim;
-    type Stretch;
-    type Shrink;
-    fn base(self) -> Self::Base;
-    fn units() -> &'static[&'static [u8]];
-    fn stretch_units() -> &'static[&'static [u8]];
-    fn shrink_units() -> &'static[&'static [u8]];
-    fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Base;
-    fn new(base:Self::Base,stretch:Option<Self::Stretch>,shrink:Option<Self::Shrink>) -> Self;
-    fn stretch_from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Stretch;
-    fn shrink_from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self::Shrink;
-}
-*/
-#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+
+/// A stretch/shrink component of a [`MuSkip`].
+#[derive(Clone,Copy,Eq,PartialEq,Debug,Ord)]
 pub enum MuStretchShrink<M:MuDim> {
     Mu(M),Fil(i32),Fill(i32),Filll(i32)
 }
 impl<M:MuDim> MuStretchShrink<M> {
+    /// Returns a new [`MuStretchShrink`] from a floating-point number and a unit. The unit is assumed to be
+    /// `fil`, `fill`, `filll` or in [`M::UNITS`](MuDim::UNITS).
     pub fn from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self {
         match dim {
             b"fil" => Self::Fil((float * 65536.0).round() as i32),
@@ -409,7 +432,37 @@ impl<M:MuDim> MuStretchShrink<M> {
         }
     }
 }
+impl<M:MuDim> Add<MuStretchShrink<M>> for MuStretchShrink<M> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self,rhs) {
+            (Self::Mu(d1),Self::Mu(d2)) => Self::Mu(d1+d2),
+            (Self::Fil(i1),Self::Fil(i2)) => Self::Fil(i1+i2),
+            (Self::Fill(i1),Self::Fill(i2)) => Self::Fill(i1+i2),
+            (Self::Filll(i1),Self::Filll(i2)) => Self::Filll(i1+i2),
+            _ => self.max(rhs)
+        }
+    }
+}
+impl<M:MuDim> PartialOrd for MuStretchShrink<M> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self,other) {
+            (Self::Mu(d1),Self::Mu(d2)) => d1.partial_cmp(d2),
+            (Self::Fil(i1),Self::Fil(i2)) => i1.partial_cmp(i2),
+            (Self::Fill(i1),Self::Fill(i2)) => i1.partial_cmp(i2),
+            (Self::Filll(i1),Self::Filll(i2)) => i1.partial_cmp(i2),
+            (Self::Filll(_),_) => Some(Ordering::Greater),
+            (_,Self::Filll(_)) => Some(Ordering::Less),
+            (Self::Fill(_),_) => Some(Ordering::Greater),
+            (_,Self::Fill(_)) => Some(Ordering::Less),
+            (Self::Fil(_),_) => Some(Ordering::Greater),
+            (_,Self::Fil(_)) => Some(Ordering::Less),
+        }
+    }
+}
 
+/// A plain TeX mu dimension, represented as a 32-bit integer analogously to *scaled points*, i.e. [`Mu`]`(65536) = 1mu`.
+/// (where `18mu = 1em`).
 #[derive(Clone,Copy,Eq,PartialEq,Debug,Default,PartialOrd,Ord)]
 pub struct Mu(pub i32);
 impl Numeric<i32> for Mu {
@@ -454,34 +507,7 @@ impl Display for Mu {
         Dim32::display_num(self.0,"mu",f)
     }
 }
-/*
-#[derive(Clone,Copy,Eq,PartialEq,Debug,Default)]
-pub struct MuSkip32{pub base:Mu,pub stretch:Option<MuStretchShrink>,pub shrink:Option<MuStretchShrink>}
-impl MuSkip for MuSkip32 {
-    type Base = Mu;
-    type Stretch = MuStretchShrink;
-    type Shrink = MuStretchShrink;
 
-    fn base(self) -> Self::Base { self.base }
-    fn units() -> &'static [&'static [u8]] { &[b"mu"]}
-    fn stretch_units() -> &'static [&'static [u8]] { &[b"mu",b"fil",b"fill"] }
-    fn shrink_units() -> &'static [&'static [u8]] { &[b"mu",b"fil",b"fill"] }
-    fn new(base: Self::Base, stretch: Option<Self::Stretch>, shrink: Option<Self::Shrink>) -> Self {
-        Self{base,stretch,shrink}
-    }
-    fn stretch_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Stretch {
-        match dim {
-            b"fil" => MuStretchShrink::fil((float * 65536.0).round() as i32),
-            b"fill" => MuStretchShrink::fill((float * 65536.0).round() as i32),
-            _ => MuStretchShrink::mu(Self::from_float(engine, float, dim).0)
-        }
-    }
-    fn shrink_from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self::Shrink {
-        Self::stretch_from_float(engine,float,dim)
-    }
-}
-
- */
 impl<M:MuDim> PartialOrd for MuSkip<M> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.base.partial_cmp(&other.base)
@@ -550,7 +576,21 @@ impl<I:TeXInt,M:MuDim+Numeric<I>> Numeric<I> for MuSkip<M> {
 impl<M:MuDim> Add<Self> for MuSkip<M> {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        Self{base:self.base+rhs.base,stretch:self.stretch.or(rhs.stretch),shrink:self.shrink.or(rhs.shrink)}
+        Self{
+            base:self.base+rhs.base,
+            stretch:match (self.stretch,rhs.stretch) {
+                (Some(a),Some(b)) => Some(a+b),
+                (Some(a),None) => Some(a),
+                (None,Some(b)) => Some(b),
+                _ => None
+            },
+            shrink:match (self.shrink,rhs.shrink) {
+                (Some(a),Some(b)) => Some(a+b),
+                (Some(a),None) => Some(a),
+                (None,Some(b)) => Some(b),
+                _ => None
+            },
+        }
     }
 }
 impl<I:TeXInt,M:MuDim+Numeric<I>> Div<I> for MuSkip<M> {

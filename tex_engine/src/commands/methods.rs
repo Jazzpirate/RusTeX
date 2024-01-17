@@ -836,7 +836,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     /// reads the name of a control sequence until `\endcsname` and returns the
-    /// corresponding [`CSName`](crate::token::CSName) (i.e. what `\csname` and
+    /// corresponding [`CSName`](crate::tex::tokens::control_sequences::CSName) (i.e. what `\csname` and
     /// `\ifcsname` do)
     pub fn read_csname(&mut self) -> ET::CSName {
         *self.gullet.csnames() += 1;

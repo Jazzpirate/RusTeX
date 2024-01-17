@@ -237,7 +237,7 @@ pub trait Gullet<ET:EngineTypes> {
     }
 
     /// Expand the given expandable [`Token`] with its given expansion function. See also
-    /// [`Expandable`](crate::commands::Expandable).
+    /// [`Expandable`](crate::commands::PrimitiveCommand::Expandable).
     fn do_expandable(engine: &mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)) {
         engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         let mut exp = Vec::new();// ExpansionContainer::new(engine.aux.memory.get_token_vec());
@@ -248,13 +248,13 @@ pub trait Gullet<ET:EngineTypes> {
     fn do_macro(engine: &mut EngineReferences<ET>,m:Macro<ET::Token>,token:ET::Token);
 
     /// Expand the given expandable [`Token`] with its given simple expansion function. See also
-    /// [`SimpleExpandable`](crate::commands::SimpleExpandable).
+    /// [`SimpleExpandable`](crate::commands::PrimitiveCommand::SimpleExpandable).
     fn do_simple_expandable(engine: &mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,ET::Token)) {
         engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
         f(engine,token)
     }
 
-    /// Expand the given conditional. See also [`Conditional`](crate::commands::Conditional)
+    /// Expand the given conditional. See also [`Conditional`](crate::commands::PrimitiveCommand::Conditional)
     fn do_conditional(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,f:fn(&mut EngineReferences<ET>,ET::Token) -> bool,unless:bool) {
         let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > ET::Int::default();
         let index = engine.gullet.get_conditionals().len();

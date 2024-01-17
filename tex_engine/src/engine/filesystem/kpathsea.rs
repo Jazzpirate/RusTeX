@@ -88,7 +88,7 @@ impl Kpathsea {
 
 /// The "base" part of [`Kpathsea`] holding information about the "global" parts of the file database, which is
 /// (or should be) shared between all instances. Never needs to be instantiated directly;
-/// use the canoncial [`KPATHSEA`] instance instead.
+/// use the canoncial [`static@KPATHSEA`] instance instead.
 #[derive(Clone,Debug)]
 pub struct KpathseaBase {
     /// The paths to search before the working directory.
