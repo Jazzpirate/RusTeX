@@ -31,7 +31,7 @@ pub mod test_utils {
         ($key:ident:$x:expr) => {{
             let measure_start = std::time::Instant::now();
             let ret = $x;
-            log::warn!(target:stringify!($key),"{}", Green.bold().paint(format!("Finished after {:?}",measure_start.elapsed())));
+            log::warn!(target:stringify!($key),"Finished after {:?}",measure_start.elapsed());
             ret
         }};
     }
@@ -61,7 +61,6 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
-    use ansi_term::Colour::*;
     use crate::tests::test_utils::*;
     use crate::measure;
     use log::*;
