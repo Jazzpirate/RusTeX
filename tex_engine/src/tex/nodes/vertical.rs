@@ -1,3 +1,4 @@
+/*! Nodes allowed in vertical lists. */
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::tex::tokens::token_lists::TokenList;
@@ -6,39 +7,52 @@ use crate::tex::nodes::boxes::{TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 
-#[derive(Clone,Debug)]
-pub enum VerticalNodeListType<ET:EngineTypes> {
-    Box(VBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
-    Insert(usize),
-    VCenter(SourceRef<ET>,ToOrSpread<ET::Dim>),
-    VAdjust,
-    VAlignRow(SourceRef<ET>),
-    VAlignCell(SourceRef<ET>,u8),
-    HAlign,Page
-}
-
-
+/// A vertical list node.
 #[derive(Clone,Debug)]
 pub enum VNode<ET:EngineTypes> {
+    /// A penalty node, as produced by `\penalty`.
     Penalty(i32),
+    /// A mark node, as produced by `\mark`.
     Mark(usize,TokenList<ET::Token>),
+    /// A whatsit node, as produced by `\special`, `\write`, etc.
     Whatsit(WhatsitNode<ET>),
+    /// A glue node, as produced by `\vskip`.
     VSkip(Skip<ET::Dim>),
-    VFil,VFill,VFilneg,Vss,
+    /// A glue node, as produced by `\vfil`.
+    VFil,
+    /// A glue node, as produced by `\vfill`.
+    VFill,
+    /// A glue node, as produced by `\vfilneg`.
+    VFilneg,
+    /// A glue node, as produced by `\vss`.
+    Vss,
+    /// A kern node, as produced by `\kern`.
     VKern(ET::Dim),
+    /// Leaders, as produced by `\leaders` or `\cleaders` or `\xleaders`.
     Leaders(Leaders<ET>),
+    /// A box node, as produced by `\hbox`, `\vbox`, `\vtop`, etc.
     Box(TeXBox<ET>),
+    /// A rule node, as produced by `\hrule`.
     HRule{
+        /// The *provided* width of the rule.
         width:Option<ET::Dim>,
+        /// The *provided* height of the rule.
         height:Option<ET::Dim>,
+        /// The *provided* depth of the rule.
         depth:Option<ET::Dim>,
-        start:SourceRef<ET>,end:SourceRef<ET>
+        /// The source reference for the start of the rule.
+        start:SourceRef<ET>,
+        /// The source reference for the end of the rule.
+        end:SourceRef<ET>
     },
+    /// An insertion node, as produced by `\insert`.
     Insert(usize,Box<[VNode<ET>]>),
+    /// A custom node.
     Custom(ET::CustomNode),
 }
 
 impl<ET:EngineTypes> VNode<ET> {
+    /// Whether this node is discardable.
     pub fn discardable(&self) -> bool {
         use VNode::*;
         match self {
@@ -146,4 +160,27 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
             _ => false
         }
     }
+}
+
+/// The kinds of vertical lists that can occur. TODO: rethink this
+#[derive(Clone,Debug)]
+pub enum VerticalNodeListType<ET:EngineTypes> {
+    /// A vertical box
+    Box(VBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
+    /// `\insert`
+    Insert(usize),
+    /// `\vcenter`
+    VCenter(SourceRef<ET>,ToOrSpread<ET::Dim>),
+    /// `\vadjust`
+    VAdjust,
+    /// A column in a `\valign`. The source ref indicates the start of the column.
+    VAlignColumn(SourceRef<ET>),
+    /// A cell in a `\valign`. The source ref indicates the start of the cell.
+    /// The `u8` indicates the number of *additional* rows spanned by this cell
+    /// (so by default 0)
+    VAlignCell(SourceRef<ET>,u8),
+    /// An `\halign` list
+    HAlign,
+    /// A page to be output
+    Page
 }

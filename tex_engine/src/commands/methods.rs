@@ -480,7 +480,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
                             children:vec!(),
-                            tp:VerticalNodeListType::VAlignRow(engine.mouth.start_ref())
+                            tp:VerticalNodeListType::VAlignColumn(engine.mouth.start_ref())
                         },
                         _ => NodeList::Horizontal {
                             children:vec!(),
@@ -496,7 +496,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
                             children:vec!(),
-                            tp:VerticalNodeListType::VAlignRow(engine.mouth.start_ref())
+                            tp:VerticalNodeListType::VAlignColumn(engine.mouth.start_ref())
                         },
                         _ => NodeList::Horizontal {
                             children:vec!(),
@@ -557,7 +557,7 @@ fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,
         end: mouth.current_sourceref(),
     };
     match stomach.data_mut().open_lists.last_mut() {
-        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignRow(..)}) =>
+        Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignColumn(..)}) =>
             children.push(VNode::Box(bx)),
         _ => todo!("throw error")
     }
@@ -589,7 +589,7 @@ pub(in crate::commands) fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomac
 
 fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
-        Some(NodeList::Vertical{children,tp:VerticalNodeListType::VAlignRow(start)}) => (children,start),
+        Some(NodeList::Vertical{children,tp:VerticalNodeListType::VAlignColumn(start)}) => (children, start),
         _ => todo!("throw error")
     };
     let bx = TeXBox::V {

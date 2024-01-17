@@ -1,3 +1,4 @@
+/*! Nodes allowed in math mode */
 use std::cell::OnceCell;
 use std::fmt::{Debug, Formatter, Write};
 use std::marker::PhantomData;
@@ -13,279 +14,82 @@ use crate::tex::numerics::{MuSkip, Skip, TeXDimen};
 use crate::tex::numerics::NumSet;
 use crate::engine::state::State;
 
-
-#[derive(Clone,Debug)]
-pub enum MathNodeList<ET:EngineTypes> {
-    Simple(Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>),
-    Over {
-        top:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
-        sep:Option<ET::Dim>,
-        bottom:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
-        left:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
-        right:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
-    },
-    EqNo {
-        pos:EqNoPosition,
-        main:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
-        eqno:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
-    }
-}
-impl <ET:EngineTypes> MathNodeList<ET> {
-    pub fn new() -> Self { MathNodeList::Simple(Vec::new()) }
-    pub fn push(&mut self, n:MathNode<ET,UnresolvedMathFontStyle<ET>>) {
-        match self {
-            MathNodeList::Simple(v) => v.push(n),
-            MathNodeList::Over{bottom,..} => bottom.push(n),
-            MathNodeList::EqNo {eqno,..} => eqno.push(n)
-        }
-    }
-    pub fn close(self,start:SourceRef<ET>,end:SourceRef<ET>) -> (Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) {
-        match self {
-            MathNodeList::Simple(v) => (v,None),
-            MathNodeList::Over{top,sep,bottom,left,right} => (vec!(MathNode::Over {
-                start,end, top:top.into(),bottom:bottom.into(),sep,left,right
-            }),None),
-            MathNodeList::EqNo {main,eqno,pos} => (main,Some((pos,eqno)))
-        }
-    }
-    pub fn list_mut(&mut self) -> &mut Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
-        match self {
-            MathNodeList::Simple(v) => v,
-            MathNodeList::Over{bottom,..} => bottom,
-            MathNodeList::EqNo {eqno,..} => eqno
-        }
-    }
-    pub fn list(&self) -> &Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
-        match self {
-            MathNodeList::Simple(v) => v,
-            MathNodeList::Over{bottom,..} => bottom,
-            MathNodeList::EqNo {eqno,..} => eqno
-        }
-    }
-}
-
-#[derive(Clone,Debug)]
-pub enum MathNodeListType<ET:EngineTypes> {
-    Top{display:bool},
-    Target(ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>),
-    LeftRight(Option<Delimiter<ET>>)
-}
-
-#[derive(Clone,Copy,Eq,PartialEq,Debug)]
-pub struct MathStyle {
-    pub cramped: bool,
-    pub style:MathStyleType
-}
-#[derive(Clone,Copy,Eq,PartialEq,Debug)]
-pub enum MathStyleType { Display, Text, Script, ScriptScript }
-
-impl MathStyle {
-    pub fn sup(self) -> Self {
-        match self.style {
-            MathStyleType::Text | MathStyleType::Display => MathStyle{cramped:self.cramped, style:MathStyleType::Script},
-            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
-        }
-    }
-
-    pub fn cramp(mut self) -> Self {
-        self.cramped = true;
-        self
-    }
-
-    pub fn sub(self) -> Self { self.sup().cramp() }
-    pub fn numerator(self) -> Self {
-        match self.style {
-            MathStyleType::Display => MathStyle{cramped:self.cramped, style:MathStyleType::Text},
-            MathStyleType::Text => MathStyle{cramped:self.cramped, style:MathStyleType::Script},
-            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
-        }
-    }
-
-    pub fn denominator(self) -> Self {
-        self.numerator().cramp()
-    }
-}
-
-#[derive(Debug,Clone,Copy,PartialEq,Eq)]
-pub enum MathClass { Ord = 0, Op = 1, Bin = 2, Rel = 3, Open = 4, Close = 5, Punct = 6 }
-impl From<u8> for MathClass {
-    fn from(v: u8) -> Self {
-        match v {
-            0 => MathClass::Ord,
-            1 => MathClass::Op,
-            2 => MathClass::Bin,
-            3 => MathClass::Rel,
-            4 => MathClass::Open,
-            5 => MathClass::Close,
-            6 => MathClass::Punct,
-            _ => panic!("Invalid math class {}",v)
-        }
-    }
-}
-
-#[derive(Debug,Clone)]
-pub struct UnresolvedMathFontStyle<ET:EngineTypes> {
-    pub text_font:ET::Font, pub script_font:ET::Font, pub script_script_font:ET::Font
-}
-
-pub trait MathFontStyleT<ET:EngineTypes>:Clone+Debug {
-    type Choice:MathChoiceT<ET>;
-    type Markers:Clone+Debug+NodeTrait<ET>;
-    fn get_em(&self) -> ET::Dim { self.get_font().get_dim(5) }
-    fn get_font(&self) -> &ET::Font;
-}
-
-pub trait MathChoiceT<ET:EngineTypes>:Clone+Debug {
-    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result;
-    fn width(&self) -> ET::Dim;
-    fn height(&self) -> ET::Dim;
-    fn depth(&self) -> ET::Dim;
-}
-#[derive(Clone,Debug)]
-pub struct UnresolvedMathChoice<ET:EngineTypes> {
-    pub display:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
-    pub text:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
-    pub script:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
-    pub scriptscript:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
-}
-impl<ET:EngineTypes> MathChoiceT<ET> for UnresolvedMathChoice<ET> {
-    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        display_do_indent(indent, f)?;
-        f.write_str("<unresolved_choice>")?;
-        for c in self.display.iter() {
-            c.display_fmt(indent + 2, f)?;
-        }
-        for c in self.text.iter() {
-            c.display_fmt(indent + 2, f)?;
-        }
-        for c in self.script.iter() {
-            c.display_fmt(indent + 2, f)?;
-        }
-        for c in self.scriptscript.iter() {
-            c.display_fmt(indent + 2, f)?;
-        }
-        display_do_indent(indent, f)?;
-        f.write_str("</unresolved_choice>")
-    }
-    fn width(&self) -> ET::Dim {
-        self.display.iter().map(|c| c.width()).sum()
-    }
-    fn height(&self) -> ET::Dim {
-        self.display.iter().map(|c| c.height()).max().unwrap_or_default()
-    }
-    fn depth(&self) -> ET::Dim {
-        self.display.iter().map(|c| c.depth()).max().unwrap_or_default()
-    }
-}
-
-pub struct ResolvedChoice<ET:EngineTypes>(pub Box<[MathNode<ET,MathFontStyle<ET>>]>);
-impl<ET:EngineTypes> Debug for ResolvedChoice<ET> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("<resolved_choice>")?;
-        for c in self.0.iter() {
-            c.display_fmt(2, f)?;
-        }
-        f.write_str("</resolved_choice>")
-    }
-}
-impl<ET:EngineTypes> Clone for ResolvedChoice<ET> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-impl<ET:EngineTypes> MathChoiceT<ET> for ResolvedChoice<ET> {
-    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for c in self.0.iter() {
-            c.display_fmt(indent, f)?;
-        }
-        Ok(())
-    }
-    fn width(&self) -> ET::Dim {
-        self.0.iter().map(|c| c.width()).sum()
-    }
-    fn height(&self) -> ET::Dim {
-        self.0.iter().map(|c| c.height()).max().unwrap_or_default()
-    }
-    fn depth(&self) -> ET::Dim {
-        self.0.iter().map(|c| c.depth()).max().unwrap_or_default()
-    }
-}
-
-#[derive(Debug,Clone)]
-pub struct MathFontStyle<ET:EngineTypes> {
-    pub style:MathStyleType, pub cramped:bool, pub font:ET::Font
-}
-impl<ET:EngineTypes> MathFontStyleT<ET> for MathFontStyle<ET> {
-    type Choice = ResolvedChoice<ET>;
-    type Markers = PhantomData<ET>;
-
-    fn get_font(&self) -> &ET::Font { &self.font }
-}
-impl<ET:EngineTypes> NodeTrait<ET> for PhantomData<ET> {
-    fn display_fmt(&self, _indent: usize, _f: &mut Formatter<'_>) -> std::fmt::Result {
-        Ok(())
-    }
-    fn height(&self) -> ET::Dim { ET::Dim::default() }
-    fn width(&self) -> ET::Dim { ET::Dim::default() }
-    fn depth(&self) -> ET::Dim { ET::Dim::default() }
-    fn nodetype(&self) -> NodeType { NodeType::Math }
-}
-
-#[derive(Debug,Copy,Clone)]
-pub enum UnresolvedMarkers {
-    Display, Text, Script, ScriptScript
-}
-impl<ET:EngineTypes> NodeTrait<ET> for UnresolvedMarkers {
-    fn display_fmt(&self, _indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnresolvedMarkers::Display => f.write_str("<display>"),
-            UnresolvedMarkers::Text => f.write_str("<text>"),
-            UnresolvedMarkers::Script => f.write_str("<script>"),
-            UnresolvedMarkers::ScriptScript => f.write_str("<scriptscript>"),
-        }
-    }
-    fn height(&self) -> ET::Dim { ET::Dim::default() }
-    fn width(&self) -> ET::Dim { ET::Dim::default() }
-    fn depth(&self) -> ET::Dim { ET::Dim::default() }
-    fn nodetype(&self) -> NodeType { NodeType::Math }
-}
-
-impl<ET:EngineTypes> MathFontStyleT<ET> for UnresolvedMathFontStyle<ET> {
-    type Choice = UnresolvedMathChoice<ET>;
-    type Markers = UnresolvedMarkers;
-    fn get_font(&self) -> &ET::Font { &self.text_font }
-}
-
+/// A math list node. Comes in two forms: an unresolved form, while the list is being
+/// constructed and the various font styles are not fixed yet (e.g. because
+/// an `\atop` comes later that shifts the font style), and a resolved form,
+/// where the fonts have been determined and are fixed.
+/// The parameter `S:`[`MathFontStyleT`] makes the distinction between the two forms.
 #[derive(Clone,Debug)]
 pub enum MathNode<ET:EngineTypes,S:MathFontStyleT<ET>> {
+    /// A math atom node (see [`MathAtom`])
     Atom(MathAtom<ET,S>),
-    HSkip(Skip<ET::Dim>),HFil,HFill,HFilneg,Hss,Space,
+    /// A penalty node, as produced by `\penalty`.
+    Penalty(i32),
+    /// A mark node, as produced by `\mark`.
+    Mark(usize,TokenList<ET::Token>),
+    /// A whatsit node, as produced by `\special`, `\write`, etc.
+    Whatsit(WhatsitNode<ET>),
+    /// A glue node, as produced by `\hskip`.
+    HSkip(Skip<ET::Dim>),
+    /// A glue node, as produced by `\mskip`. If resolved, `S` provides the adequate `em` value.
     MSkip{
-        skip:MuSkip<ET::MuDim>,style: S
+        skip:MuSkip<ET::MuDim>,
+        style: S
     },
+    /// A glue node, as produced by `\hfil`.
+    HFil,
+    /// A glue node, as produced by `\hfill`.
+    HFill,
+    /// A glue node, as produced by `\hfilneg`.
+    HFilneg,
+    /// A glue node, as produced by `\hss`.
+    Hss,
+    /// A glue node, as produced by `\ `
+    Space,
+    /// A kern node, as produced by `\kern`.
+    HKern(ET::Dim),
+    /// A kern node, as produced by `\mkern`.
     MKern{
         kern: ET::MuDim,style: S
-    },HKern(ET::Dim),
-    Leaders(Leaders<ET>),
-    Penalty(i32),
-    Mark(usize,TokenList<ET::Token>),
-    VRule{
-        width:Option<ET::Dim>,
-        height:Option<ET::Dim>,
-        depth:Option<ET::Dim>,
-        start:SourceRef<ET>,end:SourceRef<ET>
     },
+    /// A leaders node, as produced by `\leaders` or `\cleaders` or `\xleaders`.
+    Leaders(Leaders<ET>),
+    /// A rule node, as produced by `\vrule`.
+    VRule{
+        /// The *provided* width of the rule.
+        width:Option<ET::Dim>,
+        /// The *provided* height of the rule.
+        height:Option<ET::Dim>,
+        /// The *provided* depth of the rule.
+        depth:Option<ET::Dim>,
+        /// The source reference for the start of the rule.
+        start:SourceRef<ET>,
+        /// The source reference for the end of the rule.
+        end:SourceRef<ET>
+    },
+    /// A "generalized fraction", as produced by `\over`, `\atop`, `\above`,
+    /// `\abovewithdelims`, `\overwithdelims`, `\atopwithdelims`.
     Over {
-        start:SourceRef<ET>,end:SourceRef<ET>,
+        /// The source reference for the start of the node.
+        start:SourceRef<ET>,
+        /// The source reference for the end of the node.
+        end:SourceRef<ET>,
+        /// The numerator.
         top:Box<[MathNode<ET,S>]>,
+        /// The optional separator height.
         sep:Option<ET::Dim>,
+        /// The denominator.
         bottom:Box<[MathNode<ET,S>]>,
+        /// The optional left delimiter.
         left:Option<(ET::Char,S)>,
+        /// The optional right delimiter.
         right:Option<(ET::Char,S)>,
     },
+    /// A `\mathchoice` node; if resolved, this is just a wrapper around more math nodes.
     Choice(S::Choice),
+    /// Markers for the various font styles, e.g. `\displaystyle`, `\textstyle`, etc.
     Marker(S::Markers),
-    Whatsit(WhatsitNode<ET>),
+    /// A custom node.
     Custom(ET::CustomNode),
 }
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
@@ -444,6 +248,237 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
     }
 }
 
+/// One of the 8 styles of math formatting; The TeXBook
+/// calls these D,T,S,SS,D',T',S' and SS'.
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub struct MathStyle {
+    /// Whether the style is cramped or not (i.e. the `'`
+    pub cramped: bool,
+    /// The style itself (D,T,S,SS)
+    pub style:MathStyleType
+}
+impl MathStyle {
+    /// The math style to use for a superscript in this style
+    pub fn sup(self) -> Self {
+        match self.style {
+            MathStyleType::Text | MathStyleType::Display => MathStyle{cramped:self.cramped, style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
+        }
+    }
+    /// The same math style, but cramped
+    pub fn cramp(mut self) -> Self {
+        self.cramped = true;
+        self
+    }
+    /// The math style to use for a subscript in this style
+    pub fn sub(self) -> Self { self.sup().cramp() }
+    /// The math style to use for the numerator of a generalized fraction in this style
+    pub fn numerator(self) -> Self {
+        match self.style {
+            MathStyleType::Display => MathStyle{cramped:self.cramped, style:MathStyleType::Text},
+            MathStyleType::Text => MathStyle{cramped:self.cramped, style:MathStyleType::Script},
+            MathStyleType::Script | MathStyleType::ScriptScript => MathStyle{cramped:self.cramped, style:MathStyleType::ScriptScript},
+        }
+    }
+    /// The math style to use for the denominator of a generalized fraction in this style
+    pub fn denominator(self) -> Self {
+        self.numerator().cramp()
+    }
+}
+
+/// The four base math formatting styles
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
+pub enum MathStyleType { Display, Text, Script, ScriptScript }
+
+/// The 7 math classes
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+pub enum MathClass {
+    /// Ordinary
+    Ord = 0,
+    /// Large operator
+    Op = 1,
+    /// Binary operator
+    Bin = 2,
+    /// Relation
+    Rel = 3,
+    /// Opening delimiter
+    Open = 4,
+    /// Closing delimiter
+    Close = 5,
+    /// Punctuation
+    Punct = 6
+}
+impl From<u8> for MathClass {
+    fn from(v: u8) -> Self {
+        match v {
+            0 => MathClass::Ord,
+            1 => MathClass::Op,
+            2 => MathClass::Bin,
+            3 => MathClass::Rel,
+            4 => MathClass::Open,
+            5 => MathClass::Close,
+            6 => MathClass::Punct,
+            _ => panic!("Invalid math class {}",v)
+        }
+    }
+}
+
+/// This trait is implemented for exactly two types that indicate
+/// whether we are in the unresolved [`UnresolvedMathFontStyle`] or resolved
+/// ([`MathFontStyle`]) state.
+pub trait MathFontStyleT<ET:EngineTypes>:Clone+Debug {
+    /// The type of the choice node, which is either [`UnresolvedMathChoice`] or [`ResolvedChoice`].
+    type Choice:MathChoiceT<ET>;
+    /// The type of the markers, which is either [`UnresolvedMarkers`] or a dummy that never occurs.
+    type Markers:Clone+Debug+NodeTrait<ET>;
+    /// The em value to use to compute widths. Basically only relevant in resolved style.
+    fn get_em(&self) -> ET::Dim { self.get_font().get_dim(5) }
+    /// The font to use for this style. Basically only relevant in resolved style.
+    fn get_font(&self) -> &ET::Font;
+}
+/// Unresolved math font style. This is the state while the math list is being constructed.
+/// Carries information about all three fonts (text, script, scriptscript), to be picked
+/// when the math list is resolved.
+#[derive(Debug,Clone)]
+pub struct UnresolvedMathFontStyle<ET:EngineTypes> {
+    pub text_font:ET::Font, pub script_font:ET::Font, pub script_script_font:ET::Font
+}
+impl<ET:EngineTypes> MathFontStyleT<ET> for UnresolvedMathFontStyle<ET> {
+    type Choice = UnresolvedMathChoice<ET>;
+    type Markers = UnresolvedMarkers;
+    fn get_font(&self) -> &ET::Font { &self.text_font }
+}
+
+/// A resolved math font style. This is the state after the math list has been constructed.
+/// Has a definite style and font.
+#[derive(Debug,Clone)]
+pub struct MathFontStyle<ET:EngineTypes> {
+    pub style:MathStyleType, pub cramped:bool, pub font:ET::Font
+}
+impl<ET:EngineTypes> MathFontStyleT<ET> for MathFontStyle<ET> {
+    type Choice = ResolvedChoice<ET>;
+    type Markers = PhantomData<ET>;
+
+    fn get_font(&self) -> &ET::Font { &self.font }
+}
+impl<ET:EngineTypes> NodeTrait<ET> for PhantomData<ET> {
+    fn display_fmt(&self, _indent: usize, _f: &mut Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+    fn height(&self) -> ET::Dim { ET::Dim::default() }
+    fn width(&self) -> ET::Dim { ET::Dim::default() }
+    fn depth(&self) -> ET::Dim { ET::Dim::default() }
+    fn nodetype(&self) -> NodeType { NodeType::Math }
+}
+
+/// This trait is implemented for exactly two types that indicate
+/// whether we are in the unresolved [`UnresolvedMathFontStyle`] or resolved
+/// ([`MathFontStyle`]) state.
+pub trait MathChoiceT<ET:EngineTypes>:Clone+Debug {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result;
+    fn width(&self) -> ET::Dim;
+    fn height(&self) -> ET::Dim;
+    fn depth(&self) -> ET::Dim;
+}
+/// A `\mathcoice` node, not yet resolved. When the current math list
+/// is closed, one of the four choices is picked, depending on the
+/// current style.
+#[derive(Clone,Debug)]
+pub struct UnresolvedMathChoice<ET:EngineTypes> {
+    pub display:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+    pub text:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+    pub script:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+    pub scriptscript:Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>,
+}
+impl<ET:EngineTypes> MathChoiceT<ET> for UnresolvedMathChoice<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+        display_do_indent(indent, f)?;
+        f.write_str("<unresolved_choice>")?;
+        for c in self.display.iter() {
+            c.display_fmt(indent + 2, f)?;
+        }
+        for c in self.text.iter() {
+            c.display_fmt(indent + 2, f)?;
+        }
+        for c in self.script.iter() {
+            c.display_fmt(indent + 2, f)?;
+        }
+        for c in self.scriptscript.iter() {
+            c.display_fmt(indent + 2, f)?;
+        }
+        display_do_indent(indent, f)?;
+        f.write_str("</unresolved_choice>")
+    }
+    fn width(&self) -> ET::Dim {
+        self.display.iter().map(|c| c.width()).sum()
+    }
+    fn height(&self) -> ET::Dim {
+        self.display.iter().map(|c| c.height()).max().unwrap_or_default()
+    }
+    fn depth(&self) -> ET::Dim {
+        self.display.iter().map(|c| c.depth()).max().unwrap_or_default()
+    }
+}
+
+/// A resolved `\mathchoice` node. This is the state after the math list has been constructed,
+/// at which point it is only a wrapper around a list of nodes.
+pub struct ResolvedChoice<ET:EngineTypes>(pub Box<[MathNode<ET,MathFontStyle<ET>>]>);
+impl<ET:EngineTypes> Debug for ResolvedChoice<ET> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<resolved_choice>")?;
+        for c in self.0.iter() {
+            c.display_fmt(2, f)?;
+        }
+        f.write_str("</resolved_choice>")
+    }
+}
+impl<ET:EngineTypes> Clone for ResolvedChoice<ET> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<ET:EngineTypes> MathChoiceT<ET> for ResolvedChoice<ET> {
+    fn readable_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for c in self.0.iter() {
+            c.display_fmt(indent, f)?;
+        }
+        Ok(())
+    }
+    fn width(&self) -> ET::Dim {
+        self.0.iter().map(|c| c.width()).sum()
+    }
+    fn height(&self) -> ET::Dim {
+        self.0.iter().map(|c| c.height()).max().unwrap_or_default()
+    }
+    fn depth(&self) -> ET::Dim {
+        self.0.iter().map(|c| c.depth()).max().unwrap_or_default()
+    }
+}
+
+/// Markers inserted by `\displaystyle`, `\textstyle`, `\scriptstyle` and `\scriptscriptstyle`.
+/// Only meaningful in unresolved mode, while the math list is open. When the list
+/// is closed, these are removed and used to determine the font style at that point.
+#[derive(Debug,Copy,Clone)]
+pub enum UnresolvedMarkers {
+    Display, Text, Script, ScriptScript
+}
+impl<ET:EngineTypes> NodeTrait<ET> for UnresolvedMarkers {
+    fn display_fmt(&self, _indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnresolvedMarkers::Display => f.write_str("<display>"),
+            UnresolvedMarkers::Text => f.write_str("<text>"),
+            UnresolvedMarkers::Script => f.write_str("<script>"),
+            UnresolvedMarkers::ScriptScript => f.write_str("<scriptscript>"),
+        }
+    }
+    fn height(&self) -> ET::Dim { ET::Dim::default() }
+    fn width(&self) -> ET::Dim { ET::Dim::default() }
+    fn depth(&self) -> ET::Dim { ET::Dim::default() }
+    fn nodetype(&self) -> NodeType { NodeType::Math }
+}
+
+/// The most central kind of node in a math list. Consisting of a [nucleus](MathNucleus)
+/// with optional superscript and subscript math lists.
 #[derive(Clone,Debug)]
 pub struct MathAtom<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub nucleus:MathNucleus<ET,S>,
@@ -451,6 +486,7 @@ pub struct MathAtom<ET:EngineTypes,S:MathFontStyleT<ET>> {
     pub sub:Option<Box<[MathNode<ET,S>]>>,
 }
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathAtom<ET,S> {
+    /// Create a new empty math atom.
     pub fn empty() -> Self {
         Self { nucleus:MathNucleus::Simple { cls:MathClass::Ord, kernel:MathKernel::Empty, limits:None }, sup:None, sub:None }
     }
@@ -545,10 +581,16 @@ impl <ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathAtom<ET,S> {
     fn nodetype(&self) -> NodeType { NodeType::Math }
 }
 
+/// The nucleus of a [`MathAtom`]; a cohesive "unit" with optional sub/superscript.
 #[derive(Clone,Debug)]
 pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
+    /// A simple nucleus, consisting of a [`MathKernel`] and a math class.
+    /// `limits` is `None` during construction of the list, and `Some(true)` or `Some(false)`
+    /// after the list has been closed, or if a large operator is followed by a `\limits` or `\nolimits`.
     Simple{cls: MathClass,kernel:MathKernel<ET,S>,limits:Option<bool>},
+    /// A `\mathinner` node, as produced by `{...}`
     Inner(MathKernel<ET,S>),
+    /// A node produced by `\left...\right`.
     LeftRight{
         start:SourceRef<ET>,
         left:Option<(ET::Char,S)>,
@@ -556,17 +598,23 @@ pub enum MathNucleus<ET:EngineTypes,S:MathFontStyleT<ET>> {
         right:Option<(ET::Char,S)>,
         end:SourceRef<ET>
     },
+    /// A node produced by `\middle`.
     Middle(ET::Char,S),
+    /// A node produced by `\overline`.
     Overline(MathKernel<ET,S>),
+    /// A node produced by `\underline`.
     Underline(MathKernel<ET,S>),
+    /// A node produced by `\mathaccent`.
     Accent {
         accent:(ET::Char,S),
         inner:Box<[MathNode<ET,S>]>
     },
+    /// A node produced by `\radical`.
     Radical {
         rad:(ET::Char,S),
         inner:Box<[MathNode<ET,S>]>
     },
+    /// A node produced by `\vcenter`.
     VCenter{
         start:SourceRef<ET>,
         end:SourceRef<ET>,
@@ -699,14 +747,19 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNucleus<ET,S> {
     fn nodetype(&self) -> NodeType { NodeType::Math }
 }
 
+/// The kernel of a [`MathNucleus`]; the actual content of the nucleus.
 #[derive(Clone,Debug)]
 pub enum MathKernel<ET:EngineTypes,S:MathFontStyleT<ET>> {
+    /// empty
     Empty,
+    /// a single character
     Char {
         char:ET::Char,
         style: S
     },
+    /// a box
     Box(TeXBox<ET>),
+    /// a list of math nodes
     List{
         start:SourceRef<ET>,
         children:Box<[MathNode<ET,S>]>,
@@ -767,23 +820,29 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathKernel<ET,S> {
     }
 }
 
-#[derive(Debug,Copy,Clone)]
-pub enum EqNoPosition {
-    Left,Right
-}
-
+/// A resolved math group; the result of a math list.
 #[derive(Debug,Clone)]
-pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
+pub struct MathGroup<ET:EngineTypes> {
+    /// If this is a display math group, the `\abovedisplayskip` and `\belowdisplayskip`
+    /// values.
     pub display:Option<(Skip<ET::Dim>,Skip<ET::Dim>)>,
-    pub children:Box<[MathNode<ET,S>]>,
+    /// The nodes in this group
+    pub children:Box<[MathNode<ET,MathFontStyle<ET>>]>,
+    /// The source reference of the `$` or `$$` that started this group.
     pub start:SourceRef<ET>,
+    /// The source reference of the `$` or `$$` that ended this group.
     pub end:SourceRef<ET>,
-    pub eqno:Option<(EqNoPosition,Box<[MathNode<ET,S>]>)>,
+    /// If the mathgroup contained an `\eqno` or `\leqno`,
+    /// the nodes *following* that command
+    pub eqno:Option<(EqNoPosition,Box<[MathNode<ET,MathFontStyle<ET>>]>)>,
+    /// The computed width of this group - i.e. the sum of the widths of the children.
     pub computed_width:OnceCell<ET::Dim>,
+    /// The computed height of this group - i.e. the maximum of the heights of the children.
     pub computed_height:OnceCell<ET::Dim>,
+    /// The computed depth of this group - i.e. the maximum of the depths of the children.
     pub computed_depth:OnceCell<ET::Dim>,
 }
-impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathGroup<ET,S> {
+impl<ET:EngineTypes> NodeTrait<ET> for MathGroup<ET> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
         display_do_indent(indent,f)?;
         write!(f, "<{}math>",if self.display.is_some() {"display"} else {""})?;
@@ -811,8 +870,13 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathGroup<ET,S> {
     fn nodetype(&self) -> NodeType { NodeType::Math }
 }
 
-impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
-    pub fn close(display:Option<(Skip<ET::Dim>,Skip<ET::Dim>)>,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,eqno:Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) -> MathGroup<ET,MathFontStyle<ET>> {
+impl<ET:EngineTypes> MathGroup<ET> {
+    /// Create a new math group by closing a list of unresolved math nodes, iterating
+    /// over it and resolving each node by determining the appropriate [`MathFontStyle`] for
+    /// it.
+    /// If `display` is `Some`, this is a display math group, and the two
+    /// skips are the `\abovedisplayskip` and `\belowdisplayskip` values.
+    pub fn close(display:Option<(Skip<ET::Dim>,Skip<ET::Dim>)>,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,eqno:Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) -> Self {
         let style = if display.is_some() { MathStyle {
             style:MathStyleType::Display,
             cramped:false,
@@ -940,17 +1004,31 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
     }
 }
 
+/// The position of an eqno in a math list, i.e. `\eqno` (right) or `\leqno` (left).
+#[derive(Debug,Copy,Clone)]
+pub enum EqNoPosition {
+    Left,Right
+}
+
+/// Convenience struct for characters in math mode
 #[derive(Debug,Clone)]
 pub struct MathChar<ET:EngineTypes> {
+    /// The character
     pub char:ET::Char,
+    /// The math class determined from its mathcode
     pub cls:MathClass,
+    /// The font style
     pub style: UnresolvedMathFontStyle<ET>
 }
 impl<ET:EngineTypes> MathChar<ET> {
+    /// Convert this into an unresolved [`MathAtom`].
     pub fn to_atom(self) -> MathAtom<ET,UnresolvedMathFontStyle<ET>> {
         let kernel = MathNucleus::Simple { cls:self.cls, kernel:MathKernel::Char { char:self.char, style:self.style }, limits:None };
         MathAtom { nucleus: kernel,sup:None,sub:None }
     }
+    /// Create a new [`MathChar`] from a mathcode. If this was triggered by
+    /// an actual character (rather than e.g. `\mathcar`), `source` is that
+    /// character.
     pub fn from_u32(mathcode:u32, state:&ET::State, source:Option<ET::Char>) -> Self {
         let (mut cls,mut fam,pos) = {
             if mathcode == 0 {
@@ -987,12 +1065,16 @@ impl<ET:EngineTypes> MathChar<ET> {
     }
 }
 
+/// Convenience struct for math delimiters, as constructed from a delimiter code
 #[derive(Clone,Debug)]
 pub struct Delimiter<ET:EngineTypes> {
+    /// The small variant of the delimiter
     pub small:MathChar<ET>,
+    /// The large variant of the delimiter
     pub large:MathChar<ET>,
 }
 impl<ET:EngineTypes> Delimiter<ET> {
+    /// Create a new [`Delimiter`] from a delimiter code.
     pub fn from_int(num:ET::Int,state:&ET::State) -> Self {
         let num = num.into();
         if num < 0 || num > u32::MAX.into() {
@@ -1006,4 +1088,84 @@ impl<ET:EngineTypes> Delimiter<ET> {
             large:MathChar::from_u32(large, state, None)
         }
     }
+}
+
+/// An open list of unresolved math nodes.
+/// TODO: rethink this
+#[derive(Clone,Debug)]
+pub enum MathNodeList<ET:EngineTypes> {
+    /// A simple list of nodes
+    Simple(Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>),
+    /// An open list after encountering an `\over` or `\above` or `\atop` or
+    /// a related command. The current list up to that point is moved to the `top`,
+    /// subsequent nodes are added to `bottom`. (see [`MathNode::Over`]
+    Over {
+        top:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+        sep:Option<ET::Dim>,
+        bottom:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+        left:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
+        right:Option<(ET::Char,UnresolvedMathFontStyle<ET>)>,
+    },
+    /// An open list after encountering an `\eqno` or `\leqno`.
+    /// The current list up to that point is moved to `main`,
+    /// subsequent nodes are added to `eqno`. This can
+    /// only happen, if this list's direct "parent" is a horizontal
+    /// (i.e. non-math) list.
+    EqNo {
+        pos:EqNoPosition,
+        main:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+        eqno:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
+    }
+}
+impl <ET:EngineTypes> MathNodeList<ET> {
+    /// Create a new simple list.
+    pub fn new() -> Self { MathNodeList::Simple(Vec::new()) }
+    /// Push a node to the list.
+    pub fn push(&mut self, n:MathNode<ET,UnresolvedMathFontStyle<ET>>) {
+        match self {
+            MathNodeList::Simple(v) => v.push(n),
+            MathNodeList::Over{bottom,..} => bottom.push(n),
+            MathNodeList::EqNo {eqno,..} => eqno.push(n)
+        }
+    }
+    /// Close the list, returning the list of nodes and the optional eqno.
+    pub fn close(self,start:SourceRef<ET>,end:SourceRef<ET>) -> (Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) {
+        match self {
+            MathNodeList::Simple(v) => (v,None),
+            MathNodeList::Over{top,sep,bottom,left,right} => (vec!(MathNode::Over {
+                start,end, top:top.into(),bottom:bottom.into(),sep,left,right
+            }),None),
+            MathNodeList::EqNo {main,eqno,pos} => (main,Some((pos,eqno)))
+        }
+    }
+    /// Get the "open" list that nodes should be added to mutably
+    pub fn list_mut(&mut self) -> &mut Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
+        match self {
+            MathNodeList::Simple(v) => v,
+            MathNodeList::Over{bottom,..} => bottom,
+            MathNodeList::EqNo {eqno,..} => eqno
+        }
+    }
+    /// Get the "open" list that nodes should be added to immutably
+    pub fn list(&self) -> &Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>> {
+        match self {
+            MathNodeList::Simple(v) => v,
+            MathNodeList::Over{bottom,..} => bottom,
+            MathNodeList::EqNo {eqno,..} => eqno
+        }
+    }
+}
+
+///Types of open math lists
+#[derive(Clone,Debug)]
+pub enum MathNodeListType<ET:EngineTypes> {
+    /// The top-most math list
+    Top{
+        /// whether delimited by `$$` rather than `$`
+        display:bool
+    },
+    /// complex list target
+    Target(ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>),
+    /// A list opened by `\left`, to be closed by `\right`
+    LeftRight(Option<Delimiter<ET>>)
 }

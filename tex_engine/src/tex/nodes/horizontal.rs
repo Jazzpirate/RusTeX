@@ -1,43 +1,70 @@
+/*! Nodes allowed in horizontal lists. */
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::{File, SourceRef, SourceReference};
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::{BoxTarget, display_do_indent, Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox};
-use crate::tex::nodes::math::{MathFontStyle, MathGroup};
+use crate::tex::nodes::math::MathGroup;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::characters::Character;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 
-#[derive(Clone,Debug)]
-pub enum HorizontalNodeListType<ET:EngineTypes> {
-    Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
-    Box(HBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
-    VAlign,
-    HAlignRow(SourceRef<ET>),
-    HAlignCell(SourceRef<ET>,u8),
-}
-
+/// A horizontal list node.
 #[derive(Clone,Debug)]
 pub enum HNode<ET:EngineTypes> {
+    /// A penalty node, as produced by `\penalty`.
     Penalty(i32),
+    /// A mark node, as produced by `\mark`.
     Mark(usize,TokenList<ET::Token>),
+    /// A whatsit node, as produced by `\special`, `\write`, etc.
     Whatsit(WhatsitNode<ET>),
-    HSkip(Skip<ET::Dim>),HFil,HFill,HFilneg,Hss,Space,
+    /// A glue node, as produced by `\hskip`.
+    HSkip(Skip<ET::Dim>),
+    /// A glue node, as produced by `\hfil`.
+    HFil,
+    /// A glue node, as produced by `\hfill`.
+    HFill,
+    /// A glue node, as produced by `\hfilneg`.
+    HFilneg,
+    /// A glue node, as produced by `\hss`.
+    Hss,
+    /// A glue node, as produced by a space character.
+    Space,
+    /// A kern node, as produced by `\kern`.
     HKern(ET::Dim),
+    /// Leaders, as produced by `\leaders` or `\cleaders` or `\xleaders`.
     Leaders(Leaders<ET>),
+    /// A box node, as produced by `\hbox`, `\vbox`, `\vtop`, etc.
     Box(TeXBox<ET>),
+    /// A rule node, as produced by `\vrule`.
     VRule{
+        /// The *provided* width of the rule.
         width:Option<ET::Dim>,
+        /// The *provided* height of the rule.
         height:Option<ET::Dim>,
+        /// The *provided* depth of the rule.
         depth:Option<ET::Dim>,
-        start:SourceRef<ET>,end:SourceRef<ET>
+        /// The source reference for the start of the rule.
+        start:SourceRef<ET>,
+        /// The source reference for the end of the rule.
+        end:SourceRef<ET>
     },
+    /// An insertion node, as produced by `\insert`.
     Insert(usize,Box<[VNode<ET>]>),
+    /// A vadjust node, as produced by `\vadjust`; its contents will migrate to the surrounding vertical list eventually.
     VAdjust(Box<[VNode<ET>]>),
-    MathGroup(MathGroup<ET,MathFontStyle<ET>>),
-    Char { char:ET::Char, font:<ET::FontSystem as FontSystem>::Font },
+    /// A math list, as produced by `$...$` or `$$...$$`.
+    MathGroup(MathGroup<ET>),
+    /// A character node, as produced by a character.
+    Char {
+        /// The character.
+        char:ET::Char,
+        /// The current font
+        font:<ET::FontSystem as FontSystem>::Font
+    },
+    /// A custom node.
     Custom(ET::CustomNode),
 }
 
@@ -164,4 +191,22 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             _ => false
         }
     }
+}
+
+/// The kinds of horizontal lists that can occur.
+/// TODO: rethink this
+#[derive(Clone,Debug)]
+pub enum HorizontalNodeListType<ET:EngineTypes> {
+    /// A paragraph; will ultimately be broken into lines.
+    Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
+    /// A horizontal box.
+    Box(HBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
+    /// A `\valign` list
+    VAlign,
+    /// A row in an `\halign`. The source ref indicates the start of the row.
+    HAlignRow(SourceRef<ET>),
+    /// A cell in an `\halign`. The source ref indicates the start of the cell.
+    /// The `u8` indicates the number of *additional* columns spanned by this cell
+    /// (so by default 0).
+    HAlignCell(SourceRef<ET>,u8),
 }

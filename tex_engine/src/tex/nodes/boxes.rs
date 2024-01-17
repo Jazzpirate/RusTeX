@@ -301,7 +301,7 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
         match self {
             VBoxInfo::VBox {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
             VBoxInfo::VTop {..} => NodeList::Vertical {tp:VerticalNodeListType::Box(self,start,BoxTarget::none()),children:vec!()},
-            VBoxInfo::VAlignColumn => NodeList::Vertical {tp:VerticalNodeListType::VAlignRow(start),children:vec!()},
+            VBoxInfo::VAlignColumn => NodeList::Vertical {tp:VerticalNodeListType::VAlignColumn(start),children:vec!()},
             VBoxInfo::VAlignCell {..} => NodeList::Vertical {tp:VerticalNodeListType::VAlignCell(start,0),children:vec!()},
         }
     }

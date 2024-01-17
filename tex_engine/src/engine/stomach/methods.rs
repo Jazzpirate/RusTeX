@@ -5,7 +5,7 @@ use crate::engine::filesystem::{File, SourceReference};
 use crate::tex::nodes::{BoxTarget, ListTarget, NodeList, NodeTrait};
 use crate::tex::nodes::boxes::{BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
-use crate::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{MathAtom, MathClass, MathGroup, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::stomach::{Stomach, TeXMode};
 use crate::engine::state::{GroupType, State};
@@ -293,7 +293,7 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
             }}
             engine.state.pop(engine.aux,engine.mouth);
             let (children,eqno) = children.close(start,engine.mouth.current_sourceref());
-            let group = MathGroup::<ET,MathFontStyle<ET>>::close(
+            let group = MathGroup::close(
                 if display {Some((
                     engine.state.get_primitive_skip(PRIMITIVES.abovedisplayskip),
                     engine.state.get_primitive_skip(PRIMITIVES.belowdisplayskip)

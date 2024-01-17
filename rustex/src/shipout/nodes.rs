@@ -461,7 +461,7 @@ fn hbox_inner(state:&mut ShipoutState, engine:Refs,to:Option<Dim32>, children:Ve
     })
 }
 
-pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types,MathFontStyle<Types>>) {
+pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types>) {
     match bx.display {
         Some((pre,post)) => {
             let mut node = HTMLNode::new(HTMLTag::Display);
@@ -480,7 +480,7 @@ pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Type
         None => math_inner(state,engine,bx)
     }
 }
-fn math_inner(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types,MathFontStyle<Types>>) {
+fn math_inner(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types>) {
     let mut node = HTMLNode::new(HTMLTag::Math);
     node.classes.push("rustex-math".into());
     node.sourceref = Some((bx.start,bx.end));

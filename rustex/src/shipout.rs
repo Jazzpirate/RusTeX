@@ -594,7 +594,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
     }
 }
 
-pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<Types,MathFontStyle<Types>>) {
+pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<Types>) {
     let mut iter: MNodes = bx.children.into_vec().into();
     match bx.display {
         Some((pre,post)) => {
