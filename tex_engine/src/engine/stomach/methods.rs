@@ -481,12 +481,12 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
             if prevdepth > ET::Dim::from_sp(-65536000) {
                 let baselineskip = engine.state.get_primitive_skip(PRIMITIVES.baselineskip);
                 let lineskiplimit = engine.state.get_primitive_dim(PRIMITIVES.lineskiplimit);
-                let b = ET::Skip::new(baselineskip.base() - prevdepth - ht, baselineskip.stretch(), baselineskip.shrink());
-                let sk = if b.base() >= lineskiplimit { b }
+                let b = Skip::new(baselineskip.base - prevdepth - ht, baselineskip.stretch, baselineskip.shrink);
+                let sk = if b.base >= lineskiplimit { b }
                 else {
                     engine.state.get_primitive_skip(PRIMITIVES.lineskip)
                 };
-                if sk != ET::Skip::default() {
+                if sk != Skip::default() {
                     *preskip = Some(sk);
                     Some(sk)
                 } else {None}
@@ -516,7 +516,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
     }
 
     if let Some(pre) = pre {
-        data.pagetotal = data.pagetotal + pre.base();
+        data.pagetotal = data.pagetotal + pre.base;
     }
     data.pagetotal = data.pagetotal + ht + node.depth(); // ?
     if let VNode::Penalty(i) = node {
@@ -719,12 +719,12 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
 }
 
 /// Specification of a (target)line in a paragraph
-#[derive(Debug,Clone,Hash,Eq,PartialEq)]
+#[derive(Debug,Clone,Eq,PartialEq)]
 pub struct ParLineSpec<ET:EngineTypes> {
     /// `\leftskip`
-    pub leftskip:ET::Skip,
+    pub leftskip:Skip<ET::Dim>,
     /// `\rightskip`
-    pub rightskip:ET::Skip,
+    pub rightskip:Skip<ET::Dim>,
     /// The target width of the line
     pub target:ET::Dim
 }
@@ -744,37 +744,37 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
         if parshape.is_empty() {
             if hangindent == ET::Dim::default() || hangafter == 0 {
                 vec!(ParLineSpec {
-                    target:hsize + -(leftskip.base() + rightskip.base()),
+                    target:hsize + -(leftskip.base + rightskip.base),
                     leftskip,rightskip
                 })
             } else {
                 if hangafter < 0 {
                     let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|_| ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
-                        leftskip:leftskip.add(hangindent),rightskip
+                        target:hsize - (leftskip.base + rightskip.base + hangindent),
+                        leftskip:leftskip + hangindent,rightskip
                     }).collect();
                     r.push(ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base()),
+                        target:hsize - (leftskip.base + rightskip.base),
                         leftskip,rightskip
                     });
                     r
                 } else {
                     let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|_| ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base()),
+                        target:hsize - (leftskip.base + rightskip.base),
                         leftskip,rightskip
                     }).collect();
                     r.push(ParLineSpec {
-                        target:hsize + -(leftskip.base() + rightskip.base() + hangindent),
-                        leftskip:leftskip.add(hangindent),rightskip
+                        target:hsize - (leftskip.base + rightskip.base + hangindent),
+                        leftskip:leftskip + hangindent,rightskip
                     });
                     r
                 }
             }
         } else {
             parshape.into_iter().map(|(i,l)| {
-                let left = leftskip.add(i);
-                let target = l + -(leftskip.base() + rightskip.base());
-                let right = rightskip.add(hsize + -(l + i));
+                let left = leftskip + i;
+                let target = l - (leftskip.base + rightskip.base);
+                let right = rightskip + (hsize - (l + i));
                 ParLineSpec {
                     leftskip:left,rightskip:right,target
                 }
@@ -862,7 +862,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(_engine:&mut EngineReferences<ET>
                     ret.push(ParLine::Line(TeXBox::H {children:vec!(g).into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
                         spec:line_spec.clone(),
                         ends_with_line_break:false,
-                        inner_height:ht + dp + a.base() + b.base(),
+                        inner_height:ht + dp + a.base + b.base,
                         inner_depth:ET::Dim::default()
                     },preskip:None}));
                     //ret.push(ParLine::Adjust(VNode::VSkip(b)));

@@ -8,7 +8,7 @@ use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::tex;
-use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
+use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_engine::tex::tokens::CompactToken;
 use tex_engine::utils::errors::{ErrorThrower};
 use tex_engine::engine::TeXEngine;
@@ -50,8 +50,7 @@ impl EngineTypes for Types {
     type Extension = Extension;
     type Int = i32;
     type Dim = Dim32;
-    type Skip = Skip32<Dim32>;
-    type MuSkip = MuSkip32;
+    type MuDim = Mu;
     type Num = tex::numerics::DefaultNumSet;
     type State = RusTeXState;
     type File = VirtualFile<u8>;

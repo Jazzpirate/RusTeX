@@ -25,6 +25,7 @@ use crate::tex::nodes::math::{Delimiter, MathAtom, MathClass, MathKernel, MathNo
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
+use crate::tex::numerics::Skip;
 
 pub(crate) struct MacroParser<T:Token> {
     arity:u8,
@@ -137,14 +138,14 @@ pub(in crate::commands) fn modify_primitive_dim<ET:EngineTypes,O:FnOnce(ET::Dim,
     engine.state.set_primitive_dim(engine.aux,name,new,globally);
 }
 
-pub(in crate::commands) fn modify_skip_register<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>,idx:usize,globally:bool,op:O) {
+pub(in crate::commands) fn modify_skip_register<ET:EngineTypes,O:FnOnce(Skip<ET::Dim>,&mut EngineReferences<ET>) -> Skip<ET::Dim>>(engine: &mut EngineReferences<ET>,idx:usize,globally:bool,op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_skip_register(idx);
     let new = op(old,engine);
     engine.state.set_skip_register(engine.aux,idx,new,globally);
 }
 
-pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(ET::Skip,&mut EngineReferences<ET>) -> ET::Skip>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
+pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(Skip<ET::Dim>,&mut EngineReferences<ET>) -> Skip<ET::Dim>>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
     engine.read_keyword(b"by");
     let old = engine.state.get_primitive_skip(name);
     let new = op(old,engine);
@@ -318,15 +319,15 @@ pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:Bo
     start_align_row(engine,inner);
 }
 
-fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType) -> AlignData<ET::Token,ET::Skip> {
+fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType) -> AlignData<ET::Token,ET::Dim> {
     struct AlignmentDataBuilder<ET:EngineTypes> {
-        columns: shared_vector::Vector<AlignColumn<ET::Token,ET::Skip>>,
+        columns: shared_vector::Vector<AlignColumn<ET::Token,ET::Dim>>,
         recindex:Option<usize>,
         current_u: shared_vector::Vector<ET::Token>,
         current_v: shared_vector::Vector<ET::Token>,
         ingroups:u8,
         in_v:bool,
-        tabskip:ET::Skip,
+        tabskip:Skip<ET::Dim>,
         inner_mode:BoxType,
         between_mode:BoxType
     }
@@ -339,8 +340,8 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
             }
         }
     }
-    impl<ET:EngineTypes> Into<AlignData<ET::Token,ET::Skip>> for AlignmentDataBuilder<ET> {
-        fn into(mut self) -> AlignData<ET::Token, ET::Skip> {
+    impl<ET:EngineTypes> Into<AlignData<ET::Token,ET::Dim>> for AlignmentDataBuilder<ET> {
+        fn into(mut self) -> AlignData<ET::Token, ET::Dim> {
             self.columns.push(AlignColumn::new(self.current_u,self.current_v,self.tabskip,self.ingroups));
             AlignData {
                 columns: self.columns.into(),

@@ -11,7 +11,7 @@ use tex_engine::pdflatex::nodes::{PDFColor, PDFDest, PDFNode};
 use tex_engine::engine::{EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::tex::nodes::NodeTrait;
-use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuSkip, MuSkip32, Skip32};
+use tex_engine::tex::numerics::{Dim32, Mu, Skip};
 use tex_engine::engine::state::State;
 use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
@@ -414,7 +414,7 @@ pub(crate) fn shipout(engine:Refs, n: VNode<Types>) {
     */
 }
 
-pub(crate) const ZERO_SKIP: Skip32<Dim32> = Skip32 {base:Dim32(0),stretch:None,shrink:None};
+pub(crate) const ZERO_SKIP: Skip<Dim32> = Skip {base:Dim32(0),stretch:None,shrink:None};
 
 fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty: bool) {
     while let Some(c) = children.next() {

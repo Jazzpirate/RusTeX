@@ -13,6 +13,7 @@ use crate::tex::characters::CharacterMap;
 use crate::utils::HMap;
 use crate::engine::fontsystem::Font;
 use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::numerics::{MuSkip, Skip};
 use crate::tex::tokens::control_sequences::CSNameMap;
 
 /// Default implementation of a plain TeX [`State`].
@@ -28,13 +29,13 @@ pub struct DefaultState<ET:EngineTypes> {
     delcodes: <ET::Char as Character>::CharMap<ET::Int>,
     primitive_ints: HMap<PrimitiveIdentifier,ET::Int>,
     primitive_dims: HMap<PrimitiveIdentifier,ET::Dim>,
-    primitive_skips: HMap<PrimitiveIdentifier,ET::Skip>,
-    primitive_muskips: HMap<PrimitiveIdentifier,ET::MuSkip>,
+    primitive_skips: HMap<PrimitiveIdentifier,Skip<ET::Dim>>,
+    primitive_muskips: HMap<PrimitiveIdentifier,MuSkip<ET::MuDim>>,
     primitive_toks:HMap<PrimitiveIdentifier,TokenList<ET::Token>>,
     int_register:Vec<ET::Int>,
     dim_register:Vec<ET::Dim>,
-    skip_register:Vec<ET::Skip>,
-    muskip_register:Vec<ET::MuSkip>,
+    skip_register:Vec<Skip<ET::Dim>>,
+    muskip_register:Vec<MuSkip<ET::MuDim>>,
     toks_register:Vec<TokenList<ET::Token>>,
     box_register:Vec<Option<TeXBox<ET>>>,
     commands:<ET::CSName as CSName<ET::Char>>::Map<TeXCommand<ET>>,//Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
@@ -866,16 +867,16 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         });
     }
 
-    fn get_skip_register(&self, idx: usize) -> ET::Skip {
+    fn get_skip_register(&self, idx: usize) -> Skip<ET::Dim> {
         match self.skip_register.get(idx) {
             Some(i) => *i,
-            _ => ET::Skip::default()
+            _ => Skip::default()
         }
     }
-    fn set_skip_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: ET::Skip, globally: bool) {
+    fn set_skip_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: Skip<ET::Dim>, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.skip_register.len() <= idx {
-                s.skip_register.resize(idx + 1, ET::Skip::default());
+                s.skip_register.resize(idx + 1, Skip::default());
             }
             let old = std::mem::replace(&mut s.skip_register[idx], v);
             if s.tracing_assigns() {
@@ -890,16 +891,16 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         });
     }
 
-    fn get_muskip_register(&self, idx: usize) -> ET::MuSkip {
+    fn get_muskip_register(&self, idx: usize) -> MuSkip<ET::MuDim> {
         match self.muskip_register.get(idx) {
             Some(i) => *i,
-            _ => ET::MuSkip::default()
+            _ => MuSkip::default()
         }
     }
-    fn set_muskip_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: ET::MuSkip, globally: bool) {
+    fn set_muskip_register(&mut self, aux: &EngineAux<ET>, idx: usize, v: MuSkip<ET::MuDim>, globally: bool) {
         self.change_field(globally,|s,g| {
             if s.muskip_register.len() <= idx {
-                s.muskip_register.resize(idx + 1, ET::MuSkip::default());
+                s.muskip_register.resize(idx + 1, MuSkip::default());
             }
             let old = std::mem::replace(&mut s.muskip_register[idx], v);
             if s.tracing_assigns() {
@@ -1017,15 +1018,15 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         });
     }
 
-    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> ET::Skip {
+    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> Skip<ET::Dim> {
         match self.primitive_skips.get(&name) {
             Some(i) => *i,
-            _ => ET::Skip::default()
+            _ => Skip::default()
         }
     }
-    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::Skip, globally: bool) {
+    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Skip<ET::Dim>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_skips.insert(name,v).unwrap_or(ET::Skip::default());
+            let old = s.primitive_skips.insert(name,v).unwrap_or(Skip::default());
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
                 aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
@@ -1034,15 +1035,15 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         });
     }
 
-    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> ET::MuSkip {
+    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> MuSkip<ET::MuDim> {
         match self.primitive_muskips.get(&name) {
             Some(i) => *i,
-            _ => ET::MuSkip::default()
+            _ => MuSkip::default()
         }
     }
-    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::MuSkip, globally: bool) {
+    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: MuSkip<ET::MuDim>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_muskips.insert(name,v).unwrap_or(ET::MuSkip::default());
+            let old = s.primitive_muskips.insert(name,v).unwrap_or(MuSkip::default());
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
                 aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))

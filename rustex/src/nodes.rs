@@ -5,7 +5,7 @@ use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::{CustomNodeTrait, NodeTrait, NodeType};
 use tex_engine::tex::nodes::boxes::TeXBox;
-use tex_engine::tex::numerics::{Dim32, Skip32};
+use tex_engine::tex::numerics::{Dim32, Skip};
 use tex_engine::utils::HMap;
 use crate::engine::{Font, SRef, Types};
 use crate::state::RusTeXState;
@@ -41,7 +41,7 @@ pub enum RusTeXNode {
     ParagraphBegin{
         specs:Vec<ParLineSpec<Types>>,
         start:SRef,
-        parskip:Skip32<Dim32>,
+        parskip:Skip<Dim32>,
         end:SRef,
         lineskip:LineSkip,
     },

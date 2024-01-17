@@ -8,6 +8,7 @@ use crate::tex::nodes::boxes::BoxType;
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
+use crate::tex::numerics::Skip;
 
 /// Specification on a column in an `\halign` (or a row in a `\valign`); in particular:
 /// - the alignment template for the column (or row)
@@ -17,7 +18,7 @@ use crate::engine::state::State;
 /// The latter is important for the [`Gullet`](crate::engine::gullet::Gullet) to know when an [`AlignmentTab`](crate::tex::catcodes::CommandCode::AlignmentTab)
 /// [`Token`] (or a `\cr`) should be passed on or replaced by the relevant template tokens
 #[derive(Clone,Debug)]
-pub struct AlignColumn<T:Token,Sk: crate::tex::numerics::Skip> {
+pub struct AlignColumn<T:Token,D: crate::tex::numerics::TeXDimen> {
     /// The tokens to be inserted at the beginning of the column (or row)
     pub left: TokenList<T>,
     /// The tokens to be inserted at the end of the column (or row)
@@ -25,17 +26,17 @@ pub struct AlignColumn<T:Token,Sk: crate::tex::numerics::Skip> {
     /// The number of braces that are opened by the template tokens
     pub inbraces:u8,
     /// The [tabskip](crate::tex::numerics::Skip) to be inserted between the columns (or rows)
-    pub tabskip: Sk,
+    pub tabskip: Skip<D>,
 }
-impl <T:Token,Sk: crate::tex::numerics::Skip> AlignColumn<T,Sk> {
+impl <T:Token,D: crate::tex::numerics::TeXDimen> AlignColumn<T,D> {
     /// Create a new [`AlignColumn`] with the given template tokens, tabskip and number of braces
-    pub fn new(left:shared_vector::Vector<T>,right:shared_vector::Vector<T>,tabskip:Sk,inbraces:u8) -> Self {
+    pub fn new(left:shared_vector::Vector<T>,right:shared_vector::Vector<T>,tabskip:Skip<D>,inbraces:u8) -> Self {
         Self { left:left.into(),inbraces,right:right.into(),tabskip }
     }
 }
 
 /// Data structure for a currently open `\halign` (or `\valign`)
-pub struct AlignData<T:Token,Sk: crate::tex::numerics::Skip> {
+pub struct AlignData<T:Token,D: crate::tex::numerics::TeXDimen> {
     /// The number of braces that are currently open
     pub ingroups:u8,
     /// The index of the current column (or row)
@@ -44,7 +45,7 @@ pub struct AlignData<T:Token,Sk: crate::tex::numerics::Skip> {
     /// row exceeds the number of columns (or rows) in the template
     pub repeat_index:Option<usize>,
     /// The columns (or rows) of the template
-    pub columns:shared_vector::SharedVector<AlignColumn<T,Sk>>,
+    pub columns:shared_vector::SharedVector<AlignColumn<T,D>>,
     /// Whether the current column (or row) should omit the template
     pub omit:bool,
     /// Whether the current column (or row) spans across the next column (or rows)
@@ -56,7 +57,7 @@ pub struct AlignData<T:Token,Sk: crate::tex::numerics::Skip> {
     /// or [`BoxType::Horizontal`] for a `\valign`
     pub outer_mode:BoxType
 }
-impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
+impl<T:Token,D: crate::tex::numerics::TeXDimen> AlignData<T,D> {
     /// the number of open braces at which an [`AlignmentTab`](crate::tex::catcodes::CommandCode::AlignmentTab)
     /// [`Token`] (or a `\cr`) should cause the template tokens to be inserted into the input stream
     pub fn groupval(&self) -> u8 {
@@ -71,7 +72,7 @@ impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
             ingroups:125,
             currindex:0,
             repeat_index:None,
-            columns:shared_vector::vector!(AlignColumn::new(shared_vector::Vector::new(),shared_vector::Vector::new(),Sk::default(),0)).into(),
+            columns:shared_vector::vector!(AlignColumn::new(shared_vector::Vector::new(),shared_vector::Vector::new(),Skip::default(),0)).into(),
             omit:false,
             span:false,
             inner_mode:BoxType::Horizontal,
@@ -82,7 +83,7 @@ impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
     /// this is called when an [`AlignmentTab`](crate::tex::catcodes::CommandCode::AlignmentTab)
     /// [`Token`] (or a `\span`) is encountered and the number of currently open braces matches the current column's
     /// `inbraces` value.
-    pub fn on_alignment_tab<ET:EngineTypes<Token=T,Skip=Sk>>(&self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>) {
+    pub fn on_alignment_tab<ET:EngineTypes<Token=T,Dim=D>>(&self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>) {
         let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
         mouth.requeue(end_align);
         if !self.omit {
@@ -94,7 +95,7 @@ impl<T:Token,Sk: crate::tex::numerics::Skip> AlignData<T,Sk> {
     /// and insert `\everycr`;
     /// this is called when a `\cr` or `\crcr` is encountered and the number of currently open braces matches the current column's
     /// `inbraces` value.
-    pub fn on_cr<ET:EngineTypes<Token=T,Skip=Sk>>(&self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State) {
+    pub fn on_cr<ET:EngineTypes<Token=T,Dim=D>>(&self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State) {
         let everycr = state.get_primitive_tokens(PRIMITIVES.everycr);
         mouth.push_exp(everycr);
         let end = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE_ROW));

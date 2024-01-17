@@ -134,7 +134,7 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
     fn get_width(&self,v:&[HNode<ET>]) -> ET::Dim {
         match self {
             HBoxInfo::HBox { assigned_width,computed_width, .. } => assigned_width.unwrap_or_else(|| *computed_width.get_or_init(|| Self::width_inner(v))),
-            HBoxInfo::ParLine { spec,.. } => spec.leftskip.base() + spec.rightskip.base() + spec.target,
+            HBoxInfo::ParLine { spec,.. } => spec.leftskip.base + spec.rightskip.base + spec.target,
             HBoxInfo::HAlignRow => Self::width_inner(v),
             HBoxInfo::HAlignCell { to,computed_width,.. } => to.unwrap_or_else(|| *computed_width.get_or_init(|| Self::width_inner(v))),
             HBoxInfo::ParIndent(d) => *d,
@@ -367,7 +367,7 @@ impl<ET:EngineTypes> BoxInfo<ET> {
 #[derive(Debug,Clone)]
 pub enum TeXBox<ET:EngineTypes> {
     V { info:VBoxInfo<ET>, children:Box<[VNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET> },
-    H { info:HBoxInfo<ET>, children:Box<[HNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET>,preskip:Option<ET::Skip> },
+    H { info:HBoxInfo<ET>, children:Box<[HNode<ET>]>, start:SourceRef<ET>,end:SourceRef<ET>,preskip:Option<Skip<ET::Dim>> },
 }
 
 impl<ET:EngineTypes> TeXBox<ET> {
@@ -460,7 +460,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
 
     fn height(&self) -> ET::Dim {
         match self {
-            TeXBox::H { info, children,preskip,.. } => info.get_height(&children) + preskip.map(|s| s.base()).unwrap_or_default(),
+            TeXBox::H { info, children,preskip,.. } => info.get_height(&children) + preskip.map(|s| s.base).unwrap_or_default(),
             TeXBox::V { info, children,.. } => info.get_height(&children),
         }
     }

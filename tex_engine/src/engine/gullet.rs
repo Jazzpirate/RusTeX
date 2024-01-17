@@ -15,7 +15,7 @@ use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::characters::Character;
-use crate::tex::numerics::{MuSkip, NumSet};
+use crate::tex::numerics::{MuSkip, NumSet, Skip};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;
 
@@ -39,11 +39,11 @@ pub trait Gullet<ET:EngineTypes> {
     fn new(aux:&mut EngineAux<ET>,state:&mut ET::State,mouth:&mut ET::Mouth) -> Self;
 
     /// Push a new [`AlignData`] onto the stack, i.e. on `\halign` or `\valign`
-    fn push_align(&mut self,ad:AlignData<ET::Token,ET::Skip>);
+    fn push_align(&mut self,ad:AlignData<ET::Token,ET::Dim>);
     /// Pop the last [`AlignData`] from the stack, i.e. at the end of `\halign` or `\valign`
-    fn pop_align(&mut self) -> Option<AlignData<ET::Token,ET::Skip>>;
+    fn pop_align(&mut self) -> Option<AlignData<ET::Token,ET::Dim>>;
     /// Inspect the current [`AlignData`], if any (i.e. if we are in an `\halign` or `\valign`)
-    fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Skip>>;
+    fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Dim>>;
     /// Inspect the current [`ActiveConditional`], if any (i.e. if we are in an `\if` or similar)
     fn get_conditional(&self) -> Option<ActiveConditional<ET::Int>>;
     /// Get a mutable reference to the stack of [`ActiveConditional`]s
@@ -165,17 +165,17 @@ pub trait Gullet<ET:EngineTypes> {
     }
 
     /// Read a skip value from the input stream. See also [`EngineReferences::read_skip`].
-    fn read_skip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::Skip {
+    fn read_skip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> Skip<ET::Dim> {
         methods::read_skip(engine,skip_eq)
     }
 
     /// Read a muskip value from the input stream. See also [`EngineReferences::read_muskip`].
-    fn read_muskip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::MuSkip {
+    fn read_muskip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> MuSkip<ET::MuDim> {
         methods::read_muskip(engine,skip_eq)
     }
 
     /// Read a mudim value from the input stream (for `\mkern`). See also [`EngineReferences::read_mudim`].
-    fn read_mudim(engine:&mut EngineReferences<ET>,skip_eq:bool) -> <ET::MuSkip as MuSkip>::Base {
+    fn read_mudim(engine:&mut EngineReferences<ET>,skip_eq:bool) -> ET::MuDim {
         methods::read_mudim(engine, skip_eq)
     }
 
@@ -314,7 +314,7 @@ pub trait Gullet<ET:EngineTypes> {
 
 /// Default implementation of a [`Gullet`].
 pub struct DefaultGullet<ET:EngineTypes> {
-    align_data:Vec<AlignData<ET::Token,ET::Skip>>,
+    align_data:Vec<AlignData<ET::Token,ET::Dim>>,
     conditionals:Vec<ActiveConditional<ET::Int>>,
     csnames:usize,
     phantom:PhantomData<ET>
@@ -329,10 +329,10 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
         }
     }
     fn csnames(&mut self) -> &mut usize { &mut self.csnames }
-    fn push_align(&mut self, ad: AlignData<ET::Token,ET::Skip>) {
+    fn push_align(&mut self, ad: AlignData<ET::Token,ET::Dim>) {
         self.align_data.push(ad)
     }
-    fn pop_align(&mut self) -> Option<AlignData<ET::Token, ET::Skip>> {
+    fn pop_align(&mut self) -> Option<AlignData<ET::Token, ET::Dim>> {
         self.align_data.pop()
     }
     fn do_macro(engine: &mut EngineReferences<ET>, m: Macro<ET::Token>, token: ET::Token) {
@@ -384,7 +384,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
             engine.mouth.push_macro_exp(MacroExpansion::new(m.expansion,args))
         }
     }
-    fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Skip>> {
+    fn get_align_data(&mut self) -> Option<&mut AlignData<ET::Token,ET::Dim>> {
         self.align_data.last_mut()
     }
     fn get_conditional(&self) -> Option<ActiveConditional<ET::Int>> {
@@ -469,19 +469,19 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 
     /// Read a dimension value from the input stream.
-    pub fn read_dim(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::Dim {
+    pub fn read_dim(&mut self,skip_eq:bool) -> ET::Dim {
         ET::Gullet::read_dim(self,skip_eq)
     }
     /// Read a skip value from the input stream.
-    pub fn read_skip(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::Skip {
+    pub fn read_skip(&mut self,skip_eq:bool) -> Skip<ET::Dim> {
         ET::Gullet::read_skip(self,skip_eq)
     }
     /// Read a muskip value from the input stream.
-    pub fn read_muskip(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::MuSkip {
+    pub fn read_muskip(&mut self,skip_eq:bool) -> MuSkip<ET::MuDim> {
         ET::Gullet::read_muskip(self,skip_eq)
     }
     /// Read a mudim value from the input stream (for `\mkern`).
-    pub fn read_mudim(&mut self,skip_eq:bool) -> <<ET::Num as NumSet>::MuSkip as MuSkip>::Base {
+    pub fn read_mudim(&mut self,skip_eq:bool) -> ET::MuDim {
         ET::Gullet::read_mudim(self,skip_eq)
     }
     /// Check whether the next character is one of the provided ones. Returns the character if so,

@@ -16,7 +16,7 @@ pub enum HNode<ET:EngineTypes> {
     Penalty(i32),
     Mark(usize,TokenList<ET::Token>),
     Whatsit(WhatsitNode<ET>),
-    HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,Space,
+    HSkip(Skip<ET::Dim>),HFil,HFill,HFilneg,Hss,Space,
     HKern(ET::Dim),
     Leaders(Leaders<ET>),
     Box(TeXBox<ET>),
@@ -116,7 +116,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::MathGroup(mg) => mg.width(),
             HNode::Custom(n) => n.width(),
             HNode::HKern(d) => *d,
-            HNode::HSkip(s) => s.base(),
+            HNode::HSkip(s) => s.base,
             HNode::Space => ET::Dim::from_sp(65536 * 5), // TODO heuristic; use spacefactor instead
             _=> ET::Dim::default(),
         }

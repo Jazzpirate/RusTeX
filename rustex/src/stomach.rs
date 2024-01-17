@@ -6,7 +6,7 @@ use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::{GroupType, State};
 use tex_engine::engine::stomach::{Stomach, StomachData};
 use tex_engine::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, VerticalNodeListType};
-use tex_engine::tex::numerics::{Dim32, Skip32};
+use tex_engine::tex::numerics::Dim32;
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Font, Refs, Types};
 use crate::extension::FontChange;
@@ -119,7 +119,7 @@ impl Stomach<Types> for RusTeXStomach {
                     do_shipout(engine,penalty.or(Some(-10000)),|_|());
                     engine.stomach.data_mut().page_contains_boxes = true;
                 } else if penalty.is_some() {
-                    do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip32::new(Dim32(655360),None,None))));
+                    do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip::new(Dim32(655360),None,None))));
                 }
             } else if data.pagetotal >= data.pagegoal || penalty.is_some() {
                 RusTeXStomach::do_output(engine, penalty)

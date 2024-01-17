@@ -267,8 +267,8 @@ impl<ET:EngineTypes> WhatsitNode<ET> {
 
 #[derive(Clone,Debug)]
 pub enum LeaderSkip<ET:EngineTypes> {
-    HSkip(ET::Skip),HFil,HFill,
-    VSkip(ET::Skip), VFil,VFill
+    HSkip(Skip<ET::Dim>),HFil,HFill,
+    VSkip(Skip<ET::Dim>), VFil,VFill
 }
 impl<ET:EngineTypes> LeaderSkip<ET> {
     fn is_h(&self) -> bool {
@@ -319,7 +319,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
             ET::Dim::default()//self.bx.height()
         } else {
             match self.skip {
-                LeaderSkip::VSkip(s) => s.base(),
+                LeaderSkip::VSkip(s) => s.base,
                 _ => ET::Dim::default(),
             }
         }
@@ -327,7 +327,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for Leaders<ET> {
     fn width(&self) -> ET::Dim {
         if self.skip.is_h() {
             match self.skip {
-                LeaderSkip::HSkip(s) => s.base(),
+                LeaderSkip::HSkip(s) => s.base,
                 _ => ET::Dim::default(),
             }
         } else {

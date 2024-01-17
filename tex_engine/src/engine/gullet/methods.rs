@@ -5,7 +5,7 @@ use crate::commands::primitives::PRIMITIVES;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CommandCode;
-use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
+use crate::tex::numerics::{MuDim, MuSkip, MuStretchShrink, Numeric, NumSet, Skip, STRETCH_SHRINK_UNITS, StretchShrink};
 use crate::engine::state::State;
 use crate::file_end;
 use crate::engine::gullet::Gullet;
@@ -512,15 +512,15 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             if is_negative {-base} else {base}
         }
         TeXCommand::SkipRegister(u) => {
-            let base = ET::Num::dim_to_int(engine.state.get_skip_register(u).base());
+            let base = ET::Num::dim_to_int(engine.state.get_skip_register(u).base);
             if is_negative {-base} else {base}
         }
         TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
-            let base = ET::Num::dim_to_int(engine.state.get_primitive_skip(name).base());
+            let base = ET::Num::dim_to_int(engine.state.get_primitive_skip(name).base);
             if is_negative {-base} else {base}
         }
         TeXCommand::Primitive {cmd:PrimitiveCommand::Skip{read,..},..} => {
-            let base = ET::Num::dim_to_int((read)(engine,token).base());
+            let base = ET::Num::dim_to_int((read)(engine,token).base);
             if is_negative {-base} else {base}
         }
         o => todo!("read_int: {:?}",o)
@@ -678,15 +678,15 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             if is_negative {return -val} else {return val}
         }
         TeXCommand::SkipRegister(u) => {
-            let val = engine.state.get_skip_register(u).base();
+            let val = engine.state.get_skip_register(u).base;
             if is_negative {return -val} else {return val}
         }
         TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
-            let val = engine.state.get_primitive_skip(name).base();
+            let val = engine.state.get_primitive_skip(name).base;
             if is_negative {return -val} else {return val}
         }
         TeXCommand::Primitive {cmd:PrimitiveCommand::Skip{read,..},..} => {
-            let val = read(engine,token).base();
+            let val = read(engine,token).base;
             if is_negative {return -val} else {return val}
         }
         o => todo!("command in read_dim: {}",o.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
@@ -759,7 +759,7 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
                 return base.scale(scale.into(),65536.into())
             }
             TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
-                let base = engine.state.get_primitive_skip(*name).base();
+                let base = engine.state.get_primitive_skip(*name).base;
                 let scale = (float * 65536.0).round() as i32;
                 return base.scale(scale.into(),65536.into())
             }
@@ -783,7 +783,7 @@ fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f32
         let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
         float *= Into::<i64>::into(mag) as f32 / 1000.0;
     }
-    let units = <ET::Num as NumSet>::Dim::units();
+    let units = ET::Dim::UNITS;
     match read_keywords(engine,units,first) {
         Some(d) => <ET::Num as NumSet>::Dim::from_float(engine,float,d),
         _ => todo!("wut: {}",engine.preview())
@@ -791,7 +791,7 @@ fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f32
 }
 
 /// Default implementation for [`Gullet::read_skip`].
-pub fn read_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> <ET::Num as NumSet>::Skip {
+pub fn read_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> Skip<ET::Dim> {
     let (is_negative,r) = read_numeric(engine, skip_eq);
     match r {
         Ok(b) => read_skip_byte(engine,is_negative,b),
@@ -800,7 +800,7 @@ pub fn read_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool)
 }
 
 /// reads a skip literal starting with `b`.
-pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> <ET::Num as NumSet>::Skip {
+pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> Skip<ET::Dim> {
     if b == b',' || b == b'.' {
         read_skip_dim(engine,is_negative,b'.')
     } else if is_ascii_digit(b) {
@@ -812,7 +812,7 @@ pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
 
 /// reads a skip from some [`TeXCommand`] that should correspond to a skip value (e.g. `\skip` or `\lastskip`).
 /// If the command only yields an integer or dimension, the remaining components of the skip are read.
-pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, token:ET::Token) -> <ET::Num as NumSet>::Skip {
+pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, token:ET::Token) -> Skip<ET::Dim> {
     match cmd {
         TeXCommand::IntRegister(u) => {
             let base = engine.state.get_int_register(u);
@@ -872,43 +872,38 @@ pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_ne
     }
 }
 
-
-type Sk<ET> = <<ET as EngineTypes>::Num as NumSet>::Skip;
-type Str<ET> = <<<ET as EngineTypes>::Num as NumSet>::Skip as Skip>::Stretch;
-type Shr<ET> = <<<ET as EngineTypes>::Num as NumSet>::Skip as Skip>::Shrink;
-
 const PLUS: &[u8] = b"plus";
 const MINUS: &[u8] = b"minus";
 
 
-fn read_skip_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> Sk<ET> {
+fn read_skip_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8) -> Skip<ET::Dim> {
     let base = read_dim_float(engine,is_negative,first);
     read_skip_ii(engine,base)
 }
 
-fn read_skip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:<ET::Num as NumSet>::Dim) -> Sk<ET> {
+fn read_skip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:<ET::Num as NumSet>::Dim) -> Skip<ET::Dim> {
     match read_keywords(engine,&[PLUS,MINUS],None) {
         Some(b) if b == PLUS => {
             let stretch = read_stretch(engine);
             if read_keyword(engine,MINUS,None) {
-                Sk::<ET>::new(base,Some(stretch),Some(read_shrink(engine)))
+                Skip::new(base,Some(stretch),Some(read_stretch(engine)))
             } else {
-                Sk::<ET>::new(base, Some(stretch), None)
+                Skip::new(base, Some(stretch), None)
             }
         }
         Some(b) if b == MINUS => {
-            let shrink = read_shrink(engine);
+            let shrink = read_stretch(engine);
             if read_keyword(engine,PLUS,None) {
-                Sk::<ET>::new(base,Some(read_stretch(engine)),Some(shrink))
+                Skip::new(base,Some(read_stretch(engine)),Some(shrink))
             } else {
-                Sk::<ET>::new(base,None,Some(shrink))
+                Skip::new(base,None,Some(shrink))
             }
         }
-        _ => <ET::Num as NumSet>::Skip::new(base,None,None)
+        _ => Skip::new(base,None,None)
     }
 }
 
-fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
+fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> StretchShrink<ET::Dim> {
     let mut is_negative = false;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code } => match (char.try_into(),code) {
@@ -924,14 +919,14 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Str<ET> {
         ResolvedToken::Cmd(cmd) => match cmd {
             Some(TeXCommand::DimRegister(u)) => {
                 let base = engine.state.get_dim_register(*u);
-                return Sk::<ET>::stretch_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
+                return StretchShrink::from_dimen(engine,if is_negative {-1.0} else {1.0},base)
             }
             o => todo!("command in read_stretch: {:?}",o)
         }
     );
     crate::file_end!()
 }
-fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Str<ET> {
+fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> StretchShrink<ET::Dim> {
     let mut ret = 0f32;
     let mut in_decimal = first == b'.';
     let mut scale = 10f32;
@@ -967,13 +962,13 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
         ResolvedToken::Cmd(Some(TeXCommand::DimRegister(u))) => {
             let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
-            return Sk::<ET>::stretch_from_dimen(engine,scale,base)
+            return StretchShrink::from_dimen(engine,scale,base)
         }
         o => todo!("command in read_stretch_inner: {:?}",o)
     );
     todo!("read_dim_inner")
 }
-fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f32,mut first:Option<(u8,ET::Token)>) -> Str<ET> {
+fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f32,mut first:Option<(u8,ET::Token)>) -> StretchShrink<ET::Dim> {
     let is_true = match &first {
         Some((b't'|b'T',_)) => {
             read_keyword(engine,b"true",std::mem::take(&mut first))
@@ -985,104 +980,17 @@ fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:
         let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
         float *= Into::<i64>::into(mag) as f32 / 1000.0;
     }
-    let units = Sk::<ET>::stretch_units();
-    match read_keywords(engine,units,first) {
-        Some(d) => Sk::<ET>::stretch_from_float(engine,float,d),
-        _ => todo!("wut: {}\n  (l.{})",engine.preview(),engine.mouth.line_number())
+    match read_keywords(engine,STRETCH_SHRINK_UNITS,first) {
+        Some(d) => StretchShrink::from_float(engine,float,d),
+        _ => match read_keywords(engine,ET::Dim::UNITS,None) {
+            Some(d) => StretchShrink::from_float(engine,float,d),
+            _ => todo!("wut: {}\n  (l.{})",engine.preview(),engine.mouth.line_number())
+        }
     }
 }
-
-fn read_shrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Shr<ET> {
-    let mut is_negative = false;
-    crate::expand_loop!(engine,token,
-        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
-            (_,CommandCode::Space) => (),
-            (Ok(b'-'),CommandCode::Other) => {
-                is_negative =!is_negative;
-            }
-            (Ok(b'+'),CommandCode::Other) => (),
-            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_shrink_float(engine,is_negative,b),
-            (Ok(b','|b'.'),CommandCode::Other) => return read_shrink_float(engine,is_negative,b'.'),
-            _ => todo!("error?")
-        }
-        ResolvedToken::Cmd(cmd) => match cmd {
-            Some(TeXCommand::DimRegister(u)) => {
-                let base = engine.state.get_dim_register(*u);
-                return Sk::<ET>::shrink_from_dimen(engine,if is_negative {-1.0} else {1.0},base)
-            }
-            o => todo!("command in read_stretch: {:?}",o)
-        }
-    );
-    crate::file_end!()
-}
-fn read_shrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> Shr<ET> {
-    let mut ret = 0f32;
-    let mut in_decimal = first == b'.';
-    let mut scale = 10f32;
-    if !in_decimal {
-        ret = (first - b'0') as f32;
-    }
-    crate::expand_loop!(engine,token,
-        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
-            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                if in_decimal {
-                    ret += (b - b'0') as f32 / scale;
-                    scale *= 10.0;
-                } else {
-                    ret = 10.0*ret + ((b - b'0') as f32);
-                }
-            }
-            (Ok(b','|b'.'),CommandCode::Other) => {
-                if in_decimal { todo!("throw error") }
-                in_decimal = true;
-            }
-            (_,CommandCode::Space) => {
-                let f = if is_negative {-ret} else {ret};
-                return read_shrink_unit(engine,f,None)
-            }
-            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = if is_negative {-ret} else {ret};
-                return read_shrink_unit(engine,f,Some((b,token)))
-            }
-            _ => {
-                todo!("{}:{:?}",char,code);
-            }
-        }
-        ResolvedToken::Cmd(Some(TeXCommand::DimRegister(u))) => {
-            let base = engine.state.get_dim_register(*u);
-            let scale = if is_negative {-ret} else {ret};
-            return Sk::<ET>::shrink_from_dimen(engine,scale,base)
-        }
-        _ => todo!("command in read_dim_inner")
-    );
-    todo!("read_dim_inner")
-}
-fn read_shrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f32,mut first:Option<(u8,ET::Token)>) -> Shr<ET> {
-    let is_true = match &first {
-        Some((b't'|b'T',_)) => {
-            read_keyword(engine,b"true",std::mem::take(&mut first))
-        },
-        Some(_) => false,
-        None => read_keyword(engine,b"true",None)
-    };
-    if is_true {
-        let mag = engine.state.get_primitive_int(PRIMITIVES.mag);
-        float *= Into::<i64>::into(mag) as f32 / 1000.0;
-    }
-    let units = Sk::<ET>::shrink_units();
-    match read_keywords(engine,units,first) {
-        Some(d) => Sk::<ET>::shrink_from_float(engine,float,d),
-        _ => todo!("wut")
-    }
-}
-
-type MS<ET> = <<ET as EngineTypes>::Num as NumSet>::MuSkip;
-type MB<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Base;
-type MSt<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Stretch;
-type MSh<ET> = <<<ET as EngineTypes>::Num as NumSet>::MuSkip as MuSkip>::Shrink;
 
 /// Default implementation for [`Gullet::read_muskip`].
-pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> MS<ET> {
+pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> MuSkip<ET::MuDim> {
     let (is_negative,r) = read_numeric(engine, skip_eq);
     match r {
         Ok(b) => read_muskip_byte(engine,is_negative,b,|d,e| read_muskip_ii(e,d)),
@@ -1091,16 +999,16 @@ pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:boo
 }
 
 /// Default implementation for [`Gullet::read_mudim`].
-pub fn read_mudim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> MB<ET> {
+pub fn read_mudim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> ET::MuDim {
     let (is_negative,r) = read_numeric(engine, skip_eq);
     match r {
         Ok(b) => read_muskip_byte(engine,is_negative,b,|d,_| d),
-        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|d,_| d,|s| s.base())
+        Err((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|d,_| d,|s| s.base)
     }
 }
 
 /// reads a muskip or mudim literal starting with `b`.
-pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
+pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8,kern:fn(ET::MuDim,&mut EngineReferences<ET>) -> R) -> R {
     if b == b',' || b == b'.' {
         read_muskip_dim(engine,is_negative,b'.',kern)
     } else if is_ascii_digit(b) {
@@ -1111,7 +1019,7 @@ pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_n
 }
 
 /// reads a muskip or mudim value from some [`TeXCommand`] that should correspond to a muskip value (e.g. `\muskip` or `\lastskip`).
-pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, token:ET::Token, kern:fn(MB<ET>, &mut EngineReferences<ET>) -> R, skip:fn(MS<ET>) -> R) -> R {
+pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, token:ET::Token, kern:fn(ET::MuDim, &mut EngineReferences<ET>) -> R, skip:fn(MuSkip<ET::MuDim>) -> R) -> R {
     match cmd {
         TeXCommand::MuSkipRegister(u) => {
             let base = engine.state.get_muskip_register(u);
@@ -1145,12 +1053,12 @@ pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, i
 }
 
 
-fn read_muskip_dim<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8,kern:fn(MB<ET>,&mut EngineReferences<ET>) -> R) -> R {
+fn read_muskip_dim<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,first:u8,kern:fn(ET::MuDim,&mut EngineReferences<ET>) -> R) -> R {
     let base = read_mudim_float(engine,is_negative,first);
     kern(base,engine)
 }
 
-fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MB<ET> {
+fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> ET::MuDim {
     let mut ret = 0f32;
     let mut in_decimal = first == b'.';
     let mut fac = 10f32;
@@ -1188,37 +1096,37 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
     todo!("read_dim_inner")
 }
 
-fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f32, first:Option<(u8, ET::Token)>) -> MB<ET> {
-    let units = MS::<ET>::units();
+fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f32, first:Option<(u8, ET::Token)>) -> ET::MuDim {
+    let units = ET::MuDim::UNITS;
     match read_keywords(engine,units,first) {
-        Some(d) => MS::<ET>::from_float(engine,float,d),
+        Some(d) => ET::MuDim::from_float(engine,float,d),
         _ => todo!("wut")
     }
 }
 
-pub(crate) fn read_muskip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:MB<ET>) -> MS<ET> {
+pub(crate) fn read_muskip_ii<ET:EngineTypes>(engine:&mut EngineReferences<ET>, base:ET::MuDim) -> MuSkip<ET::MuDim> {
     match read_keywords(engine,&[PLUS,MINUS],None) {
         Some(b) if b == PLUS => {
             let stretch = read_mustretch(engine);
             if read_keyword(engine,MINUS,None) {
-                MS::<ET>::new(base,Some(stretch),Some(read_mushrink(engine)))
+                MuSkip::new(base,Some(stretch),Some(read_mustretch(engine)))
             } else {
-                MS::<ET>::new(base, Some(stretch), None)
+                MuSkip::new(base, Some(stretch), None)
             }
         }
         Some(b) if b == MINUS => {
-            let shrink = read_mushrink(engine);
+            let shrink = read_mustretch(engine);
             if read_keyword(engine,PLUS,None) {
-                MS::<ET>::new(base,Some(read_mustretch(engine)),Some(shrink))
+                MuSkip::new(base,Some(read_mustretch(engine)),Some(shrink))
             } else {
-                MS::<ET>::new(base,None,Some(shrink))
+                MuSkip::new(base,None,Some(shrink))
             }
         }
-        _ => MS::<ET>::new(base,None,None)
+        _ => MuSkip::new(base,None,None)
     }
 }
 
-fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
+fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MuStretchShrink<ET::MuDim> {
     let mut is_negative = false;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
@@ -1235,7 +1143,7 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSt<ET> {
     );
     crate::file_end!()
 }
-fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSt<ET> {
+fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MuStretchShrink<ET::MuDim> {
     let mut ret = 0f32;
     let mut in_decimal = first == b'.';
     let mut fac = 10f32;
@@ -1272,77 +1180,16 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
     );
     todo!("read_dim_inner")
 }
-fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32,first:Option<(u8,ET::Token)>) -> MSt<ET> {
-    let units = MS::<ET>::stretch_units();
-    match read_keywords(engine,units,first) {
-        Some(d) => MS::<ET>::stretch_from_float(engine,float,d),
-        _ => todo!("wut")
-    }
-}
-
-fn read_mushrink<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MSh<ET> {
-    let mut is_negative = false;
-    crate::expand_loop!(engine,token,
-        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
-            (_,CommandCode::Space) => (),
-            (Ok(b'-'),CommandCode::Other) => {
-                is_negative =!is_negative;
-            }
-            (Ok(b'+'),CommandCode::Other) => (),
-            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mushrink_float(engine,is_negative,b),
-            (Ok(b','|b'.'),CommandCode::Other) => return read_mushrink_float(engine,is_negative,b'.'),
-            _ => todo!("error?")
+fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32,first:Option<(u8,ET::Token)>) -> MuStretchShrink<ET::MuDim> {
+    match read_keywords(engine,STRETCH_SHRINK_UNITS,first) {
+        Some(d) => MuStretchShrink::from_float(engine,float,d),
+        _ => match read_keywords(engine,ET::MuDim::UNITS,None) {
+            Some(d) => MuStretchShrink::from_float(engine,float,d),
+            _ => todo!("wut")
         }
-        _ => todo!("command in read_skip")
-    );
-    crate::file_end!()
-}
-
-fn read_mushrink_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MSh<ET> {
-    let mut ret = 0f32;
-    let mut in_decimal = first == b'.';
-    let mut fac = 10f32;
-    if !in_decimal {
-        ret = (first - b'0') as f32;
-    }
-    crate::expand_loop!(engine,token,
-        ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
-            (Ok(b),CommandCode::Other) if is_ascii_digit(b) => {
-                if in_decimal {
-                    ret += (b - b'0') as f32 / fac;
-                    fac *= 10.0;
-                } else {
-                    ret = 10.0*ret + ((b - b'0') as f32);
-                }
-            }
-            (Ok(b','|b'.'),CommandCode::Other) => {
-                if in_decimal { todo!("throw error") }
-                in_decimal = true;
-            }
-            (_,CommandCode::Space) => {
-                let f = if is_negative {-ret} else {ret};
-                return read_mushrink_unit(engine,f,None)
-            }
-            (Ok(b),CommandCode::Other | CommandCode::Letter) => {
-                let f = if is_negative {-ret} else {ret};
-                return read_mushrink_unit(engine,f,Some((b,token)))
-            }
-            _ => {
-                todo!("{}:{:?}",char,code);
-            }
-        }
-        _ => todo!("command in read_dim_inner")
-    );
-    todo!("read_dim_inner")
-}
-
-fn read_mushrink_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32,first:Option<(u8,ET::Token)>) -> MSh<ET> {
-    let units = MS::<ET>::shrink_units();
-    match read_keywords(engine,units,first) {
-        Some(d) => MS::<ET>::shrink_from_float(engine,float,d),
-        _ => todo!("wut")
     }
 }
+
 
 /// Default implementation for [`Gullet::read_keyword`].
 pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],first:Option<(u8,ET::Token)>) -> bool {

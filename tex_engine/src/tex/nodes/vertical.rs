@@ -11,7 +11,7 @@ pub enum VNode<ET:EngineTypes> {
     Penalty(i32),
     Mark(usize,TokenList<ET::Token>),
     Whatsit(WhatsitNode<ET>),
-    VSkip(ET::Skip),
+    VSkip(Skip<ET::Dim>),
     VFil,VFill,VFilneg,Vss,
     VKern(ET::Dim),
     Leaders(Leaders<ET>),
@@ -91,7 +91,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
             VNode::Leaders(l) => l.height(),
             VNode::HRule { height, .. } => height.unwrap_or(ET::Dim::from_sp(26214)),
             VNode::Custom(n) => n.height(),
-            VNode::VSkip(s) => s.base(),
+            VNode::VSkip(s) => s.base,
             _ => ET::Dim::default(),
         }
     }

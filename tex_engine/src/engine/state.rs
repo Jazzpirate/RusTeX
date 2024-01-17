@@ -10,6 +10,7 @@ use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::boxes::{BoxType, TeXBox};
 use crate::tex::nodes::math::UnresolvedMathFontStyle;
+use crate::tex::numerics::{MuSkip, Skip};
 use crate::tex::tokens::control_sequences::CSName;
 
 /// The type of a group, e.g. `{...}`, `\begingroup...\endgroup`, `$...$`.
@@ -144,13 +145,13 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
     /// Set a dimen register value
     fn set_dim_register(&mut self,aux:&EngineAux<ET>,idx:usize,v:ET::Dim,globally:bool);
     /// Get a skip register value
-    fn get_skip_register(&self,idx:usize) -> ET::Skip;
+    fn get_skip_register(&self,idx:usize) -> Skip<ET::Dim>;
     /// Set a skip register value
-    fn set_skip_register(&mut self,aux:&EngineAux<ET>,idx:usize,v:ET::Skip,globally:bool);
+    fn set_skip_register(&mut self,aux:&EngineAux<ET>,idx:usize,v:Skip<ET::Dim>,globally:bool);
     /// Get a muskip register value
-    fn get_muskip_register(&self,idx:usize) -> ET::MuSkip;
+    fn get_muskip_register(&self,idx:usize) -> MuSkip<ET::MuDim>;
     /// Set a muskip register value
-    fn set_muskip_register(&mut self,aux:&EngineAux<ET>,idx:usize,v:ET::MuSkip,globally:bool);
+    fn set_muskip_register(&mut self,aux:&EngineAux<ET>,idx:usize,v:MuSkip<ET::MuDim>,globally:bool);
     /// Get a token register value
     fn get_toks_register(&self,idx:usize) -> &TokenList<ET::Token>;
     /// Set a token register value
@@ -168,13 +169,13 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
     /// Set a primitive dimension value
     fn set_primitive_dim(&mut self,aux:&EngineAux<ET>,name:PrimitiveIdentifier,v:ET::Dim,globally:bool);
     /// Get a primitive skip value
-    fn get_primitive_skip(&self,name:PrimitiveIdentifier) -> ET::Skip;
+    fn get_primitive_skip(&self,name:PrimitiveIdentifier) -> Skip<ET::Dim>;
     /// Set a primitive skip value
-    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>,name:PrimitiveIdentifier,v:ET::Skip,globally:bool);
+    fn set_primitive_skip(&mut self,aux:&EngineAux<ET>,name:PrimitiveIdentifier,v:Skip<ET::Dim>,globally:bool);
     /// Get a primitive muskip value
-    fn get_primitive_muskip(&self,name:PrimitiveIdentifier) -> ET::MuSkip;
+    fn get_primitive_muskip(&self,name:PrimitiveIdentifier) -> MuSkip<ET::MuDim>;
     /// Set a primitive muskip value
-    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>,name:PrimitiveIdentifier,v:ET::MuSkip,globally:bool);
+    fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>,name:PrimitiveIdentifier,v:MuSkip<ET::MuDim>,globally:bool);
     /// Get a primitive token list
     fn get_primitive_tokens(&self,name:PrimitiveIdentifier) -> &TokenList<ET::Token>;
     /// Set a primitive token list
@@ -232,15 +233,15 @@ pub enum StateChange<ET:EngineTypes> {
     NewlineChar{old:Option<ET::Char>},
     IntRegister{idx:usize,old:ET::Int},
     DimRegister{idx:usize,old:ET::Dim},
-    SkipRegister{idx:usize,old:ET::Skip},
-    MuSkipRegister{idx:usize,old:ET::MuSkip},
+    SkipRegister{idx:usize,old:Skip<ET::Dim>},
+    MuSkipRegister{idx:usize,old:MuSkip<ET::MuDim>},
     BoxRegister{idx:usize,old:Option<TeXBox<ET>>},
     ToksRegister{idx:usize,old:TokenList<ET::Token>},
     PrimitiveInt{name:PrimitiveIdentifier,old:ET::Int},
     PrimitiveDim{name:PrimitiveIdentifier,old:ET::Dim},
     PrimitiveToks{name:PrimitiveIdentifier,old:TokenList<ET::Token>},
-    PrimitiveSkip{name:PrimitiveIdentifier,old:ET::Skip},
-    PrimitiveMuSkip{name:PrimitiveIdentifier,old:ET::MuSkip},
+    PrimitiveSkip{name:PrimitiveIdentifier,old:Skip<ET::Dim>},
+    PrimitiveMuSkip{name:PrimitiveIdentifier,old:MuSkip<ET::MuDim>},
     Command{name:ET::CSName,old:Option<TeXCommand<ET>>},
     AcCommand{ char:ET::Char,old:Option<TeXCommand<ET>>},
     // /// A custom state change, to be implemented by the engine, if additional state change types are needed

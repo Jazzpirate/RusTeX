@@ -201,12 +201,12 @@ impl<ET:EngineTypes> MathFontStyleT<ET> for UnresolvedMathFontStyle<ET> {
 #[derive(Clone,Debug)]
 pub enum MathNode<ET:EngineTypes,S:MathFontStyleT<ET>> {
     Atom(MathAtom<ET,S>),
-    HSkip(ET::Skip),HFil,HFill,HFilneg,Hss,Space,
+    HSkip(Skip<ET::Dim>),HFil,HFill,HFilneg,Hss,Space,
     MSkip{
-        skip:ET::MuSkip,style: S
+        skip:MuSkip<ET::MuDim>,style: S
     },
     MKern{
-        kern: <ET::MuSkip as MuSkip>::Base,style: S
+        kern: ET::MuDim,style: S
     },HKern(ET::Dim),
     Leaders(Leaders<ET>),
     Penalty(i32),
@@ -330,8 +330,8 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathNode<ET,S> {
             MathNode::Custom(n) => n.width(),
             MathNode::HKern(d) => *d,
             MathNode::MKern {kern,style} => ET::Num::mudim_to_dim(*kern,style.get_em()),
-            MathNode::MSkip {skip,style} => ET::Num::mudim_to_dim(skip.base(),style.get_em()),
-            MathNode::HSkip(s) => s.base(),
+            MathNode::MSkip {skip,style} => ET::Num::mudim_to_dim(skip.base,style.get_em()),
+            MathNode::HSkip(s) => s.base,
             MathNode::Space => ET::Dim::from_sp(65536 * 5), // TODO heuristic; use spacefactor instead
             MathNode::Leaders(l) => l.width(),
             MathNode::Atom(a) => a.width(),
@@ -716,7 +716,7 @@ pub enum EqNoPosition {
 
 #[derive(Debug,Clone)]
 pub struct MathGroup<ET:EngineTypes,S:MathFontStyleT<ET>> {
-    pub display:Option<(ET::Skip,ET::Skip)>,
+    pub display:Option<(Skip<ET::Dim>,Skip<ET::Dim>)>,
     pub children:Box<[MathNode<ET,S>]>,
     pub start:SourceRef<ET>,
     pub end:SourceRef<ET>,
@@ -754,7 +754,7 @@ impl<ET:EngineTypes,S:MathFontStyleT<ET>> NodeTrait<ET> for MathGroup<ET,S> {
 }
 
 impl<ET:EngineTypes,S:MathFontStyleT<ET>> MathGroup<ET,S> {
-    pub fn close(display:Option<(ET::Skip,ET::Skip)>,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,eqno:Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) -> MathGroup<ET,MathFontStyle<ET>> {
+    pub fn close(display:Option<(Skip<ET::Dim>,Skip<ET::Dim>)>,start:SourceRef<ET>,end:SourceRef<ET>,children:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,eqno:Option<(EqNoPosition,Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>)>) -> MathGroup<ET,MathFontStyle<ET>> {
         let style = if display.is_some() { MathStyle {
             style:MathStyleType::Display,
             cramped:false,

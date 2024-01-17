@@ -1,7 +1,7 @@
 use tex_engine::pdflatex::nodes::{NumOrName, PDFColor, PDFNode};
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::File;
-use tex_engine::tex::numerics::{Dim32, Fill, Mu, MuFill, MuSkip32, Skip, Skip32};
+use tex_engine::tex::numerics::{Dim32, StretchShrink, Mu, MuStretchShrink, Skip};
 use crate::engine::{Bx, Font, Refs, SRef, Types};
 use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
 use tex_engine::tex::nodes::NodeTrait;
@@ -32,7 +32,7 @@ pub(crate) fn mu_to_dim(mu:Mu,f:&Font) -> Dim32 {
     let em = f.get_dim(5);
     Dim32(((mu.0 as f32) * (em.0 as f32) / 65536.0 / 18.0) as i32)
 }
-pub(crate) fn muskip_to_skip(ms:MuSkip32,f:&Font) -> Skip32<Dim32> {
+pub(crate) fn muskip_to_skip(ms:MuSkip,f:&Font) -> Skip<Dim32> {
     let em : Dim32 = f.get_dim(5);
     let base = em.scale_float((ms.base.0 as f32) / (65536.0 * 18.0));
     let stretch = match ms.stretch {
@@ -47,31 +47,31 @@ pub(crate) fn muskip_to_skip(ms:MuSkip32,f:&Font) -> Skip32<Dim32> {
         Some(MuFill::fill(i)) => Some(Fill::fill(i)),
         None => None
     };
-    Skip32 { base,stretch,shrink }
+    Skip { base,stretch,shrink }
 }
  */
 
 pub(crate) trait SkipAdd {
-    fn merge(&mut self,sk:Skip32<Dim32>);
+    fn merge(&mut self,sk:Skip<Dim32>);
     fn set_fil(&mut self);
     fn set_fill(&mut self);
 }
-impl SkipAdd for Skip32<Dim32> {
-    fn merge(&mut self,sk2:Skip32<Dim32>) {
+impl SkipAdd for Skip<Dim32> {
+    fn merge(&mut self,sk2:Skip<Dim32>) {
         let base = self.base + sk2.base;
         let stretch = match (self.stretch,sk2.stretch) {
-            (Some(Fill::fill(a)),_)|(_,Some(Fill::fill(a))) => Some(Fill::fill(a)),
-            (Some(Fill::fil(a)),_)|(_,Some(Fill::fil(a))) => Some(Fill::fil(a)),
+            (Some(StretchShrink::Fill(a)),_)|(_,Some(StretchShrink::Fill(a))) => Some(StretchShrink::Fill(a)),
+            (Some(StretchShrink::Fil(a)),_)|(_,Some(StretchShrink::Fil(a))) => Some(StretchShrink::Fil(a)),
             _ => None,
         };
-        *self = Skip32 { base,stretch,shrink:None };
+        *self = Skip { base,stretch,shrink:None };
     }
     fn set_fil(&mut self) {
-        if let Some(Fill::fill(_)) = self.stretch { return }
-        self.stretch = Some(Fill::fil(1))
+        if let Some(StretchShrink::Fill(_)) = self.stretch { return }
+        self.stretch = Some(StretchShrink::Fil(1))
     }
     fn set_fill(&mut self) {
-        self.stretch = Some(Fill::fill(1))
+        self.stretch = Some(StretchShrink::Fill(1))
     }
 }
 
@@ -80,21 +80,24 @@ pub(crate) enum Alignment {
     L,R,C,S
 }
 impl Alignment {
-    pub fn from(skip1:Skip32<Dim32>,skip2:Skip32<Dim32>) -> Self {
+    pub fn from(skip1:Skip<Dim32>,skip2:Skip<Dim32>) -> Self {
         use Alignment::*;
         match (skip1.stretch,skip2.stretch) {
-            (None|Some(Fill::pt(_)),None|Some(Fill::pt(_))) => S,
-            (Some(Fill::fil(_)),Some(Fill::fil(_))) => C,
-            (Some(Fill::fill(_)),Some(Fill::fill(_))) => C,
-            (Some(Fill::fill(_)),_) => R,
-            (_,Some(Fill::fill(_))) => L,
-            (Some(Fill::fil(_)),_) => R,
-            (_,Some(Fill::fil(_))) => L,
+            (None|Some(StretchShrink::Dim(_)),None|Some(StretchShrink::Dim(_))) => S,
+            (Some(StretchShrink::Fil(_)),Some(StretchShrink::Fil(_))) => C,
+            (Some(StretchShrink::Fill(_)),Some(StretchShrink::Fill(_))) => C,
+            (Some(StretchShrink::Filll(_)),Some(StretchShrink::Filll(_))) => C,
+            (Some(StretchShrink::Filll(_)),_) => R,
+            (_,Some(StretchShrink::Filll(_))) => L,
+            (Some(StretchShrink::Fill(_)),_) => R,
+            (_,Some(StretchShrink::Fill(_))) => L,
+            (Some(StretchShrink::Fil(_)),_) => R,
+            (_,Some(StretchShrink::Fil(_))) => L,
         }
     }
 }
 
-fn align_i(n:HNode<Types>,remove_space:bool,skip:&mut Skip32<Dim32>,v:Option<&mut Vec<HNode<Types>>>,rep:&mut Vec<HNode<Types>>) -> bool {
+fn align_i(n:HNode<Types>,remove_space:bool,skip:&mut Skip<Dim32>,v:Option<&mut Vec<HNode<Types>>>,rep:&mut Vec<HNode<Types>>) -> bool {
     match n {
         HNode::HKern(n) => skip.base = skip.base + n,
         HNode::HSkip(sk) => skip.merge(sk),
@@ -224,7 +227,7 @@ pub(crate) fn do_missing_glyph(state:&mut ShipoutState,name:GlyphName,char:u8,fo
     ));
 }
 
-pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VNodes,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip,parskip:Option<Skip32<Dim32>>) {
+pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VNodes,mut spec:Vec<ParLineSpec<Types>>,start:SRef,end:SRef,lineskip: LineSkip,parskip:Option<Skip<Dim32>>) {
     if let Some(parskip) = parskip {
         state.push_comment(format!("<div class=\"rustex-vskip\" style=\"margin-bottom:{};\"></div>",dim_to_string(parskip.base)))
     }
@@ -1030,7 +1033,7 @@ fn align_cell(mut v:Vec<HNode<Types>>) -> (Alignment, Vec<HNode<Types>>) {
     (Alignment::from(left,right),nv)
 }
 
-fn halign_i(n:HNode<Types>,skip:&mut Skip32<Dim32>,v:Option<&mut Vec<HNode<Types>>>,rep:&mut Vec<HNode<Types>>) -> bool {
+fn halign_i(n:HNode<Types>,skip:&mut Skip<Dim32>,v:Option<&mut Vec<HNode<Types>>>,rep:&mut Vec<HNode<Types>>) -> bool {
     match n {
         HNode::HKern(n) => skip.base = skip.base + n,
         HNode::HSkip(sk) => skip.merge(sk),

@@ -18,7 +18,7 @@ use crate::tex::characters::Character;
 use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::numerics::{Dim32, MuSkip, MuSkip32, Numeric, NumSet, Skip, Skip32, TeXDimen, TeXInt};
+use crate::tex::numerics::{Dim32, Mu, MuDim, MuSkip, Numeric, NumSet, Skip, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
 use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXError};
 
@@ -43,9 +43,8 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type FileSystem: FileSystem<File=Self::File>;
     type Int:TeXInt;
     type Dim:TeXDimen + Numeric<Self::Int>;
-    type Skip:Skip<Base = Self::Dim> + Numeric<Self::Int>;
-    type MuSkip:MuSkip + Numeric<Self::Int>;
-    type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,Skip=Self::Skip,MuSkip=Self::MuSkip>;
+    type MuDim:MuDim + Numeric<Self::Int>;
+    type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,MuDim=Self::MuDim>;
     type State: State<Self>;
     type Outputs: Outputs;
     type Mouth: Mouth<Self>;
@@ -119,8 +118,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Extension = ();
     type Int = i32;
     type Dim = Dim32;
-    type Skip = Skip32<Dim32>;
-    type MuSkip = MuSkip32;
+    type MuDim = Mu;
     type Num = tex::numerics::DefaultNumSet;
     type State = state::tex_state::DefaultState<Self>;
     type File = VirtualFile<u8>;

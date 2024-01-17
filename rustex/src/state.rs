@@ -3,7 +3,7 @@ use tex_engine::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier};
 use tex_engine::engine::{EngineAux, EngineTypes, state};
 use tex_engine::engine::state::{GroupType, State, StateChangeTracker, StateStack};
 use tex_engine::tex::catcodes::{CategoryCode, CategoryCodeScheme};
-use tex_engine::tex::numerics::{Dim32, MuSkip32, Skip32};
+use tex_engine::tex::numerics::{Dim32, Mu, MuSkip, Skip};
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{CSName, Font, Types};
 use crate::stomach::CLOSE_FONT;
@@ -217,19 +217,19 @@ impl State<Types> for RusTeXState {
         self.0.set_dim_register(aux,idx,v,globally)
     }
 
-    fn get_skip_register(&self, idx: usize) -> Skip32<Dim32> {
+    fn get_skip_register(&self, idx: usize) -> Skip<Dim32> {
         self.0.get_skip_register(idx)
     }
 
-    fn set_skip_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: Skip32<Dim32>, globally: bool) {
+    fn set_skip_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: Skip<Dim32>, globally: bool) {
         self.0.set_skip_register(aux,idx,v,globally)
     }
 
-    fn get_muskip_register(&self, idx: usize) -> MuSkip32 {
+    fn get_muskip_register(&self, idx: usize) -> MuSkip<Mu> {
         self.0.get_muskip_register(idx)
     }
 
-    fn set_muskip_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: MuSkip32, globally: bool) {
+    fn set_muskip_register(&mut self, aux: &EngineAux<Types>, idx: usize, v: MuSkip<Mu>, globally: bool) {
         self.0.set_muskip_register(aux,idx,v,globally)
     }
     fn get_toks_register(&self, idx: usize) -> &TokenList<CompactToken> {
@@ -263,22 +263,22 @@ impl State<Types> for RusTeXState {
         self.0.set_primitive_dim(aux,name,v,globally)
     }
 
-    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> Skip32<Dim32> {
+    fn get_primitive_skip(&self, name: PrimitiveIdentifier) -> Skip<Dim32> {
         self.0.get_primitive_skip(name)
     }
 
 
-    fn set_primitive_skip(&mut self, aux: &EngineAux<Types>, name: PrimitiveIdentifier, v: Skip32<Dim32>, globally: bool) {
+    fn set_primitive_skip(&mut self, aux: &EngineAux<Types>, name: PrimitiveIdentifier, v: Skip<Dim32>, globally: bool) {
         self.0.set_primitive_skip(aux,name,v,globally)
     }
 
 
-    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> MuSkip32 {
+    fn get_primitive_muskip(&self, name: PrimitiveIdentifier) -> MuSkip<Mu> {
         self.0.get_primitive_muskip(name)
     }
 
 
-    fn set_primitive_muskip(&mut self, aux: &EngineAux<Types>, name: PrimitiveIdentifier, v: MuSkip32, globally: bool) {
+    fn set_primitive_muskip(&mut self, aux: &EngineAux<Types>, name: PrimitiveIdentifier, v: MuSkip<Mu>, globally: bool) {
         self.0.set_primitive_muskip(aux,name,v,globally)
     }
 

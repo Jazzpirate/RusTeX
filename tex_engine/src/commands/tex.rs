@@ -10,7 +10,7 @@ use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use super::primitives::*;
 use crate::engine::state::{GroupType, State};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::numerics::{Numeric, NumSet};
+use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
 use crate::tex::characters::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::{StandardToken, Token};
@@ -277,7 +277,7 @@ pub fn dimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
     engine.state.set_dim_register(engine.aux,idx,val,globally)
 }
 
-pub fn skip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> ET::Skip {
+pub fn skip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Skip<ET::Dim> {
     let idx = engine.read_register_index(false);
     engine.state.get_skip_register(idx)
 }
@@ -287,7 +287,7 @@ pub fn skip_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
     engine.state.set_skip_register(engine.aux,idx,val,globally)
 }
 
-pub fn muskip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> ET::MuSkip {
+pub fn muskip_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> MuSkip<ET::MuDim> {
     let idx = engine.read_register_index(false);
     engine.state.get_muskip_register(idx)
 }
@@ -1861,7 +1861,7 @@ pub fn lastkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
     ).unwrap_or_default()
 }
 
-pub fn lastskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Skip {
+pub fn lastskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> Skip<ET::Dim> {
     super::methods::last_x(engine,
                            |v| match v {VNode::VSkip(k) => Some(*k),_ => None },
                            |h| match h {HNode::HSkip(k) => Some(*k),_ => None },

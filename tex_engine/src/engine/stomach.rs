@@ -9,7 +9,7 @@ use crate::engine::state::{GroupType, State};
 use crate::tex::catcodes::CommandCode;
 use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType, MathNodeListType, ListTarget, MathNodeList};
 use crate::utils::HMap;
-use crate::tex::numerics::TeXDimen;
+use crate::tex::numerics::{Skip, TeXDimen};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::commands::TeXCommand;
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
@@ -404,7 +404,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     fn split_paragraph(engine:&mut EngineReferences<ET>, specs:Vec<ParLineSpec<ET>>, children:Vec<HNode<ET>>, start_ref:SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>) {
         if children.is_empty() { return }
         let parskip = engine.state.get_primitive_skip(PRIMITIVES.parskip);
-        if parskip != <ET as EngineTypes>::Skip::default() {
+        if parskip != Skip::default() {
             Self::add_node_v(engine,VNode::VSkip(parskip));
         }
         let ret = methods::split_paragraph_roughly(engine, specs, children, start_ref);

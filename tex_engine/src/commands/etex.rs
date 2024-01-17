@@ -9,7 +9,7 @@ use crate::tex::tokens::control_sequences::{CSHandler,ResolvedCSName};
 use crate::tex::tokens::{StandardToken, Token};
 use super::primitives::*;
 use crate::engine::gullet::Gullet;
-use crate::tex::numerics::{Numeric, NumSet};
+use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
 use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::Stomach;
@@ -251,7 +251,7 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     i
 }
 
-pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Skip {
+pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Skip<ET::Dim> {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_skip_byte,
                           crate::engine::gullet::methods::read_skip_command
@@ -267,14 +267,14 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
     i
 }
 
-pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
-    fn muskip_byte<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,b:u8) -> <ET::Num as NumSet>::MuSkip {
+pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> MuSkip<ET::MuDim> {
+    fn muskip_byte<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,b:u8) -> MuSkip<ET::MuDim> {
         crate::engine::gullet::methods::read_muskip_byte(
             engine,is_negative,b,
             |d,e| crate::engine::gullet::methods::read_muskip_ii(e, d)
         )
     }
-    fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, tk:ET::Token) -> <ET::Num as NumSet>::MuSkip {
+    fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, tk:ET::Token) -> MuSkip<ET::MuDim> {
         crate::engine::gullet::methods::read_muskip_command(
             engine,is_negative,cmd,tk,|d,e| crate::engine::gullet::methods::read_muskip_ii(e, d),|s| s
         )

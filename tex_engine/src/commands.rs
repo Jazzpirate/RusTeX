@@ -10,7 +10,7 @@ use crate::engine::fontsystem::FontSystem;
 use crate::tex::tokens::token_lists::{StringCharWrite, TokenList, CharWrite};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::tokens::control_sequences::CSName;
-use crate::tex::numerics::{NumSet, TeXInt};
+use crate::tex::numerics::{MuSkip, NumSet, Skip, TeXInt};
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
 use crate::engine::mouth::strings::InputTokenizer;
@@ -84,23 +84,23 @@ pub enum PrimitiveCommand<ET:EngineTypes> {
     },
     Assignment(fn(&mut EngineReferences<ET>,ET::Token,bool)),
     Int {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Int,
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Int,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
     Dim {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Dim,
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Dim,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
     Skip {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::Skip,
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> Skip<ET::Dim>,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
     MuSkip {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::Num as NumSet>::MuSkip,
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> MuSkip<ET::MuDim>,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
     FontCmd{
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> <ET::FontSystem as FontSystem>::Font,
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Font,
         assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
     },
     Box(fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>),
