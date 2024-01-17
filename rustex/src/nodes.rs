@@ -82,12 +82,12 @@ impl NodeTrait<Types> for RusTeXNode {
         }
     }
     fn nodetype(&self) -> NodeType {NodeType::WhatsIt}
-    fn readable_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn display_fmt(&self, indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PDFNode(n) => n.readable_fmt(indent,f),
+            Self::PDFNode(n) => n.display_fmt(indent,f),
             Self::PGFSvg {bx,..} => {
                 write!(f,"<svg>")?;
-                bx.readable_fmt(indent+2,f)?;
+                bx.display_fmt(indent+2,f)?;
                 write!(f,"</svg>")?;
                 Ok(())
             }

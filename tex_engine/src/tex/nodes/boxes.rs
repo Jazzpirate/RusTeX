@@ -3,9 +3,9 @@ use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::engine::stomach::methods::ParLineSpec;
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, NodeList, NodeTrait, NodeType, VerticalNodeListType};
-use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::vertical::VNode;
+use crate::tex::nodes::{BoxTarget, NodeList, NodeTrait, NodeType};
+use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
+use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 
@@ -436,13 +436,13 @@ impl<ET:EngineTypes> TeXBox<ET> {
 }
 
 impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
-    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent, f)?;
         match self {
             TeXBox::H { info, children,.. } => {
                 write!(f, "<hbox:{}>",info)?;
                 for c in children.iter() {
-                    c.readable_fmt(indent+2, f)?;
+                    c.display_fmt(indent+2, f)?;
                 }
                 Self::readable_do_indent(indent, f)?;
                 write!(f,"</hbox:{}>",info)
@@ -450,7 +450,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
             TeXBox::V { info, children,.. } => {
                 write!(f, "<vbox:{}>",info)?;
                 for c in children.iter() {
-                    c.readable_fmt(indent+2, f)?;
+                    c.display_fmt(indent+2, f)?;
                 }
                 Self::readable_do_indent(indent, f)?;
                 write!(f,"</vbox:{}>",info)

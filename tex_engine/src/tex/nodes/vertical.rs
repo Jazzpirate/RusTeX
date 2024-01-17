@@ -1,10 +1,22 @@
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{Leaders, NodeTrait, NodeType, WhatsitNode};
-use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::{BoxTarget, Leaders, NodeTrait, NodeType, WhatsitNode};
+use crate::tex::nodes::boxes::{TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
+
+#[derive(Clone,Debug)]
+pub enum VerticalNodeListType<ET:EngineTypes> {
+    Box(VBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
+    Insert(usize),
+    VCenter(SourceRef<ET>,ToOrSpread<ET::Dim>),
+    VAdjust,
+    VAlignRow(SourceRef<ET>),
+    VAlignCell(SourceRef<ET>,u8),
+    HAlign,Page
+}
+
 
 #[derive(Clone,Debug)]
 pub enum VNode<ET:EngineTypes> {
@@ -37,13 +49,13 @@ impl<ET:EngineTypes> VNode<ET> {
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
-    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             VNode::Penalty(p) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
-            VNode::Leaders(l) => l.readable_fmt(indent, f),
+            VNode::Leaders(l) => l.display_fmt(indent, f),
             VNode::VSkip(s) => write!(f, "<vskip:{}>",s),
             VNode::VFil => write!(f, "<vfil>"),
             VNode::VFill => write!(f, "<vfill>"),
@@ -63,7 +75,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
                 }
                 write!(f, ">")
             }
-            VNode::Box(b) => b.readable_fmt(indent, f),
+            VNode::Box(b) => b.display_fmt(indent, f),
             VNode::Mark(i, _) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
@@ -72,7 +84,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f,"<insert {}>",n)?;
                 for c in ch.iter() {
-                    c.readable_fmt(indent + 2,f)?;
+                    c.display_fmt(indent + 2, f)?;
                 }
                 Self::readable_do_indent(indent,f)?;
                 write!(f,"</insert>")
@@ -81,7 +93,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for VNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "{:?}",w)
             }
-            VNode::Custom(n) => n.readable_fmt(indent, f)
+            VNode::Custom(n) => n.display_fmt(indent, f)
         }
     }
     fn height(&self) -> ET::Dim {

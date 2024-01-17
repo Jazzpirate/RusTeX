@@ -1,15 +1,23 @@
 use crate::engine::EngineTypes;
-use crate::engine::filesystem::SourceRef;
+use crate::engine::filesystem::{File, SourceRef, SourceReference};
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{Leaders, NodeTrait, NodeType, WhatsitNode};
-use crate::tex::nodes::boxes::TeXBox;
+use crate::tex::nodes::{BoxTarget, Leaders, NodeTrait, NodeType, WhatsitNode};
+use crate::tex::nodes::boxes::{HBoxInfo, TeXBox};
 use crate::tex::nodes::math::{MathFontStyle, MathGroup};
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::characters::Character;
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 
+#[derive(Clone,Debug)]
+pub enum HorizontalNodeListType<ET:EngineTypes> {
+    Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
+    Box(HBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
+    VAlign,
+    HAlignRow(SourceRef<ET>),
+    HAlignCell(SourceRef<ET>,u8),
+}
 
 #[derive(Clone,Debug)]
 pub enum HNode<ET:EngineTypes> {
@@ -34,14 +42,14 @@ pub enum HNode<ET:EngineTypes> {
 }
 
 impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
-    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HNode::Penalty(p) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<penalty:{}>",p)
             },
-            HNode::Leaders(l) => l.readable_fmt(indent, f),
-            HNode::Box(b) => b.readable_fmt(indent, f),
+            HNode::Leaders(l) => l.display_fmt(indent, f),
+            HNode::Box(b) => b.display_fmt(indent, f),
             HNode::Mark(i, _) => {
                 Self::readable_do_indent(indent,f)?;
                 write!(f, "<mark:{}>",i)
@@ -63,7 +71,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 write!(f,"<insert {}>",n)?;
                 for c in ch.iter() {
-                    c.readable_fmt(indent + 2,f)?;
+                    c.display_fmt(indent + 2, f)?;
                 }
                 Self::readable_do_indent(indent,f)?;
                 write!(f,"</insert>")
@@ -72,13 +80,13 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("<vadjust>")?;
                 for c in ls.iter() {
-                    c.readable_fmt(indent+2, f)?;
+                    c.display_fmt(indent+2, f)?;
                 }
                 Self::readable_do_indent(indent,f)?;
                 f.write_str("</vadjust>")
             },
             HNode::MathGroup(mg) => {
-                mg.readable_fmt(indent, f)
+                mg.display_fmt(indent, f)
             }
             HNode::Char { char, .. } =>
                 Ok(char.display_fmt(f)),
@@ -93,7 +101,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Hss => write!(f, "<hss>"),
             HNode::Space => write!(f, "<space>"),
             HNode::HKern(d) => write!(f, "<hkern:{}>",d),
-            HNode::Custom(n) => n.readable_fmt(indent, f)
+            HNode::Custom(n) => n.display_fmt(indent, f)
         }
     }
     fn height(&self) -> ET::Dim {

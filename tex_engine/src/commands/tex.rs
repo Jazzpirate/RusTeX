@@ -22,10 +22,10 @@ use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::methods::SplitResult;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderType, ListTarget, MathNodeList, MathNodeListType, NodeList, NodeTrait, VerticalNodeListType};
-use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
-use crate::tex::nodes::vertical::VNode;
+use crate::tex::nodes::{BoxTarget, LeaderType, ListTarget, NodeList, NodeTrait};
+use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
+use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathClass, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
+use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::token_lists::CharWrite;
 

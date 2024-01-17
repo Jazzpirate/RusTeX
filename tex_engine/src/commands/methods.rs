@@ -19,10 +19,10 @@ use std::fmt::Write;
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::gullet::hvalign::{AlignColumn, AlignData};
 use crate::tex::nodes::boxes::{BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{BoxTarget, HorizontalNodeListType, LeaderBody, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList, VerticalNodeListType};
-use crate::tex::nodes::horizontal::HNode;
+use crate::tex::nodes::{BoxTarget, LeaderBody, Leaders, LeaderSkip, LeaderType, ListTarget, NodeList};
+use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
 use crate::tex::nodes::math::{Delimiter, MathAtom, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
-use crate::tex::nodes::vertical::VNode;
+use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
 use crate::tex::numerics::Skip;
@@ -755,7 +755,7 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
     todo!("file end")
 }
 
-fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<ET>,tp:LeaderType) {
+fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBody<ET>, tp:LeaderType) {
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => {
             let skip = match *name {
@@ -767,7 +767,7 @@ fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:LeaderBody<E
                 n if n == PRIMITIVES.hfill => LeaderSkip::HFill,
                 _ => todo!("throw error")
             };
-            let leaders = Leaders {skip,bx,tp};
+            let leaders = Leaders {skip,body,tp};
             crate::add_node!(ET::Stomach;engine,VNode::Leaders(leaders),HNode::Leaders(leaders),MathNode::Leaders(leaders));
             return
         }

@@ -273,7 +273,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
         PDFNode::Color(_) => true,
         _ => false
     } }
-    fn readable_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Self::readable_do_indent(indent,f)?;
         match self {
             PDFNode::PDFDest(PDFDest {structnum,id,dest}) =>
@@ -291,7 +291,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
             PDFNode::XForm(x) => {
                 write!(f, "<pdfxform attr=\"{}\", resources=\"{}\">", x.attr, x.resources)?;
                 if let Some(bx) = &x.bx {
-                    bx.readable_fmt(indent+2,f)?;
+                    bx.display_fmt(indent+2, f)?;
                 }
                 Self::readable_do_indent(indent,f)?;
                 write!(f,"</pdfxform>")

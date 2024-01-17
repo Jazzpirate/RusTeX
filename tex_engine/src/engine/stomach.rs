@@ -7,7 +7,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::state::{GroupType, State};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, HorizontalNodeListType, VerticalNodeListType, MathNodeListType, ListTarget, MathNodeList};
+use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, ListTarget};
 use crate::utils::HMap;
 use crate::tex::numerics::{Skip, TeXDimen};
 use crate::tex::tokens::{StandardToken, Token};
@@ -16,9 +16,9 @@ use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread};
-use crate::tex::nodes::horizontal::HNode;
-use crate::tex::nodes::math::{MathAtom, MathChar, MathNode, MathNucleus, UnresolvedMathFontStyle};
-use crate::tex::nodes::vertical::VNode;
+use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
+use crate::tex::nodes::math::{MathAtom, MathChar, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::gullet::Gullet;
 use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
 
@@ -534,7 +534,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
     /// read a math char or group from the current input stream. Assumes we are in math mode.
     /// (e.g. `\mathop X` or `\mathop{ \alpha + \beta }`).
-    /// In the latter case a new list is opened in processed "asynchronously". When the list is closed,
+    /// In the latter case a new list is opened and processed "asynchronously". When the list is closed,
     /// the second continuation is called with the list as argument.
     pub fn read_char_or_math_group<S,F1:FnOnce(S,&mut Self,MathChar<ET>),F2:FnOnce(S) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,f:F1,tp:F2,s:S) {
         crate::expand_loop!(self,token,
