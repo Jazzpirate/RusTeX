@@ -144,14 +144,18 @@ fn get_from_pfx<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F, map:&'a mut HMap
             if enc.pfx_file.ends_with(".pfb") || enc.pfx_file.ends_with(".pfa") {
                 let f = get(enc.pfx_file.as_ref());
                 if PathBuf::from(f.as_ref()).exists() {
-                    let ls = pfx_files::parse_pfb(f.as_ref(),&mut enc.styles);
-                    map.insert(enc.pfx_file.clone(),ls);
+                    if let Some(ls) = pfx_files::parse_pfb(f.as_ref(),&mut enc.styles) {
+                        map.insert(enc.pfx_file.clone(), ls);
+                    } else {
+                        enc.pfx_file = "".into();
+                        return (&*enc,None)
+                    }
                 } else {
                     enc.pfx_file = "".into();
                     return (&*enc,None)
                 }
             } else {
-                todo!("File ending: {}",enc.pfx_file)
+                return (&*enc,None)
             }
         }
     }
@@ -176,7 +180,7 @@ fn get_from_enc<'a,S:AsRef<str>,F:FnMut(&str) -> S>(get:&mut F,map:&'a mut HMap<
     if e.len() == 1 {
         Ok((&*enc,&e[0].1))
     } else {
-        todo!("Length: {}; names: {:?}",e.len(),e.iter().map(|(n,_)| n.as_ref()).collect::<Vec<_>>())
+        Err(enc)
     }
 }
 

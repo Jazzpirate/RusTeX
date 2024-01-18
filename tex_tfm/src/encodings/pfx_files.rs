@@ -3,22 +3,22 @@ use crate::{Glyph, GlyphList};
 use crate::glyphs::UNDEFINED_LIST;
 use crate::parsing::Parser;
 
-pub(crate) fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> GlyphList {
+pub(crate) fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> Option<GlyphList> {
     let disas = match std::str::from_utf8(std::process::Command::new("t1disasm")
         .args(vec!(f)).output().expect("t1disasm not found!")
         .stdout.as_slice()) {
         Ok(s) => s.trim().to_string(),
-        _ => return crate::glyphs::UNDEFINED_LIST.clone()
+        _ => return Some(crate::glyphs::UNDEFINED_LIST.clone())
     };
     let mut s = Parser::new(&disas);
     let _ = s.read_until_strs(&["dict begin","dict dup begin"]);
     if s.is_empty() { panic!("Empty pfb file!"); }
-    return parse_dict(&mut s,mods);
+    parse_dict(&mut s,mods)
 }
 
-fn parse_dict(s:&mut Parser<'_>,mods:&mut ModifierSeq) -> GlyphList {
+fn parse_dict(s:&mut Parser<'_>,mods:&mut ModifierSeq) -> Option<GlyphList> {
     if parse_dict_header(s,mods) {
-        return crate::STANDARD_ENCODING.clone()
+        return Some(crate::STANDARD_ENCODING.clone())
     }
     let mut dict = UNDEFINED_LIST.clone();
     while !s.is_empty() {
@@ -28,17 +28,17 @@ fn parse_dict(s:&mut Parser<'_>,mods:&mut ModifierSeq) -> GlyphList {
                 continue
             }
             let i = s.read_digit() as u8;
-            if !s.drop("/") { panic!("Expected /"); }
+            if !s.drop("/") { return None }
             let name = s.read_until_ws();
             dict.0[i as usize] = Glyph::get(name);
-            if !s.drop("put") { panic!("Expected put"); }
+            if !s.drop("put") { return None }
             continue
         }
         while s.starts_with('%') { s.skip_until_endline() }
-        if s.drop("readonly def") { return dict; }
-        panic!("???: {}",s.0)
+        if s.drop("readonly def") { return Some(dict) }
+        return None
     }
-    todo!("{}",s.0)
+    None
 }
 
 fn parse_dict_header(s:&mut Parser<'_>,mods:&mut ModifierSeq) -> bool {
