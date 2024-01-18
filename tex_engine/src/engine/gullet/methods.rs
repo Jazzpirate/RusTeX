@@ -18,7 +18,7 @@ use crate::engine::EngineAux;
 
 /// processes the parameter signature `params` of a [`Macro`](crate::commands::Macro) by reading the relevant arguments;
 /// storing them in `args`
-pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut [Vec<ET::Token>;9],params:TokenList<ET::Token>,long:bool) {
+pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut [Vec<ET::Token>;9],params:TokenList<ET::Token>,long:bool,token:&ET::Token) {
     let mut i = 1usize;
     let inner = &params.0;
     let mut next = &inner[0];
@@ -26,9 +26,9 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
         match next.is_argument_marker() {
             Some(a) => match inner.get(i) {
                 Some(n) if n.is_argument_marker().is_some() =>
-                    {next = n; i += 1;read_argument(engine,&mut args[a as usize],long)},
+                    {next = n; i += 1;read_argument(engine,&mut args[a as usize],long,token)},
                 None => {
-                    read_argument(engine,&mut args[a as usize],long);
+                    read_argument(engine,&mut args[a as usize],long,token);
                     return
                 },
                 Some(o) => {
@@ -39,7 +39,7 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                         delim.push(n.clone());
                         i += 1;
                     }
-                    read_delimited_argument(engine,&mut args[a as usize],&delim,long);
+                    read_delimited_argument(engine,&mut args[a as usize],&delim,long,token);
                     match inner.get(i) {
                         Some(n) => {next = n; i += 1},
                         _ => return ()
@@ -52,13 +52,16 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                         Some(n) => {next = n; i += 1},
                         _ => return ()
                     },
-                _ => todo!("error")
+                _ => match engine.aux.error_handler.missing_argument(engine.aux.memory.cs_interner(),engine.state,token.clone()) {
+                    Some(src) => engine.mouth.push_string(src),
+                    _ => ()
+                }
             }
         }
     }
 }
 
-fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,delim:&Vec<ET::Token>,long:bool) {
+fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,delim:&Vec<ET::Token>,long:bool,token:&ET::Token) {
     let par = engine.aux.memory.cs_interner().par();
     let last = delim.last().unwrap();
     let ends_with_bgroup = last.command_code() == CommandCode::BeginGroup;
@@ -110,10 +113,13 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
             arg.push(t);
         }
     }
-    crate::file_end!()
+    match engine.aux.error_handler.missing_argument(engine.aux.memory.cs_interner(),engine.state,token.clone()) {
+        Some(src) => engine.mouth.push_string(src),
+        _ => ()
+    }
 }
 
-fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool) {
+fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool,token:&ET::Token) {
     while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
         match t.command_code() {
             CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => continue,
@@ -140,6 +146,10 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
         }
         arg.push(t);
         return
+    }
+    match engine.aux.error_handler.missing_argument(engine.aux.memory.cs_interner(),engine.state,token.clone()) {
+        Some(src) => engine.mouth.push_string(src),
+        _ => ()
     }
 }
 
@@ -179,7 +189,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     cont(engine.aux,engine.state,next);
                 }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.unexpanded => {
-                    engine.expand_until_bgroup(false);
+                    engine.expand_until_bgroup(false,&t);
                     engine.read_until_endgroup(|a,s,t|{
                         if edef_like && t.command_code() == CommandCode::Parameter {
                             cont(a,s,t.clone());

@@ -16,7 +16,8 @@ use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::panic::PanicInfo;
 use crate::commands::primitives::PrimitiveIdentifier;
-use crate::engine::{EngineTypes};
+use crate::engine::{EngineReferences, EngineTypes};
+use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use crate::tex::characters::{Character, StringLineSource};
@@ -96,9 +97,19 @@ pub trait ErrorHandler<ET:EngineTypes> {
     }
 
     /// "You can't use `X` in `Y` mode."
-    fn not_allowed_in_mode(&self,_csi:&<ET::CSName as CSName<ET::Char>>::Handler, _state:&ET::State,stomach:&mut ET::Stomach,name:PrimitiveIdentifier,_tk:ET::Token)
+    fn not_allowed_in_mode(&self,_csi:&<ET::CSName as CSName<ET::Char>>::Handler, state:&ET::State,stomach:&mut ET::Stomach,name:PrimitiveIdentifier,_tk:ET::Token)
         -> Option<StringLineSource<ET::Char>> {
-        TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(Some(ET::Char::from(b'\\'))),stomach.data_mut().mode()))
+        TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(state.get_escape_char()),stomach.data_mut().mode()))
+    }
+
+    /// "File ended while scanning text of `X`"
+    fn missing_begingroup(&self,csi:&<ET::CSName as CSName<ET::Char>>::Handler,state:&ET::State,t:ET::Token) -> Option<StringLineSource<ET::Char>> {
+        TeXError::throw(format!("! File ended while scanning text of {}",t.display(csi,state.get_catcode_scheme(),state.get_escape_char())))
+    }
+
+    /// "File ended while scanning use of `X`"
+    fn missing_argument(&self,csi:&<ET::CSName as CSName<ET::Char>>::Handler,state:&ET::State,t:ET::Token) -> Option<StringLineSource<ET::Char>> {
+        TeXError::throw(format!("! File ended while scanning text of {}",t.display(csi,state.get_catcode_scheme(),state.get_escape_char())))
     }
 
     /*
@@ -143,12 +154,23 @@ pub trait ErrorHandler<ET:EngineTypes> {
 }
 
 
-/// Default [`ErrorHandler`] that just panics.
+/// Default [`ErrorHandler`] that just throws a [`TeXError`].
 pub struct ErrorThrower<ET:EngineTypes>(PhantomData<ET>);
 impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {}
 impl<ET:EngineTypes> ErrorThrower<ET> {
     pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
 }
+/*
+impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    pub fn throw_error<F:FnOnce(&mut Self)>(&mut self,f:F) {
+        match f(self) {
+            Some(src) => self.mouth.push_string(src),
+            _ => ()
+        }
+    }
+}
+
+ */
 
 #[macro_export]
 macro_rules! file_end {

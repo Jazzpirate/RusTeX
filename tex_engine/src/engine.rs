@@ -266,7 +266,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         );
     }
 
-    pub fn expand_until_bgroup(&mut self,allow_let:bool) {
+    pub fn expand_until_bgroup(&mut self,allow_let:bool,t:&ET::Token) {
         while let Some(tk) = self.get_next() {
             if tk.command_code() == CommandCode::BeginGroup {return }
             crate::expand!(self,tk;
@@ -275,7 +275,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 _ => todo!("error")
             );
         }
-        todo!("file end error")
+        match self.aux.error_handler.missing_begingroup(self.aux.memory.cs_interner(),self.state,t.clone()) {
+            Some(txt) => self.mouth.push_string(txt),
+            _ => ()
+        }
     }
 }
 

@@ -278,9 +278,9 @@ impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
     }
 }
 
-pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
+pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,tk:&ET::Token) {
     let mut v = shared_vector::Vector::new();
-    engine.expand_until_bgroup(false);
+    engine.expand_until_bgroup(false,&tk);
     engine.expand_until_endgroup(true,true,|_,_,t| v.push(t));
     let data = engine.stomach.data_mut();
     for list in data.open_lists.iter_mut().rev() {
@@ -310,9 +310,9 @@ pub(crate) fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mu
     }
 }
 
-pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>) { // TODO use to
+pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>,tk:&ET::Token) { // TODO use to
     engine.gullet.push_align(AlignData::dummy());
-    engine.expand_until_bgroup(true);
+    engine.expand_until_bgroup(true,&tk);
     let data = read_align_preamble(engine,inner,between);
     *engine.gullet.get_align_data().unwrap() = data;
     ET::Stomach::open_align(engine,inner,between);
@@ -441,7 +441,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
             ResolvedToken::Tk{code:CommandCode::Space,..} => (),
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.crcr => (),
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.noalign => {
-                engine.expand_until_bgroup(true);
+                engine.expand_until_bgroup(true,&token);
                 engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(
                     match mode {

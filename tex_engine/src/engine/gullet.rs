@@ -366,7 +366,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
             return;
         }
         let mut args = engine.mouth.get_args();
-        methods::read_arguments(engine,&mut args,m.signature.params,m.long);
+        methods::read_arguments(engine,&mut args,m.signature.params,m.long,&token);
         if trace {
             for i in 0..m.signature.arity {
                 engine.aux.outputs.write_neg1(

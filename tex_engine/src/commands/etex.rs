@@ -137,8 +137,8 @@ pub fn currentgrouplevel<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET
     (engine.state.get_group_level() as i32).into()
 }
 
-pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
-    engine.expand_until_bgroup(false);
+pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    engine.expand_until_bgroup(false,&tk);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
     engine.read_until_endgroup(|a,st,t| match t.command_code() {
@@ -352,8 +352,8 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,g
 }
 
 
-pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    engine.expand_until_bgroup(false);
+pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    engine.expand_until_bgroup(false,&tk);
     let mut ret: Vec<Box<[ET::Char]>> = vec!();
     let mut curr = vec!();
     let mut f = |c:ET::Char| if matches!(c.try_into(),Ok(b'\n')) {
@@ -415,8 +415,8 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 }
 
 
-pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
-    engine.expand_until_bgroup(false);
+pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    engine.expand_until_bgroup(false,&tk);
     engine.read_until_endgroup(|_,_,t|{
         exp.push(t)
     });
@@ -448,12 +448,12 @@ pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     }))
 }
 
-pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let i = engine.read_int(false).into();
     if i < 0 {
         todo!("throw error")
     }
-    super::methods::do_marks(engine, i as usize)
+    super::methods::do_marks(engine, i as usize,&tk)
 }
 
 pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {

@@ -854,16 +854,16 @@ pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token) 
     } else {
         None
     };
-    super::methods::do_align(engine, BoxType::Horizontal, BoxType::Vertical, wd)
+    super::methods::do_align(engine, BoxType::Horizontal, BoxType::Vertical, wd,&token)
 }
 
-pub fn valign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn valign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let wd = if engine.read_keyword(b"to") {
         Some(engine.read_dim(false))
     } else {
         None
     };
-    super::methods::do_align(engine, BoxType::Vertical, BoxType::Horizontal, wd)
+    super::methods::do_align(engine, BoxType::Vertical, BoxType::Horizontal, wd,&tk)
 }
 
 
@@ -1023,10 +1023,10 @@ pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
     }
 }
 
-pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let n = engine.read_int(false).into();
     if n < 0 { todo!("throw error")}
-    engine.expand_until_bgroup(false);
+    engine.expand_until_bgroup(false,&tk);
     engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
     engine.stomach.data_mut().open_lists.push(
         NodeList::Vertical {children:vec!(),tp:VerticalNodeListType::Insert(n as usize)}
@@ -1177,8 +1177,8 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
     engine.requeue(first);
 }
 
-pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    engine.expand_until_bgroup(false);
+pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    engine.expand_until_bgroup(false,&tk);
     let mut exp = Vec::new();// ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
     engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
@@ -1197,8 +1197,8 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
     engine.mouth.push_vec(exp);
 }
 
-pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    engine.expand_until_bgroup(false);
+pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    engine.expand_until_bgroup(false,&tk);
     let mut exp = Vec::new();//ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
     engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
@@ -1983,12 +1983,12 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token) -
     Ok(Some(ret))
 }
 
-pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     match engine.stomach.data_mut().mode() {
         TeXMode::Vertical | TeXMode::InternalVertical => todo!("throw error"),
         _ => ()
     }
-    engine.expand_until_bgroup(true);
+    engine.expand_until_bgroup(true,&tk);
     engine.stomach.data_mut().open_lists.push(NodeList::Vertical {
         children:vec!(),
         tp:VerticalNodeListType::VAdjust
@@ -2016,8 +2016,8 @@ pub fn inputlineno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     Int::<ET>::from(engine.mouth.line_number() as i32)
 }
 
-pub fn mark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    super::methods::do_marks(engine, 0)
+pub fn mark<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+    super::methods::do_marks(engine, 0,&tk)
 }
 
 

@@ -313,9 +313,9 @@ pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
                       dt.offset().to_string().replace(":","'")).unwrap();
 }
 
-pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
+pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     // TODO actually escape
-    engine.expand_until_bgroup(false);
+    engine.expand_until_bgroup(false,&tk);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
     engine.expand_until_endgroup(true,false,|a,st,t| match t.command_code() {
