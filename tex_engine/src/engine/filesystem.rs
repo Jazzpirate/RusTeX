@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use crate::engine::{EngineAux, EngineTypes};
 use crate::engine::filesystem::kpathsea::Kpathsea;
 use crate::engine::mouth::strings::InputTokenizer;
+use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
-use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::{Character, StringLineSource, TextLine, TextLineSource};
 use crate::tex::tokens::Token;
@@ -44,7 +44,7 @@ pub trait FileSystem:Clone {
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
                                                                                 idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
-                                                                                cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
+                                                                                state:&ET::State, cont:F
     );
     /// Reads a line from the file with the given index using [`CategoryCode::Other`](crate::tex::catcodes::CategoryCode::Other)
     /// expect for space characters (`\readline`).
@@ -177,11 +177,14 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
                                                                                 idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
-                                                                                cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
+                                                                                state:&ET::State, cont:F
     ) {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
-                f.read(handler,cc,endline,cont);
+                match f.read(handler,state.get_catcode_scheme(),state.get_endline_char(),cont) {
+                    Ok(_) => (),
+                    Err(e) => {eh.invalid_character(state,e.0);}
+                }
             }
             _ => todo!("throw File not open error")
         }

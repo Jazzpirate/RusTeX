@@ -12,9 +12,9 @@ name = "RusTeX"
 path = "src/main.rs"
 
 [profile.dev]
-#opt-level = 2
-#lto = "fat"
-#debug = 1
+opt-level = 2
+lto = "fat"
+debug = 1
 
 #split-debuginfo = "off"
 #strip = "none"

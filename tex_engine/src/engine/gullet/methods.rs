@@ -417,17 +417,9 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
 }
 
 
-fn is_ascii_digit(u:u8) -> bool {
-    u >= 48 && u <= 57
-}
-
-fn is_ascii_oct_digit(u:u8) -> bool {
-    u >= 48 && u <= 55
-}
-
-fn is_ascii_hex_digit(u:u8) -> bool {
-    is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102)
-}
+fn is_ascii_digit(u:u8) -> bool { u >= 48 && u <= 57 }
+fn is_ascii_oct_digit(u:u8) -> bool { u >= 48 && u <= 55 }
+fn is_ascii_hex_digit(u:u8) -> bool { is_ascii_digit(u) || (u >= 65 && u <= 70) || (u >= 97 && u <= 102) }
 
 /// Takes care of the boilerplate for reading a number/dimension/skip.
 /// Expands [`Token`]s until an unexpandable [`Token`] is encountered; skips `=` if `skip_eq` is true,
@@ -442,12 +434,11 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
-            (Ok(b'='),CommandCode::Other) => {
-                if had_eq { todo!("throw error") }
+            (Ok(b'='),CommandCode::Other) if !had_eq => {
                 had_eq = true;
             }
             (Ok(b'-'),CommandCode::Other) => {
-                is_negative =!is_negative;
+                is_negative = !is_negative;
             }
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
@@ -455,12 +446,11 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => match ((*char).try_into(),code) {
             (_,CommandCode::Space) => (),
-            (Ok(b'='),CommandCode::Other) => {
-                if had_eq { todo!("throw error") }
+            (Ok(b'='),CommandCode::Other) if !had_eq => {
                 had_eq = true;
             }
             (Ok(b'-'),CommandCode::Other) => {
-                is_negative =!is_negative;
+                is_negative = !is_negative;
             }
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),

@@ -1413,8 +1413,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globa
     }
     let cs = engine.read_control_sequence();
     let mut ret = shared_vector::Vector::new();
-    engine.filesystem.read::<ET,_>(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),
-    engine.state.get_catcode_scheme(),engine.state.get_endline_char(),|t| ret.push(t));
+    engine.filesystem.read::<ET,_>(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),engine.state,|t| ret.push(t));
 
     let m = Macro {
         long:false,outer:false,protected:false,

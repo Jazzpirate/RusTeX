@@ -127,21 +127,22 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
     /// `\read` - read a line of input as [`Character`]s in the currenct [`CategoryCodeScheme`], respecting
     /// braces ([`CategoryCode::BeginGroup`] and [`EndGroup`](CategoryCode::EndGroup)) and passing each token to the
     /// given function.
-    pub fn read<T:Token<Char=C>,F:FnMut(T)>(&mut self, handler:&mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) {
+    pub fn read<T:Token<Char=C>,F:FnMut(T)>(&mut self, handler:&mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) -> Result<(),InvalidCharacterError<C>> {
         let mut ingroups = 0;
+        let mut ret: Result<(),InvalidCharacterError<C>> = Ok(());
         let line = self.line;
         while self.line == line || ingroups > 0 {
             match self.get_char() {
                 None => {
-                    if self.eof {return}
+                    if self.eof {return ret }
                     if let Some(n) =self.return_endline::<T>(cc, endline, handler.par()) {
                         f(n)
                     }
-                    return ()
+                    return ret
                 }
                 Some(c) => match self.check_char::<T>(handler, cc, endline, c) {
                     Ok(None) if self.line == line || ingroups > 0 => (),
-                    Ok(None) => return (),
+                    Ok(None) => return ret,
                     Ok(Some(tk)) => {
                         if tk.command_code() == CommandCode::BeginGroup {
                             ingroups += 1
@@ -150,10 +151,14 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                         }
                         f(tk)
                     }
-                    _ => todo!("invalid character")
+                    Err(i) => {
+                        f(T::from_char_cat(i.0,CommandCode::Other));
+                        ret = Err(i)
+                    }
                 }
             }
         }
+        ret
     }
 
     /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacterError`]

@@ -305,7 +305,6 @@ impl<ET:EngineTypes> StateStack<ET> {
     /// if there is a stack level, remove any equivalent previous changes
     pub fn add_change_globally(&mut self,change:StateChange<ET>) {
         let change = change.into();
-        if self.stack.is_empty() { return; }
         for lvl in &mut self.stack {
             for c in lvl.changes.iter_mut() {
                 if c.equiv(&change) {
@@ -316,9 +315,9 @@ impl<ET:EngineTypes> StateStack<ET> {
     }
     /// Register a local state change, to be rolled back when the current group ends
     pub fn add_change_locally(&mut self,change:StateChange<ET>) {
-        let change = change.into();
         match self.stack.last_mut() {
             Some(lvl) => {
+                let change = change.into();
                 if lvl.changes.iter().all(|c| !c.equiv(&change)) {
                     lvl.changes.push(change);
                 }
