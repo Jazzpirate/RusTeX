@@ -9,21 +9,19 @@ use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 use crate::tex::numerics::{MuSkip, Skip};
 use crate::utils::HMap;
 
-#[macro_export]
+
 macro_rules! cmtodos {
     ($engine:ident,$($name:ident),*) => {
         $(cmtodo!($engine,$name);)*
     };
 }
 
-#[macro_export]
 macro_rules! cmstodos {
     ($engine:ident,$($name:ident),*) => {
         $(cmstodo!($engine,$name);)*
     };
 }
 
-#[macro_export]
 macro_rules! cmtodo {
     ($engine:ident,$name:ident) => {{
         let command = crate::commands::PrimitiveCommand::SimpleExpandable(
@@ -37,7 +35,6 @@ macro_rules! cmtodo {
     }};
 }
 
-#[macro_export]
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {{
         let command = crate::commands::PrimitiveCommand::Unexpandable {
@@ -51,6 +48,11 @@ macro_rules! cmstodo {
         refs.state.register_primitive(refs.aux,stringify!($name),command);
     }};
 }
+
+pub(crate) use cmtodos;
+pub(crate) use cmstodos;
+pub(crate) use cmtodo;
+pub(crate) use cmstodo;
 
 /// Creates a new expandable primitive and registers it with the engine.
 pub fn register_expandable<E:TeXEngine>(

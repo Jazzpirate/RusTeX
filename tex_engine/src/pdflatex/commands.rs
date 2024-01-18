@@ -1,4 +1,3 @@
-use crate::{cmtodo, cmtodos};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};

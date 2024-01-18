@@ -133,7 +133,7 @@ impl<'a,W:Write,C:Character,CS: CSName<C>> CharWrite<C,CS> for StringCharWrite<'
     }
     fn push_cs<I: CSHandler<C,CS>>(&mut self, cs:CS, int:&I, cc:&CategoryCodeScheme<C>, esc:Option<C>) {
         let res = int.resolve(&cs);
-        write!(self, "{}{}", C::displayable_opt(esc), res).unwrap();
+        write!(self, "{}{}", C::display_opt(esc), res).unwrap();
         if res.len() == 1 {
             let c = res.iter().next().unwrap();
             match cc.get(c) {

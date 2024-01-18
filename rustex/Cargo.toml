@@ -27,7 +27,7 @@ codegen-units = 1
 [dependencies]
 tex_engine = { path = "../tex_engine",features = ["pdflatex","pdfium"] }
 tex_tfm = { path = "../tex_tfm" }
-env_logger = "0.10.1"
+env_logger = "0.10.2"
 log={version="0.4.20",features=["kv_unstable"]}
 ansi_term = "0.12.1"
 chrono = "0.4.31"

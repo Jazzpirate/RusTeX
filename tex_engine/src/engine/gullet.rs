@@ -289,16 +289,16 @@ pub trait Gullet<ET:EngineTypes> {
                 if engine.gullet.get_conditionals().len() > index {
                     engine.aux.outputs.write_neg1(
                         format_args!("{{{}else: {} (level {}) entered on line {}}}",
-                                     ET::Char::displayable_opt(engine.state.get_escape_char()),
+                                     ET::Char::display_opt(engine.state.get_escape_char()),
                                      name.display(engine.state.get_escape_char()),
-                                     index+1,engine.mouth.line_number()
+                                     index+1, engine.mouth.line_number()
                         ));
                 } else {
                     engine.aux.outputs.write_neg1(
                         format_args!("{{{}fi: {} (level {}) entered on line {}}}",
-                                     ET::Char::displayable_opt(engine.state.get_escape_char()),
+                                     ET::Char::display_opt(engine.state.get_escape_char()),
                                      name.display(engine.state.get_escape_char()),
-                                     index+1,engine.mouth.line_number()
+                                     index+1, engine.mouth.line_number()
                         ));
                 }
             }
@@ -341,7 +341,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
             match token.to_enum() {
                 StandardToken::ControlSequence(cs) => {
                     engine.aux.outputs.write_neg1(format_args!("~.{}{} {}",
-                                                               ET::Char::displayable_opt(engine.state.get_escape_char()),
+                                                               ET::Char::display_opt(engine.state.get_escape_char()),
                                                                engine.aux.memory.cs_interner().resolve(&cs),
                                                                m.meaning(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
                     ));

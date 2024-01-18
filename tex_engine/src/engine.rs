@@ -21,6 +21,7 @@ use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, MuDim, Numeric, NumSet, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
 use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXError};
+use crate::tex_error;
 
 pub mod filesystem;
 pub mod mouth;
@@ -258,10 +259,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         }; self,
             ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code),
-            ResolvedToken::Cmd(None) => match self.aux.error_handler.undefined(self.aux.memory.cs_interner(),self.state,token) {
-                Some(txt) => self.mouth.push_string(txt),
-                _ => ()
-            }
+            ResolvedToken::Cmd(None) => tex_error!(self,undefined,token),
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(self,token,cmd)
         );
     }
@@ -275,10 +273,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 _ => todo!("error")
             );
         }
-        match self.aux.error_handler.missing_begingroup(self.aux.memory.cs_interner(),self.state,t.clone()) {
-            Some(txt) => self.mouth.push_string(txt),
-            _ => ()
-        }
+        tex_error!(self,missing_begingroup,t.clone());
     }
 }
 
@@ -392,10 +387,7 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },name} |
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },name} |
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
-                match $engine.aux.error_handler.not_allowed_in_mode($engine.aux.memory.cs_interner(),$engine.state,$engine.stomach,*name,$token) {
-                Some(s) => $engine.mouth.push_string(s),
-                _ => ()
-            }
+                tex_error!($engine,not_allowed_in_mode,$token,*name),
             crate::commands::TeXCommand::Macro(_) |
             crate::commands::TeXCommand::Primitive{ cmd:crate::commands::PrimitiveCommand::Conditional { .. } |
                 crate::commands::PrimitiveCommand::Expandable { .. } |

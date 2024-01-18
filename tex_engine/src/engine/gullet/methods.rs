@@ -7,7 +7,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::numerics::{MuDim, MuSkip, MuStretchShrink, Numeric, NumSet, Skip, STRETCH_SHRINK_UNITS, StretchShrink};
 use crate::engine::state::State;
-use crate::file_end;
+use crate::{file_end, tex_error};
 use crate::engine::gullet::Gullet;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
@@ -52,10 +52,7 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                         Some(n) => {next = n; i += 1},
                         _ => return ()
                     },
-                _ => match engine.aux.error_handler.missing_argument(engine.aux.memory.cs_interner(),engine.state,token.clone()) {
-                    Some(src) => engine.mouth.push_string(src),
-                    _ => ()
-                }
+                _ => tex_error!(engine,missing_argument,token.clone())
             }
         }
     }
@@ -113,10 +110,7 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
             arg.push(t);
         }
     }
-    match engine.aux.error_handler.missing_argument(engine.aux.memory.cs_interner(),engine.state,token.clone()) {
-        Some(src) => engine.mouth.push_string(src),
-        _ => ()
-    }
+    tex_error!(engine,missing_argument,token.clone())
 }
 
 fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool,token:&ET::Token) {
@@ -147,10 +141,7 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
         arg.push(t);
         return
     }
-    match engine.aux.error_handler.missing_argument(engine.aux.memory.cs_interner(),engine.state,token.clone()) {
-        Some(src) => engine.mouth.push_string(src),
-        _ => ()
-    }
+    tex_error!(engine,missing_argument,token.clone())
 }
 
 /// Default implementation for [`Gullet::expand_until_endgroup`].
@@ -402,10 +393,8 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
             _ => todo!("number expected")
         }
-        ResolvedToken::Cmd(None) => match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,token) {
-            Some(txt) => engine.mouth.push_string(txt),
-            _ => ()
-        }
+        ResolvedToken::Cmd(None) =>
+            tex_error!(engine,undefined,token.clone()),
         ResolvedToken::Cmd(Some(cmd)) => return (is_negative,Err((cmd.clone(),token)))
     );
     todo!("file end")
@@ -778,10 +767,8 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
             }
             o => todo!("command in read_unit_or_dim: {:?}",o)
         }
-        ResolvedToken::Cmd(None) => match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,token) {
-            Some(txt) => engine.mouth.push_string(txt),
-            _ => ()
-        }
+        ResolvedToken::Cmd(None) =>
+            tex_error!(engine,undefined,token.clone()),
     );
     todo!("file end")
 }

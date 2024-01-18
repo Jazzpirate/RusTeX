@@ -23,7 +23,7 @@ pub trait CSName<C:Character>: Clone + Eq + 'static + std::hash::Hash + Debug {
     type Map<A>:CSNameMap<C,Self,A> where A:Clone;
     fn display_fmt<W:Write>(&self, int:&Self::Handler, cc:&CategoryCodeScheme<C>, escapechar:Option<C>, f: &mut W) -> std::fmt::Result {
         let res = int.resolve(self);
-        write!(f, "{}{}", C::displayable_opt(escapechar), res)?;
+        write!(f, "{}{}", C::display_opt(escapechar), res)?;
         if res.len() == 1 {
             let c = res.iter().next().unwrap();
             match cc.get(c) {

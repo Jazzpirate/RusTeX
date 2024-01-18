@@ -19,7 +19,7 @@ use crate::commands::primitives::PrimitiveIdentifier;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
-use crate::tex::tokens::control_sequences::{CSName, CSHandler};
+use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::characters::{Character, StringLineSource};
 use crate::tex::tokens::Token;
 use crate::tex::tokens::StandardToken;
@@ -97,19 +97,18 @@ pub trait ErrorHandler<ET:EngineTypes> {
     }
 
     /// "You can't use `X` in `Y` mode."
-    fn not_allowed_in_mode(&self,_csi:&<ET::CSName as CSName<ET::Char>>::Handler, state:&ET::State,stomach:&mut ET::Stomach,name:PrimitiveIdentifier,_tk:ET::Token)
-        -> Option<StringLineSource<ET::Char>> {
-        TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(state.get_escape_char()),stomach.data_mut().mode()))
+    fn not_allowed_in_mode(&self,engine:&mut EngineReferences<ET>,_token:ET::Token,name:PrimitiveIdentifier) {
+        TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(engine.state.get_escape_char()),engine.stomach.data_mut().mode()))
     }
 
     /// "File ended while scanning text of `X`"
-    fn missing_begingroup(&self,csi:&<ET::CSName as CSName<ET::Char>>::Handler,state:&ET::State,t:ET::Token) -> Option<StringLineSource<ET::Char>> {
-        TeXError::throw(format!("! File ended while scanning text of {}",t.display(csi,state.get_catcode_scheme(),state.get_escape_char())))
+    fn missing_begingroup(&self,engine:&mut EngineReferences<ET>,t:ET::Token) {
+        TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
     /// "File ended while scanning use of `X`"
-    fn missing_argument(&self,csi:&<ET::CSName as CSName<ET::Char>>::Handler,state:&ET::State,t:ET::Token) -> Option<StringLineSource<ET::Char>> {
-        TeXError::throw(format!("! File ended while scanning text of {}",t.display(csi,state.get_catcode_scheme(),state.get_escape_char())))
+    fn missing_argument(&self,engine:&mut EngineReferences<ET>,t:ET::Token) {
+        TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
     /*
@@ -129,21 +128,20 @@ pub trait ErrorHandler<ET:EngineTypes> {
      */
 
     /// "Undefined `[`control sequence`|`active character`]`"
-    fn undefined(&self, csi:&<ET::CSName as CSName<ET::Char>>::Handler, state:&ET::State, token:ET::Token)
-        -> Option<StringLineSource<ET::Char>> {
+    fn undefined(&self, engine:&mut EngineReferences<ET>,token:ET::Token) {
         match token.to_enum() {
-            StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs).to_string(),state),
-            StandardToken::Character(c,_) => self.undefined_active_character(c,state),
+            StandardToken::ControlSequence(cs) => self.undefined_control_sequence(engine,token,cs),
+            StandardToken::Character(c,_) => self.undefined_active_character(engine,token,c),
             _ => unreachable!()
         }
     }
 
     /// "Undefined control sequence"
-    fn undefined_control_sequence(&self,name:String, _state:&ET::State) -> Option<StringLineSource<ET::Char>> { // TODO: proper error type
-        TeXError::throw(format!("Undefined control sequence \\{}",name))
+    fn undefined_control_sequence(&self,engine:&mut EngineReferences<ET>,_token:ET::Token,csname:ET::CSName) {
+        TeXError::throw(format!("Undefined control sequence {}{}",ET::Char::display_opt(engine.state.get_escape_char()),engine.aux.memory.cs_interner().resolve(&csname)))
     }
     /// "Undefined active character"
-    fn undefined_active_character(&self,c:ET::Char, _state:&ET::State)-> Option<StringLineSource<ET::Char>> { // TODO: proper error type
+    fn undefined_active_character(&self,_engine:&mut EngineReferences<ET>,_token:ET::Token,c:ET::Char) {
         TeXError::throw(format!("Undefined active character {}",c.display()))
     }
 
@@ -171,6 +169,23 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 }
 
  */
+
+/// Convenience macro for throwing a [`TeXError`] that temporarily replaces the [`ErrorHandler`]
+/// to make the borrow checker happy.
+/// e.g. [`tex_error`]`!(engine,`[undefined_control_sequence](ErrorHandler::undefined_control_sequence)`,token,csname)`
+#[macro_export]
+macro_rules! tex_error {
+    ($engine:expr,$e:ident,$tk:expr) => {{
+        let eh = std::mem::replace(&mut $engine.aux.error_handler,crate::utils::errors::ErrorThrower::new());
+        crate::utils::errors::ErrorHandler::$e(&*eh,$engine,$tk);
+        $engine.aux.error_handler = eh;
+    }};
+    ($engine:expr,$e:ident,$tk:expr,$($arg:expr),*) => {{
+        let eh = std::mem::replace(&mut $engine.aux.error_handler,crate::utils::errors::ErrorThrower::new());
+        crate::utils::errors::ErrorHandler::$e(&*eh,$engine,$tk,($($arg),*));
+        $engine.aux.error_handler = eh;
+    }};
+}
 
 #[macro_export]
 macro_rules! file_end {

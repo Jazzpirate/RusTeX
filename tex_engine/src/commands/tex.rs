@@ -1,5 +1,5 @@
 use chrono::{Datelike, Timelike};
-use crate::{add_node, cmstodo, cmstodos, cmtodo, cmtodos, expand_loop};
+use crate::{add_node, expand_loop};
 use crate::commands::{TeXCommand, Macro, MacroSignature, CommandScope, ActiveConditional, ResolvedToken, PrimitiveCommand, CharOrPrimitive};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
@@ -28,6 +28,7 @@ use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathC
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::token_lists::CharWrite;
+use crate::tex_error;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
@@ -613,14 +614,14 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) {
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}else: {} (level {}) entered on line {}}}",
-                        <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         name.display(engine.state.get_escape_char()),index,engine.mouth.line_number()));
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
+                         name.display(engine.state.get_escape_char()), index, engine.mouth.line_number()));
     }
     crate::engine::gullet::methods::false_loop(engine,index,false,false);
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}fi: {} (level {}) entered on line {}}}",
-                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
                          name.display(engine.state.get_escape_char()),
                          index, engine.mouth.line_number()));
     }
@@ -639,16 +640,16 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}or: {}ifcase (level {}) entered on line {}}}",
-                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                        index,engine.mouth.line_number()));
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
+                         index, engine.mouth.line_number()));
     }
     crate::engine::gullet::methods::false_loop(engine,index,false,true);
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}or: {}ifcase (level {}) entered on line {}}}",
-                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
                          index, engine.mouth.line_number()));
     }
 }
@@ -1040,10 +1041,7 @@ pub fn immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
         },
         ResolvedToken::Tk {char,code} => ET::Stomach::do_char(engine,token,char,code),
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => ET::Stomach::do_char(engine,token,*char,*code),
-        ResolvedToken::Cmd(None) => match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,token)  {
-            Some(txt) => engine.mouth.push_string(txt),
-            _ => ()
-        }
+        ResolvedToken::Cmd(None) => tex_error!(engine,undefined,token),
         ResolvedToken::Cmd(Some(c)) =>
             crate::do_cmd!(engine,token,c)
     );
@@ -1085,8 +1083,8 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}fi: {} (level {}) entered on line {}}}",
-                         <ET::Char as Character>::displayable_opt(engine.state.get_escape_char()),
-                         name.display(engine.state.get_escape_char()),index,engine.mouth.line_number()));
+                         <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
+                         name.display(engine.state.get_escape_char()), index, engine.mouth.line_number()));
     }
 }
 

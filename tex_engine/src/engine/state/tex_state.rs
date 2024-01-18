@@ -228,24 +228,24 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::Catcode {char,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}catcode{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            char.into(),old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            char.into(), old));
                     }
                     *self.catcodes.get_mut(char) = old;
                 }
                 StateChange::CurrentFont(font) => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring current font ={}{}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                            aux.memory.cs_interner().resolve(font.name())
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
                     self.current_font = font;
                 }
                 StateChange::TextFont{idx,old:font} => {
                     if trace {
-                        aux.outputs.write_neg1(format_args!("{{restoring textfont{} ={}{}}}",idx,
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                        aux.outputs.write_neg1(format_args!("{{restoring textfont{} ={}{}}}", idx,
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
@@ -253,8 +253,8 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 }
                 StateChange::ScriptFont{idx,old:font} => {
                     if trace {
-                        aux.outputs.write_neg1(format_args!("{{restoring scriptfont{} ={}{}}}",idx,
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                        aux.outputs.write_neg1(format_args!("{{restoring scriptfont{} ={}{}}}", idx,
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
@@ -262,8 +262,8 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 }
                 StateChange::ScriptScriptFont{idx,old:font} => {
                     if trace {
-                        aux.outputs.write_neg1(format_args!("{{restoring scriptscriptfont{} ={}{}}}",idx,
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                        aux.outputs.write_neg1(format_args!("{{restoring scriptscriptfont{} ={}{}}}", idx,
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             aux.memory.cs_interner().resolve(font.name())
                         ));
                     }
@@ -278,47 +278,47 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::SfCode {char,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}sfcode{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            char.into(),old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            char.into(), old));
                     }
                     *self.sfcodes.get_mut(char) = old;
                 }
                 StateChange::DelCode {char,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}delcode{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            char.into(),old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            char.into(), old));
                     }
                     *self.delcodes.get_mut(char) = old;
                 }
                 StateChange::LcCode {char,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}lccode{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            char.into(),old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            char.into(), old));
                     }
                     *self.lccodes.get_mut(char) = old;
                 }
                 StateChange::UcCode {char,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}uccode{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            char.into(),old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            char.into(), old));
                     }
                     *self.uccodes.get_mut(char) = old;
                 }
                 StateChange::MathCode {char,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}mathcode{}=\"{:X}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            char.into(),old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            char.into(), old));
                     }
                     *self.mathcodes.get_mut(char) = old;
                 }
                 StateChange::EndlineChar {old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}endlinechar={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             match old {
                                                                 None => -1,
                                                                 Some(c) => c.into() as i64
@@ -329,7 +329,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::EscapeChar {old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}escapechar={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             match old {
                                                                 None => -1,
                                                                 Some(c) => c.into() as i64
@@ -340,7 +340,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::NewlineChar {old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}newlinechar={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             match old {
                                                                 None => -1,
                                                                 Some(c) => c.into() as i64
@@ -351,40 +351,40 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::IntRegister {idx,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}count{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            idx,old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            idx, old));
                     }
                     self.int_register[idx as usize] = old;
                 }
                 StateChange::DimRegister {idx,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}dimen{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            idx,old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            idx, old));
                     }
                     self.dim_register[idx as usize] = old;
                 }
                 StateChange::SkipRegister {idx,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}skip{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            idx,old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            idx, old));
                     }
                     self.skip_register[idx as usize] = old;
                 }
                 StateChange::MuSkipRegister {idx,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}muskip{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            idx,old));
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            idx, old));
                     }
                     self.muskip_register[idx as usize] = old;
                 }
                 StateChange::ToksRegister {idx,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}toks{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
-                                                            idx,old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
+                                                            idx, old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
                                                             ));
                     }
                     self.toks_register[idx as usize] = old;
@@ -398,7 +398,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::PrimitiveInt {name,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             name.display(self.escape_char),
                                                             old));
                     }
@@ -407,7 +407,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::PrimitiveDim {name,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             name.display(self.escape_char),
                                                             old));
                     }
@@ -416,7 +416,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::PrimitiveSkip {name,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             name.display(self.escape_char),
                                                             old));
                     }
@@ -425,7 +425,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::PrimitiveMuSkip {name,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             name.display(self.escape_char),
                                                             old));
                     }
@@ -434,7 +434,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 StateChange::PrimitiveToks {name,old} => {
                     if trace {
                         aux.outputs.write_neg1(format_args!("{{restoring {}{}={}}}",
-                                                            <ET::Char as Character>::displayable_opt(self.escape_char),
+                                                            <ET::Char as Character>::display_opt(self.escape_char),
                                                             name.display(self.escape_char),
                                                             old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
                                                             ));
@@ -446,14 +446,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                         match old {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{restoring {}{}={}undefined}}",
-                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             <ET::Char as Character>::display_opt(self.escape_char),
                                              aux.memory.cs_interner().resolve(&name),
-                                             <ET::Char as Character>::displayable_opt(self.escape_char)
+                                             <ET::Char as Character>::display_opt(self.escape_char)
                                 )
                             ),
                             Some(ref c) => aux.outputs.write_neg1(
                                 format_args!("{{restoring {}{}={}}}",
-                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             <ET::Char as Character>::display_opt(self.escape_char),
                                              aux.memory.cs_interner().resolve(&name),
                                              c.meaning(aux.memory.cs_interner(),&self.catcodes,self.escape_char)
                                 )
@@ -470,14 +470,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                         match old {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{restoring {}{}={}undefined}}",
-                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             <ET::Char as Character>::display_opt(self.escape_char),
                                              char.display(),
-                                             <ET::Char as Character>::displayable_opt(self.escape_char)
+                                             <ET::Char as Character>::display_opt(self.escape_char)
                                 )
                             ),
                             Some(ref c) => aux.outputs.write_neg1(
                                 format_args!("{{restoring {}{}={}}}",
-                                             <ET::Char as Character>::displayable_opt(self.escape_char),
+                                             <ET::Char as Character>::display_opt(self.escape_char),
                                              char.display(),
                                              c.meaning(aux.memory.cs_interner(),&self.catcodes,self.escape_char)
                                 )
@@ -527,12 +527,12 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing current font={}{}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                aux.memory.cs_interner().resolve(s.current_font.name())
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 aux.memory.cs_interner().resolve(s.current_font.name())
                                  ));
                 aux.outputs.write_neg1(
                     format_args!("{{into current font={}{}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
@@ -549,13 +549,13 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing textfont{}={}{}}}",
-                                 if g {"globally "} else {""},idx,
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 if g {"globally "} else {""}, idx,
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(s.textfonts[idx as usize].name())
                     ));
                 aux.outputs.write_neg1(
-                    format_args!("{{into textfont{}={}{}}}",idx,
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                    format_args!("{{into textfont{}={}{}}}", idx,
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
@@ -572,13 +572,13 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing scriptfont{}={}{}}}",
-                                 if g {"globally "} else {""},idx,
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 if g {"globally "} else {""}, idx,
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(s.scriptfonts[idx as usize].name())
                     ));
                 aux.outputs.write_neg1(
-                    format_args!("{{into scriptfont{}={}{}}}",idx,
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                    format_args!("{{into scriptfont{}={}{}}}", idx,
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
@@ -595,13 +595,13 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing scriptscriptfont{}={}{}}}",
-                                 if g {"globally "} else {""},idx,
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 if g {"globally "} else {""}, idx,
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(s.scriptscriptfonts[idx as usize].name())
                     ));
                 aux.outputs.write_neg1(
-                    format_args!("{{into scriptscriptfont{}={}{}}}",idx,
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                    format_args!("{{into scriptscriptfont{}={}{}}}", idx,
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  aux.memory.cs_interner().resolve(fnt.name())
                     ));
             }
@@ -619,8 +619,8 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{} {}catcode{}={}}}",
                                  if g {"globally changing"} else {"reassigning"},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,cc));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, cc));
             }
             let old = std::mem::replace(s.catcodes.get_mut(c), cc);
             StateChange::Catcode { char: c, old }
@@ -636,12 +636,12 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}sfcode{}={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,old));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, old));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}sfcode{}={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,val));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, val));
             }
             StateChange::SfCode { char: c, old }
         })
@@ -656,12 +656,12 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}delcode{}={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,old));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, old));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}delcode{}={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,val));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, val));
             }
             StateChange::DelCode { char: c, old }
         })
@@ -676,12 +676,12 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}lccode{}={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,old.into()));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, old.into()));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}lccode{}={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,val.into()));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, val.into()));
             }
             StateChange::LcCode { char: c, old }
         })
@@ -696,12 +696,12 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}uccode{}={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,old.into()));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, old.into()));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}uccode{}={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,val.into()));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, val.into()));
             }
             StateChange::UcCode { char: c, old }
         })
@@ -716,12 +716,12 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}mathcode{}=\"{:X}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,old));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, old));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}mathcode{}=\"{:X}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
-                                 num,val));
+                                 <ET::Char as Character>::display_opt(s.escape_char),
+                                 num, val));
             }
             StateChange::MathCode { char: c, old }
         })
@@ -734,14 +734,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}endlinechar={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  match s.endline_char {
                                      None => -1,
                                      Some(c) => c.into() as i64
                                  }));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}endlinechar={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  match c {
                                      None => -1,
                                      Some(c) => c.into() as i64
@@ -759,14 +759,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}escapechar={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  match s.escape_char {
                                      None => -1,
                                      Some(c) => c.into() as i64
                                  }));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}escapechar={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  match c {
                                      None => -1,
                                      Some(c) => c.into() as i64
@@ -784,14 +784,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                 aux.outputs.write_neg1(
                     format_args!("{{{}changing {}newlinechar={}}}",
                                  if g {"globally "} else {""},
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  match s.newline_char {
                                      None => -1,
                                      Some(c) => c.into() as i64
                                  }));
                 aux.outputs.write_neg1(
                     format_args!("{{into {}newlinechar={}}}",
-                                 <ET::Char as Character>::displayable_opt(s.escape_char),
+                                 <ET::Char as Character>::display_opt(s.escape_char),
                                  match c {
                                      None => -1,
                                      Some(c) => c.into() as i64
@@ -834,10 +834,10 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}count{}={}}}",
                                                     if g {"globally "} else {""},
-                                                    ET::Char::displayable_opt(s.escape_char),
-                                                    idx,old));
+                                                    ET::Char::display_opt(s.escape_char),
+                                                    idx, old));
                 aux.outputs.write_neg1(format_args!("{{into {}count{}={}}}",
-                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+                                                    ET::Char::display_opt(s.escape_char), idx, v))
             }
             StateChange::IntRegister { idx, old }
         });
@@ -858,10 +858,10 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}dimen{}={}}}",
                                                     if g {"globally "} else {""},
-                                                    ET::Char::displayable_opt(s.escape_char),
-                                                    idx,old));
+                                                    ET::Char::display_opt(s.escape_char),
+                                                    idx, old));
                 aux.outputs.write_neg1(format_args!("{{into {}dimen{}={}}}",
-                                                    ET::Char::displayable_opt(s.escape_char),idx,v));
+                                                    ET::Char::display_opt(s.escape_char), idx, v));
             }
             StateChange::DimRegister { idx, old }
         });
@@ -882,10 +882,10 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}skip{}={}}}",
                                                     if g {"globally "} else {""},
-                                                    ET::Char::displayable_opt(s.escape_char),
-                                                    idx,old));
+                                                    ET::Char::display_opt(s.escape_char),
+                                                    idx, old));
                 aux.outputs.write_neg1(format_args!("{{into {}skip{}={}}}",
-                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+                                                    ET::Char::display_opt(s.escape_char), idx, v))
             }
             StateChange::SkipRegister { idx, old }
         });
@@ -906,10 +906,10 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}muskip{}={}}}",
                                                     if g {"globally "} else {""},
-                                                    ET::Char::displayable_opt(s.escape_char),
-                                                    idx,old));
+                                                    ET::Char::display_opt(s.escape_char),
+                                                    idx, old));
                 aux.outputs.write_neg1(format_args!("{{into {}muskip{}={}}}",
-                                                    ET::Char::displayable_opt(s.escape_char),idx,v))
+                                                    ET::Char::display_opt(s.escape_char), idx, v))
             }
             StateChange::MuSkipRegister { idx, old }
         });
@@ -961,14 +961,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             if trace {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}toks{}={}}}",
                                                     if g { "globally " } else { "" },
-                                                    ET::Char::displayable_opt(s.escape_char),
+                                                    ET::Char::display_opt(s.escape_char),
                                                     idx, s.toks_register[idx].display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                 ));
             }
             let old = std::mem::replace(&mut s.toks_register[idx], v);
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{into {}toks{}={}}}",
-                                                    ET::Char::displayable_opt(s.escape_char),idx,
+                                                    ET::Char::display_opt(s.escape_char), idx,
                                                     s.toks_register[idx].display(aux.memory.cs_interner(), &s.catcodes, s.escape_char,false)
                                                     ))
             }
@@ -1065,15 +1065,15 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}undefined}}",
                                              if g { "globally " } else { "" },
-                                             ET::Char::displayable_opt(s.escape_char),
+                                             ET::Char::display_opt(s.escape_char),
                                              aux.memory.cs_interner().resolve(&name),
-                                             ET::Char::displayable_opt(s.escape_char)
+                                             ET::Char::display_opt(s.escape_char)
                                 )
                             ),
                             Some(ref c) => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}}}",
                                              if g { "globally " } else { "" },
-                                             ET::Char::displayable_opt(s.escape_char),
+                                             ET::Char::display_opt(s.escape_char),
                                              aux.memory.cs_interner().resolve(&name),
                                              c.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char)
                                 )
@@ -1081,9 +1081,9 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                         }
                         aux.outputs.write_neg1(
                             format_args!("{{into {}{}={}undefined}}",
-                                         ET::Char::displayable_opt(s.escape_char),
+                                         ET::Char::display_opt(s.escape_char),
                                          aux.memory.cs_interner().resolve(&name),
-                                         ET::Char::displayable_opt(s.escape_char)
+                                         ET::Char::display_opt(s.escape_char)
                             )
                         );
                     }
@@ -1095,15 +1095,15 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                             None => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}undefined}}",
                                              if g { "globally " } else { "" },
-                                             ET::Char::displayable_opt(s.escape_char),
+                                             ET::Char::display_opt(s.escape_char),
                                              aux.memory.cs_interner().resolve(&name),
-                                             ET::Char::displayable_opt(s.escape_char)
+                                             ET::Char::display_opt(s.escape_char)
                                 )
                             ),
                             Some(ref c) => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}}}",
                                              if g { "globally " } else { "" },
-                                             ET::Char::displayable_opt(s.escape_char),
+                                             ET::Char::display_opt(s.escape_char),
                                              aux.memory.cs_interner().resolve(&name),
                                              c.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char)
                                 )
@@ -1111,7 +1111,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                         }
                         aux.outputs.write_neg1(
                             format_args!("{{into {}{}={}}}",
-                                         ET::Char::displayable_opt(s.escape_char),
+                                         ET::Char::display_opt(s.escape_char),
                                          aux.memory.cs_interner().resolve(&name),
                                          cmd.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char)
                             )

@@ -106,7 +106,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
             StandardToken::Character(c,_) => Ok(c.display_fmt(f)),
             StandardToken::ControlSequence(cs) =>
                 cs.display_fmt(int,cc,escapechar,f),
-            StandardToken::Primitive(id) => write!(f,"{}pdfprimitive {}",Self::Char::displayable_opt(escapechar),id.display(escapechar))
+            StandardToken::Primitive(id) => write!(f, "{}pdfprimitive {}", Self::Char::display_opt(escapechar), id.display(escapechar))
         }
     }
     /// Returns a helper struct implementing [`Display`](std::fmt::Display) for this token.

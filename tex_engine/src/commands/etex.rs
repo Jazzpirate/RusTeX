@@ -1,4 +1,3 @@
-use crate::cmtodo;
 use crate::commands::{CharOrPrimitive, TeXCommand, CommandScope, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::mouth::Mouth;

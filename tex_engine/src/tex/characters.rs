@@ -28,10 +28,10 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
     /// Convert this character to a `char`.
     fn to_char(&self) -> char;
 
-    /// Like [`displayable`](Self::display), but for an [`Option`]`<`[`Character`]`>`. Useful for
+    /// Like [`display`](Self::display), but for an [`Option`]`<`[`Character`]`>`. Useful for
     /// `format!` and `write!` macros specifically for the current `\ecapechar` (which may or may not be defined).
 
-    fn displayable_opt(c:Option<Self>) -> DisplayableCharacterOpt<Self> { DisplayableCharacterOpt(c) }
+    fn display_opt(c:Option<Self>) -> DisplayableCharacterOpt<Self> { DisplayableCharacterOpt(c) }
     /// The starting [`CategoryCodeScheme`] for this character type.
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
 
