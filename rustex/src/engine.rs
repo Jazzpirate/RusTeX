@@ -156,6 +156,7 @@ impl RusTeXEngineT for RusTeXEngine {
         engine.stomach.continuous = true;
         if log { engine.aux.outputs = RusTeXOutput::Print(verbose); }
 
+        let start = std::time::Instant::now();
         match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
             Ok(_) => (),
             Err(e) => engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)))
@@ -180,6 +181,8 @@ impl RusTeXEngineT for RusTeXEngine {
                        shipout::POSTAMBLE).unwrap();
             });
         }
+
+        println!("Finished after {:?}", start.elapsed());
 
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));
         ret

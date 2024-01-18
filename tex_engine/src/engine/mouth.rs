@@ -287,7 +287,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                                 Some(s) => self.push_string(s),
                                 _ => ()
                             }
-                            return self.get_next_opt(aux,state)
+                            continue
                         }
                     }
                 }
@@ -302,7 +302,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                                 Some(s) => self.push_string(s),
                                 _ => ()
                             }
-                            return self.get_next_opt(aux,state)
+                            continue
                         }
                     }
                 }
@@ -312,7 +312,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 
     fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,mut cont:Fn) {
-        loop {
+        'top: loop {
             match self.inputs.last_mut() {
                 Some(TokenSource::Vec(v)) => {
                     while let Some(t) = v.pop() {
@@ -334,7 +334,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                                     Some(s) => self.push_string(s),
                                     _ => ()
                                 }
-                                return self.iterate(aux,state,cont)
+                                continue 'top
                             }
                         }
                     }
@@ -351,7 +351,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                                     Some(s) => self.push_string(s),
                                     _ => ()
                                 }
-                                return self.iterate(aux,state,cont)
+                                continue 'top
                             }
                         }
                     }

@@ -309,7 +309,7 @@ impl<ET:EngineTypes> StateStack<ET> {
         for lvl in &mut self.stack {
             for c in lvl.changes.iter_mut() {
                 if c.equiv(&change) {
-                    *c = StateChangeI::None;
+                    c.active = false
                 }
             }
         }
@@ -337,61 +337,53 @@ impl<'a,ET:EngineTypes> ChangeIter<'a,ET> {
     /// Close the iterator, rolling back any changes
     pub fn close<F:FnMut(StateChange<ET>)>(mut self,mut f:F) {
         for ch in self.chs.drain(..) {
-            if let StateChangeI::Ch {ch,..} = ch {
-                f(ch);
-            }
+            if ch.active { f(ch.ch); }
         }
         self.stack.vecs.push(self.chs);
     }
 }
 
 #[derive(Clone)]
-enum StateChangeI<ET:EngineTypes> {
-    None,
-    Ch {
-        id:(std::mem::Discriminant<StateChange<ET>>,usize),ch:StateChange<ET>
-    }
+struct StateChangeI<ET:EngineTypes> {
+    active:bool,id:(std::mem::Discriminant<StateChange<ET>>,usize),ch:StateChange<ET>
 }
 impl<ET:EngineTypes> StateChangeI<ET> {
     fn equiv(&self,other:&StateChangeI<ET>) -> bool {
-        match (self,other) {
-            (StateChangeI::Ch{id:id1,..},StateChangeI::Ch{id:id2,..})
-            => id1 == id2,
-            _  => false
-        }
+        self.active && self.id == other.id
     }
 }
 impl<ET:EngineTypes> From<StateChange<ET>> for StateChangeI<ET> {
     fn from(value: StateChange<ET>) -> Self {
-        match &value {
-            StateChange::Catcode{char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-            StateChange::SfCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-            StateChange::LcCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-            StateChange::UcCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-            StateChange::MathCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-            StateChange::CurrentFont(_) => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
-            StateChange::EndlineChar{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
-            StateChange::EscapeChar{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
-            StateChange::NewlineChar{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
-            StateChange::ParShape{..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),0), ch:value },
-            StateChange::TextFont{idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx as usize), ch:value },
-            StateChange::ScriptFont{idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx as usize), ch:value },
-            StateChange::ScriptScriptFont{idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx as usize), ch:value },
-            StateChange::DelCode {char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-            StateChange::IntRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
-            StateChange::DimRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
-            StateChange::SkipRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
-            StateChange::MuSkipRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
-            StateChange::ToksRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
-            StateChange::BoxRegister {idx,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),*idx), ch:value },
-            StateChange::PrimitiveInt{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
-            StateChange::PrimitiveDim{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
-            StateChange::PrimitiveSkip{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
-            StateChange::PrimitiveMuSkip{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
-            StateChange::PrimitiveToks{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.as_u16() as usize), ch:value },
-            StateChange::Command{name,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),name.id()), ch:value },
-            StateChange::AcCommand{ char,..} => StateChangeI::Ch { id:(std::mem::discriminant(&value),(*char).into() as usize), ch:value },
-        }
+        let u = match &value {
+            StateChange::Catcode{char,..} => (*char).into() as usize,
+            StateChange::SfCode {char,..} => (*char).into() as usize,
+            StateChange::LcCode {char,..} => (*char).into() as usize,
+            StateChange::UcCode {char,..} => (*char).into() as usize,
+            StateChange::MathCode {char,..} => (*char).into() as usize,
+            StateChange::DelCode {char,..} => (*char).into() as usize,
+            StateChange::AcCommand{ char,..} => (*char).into() as usize,
+            StateChange::CurrentFont(_) => 0,
+            StateChange::EndlineChar{..} => 0,
+            StateChange::EscapeChar{..} => 0,
+            StateChange::NewlineChar{..} => 0,
+            StateChange::ParShape{..} => 0,
+            StateChange::TextFont{idx,..} => *idx as usize,
+            StateChange::ScriptFont{idx,..} => *idx as usize,
+            StateChange::ScriptScriptFont{idx,..} => *idx as usize,
+            StateChange::IntRegister {idx,..} => *idx,
+            StateChange::DimRegister {idx,..} => *idx,
+            StateChange::SkipRegister {idx,..} => *idx,
+            StateChange::MuSkipRegister {idx,..} => *idx,
+            StateChange::ToksRegister {idx,..} => *idx,
+            StateChange::BoxRegister {idx,..} => *idx,
+            StateChange::PrimitiveInt{name,..} => name.as_u16() as usize,
+            StateChange::PrimitiveDim{name,..} => name.as_u16() as usize,
+            StateChange::PrimitiveSkip{name,..} => name.as_u16() as usize,
+            StateChange::PrimitiveMuSkip{name,..} => name.as_u16() as usize,
+            StateChange::PrimitiveToks{name,..} => name.as_u16() as usize,
+            StateChange::Command{name,..} => name.id(),
+        };
+        StateChangeI{ active:true, id:(std::mem::discriminant(&value),u), ch:value }
     }
 }
 

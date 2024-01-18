@@ -143,6 +143,79 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
     }
     tex_error!(engine,missing_argument,token.clone())
 }
+/*
+pub fn skip_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,params:TokenList<ET::Token>,long:bool,token:&ET::Token) {
+    let mut i = 1usize;
+    let inner = &params.0;
+    let mut next = &inner[0];
+    loop {
+        match next.is_argument_marker() {
+            Some(a) => match inner.get(i) {
+                Some(n) if n.is_argument_marker().is_some() =>
+                    {next = n; i += 1;
+                        skip_argument(engine, long, token)},
+                None => {
+                    skip_argument(engine, long, token);
+                    return
+                },
+                Some(o) => {
+                    let mut delim = vec!(o.clone());
+                    i += 1;
+                    while let Some(n) = inner.get(i) {
+                        if n.is_argument_marker().is_some() {break}
+                        delim.push(n.clone());
+                        i += 1;
+                    }
+                    read_delimited_argument(engine, &mut Vec::new(),&delim, long, token);
+                    match inner.get(i) {
+                        Some(n) => {next = n; i += 1},
+                        _ => return ()
+                    }
+                }
+            },
+            _ => match engine.get_next() {
+                Some(o) if o == *next =>
+                    match inner.get(i) {
+                        Some(n) => {next = n; i += 1},
+                        _ => return ()
+                    },
+                _ => tex_error!(engine,missing_argument,token.clone())
+            }
+        }
+    }
+}
+
+fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,long:bool,token:&ET::Token) {
+    while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+        match t.command_code() {
+            CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => continue,
+            CommandCode::Space => continue,
+            CommandCode::BeginGroup => {
+                if long {
+                    engine.mouth.read_until_endgroup(
+                        engine.aux,
+                        engine.state,
+                        |_, t| {}
+                    );
+                } else {
+                    let par = engine.aux.memory.cs_interner().par();
+                    engine.mouth.read_until_endgroup(
+                        engine.aux,
+                        engine.state,
+                        |_,t|
+                            if t.is_cs(&par) {todo!("\\par in read_argument")} else {}
+                    );
+                }
+                return
+            }
+            _ => ()
+        }
+        return
+    }
+    tex_error!(engine,missing_argument,token.clone())
+}
+
+ */
 
 /// Default implementation for [`Gullet::expand_until_endgroup`].
 pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {

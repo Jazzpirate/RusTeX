@@ -345,10 +345,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
                                                                engine.aux.memory.cs_interner().resolve(&cs),
                                                                m.meaning(engine.aux.memory.cs_interner(), engine.state.get_catcode_scheme(), engine.state.get_escape_char())
                     ));
-                    engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
-                    if engine.aux.memory.cs_interner().resolve(&cs).to_string() == "lst@ReplaceIn@" {
-                        println!("HERE!!!!")
-                    }
+                    //engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
                 }
                 StandardToken::Character(c,_) => {
                     engine.aux.outputs.write_neg1(format_args!("~.{} {}",
