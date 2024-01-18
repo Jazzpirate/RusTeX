@@ -15,6 +15,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
+use crate::utils::errors::ErrorHandler;
 
 #[macro_export]
 macro_rules! add_node {
@@ -241,7 +242,13 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) {
             end!(ET::Stomach::do_char(engine,token,char,code)),
         ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) =>
             end!(ET::Stomach::do_char(engine,token,*char,*code)),
-        ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
+        ResolvedToken::Cmd(None) => {
+            match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,token)  {
+                Some(txt) => engine.mouth.push_string(txt),
+                _ => ()
+            }
+            end!(())
+        }
         ResolvedToken::Cmd(Some(cmd)) => {
             end!(crate::do_cmd!(ET;engine,token,cmd))
         }
@@ -642,7 +649,10 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
         crate::expand!(ET;engine,next;
             ResolvedToken::Tk { char, code } => do_char(engine, next, char, code),
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => do_char(engine, next, *char, *code),
-            ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),next),
+            ResolvedToken::Cmd(None) => match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,next)  {
+                Some(txt) => engine.mouth.push_string(txt),
+                _ => ()
+            }
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(ET;engine,next,cmd)
         );
     }

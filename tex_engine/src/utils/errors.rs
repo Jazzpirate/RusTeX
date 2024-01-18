@@ -15,7 +15,9 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::panic::PanicInfo;
-use crate::engine::EngineTypes;
+use crate::commands::primitives::PrimitiveIdentifier;
+use crate::engine::{EngineTypes};
+use crate::engine::stomach::Stomach;
 use crate::tex::tokens::control_sequences::{CSName, CSHandler};
 use crate::tex::characters::{Character, StringLineSource};
 use crate::tex::tokens::Token;
@@ -87,14 +89,21 @@ fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),
 
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler<ET:EngineTypes> {
+    /// Create a new error handler.
+    fn new() -> Self;
+
+    /// "Text line contains an invalid character"
     fn invalid_character(&self,_state:&ET::State,c:ET::Char) -> Option<StringLineSource<ET::Char>> {
         TeXError::throw(format!("! Text line contains an invalid character.\n{}",c.display()))
     }
-    /*
-    /// Invalid character in input file/string
-    fn invalid_character<T:Token,D:Display>(&self,_character:T::Char,text:D) -> Option<T> {
-        TeXError::throw(format!("! Text line contains an invalid character.\n{}",text))
+
+    /// "You can't use `X` in `Y` mode."
+    fn not_allowed_in_mode(&self,_csi:&<ET::CSName as CSName<ET::Char>>::Handler, _state:&ET::State,stomach:&mut ET::Stomach,name:PrimitiveIdentifier,_tk:ET::Token)
+        -> Option<StringLineSource<ET::Char>> {
+        TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(Some(ET::Char::from(b'\\'))),stomach.data_mut().mode()))
     }
+
+    /*
     /// "Runaway argument? Paragraph ended before `\foo` was complete."
     fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
         //let line = &tokenizer.string.line(start.0)[start.1..];
@@ -110,24 +119,26 @@ pub trait ErrorHandler<ET:EngineTypes> {
 
      */
 
-    fn undefined(&self, csi:&<ET::CSName as CSName<ET::Char>>::Handler, token:ET::Token) {
+    /// "Undefined `[`control sequence`|`active character`]`"
+    fn undefined(&self, csi:&<ET::CSName as CSName<ET::Char>>::Handler, state:&ET::State, token:ET::Token)
+        -> Option<StringLineSource<ET::Char>> {
         match token.to_enum() {
-            StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs).to_string()),
-            StandardToken::Character(c,_) => self.undefined_active_character(c),
+            StandardToken::ControlSequence(cs) => self.undefined_control_sequence(csi.resolve(&cs).to_string(),state),
+            StandardToken::Character(c,_) => self.undefined_active_character(c,state),
             _ => unreachable!()
         }
     }
 
     /// "Undefined control sequence"
-    fn undefined_control_sequence(&self,name:String) { // TODO: proper error type
+    fn undefined_control_sequence(&self,name:String, _state:&ET::State) -> Option<StringLineSource<ET::Char>> { // TODO: proper error type
         TeXError::throw(format!("Undefined control sequence \\{}",name))
     }
-    /// "Undefined control sequence"
-    fn undefined_active_character(&self,c:ET::Char) { // TODO: proper error type
+    /// "Undefined active character"
+    fn undefined_active_character(&self,c:ET::Char, _state:&ET::State)-> Option<StringLineSource<ET::Char>> { // TODO: proper error type
         TeXError::throw(format!("Undefined active character {}",c.display()))
     }
 
-    /// `\errormsg`
+    /// `\errmessage`
     fn error_message(&self,msg:&str) { // TODO: proper error type
         TeXError::throw(format!("! {}",msg))
     }
@@ -136,9 +147,11 @@ pub trait ErrorHandler<ET:EngineTypes> {
 
 /// Default [`ErrorHandler`] that just panics.
 pub struct ErrorThrower<ET:EngineTypes>(PhantomData<ET>);
-impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {}
+impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {
+    fn new() -> Self { Self(PhantomData) }
+}
 impl<ET:EngineTypes> ErrorThrower<ET> {
-    pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
+    //pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
 }
 
 #[macro_export]

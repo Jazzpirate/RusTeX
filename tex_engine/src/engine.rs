@@ -44,6 +44,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Int:TeXInt;
     type Dim:TeXDimen + Numeric<Self::Int>;
     type MuDim:MuDim + Numeric<Self::Int>;
+    type EH:ErrorHandler<Self>;
     type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,MuDim=Self::MuDim>;
     type State: State<Self>;
     type Outputs: Outputs;
@@ -56,7 +57,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
 }
 pub struct EngineAux<ET:EngineTypes> {
     pub memory:MemoryManager<ET::Token>,
-    pub error_handler:Box<dyn ErrorHandler<ET>>,
+    pub error_handler:ET::EH,
     pub outputs:ET::Outputs,
     pub start_time:chrono::DateTime<chrono::Local>,
     pub jobname:String,
@@ -119,6 +120,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Int = i32;
     type Dim = Dim32;
     type MuDim = Mu;
+    type EH = ErrorThrower<Self>;
     type Num = tex::numerics::DefaultNumSet;
     type State = state::tex_state::DefaultState<Self>;
     type File = VirtualFile<u8>;
@@ -196,7 +198,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
         let mut memory = MemoryManager::new();
         let mut aux = EngineAux {
             outputs: ET::Outputs::new(),
-            error_handler: ErrorThrower::new(),
+            error_handler: ET::EH::new(),
             start_time:chrono::Local::now(),
             extension: ET::Extension::new(&mut memory),
             memory,
@@ -258,7 +260,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         }; self,
             ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code),
-            ResolvedToken::Cmd(None) => self.aux.error_handler.undefined(self.aux.memory.cs_interner(),token),
+            ResolvedToken::Cmd(None) => match self.aux.error_handler.undefined(self.aux.memory.cs_interner(),self.state,token) {
+                Some(txt) => self.mouth.push_string(txt),
+                _ => ()
+            }
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(self,token,cmd)
         );
     }
@@ -381,12 +386,15 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::MathChar(u) =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,Some($token)),
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Relax,..} => (),
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Int { .. },..} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Dim { .. },..} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },..} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },..} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },..} =>
-                crate::engine::do_error($engine,$cmd.clone()),
+            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Int { .. },name} |
+            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Dim { .. },name} |
+            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },name} |
+            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },name} |
+            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
+                match $engine.aux.error_handler.not_allowed_in_mode($engine.aux.memory.cs_interner(),$engine.state,$engine.stomach,*name,$token) {
+                Some(s) => $engine.mouth.push_string(s),
+                _ => ()
+            }
             crate::commands::TeXCommand::Macro(_) |
             crate::commands::TeXCommand::Primitive{ cmd:crate::commands::PrimitiveCommand::Conditional { .. } |
                 crate::commands::PrimitiveCommand::Expandable { .. } |
@@ -394,8 +402,4 @@ macro_rules! do_cmd {
             } | TeXCommand::Char {..} => unreachable!(),
         }
     }
-}
-
-pub fn do_error<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cmd: TeXCommand<ET>) {
-    todo!("Not allowed in {:?} mode: {}",engine.stomach.data_mut().mode(),cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
 }

@@ -15,6 +15,7 @@ use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::StringLineSource;
 use crate::tex::tokens::Token;
+use crate::utils::errors::ErrorHandler;
 
 pub mod strings;
 

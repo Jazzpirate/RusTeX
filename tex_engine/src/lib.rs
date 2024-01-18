@@ -20,4 +20,5 @@ pub mod prelude {
     pub use crate::tex::tokens::token_lists::{CharWrite, TokenList};
     pub use crate::engine::EngineTypes;
     pub use crate::engine::stomach::TeXMode;
+    pub use crate::utils::errors::ErrorHandler;
 }

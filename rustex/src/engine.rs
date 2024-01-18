@@ -50,6 +50,7 @@ impl EngineTypes for Types {
     type Extension = Extension;
     type Int = i32;
     type Dim = Dim32;
+    type EH = ErrorThrower<Self>;
     type MuDim = Mu;
     type Num = tex::numerics::DefaultNumSet;
     type State = RusTeXState;

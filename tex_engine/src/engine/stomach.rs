@@ -1,4 +1,6 @@
 pub mod methods;
+
+use std::fmt::Display;
 use crate::engine::TeXError;
 
 use crate::commands::{CharOrPrimitive, CommandScope, PrimitiveCommand, ResolvedToken};
@@ -37,6 +39,18 @@ pub enum TeXMode {
     InlineMath,
     /// The mode the engine is in inside a display math box
     DisplayMath
+}
+impl Display for TeXMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TeXMode::Vertical => write!(f,"vertical"),
+            TeXMode::InternalVertical => write!(f,"internal vertical"),
+            TeXMode::Horizontal => write!(f,"horizontal"),
+            TeXMode::RestrictedHorizontal => write!(f,"restricted horizontal"),
+            TeXMode::InlineMath => write!(f,"inline math"),
+            TeXMode::DisplayMath => write!(f,"display math")
+        }
+    }
 }
 impl TeXMode {
     /// Returns true if the mode is vertical or internal vertical

@@ -462,7 +462,7 @@ pub enum TeXBox<ET:EngineTypes> {
         start:SourceRef<ET>,
         /// The source reference of the end of this box
         end:SourceRef<ET>,
-        /// The vertical skip before this box, if any, as computed base on `\prevdepth`
+        /// The vertical skip before this box, if any, as computed based on `\prevdepth`
         preskip:Option<Skip<ET::Dim>>
     },
 }
@@ -478,7 +478,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
     /// Assigns the given height to this box (as e.g. `\ht0=50pt`)
     pub fn assign_height(&mut self, h:ET::Dim) {
         match self {
-            TeXBox::H {info: HBoxInfo::HBox { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
+            TeXBox::H{ info: HBoxInfo::HBox { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
             TeXBox::V{ info: VBoxInfo::VBox { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
             TeXBox::V{ info: VBoxInfo::VTop { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
             _ => todo!()
@@ -487,7 +487,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
     /// The assigned height of this box, if any (i.e. the result of `\ht0=...`)
     pub fn assigned_height(&self) -> Option<ET::Dim> {
         match self {
-            TeXBox::H {info: HBoxInfo::HBox { assigned_height, .. },..} => *assigned_height,
+            TeXBox::H{ info: HBoxInfo::HBox { assigned_height, .. },..} => *assigned_height,
             TeXBox::V{ info: VBoxInfo::VBox { assigned_height, .. },..} => *assigned_height,
             TeXBox::V{ info: VBoxInfo::VTop { assigned_height, .. },..} => *assigned_height,
             _ => None
@@ -505,7 +505,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
     /// The assigned width of this box, if any (i.e. the result of `\wd0=...`)
     pub fn assigned_width(&self) -> Option<ET::Dim> {
         match self {
-            TeXBox::H {info: HBoxInfo::HBox { assigned_width, .. },..} => *assigned_width,
+            TeXBox::H{ info: HBoxInfo::HBox { assigned_width, .. },..} => *assigned_width,
             TeXBox::V{ info: VBoxInfo::VBox { assigned_width, .. },..} => *assigned_width,
             TeXBox::V{ info: VBoxInfo::VTop { assigned_width, .. },..} => *assigned_width,
             _ => None
@@ -523,7 +523,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
     /// The assigned depth of this box, if any (i.e. the result of `\dp0=...`)
     pub fn assigned_depth(&self) -> Option<ET::Dim> {
         match self {
-            TeXBox::H {info: HBoxInfo::HBox { assigned_depth, .. },..} => *assigned_depth,
+            TeXBox::H{ info: HBoxInfo::HBox { assigned_depth, .. },..} => *assigned_depth,
             TeXBox::V{ info: VBoxInfo::VBox { assigned_depth, .. },..} => *assigned_depth,
             TeXBox::V{ info: VBoxInfo::VTop { assigned_depth, .. },..} => *assigned_depth,
             _ => None
@@ -532,7 +532,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
     /// The "scaling factor" of this box, i.e. the `to` or `spread` in e.g. `\hbox to 50pt` or `\hbox spread 10pt`
     pub fn to_or_scaled(&self) -> ToOrSpread<ET::Dim> {
         match self {
-            TeXBox::H {info: HBoxInfo::HBox { scaled, .. },..} => scaled.clone(),
+            TeXBox::H{ info: HBoxInfo::HBox { scaled, .. },..} => scaled.clone(),
             TeXBox::V{ info: VBoxInfo::VBox { scaled, .. },..} => scaled.clone(),
             TeXBox::V{ info: VBoxInfo::VTop { scaled, .. },..} => scaled.clone(),
             _ => ToOrSpread::None

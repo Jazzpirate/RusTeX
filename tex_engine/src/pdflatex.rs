@@ -17,7 +17,7 @@ use crate::tex::tokens::control_sequences::InternedCSName;
 use crate::tex::characters::Character;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, Numeric, TeXDimen, TeXInt};
-use crate::utils::errors::TeXError;
+use crate::utils::errors::{ErrorThrower, TeXError};
 
 pub trait PDFTeXEngine: TeXEngine
     where <Self::Types as EngineTypes>::Extension: PDFExtension<Self::Types>,
@@ -100,6 +100,7 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Int = i32;
     type Dim = Dim32;
     type MuDim = Mu;
+    type EH = ErrorThrower<Self>;
     type Num = tex::numerics::DefaultNumSet;
     type State = state::tex_state::DefaultState<Self>;
     type File = VirtualFile<u8>;

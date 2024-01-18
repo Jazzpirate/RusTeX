@@ -15,6 +15,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::characters::Character;
 use crate::engine::EngineAux;
+use crate::utils::errors::ErrorHandler;
 
 /// processes the parameter signature `params` of a [`Macro`](crate::commands::Macro) by reading the relevant arguments;
 /// storing them in `args`
@@ -392,7 +393,10 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             (Ok(b),CommandCode::Other) => return (is_negative,Ok(b)),
             _ => todo!("number expected")
         }
-        ResolvedToken::Cmd(None) => engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token),
+        ResolvedToken::Cmd(None) => match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,token) {
+            Some(txt) => engine.mouth.push_string(txt),
+            _ => ()
+        }
         ResolvedToken::Cmd(Some(cmd)) => return (is_negative,Err((cmd.clone(),token)))
     );
     todo!("file end")
@@ -765,8 +769,10 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
             }
             o => todo!("command in read_unit_or_dim: {:?}",o)
         }
-        ResolvedToken::Cmd(None) =>
-            engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),token)
+        ResolvedToken::Cmd(None) => match engine.aux.error_handler.undefined(engine.aux.memory.cs_interner(),engine.state,token) {
+            Some(txt) => engine.mouth.push_string(txt),
+            _ => ()
+        }
     );
     todo!("file end")
 }
