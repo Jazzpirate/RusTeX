@@ -76,7 +76,7 @@ impl FileSystem for RusTeXFileSystem {
     }
 
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&ET::EH,
+                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 cc:&CategoryCodeScheme<<Self::File as File>::Char>, endline:Option<<Self::File as File>::Char>, cont:F
     ) {

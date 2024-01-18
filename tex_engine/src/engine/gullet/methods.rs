@@ -15,7 +15,6 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::characters::Character;
 use crate::engine::EngineAux;
-use crate::utils::errors::ErrorHandler;
 
 /// processes the parameter signature `params` of a [`Macro`](crate::commands::Macro) by reading the relevant arguments;
 /// storing them in `args`

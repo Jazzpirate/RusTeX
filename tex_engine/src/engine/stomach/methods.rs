@@ -15,7 +15,6 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
-use crate::utils::errors::ErrorHandler;
 
 #[macro_export]
 macro_rules! add_node {

@@ -42,7 +42,7 @@ pub trait FileSystem:Clone {
     /// Reads a line from the file with the given index and current [`CategoryCodeScheme`] (`\read`), possibly
     /// respecting groups (i.e. will continue reading at the end of a line until all open groups are closed).
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&ET::EH,
+                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
     );
@@ -175,7 +175,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         }
     }
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&ET::EH,
+                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 cc:&CategoryCodeScheme<ET::Char>, endline:Option<ET::Char>, cont:F
     ) {

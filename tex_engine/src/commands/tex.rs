@@ -28,7 +28,6 @@ use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathC
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::token_lists::CharWrite;
-use crate::utils::errors::ErrorHandler;
 
 type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;

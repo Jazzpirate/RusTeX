@@ -89,8 +89,6 @@ fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),
 
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler<ET:EngineTypes> {
-    /// Create a new error handler.
-    fn new() -> Self;
 
     /// "Text line contains an invalid character"
     fn invalid_character(&self,_state:&ET::State,c:ET::Char) -> Option<StringLineSource<ET::Char>> {
@@ -147,11 +145,9 @@ pub trait ErrorHandler<ET:EngineTypes> {
 
 /// Default [`ErrorHandler`] that just panics.
 pub struct ErrorThrower<ET:EngineTypes>(PhantomData<ET>);
-impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {
-    fn new() -> Self { Self(PhantomData) }
-}
+impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {}
 impl<ET:EngineTypes> ErrorThrower<ET> {
-    //pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
+    pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
 }
 
 #[macro_export]

@@ -44,7 +44,6 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Int:TeXInt;
     type Dim:TeXDimen + Numeric<Self::Int>;
     type MuDim:MuDim + Numeric<Self::Int>;
-    type EH:ErrorHandler<Self>;
     type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,MuDim=Self::MuDim>;
     type State: State<Self>;
     type Outputs: Outputs;
@@ -57,7 +56,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
 }
 pub struct EngineAux<ET:EngineTypes> {
     pub memory:MemoryManager<ET::Token>,
-    pub error_handler:ET::EH,
+    pub error_handler:Box<dyn ErrorHandler<ET>>,
     pub outputs:ET::Outputs,
     pub start_time:chrono::DateTime<chrono::Local>,
     pub jobname:String,
@@ -120,7 +119,6 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Int = i32;
     type Dim = Dim32;
     type MuDim = Mu;
-    type EH = ErrorThrower<Self>;
     type Num = tex::numerics::DefaultNumSet;
     type State = state::tex_state::DefaultState<Self>;
     type File = VirtualFile<u8>;
@@ -198,7 +196,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
         let mut memory = MemoryManager::new();
         let mut aux = EngineAux {
             outputs: ET::Outputs::new(),
-            error_handler: ET::EH::new(),
+            error_handler: ErrorThrower::new(),
             start_time:chrono::Local::now(),
             extension: ET::Extension::new(&mut memory),
             memory,
