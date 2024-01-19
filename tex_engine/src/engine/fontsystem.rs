@@ -11,6 +11,7 @@ use crate::engine::fontsystem::tfm::TfmFile;
 use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
+use crate::tex_error;
 use crate::utils::{HMap, Ptr};
 
 /// A font system provides [`Font`]s, which in turn provide various information about [`Character`]s (or, rather, glyphs)
@@ -305,17 +306,24 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a font from the input stream (e.g. `\font` for the current font
     /// or a font defined via `\font\foo=...`).
-    pub fn read_font(&mut self) -> <ET::FontSystem as FontSystem>::Font {
+    pub fn read_font(&mut self,token:&ET::Token) -> <ET::FontSystem as FontSystem>::Font {
         crate::expand_loop!(self,token,
             ResolvedToken::Cmd(Some(c)) => match c {
                 TeXCommand::Font(f) => return f.clone(),
                 TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd{read,..},..} => {
                     return read(self,token)
                 }
-                _ => todo!("error")
+                _ => {
+                    tex_error!(self,other,"Missing font identifier.");
+                    return self.fontsystem.null()
+                }
             }
-            _ => todo!("error")
+            _ => {
+                tex_error!(self,other,"Missing font identifier.");
+                return self.fontsystem.null()
+            }
         );
-        todo!("file end")
+        self.aux.error_handler.file_end_while_scanning(self.state,&self.aux.memory.cs_interner(),token.clone());
+        self.fontsystem.null()
     }
 }

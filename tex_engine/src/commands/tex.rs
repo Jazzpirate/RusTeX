@@ -722,9 +722,9 @@ pub fn textfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::To
     engine.state.get_textfont(num).clone()
 }
 
-pub fn textfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,global:bool) {
+pub fn textfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let num = engine.mathfont_index(false);
-    let fnt = engine.read_font();
+    let fnt = engine.read_font(&tk);
     engine.state.set_textfont(engine.aux,num,fnt,global)
 }
 
@@ -734,9 +734,9 @@ pub fn scriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
     engine.state.get_scriptfont(num).clone()
 }
 
-pub fn scriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,global:bool) {
+pub fn scriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let num = engine.mathfont_index(false);
-    let fnt = engine.read_font();
+    let fnt = engine.read_font(&tk);
     engine.state.set_scriptfont(engine.aux,num,fnt,global)
 }
 
@@ -745,27 +745,27 @@ pub fn scriptscriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_t
     engine.state.get_scriptscriptfont(num).clone()
 }
 
-pub fn scriptscriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,global:bool) {
+pub fn scriptscriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let num = engine.mathfont_index(false);
-    let fnt = engine.read_font();
+    let fnt = engine.read_font(&tk);
     engine.state.set_scriptscriptfont(engine.aux,num,fnt,global)
 }
 
-pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Dim<ET> {
+pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Dim<ET> {
     let idx = match engine.read_int(false).try_into() {
         Ok(i) if i-1 >= 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
         _ => todo!("throw error")
     };
-    let font = engine.read_font();
+    let font = engine.read_font(&tk);
     font.get_dim(idx)
 }
-pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
+pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
     let i = engine.read_int(false);
     let idx = match i.try_into() {
         Ok(i) if i-1 >= 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
         _ => todo!("throw error: {}",i)
     };
-    let mut font = engine.read_font();
+    let mut font = engine.read_font(&tk);
     let dim = engine.read_dim(true);
     font.set_dim(idx,dim);
 }
@@ -863,22 +863,22 @@ pub fn valign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 
-pub fn hyphenchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
-    let font = engine.read_font();
+pub fn hyphenchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
+    let font = engine.read_font(&tk);
     font.get_hyphenchar()
 }
-pub fn hyphenchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
-    let mut font = engine.read_font();
+pub fn hyphenchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let mut font = engine.read_font(&tk);
     let val = engine.read_int(true);
     font.set_hyphenchar(val);
 }
 
-pub fn skewchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
-    let font = engine.read_font();
+pub fn skewchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
+    let font = engine.read_font(&tk);
     font.get_skewchar()
 }
-pub fn skewchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
-    let mut font = engine.read_font();
+pub fn skewchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
+    let mut font = engine.read_font(&tk);
     let val = engine.read_int(true);
     font.set_skewchar(val);
 }
@@ -1095,8 +1095,8 @@ pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET
     write!(f,"{}",engine.aux.jobname).unwrap();
 }
 
-pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
-    let font = engine.read_font();
+pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    let font = engine.read_font(&tk);
     let mut fi = |t| exp.push(t);
     let mut f = Otherize::new(&mut fi);
     if font.has_at_set() {

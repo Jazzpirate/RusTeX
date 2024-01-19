@@ -18,6 +18,7 @@ use crate::tex::characters::Character;
 use crate::tex::numerics::{MuSkip, NumSet, Skip};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;
+use crate::tex_error;
 
 /// A [`Gullet`] is the part of the engine that reads tokens from the input stream and expands them;
 /// including conditionals etc.
@@ -263,7 +264,7 @@ pub trait Gullet<ET:EngineTypes> {
                 match engine.gullet.get_conditionals().get_mut(index) {
                     Some(u@ActiveConditional::Unfinished(_)) =>
                         *u = ActiveConditional::True(name),
-                    _ => todo!("throw proper error")
+                    _ => unreachable!()
                 }
             }
         } else {
@@ -428,12 +429,17 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn read_charcode(&mut self,skip_eq:bool) -> ET::Char {
         let i:i64 = ET::Gullet::read_int(self,skip_eq).into();
         if i < 0 {
-            todo!("negative charcode")
+            tex_error!(self,other,&format!("Bad character code ({})",i));
+            return ET::Char::from(0)
         }
         match ET::Char::try_from(i as u64) {
             Ok(c) => c,
-            _ => todo!("charcode too large: {}",i)
+            _ => {
+                tex_error!(self,other,&format!("Bad character code ({})",i));
+                ET::Char::from(0)
+            }
         }
+
     }
     /// Read a braced string from the input stream (unlike [`read_string`](EngineReferences::read_string)
     /// which does not require braces). Compare e.g. `\message{Hello World}` (which would use `read_braced_string`)
@@ -444,9 +450,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 Some(t) => match t.command_code() {
                     CommandCode::BeginGroup => break,
                     CommandCode::Space if skip_ws => (),
-                    _ => todo!("should be begingroup: {:?}",t.to_enum()),
+                    _ => tex_error!(self,missing_begingroup,token.clone()),
                 }
-                None => todo!("file end")
+                None => self.aux.error_handler.file_end_while_scanning(self.state,&self.aux.memory.cs_interner(),token.clone())
             }
         }
         ET::Gullet::expand_until_endgroup(self,expand_protected,false,token,|a,s,t| {
