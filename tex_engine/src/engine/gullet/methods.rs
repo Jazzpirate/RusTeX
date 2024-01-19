@@ -70,11 +70,11 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
                 if arg.is_empty() { remove_braces = Some(None) }
                 arg.push(t);
                 let r = if long {
-                    engine.read_until_endgroup(
+                    engine.read_until_endgroup(&token,
                         |_, _, t| arg.push(t)
                     )
                 } else {
-                    engine.read_until_endgroup(
+                    engine.read_until_endgroup(&token,
                         |_, _, t| if t.is_cs(&par) { todo!("\\par in read_argument") } else { arg.push(t) }
                     )
                 };
@@ -122,14 +122,14 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
                 if long {
                     engine.mouth.read_until_endgroup(
                         engine.aux,
-                        engine.state,
+                        engine.state,token,
                         |_, t| arg.push(t)
                     );
                 } else {
                     let par = engine.aux.memory.cs_interner().par();
                     engine.mouth.read_until_endgroup(
                         engine.aux,
-                        engine.state,
+                        engine.state,token,
                         |_,t|
                             if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t)}
                     );
@@ -218,7 +218,7 @@ fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,long:bool,toke
  */
 
 /// Default implementation for [`Gullet::expand_until_endgroup`].
-pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,mut cont:Fn) {
+pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,token:&ET::Token,mut cont:Fn) {
     let mut ingroups = 0;
     while let Some(t) = engine.get_next() {
         match t.command_code() {
@@ -254,7 +254,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.unexpanded => {
                     engine.expand_until_bgroup(false,&t);
-                    engine.read_until_endgroup(|a,s,t|{
+                    engine.read_until_endgroup(token,|a,s,t|{
                         if edef_like && t.command_code() == CommandCode::Parameter {
                             cont(a,s,t.clone());
                         }
@@ -290,7 +290,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
     todo!("throw error")
 }
 
-pub(crate) fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize) {
+pub(crate) fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,token:&ET::Token) {
     let (mut incond,cond) = {
         let conds = engine.gullet.get_conditionals();
         let ic = conds.len() - idx;
@@ -303,7 +303,7 @@ pub(crate) fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usi
     let mut curr_int = <ET::Num as NumSet>::Int::default();
     let one = <ET::Num as NumSet>::Int::from(1);
     let mut conds = std::mem::take(engine.gullet.get_conditionals());
-    engine.iterate(|_,state,t| {
+    engine.iterate(token,|_,state,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::char_or_primitive(state,&t) {
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.r#else && incond == 0 => {
@@ -342,7 +342,7 @@ pub(crate) fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usi
 /// What to do on a false conditional - skips [`Token`]s until the next `\else` (if `allowelse` is true) or `\fi`
 /// If `skipelse` is false, precisely one `\else` is skipped as well (this happens in `\ifcase` when the
 /// appropriate case is already done, so the corresponding `\else` should be skipped).
-pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,allowelse:bool,mut skipelse:bool) {
+pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,allowelse:bool,mut skipelse:bool,token:&ET::Token) {
     let (mut incond,cond) = {
         let conds = engine.gullet.get_conditionals();
         let ic = conds.len() - idx;
@@ -350,7 +350,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
         (ic,conds.pop().unwrap().name())
     };
     let mut conds = std::mem::take(engine.gullet.get_conditionals());
-    engine.iterate(|_,state,t| {
+    engine.iterate(token,|_,state,t| {
         if !t.is_cs_or_active() { return true }
         match ET::Gullet::char_or_primitive(state,&t) {
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.r#else && incond == 0 => {

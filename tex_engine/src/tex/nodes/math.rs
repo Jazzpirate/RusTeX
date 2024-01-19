@@ -1082,19 +1082,33 @@ pub struct Delimiter<ET:EngineTypes> {
     pub large:MathChar<ET>,
 }
 impl<ET:EngineTypes> Delimiter<ET> {
+    fn default() -> Self {
+        Delimiter {
+            small:MathChar {
+                char:ET::Char::from(0),
+                cls:MathClass::Ord,
+                style:UnresolvedMathFontStyle::of_fam(0)
+            },
+            large:MathChar {
+                char:ET::Char::from(0),
+                cls:MathClass::Ord,
+                style:UnresolvedMathFontStyle::of_fam(0)
+            }
+        }
+    }
     /// Create a new [`Delimiter`] from a delimiter code.
-    pub fn from_int(num:ET::Int,state:&ET::State) -> Self {
+    pub fn from_int(num:ET::Int,state:&ET::State) -> Result<Self,(Self,i64)> {
         let num = num.into();
         if num < 0 || num > u32::MAX.into() {
-            todo!("throw error")
+            return Err((Self::default(),num))
         }
         let num = num as u32;
         let large = num & 0xFFF;
         let small = num >> 12;
-        Delimiter {
+        Ok(Delimiter {
             small:MathChar::from_u32(small, state, None),
             large:MathChar::from_u32(large, state, None)
-        }
+        })
     }
 }
 

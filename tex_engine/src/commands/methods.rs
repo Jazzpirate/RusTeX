@@ -10,7 +10,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use crate::engine::state::{GroupType, State};
 use crate::engine::stomach::{Stomach, StomachData};
-use crate::expand_loop;
+use crate::{expand_loop, tex_error};
 use crate::tex::catcodes::CommandCode;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
@@ -281,7 +281,7 @@ impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
 pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,tk:&ET::Token) {
     let mut v = shared_vector::Vector::new();
     engine.expand_until_bgroup(false,&tk);
-    engine.expand_until_endgroup(true,true,|_,_,t| v.push(t));
+    engine.expand_until_endgroup(true,true,&tk,|_,_,t| v.push(t));
     let data = engine.stomach.data_mut();
     for list in data.open_lists.iter_mut().rev() {
         match list {
@@ -827,12 +827,12 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// expects a [`BeginGroup`](CommandCode::BeginGroup) token, reads until the
     /// matching [`EndGroup`](CommandCode::EndGroup) token and discards everything
     /// in between.
-    pub fn skip_argument(&mut self) {
+    pub fn skip_argument(&mut self,token:&ET::Token) {
         match self.get_next() {
             Some(t) if t.command_code() == CommandCode::BeginGroup => (),
             _ => todo!("throw error")
         }
-        self.read_until_endgroup(|_,_,_| {});
+        self.read_until_endgroup(token,|_,_,_| {});
     }
 
     /// reads the name of a control sequence until `\endcsname` and returns the
@@ -872,9 +872,6 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         let idx = self.read_file_index();
         let mut filename = self.aux.memory.get_string();
         self.read_string(true,&mut filename);
-        if filename.is_empty() {
-            todo!("throw error")
-        }
         let file = self.filesystem.get(&filename);
         self.aux.memory.return_string(filename);
         (idx,file)
@@ -997,12 +994,24 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         crate::expand_loop!(self,token,
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..}))  if *name == PRIMITIVES.delimiter => {
                 let num = self.read_int(false);
-                return Some(Delimiter::from_int(num,self.state))
+                return Some(match Delimiter::from_int(num,self.state) {
+                    Ok(d) => d,
+                    Err((d,i)) => {
+                        tex_error!(self,other,&format!("Bad delimiter code ({})",i));
+                        d
+                    }
+                })
             }
             ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
                 let num = self.state.get_delcode(char);
                 if num == ET::Int::default() {return None} else {
-                    return Some(Delimiter::from_int(num,self.state))
+                    return Some(match Delimiter::from_int(num,self.state) {
+                    Ok(d) => d,
+                    Err((d,i)) => {
+                        tex_error!(self,other,&format!("Bad delimiter code ({})",i));
+                        d
+                    }
+                })
                 };
             }
             o => todo!("??? {:?}",o)

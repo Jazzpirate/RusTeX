@@ -54,30 +54,20 @@ pub trait Gullet<ET:EngineTypes> {
     /// Wrapper around [`Mouth::iterate`] that, in case we are in an `\halign` or `\valign`,
     /// make sure to replace `&`, `\cr` etc. with the appropriate tokens.
     /// See also [`EngineReferences::iterate`].
-    fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token) -> bool>(&mut self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,mut f:Fn) {
+    fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token) -> bool>(&mut self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State,token:&ET::Token,mut f:Fn) {
         match self.get_align_data() {
-            None => mouth.iterate(aux,state,|a,t|f(a,state,t)),
+            None => mouth.iterate(aux,state,token,|a,t|f(a,state,t)),
             Some(data) => {
-                mouth.iterate(aux,state,|aux,t| {
+                mouth.iterate(aux,state,token,|aux,t| {
                     match t.command_code() {
                         CommandCode::BeginGroup => {
                             data.ingroups += 1;
                             f(aux,state,t)
                         }
                         CommandCode::EndGroup => {
-                            if data.ingroups == 0 { todo!() }
+                            if data.ingroups == 0 { aux.error_handler.too_many_closebraces() }
                             data.ingroups -= 1;
                             f(aux,state,t)
-                        }
-                        CommandCode::AlignmentTab if data.ingroups == data.groupval() => { todo!() }
-                        CommandCode::Escape | CommandCode::Active if data.ingroups == data.groupval() => match Self::char_or_primitive(state, &t) {
-                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
-                                todo!()
-                            }
-                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
-                                todo!()
-                            }
-                           _ => f(aux, state, t)
                         }
                         _ => f(aux,state,t)
                     }
@@ -96,7 +86,7 @@ pub trait Gullet<ET:EngineTypes> {
                 Some(t) => match t.command_code() {
                     CommandCode::BeginGroup => { a.ingroups += 1; Some(t) }
                     CommandCode::EndGroup => {
-                        if a.ingroups == 0 { todo!("throw error") }
+                        if a.ingroups == 0 { aux.error_handler.too_many_closebraces() }
                         a.ingroups -= 1;
                         Some(t)
                     }
@@ -126,25 +116,25 @@ pub trait Gullet<ET:EngineTypes> {
     /// Wrapper around [`Mouth::read_until_endgroup`] that, in case we are in an `\halign` or `\valign`,
     /// make sure to replace `&`, `\cr` etc. with the appropriate tokens.
     /// See also [`EngineReferences::read_until_endgroup`].
-    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State,mut cont:Fn) -> ET::Token {
+    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State,token:&ET::Token,mut cont:Fn) -> ET::Token {
         match self.get_align_data() {
             None => (),
             Some(d) => {
-                if d.ingroups == 0 { todo!() }
+                if d.ingroups == 0 { aux.error_handler.too_many_closebraces() }
                 d.ingroups -= 1
             }
         }
-        mouth.read_until_endgroup(aux,state,|a,t|cont(a,state,t))
+        mouth.read_until_endgroup(aux,state,token,|a,t|cont(a,state,t))
     }
 
     /// Wrapper around [`Mouth::requeue`] that makes sure to update the [`AlignData`] if we are in an
     /// `\halign` or `\valign`.
     /// See also [`EngineReferences::requeue`].
-    fn requeue(&mut self,mouth:&mut ET::Mouth,t:ET::Token) {
+    fn requeue(&mut self,aux:&EngineAux<ET>,mouth:&mut ET::Mouth,t:ET::Token) {
         if let Some(data) = self.get_align_data() {
             let cc = t.command_code();
             if cc == CommandCode::BeginGroup {
-                if data.ingroups == 0 { todo!() }
+                if data.ingroups == 0 { aux.error_handler.too_many_closebraces() }
                 data.ingroups -= 1;
             }
             else if cc == CommandCode::EndGroup {
@@ -263,7 +253,7 @@ pub trait Gullet<ET:EngineTypes> {
             //crate::debug_log!(error => "Here: {}",engine.preview());
             engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",name.display(engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
         }
-        let mut ret = f(engine,token);
+        let mut ret = f(engine,token.clone());
         if unless { ret = !ret }
         if ret {
             if trace {
@@ -281,9 +271,9 @@ pub trait Gullet<ET:EngineTypes> {
                 engine.aux.outputs.write_neg1("{false}");
             }
             if name == PRIMITIVES.ifcase {
-                methods::case_loop(engine, index + 1);
+                methods::case_loop(engine,index + 1, &token);
             } else {
-                methods::false_loop(engine, index + 1, true,false);
+                methods::false_loop(engine, index + 1, true,false,&token);
             }
             if trace {
                 if engine.gullet.get_conditionals().len() > index {
@@ -307,8 +297,8 @@ pub trait Gullet<ET:EngineTypes> {
 
     /// Expand [`Token`]s until encountering an [`EndGroup`](CommandCode::EndGroup)-token.
     /// See also [`EngineReferences::expand_until_endgroup`].
-    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,cont:Fn) {
-        methods::expand_until_endgroup(engine,expand_protected,edef_like,cont);
+    fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,token:&ET::Token,cont:Fn) {
+        methods::expand_until_endgroup(engine,expand_protected,edef_like,token,cont);
     }
 }
 
@@ -394,25 +384,25 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Yields [`Token`]s from the input stream until and passes them on to `cont` until `cont` returns `false`.
-    pub fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token) -> bool>(&mut self,mut cont:Fn) {
-        self.gullet.iterate(self.mouth,self.aux,self.state,|a,s,t| cont(a, s, t))
+    pub fn iterate<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token) -> bool>(&mut self,token:&ET::Token,mut cont:Fn) {
+        self.gullet.iterate(self.mouth,self.aux,self.state,token,|a,s,t| cont(a, s, t))
     }
 
     /// Push the provided [`Token`] back onto the input stream.
     pub fn requeue(&mut self,t:ET::Token) {
-        self.gullet.requeue(self.mouth,t)
+        self.gullet.requeue(self.aux,self.mouth,t)
     }
 
     /// Yields [`Token`]s from the input stream until an [`EndGroup`](CommandCode::EndGroup)-token is encountered.
-    pub fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self, cont:Fn) -> ET::Token {
-        self.gullet.read_until_endgroup(self.mouth,self.aux,self.state,cont)
+    pub fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self,token:&ET::Token, cont:Fn) -> ET::Token {
+        self.gullet.read_until_endgroup(self.mouth,self.aux,self.state,token,cont)
     }
     /// Yields [`Token`]s from the input stream until an [`EndGroup`](CommandCode::EndGroup)-token is encountered, expanding
     /// all expandable tokens along the way. If `expand_protected` is `true`, protected tokens are expanded as well.
     /// If `edef_like` is `true`, the expansion is done in `\edef`-mode, i.e. tokens expanded from `\the` are not expanded
     /// further and [`Parameter`](CommandCode::Parameter)-tokens expanded from `\the` are doubled.
-    pub fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self,expand_protected:bool,edef_like:bool,mut cont:Fn) {
-        ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,|a,s,t| cont(a,s,t))
+    pub fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self,expand_protected:bool,edef_like:bool,token:&ET::Token,mut cont:Fn) {
+        ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,token,|a,s,t| cont(a,s,t))
     }
     /// Yields the next [`Token`] from the input stream.
     pub fn get_next(&mut self) -> Option<ET::Token> {
@@ -448,7 +438,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Read a braced string from the input stream (unlike [`read_string`](EngineReferences::read_string)
     /// which does not require braces). Compare e.g. `\message{Hello World}` (which would use `read_braced_string`)
     /// and `\input myfile.tex` (which would use [`read_string`](EngineReferences::read_string)).
-    pub fn read_braced_string(&mut self,skip_ws:bool, expand_protected:bool, mut str:&mut String) {
+    pub fn read_braced_string(&mut self,skip_ws:bool, expand_protected:bool,token:&ET::Token, mut str:&mut String) {
         loop {
             match self.get_next() {
                 Some(t) => match t.command_code() {
@@ -459,7 +449,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 None => todo!("file end")
             }
         }
-        ET::Gullet::expand_until_endgroup(self,expand_protected,false,|a,s,t| {
+        ET::Gullet::expand_until_endgroup(self,expand_protected,false,token,|a,s,t| {
             t.display_fmt(a.memory.cs_interner(),s.get_catcode_scheme(),
                           s.get_escape_char(),&mut str).unwrap();
         });

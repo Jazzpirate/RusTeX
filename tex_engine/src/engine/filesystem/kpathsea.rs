@@ -60,7 +60,7 @@ impl Kpathsea {
         } else if filestr.starts_with("nul:") {
             return KpseResult{path:self.pwd.join(filestr),exists:false}
         } else if filestr.is_empty() {
-            todo!("Empty string in kpsewhich")
+            panic!("Empty string in kpsewhich")
         }
         if Path::new(filestr).is_absolute() {
             if Path::new(filestr).is_file() {return KpseResult{path:PathBuf::from(&filestr),exists:true} }

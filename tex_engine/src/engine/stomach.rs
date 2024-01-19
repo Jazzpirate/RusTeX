@@ -173,12 +173,12 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         methods::insert_afterassignment(engine);
     }
     /// Assign a value to a [token register](TeXCommand::ToksRegister) and insert `\afterassignment` if necessary
-    fn assign_toks_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
-        methods::assign_toks_register(engine,register,global)
+    fn assign_toks_register(engine:&mut EngineReferences<ET>,token:ET::Token,register:usize,global:bool) {
+        methods::assign_toks_register(engine,token,register,global)
     }
     /// Assign a value to a [primitive token list](PrimitiveCommand::PrimitiveToks) and insert `\afterassignment` if necessary
-    fn assign_primitive_toks(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
-        methods::assign_primitive_toks(engine,name,global)
+    fn assign_primitive_toks(engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,global:bool) {
+        methods::assign_primitive_toks(engine,token,name,global)
     }
     /// Assign a value to a [primitive integer value](PrimitiveCommand::PrimitiveInt) and insert `\afterassignment` if necessary
     fn assign_primitive_int(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {

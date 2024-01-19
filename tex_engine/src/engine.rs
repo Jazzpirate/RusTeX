@@ -366,7 +366,7 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::MuSkipRegister(u) =>
                <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false),
             crate::commands::TeXCommand::ToksRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_toks_register($engine, *u,false),
+                <$ET as EngineTypes>::Stomach::assign_toks_register($engine,$token, *u,false),
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Whatsit { get, .. }} =>
                 <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get),
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveInt} =>
@@ -378,7 +378,7 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveMuSkip} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false),
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveToks} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,*name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,$token,*name,false),
             crate::commands::TeXCommand::MathChar(u) =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,Some($token)),
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Relax,..} => (),

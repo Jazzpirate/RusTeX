@@ -115,11 +115,11 @@ fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {
     };
     engine.state.set_command(engine.aux,path,empty,true);
 }
-fn gbegin(engine:Refs,_token:CompactToken) {
+fn gbegin(engine:Refs,token:CompactToken) {
     let mut attrs : HMap<&'static str,String> = HMap::default();
     let mut key = String::new();
     let start = engine.mouth.start_ref();
-    engine.read_braced_string(true,true,&mut key);
+    engine.read_braced_string(true,true,&token,&mut key);
     'attr: loop {
         //println!("HERE! {}",engine.preview());
         match engine.read_keywords(&[

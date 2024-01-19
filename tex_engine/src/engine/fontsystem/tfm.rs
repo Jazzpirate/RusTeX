@@ -244,7 +244,7 @@ impl FInfoEntry {
                             Some((s,n,o,r)) => {
                                 skip = s;next = n;op = o;rem = r;
                             }
-                            None => todo!("should not be able to happen")
+                            None => unreachable!("broken .tfm file")
                         }
                     }
                     loop {
@@ -255,12 +255,12 @@ impl FInfoEntry {
                                 Some((s,n,o,r)) => {
                                     skip = s;next = n;rem = r;op = o;
                                 }
-                                None => todo!("should not be able to happen")
+                                None => unreachable!("broken .tfm file")
                             }
                         }
                     }
                 }
-                None => todo!("should not be able to happen")
+                None => unreachable!("broken .tfm file")
             }
         }
     }

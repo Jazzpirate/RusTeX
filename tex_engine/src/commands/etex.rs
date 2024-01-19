@@ -140,7 +140,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     engine.expand_until_bgroup(false,&tk);
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
-    engine.read_until_endgroup(|a,st,t| match t.command_code() {
+    engine.read_until_endgroup(&tk,|a,st,t| match t.command_code() {
         CommandCode::Space => f(t),
         CommandCode::Parameter => {
             f(t.clone());
@@ -164,10 +164,10 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     });
 }
 
-pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
+pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     match engine.get_next() {
         Some(t) if t.command_code() == CommandCode::BeginGroup => {
-            ET::Gullet::expand_until_endgroup(engine,false,false,|_,_,t| exp.push(t));
+            ET::Gullet::expand_until_endgroup(engine,false,false,&tk,|_,_,t| exp.push(t));
         }
         _ => todo!("throw errors")
     }
@@ -362,7 +362,7 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
         ret.push(std::mem::take(&mut curr).into());
     } else {curr.push(c)};
     let escapechar = engine.state.get_escape_char();
-    engine.read_until_endgroup(|a,state,t| {
+    engine.read_until_endgroup(&tk,|a,state,t| {
         match t.to_enum() {
             StandardToken::Character(c,_) => f(c),
             StandardToken::ControlSequence(cs) => {
@@ -416,7 +416,7 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 
 pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false,&tk);
-    engine.read_until_endgroup(|_,_,t|{
+    engine.read_until_endgroup(&tk,|_,_,t|{
         exp.push(t)
     });
 }

@@ -116,6 +116,13 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     }
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         let path = path.as_ref();
+        if path.is_empty() {
+            return VirtualFile {
+                path:self.kpse.pwd.clone(),
+                source:None,pipe:false,exists:false,
+                id:self.interner.get_or_intern("")
+            }
+        }
         let kpath = self.kpse.kpsewhich(path);
         match self.files.get(&kpath.path) {
             Some(f) => f.clone(),

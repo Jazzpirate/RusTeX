@@ -19,6 +19,7 @@ use crate::commands::primitives::PrimitiveIdentifier;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
+use crate::prelude::CSName;
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::characters::{Character, StringLineSource};
 use crate::tex::tokens::Token;
@@ -96,6 +97,15 @@ pub trait ErrorHandler<ET:EngineTypes> {
         TeXError::throw(format!("! Text line contains an invalid character.\n{}",c.display()))
     }
 
+    /// "File ended while scanning use of X"
+    fn file_end_while_scanning(&self,state:&ET::State,int:&<ET::CSName as CSName<ET::Char>>::Handler,token:ET::Token) {
+        TeXError::throw(format!("! File ended while scanning use of {}",token.display(int,state.get_catcode_scheme(),state.get_escape_char())))
+    }
+
+    fn too_many_closebraces(&self) {
+        TeXError::throw(format!("Too many }}'s"))
+    }
+
     /// "You can't use `X` in `Y` mode."
     fn not_allowed_in_mode(&self,engine:&mut EngineReferences<ET>,_token:ET::Token,name:PrimitiveIdentifier) {
         TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(engine.state.get_escape_char()),engine.stomach.data_mut().mode()))
@@ -108,7 +118,7 @@ pub trait ErrorHandler<ET:EngineTypes> {
 
     /// "File ended while scanning use of `X`"
     fn missing_argument(&self,engine:&mut EngineReferences<ET>,t:ET::Token) {
-        TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
+        TeXError::throw(format!("! File ended while scanning use of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
     /// "Missing number, treated as zero."
@@ -124,6 +134,7 @@ pub trait ErrorHandler<ET:EngineTypes> {
     fn other(&self,_engine:&mut EngineReferences<ET>,msg:&str) {
         TeXError::throw(msg.to_string())
     }
+
 
     /*
     /// "Runaway argument? Paragraph ended before `\foo` was complete."

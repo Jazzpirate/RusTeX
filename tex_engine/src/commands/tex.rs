@@ -67,10 +67,10 @@ pub fn end<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     engine.mouth.finish();
 }
 
-pub fn discretionary<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    engine.skip_argument();
-    engine.skip_argument();
-    engine.skip_argument();
+pub fn discretionary<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+    engine.skip_argument(&tk);
+    engine.skip_argument(&tk);
+    engine.skip_argument(&tk);
     // TODO
 }
 
@@ -328,7 +328,7 @@ pub fn toksdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,g
     engine.set_command(&name,Some(cmd),globally)
 }
 
-pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
+pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
@@ -339,13 +339,13 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:
         None => todo!("file end error")
     };
     let mut parser = MacroParser::new();
-    engine.iterate(|_,_,t| parser.do_signature_token(t));
-    engine.read_until_endgroup(|_,_,t| parser.do_expansion_token(t));
+    engine.iterate(&tk,|_,_,t| parser.do_signature_token(t));
+    engine.read_until_endgroup(&tk,|_,_,t| parser.do_expansion_token(t));
     let cmd = parser.close(long,outer,protected);
     engine.set_command(&cm, Some(TeXCommand::Macro(cmd)), globally)
 }
 
-pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
+pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
     let cm = match engine.get_next() {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
@@ -357,8 +357,8 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer
     };
 
     let mut parser = MacroParser::new();
-    engine.iterate(|_,_,t| parser.do_signature_token(t));
-    engine.expand_until_endgroup(false,true,|_,_,t| parser.do_expansion_token(t));
+    engine.iterate(&tk,|_,_,t| parser.do_signature_token(t));
+    engine.expand_until_endgroup(false,true,&tk,|_,_,t| parser.do_expansion_token(t));
     let cmd = parser.close(long,outer,protected);
     engine.set_command(&cm, Some(TeXCommand::Macro(cmd)), globally)
 }
@@ -458,9 +458,9 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,out
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::MuSkip {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd(Some(TeXCommand::ToksRegister(u))) if allow_others =>
-            return ET::Stomach::assign_toks_register(engine,*u,true),
+            return ET::Stomach::assign_toks_register(engine,token,*u,true),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) if allow_others =>
-            return ET::Stomach::assign_primitive_toks(engine,*name,true),
+            return ET::Stomach::assign_primitive_toks(engine,token,*name,true),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         o => todo!("\\global {:?}",o)
@@ -612,7 +612,7 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) {
                          <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
                          name.display(engine.state.get_escape_char()), index, engine.mouth.line_number()));
     }
-    crate::engine::gullet::methods::false_loop(engine,index,false,false);
+    crate::engine::gullet::methods::false_loop(engine,index,false,false,&tk);
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}fi: {} (level {}) entered on line {}}}",
@@ -622,7 +622,7 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) {
     }
 }
 
-pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     let conds = engine.gullet.get_conditionals();
     match conds.pop() {
         Some(ActiveConditional::Case(_)) => {
@@ -639,7 +639,7 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
                          <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
                          index, engine.mouth.line_number()));
     }
-    crate::engine::gullet::methods::false_loop(engine,index,false,true);
+    crate::engine::gullet::methods::false_loop(engine,index,false,true,&tk);
     if trace {
         engine.aux.outputs.write_neg1(
             format_args!("{{{}or: {}ifcase (level {}) entered on line {}}}",
@@ -1180,7 +1180,7 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
     engine.expand_until_bgroup(false,&tk);
     let mut exp = Vec::new();// ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
-    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
+    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,&tk,|_,_,t| {
         match t.to_enum() {
             StandardToken::Character(c,cc) => {
                 let lccode = state.get_lccode(c);
@@ -1200,7 +1200,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
     engine.expand_until_bgroup(false,&tk);
     let mut exp = Vec::new();//ET::Gullet::get_expansion_container(engine);
     let state = &engine.state;
-    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,|_,_,t| {
+    engine.gullet.read_until_endgroup(engine.mouth,engine.aux,state,&tk,|_,_,t| {
         match t.to_enum() {
             StandardToken::Character(c,cc) => {
                 let uccode = state.get_uccode(c);
@@ -1309,16 +1309,16 @@ pub fn cleaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
     super::methods::do_leaders(engine,LeaderType::C)
 }
 
-pub fn message<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn message<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,true,&mut out);
+    engine.read_braced_string(false,true,&tk,&mut out);
     engine.aux.outputs.message(&out);
     engine.aux.memory.return_string(out);
 }
 
-pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn errmessage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,true,&mut out);
+    engine.read_braced_string(false,true,&tk,&mut out);
     write!(out," (line {})",engine.mouth.line_number()).unwrap();
     engine.aux.outputs.errmessage(&out);
     engine.aux.error_handler.error_message(&out);
@@ -1592,7 +1592,7 @@ pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     engine.filesystem.close_in(idx)
 }
 
-pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
+pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
     let idx = engine.read_int(false).into();
     let mut tks = Vec::new();
@@ -1602,23 +1602,23 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
         Some(_) => todo!("should be begingroup"),
         None => todo!("file end")
     }
-    engine.read_until_endgroup(|_,_,t| {
+    engine.read_until_endgroup(&tk,|_,_,t| {
         tks.push(t);
     });
     tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-    Some(Box::new(move |engine| {do_write(engine,idx,tks)}))
+    Some(Box::new(move |engine| {do_write(engine,tk,idx,tks)}))
 }
-pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let idx = engine.read_int(false).into();
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,true,&mut out);
+    engine.read_braced_string(false,true,&tk,&mut out);
     engine.filesystem.write(idx,&out,engine.state.get_newline_char(),engine.aux);
     engine.aux.memory.return_string(out);
 }
-pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,i:i64,v:Vec<ET::Token>) {
+pub fn do_write<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,i:i64,v:Vec<ET::Token>) {
     engine.mouth.push_vec(v);
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,false,&mut out);
+    engine.read_braced_string(false,false,&tk,&mut out);
     engine.filesystem.write(i,&out,engine.state.get_newline_char(),engine.aux);
     engine.aux.memory.return_string(out);
 }
@@ -1644,7 +1644,7 @@ pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> 
     Int::<ET>::from(i)
 }
 
-pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,global:bool) {
+pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let idx = engine.read_register_index(false);
     let mut had_eq = false;
     crate::expand_loop!(engine,token,
@@ -1656,7 +1656,7 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globa
             }
             (_,CommandCode::BeginGroup) => {
                 let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(|_,_,t| tks.push(t));
+                engine.read_until_endgroup(&tk,|_,_,t| tks.push(t));
                 engine.state.set_toks_register(engine.aux,idx,TokenList::from(tks),global);
                 return ()
             }
@@ -1774,7 +1774,13 @@ pub fn indent<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
 
 pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let num = engine.read_int(false);
-    let delim = Delimiter::from_int(num,engine.state);
+    let delim = match Delimiter::from_int(num,engine.state) {
+        Ok(d) => d,
+        Err((d,i)) => {
+            tex_error!(engine,other,&format!("Bad delimiter code ({})",i));
+            d
+        }
+    };
     ET::Stomach::add_node_m(engine,MathNode::Atom(delim.small.to_atom()))
 }
 
@@ -2728,7 +2734,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"errorstopmode",CommandScope::Any,errorstopmode);
     register_unexpandable(engine,"halign",CommandScope::Any,halign);
     register_unexpandable(engine,"valign",CommandScope::SwitchesToHorizontal,valign);
-    register_unexpandable(engine, "hyphenation",CommandScope::Any, |e,_|e.skip_argument());
+    register_unexpandable(engine, "hyphenation",CommandScope::Any, |e,t|e.skip_argument(&t));
     register_unexpandable(engine,"ignorespaces",CommandScope::Any,ignorespaces);
     register_unexpandable(engine,"insert",CommandScope::Any,insert);
     register_unexpandable(engine,"immediate",CommandScope::Any,immediate);
@@ -2754,7 +2760,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"raise",CommandScope::SwitchesToHorizontalOrMath,raise);
     register_unexpandable(engine,"lower",CommandScope::SwitchesToHorizontalOrMath,lower);
     register_unexpandable(engine,"shipout",CommandScope::Any,shipout);
-    register_unexpandable(engine, "patterns", CommandScope::Any,|e,_| e.skip_argument());
+    register_unexpandable(engine, "patterns", CommandScope::Any,|e,t| e.skip_argument(&t));
     register_unexpandable(engine,"vadjust",CommandScope::Any,vadjust);
     {
         let refs = engine.get_engine_refs();

@@ -39,7 +39,7 @@ pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) 
 }
 
 /// Default implementation for [`Stomach::assign_toks_register`].
-pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,register:usize,global:bool) {
+pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,register:usize,global:bool) {
     let mut had_eq = false;
     crate::expand_loop!(ET; engine,tk,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
@@ -50,7 +50,7 @@ pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,reg
             }
             (_,CommandCode::BeginGroup) => {
                 let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(|_,_,t| tks.push(t));
+                engine.read_until_endgroup(&token,|_,_,t| tks.push(t));
                 engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
                 insert_afterassignment(engine);
                 return ()
@@ -74,7 +74,7 @@ pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,reg
 }
 
 /// Default implementation for [`Stomach::assign_primitive_toks`].
-pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) {
+pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,global:bool) {
     let mut had_eq = false;
     crate::expand_loop!(ET; engine,tk,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
@@ -87,10 +87,10 @@ pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,na
                 let mut tks = shared_vector::Vector::new();
                 if name == PRIMITIVES.output {
                     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                    engine.read_until_endgroup(|_,_,t| tks.push(t));
+                    engine.read_until_endgroup(&token,|_,_,t| tks.push(t));
                     tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
                 } else {
-                    engine.read_until_endgroup(|_,_,t| tks.push(t));
+                    engine.read_until_endgroup(&token,|_,_,t| tks.push(t));
                 }
                 engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
                 insert_afterassignment(engine);

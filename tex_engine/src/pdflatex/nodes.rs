@@ -47,12 +47,12 @@ impl NumOrName {
 #[derive(Debug,Clone)]
 pub enum PDFStruct { Num(i64),Name(String),Other(String) }
 
-pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> Option<NumOrName> {
+pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> Option<NumOrName> {
     match engine.read_keywords(&[b"num",b"name"]) {
         Some(b"num") => Some(NumOrName::Num(engine.read_int(false).into())),
         Some(b"name") => {
             let mut str = String::new();
-            engine.read_braced_string(true,true,&mut str);
+            engine.read_braced_string(true,true,token,&mut str);
             Some(NumOrName::Name(str))
         }
         _ => None
@@ -94,24 +94,24 @@ pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> PDFDest
     }
 }
 
-pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSpec {
+pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> ActionSpec {
     match engine.read_keywords(&[b"user",b"goto",b"thread"]) {
         Some(b"user") => {
             let mut ret = String::new();
-            engine.read_braced_string(true,true,&mut ret);
+            engine.read_braced_string(true,true,token,&mut ret);
             ActionSpec::User(ret)
         }
         Some(b"goto") => {
             let file = if engine.read_keyword(b"file") {
                 let mut file = String::new();
-                engine.read_braced_string(true,true,&mut file);
+                engine.read_braced_string(true,true,token,&mut file);
                 Some(file)
             } else {None};
             let struct_ = if engine.read_keyword(b"struct") {
-                match num_or_name(engine) {
+                match num_or_name(engine,token) {
                     None => {
                         let mut ret = String::new();
-                        engine.read_braced_string(true,true,&mut ret);
+                        engine.read_braced_string(true,true,token,&mut ret);
                         Some(PDFStruct::Other(ret))
                     },
                     Some(NumOrName::Num(i)) => {
@@ -124,7 +124,7 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
             } else {None};
             match file {
                 None => {
-                    match num_or_name(engine) {
+                    match num_or_name(engine,token) {
                         Some(n) => ActionSpec::Goto(GotoAction::Current {
                             struct_,page:None,target:n
                         }),
@@ -133,7 +133,7 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
                                 Some(engine.read_int(false).into())
                             } else {None};
                             let mut str = String::new();
-                            engine.read_braced_string(true,true,&mut str);
+                            engine.read_braced_string(true,true,token,&mut str);
                             ActionSpec::Goto(GotoAction::Current{
                                 struct_,page,target:NumOrName::Name(str)
                             })
@@ -143,14 +143,14 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
                 Some(filename) => {
                     let (page,target) = if engine.read_keyword(b"name") {
                         let mut str = String::new();
-                        engine.read_braced_string(true,true,&mut str);
+                        engine.read_braced_string(true,true,token,&mut str);
                         (None,str)
                     } else {
                         let page = if engine.read_keyword(b"page") {
                             Some(engine.read_int(false).into())
                         } else {None};
                         let mut str = String::new();
-                        engine.read_braced_string(true,true,&mut str);
+                        engine.read_braced_string(true,true,token,&mut str);
                         (page,str)
                     };
                     let newwindow = match engine.read_keywords(&[b"newwindow",b"nonewwindow"]) {
@@ -167,11 +167,11 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
         Some(b"thread") => {
             let file = if engine.read_keyword(b"file") {
                 let mut file = String::new();
-                engine.read_braced_string(true,true,&mut file);
+                engine.read_braced_string(true,true,token,&mut file);
                 Some(file)
             } else {None};
 
-            match num_or_name(engine) {
+            match num_or_name(engine,token) {
                 Some(n) => ActionSpec::Thread{file,target:n},
                 None => {
                     tex_error!(engine,missing_keyword,&["num","name"]);
