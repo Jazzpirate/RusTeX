@@ -46,51 +46,6 @@ fn pgfhbox(engine:Refs,_token:CompactToken) {
     let bx = engine.state.take_box_register(num).unwrap();
     let node = RusTeXNode::PGFEscape(bx);
     RusTeXStomach::add_node_h(engine, HNode::Custom(node));
-    /*
-    let mut ch = match bx {
-        TeXBox::H {ref mut children,..} => std::mem::take(children).into_vec(),
-        _ => {
-            let node = RusTeXNode::PGFEscape(bx);
-            RusTeXStomach::add_node_h(engine, HNode::Custom(node));
-            return
-        }
-    };
-    let mut endidx = 0;
-    for (i,b) in ch.iter().enumerate() {
-        match b {
-            HNode::Custom(RusTeXNode::FontChange(..) | RusTeXNode::FontChangeEnd |
-                            RusTeXNode::PDFNode(PDFNode::PDFStartLink(..)) |
-                            RusTeXNode::PDFNode(PDFNode::PDFEndLink) |
-                            RusTeXNode::PDFNode(PDFNode::Color(..)) |
-                          RusTeXNode::PGFGBegin {..} | RusTeXNode::PGFGEnd
-            ) => (),
-            _ => { endidx = i; break }
-        }
-    }
-    let mut rest = ch.split_off(endidx);
-    let mut readd = vec!();
-    while let Some(b) = rest.pop() {
-        match b {
-            HNode::Custom(RusTeXNode::FontChange(..) | RusTeXNode::FontChangeEnd |
-                          RusTeXNode::PDFNode(PDFNode::PDFStartLink(..)) |
-                          RusTeXNode::PDFNode(PDFNode::PDFEndLink) |
-                          RusTeXNode::PDFNode(PDFNode::Color(..)) |
-                          RusTeXNode::PGFGBegin {..} | RusTeXNode::PGFGEnd
-            ) => readd.push(b),
-            _ => { rest.push(b); break }
-        }
-    }
-
-    for c in ch { RusTeXStomach::add_node_h(engine,c) }
-    match bx {
-        TeXBox::H {ref mut children,..} => *children = rest.into(),
-        _ => unreachable!()
-    };
-    let node = RusTeXNode::PGFEscape(bx);
-    RusTeXStomach::add_node_h(engine, HNode::Custom(node));
-    for c in readd.into_iter().rev() { RusTeXStomach::add_node_h(engine,c) }
-
-     */
 }
 fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
     let num = engine.read_register_index(false);
@@ -103,7 +58,6 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
     let maxy = engine.read_dim(true);
     let node = RusTeXNode::PGFSvg { bx, minx, miny, maxx, maxy };
     RusTeXStomach::add_node_h(engine, HNode::Custom(node));
-    //tex_engine::add_node!(RusTeXStomach;engine, VNode::Custom(node), HNode::Custom(node),MathNode::Custom(node));
 }
 fn pgfliteral(engine:Refs,_token:CompactToken) { todo!("pgfliteral") }
 fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {

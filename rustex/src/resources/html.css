@@ -406,13 +406,16 @@ mtd {padding:0;text-align: start}
 
 .rustex-foreign {
     display: flex;
+    white-space: initial;
     overflow: visible;
     > div {
+        display:flex;
+        white-space: initial;
         width: 100%;
         height: 100%;
         text-align: center;
-        justify-content: start;
-        /*align-content: center;*/
+        justify-content: center;
+        align-content: center;
         flex-wrap: wrap;
         line-height: 1;
         > * {

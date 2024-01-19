@@ -1155,106 +1155,86 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
         }
     }
 }
-
-// TODO old code, needs cleanup + optimization
+use std::fmt::Write;
 
 pub fn parse_path(ts : String) -> String {
-    fn parse_path_one(s : &str) -> String {
-        if s.is_empty() { return "".into() };
+    let mut ret = String::new();
+    let mut s = ts.trim();
+    while !s.is_empty() {
         if s.starts_with("M") {
-            let (n1, s1) = parse_get_num(s[1..].trim_start());
-            let (n2, s2) = parse_get_num(s1.trim_start());
-            "M ".to_string() +
-                scale(n1).as_str() + " " +
-                scale(-n2).as_str() + " " +
-                parse_path_one(s2.trim_start()).as_str()
+            s = s[1..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            let n2 = parse_get_num(&mut s);
+            write!(ret,"M {} {} ",scale(n1),scale(-n2)).unwrap();
         } else if s.starts_with("L") {
-            let (n1, s1) = parse_get_num(s[1..].trim_start());
-            let (n2, s2) = parse_get_num(s1.trim_start());
-            "L ".to_string() +
-                scale(n1).as_str() + " " +
-                scale(-n2).as_str() + " " +
-                parse_path_one(s2.trim_start()).as_str()
+            s = s[1..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            let n2 = parse_get_num(&mut s);
+            write!(ret,"L {} {} ",scale(n1),scale(-n2)).unwrap();
         } else if s.starts_with("C") {
-            let (n1, s1) = parse_get_num(s[1..].trim_start());
-            let (n2, s2) = parse_get_num(s1.trim_start());
-            let (n3, s3) = parse_get_num(s2.trim_start());
-            let (n4, s4) = parse_get_num(s3.trim_start());
-            let (n5, s5) = parse_get_num(s4.trim_start());
-            let (n6, s6) = parse_get_num(s5.trim_start());
-            "C ".to_string() +
-                scale(n1).as_str() + " " +
-                scale(-n2).as_str() + " " +
-                scale(n3).as_str() + " " +
-                scale(-n4).as_str() + " " +
-                scale(n5).as_str() + " " +
-                scale(-n6).as_str() + " " +
-                parse_path_one(s6.trim_start()).as_str()
+            s = s[1..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            let n2 = parse_get_num(&mut s);
+            let n3 = parse_get_num(&mut s);
+            let n4 = parse_get_num(&mut s);
+            let n5 = parse_get_num(&mut s);
+            let n6 = parse_get_num(&mut s);
+            write!(ret,"C {} {} {} {} {} {} ",scale(n1),scale(-n2),scale(n3),scale(-n4),scale(n5),scale(-n6)).unwrap();
         } else if s.starts_with("Z") {
-            "Z ".to_string() + parse_path_one(s[1..].trim_start()).as_str()
+            write!(ret,"Z ").unwrap();
+            s = s[1..].trim_start();
         } else if s.starts_with("h") {
-            let (n1, s1) = parse_get_num(s[1..].trim_start());
-            "h ".to_string() +
-                scale(n1).as_str() + " " +
-                parse_path_one(s1.trim_start()).as_str()
+            s = s[1..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            write!(ret,"h {} ",scale(n1)).unwrap();
         } else if s.starts_with("v") {
-            let (n1, s1) = parse_get_num(s[1..].trim_start());
-            "v ".to_string() +
-                scale(-n1).as_str() + " " +
-                parse_path_one(s1.trim_start()).as_str()
+            s = s[1..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            write!(ret,"v {} ",scale(-n1)).unwrap();
         } else {
-            todo!("Foo!")
+            todo!("parse_path: {}",s);
         }
     }
-    parse_path_one(ts.trim())
+    ret
 }
 
 pub fn parse_transform(ts : String) -> String {
-    fn parse_one(s : &str) -> String {
-        if s.is_empty() { return "".into() };
+    let mut ret = String::new();
+    let mut s = ts.trim();
+    while !s.is_empty() {
         if s.starts_with("translate(") {
-            let (n1,s1) = parse_get_num(&s[10..]);
-            let (n2,s2) = parse_get_num(s1);
-            "translate(".to_string() + scale(n1).as_str() +
-                "," + scale(-n2).as_str() + ")" + &parse_one(s2)
+            s = &s[10..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            let n2 = parse_get_num(&mut s);
+            write!(ret,"translate({},{})",scale(n1),scale(-n2)).unwrap();
         } else if s.starts_with("matrix(") {
-            let (n1, s1) = parse_get_num(s[7..].trim_start());
-            let (n2, s2) = parse_get_num(s1.trim_start());
-            let (n3, s3) = parse_get_num(s2.trim_start());
-            let (n4, s4) = parse_get_num(s3.trim_start());
-            let (n5, s5) = parse_get_num(s4.trim_start());
-            let (n6, s6) = parse_get_num(s5.trim_start());
-            "matrix(".to_string() +
-                n1.to_string().as_str() + "," +
-                n2.to_string().as_str() + "," +
-                n3.to_string().as_str() + "," +
-                n4.to_string().as_str() + "," +
-                scale(n5).as_str() + "," +
-                scale(-n6).as_str() + ")" + &parse_one(s6)
+            s = s[7..].trim_start();
+            let n1 = parse_get_num(&mut s);
+            let n2 = parse_get_num(&mut s);
+            let n3 = parse_get_num(&mut s);
+            let n4 = parse_get_num(&mut s);
+            let n5 = parse_get_num(&mut s);
+            let n6 = parse_get_num(&mut s);
+            write!(ret,"matrix({},{},{},{},{},{})",n1,n2,n3,n4,scale(n5),scale(-n6)).unwrap();
         } else {
-            todo!("Foo!")
+            todo!("parse_transform: {}",s);
         }
     }
-    parse_one(ts.trim())
+    ret
 }
-fn parse_get_num<'a>(s:&'a str) -> (f32,&'a str) {
+fn parse_get_num<'a>(s:&mut &'a str) -> f32 {
     match s.find(|x| x == ' ' || x == ')' || x == ',') {
-        Some(i) =>
-            (s[..i].parse::<f32>().unwrap(), &s[i + 1..]),
-        None => (s.parse::<f32>().unwrap(), "")
+        Some(i) => {
+            let f = s[..i].parse::<f32>().unwrap();
+            *s = &s[i+1..].trim_start();
+            f
+        }
+        None => {
+            let f = s.parse::<f32>().unwrap();
+            *s = "";
+            f
+        }
     }
 }
 
-fn scale(f:f32) -> String {
-    (1.5 * f).to_string()
-}
-
-/*
-
-use crate::html::labels::*;
-use crate::shipout::annotations::close_all;
-
-
-
-
- */
+fn scale(f:f32) -> f32 { 1.5 * f }

@@ -534,12 +534,12 @@ impl <ET:EngineTypes> NodeTrait<ET> for MathAtom<ET,MathFontStyle<ET>> {
             MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
             _ => false
         };
-        let sup = self.sup.as_ref().unwrap().iter().map(|c| c.height()).max().unwrap_or_default();
+        let sup = self.sup.as_ref().unwrap().iter().map(|c| c.height() + c.depth()).max().unwrap_or_default();
         if limits {
-            h + sup + self.sup.as_ref().unwrap().iter().map(|c| c.depth()).max().unwrap_or_default() +
-                ET::Dim::from_sp(65536 * 5) // TODO heuristic
+            h + sup +
+                ET::Dim::from_sp(65536 * 3) // TODO heuristic
         } else {
-            h + sup.scale_float(0.5) // TODO heuristic
+            h + sup.scale_float(0.75) // TODO heuristic
         }
     }
     fn width(&self) -> ET::Dim {
@@ -574,12 +574,12 @@ impl <ET:EngineTypes> NodeTrait<ET> for MathAtom<ET,MathFontStyle<ET>> {
             MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
             _ => false
         };
-        let sub = self.sub.as_ref().unwrap().iter().map(|c| c.depth()).max().unwrap_or_default();
+        let sub = self.sub.as_ref().unwrap().iter().map(|c| c.depth() + c.height()).max().unwrap_or_default();
         if limits {
-            h + sub + self.sub.as_ref().unwrap().iter().map(|c| c.height()).max().unwrap_or_default() +
-                ET::Dim::from_sp(65536 * 5) // TODO heuristic
+            h + sub +
+                ET::Dim::from_sp(65536 * 3) // TODO heuristic
         } else {
-            h + sub // TODO heuristic
+            h + sub.scale_float(0.75) // TODO heuristic
         }
     }
 
@@ -723,9 +723,9 @@ impl<ET:EngineTypes> NodeTrait<ET> for MathNucleus<ET,MathFontStyle<ET>> {
     }
     fn width(&self) -> ET::Dim {
         match self {
-            MathNucleus::Simple{kernel,..} => kernel.width(),
+            MathNucleus::Simple{kernel,..} => kernel.width()  + ET::Dim::from_sp(65536 * 2), // heuristic adjustment
             MathNucleus::Inner(k) => k.width(),
-            MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.width()).sum(),
+            MathNucleus::LeftRight {children,..} => children.iter().map(|c| c.width()).sum::<ET::Dim>() + ET::Dim::from_sp(65536 * 3), // heuristic adjustment
             MathNucleus::Overline(k) => k.width(),
             MathNucleus::Underline(k) => k.width(),
             MathNucleus::Middle(c,s) => s.get_font().get_wd(*c),
