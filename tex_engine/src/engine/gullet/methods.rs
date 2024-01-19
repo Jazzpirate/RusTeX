@@ -7,7 +7,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::numerics::{MuDim, MuSkip, MuStretchShrink, Numeric, NumSet, Skip, STRETCH_SHRINK_UNITS, StretchShrink};
 use crate::engine::state::State;
-use crate::{file_end, tex_error};
+use crate::tex_error;
 use crate::engine::gullet::Gullet;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
@@ -413,7 +413,6 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
         }
         o => todo!("unexpandable in read_string: {:?}",o)
     );
-    crate::file_end!()
 }
 
 
@@ -613,7 +612,7 @@ fn read_dec_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
     );
-    file_end!()
+    if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
 }
 
 fn hex_to_num(b: u8) -> i64 {
@@ -653,31 +652,41 @@ fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
         }
         o => todo!("{:?}; current: {:?}",o,ret)
     );
-    file_end!()
+    if empty {todo!()} else {
+        (if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())
+    }
 }
 
 fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
     let mut ret = 0i32;
+    let mut empty = true;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (Ok(b),CommandCode::Other) if is_ascii_oct_digit(b) => {
                 ret = 8*ret + ((b - b'0') as i32);
+                empty = false
             }
-            (_,CommandCode::Space) => return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)},
-            _  => {
+            (_,CommandCode::Space) if !empty => return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)},
+            _  if !empty => {
                 engine.requeue(token);
                 return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
             }
+            _ => {
+                todo!("{}:{:?}",char,code);
+            }
         }
-        ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => {
+        ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) if !empty => {
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
-        ResolvedToken::Cmd(_) => {
+        ResolvedToken::Cmd(_) if !empty => {
             engine.mouth.requeue(token);
             return if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
         }
+        o => todo!("{:?}; current: {:?}",o,ret)
     );
-    file_end!()
+    if empty {todo!()} else {
+        if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)}
+    }
 }
 
 /// Default implementation for [`Gullet::read_dim`].
@@ -989,7 +998,8 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> StretchShri
             o => todo!("command in read_stretch: {:?}",o)
         }
     );
-    crate::file_end!()
+    tex_error!(engine,missing_number);
+    StretchShrink::Dim(ET::Dim::default())
 }
 fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> StretchShrink<ET::Dim> {
     let mut ret = 0f32;
@@ -1206,7 +1216,8 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> MuStretch
         }
         _ => todo!("command in read_skip")
     );
-    crate::file_end!()
+    tex_error!(engine,missing_number);
+    MuStretchShrink::Mu(ET::MuDim::default())
 }
 fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> MuStretchShrink<ET::MuDim> {
     let mut ret = 0f32;

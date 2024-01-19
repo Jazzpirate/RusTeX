@@ -906,7 +906,10 @@ pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
     let first = engine.read_dim(false);
     let rel = match engine.read_chars(&[b'=',b'<',b'>']) {
         Ok(b) => b,
-        _ => todo!("throw error")
+        _ => {
+            tex_error!(engine,missing_keyword,&["=","<",">"]);
+            b'='
+        }
     };
     let second = engine.read_dim(false);
     //debug_log!(debug=>"Comparing {} {} {}",first,rel as char,second);
@@ -949,7 +952,10 @@ pub fn ifnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
     let first = engine.read_int(false);
     let rel = match engine.read_chars(&[b'=',b'<',b'>']) {
         Ok(b) => b,
-        _ => todo!("throw error")
+        _ => {
+            tex_error!(engine,missing_keyword,&["=","<",">"]);
+            b'='
+        }
     };
     let second = engine.read_int(false);
     //debug_log!(debug=>"Comparing {} {} {}",first,rel as char,second);
@@ -1403,9 +1409,7 @@ pub fn prevdepth_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::T
 
 pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
     let idx = engine.read_file_index();
-    if !engine.read_keyword("to".as_bytes()) {
-        todo!("throw error")
-    }
+    if !engine.read_keyword("to".as_bytes()) { tex_error!(engine,missing_keyword,&["to"]); }
     let cs = engine.read_control_sequence();
     let mut ret = shared_vector::Vector::new();
     engine.filesystem.read::<ET,_>(idx,&engine.aux.error_handler,engine.aux.memory.cs_interner_mut(),engine.state,|t| ret.push(t));

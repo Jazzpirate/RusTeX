@@ -6,6 +6,7 @@ use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::{display_do_indent, NodeTrait, NodeType};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::CustomNodeTrait;
+use crate::tex_error;
 
 #[derive(Debug,Clone)]
 pub enum ActionSpec {
@@ -86,7 +87,10 @@ pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> PDFDest
         Some(b"fith") => PDFDestType::Fith,
         Some(b"fitv") => PDFDestType::Fitv,
         Some(b"fit") => PDFDestType::Fit,
-        _ => todo!("error")
+        _ => {
+            tex_error!(engine,missing_keyword,&["xyz","fitr","fitbh","fitbv","fitb","fith","fitv","fit"]);
+            PDFDestType::XYZ {zoom:None}
+        }
     }
 }
 
@@ -169,11 +173,17 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> ActionSp
 
             match num_or_name(engine) {
                 Some(n) => ActionSpec::Thread{file,target:n},
-                None => todo!("Expected one of 'num','name'"),
+                None => {
+                    tex_error!(engine,missing_keyword,&["num","name"]);
+                    ActionSpec::Thread {file,target:NumOrName::Num(0)}
+                }
             }
 
         }
-        None => todo!("Expected one of 'user','goto','thread'"),
+        None => {
+            tex_error!(engine,missing_keyword,&["user","goto","thread"]);
+            ActionSpec::User(String::new())
+        },
         _ => unreachable!()
     }
 }
@@ -523,14 +533,13 @@ pub struct PDFCatalog {
 #[allow(non_snake_case)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
 impl PDFColor {
-
     pub fn black() -> Self { PDFColor{R:0,G:0,B:0} }
     pub fn parse<S:AsRef<str>+std::fmt::Display>(s:S) -> Self {
         macro_rules! parse {
             ($s:expr) => {
                 match $s.parse::<f32>() {
                     Ok(f) => f,
-                    _ => todo!("Invalid color specification: {}",s)
+                    _ => return Self::black()
                 }
             }
         }
@@ -541,7 +550,7 @@ impl PDFColor {
             let g = 255.0*(1.0 - parse!(ls[1])) * third;
             let b = 255.0*(1.0 - parse!(ls[2])) * third;
             if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
-                todo!("Invalid color specification: {}",s);
+                return Self::black();
             }
             PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
         } else if matches!(ls.last(),Some(&"RG")) && ls.len() > 3 {
@@ -549,18 +558,18 @@ impl PDFColor {
             let g = 255.0 * parse!(ls[1]);
             let b = 255.0 * parse!(ls[2]);
             if r > 255.0 || g > 255.0 || b > 255.0 || r < 0.0 || g < 0.0 || b < 0.0 {
-                todo!("Invalid color specification: {}",s);
+                return Self::black();
             }
             PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
         } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
             let x = 255.0 * parse!(ls[0]);
             if x > 255.0 || x < 0.0  {
-                todo!("Invalid color specification: {}",s);
+                return Self::black();
             }
             let x = (x.round()) as u8;
             PDFColor{R:x, G:x, B:x}
         } else {
-            todo!("Invalid color specification: {}",s);
+            Self::black()
         }
     }
 }

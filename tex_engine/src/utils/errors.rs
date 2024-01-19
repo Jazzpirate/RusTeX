@@ -111,18 +111,30 @@ pub trait ErrorHandler<ET:EngineTypes> {
         TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
+    /// "Missing number, treated as zero."
+    fn missing_number(&self,_engine:&mut EngineReferences<ET>) {
+        TeXError::throw(format!("Missing number"));
+    }
+
+    /// "Missing `x` inserted"
+    fn missing_keyword(&self,_engine:&mut EngineReferences<ET>,kws:&[&str]) {
+        TeXError::throw(format!("Missing keyword: One of {}",kws.iter().map(|s| format!("`{}`",s)).collect::<Vec<_>>().join(", ")));
+    }
+
+    fn other(&self,_engine:&mut EngineReferences<ET>,msg:&str) {
+        TeXError::throw(msg.to_string())
+    }
+
     /*
     /// "Runaway argument? Paragraph ended before `\foo` was complete."
     fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
         //let line = &tokenizer.string.line(start.0)[start.1..];
         //throw!("Runaway argument?\n{}\n! Paragraph ended before \\{} was complete.",InputLinePresenter(line),name.as_ref());
-        todo!()
     }
     /// "Runaway argument? File ended while scanning use of `\foo`."
     fn file_end<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
         //let line = &tokenizer.string.line(start.0)[start.1..];
         //throw!("Runaway argument?\n{}\n! File ended while scanning use of \\{}.",InputLinePresenter(line),name.as_ref());
-        todo!()
     }
 
      */
@@ -146,7 +158,7 @@ pub trait ErrorHandler<ET:EngineTypes> {
     }
 
     /// `\errmessage`
-    fn error_message(&self,msg:&str) { // TODO: proper error type
+    fn error_message(&self,msg:&str) {
         TeXError::throw(format!("! {}",msg))
     }
 }
@@ -175,20 +187,14 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 /// e.g. [`tex_error`](crate::tex_error)`!(engine,`[undefined_control_sequence](ErrorHandler::undefined_control_sequence)`,token,csname)`
 #[macro_export]
 macro_rules! tex_error {
-    ($engine:expr,$e:ident,$tk:expr) => {{
+    ($engine:expr,$e:ident) => {{
         let eh = std::mem::replace(&mut $engine.aux.error_handler,crate::utils::errors::ErrorThrower::new());
-        crate::utils::errors::ErrorHandler::$e(&*eh,$engine,$tk);
+        crate::utils::errors::ErrorHandler::$e(&*eh,$engine);
         $engine.aux.error_handler = eh;
     }};
-    ($engine:expr,$e:ident,$tk:expr,$($arg:expr),*) => {{
+    ($engine:expr,$e:ident,$($arg:expr),*) => {{
         let eh = std::mem::replace(&mut $engine.aux.error_handler,crate::utils::errors::ErrorThrower::new());
-        crate::utils::errors::ErrorHandler::$e(&*eh,$engine,$tk,($($arg),*));
+        crate::utils::errors::ErrorHandler::$e(&*eh,$engine,$($arg),*);
         $engine.aux.error_handler = eh;
     }};
-}
-
-#[macro_export]
-macro_rules! file_end {
-    () => (crate::utils::errors::TeXError::throw("File ended unexpectedly"));
-    ($tk:expr) => (crate::utils::errors::TeXError::throw(format!("File ended unexpectedly: {}",$tk)));
 }

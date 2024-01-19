@@ -129,6 +129,20 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
             computed_depth: OnceCell::new(),
         }
     }
+    /// Convert this to a simple `\hbox` box info
+    pub fn to_hbox(&mut self) {
+        match self {
+            HBoxInfo::HBox {..} => (),
+            HBoxInfo::ParLine { spec,.. } => *self = HBoxInfo::new_box(ToOrSpread::To(spec.target)),
+            HBoxInfo::ParIndent(d) => *self = HBoxInfo::new_box(ToOrSpread::To(*d)),
+            HBoxInfo::HAlignRow => *self = HBoxInfo::new_box(ToOrSpread::None),
+            HBoxInfo::HAlignCell { to,.. } => *self = HBoxInfo::new_box(match to {
+                None => ToOrSpread::None,
+                Some(to) => ToOrSpread::To(*to)
+            })
+        }
+    }
+
     /// Create a new `\halign` cell box info with the given number of column spans (default 0)
     pub fn new_cell(spans:u8) -> Self {
         HBoxInfo::HAlignCell {
@@ -186,16 +200,18 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
 
     /// Raise this box by the given amount (i.e. `\raise` or `\lower`)
     pub fn raise(&mut self,d:ET::Dim) {
+        self.to_hbox();
         match self {
             HBoxInfo::HBox { ref mut raised, .. } => *raised = Some(d),
-            _ => todo!()
+            _ => unreachable!()
         }
     }
     /// Move this box left by the given amount (i.e. `\moveleft` or `\moveright`)
     pub fn move_left(&mut self,d:ET::Dim) {
+        self.to_hbox();
         match self {
             HBoxInfo::HBox { ref mut moved_left, .. } => *moved_left = Some(d),
-            _ => todo!()
+            _ => unreachable!()
         }
     }
 }
@@ -282,6 +298,19 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             computed_depth: OnceCell::new(),
         }
     }
+
+    /// Convert this box to a `\vbox` (or `\vtop` if it already is a `\vtop`)
+    pub fn to_vbox(&mut self) {
+        match self {
+            VBoxInfo::VTop {..} | VBoxInfo::VBox {..} => (),
+            VBoxInfo::VAlignColumn => *self = VBoxInfo::new_box(ToOrSpread::None),
+            VBoxInfo::VAlignCell {to,..} => *self = VBoxInfo::new_box(match to {
+                None => ToOrSpread::None,
+                Some(d) => ToOrSpread::To(*d)
+            })
+        }
+    }
+
     /// Create a new `\vtop` box info with the given scaling factor
     pub fn new_top(scaled:ToOrSpread<ET::Dim>) -> Self {
         VBoxInfo::VTop {
@@ -395,7 +424,11 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
         match self {
             VBoxInfo::VBox { ref mut raised, .. } => *raised = Some(d),
             VBoxInfo::VTop { ref mut raised, .. } => *raised = Some(d),
-            _ => todo!()
+            _ => {
+                self.to_vbox();
+                let VBoxInfo::VBox {raised,..} = self else {unreachable!()};
+                *raised = Some(d)
+            }
         }
     }
     /// Move this box left by the given amount (i.e. `\moveleft` or `\moveright`)
@@ -403,7 +436,11 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
         match self {
             VBoxInfo::VBox { ref mut moved_left, .. } => *moved_left = Some(d),
             VBoxInfo::VTop { ref mut moved_left, .. } => *moved_left = Some(d),
-            _ => todo!()
+            _ => {
+                self.to_vbox();
+                let VBoxInfo::VBox {moved_left,..} = self else {unreachable!()};
+                *moved_left = Some(d)
+            }
         }
     }
 }
@@ -481,7 +518,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
             TeXBox::H{ info: HBoxInfo::HBox { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
             TeXBox::V{ info: VBoxInfo::VBox { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
             TeXBox::V{ info: VBoxInfo::VTop { ref mut assigned_height, .. },..} => *assigned_height = Some(h),
-            _ => todo!()
+            _ => ()
         }
     }
     /// The assigned height of this box, if any (i.e. the result of `\ht0=...`)
@@ -499,7 +536,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
             TeXBox::H{ info: HBoxInfo::HBox { ref mut assigned_width, .. },..} => *assigned_width = Some(w),
             TeXBox::V{ info: VBoxInfo::VBox { ref mut assigned_width, .. },..} => *assigned_width = Some(w),
             TeXBox::V{ info: VBoxInfo::VTop { ref mut assigned_width, .. },..} => *assigned_width = Some(w),
-            _ => todo!()
+            _ => ()
         }
     }
     /// The assigned width of this box, if any (i.e. the result of `\wd0=...`)
@@ -517,7 +554,7 @@ impl<ET:EngineTypes> TeXBox<ET> {
             TeXBox::H{ info: HBoxInfo::HBox { ref mut assigned_depth, .. },..} => *assigned_depth = Some(d),
             TeXBox::V{ info: VBoxInfo::VBox { ref mut assigned_depth, .. },..} => *assigned_depth = Some(d),
             TeXBox::V{ info: VBoxInfo::VTop { ref mut assigned_depth, .. },..} => *assigned_depth = Some(d),
-            _ => todo!()
+            _ => ()
         }
     }
     /// The assigned depth of this box, if any (i.e. the result of `\dp0=...`)

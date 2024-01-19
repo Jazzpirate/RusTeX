@@ -270,7 +270,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             crate::expand!(self,tk;
                 ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::BeginGroup,..})) if allow_let =>
                     return,
-                _ => todo!("error")
+                _ => break
             );
         }
         tex_error!(self,missing_begingroup,t.clone());
