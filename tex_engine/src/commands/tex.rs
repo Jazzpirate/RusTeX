@@ -57,7 +57,7 @@ pub fn begingroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     match engine.state.get_group_type() {
         Some(GroupType::ControlSequence) => (),
-        _ => todo!("throw error")
+        _ => tex_error!(engine,missing_endgroup)
     }
     engine.state.pop(engine.aux,engine.mouth);
 }

@@ -173,7 +173,7 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
                     engine.state.pop(engine.aux,engine.mouth),
                 Some(GroupType::Box(bt)) =>
                     ET::Stomach::close_box(engine, bt),
-                o => todo!("throw error; group type {:?}",o)
+                o => tex_error!(engine,other,"Extra }, or forgotten \\endgroup")
             }
         }
         CommandCode::Other | CommandCode::Letter if engine.stomach.data_mut().mode().is_horizontal() =>

@@ -144,6 +144,10 @@ impl Stomach<Types> for RusTeXStomach {
     }
     fn close_align(engine: &mut EngineReferences<Types>) {
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignEnd));
+        match engine.state.get_group_type() {
+            Some(GroupType::Box(_)) => (),
+            _ => todo!("throw error")
+        }
         match engine.stomach.data_mut().open_lists.pop() {
             Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
                 engine.state.pop(engine.aux,&mut engine.mouth);

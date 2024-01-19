@@ -116,6 +116,10 @@ pub trait ErrorHandler<ET:EngineTypes> {
         TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
+    fn missing_endgroup(&self,engine:&mut EngineReferences<ET>) {
+        TeXError::throw(format!("! Missing }} inserted"))
+    }
+
     /// "File ended while scanning use of `X`"
     fn missing_argument(&self,engine:&mut EngineReferences<ET>,t:ET::Token) {
         TeXError::throw(format!("! File ended while scanning use of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
