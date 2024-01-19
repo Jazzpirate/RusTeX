@@ -9,7 +9,6 @@ use crate::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier, PRIMIT
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::tex::nodes::boxes::{BoxType, TeXBox};
-use crate::tex::nodes::math::UnresolvedMathFontStyle;
 use crate::tex::numerics::{MuSkip, Skip};
 use crate::tex::tokens::control_sequences::CSName;
 
@@ -53,13 +52,8 @@ pub trait State<ET:EngineTypes>:Sized+Clone {
 
     /// Get the current set of mathfonts (text, script, scriptscript)
     /// for the given family number, where `fam` is 0..15
-    /// TODO: due for an overhaul
-    fn get_mathfonts(&self,fam:u8) -> UnresolvedMathFontStyle<ET> {
-        UnresolvedMathFontStyle {
-            text_font:self.get_textfont(fam).clone(),
-            script_font:self.get_scriptfont(fam).clone(),
-            script_script_font:self.get_scriptscriptfont(fam).clone()
-        }
+    fn get_mathfonts(&self,fam:u8) -> (ET::Font,ET::Font,ET::Font) {
+        (self.get_textfont(fam).clone(),self.get_scriptfont(fam).clone(), self.get_scriptscriptfont(fam).clone())
     }
     /// register a new [`PrimitiveCommand`]. Should only be called during engine initialization.
     fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd:PrimitiveCommand<ET>);

@@ -222,18 +222,13 @@ pub fn char_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     let char = engine.read_charcode(false);
     match engine.stomach.data_mut().mode() {
         TeXMode::DisplayMath | TeXMode::InlineMath => {
-            let font = engine.state.get_current_font().clone();
             ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
                 sup:None,sub:None,nucleus:MathNucleus::Simple {
                     cls:MathClass::Ord,
                     limits:None,
                     kernel:MathKernel::Char {
                         char,
-                        style:UnresolvedMathFontStyle {
-                            text_font:font.clone(),
-                            script_font:font.clone(),
-                            script_script_font:font
-                        }
+                        style:UnresolvedMathFontStyle::of_fam(0)
                     }
                 }
             }))
@@ -1781,12 +1776,12 @@ pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
 
 pub fn mskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let skip = engine.read_muskip(false);
-    ET::Stomach::add_node_m(engine,MathNode::MSkip{skip,style:engine.state.get_mathfonts(2)})
+    ET::Stomach::add_node_m(engine,MathNode::MSkip{skip,style:UnresolvedMathFontStyle::of_fam(0)})
 }
 
 pub fn mkern<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let kern = engine.read_mudim(false);
-    ET::Stomach::add_node_m(engine,MathNode::MKern{kern,style:engine.state.get_mathfonts(2)})
+    ET::Stomach::add_node_m(engine,MathNode::MKern{kern,style:UnresolvedMathFontStyle::of_fam(0)})
 }
 
 pub fn unskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {

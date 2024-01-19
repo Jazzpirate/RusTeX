@@ -37,7 +37,7 @@ pub trait NodeTrait<ET:EngineTypes>:Debug+Clone {
 
     /// Returns a helper struct that implements [`Display`] and uses [`Self::display_fmt`]
     /// to yield a human-readable string.
-    fn display(&self) -> ReadableNode<ET,Self> { ReadableNode(self,PhantomData) }
+    fn display(&self) -> DisplayNode<ET,Self> { DisplayNode(self, PhantomData) }
     /// Whether this node is "opaque"; meaning: When considering a list of nodes (e.g. in `\unskip`
     /// or `\lastbox`, this node should not be considered. Useful for annotation/marker nodes
     /// some engine wants to insert, without impacting algorithms that inspect e.g. the last node
@@ -56,8 +56,8 @@ pub fn display_do_indent(indent:usize, f:&mut std::fmt::Formatter<'_>) -> std::f
 
 /// Helper struct that implements [`Display`] and uses [`NodeTrait::display_fmt`] to yield a
 /// human-readable string.
-pub struct ReadableNode<'a,ET:EngineTypes,N: NodeTrait<ET>>(&'a N, PhantomData<ET>);
-impl<'a,ET:EngineTypes,N: NodeTrait<ET>> Display for ReadableNode<'a,ET,N> {
+pub struct DisplayNode<'a,ET:EngineTypes,N: NodeTrait<ET>>(&'a N, PhantomData<ET>);
+impl<'a,ET:EngineTypes,N: NodeTrait<ET>> Display for DisplayNode<'a,ET,N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.display_fmt(0, f)
     }
@@ -310,8 +310,8 @@ impl<ET:EngineTypes> Clone for crate::tex::nodes::BoxTarget<ET> {
 /// This struct abstracts over that by carrying a continuation function to be called when the list is closed.
 ///
 /// TODO: rethink this in light of [`BoxTarget`].
-pub struct ListTarget<ET:EngineTypes,N:NodeTrait<ET>>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>)>>);
-impl<ET:EngineTypes,N:NodeTrait<ET>> ListTarget<ET,N> {
+pub struct ListTarget<ET:EngineTypes,N>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>)>>);
+impl<ET:EngineTypes,N> ListTarget<ET,N> {
     /// Create a new list target from the given continuation function.
     pub fn new<F:FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>) + 'static>(f:F) -> Self { ListTarget(Some(Box::new(f))) }
     /// Execute the continuation function (once the list is closed)
@@ -326,7 +326,7 @@ impl<ET:EngineTypes,N:NodeTrait<ET>> ListTarget<ET,N> {
     /// Whether the continuation function has not yet been called
     pub fn is_some(&self) -> bool { self.0.is_some() }
 }
-impl<ET:EngineTypes,N:NodeTrait<ET>> Debug for ListTarget<ET,N> {
+impl<ET:EngineTypes,N> Debug for ListTarget<ET,N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.0 {
             None => f.write_str("ListTarget(None)"),
@@ -334,6 +334,6 @@ impl<ET:EngineTypes,N:NodeTrait<ET>> Debug for ListTarget<ET,N> {
         }
     }
 }
-impl<ET:EngineTypes,N:NodeTrait<ET>> Clone for ListTarget<ET,N> {
+impl<ET:EngineTypes,N> Clone for ListTarget<ET,N> {
     fn clone(&self) -> Self { ListTarget(None) }
 }

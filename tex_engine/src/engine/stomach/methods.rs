@@ -295,14 +295,14 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
                 Some(tk) if tk.command_code() == CommandCode::MathShift => (),
                 _ => todo!("throw error")
             }}
-            engine.state.pop(engine.aux,engine.mouth);
             let (children,eqno) = children.close(start,engine.mouth.current_sourceref());
-            let group = MathGroup::close(
+            let group = MathGroup::close(engine.state,
                 if display {Some((
                     engine.state.get_primitive_skip(PRIMITIVES.abovedisplayskip),
                     engine.state.get_primitive_skip(PRIMITIVES.belowdisplayskip)
                 ))} else {None},
                 start,engine.mouth.current_sourceref(),children,eqno);
+            engine.state.pop(engine.aux,engine.mouth);
             ET::Stomach::add_node_h(engine, HNode::MathGroup(group));
         }
         _ => todo!("error")
