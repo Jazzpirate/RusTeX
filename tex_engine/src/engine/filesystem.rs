@@ -39,7 +39,7 @@ pub trait FileSystem:Clone {
     fn eof(&self,idx:u8) -> bool;
     /// Writes the given string to the file with the given index (`\write`).
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
-    /// Reads a line from the file with the given index and current [`CategoryCodeScheme`] (`\read`), possibly
+    /// Reads a line from the file with the given index and current [`CategoryCodeScheme`](crate::tex::catcodes::CategoryCodeScheme) (`\read`),
     /// respecting groups (i.e. will continue reading at the end of a line until all open groups are closed).
     fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
                                                                                 idx:u8, eh:&Box<dyn ErrorHandler<ET>>,

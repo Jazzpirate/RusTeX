@@ -172,7 +172,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
 /// Convenience macro for throwing a [`TeXError`] that temporarily replaces the [`ErrorHandler`]
 /// to make the borrow checker happy.
-/// e.g. [`tex_error`]`!(engine,`[undefined_control_sequence](ErrorHandler::undefined_control_sequence)`,token,csname)`
+/// e.g. [`tex_error`](crate::tex_error)`!(engine,`[undefined_control_sequence](ErrorHandler::undefined_control_sequence)`,token,csname)`
 #[macro_export]
 macro_rules! tex_error {
     ($engine:expr,$e:ident,$tk:expr) => {{
