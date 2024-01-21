@@ -116,8 +116,12 @@ pub trait ErrorHandler<ET:EngineTypes> {
         TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
-    fn missing_endgroup(&self,engine:&mut EngineReferences<ET>) {
+    fn missing_endgroup(&self,_engine:&mut EngineReferences<ET>) {
         TeXError::throw(format!("! Missing }} inserted"))
+    }
+
+    fn wrong_definition(&self,engine:&mut EngineReferences<ET>,token:ET::Token) {
+        TeXError::throw(format!("Use of {} doesn't match its definition",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
     /// "File ended while scanning use of `X`"

@@ -10,7 +10,7 @@ use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::tex;
 use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_engine::tex::tokens::CompactToken;
-use tex_engine::utils::errors::{ErrorThrower};
+use tex_engine::utils::errors::{ErrorThrower, TeXError};
 use tex_engine::engine::TeXEngine;
 use tex_engine::engine::utils::outputs::Outputs;
 use tex_engine::utils::errors::ErrorHandler;
@@ -124,10 +124,18 @@ fn get_engine(log:bool) -> DefaultEngine<Types> {
         mouth,gullet,stomach
     }
 }
+
+pub struct CompilationResult {
+    pub out:String,
+    pub error:Option<TeXError>,
+    pub missing_glyphs: Box<[(String,u8,String)]>,
+    pub missing_fonts: Box<[String]>
+}
+
 pub trait RusTeXEngineT {
     fn initialize(log:bool);
     fn get() -> Self;
-    fn do_file<S:AsRef<str>>(file:S,verbose:bool,log:bool,sourcerefs:bool) -> String;
+    fn do_file<S:AsRef<str>>(file:S,verbose:bool,log:bool,sourcerefs:bool) -> CompilationResult;
 }
 
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
@@ -150,17 +158,20 @@ impl RusTeXEngineT for RusTeXEngine {
     fn initialize(log:bool) { let _ = get_engine(log); }
 
     fn get() -> Self { get_engine(false) }
-    fn do_file<S:AsRef<str>>(file:S,verbose:bool,log:bool,sourcerefs:bool) -> String {
+    fn do_file<S:AsRef<str>>(file:S,verbose:bool,log:bool,sourcerefs:bool) -> CompilationResult {
         use std::fmt::Write;
         let mut engine = Self::get();
         engine.stomach.continuous = true;
         if log { engine.aux.outputs = RusTeXOutput::Print(verbose); }
 
         let start = std::time::Instant::now();
-        match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
-            Ok(_) => (),
-            Err(e) => engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)))
-        }
+        let res = match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
+            Ok(_) => None,
+            Err(e) => {
+                engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)));
+                Some(e)
+            }
+        };
 
         //let cap = engine.aux.memory.cs_interner().cap();
         //println!("\n\nCapacity: {} of {} ({:.2}%)",cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
@@ -168,23 +179,33 @@ impl RusTeXEngineT for RusTeXEngine {
         // ----------------
         let out = std::mem::take(&mut engine.aux.extension.state.output);
         let mut ret = String::new();
-        {
+        let (fonts,glyphs) = {
             let mut refs = engine.get_engine_refs();
-            shipout::split_state(&mut refs, |engine, state| {
+            let (fonts,glyphs) = shipout::split_state(&mut refs, |engine, state| {
                 let mut page = make_page(engine, state, |_, state| {
                     for c in out { state.push_child(c) }
                 });
                 page.classes = vec!("rustex-body".into());
                 let topfont = state.fonts.first().unwrap().clone();
-                write!(ret, "{}{}{}", shipout::PREAMBLE,
-                       page.displayable(&engine.fontsystem.glyphmaps, &engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs),
-                       shipout::POSTAMBLE).unwrap();
+                let dp = page.displayable(&engine.fontsystem.glyphmaps, &engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);
+                write!(ret, "{}{}{}", shipout::PREAMBLE,dp, shipout::POSTAMBLE).unwrap();
+                for k in dp.get_missings() {
+                    state.missing_fonts.insert(k);
+                }
+                (std::mem::take(&mut state.missing_fonts), std::mem::take(&mut state.missing_glyphs))
             });
-        }
+            (fonts,glyphs)
+        };
 
         println!("Finished after {:?}", start.elapsed());
 
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));
-        ret
+
+        CompilationResult {
+            out:ret,
+            error:res,
+            missing_glyphs:glyphs.into_iter().collect::<Vec<_>>().into_boxed_slice(),
+            missing_fonts:fonts.into_iter().collect::<Vec<_>>().into_boxed_slice()
+        }
     }
 }

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
 use std::thread::current;
 use tex_engine::engine::EngineTypes;
@@ -12,6 +12,7 @@ use crate::fonts::FontStore;
 use crate::shipout::{ShipoutMode, ShipoutState};
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::pdflatex::nodes::PDFColor;
 use crate::files::RusTeXFileSystem;
@@ -69,9 +70,9 @@ pub enum HTMLChild {
     //Glyph(Glyph),Space,EscapedSpace
 }
 impl HTMLChild {
-    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
+    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,missings:&mut HashSet<String>,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            HTMLChild::Node(n) => n.display_fmt(store, files, indent, curr_width, in_font,do_refs, f),
+            HTMLChild::Node(n) => n.display_fmt(store, files, missings,indent, curr_width, in_font,do_refs, f),
             HTMLChild::Text(string) => f.write_str(string),
             HTMLChild::Comment(s) => f.write_str(s),
             HTMLChild::HRule { width, height, bottom, color, start, end } => {
@@ -296,10 +297,10 @@ impl HTMLNode {
             _ => parent.push(HTMLChild::Node(self))
         }
     }
-    pub fn displayable<'a>(&'a self,store:&'a FontStore,files:&'a RusTeXFileSystem,width:Dim32,font:&'a Font,do_refs:bool) -> impl Display + 'a {
-        DisplayableNode {node:self,files,store,width,font,do_refs}
+    pub fn displayable<'a>(&'a self,store:&'a FontStore,files:&'a RusTeXFileSystem,width:Dim32,font:&'a Font,do_refs:bool) -> DisplayableNode<'a> {
+        DisplayableNode {node:self,files,store,width,font,do_refs,missing_fonts:Mutex::new(HashSet::new())}
     }
-    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
+    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,missings:&mut HashSet<String>,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
         write!(f,"<{}",self.tag)?;
         let (widthcls,widthsstyle,wd,scaled) = if let Some((wd,abs)) = self.width {
             if wd == Dim32(0) {
@@ -374,7 +375,7 @@ impl HTMLNode {
             if self.tag.allow_linebreak() {
                 do_indent(indent+2,f)?;
             }
-            c.display_fmt(store,files,indent+2,wd,font,do_refs,f)?;
+            c.display_fmt(store,files,missings,indent+2,wd,font,do_refs,f)?;
         }
         if scaled {
             f.write_str("</span>")?;
@@ -520,17 +521,24 @@ fn close_color(mut annot:HTMLNode,mode:ShipoutMode,parent:&mut Vec<HTMLChild>) {
 }
 
 
-struct DisplayableNode<'a> {
+pub struct DisplayableNode<'a> {
     node:&'a HTMLNode,
     files:&'a RusTeXFileSystem,
     store:&'a FontStore,
     width:Dim32,
     font:&'a Font,
+    missing_fonts:Mutex<HashSet<String>>,
     do_refs:bool
+}
+impl<'a> DisplayableNode<'a> {
+    pub fn get_missings(mut self) -> HashSet<String> {
+        std::mem::take(self.missing_fonts.get_mut().unwrap())
+    }
 }
 impl<'a> Display for DisplayableNode<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.node.display_fmt(self.store,self.files,0,self.width,self.font,self.do_refs,f)
+        let mut hs = self.missing_fonts.lock().unwrap();
+        self.node.display_fmt(self.store,self.files,&mut *hs,0,self.width,self.font,self.do_refs,f)
     }
 }
 

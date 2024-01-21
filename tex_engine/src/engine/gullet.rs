@@ -70,6 +70,20 @@ pub trait Gullet<ET:EngineTypes> {
                             data.ingroups -= 1;
                             f(aux,state,t)
                         }
+                        /*
+                        CommandCode::AlignmentTab if data.ingroups == data.groupval() => {
+                            todo!("fuck")
+                        }
+                        CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if data.ingroups == data.groupval() => match Self::char_or_primitive(state,&t) {
+                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
+                                todo!("fuck")
+                            }
+                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
+                                todo!("fuck")
+                            }
+                            _ => f(aux,state,t)
+                        }
+                         */
                         _ => f(aux,state,t)
                     }
                 });

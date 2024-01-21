@@ -46,12 +46,13 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                     }
                 }
             },
-            _ => match engine.get_next() {
+            _ => match engine.mouth.get_next_opt(engine.aux,engine.state) {
                 Some(o) if o == *next =>
                     match inner.get(i) {
                         Some(n) => {next = n; i += 1},
                         _ => return ()
                     },
+                Some(_) => tex_error!(engine,wrong_definition,token.clone()),
                 _ => tex_error!(engine,missing_argument,token.clone())
             }
         }
@@ -249,7 +250,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)})) =>
                     ET::Gullet::do_conditional(engine,*name,t,*cond,false),
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
-                    let next = engine.mouth.get_next_opt(engine.aux,engine.state).unwrap();
+                    let next = engine.get_next().unwrap();
                     cont(engine.aux,engine.state,next);
                 }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.unexpanded => {
@@ -485,22 +486,7 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 /// reads a character literal triggered by a backtick, when a number is expected
 fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> <ET::Num as NumSet>::Int {
     let next = engine.mouth.get_next_opt(engine.aux, engine.state);
-    crate::expand_loop!(engine,token,
-        ResolvedToken::Tk{code,..} => {
-            if code != CommandCode::Space {
-                engine.requeue(token);
-            }
-            break
-        }
-        ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => {
-            break
-        }
-        ResolvedToken::Cmd(_) => {
-            engine.mouth.requeue(token);
-            break
-        }
-    );
-    match next {
+    let ret = match next {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c, _) => {
                 let i: u64 = c.into();
@@ -525,7 +511,23 @@ fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:b
             _ => todo!("throw error here")
         },
         None => todo!("throw error here")
-    }
+    };
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{code,..} => {
+            if code != CommandCode::Space {
+                engine.requeue(token);
+            }
+            break
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => {
+            break
+        }
+        ResolvedToken::Cmd(_) => {
+            engine.requeue(token);
+            break
+        }
+    );
+    ret
 }
 
 /// reads an integer from some [`TeXCommand`] that should correspond to an integer value (e.g. `\count` or `\lastpenalty`).
@@ -702,7 +704,11 @@ pub fn read_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) 
 pub fn read_dim_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> <ET::Num as NumSet>::Dim {
     if b == b',' || b == b'.' {
         read_dim_float(engine,is_negative,b'.')
-    } else if is_ascii_digit(b) {
+    } else  if b == b'`' {
+        let i = read_int_char(engine,is_negative).into();
+        read_unit_or_dim(engine,i as f32)
+    }
+    else if is_ascii_digit(b) {
         read_dim_float(engine,is_negative,b)
     } else {
         todo!("error?")
@@ -994,6 +1000,18 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> StretchShri
             Some(TeXCommand::DimRegister(u)) => {
                 let base = engine.state.get_dim_register(*u);
                 return StretchShrink::Dim(if is_negative {-base} else {base})
+            }
+            Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim}) => {
+                let base = engine.state.get_primitive_dim(*name);
+                return StretchShrink::Dim(if is_negative {-base} else {base})
+            }
+            Some(TeXCommand::IntRegister(u)) => {
+                let base = engine.state.get_int_register(*u).into() as f32;
+                return read_stretch_unit(engine,if is_negative {-base} else {base},None)
+            }
+            Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt}) => {
+                let base = engine.state.get_primitive_int(*name).into() as f32;
+                return read_stretch_unit(engine,if is_negative {-base} else {base},None)
             }
             o => todo!("command in read_stretch: {:?}",o)
         }

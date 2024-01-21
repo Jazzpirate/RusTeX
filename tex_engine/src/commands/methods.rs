@@ -409,6 +409,9 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
             }
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true),
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
+                if ingroups != 0 {
+                    todo!("throw error")
+                }
                 engine.push_every(PRIMITIVES.everycr);
                 return cols.into()
             },
@@ -491,7 +494,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                 engine.gullet.get_align_data().unwrap().omit = true;
                 return open_align_cell(engine,mode)
             }
-            ResolvedToken::Tk{..} | ResolvedToken::Cmd(_) => {
+            _ => {
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
@@ -868,10 +871,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a number from the input stream, making sure it's in the range of
     /// a file input/output stream index (0-255), and subsequently reads a filename
     /// - i.e. the first two steps of `\openin` or `\openout`
-    pub fn read_filename_and_index(&mut self) -> (u8,ET::File) {
+    pub fn read_filename_and_index(&mut self,prefix:&str) -> (u8,ET::File) {
         let idx = self.read_file_index();
         let mut filename = self.aux.memory.get_string();
         self.read_string(true,&mut filename);
+        filename.insert_str(0,prefix);
         let file = self.filesystem.get(&filename);
         self.aux.memory.return_string(filename);
         (idx,file)

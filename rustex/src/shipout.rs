@@ -2,7 +2,7 @@ pub(crate) mod nodes;
 mod annotations;
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use crate::engine::{Bx, Font, Refs, SRef, Types};
 use std::fmt::Write;
 use std::vec::IntoIter;
@@ -87,7 +87,9 @@ pub(crate) struct ShipoutState {
     pub(crate) modes:Vec<ShipoutMode>,
     pub(crate) fontlinks:BTreeSet<String>,
     pub(crate) in_content:bool,
-    pub(crate) nullfont:Option<Font>
+    pub(crate) nullfont:Option<Font>,
+    pub(crate) missing_glyphs: HashSet<(String,u8,String)>,
+    pub(crate) missing_fonts: HashSet<String>
 }
 impl Default for ShipoutState {
     fn default() -> Self {
@@ -102,7 +104,9 @@ impl Default for ShipoutState {
             modes:vec!(ShipoutMode::Top),
             lineskip:Vec::new(),
             in_content:false,
-            nullfont:None
+            nullfont:None,
+            missing_fonts:HashSet::new(),
+            missing_glyphs:HashSet::new()
         }
     }
 }

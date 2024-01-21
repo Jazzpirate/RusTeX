@@ -628,6 +628,13 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
         Some(ActiveConditional::Case(_)) => {
             conds.push(ActiveConditional::Else(PRIMITIVES.ifcase));
         }
+        Some(u@ActiveConditional::Unfinished(_)) => {
+            conds.push(u);
+            engine.mouth.requeue(tk);
+            let relax = engine.aux.memory.cs_interner_mut().new("relax");
+            engine.mouth.requeue(ET::Token::from_cs(relax));
+            return
+        }
         _ => todo!()
     };
     let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > Int::<ET>::default();
@@ -1153,11 +1160,11 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
         }
         None => todo!("file end error")
     };
-    let first = match engine.get_next() {
+    let first = match engine.mouth.get_next_opt(engine.aux,engine.state) {
         Some(t) => t,
         _ => todo!("error")
     };
-    let second = match engine.get_next() {
+    let second = match engine.mouth.get_next_opt(engine.aux,engine.state) {
         Some(t) => t,
         _ => todo!("error")
     };
@@ -1172,8 +1179,8 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
             engine.state.primitives().get_id(id).cloned(),
     };
     engine.set_command(&cm,cmd,globally);
-    engine.requeue(second);
-    engine.requeue(first);
+    engine.mouth.requeue(second);
+    engine.mouth.requeue(first);
 }
 
 pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
@@ -1391,11 +1398,11 @@ pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token)
                -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>> {
-    let (idx,file) = engine.read_filename_and_index();
+    let (idx,file) = engine.read_filename_and_index("./");
     Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file)}))
 }
 pub fn openout_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let (idx,file) = engine.read_filename_and_index();
+    let (idx,file) = engine.read_filename_and_index("./");
     engine.filesystem.open_out(idx,file)
 }
 
@@ -1573,7 +1580,7 @@ pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 }
 
 pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let (idx,file) = engine.read_filename_and_index();
+    let (idx,file) = engine.read_filename_and_index("");
     engine.filesystem.open_in(idx,file)
 }
 

@@ -55,36 +55,41 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Font:Font<Char=Self::Char,Int=Self::Int, Dim=Self::Dim,CS=Self::CSName>;
     type FontSystem: FontSystem<Font=Self::Font,Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
 }
+/// Auxiliary components passed around to [`PrimitiveCommand`](crate::commands::PrimitiveCommand)s.
 pub struct EngineAux<ET:EngineTypes> {
+    /// memory management and interning of control sequence names
     pub memory:MemoryManager<ET::Token>,
+    /// error handling
     pub error_handler:Box<dyn ErrorHandler<ET>>,
+    /// printing to logs or the terminal
     pub outputs:ET::Outputs,
+    /// start time of the current job
     pub start_time:chrono::DateTime<chrono::Local>,
+    /// `\jobname`
     pub jobname:String,
+    /// extension components
     pub extension:ET::Extension
 }
 
-pub struct Colon<'c,ET:EngineTypes> {
+struct Colon<'c,ET:EngineTypes> {
     out:Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
-
-    pub fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>(f:F) -> Self {
+    fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
-
-    pub fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) {
+    fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) {
         (self.out)(engine,n)
     }
 }
 impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
-
     fn default() -> Self {
         Colon { out:Box::new(|_,_|{}) }
     }
 }
 
 impl <ET:EngineTypes> EngineReferences<'_,ET> {
+    /// ships out the [`VNode`], passing it on to the provided continuation.
     pub fn shipout(&mut self,n: VNode<ET>) {
         let mut colon = std::mem::take(&mut self.colon);
         colon.out(self,n);
@@ -93,8 +98,8 @@ impl <ET:EngineTypes> EngineReferences<'_,ET> {
 }
 
 /**
-    A TeX engine combines all the necessary components into a struct capable of compiling a TeX file into
-    some output format. We use public fields instead of accessor methods to convince the borrow checker
+    This struct combines all the necessary components for use in [`PrimitiveCommand`](crate::commands::PrimitiveCommand)s.
+    We use public fields instead of accessor methods to convince the borrow checker
     that all the components are *independent*, and avoid "Cannot borrow as mutable because already borrowed as
     immutable" errors.
 */
@@ -105,7 +110,7 @@ pub struct EngineReferences<'et,ET:EngineTypes> {
     pub stomach:&'et mut ET::Stomach,
     pub filesystem:&'et mut ET::FileSystem,
     pub fontsystem:&'et mut ET::FontSystem,
-    pub colon:Colon<'et,ET>,
+    colon:Colon<'et,ET>,
     pub aux:&'et mut EngineAux<ET>
 }
 
@@ -114,8 +119,8 @@ pub struct EngineReferences<'et,ET:EngineTypes> {
 pub struct DefaultPlainTeXEngineTypes;
 impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Char = u8;
-    type CSName = InternedCSName<u8>;//InternedString;
-    type Token = super::tex::tokens::CompactToken;//::StandardToken<Self::CSName,u8>;//
+    type CSName = InternedCSName<u8>;
+    type Token = super::tex::tokens::CompactToken;
     type Extension = ();
     type Int = i32;
     type Dim = Dim32;
@@ -130,12 +135,15 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type CustomNode = ();
     type Stomach = DefaultStomach<Self>;
     type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
-    type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
+    type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;
 }
 
+/// A [`TeXEngine`] combines all necessary components (see [`EngineTypes`]) to compile a TeX file into some output format.
 pub trait TeXEngine:Sized {
     type Types:EngineTypes;
+    /// Returns mutable references to the components of the engine.
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
+    /// Initializes the engine with a file, e.g. `latex.ltx` or `pdftex.cfg`.
     fn init_file(&mut self,s:&str) -> Result<(),TeXError> {TeXError::catch(|| {
         log::debug!("Initializing with file {}",s);
         let mut comps = self.get_engine_refs();
@@ -145,6 +153,7 @@ pub trait TeXEngine:Sized {
         comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
+    /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
     fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {TeXError::catch(||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
@@ -159,6 +168,7 @@ pub trait TeXEngine:Sized {
         comps.colon = Colon::new(f);
         comps.top_loop();
     })}
+    /// Registers all primitives of plain TeX and sets the default variables.
     fn initialize_plain_tex(&mut self) {
         super::commands::tex::register_tex_primitives(self);
         let mag = PRIMITIVES.mag;
@@ -167,16 +177,19 @@ pub trait TeXEngine:Sized {
         refs.state.set_primitive_int(refs.aux,mag, (1000).into(),true);
         refs.state.set_primitive_int(refs.aux,fam, (-1).into(),true);
     }
+    /// Registers all primitives of plain TeX, e-TeX and sets the default variables.
     fn initialize_etex(&mut self) {
         self.initialize_plain_tex();
         super::commands::etex::register_etex_primitives(self);
     }
-
+    /// Initialized the engine by processing `latex.ltx`. Only call this (for modern LaTeX setups)
+    /// after calling [`initialize_etex`](TeXEngine::initialize_etex) first.
     fn load_latex(&mut self) -> Result<(),TeXError> {
         self.init_file("latex.ltx")
     }
 }
 
+/// Default implementation of a [`TeXEngine`] for the provided [`EngineTypes`].
 pub struct DefaultEngine<ET:EngineTypes> {
     pub aux:EngineAux<ET>,
     pub state: ET::State,
@@ -187,12 +200,7 @@ pub struct DefaultEngine<ET:EngineTypes> {
     pub stomach: ET::Stomach,
 }
 impl<ET:EngineTypes> DefaultEngine<ET> {
-    pub fn reset(&mut self, s:ET::State) {
-        self.state = s;
-        self.mouth = ET::Mouth::new(&mut self.aux,&mut self.state);
-        self.gullet = ET::Gullet::new(&mut self.aux,&mut self.state,&mut self.mouth);
-        self.stomach = ET::Stomach::new(&mut self.aux,&mut self.state);
-    }
+    /// Creates a new engine.
     pub fn new() -> Self {
         let mut memory = MemoryManager::new();
         let mut aux = EngineAux {
@@ -232,6 +240,7 @@ impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
         }
     }
 }
+/// A plain TeX engine with default components.
 pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 
 /** Additional components we want to add to a [`EngineReferences`] can be implemented here.
@@ -245,6 +254,7 @@ impl<ET:EngineTypes<Extension=()>> EngineExtension<ET> for () {
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
+    /// Runs the provided closure and prints the result to `\write-1` iff `\tracingcommands > 0`.
     pub fn trace_command<D:std::fmt::Display,F:FnOnce(&mut Self) -> D>(&mut self, f:F) {
         let trace = self.state.get_primitive_int(PRIMITIVES.tracingcommands) > <ET::Num as NumSet>::Int::default();
         if trace {
@@ -252,7 +262,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             self.aux.outputs.write_neg1(format_args!("{{{}}}",d));
         }
     }
-
+    /// Entry point for compilation. This function is called by [`TeXEngine::do_file_default`].
     pub fn top_loop(&mut self) {
         crate::expand_loop!(ET::Stomach::every_top(self) => token => {
             if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next();continue}
@@ -264,6 +274,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         );
     }
 
+    /// Expand expandable tokens until a [`BeginGroup`](CommandCode::BeginGroup) is found.
+    /// Throws a [`TeXError`] if any unexpandable other token is encountered.
+    /// If `allow_let` is true, other [`Token`]s which have been `\let` to a [`BeginGroup`](CommandCode::BeginGroup)
+    /// are also accepted (e.g. `\bgroup`).
     pub fn expand_until_bgroup(&mut self,allow_let:bool,t:&ET::Token) {
         while let Some(tk) = self.get_next() {
             if tk.command_code() == CommandCode::BeginGroup {return }
@@ -277,6 +291,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
 }
 
+/// Expands tokens until a non-expandable Token is found, the [`ResolvedToken`] of which is then matched by the
+/// provided `$case` patterns.
 #[macro_export]
 macro_rules! expand_loop {
     ($engine:ident,$tk:ident,$($case:tt)*) => {{
@@ -310,6 +326,7 @@ macro_rules! expand_loop {
     }}
 }
 
+/// Expands the provided token or, if not expandable, matches the [`ResolvedToken`] against the provided `$case` patterns.
 #[macro_export]
 macro_rules! expand {
     ($engine:ident,$tk:expr;$($case:tt)*) => {
@@ -331,6 +348,8 @@ macro_rules! expand {
     }
 }
 
+/// Default treatment of unexpandable tokens, i.e. passed to the relevant [`Stomach`] method or throws
+/// [`ErrorHandler::undefined`] or [`ErrorHandler::not_allowed_in_mode`] errors.
 #[macro_export]
 macro_rules! do_cmd {
     ($engine:ident,$token:expr,$cmd:ident) => {

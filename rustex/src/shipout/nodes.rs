@@ -222,6 +222,7 @@ pub(crate) fn do_missing_glyph(state:&mut ShipoutState,name:GlyphName,char:u8,fo
         ShipoutMode::Math => "mtext",
         _ => unreachable!()
     };
+    state.missing_glyphs.insert((name.to_string(),char,font.filename().to_string()));
     state.push_child(HTMLChild::Comment(
         format!("<{} class=\"rustex-missing\" title=\"Missing Glyph: {} (pos. {}) in font {}\"></{}>",s,name,char,font.filename(),s)
     ));
