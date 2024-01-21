@@ -152,7 +152,7 @@ pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(Skip<ET
     engine.state.set_primitive_skip(engine.aux,name,new,globally);
 }
 
-pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:BoxType,every:PrimitiveIdentifier) -> ToOrSpread<ET::Dim> {
+pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:GroupType,every:PrimitiveIdentifier) -> ToOrSpread<ET::Dim> {
     let scaled = match engine.read_keywords(&[b"to",b"spread"]) {
         Some(b"to") => {
             let to = engine.read_dim(false);
@@ -164,13 +164,12 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
         }
         _ => ToOrSpread::None
     };
-    let mut ate_relax = scaled == ToOrSpread::None;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) if !ate_relax => ate_relax = true,
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) => (),
         ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
         ResolvedToken::Cmd(Some(TeXCommand::Char{code:CommandCode::BeginGroup,..})) => {
-            engine.state.push(engine.aux,GroupType::Box(tp),engine.mouth.line_number());
+            engine.state.push(engine.aux,tp,engine.mouth.line_number());
             engine.push_every(every);
             return scaled
         }
@@ -445,7 +444,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.crcr => (),
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.noalign => {
                 engine.expand_until_bgroup(true,&token);
-                engine.state.push(engine.aux,GroupType::Box(mode.other()),engine.mouth.line_number());
+                engine.state.push(engine.aux,GroupType::Noalign,engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Horizontal {
@@ -523,7 +522,7 @@ pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineRef
             if data.span {
                 data.span = false
             } else {
-                engine.state.push(engine.aux, GroupType::Box(mode), engine.mouth.line_number());
+                engine.state.push(engine.aux, GroupType::Align, engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {

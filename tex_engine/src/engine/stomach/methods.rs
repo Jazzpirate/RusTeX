@@ -159,20 +159,21 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
             ET::Stomach::add_node_h(engine, HNode::Space),
         CommandCode::Space => (),
         CommandCode::BeginGroup if engine.stomach.data_mut().mode().is_math() => {
-            engine.state.push(engine.aux,GroupType::Math {
-                display: engine.stomach.data_mut().mode() == TeXMode::DisplayMath
-            },engine.mouth.line_number());
+            engine.state.push(engine.aux,GroupType::Math,engine.mouth.line_number());
             engine.stomach.data_mut().open_lists.push(NodeList::new_math(engine.mouth.start_ref()));
         },
         CommandCode::EndGroup if engine.stomach.data_mut().mode().is_math() => close_group_in_m(engine),
         CommandCode::BeginGroup =>
-            engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number()),
+            engine.state.push(engine.aux, GroupType::Simple, engine.mouth.line_number()),
         CommandCode::EndGroup => {
             match engine.state.get_group_type() {
-                Some(GroupType::Character) =>
+                Some(GroupType::Simple) =>
                     engine.state.pop(engine.aux,engine.mouth),
-                Some(GroupType::Box(bt)) =>
-                    ET::Stomach::close_box(engine, bt),
+                Some(GroupType::HBox | GroupType::Math | GroupType::MathChoice | GroupType::LeftRight) =>
+                    ET::Stomach::close_box(engine, BoxType::Horizontal),
+                Some(GroupType::VBox | GroupType::VCenter | GroupType::VTop | GroupType::Insert |
+                     GroupType::VAdjust | GroupType::Noalign) =>
+                    ET::Stomach::close_box(engine, BoxType::Vertical),
                 _ => tex_error!(engine,other,"Extra }, or forgotten \\endgroup")
             }
         }
@@ -283,7 +284,7 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
         _ => (false,PRIMITIVES.everymath)
     };
     engine.stomach.data_mut().open_lists.push(NodeList::Math {children:MathNodeList::new(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
-    engine.state.push(engine.aux,GroupType::Math{display},engine.mouth.line_number());
+    engine.state.push(engine.aux,GroupType::MathShift{display},engine.mouth.line_number());
     engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
     engine.push_every(every);
 }
@@ -553,7 +554,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
 
     let split_penalty = split_penalty.unwrap_or(0);
 
-    engine.state.push(engine.aux,GroupType::Character,engine.mouth.line_number());
+    engine.state.push(engine.aux, GroupType::Simple, engine.mouth.line_number());
 
     let data = engine.stomach.data_mut();
 

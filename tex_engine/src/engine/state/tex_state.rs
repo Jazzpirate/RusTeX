@@ -152,33 +152,10 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             _ => false
         };
         if tracing {
-            match group_type {
-                GroupType::ControlSequence =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{entering semi simple group (level {}) at line {}}}",
-                        self.stack.stack.len(), line_number
-                    )),
-                GroupType::Character =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{entering simple group (level {}) at line {}}}",
-                        self.stack.stack.len(), line_number
-                    )),
-                GroupType::Box(bt) =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{entering {} group (level {}) at line {}}}",bt,
-                        self.stack.stack.len(), line_number
-                    )),
-                GroupType::Math { ..} =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{entering math shift group (level {}) at line {}}}",
-                        self.stack.stack.len(), line_number
-                    )),
-                GroupType::LeftRight =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{entering math left group (level {}) at line {}}}",
-                        self.stack.stack.len(), line_number
-                    )),
-            }
+            aux.outputs.write_neg1(format_args!(
+                "{{entering {} group (level {}) at line {}}}",group_type,
+                self.stack.stack.len(), line_number
+            ))
         }
     }
 
@@ -194,33 +171,10 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         let (gt,ag,ch) = self.stack.pop();
 
         if traceg {
-            match gt {
-                GroupType::ControlSequence =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{leaving semi simple group (level {}) at line {}}}",
-                        len, mouth.line_number()
-                    )),
-                GroupType::Character =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{leaving simple group (level {}) at line {}}}",
-                        len, mouth.line_number()
-                    )),
-                GroupType::Box(bt) =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{leaving {} group (level {}) at line {}}}",bt,
-                        len, mouth.line_number()
-                    )),
-                GroupType::Math { ..} =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{leaving math shift group (level {}) at line {}}}",
-                        len, mouth.line_number()
-                    )),
-                GroupType::LeftRight =>
-                    aux.outputs.write_neg1(format_args!(
-                        "{{leaving math left group (level {}) at line {}}}",
-                        len, mouth.line_number()
-                    )),
-            }
+            aux.outputs.write_neg1(format_args!(
+                "{{leaving {} group (level {}) at line {}}}",gt,
+                len, mouth.line_number()
+            ))
         }
         ch.close(|c| {
             match c {

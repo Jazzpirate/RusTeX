@@ -72,11 +72,11 @@ pub fn aftergroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 }
 
 pub fn begingroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    engine.state.push(engine.aux,GroupType::ControlSequence,engine.mouth.line_number())
+    engine.state.push(engine.aux, GroupType::SemiSimple, engine.mouth.line_number())
 }
 pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     match engine.state.get_group_type() {
-        Some(GroupType::ControlSequence) => (),
+        Some(GroupType::SemiSimple) => (),
         _ => tex_error!(engine,missing_endgroup)
     }
     engine.state.pop(engine.aux,engine.mouth);
@@ -841,22 +841,22 @@ pub fn unvcopy<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 }
 
 pub fn hbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let scaled = super::methods::do_box_start(engine, BoxType::Horizontal, PRIMITIVES.everyhbox);
+    let scaled = super::methods::do_box_start(engine, GroupType::HBox, PRIMITIVES.everyhbox);
     Err(BoxInfo::H(HBoxInfo::new_box(scaled)))
 }
 
 pub fn vbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
+    let scaled = super::methods::do_box_start(engine, GroupType::VBox, PRIMITIVES.everyvbox);
     Err(BoxInfo::V(VBoxInfo::new_box(scaled)))
 }
 
 pub fn vtop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>> {
-    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
+    let scaled = super::methods::do_box_start(engine, GroupType::VTop, PRIMITIVES.everyvbox);
     Err(BoxInfo::V(VBoxInfo::new_top(scaled)))
 }
 
 pub fn vcenter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let scaled = super::methods::do_box_start(engine, BoxType::Vertical, PRIMITIVES.everyvbox);
+    let scaled = super::methods::do_box_start(engine, GroupType::VCenter, PRIMITIVES.everyvbox);
     engine.stomach.data_mut().open_lists.push(NodeList::Vertical {
         children: Vec::new(),
         tp: VerticalNodeListType::VCenter(engine.mouth.start_ref(),scaled)
@@ -1056,7 +1056,7 @@ pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let n = engine.read_int(false).into();
     if n < 0 { todo!("throw error")}
     engine.expand_until_bgroup(false,&tk);
-    engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
+    engine.state.push(engine.aux,GroupType::Insert,engine.mouth.line_number());
     engine.stomach.data_mut().open_lists.push(
         NodeList::Vertical {children:vec!(),tp:VerticalNodeListType::Insert(n as usize)}
     )
@@ -2022,7 +2022,7 @@ pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
         children:vec!(),
         tp:VerticalNodeListType::VAdjust
     });
-    engine.state.push(engine.aux,GroupType::Box(BoxType::Vertical),engine.mouth.line_number());
+    engine.state.push(engine.aux,GroupType::VAdjust,engine.mouth.line_number());
 }
 
 

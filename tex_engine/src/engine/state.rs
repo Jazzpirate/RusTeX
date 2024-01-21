@@ -2,13 +2,14 @@
     values. */
 pub mod tex_state;
 
+use std::fmt::Formatter;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use crate::commands::{TeXCommand, PrimitiveCommand};
 use crate::commands::primitives::{PrimitiveCommands, PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::boxes::{BoxType, TeXBox};
+use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::numerics::{MuSkip, Skip};
 use crate::tex::tokens::control_sequences::CSName;
 
@@ -16,15 +17,82 @@ use crate::tex::tokens::control_sequences::CSName;
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub enum GroupType {
     /// A group delimited by `{` and `}`.
-    Character,
+    Simple,
+    /// `\hbox`
+    HBox,
+    /// `\vadjust`
+    VAdjust,
+    /// `\vbox`
+    VBox,
+    /// `\vtop`
+    VTop,
+    /// `\halign` or `\valign`
+    Align,
+    /// `\noalign`
+    Noalign,
+    /// Output routine
+    Output,
+    /// `{...}` in math mode
+    Math,
+    /// Discretionary
+    Disc,
+    /// Insert
+    Insert,
+    /// `\vcenter`
+    VCenter,
+    /// `\mathchoice`
+    MathChoice,
     /// A group delimited by `\begingroup` and `\endgroup`.
-    ControlSequence,
-    /// A box (e.g. `\hbox` or `\vbox`), or a math group.
-    Box(BoxType),
+    SemiSimple,
     /// A math group delimited by `$` (inline) or `$$` (display).
-    Math{display:bool},
+    MathShift{display:bool},
     /// An inner math group delimited by `\left` and `\right`.
     LeftRight
+}
+impl std::fmt::Display for GroupType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GroupType::Simple => write!(f,"simple"),
+            GroupType::HBox => write!(f,"hbox"),
+            GroupType::VAdjust => write!(f,"adjusted hbox"),
+            GroupType::VBox => write!(f,"vbox"),
+            GroupType::VTop => write!(f,"vtop"),
+            GroupType::Align => write!(f,"align"),
+            GroupType::Noalign => write!(f,"no align"),
+            GroupType::Output => write!(f,"output"),
+            GroupType::Math => write!(f,"math"),
+            GroupType::Disc => write!(f,"disc"),
+            GroupType::Insert => write!(f,"insert"),
+            GroupType::VCenter => write!(f,"vcenter"),
+            GroupType::MathChoice => write!(f,"math choice"),
+            GroupType::SemiSimple => write!(f,"semi simple"),
+            GroupType::MathShift{..} => write!(f,"math shift"),
+            GroupType::LeftRight{..} => write!(f,"math left"),
+        }
+    }
+}
+impl GroupType {
+    pub fn to_byte(&self) -> u8 {
+        match self {
+            // 0: bottom level (no group)
+            GroupType::Simple => 1,
+            GroupType::HBox => 2,
+            GroupType::VAdjust => 3,
+            GroupType::VBox => 4,
+            GroupType::VTop => 5,
+            GroupType::Align => 6,
+            GroupType::Noalign => 7,
+            GroupType::Output => 8,
+            GroupType::Math => 9,
+            GroupType::Disc => 10,
+            GroupType::Insert => 11,
+            GroupType::VCenter => 12,
+            GroupType::MathChoice => 13,
+            GroupType::SemiSimple => 14,
+            GroupType::MathShift { .. } => 15,
+            GroupType::LeftRight => 16,
+        }
+    }
 }
 
 /// A TeX state; holds all the different parameters, equivalents, registers etc.

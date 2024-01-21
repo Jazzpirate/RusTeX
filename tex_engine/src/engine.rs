@@ -313,6 +313,12 @@ macro_rules! expand_loop {
             $then;
         }
     }};
+    ($tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
+        while let Some($tk) = $engine.get_next() {
+            $first;
+            crate::expand!(ET;$engine,$tk;$($case)*);
+        }
+    }};
     ($ET:ty; $engine:ident,$tk:ident,$($case:tt)*) => {{
         while let Some($tk) = $engine.get_next() {
             crate::expand!($ET;$engine,$tk;$($case)*);

@@ -366,13 +366,13 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         for src in self.inputs.iter().rev() {
             match src {
                 //TokenSource::TokenList(s) => s.preview(int,cc,esc,&mut str),
-                TokenSource::String(s) => s.preview(&mut 500,&mut str).unwrap(),
+                TokenSource::String(s) => s.preview(&mut 1000,&mut str).unwrap(),
                 //TokenSource::Expansion(s) => s.preview(int,cc,esc,&mut str),
                 TokenSource::File(s,_) => {
-                    s.preview(&mut 500,&mut str).unwrap();break
+                    s.preview(&mut 1000,&mut str).unwrap();break
                 },
                 TokenSource::Vec(v) => {
-                    for t in v.iter().rev().take(500) {
+                    for t in v.iter().rev().take(1000) {
                         t.display_fmt(int,cc,esc,&mut str).unwrap()
                     }
                 }

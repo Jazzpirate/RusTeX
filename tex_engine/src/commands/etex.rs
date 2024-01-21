@@ -135,6 +135,32 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
 pub fn currentgrouplevel<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
     (engine.state.get_group_level() as i32).into()
 }
+/*\currentgrouptype returns a number representing the type of the innermost
+group:
+0: bottom level (no group)
+1: simple group
+2: hbox group
+// 3: adjusted hbox group
+4: vbox group
+// 5: vtop group
+// 6: align group
+// 7: no align group
+// 8: output group
+// 9: math group
+// 10: disc group
+// 11: insert group
+// 12: vcenter group
+// 13: math choice group
+14: semi simple group
+15: math shift group
+16: math left group
+ */
+pub fn currentgrouptype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
+    match engine.state.get_group_type() {
+        None => ET::Int::default(),
+        Some(gt) => ET::Int::from(gt.to_byte() as i32)
+    }
+}
 
 pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     engine.expand_until_bgroup(false,&tk);
@@ -364,6 +390,7 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     let escapechar = engine.state.get_escape_char();
     engine.read_until_endgroup(&tk,|a,state,t| {
         match t.to_enum() {
+            StandardToken::Character(c,CommandCode::Parameter) => {f(c);f(c)},
             StandardToken::Character(c,_) => f(c),
             StandardToken::ControlSequence(cs) => {
                 if let Some(esc) = escapechar {
@@ -514,6 +541,7 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     register_muskip(engine,"muexpr",muexpr,None);
 
     register_int(engine,"currentgrouplevel",currentgrouplevel,None);
+    register_int(engine,"currentgrouptype",currentgrouptype,None);
     register_int(engine,"lastnodetype",lastnodetype,None);
     register_int(engine,"eTeXversion",eTeXversion,None);
 
@@ -549,7 +577,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodo!(engine,beginL);
     cmtodo!(engine,beginR);
     cmtodo!(engine,clubpenalties);
-    cmtodo!(engine,currentgrouptype);
     cmtodo!(engine,currentifbranch);
     cmtodo!(engine,currentiflevel);
     cmtodo!(engine,currentiftype);

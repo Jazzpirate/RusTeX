@@ -28,9 +28,9 @@ fn main() {
     //run()
     //test()
     //temp_test()
-    //notes()
+    notes()
     //test2()
-    test_all()
+    //test_all()
 }
 
 fn test_all() {
@@ -97,7 +97,7 @@ fn test() {
 
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/CV/cv_dfg.tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html", &ret.out).unwrap();
 }
 

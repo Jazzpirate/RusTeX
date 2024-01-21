@@ -431,7 +431,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
                                     -> (bool,Result<u8,(TeXCommand<ET>, ET::Token)>) {
     let mut is_negative = false;
     let mut had_eq = !skip_eq;
-    crate::expand_loop!(engine,token,
+    crate::expand_loop!(token => if token.is_primitive() == Some(PRIMITIVES.noexpand) {continue};engine,
         ResolvedToken::Tk {char,code,..} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) if !had_eq => {
@@ -838,6 +838,16 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f32) 
                 let scale = (float * 65536.0).round() as i32;
                 return base.scale(scale.into(),65536.into())
             }
+            TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim} => {
+                let base = engine.state.get_primitive_dim(*name);
+                let scale = (float * 65536.0).round() as i32;
+                return base.scale(scale.into(),65536.into())
+            }
+            TeXCommand::SkipRegister(u) => {
+                let base = engine.state.get_skip_register(*u).base;
+                let scale = (float * 65536.0).round() as i32;
+                return base.scale(scale.into(),65536.into())
+            }
             TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
                 let base = engine.state.get_primitive_skip(*name).base;
                 let scale = (float * 65536.0).round() as i32;
@@ -1075,9 +1085,9 @@ fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:
     }
     match read_keywords(engine,STRETCH_SHRINK_UNITS,first) {
         Some(d) => StretchShrink::from_float(engine,float,d),
-        _ => match read_keywords(engine,ET::Dim::UNITS,None) {
-            Some(d) => StretchShrink::from_float(engine,float,d),
-            _ => todo!("wut: {}\n  (l.{})",engine.preview(),engine.mouth.line_number())
+        _ => {
+            let ret = read_unit_or_dim(engine,float);
+            StretchShrink::Dim(ret)
         }
     }
 }

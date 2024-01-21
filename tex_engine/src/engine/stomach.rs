@@ -285,7 +285,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
 
     /// Opens an `\halign` or `\valign`
     fn open_align(engine:&mut EngineReferences<ET>,_inner:BoxType,between:BoxType) {
-        engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
+        engine.state.push(engine.aux,GroupType::Align,engine.mouth.line_number());
         engine.stomach.data_mut().open_lists.push(
         if between == BoxType::Vertical {
             NodeList::Vertical {
@@ -558,9 +558,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             ResolvedToken::Tk {code:CommandCode::Space,..} => (),
             ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
             ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::BeginGroup,..})) => {
-                self.state.push(self.aux,GroupType::Math {
-                    display:self.stomach.data_mut().mode() == TeXMode::DisplayMath
-                },self.mouth.line_number());
+                self.state.push(self.aux,GroupType::Math,self.mouth.line_number());
                 let list = NodeList::Math{children:MathNodeList::new(),start:self.mouth.start_ref(),
                     tp:MathNodeListType::Target(tp(s))};
                 self.stomach.data_mut().open_lists.push(list);

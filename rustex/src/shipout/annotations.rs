@@ -79,7 +79,7 @@ pub(crate) fn close_font(state:&mut ShipoutState) {
             requeue.push(n);
         }
     }
-    unreachable!()
+    //unreachable!()
 }
 
 

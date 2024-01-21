@@ -49,7 +49,7 @@ impl Stomach<Types> for RusTeXStomach {
     }
 
     fn assign_font(engine: Refs, _token: CompactToken, f: Font, global: bool) {
-        let g = global || engine.aux.extension.change_markers.len() == 0;
+        let g = engine.state.get_group_level() == 0 || global || engine.aux.extension.change_markers.len() == 0;
         tex_engine::add_node!(Self;engine,
                        VNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
                        HNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
@@ -128,7 +128,7 @@ impl Stomach<Types> for RusTeXStomach {
     }
 
     fn open_align(engine: Refs, _inner: BoxType, between: BoxType) {
-        engine.state.push(engine.aux,GroupType::Box(between),engine.mouth.line_number());
+        engine.state.push(engine.aux,GroupType::Align,engine.mouth.line_number());
         engine.stomach.data_mut().open_lists.push(
             if between == BoxType::Vertical {
                 NodeList::Vertical {
@@ -145,7 +145,7 @@ impl Stomach<Types> for RusTeXStomach {
     fn close_align(engine: &mut EngineReferences<Types>) {
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignEnd));
         match engine.state.get_group_type() {
-            Some(GroupType::Box(_)) => (),
+            Some(GroupType::Align) => (),
             _ => todo!("throw error")
         }
         match engine.stomach.data_mut().open_lists.pop() {

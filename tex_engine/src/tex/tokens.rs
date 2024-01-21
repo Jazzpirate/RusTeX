@@ -225,7 +225,10 @@ impl Token for CompactToken {
     fn to_enum(&self) -> StandardToken<u8,InternedCSName<u8>> {
         match self.as_string() {
             Some(s) => StandardToken::ControlSequence(s),
-            None => StandardToken::Character(self.u8(), self.code())
+            None => match self.is_primitive() {
+                Some(i ) => StandardToken::Primitive(i),
+                None => StandardToken::Character(self.u8(), self.code()),
+            }
         }
     }
 

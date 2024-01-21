@@ -440,9 +440,9 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
             }
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => annotations::do_color(state,engine,act),
             VNode::Custom(RusTeXNode::FontChange(font,true)) => {
-                if state.in_content {
+                /*if state.in_content {
                     todo!()
-                }
+                }*/
                 *state.fonts.last_mut().unwrap() = font;
             }
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFStartLink(link))) =>
