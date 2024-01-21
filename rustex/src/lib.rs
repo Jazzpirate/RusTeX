@@ -29,6 +29,6 @@ mod tests {
         let testpath:PathBuf = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
         let ret = RusTeXEngine::do_file(testpath.to_str().unwrap(),false,true,true);
         let out = testpath.with_extension("html");
-        std::fs::write(out.to_str().unwrap(), &ret).unwrap();
+        std::fs::write(out.to_str().unwrap(), &ret.out).unwrap();
     }
 }

@@ -564,6 +564,21 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
                 state.push_glyph(glyph)
             }
         }
+        HNode::Accent {char,font,accent} => {
+            if font == engine.fontsystem.null() { return }
+            state.in_content = true;
+            let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
+            let glyph = glyphtable.get(char);
+            let accent = glyphtable.get(accent);
+            if !glyph.is_defined() {
+                nodes::do_missing_glyph(state,glyph.name(),char,&font);
+            } else {
+                if accent.is_defined() {
+                    state.push_glyph(accent) // TODO properly
+                }
+                state.push_glyph(glyph)
+            }
+        }
         HNode::VRule {width,height,depth,start,end} => {
             nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth)
         }

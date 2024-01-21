@@ -27,10 +27,10 @@ fn main() {
     //thesis()
     //run()
     //test()
-    temp_test()
+    //temp_test()
     //notes()
     //test2()
-    //test_all()
+    test_all()
 }
 
 fn test_all() {
@@ -83,6 +83,10 @@ fn test_all() {
             }
         }
     }
+    println!("Finished \\o/\n\nMissing glyphs: {}\nMissing web fonts: {}",
+           missing_glyphs.into_iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "),
+           missing_fonts.into_iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
+    );
 }
 
 fn test() {

@@ -64,6 +64,15 @@ pub enum HNode<ET:EngineTypes> {
         /// The current font
         font:<ET::FontSystem as FontSystem>::Font
     },
+    /// An `\accent` node.
+    Accent {
+        /// The accent character.
+        accent:ET::Char,
+        /// The lower character.
+        char:ET::Char,
+        /// The current font
+        font:<ET::FontSystem as FontSystem>::Font
+    },
     /// A custom node.
     Custom(ET::CustomNode),
 }
@@ -117,6 +126,9 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             }
             HNode::Char { char, .. } =>
                 Ok(char.display_fmt(f)),
+            HNode::Accent { accent, char, .. } => {
+                write!(f,"<accent accent=\"{}\" char=\"{}\" />",accent.display(),char.display())
+            }
             HNode::Whatsit(w) => {
                 display_do_indent(indent,f)?;
                 write!(f, "{:?}",w)
@@ -139,6 +151,9 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Leaders(l) => l.height(),
             HNode::MathGroup(mg) => mg.height(),
             HNode::Custom(n) => n.height(),
+            HNode::Accent { char, font,.. } => {
+                font.get_ht(*char) // TODO
+            }
             _ => ET::Dim::default(),
         }
     }
@@ -152,6 +167,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::Custom(n) => n.width(),
             HNode::HKern(d) => *d,
             HNode::HSkip(s) => s.base,
+            HNode::Accent { char, font,.. } => font.get_wd(*char),
             HNode::Space => ET::Dim::from_sp(65536 * 5), // TODO heuristic; use spacefactor instead
             _=> ET::Dim::default(),
         }
@@ -160,6 +176,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
         match self {
             HNode::Box(b) => b.depth(),
             HNode::Char { char,font } => font.get_dp(*char),
+            HNode::Accent{ char, font,.. } => font.get_dp(*char),
             HNode::VRule { depth, .. } => depth.unwrap_or_default(),
             HNode::Leaders(l) => l.depth(),
             HNode::MathGroup(mg) => mg.depth(),
@@ -179,6 +196,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::MathGroup{..} => NodeType::Math,
             HNode::Mark(_, _) => NodeType::Mark,
             HNode::Whatsit(_) => NodeType::WhatsIt,
+            HNode::Accent {..} => NodeType::Char,
             HNode::Leaders(_) => NodeType::Glue,
             HNode::HSkip(_) | HNode::Space | HNode::HFil | HNode::HFill | HNode::HFilneg | HNode::Hss => NodeType::Glue,
             HNode::Custom(n) => n.nodetype(),

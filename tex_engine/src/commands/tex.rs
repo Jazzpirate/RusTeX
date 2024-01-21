@@ -34,6 +34,26 @@ type Int<E> = <<E as EngineTypes>::Num as NumSet>::Int;
 type Dim<E> = <<E as EngineTypes>::Num as NumSet>::Dim;
 type Fnt<E> = <<E as EngineTypes>::FontSystem as FontSystem>::Font;
 
+pub fn accent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+    let accent = engine.read_charcode(false);
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk{char,code:CommandCode::Other|CommandCode::Letter} => {
+            ET::Stomach::add_node_h(engine,HNode::Accent {accent,char,font:engine.state.get_current_font().clone()})
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::Char {char,code:CommandCode::Other|CommandCode::Letter})) => {
+            ET::Stomach::add_node_h(engine,HNode::Accent {accent,char:*char,font:engine.state.get_current_font().clone()})
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::CharDef(char))) => {
+            ET::Stomach::add_node_h(engine,HNode::Accent {accent,char:*char,font:engine.state.get_current_font().clone()})
+        }
+        _ => {
+            engine.requeue(token);
+            let tk = <ET::Token as Token>::from_char_cat(accent,CommandCode::Other);
+            ET::Stomach::do_char(engine,tk,accent,CommandCode::Other);
+            return
+        }
+    );
+}
 
 pub fn afterassignment<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
     let next = match engine.get_next() {
@@ -218,7 +238,7 @@ pub fn chardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,g
     engine.set_command(&name,Some(cmd),globally)
 }
 
-pub fn char_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
+pub fn r#char<ET:EngineTypes>(engine: &mut EngineReferences<ET>, _tk:ET::Token) {
     let char = engine.read_charcode(false);
     match engine.stomach.data_mut().mode() {
         TeXMode::DisplayMath | TeXMode::InlineMath => {
@@ -2732,7 +2752,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"aftergroup",CommandScope::Any,aftergroup);
     register_unexpandable(engine,"begingroup",CommandScope::Any,begingroup);
     register_unexpandable(engine,"closein",CommandScope::Any,closein);
-    register_unexpandable(engine,"char",CommandScope::SwitchesToHorizontalOrMath,char_);
+    register_unexpandable(engine, "char", CommandScope::SwitchesToHorizontalOrMath, r#char);
     register_unexpandable(engine,"discretionary",CommandScope::Any,discretionary);
     register_unexpandable(engine,"dump",CommandScope::Any,|_,_|());
     register_unexpandable(engine,"endcsname",CommandScope::Any,endcsname);
@@ -2813,6 +2833,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "indent", CommandScope::SwitchesToHorizontal, indent);
     register_unexpandable(engine, " ", CommandScope::SwitchesToHorizontalOrMath, char_space);
     register_unexpandable(engine,"vcenter",CommandScope::MathOnly,vcenter);
+    register_unexpandable(engine,"accent",CommandScope::SwitchesToHorizontal,accent);
 
     register_unexpandable(engine, "mathord", CommandScope::MathOnly, mathord);
     register_unexpandable(engine, "mathop", CommandScope::MathOnly, mathop);
@@ -2862,7 +2883,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     );
 
     cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
-        show,showbox,showthe,special,noboundary,accent,setlanguage,
+        show,showbox,showthe,special,noboundary,setlanguage,
         bigskip,bye,italiccorr,medskip,smallskip
     );
 
