@@ -17,7 +17,7 @@ use RusTeX::files::RusTeXFileSystem;
 use RusTeX::output::RusTeXOutput;
 use RusTeX::stomach::{CLOSE_FONT, close_font};
 use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
-use tex_engine::commands::primitives::register_unexpandable;
+use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;
 use tex_engine::pdflatex::PlainPDFTeXEngine;
@@ -97,13 +97,14 @@ fn test() {
 
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/20 - FrameIT/paper/img/opposite_len_scroll.tex",true,true,true);
+    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html", &ret.out).unwrap();
 }
 
 fn thesis() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",false,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html", &ret.out).unwrap();
 }
 
@@ -121,7 +122,7 @@ fn profile() {
     println!("Profiling...");
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let mut engine = DefaultEngine::<Types>::new();
-    register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
+    register_simple_expandable(&mut engine,CLOSE_FONT,close_font);
     engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
         scope:CommandScope::Any,
         apply:|_,_| {
@@ -203,7 +204,7 @@ fn run() {
 fn test_latex_ltx() {
     use tex_engine::engine::state::State;
     let mut engine = DefaultEngine::<Types>::new();
-    register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
+    register_simple_expandable(&mut engine,CLOSE_FONT,close_font);
     engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
         scope:CommandScope::Any,
         apply:|_,_| {

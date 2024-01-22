@@ -13,6 +13,8 @@ use crate::stomach::RusTeXStomach;
 use tex_engine::engine::stomach::Stomach;
 use tex_engine::prelude::*;
 use tex_engine::engine::utils::memory::MemoryManager;
+use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread};
+use tex_engine::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus};
 
 pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     crate::engine::register_command(engine, true, "pgfsysdriver", "",
@@ -56,8 +58,26 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
     let miny = engine.read_dim(true);
     let maxx = engine.read_dim(true);
     let maxy = engine.read_dim(true);
+    let (start,end) = if let TeXBox::H {start,end,..} = &bx {
+        (start.clone(),end.clone())
+    } else {
+        unreachable!()
+    };
     let node = RusTeXNode::PGFSvg { bx, minx, miny, maxx, maxy };
-    RusTeXStomach::add_node_h(engine, HNode::Custom(node));
+    match engine.stomach.data_mut().mode() {
+        TeXMode::RestrictedHorizontal | TeXMode::Horizontal =>
+            RusTeXStomach::add_node_h(engine, HNode::Custom(node)),
+        _ => {
+            let info = HBoxInfo::new_box(ToOrSpread::None);
+            let bx = MathNode::Atom(MathAtom {
+                sub:None,sup:None,
+                nucleus: MathNucleus::Inner(MathKernel::Box(TeXBox::H {
+                    info,children:vec!(HNode::Custom(node)).into(),start,end,preskip:None
+                }))
+            });
+            RusTeXStomach::add_node_m(engine, bx)
+        }
+    }
 }
 fn pgfliteral(engine:Refs,_token:CompactToken) { todo!("pgfliteral") }
 fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {

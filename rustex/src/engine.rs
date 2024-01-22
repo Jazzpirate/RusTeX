@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use lazy_static::lazy_static;
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use tex_engine::commands::{TeXCommand, CommandScope, Macro, PrimitiveCommand};
-use tex_engine::commands::primitives::register_unexpandable;
+use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
@@ -80,7 +80,7 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
                 //let start = std::time::Instant::now();
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
-                register_unexpandable(&mut engine,CLOSE_FONT,CommandScope::Any,close_font);
+                register_simple_expandable(&mut engine,CLOSE_FONT,close_font);
                 engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
                     scope:CommandScope::Any,
                     apply:|_,_| {

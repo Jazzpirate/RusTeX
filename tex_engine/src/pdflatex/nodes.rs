@@ -8,6 +8,29 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::CustomNodeTrait;
 use crate::tex_error;
 
+#[derive(Clone,Debug)]
+pub enum PDFNode<ET:EngineTypes> {
+    Obj(PDFObj),
+    XForm(PDFXForm<ET>),
+    XImage(PDFXImage<ET>),
+    PDFLiteral(PDFLiteral),
+    PDFOutline(PDFOutline),
+    PDFCatalog(PDFCatalog),
+    PDFPageAttr(Box<[ET::Token]>),
+    PDFPagesAttr(Box<[ET::Token]>),
+    PDFDest(PDFDest<ET::Dim>),
+    Color(ColorStackAction),
+    PDFStartLink(PDFStartLink<ET>),
+    PDFAnnot(PDFAnnot<ET>),
+    PDFEndLink,PDFSave,PDFRestore,
+    PDFMatrix {
+        scale:f32,
+        rotate:f32,
+        skewx:f32,
+        skewy:f32,
+    }
+}
+
 #[derive(Debug,Clone)]
 pub enum ActionSpec {
     User(String),
@@ -190,26 +213,6 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
 
 // ----------------------------------------------------------------------------------------
 
-#[derive(Clone,Debug)]
-pub enum PDFNode<ET:EngineTypes> {
-    Obj(PDFObj),
-    XForm(PDFXForm<ET>),
-    XImage(PDFXImage<ET>),
-    PDFLiteral(PDFLiteral),
-    PDFOutline(PDFOutline),
-    PDFCatalog(PDFCatalog),
-    PDFDest(PDFDest<ET::Dim>),
-    Color(ColorStackAction),
-    PDFStartLink(PDFStartLink<ET>),
-    PDFAnnot(PDFAnnot<ET>),
-    PDFEndLink,PDFSave,PDFRestore,
-    PDFMatrix {
-        scale:f32,
-        rotate:f32,
-        skewx:f32,
-        skewy:f32,
-    }
-}
 
 #[derive(Copy,Clone,Debug)]
 pub enum ColorStackAction {
@@ -308,6 +311,10 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
             }
             PDFNode::XImage(img) =>
                 write!(f,"<pdfximage {}>",img.filepath.display()),
+            PDFNode::PDFPageAttr(_) =>
+                write!(f,"<pdfpageattr/>"),
+            PDFNode::PDFPagesAttr(_) =>
+                write!(f,"<pdfpagesattr/>"),
             PDFNode::PDFSave => write!(f,"<pdfsave>"),
             PDFNode::PDFRestore => write!(f,"<pdfrestore>"),
             PDFNode::PDFLiteral(PDFLiteral {option,literal}) =>

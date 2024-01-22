@@ -724,6 +724,26 @@ pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
     }
 }
 
+pub fn pdfpageattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+    where ET::Extension : PDFExtension<ET>,
+          ET::CustomNode:From<PDFNode<ET>> {
+    engine.expand_until_bgroup(false,&tk);
+    let mut v = Vec::new();
+    engine.read_until_endgroup(&tk,|_,_,t| v.push(t));
+    let node = PDFNode::PDFPageAttr(v.into());
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+}
+
+pub fn pdfpagesattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+    where ET::Extension : PDFExtension<ET>,
+          ET::CustomNode:From<PDFNode<ET>> {
+    engine.expand_until_bgroup(false,&tk);
+    let mut v = Vec::new();
+    engine.read_until_endgroup(&tk,|_,_,t| v.push(t));
+    let node = PDFNode::PDFPagesAttr(v.into());
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+}
+
 pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
     let name = engine.read_csname();
     let s = engine.aux.memory.cs_interner_mut().resolve(&name).to_string();
@@ -860,10 +880,12 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_unexpandable(engine,"pdfsetmatrix",CommandScope::Any,pdfsetmatrix);
     register_unexpandable(engine,"pdfannot",CommandScope::Any,pdfannot);
 
-    register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate);
+    register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate,None);
+    register_whatsit(engine,"pdfxform",pdfxform,pdfxform_immediate,None);
+    register_whatsit(engine,"pdfpageattr",|e,t| {pdfpageattr(e,t);None},pdfpageattr,Some(|_,_| Vec::new()));
+    register_whatsit(engine,"pdfpagesattr",|e,t| {pdfpagesattr(e,t);None},pdfpagesattr,Some(|_,_| Vec::new()));
     register_unexpandable(engine,"pdfrefobj",CommandScope::Any,pdfrefobj);
     register_int(engine,"pdflastobj",pdflastobj,None);
-    register_whatsit(engine,"pdfxform",pdfxform,pdfxform_immediate);
     register_unexpandable(engine,"pdfrefxform",CommandScope::Any,pdfrefxform);
     register_int(engine,"pdflastxform",pdflastxform,None);
     register_unexpandable(engine,"pdfximage",CommandScope::Any,pdfximage);
@@ -925,8 +947,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdflastlinedepth);
     cmtodo!(engine,pdfpxdimen);
     cmtodo!(engine,pdfthreadmargin);
-    cmtodo!(engine,pdfpageattr);
-    cmtodo!(engine,pdfpagesattr);
     cmtodo!(engine,pdfpkmode);
     cmtodo!(engine,ifpdfprimitive);
     cmtodo!(engine,pdfescapehex);

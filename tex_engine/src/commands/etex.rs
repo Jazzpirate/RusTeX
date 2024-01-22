@@ -524,7 +524,8 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "tracinggroups",
     "tracingifs",
     "tracingnesting",
-    "tracingscantokens"
+    "tracingscantokens",
+    "savingvdiscards"
 ];
 
 const PRIMITIVE_TOKS:&[&'static str] = &[
@@ -597,7 +598,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodo!(engine,parshapeindent);
     cmtodo!(engine,parshapelength);
     cmtodo!(engine,predisplaydirection);
-    cmtodo!(engine,savingvdiscards);
     cmtodo!(engine,showgroups);
     cmtodo!(engine,showifs);
     cmtodo!(engine,showtokens);

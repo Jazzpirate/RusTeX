@@ -96,7 +96,7 @@ impl NumSet for DefaultNumSet {
 
 impl Numeric<i32> for i32 {
     fn scale(&self, times: i32, div: i32) -> Self {
-        ((*self as f32 * times as f32) / (div as f32)).round() as i32
+        ((*self as f64 * times as f64) / (div as f64)).round() as i32
     }
 }
 impl TeXInt for i32 {

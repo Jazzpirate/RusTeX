@@ -5,7 +5,7 @@
 use std::fmt::Display;
 use crate::commands::methods::MacroParser;
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
-use crate::engine::{EngineReferences, EngineTypes};
+use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::fontsystem::FontSystem;
 use crate::tex::tokens::token_lists::{StringCharWrite, TokenList, CharWrite};
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
@@ -14,6 +14,7 @@ use crate::tex::numerics::{MuSkip, Skip, TeXInt};
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
 use crate::engine::mouth::strings::InputTokenizer;
+use crate::engine::state::State;
 use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 
@@ -89,6 +90,57 @@ pub enum TeXCommand<ET:EngineTypes> {
     /// A [primitive command](PrimitiveCommand), e.g. `\relax`, `\endgroup`, `\count` etc.
     Primitive{name:PrimitiveIdentifier,cmd:PrimitiveCommand<ET>},
 }
+impl<ET:EngineTypes> TeXCommand<ET> {
+
+    /// returns a helper struct for displaying the `\meaning` of this command; implements [`Display`].
+    pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
+        Meaning{cmd:self,int,cc,escapechar}
+    }
+
+    /// implements `\the` for this command, e.g. `\the\count0` or `\the\font`.
+    pub fn the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&self,engine:&mut EngineReferences<ET>,token:ET::Token,mut cont:F) {
+        use crate::tex::tokens::token_lists::Otherize;
+        use std::fmt::Write;
+        match self {
+            TeXCommand::IntRegister(u) => {
+                let val = engine.state.get_int_register(*u);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            TeXCommand::DimRegister(u) => {
+                let val = engine.state.get_dim_register(*u);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            TeXCommand::SkipRegister(u) => {
+                let val = engine.state.get_skip_register(*u);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            TeXCommand::MuSkipRegister(u) => {
+                let val = engine.state.get_muskip_register(*u);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            TeXCommand::CharDef(c) => {
+                let val : u64 = (*c).into();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            TeXCommand::MathChar(u) => {
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",u).unwrap();
+            }
+            TeXCommand::ToksRegister(u) => {
+                for t in &engine.state.get_toks_register(*u).0 {
+                    cont(engine.aux,engine.state,engine.gullet,t.clone())
+                }
+            }
+            TeXCommand::Font(fnt) => {
+                let t = fnt.name();
+                cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
+            }
+            TeXCommand::Primitive {name,cmd} => cmd.the(engine,token,*name,cont),
+            o => crate::tex_error!(engine,other,&format!("You can't use {} after \\the",
+                o.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
+            )),
+        }
+    }
+}
 
 /// A *primitive* command defined from the outset. All of the `fn` methods
 /// are called with (at least) the current [`EngineReferences`] and the [`Token`] that
@@ -158,16 +210,74 @@ pub enum PrimitiveCommand<ET:EngineTypes> {
     /// is called, otherwise, `get` may return a (boxed) continuation to be called at shipout.
     Whatsit {
         get:fn(&mut EngineReferences<ET>, ET::Token) -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>,
-        immediate:fn(&mut EngineReferences<ET>,ET::Token)
+        immediate:fn(&mut EngineReferences<ET>,ET::Token),
+        the:Option<fn(&mut EngineReferences<ET>,ET::Token) -> Vec<ET::Token>>
     },
     /// `\relax` - does nothing.
     Relax,
 }
+impl<ET:EngineTypes> PrimitiveCommand<ET> {
 
-impl<ET:EngineTypes> TeXCommand<ET> {
-    /// returns a helper struct for displaying the `\meaning` of this command; implements [`Display`].
-    pub fn meaning<'a>(&'a self, int:&'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler, cc:&'a CategoryCodeScheme<ET::Char>, escapechar:Option<ET::Char>) -> Meaning<'a,ET> {
-        Meaning{cmd:self,int,cc,escapechar}
+    /// implements `\the` for this command, e.g. `\the\count0` or `\the\font`.
+    pub fn the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&self,engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,mut cont:F) {
+        use crate::tex::tokens::token_lists::Otherize;
+        use std::fmt::Write;
+        match self {
+            PrimitiveCommand::Int{read,..} => {
+                let val = read(engine,token);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::Dim{read,..} => {
+                let val = read(engine,token);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::Skip{read,..} => {
+                let val = read(engine,token);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::MuSkip{read,..} => {
+                let val = read(engine,token);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::PrimitiveInt => {
+                let val = engine.state.get_primitive_int(name);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::PrimitiveDim => {
+                let val = engine.state.get_primitive_dim(name);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::PrimitiveSkip => {
+                let val = engine.state.get_primitive_skip(name);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::PrimitiveMuSkip => {
+                let val = engine.state.get_primitive_muskip(name);
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+            }
+            PrimitiveCommand::PrimitiveToks => {
+                for t in &engine.state.get_primitive_tokens(name).0 {
+                    cont(engine.aux,engine.state,engine.gullet,t.clone())
+                }
+            }
+            PrimitiveCommand::FontCmd{read,..} => {
+                let fnt = read(engine,token);
+                let t = fnt.name();
+                cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
+            }
+            PrimitiveCommand::Whatsit {the:Some(the),..} => {
+                for t in the(engine,token) {
+                    cont(engine.aux,engine.state,engine.gullet,t)
+                }
+            }
+            _ if name == PRIMITIVES.toks => {
+                let u = engine.read_register_index(false);
+                for t in &engine.state.get_toks_register(u).0 {
+                    cont(engine.aux,engine.state,engine.gullet,t.clone())
+                }
+            }
+            _ => crate::tex_error!(engine,other,&format!("You can't use {} after \\the",name.display(engine.state.get_escape_char()))),
+        }
     }
 }
 

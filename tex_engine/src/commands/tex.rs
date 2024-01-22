@@ -483,6 +483,10 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,out
             return ET::Stomach::assign_primitive_toks(engine,token,*name,true),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd {assign:Some(f),..},name})) if allow_others =>
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Whatsit {get,..},name})) if allow_others =>
+            return ET::Stomach::do_whatsit(engine,*name,token,*get),
+        ResolvedToken::Cmd(Some(cmd)) =>
+            todo!("\\global {}",cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())),
         o => todo!("\\global {:?}",o)
     )
 }
@@ -736,7 +740,9 @@ pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
             font.set_at(size);
         }
         Some(b"scaled") => {
-            todo!("read float and scale")
+            let i = engine.read_int(false).into();
+            let at = font.get_at();
+            font.set_at(at.scale_float(i as f32 / 1000.0));
         }
         _ => ()
     }
@@ -1726,7 +1732,15 @@ pub fn vrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
         }
     }
     let end = engine.mouth.current_sourceref();
-    ET::Stomach::add_node_h(engine,HNode::VRule {width,height,depth,start,end})
+    match engine.stomach.data_mut().mode() {
+        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
+            ET::Stomach::add_node_h(engine,HNode::VRule {width,height,depth,start,end})
+        }
+        TeXMode::InlineMath | TeXMode::DisplayMath => {
+            ET::Stomach::add_node_m(engine,MathNode::VRule {width,height,depth,start,end})
+        }
+        _ => unreachable!()
+    }
 }
 
 pub fn hrule<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
@@ -1967,6 +1981,26 @@ pub fn pagefillshrink_get<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:
 pub fn pagefillshrink_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
     let _ = engine.read_dim(true);
     // TODO
+}
+
+pub fn pagedepth_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Dim {
+    engine.stomach.data_mut().pagedepth
+}
+pub fn pagedepth_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
+    let d = engine.read_dim(true);
+    engine.stomach.data_mut().pagedepth = d;
+}
+
+pub fn prevgraf_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
+    (engine.stomach.data_mut().prevgraf as i32).into()
+}
+pub fn prevgraf_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) {
+    let d = engine.read_int(true).into();
+    if d < 0 {
+        tex_error!(engine,other,&format!("Bad prevgraf ({})",d));
+    } else {
+        engine.stomach.data_mut().prevgraf = d as u16;
+    }
 }
 
 pub fn deadcycles_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> ET::Int {
@@ -2658,6 +2692,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"lastpenalty",lastpenalty,None);
     register_int(engine,"parshape",parshape_get,Some(parshape_set));
     register_int(engine,"deadcycles",deadcycles_get,Some(deadcycles_set));
+    register_int(engine,"prevgraf",prevgraf_get,Some(prevgraf_set));
 
     register_dim(engine,"fontdimen",fontdimen_get,Some(fontdimen_set));
     register_dim(engine,"dimen",dimen_get,Some(dimen_set));
@@ -2674,6 +2709,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_dim(engine,"pageshrink",pageshrink_get,Some(pageshrink_set));
     register_dim(engine,"pagefilshrink",pagefilshrink_get,Some(pagefilshrink_set));
     register_dim(engine,"pagefillshrink",pagefillshrink_get,Some(pagefillshrink_set));
+    register_dim(engine,"pagedepth",pagedepth_get,Some(pagedepth_set));
 
     register_skip(engine,"skip",skip_get,Some(skip_set));
     register_skip(engine,"lastskip",lastskip,None);
@@ -2818,7 +2854,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine, "nolimits", CommandScope::MathOnly, nolimits);
     register_unexpandable(engine, "penalty", CommandScope::Any, penalty);
     register_unexpandable(engine, "kern", CommandScope::Any, kern);
-    register_unexpandable(engine, "vrule", CommandScope::SwitchesToHorizontal, vrule);
+    register_unexpandable(engine, "vrule", CommandScope::SwitchesToHorizontalOrMath, vrule);
     register_unexpandable(engine, "vskip", CommandScope::SwitchesToVertical, vskip);
     register_unexpandable(engine, "vfil", CommandScope::SwitchesToVertical, vfil);
     register_unexpandable(engine, "vfill", CommandScope::SwitchesToVertical, vfill);
@@ -2865,9 +2901,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
 
     register_unexpandable(engine,"nonscript",CommandScope::MathOnly,|_,_|()); // TODO
 
-    register_whatsit(engine,"closeout",closeout,closeout_immediate);
-    register_whatsit(engine,"openout",openout,openout_immediate);
-    register_whatsit(engine,"write",write,write_immediate);
+    register_whatsit(engine,"closeout",closeout,closeout_immediate,None);
+    register_whatsit(engine,"openout",openout,openout_immediate,None);
+    register_whatsit(engine,"write",write,write_immediate,None);
 
     register_box(engine,"hbox",hbox);
     register_box(engine,"vbox",vbox);
@@ -2878,11 +2914,10 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_box(engine, "vsplit", vsplit);
 
     cmstodos!(engine,
-        noalign,omit,
-        pagedepth,span
+        noalign,omit,span
     );
 
-    cmtodos!(engine,prevgraf,insertpenalties,scrollmode,nonstopmode,batchmode,
+    cmtodos!(engine,insertpenalties,scrollmode,nonstopmode,batchmode,
         show,showbox,showthe,special,noboundary,setlanguage,
         bigskip,bye,italiccorr,medskip,smallskip
     );

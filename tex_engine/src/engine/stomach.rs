@@ -379,7 +379,9 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     /// Open a new paragraph; assumed to be called in (internal) vertical mode
     fn open_paragraph(engine:&mut EngineReferences<ET>,token:ET::Token) {
         let sref = engine.mouth.start_ref();
-        engine.stomach.data_mut().open_lists.push(NodeList::Horizontal {
+        let data = engine.stomach.data_mut();
+        data.prevgraf = 0;
+        data.open_lists.push(NodeList::Horizontal {
             tp:HorizontalNodeListType::Paragraph(sref),
             children:vec!()
         });
@@ -456,6 +458,7 @@ pub struct StomachData<ET:EngineTypes> {
     pub splitbotmarks:HMap<usize,TokenList<ET::Token>>,
     pub page_contains_boxes:bool,
     pub lastpenalty: i32,
+    pub prevgraf: u16,
     pub in_output:bool,
     pub deadcycles:usize,
     pub vadjusts:Vec<VNode<ET>>,
@@ -503,6 +506,7 @@ impl <ET:EngineTypes> StomachData<ET> {
             botmarks:HMap::default(),
             splitfirstmarks:HMap::default(),
             splitbotmarks:HMap::default(),
+            prevgraf:0,
             lastpenalty:0,
             page_contains_boxes:false,
             in_output:false,

@@ -7,7 +7,7 @@ use crate::engine::filesystem::FileSystem;
 use crate::engine::fontsystem::{Font, FontSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::mouth::Mouth;
-use crate::tex::tokens::token_lists::{Otherize, TokenList};
+use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::state::{GroupType, State};
 use crate::engine::stomach::{Stomach, StomachData};
 use crate::{expand_loop, tex_error};
@@ -15,7 +15,6 @@ use crate::tex::catcodes::CommandCode;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
 use crate::tex::tokens::control_sequences::CSHandler;
-use std::fmt::Write;
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::gullet::hvalign::{AlignColumn, AlignData};
 use crate::tex::nodes::boxes::{BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
@@ -883,110 +882,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// `\the`, but using a continuation function; this is used for both [`the`](super::tex::the)
     /// as well as in [`expand_until_endgroup`](Self::expand_until_endgroup)
     /// to speed things up
-    pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,mut cont:F) {
+    pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,cont:F) {
         expand_loop!(self,token,
-            ResolvedToken::Cmd(Some(c)) => match c {
-                TeXCommand::Primitive{cmd:PrimitiveCommand::Int{read,..},..} => {
-                    let val = read(self,token);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::Dim{read,..},..} => {
-                    let val = read(self,token);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::Skip{read,..},..} => {
-                    let val = read(self,token);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::MuSkip{read,..},..} => {
-                    let val = read(self,token);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::IntRegister(u) => {
-                    let val = self.state.get_int_register(*u);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::DimRegister(u) => {
-                    let val = self.state.get_dim_register(*u);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::SkipRegister(u) => {
-                    let val = self.state.get_skip_register(*u);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::MuSkipRegister(u) => {
-                    let val = self.state.get_muskip_register(*u);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveInt,name} => {
-                    let val = self.state.get_primitive_int(*name);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveDim,name} => {
-                    let val = self.state.get_primitive_dim(*name);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveSkip,name} => {
-                    let val = self.state.get_primitive_skip(*name);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveMuSkip,name} => {
-                    let val = self.state.get_primitive_muskip(*name);
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::CharDef(c) => {
-                    let val : u64 = (*c).into();
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",val).unwrap();
-                    return ()
-                }
-                TeXCommand::MathChar(u) => {
-                    write!(Otherize::new(&mut |t| cont(self.aux,self.state,self.gullet,t)),"{}",u).unwrap();
-                    return ()
-                }
-                TeXCommand::ToksRegister(u) => {
-                    for t in &self.state.get_toks_register(*u).0 {
-                        cont(self.aux,self.state,self.gullet,t.clone())
-                    }
-                    return ()
-                }
-                TeXCommand::Primitive{name,..} if *name == PRIMITIVES.toks => {
-                    let u = self.read_register_index(false);
-                    for t in &self.state.get_toks_register(u).0 {
-                        cont(self.aux,self.state,self.gullet,t.clone())
-                    }
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::PrimitiveToks,name} => {
-                    for t in &self.state.get_primitive_tokens(*name).0 {
-                        cont(self.aux,self.state,self.gullet,t.clone())
-                    }
-                    return ()
-                }
-                TeXCommand::Font(fnt) => {
-                    let t = fnt.name();
-                    cont(self.aux,self.state,self.gullet,ET::Token::from_cs(t.clone()));
-                    return ()
-                }
-                TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd{read,..},..} => {
-                    let fnt = read(self,token);
-                    let t = fnt.name();
-                    cont(self.aux,self.state,self.gullet,ET::Token::from_cs(t.clone()));
-                    return ()
-                }
-                o => todo!("Here: {:?} in \\the - {}",o,self.mouth.current_sourceref().display(self.filesystem))
-            }
+            ResolvedToken::Cmd(Some(c)) => return c.clone().the(self,token,cont),
             o => todo!("{:?} in \\the",o)
         );
     }

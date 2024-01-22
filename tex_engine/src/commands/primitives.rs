@@ -215,8 +215,10 @@ pub fn register_whatsit<E:TeXEngine>(
     name:&'static str,
     get:fn(&mut EngineReferences<E::Types>, <E::Types as EngineTypes>::Token)
              -> Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>)>>,
-    immediate:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token)) {
-    let command = PrimitiveCommand::Whatsit { get,immediate };
+    immediate:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token),
+    the:Option<fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> Vec<<E::Types as EngineTypes>::Token>>
+) {
+    let command = PrimitiveCommand::Whatsit { get,immediate, the };
     let refs = engine.get_engine_refs();
     refs.state.register_primitive(refs.aux,name,command);
 }

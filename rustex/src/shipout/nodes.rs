@@ -220,7 +220,7 @@ pub(crate) fn do_missing_glyph(state:&mut ShipoutState,name:GlyphName,char:u8,fo
     let s = match state.mode() {
         ShipoutMode::H{..} | ShipoutMode::Par => "span",
         ShipoutMode::Math => "mtext",
-        _ => unreachable!()
+        _ => return
     };
     state.missing_glyphs.insert((name.to_string(),char,font.filename().to_string()));
     state.push_child(HTMLChild::Comment(
@@ -895,7 +895,20 @@ pub(crate) fn hrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Option<D
 
 pub(crate) fn vrule(state:&mut ShipoutState,start:SRef, end:SRef, width:Dim32, height:Option<Dim32>, depth:Option<Dim32>) {
     let mode = state.mode();
-    if mode == ShipoutMode::Math { todo!() }
+    if mode == ShipoutMode::Math {
+        state.push_comment(format!("<mspace background=\"{}\"{}{}{}/>",state.colors.last().unwrap(),
+            if width != Dim32(0) {format!(" width=\"{}\"",dim_to_string(width))} else {"".into()},
+            match height {
+                None | Some(Dim32(0)) => "".into(),
+                Some(h) => format!(" height=\"{}\"",dim_to_string(h))
+            },
+           match depth {
+               None | Some(Dim32(0)) => "".into(),
+               Some(h) => format!(" depth=\"{}\"",dim_to_string(h))
+           }
+        ));
+        return
+    }
     if width == Dim32(0) { return }
     match (height,depth) {
         (None,None) =>
@@ -948,6 +961,17 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
             _ => noalign.push(row)
         }
     }
+    while let Some(row) = children.next() {
+        match row {
+            VNode::Box(TeXBox::H { info: HBoxInfo::HAlignRow,children,start,end,.. }) => {
+                num_cols = num_cols.max(children.len());
+                rows.push(RowOrNoAlign::Row(children.into_vec(),start,end));
+            }
+            VNode::Penalty(_) => (),
+            _ => {children.prefix(vec!(row));break}
+        }
+    }
+
     let mut node = HTMLNode::new(HTMLTag::HAlign);
     node.styles.insert("--rustex-align-num".into(),num_cols.to_string().into());
     node.classes.push("rustex-halign".into());

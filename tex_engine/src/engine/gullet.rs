@@ -362,6 +362,18 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
                 _ => unreachable!()
             }
             //crate::debug_log!(error => "Here: {}",engine.preview());
+
+/*
+            match engine.gullet.get_align_data() {
+                Some(d) => {
+                    let ig = d.ingroups;
+                    let val = d.groupval();
+                    println!("Here: {} == {}",ig,val);
+                }
+                _ => ()
+            }
+*/
+
         }
         if m.signature.params.is_empty() {
             engine.mouth.push_exp(&m.expansion);

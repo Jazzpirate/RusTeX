@@ -274,7 +274,10 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     let (display,every) = match engine.stomach.data_mut().mode() {
         TeXMode::Horizontal => {
             match engine.get_next() {
-                Some(tk) if tk.command_code() == CommandCode::MathShift => (true,PRIMITIVES.everydisplay),
+                Some(tk) if tk.command_code() == CommandCode::MathShift => {
+                    engine.stomach.data_mut().prevgraf = 3; // heuristic
+                    (true,PRIMITIVES.everydisplay)
+                },
                 Some(o) => {
                     engine.requeue(o);(false,PRIMITIVES.everymath)
                 }
@@ -292,10 +295,13 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
 fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Math{children,start,tp:MathNodeListType::Top {display}}) => {
-            if display {match engine.get_next() {
-                Some(tk) if tk.command_code() == CommandCode::MathShift => (),
-                _ => todo!("throw error")
-            }}
+            if display {
+                engine.stomach.data_mut().prevgraf += 3;
+                match engine.get_next() {
+                    Some(tk) if tk.command_code() == CommandCode::MathShift => (),
+                    _ => todo!("throw error")
+                }
+            }
             let (children,eqno) = children.close(start,engine.mouth.current_sourceref());
             let group = MathGroup::close(engine.state,
                 if display {Some((
@@ -508,7 +514,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
         Some(_) => todo!("throw error"),
         _ => ()
     }
-    if !data.page_contains_boxes && !data.in_output /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
+    if !data.page_contains_boxes /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
         match &node {
             VNode::Box(_) | VNode::Insert(..) | VNode::HRule {..} => {
                 //crate::debug_log!(debug => "Here: {} \n\n {}",node.readable(),engine.mouth.display_position());
@@ -554,7 +560,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
 
     let split_penalty = split_penalty.unwrap_or(0);
 
-    engine.state.push(engine.aux, GroupType::Simple, engine.mouth.line_number());
+    engine.state.push(engine.aux, GroupType::Output, engine.mouth.line_number());
 
     let data = engine.stomach.data_mut();
 

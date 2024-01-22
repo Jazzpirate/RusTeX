@@ -113,8 +113,8 @@ impl Stomach<Types> for RusTeXStomach {
         let data = engine.stomach.data_mut();
         if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() {
             if continuous {
-                data.pagegoal = <Types as EngineTypes>::Dim::from_sp(i32::MAX / 3);
-                engine.state.set_primitive_dim(engine.aux,PRIMITIVES.vsize,data.pagegoal,true);
+                //data.pagegoal = <Types as EngineTypes>::Dim::from_sp(180224000);
+                //engine.state.set_primitive_dim(engine.aux,PRIMITIVES.vsize,data.pagegoal,true);
                 if data.page_contains_boxes && data.pagetotal > <Types as EngineTypes>::Dim::from_sp(6553600 * 5) {
                     do_shipout(engine,penalty.or(Some(-10000)),|_|());
                     engine.stomach.data_mut().page_contains_boxes = true;
