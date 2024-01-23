@@ -10,7 +10,7 @@ use crate::tex::tokens::token_lists::{Otherize, TokenList};
 use super::primitives::*;
 use crate::engine::state::{GroupType, State};
 use crate::tex::catcodes::{CategoryCode, CommandCode};
-use crate::tex::numerics::{MuSkip, Numeric, NumSet, Skip};
+use crate::tex::numerics::{MuSkip, NumSet, Skip};
 use crate::tex::characters::{Character, CharacterMap};
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::{StandardToken, Token};
@@ -585,13 +585,13 @@ pub fn divide<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,gl
         if b == Int::<ET>::default() {
             todo!("divide by zero")
         }
-        a.scale(Int::<ET>::from(1),b)
+        a / b
     },|a,e| {
         let b = e.read_int(false);
         if b == Int::<ET>::default() {
             todo!("divide by zero")
         }
-        a.scale(Int::<ET>::from(1),b)
+        a / b
     }
     );
 }
@@ -600,11 +600,11 @@ pub fn multiply<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
         |a,e| a * e.read_int(false),
         |a,e| {
             let b = e.read_int(false);
-            a.scale(b,Int::<ET>::from(1))
+            a * b
         },
         |a,e| {
             let b = e.read_int(false);
-            a.scale(b,Int::<ET>::from(1))
+            a * b
         }
     );
 }
@@ -742,7 +742,7 @@ pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,
         Some(b"scaled") => {
             let i = engine.read_int(false).into();
             let at = font.get_at();
-            font.set_at(at.scale_float(i as f32 / 1000.0));
+            font.set_at(at.scale_float(i as f64 / 1000.0));
         }
         _ => ()
     }
@@ -1384,14 +1384,14 @@ pub fn number<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 }
 
 pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let token = match engine.get_next() {
+    let token = match engine.mouth.get_next_opt(engine.aux,engine.state) {
         Some(t) if t == ET::Token::eof() => return,
         Some(t) => t,
         _ => todo!("throw error")
     };
     match engine.resolve(&token) {
         ResolvedToken::Tk{..} =>
-            engine.requeue(token),
+            engine.mouth.requeue(token),
         ResolvedToken::Cmd(Some(cm)) => {
             match cm {
                 TeXCommand::Macro(_) |

@@ -367,10 +367,10 @@
 \def\pgfsys@beveljoin{\pgf@sys@svg@node@beging{stroke-linejoin="bevel"}}
 
 % Invisibility
-\def\pgfsys@begininvisible{\pgf@sys@svg@node@begin{g}{visibility="hidden"}}
-\def\pgfsys@endinvisible{\pgf@sys@svg@node@end{g}}
-\def\pgfsys@begininvisiblescope{\pgfsys@beginscope@{visibility="hidden"}}
-\def\pgfsys@endinvisiblescope{\pgfsys@endscope}
+\def\pgfsys@begininvisible{\rustex@annotateHTML{style:visibility="hidden"}}
+\def\pgfsys@endinvisible{\rustex@annotateHTMLEnd}
+\def\pgfsys@begininvisiblescope{\pgfsys@beginscope@{}\pgfsys@begininvisible}
+\def\pgfsys@endinvisiblescope{\pgfsys@endinvisible\pgfsys@endscope}
 
 
 %
@@ -589,7 +589,7 @@
 % Step 2: Insert stops.
 \expandafter\pgf@sys@svg@shading@dostops\pgf@sys@shading@ranges%
   % dummy for end:
-  {{\pgf@sys@shading@end@pos}{\pgf@sys@shading@end@pos}{\pgf@sys@shading@end@rgb}{\pgf@sys@shading@end@rgb}}%
+  {{\pgf@sys@shading@end@pos}{\pgf@sys@shading@end@pos}{}{}}%
   {}% end
 }
 \def\pgf@sys@svg@shading@dostops#1{%
@@ -609,12 +609,24 @@
     \pgf@x=16\pgf@x%
     \divide\pgf@x by \c@pgf@counta\relax%
     \pgf@sys@svg@addtostops{\csname rustex!pgf!gbegin\endcsname{stop} offset="\pgf@sys@tonumber\pgf@x" stop-color="}%
-    \pgf@sys@svg@shading@dorgb#3%
+    \pgf@sys@svg@shading@dorgb@test#3{}\pgf@sys@svg@shading@dorgb@testend%
     \pgf@sys@svg@addtostops{"\relax\pgf@sys@svg@node@end{stop}}%
 }
+\def\pgf@sys@svg@shading@dorgb@test#1#2\pgf@sys@svg@shading@dorgb@testend{%#
+  \def\pgf@test{#1}%
+  \ifx\pgf@test\pgfutil@empty\pgf@sys@svg@addtostops{0 0 0}\else%
+      \def\pgf@test{#2}%
+      \ifx\pgf@test\pgfutil@empty%
+        \pgf@sys@svg@color@gray{#1}\relax%
+        \pgf@sys@svg@addtostops{\pgf@sys@svg@prepared}%
+      \else%
+        \pgf@sys@svg@shading@dorgb{#1}#2%
+      \fi%
+  \fi%
+}
 \def\pgf@sys@svg@shading@dorgb#1#2#3{%
-\pgf@sys@svg@color@rgb#1,#2,#3\relax%
-\pgf@sys@svg@addtostops{\pgf@sys@svg@prepared}%
+    \pgf@sys@svg@color@rgb#1,#2,#3\relax%
+    \pgf@sys@svg@addtostops{\pgf@sys@svg@prepared}%
 }
 
 \let\pgf@sys@svg@thestops=\pgfutil@empty

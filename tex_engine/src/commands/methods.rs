@@ -632,7 +632,7 @@ pub(crate) fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<
     match data.open_lists.last_mut() {
         None => (),//todo!("throw error: Not allowed in vertical"), <- not entirely true; if there's contributed stuff not yet migrated to the current page, it's allowed
         Some(NodeList::Vertical {children,..}) => {
-            let mut readd = arrayvec::ArrayVec::<VNode<ET>,10>::new();
+            let mut readd = Vec::new();
             loop {
                 match children.last_mut() {
                     Some(n) if v(n) => { children.pop();break }
@@ -647,7 +647,7 @@ pub(crate) fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<
             }
         }
         Some(NodeList::Horizontal {children,..}) => {
-            let mut readd = arrayvec::ArrayVec::<HNode<ET>,10>::new();
+            let mut readd = Vec::new();
             loop {
                 match children.last_mut() {
                     Some(n) if h(n) => { children.pop();break }
@@ -662,7 +662,7 @@ pub(crate) fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<
             }
         }
         Some(NodeList::Math {children,..}) => {
-            let mut readd = arrayvec::ArrayVec::<_,10>::new();
+            let mut readd = Vec::new();
             loop {
                 match children.list_mut().last_mut() {
                     Some(n) if m(n) => { children.list_mut().pop();break }

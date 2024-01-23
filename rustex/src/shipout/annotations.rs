@@ -1,21 +1,25 @@
 use std::collections::BTreeSet;
 use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFNode, PDFStartLink};
-use crate::engine::{Font, Refs, Types};
+use crate::engine::{Font, Refs, SRef, Types};
 use crate::html::{HTMLChild, HTMLNode, HTMLTag};
 use crate::shipout::{ShipoutMode, ShipoutState};
 use tex_engine::pdflatex::nodes::PDFExtension;
 use tex_engine::engine::fontsystem::Font as FontT;
+use tex_engine::utils::HMap;
 use crate::fonts::FontStore;
 
-pub(crate) fn close_all(mode:ShipoutMode,open: &mut Vec<HTMLNode>) -> HTMLNode {
+pub(crate) fn close_all<F:Fn(&HTMLTag) -> bool>(mode:ShipoutMode,open: &mut Vec<HTMLNode>,tag:F) -> HTMLNode {
     let mut reopen:Vec<HTMLNode> = vec!();
     loop {
         let mut last = open.pop().unwrap();
-        if matches!(last.tag, HTMLTag::ColorChange(_)) {
+        let m = tag(&last.tag);
+        if !m && matches!(last.tag, HTMLTag::ColorChange(_)) {
             reopen.push(last);
-        } else if matches!(last.tag, HTMLTag::FontChange(_)) {
+        } else if !m && matches!(last.tag, HTMLTag::FontChange(_)) {
             reopen.push(last);
-        } else if matches!(last.tag, HTMLTag::Link(_)) {
+        } else if !m && matches!(last.tag, HTMLTag::Link(_)) {
+            reopen.push(last);
+        }else if !m && matches!(last.tag, HTMLTag::Annot(_)) {
             reopen.push(last);
         } else {
             if reopen.is_empty() { return last }
@@ -81,7 +85,6 @@ pub(crate) fn close_font(state:&mut ShipoutState) {
     }
     //unreachable!()
 }
-
 
 pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAction) {
     let stack = engine.aux.extension.colorstacks();
@@ -195,6 +198,48 @@ pub(crate) fn close_link(state:&mut ShipoutState) {
     unreachable!()
 }
 
+pub(crate) fn do_annot(state:&mut ShipoutState,start:SRef,attrs:HMap<String,String>,styles:HMap<String,String>) {
+    let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+    for (k,v) in attrs.into_iter() {
+        node.attrs.insert(k.into(),v.into());
+    }
+    for (k,v) in styles.into_iter() {
+        node.styles.insert(k.into(),v.into());
+    }
+    node.sourceref = Some((start.clone(),start));
+    state.nodes.push(node);
+}
+pub(crate) fn close_annot(state:&mut ShipoutState,end:SRef) {
+    let mut requeue:Vec<HTMLNode> = vec!();
+    while let Some(mut n) = state.nodes.pop() {
+        if matches!(n.tag,HTMLTag::Annot(_)) {
+            let Some((start,_)) = std::mem::take(&mut n.sourceref) else {unreachable!()};
+            n.sourceref = Some((start,end));
+            if requeue.is_empty() {
+                if !n.children.is_empty() {state.push(n);}
+                return
+            }
+            let rf = n.sourceref.clone().unwrap();
+            let styles = n.styles.clone();
+            let attrs = n.attrs.clone();
+            if !n.children.is_empty() {state.push(n);}
+            for mut c in requeue.into_iter().rev() {
+                let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+                node.attrs = attrs.clone();
+                node.styles = styles.clone();
+                node.sourceref = Some(rf);
+                node.children = std::mem::take(&mut c.children);
+                if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
+                state.nodes.push(c);
+            }
+            return
+        } else {
+            requeue.push(n);
+        }
+    }
+    unreachable!()
+}
+
 pub(crate) fn do_matrix(state:&mut ShipoutState,scale:f32,rotate:f32,skewx:f32,skewy:f32) {
     let mut node = HTMLNode::new(HTMLTag::Matrix(state.mode()));
     node.classes.push("rustex-pdfmatrix".into());
@@ -213,7 +258,7 @@ pub(crate) fn reset_matrix(state:&mut ShipoutState) {
                 if !n.children.is_empty() {state.push(n);}
                 return
             }
-            let Some(transform) = n.styles.get("transfomr") else { unreachable!() };
+            let Some(transform) = n.styles.get("transform") else { unreachable!() };
             let transform = transform.to_string();
             if !n.children.is_empty() {state.push(n);}
             for mut c in requeue.into_iter().rev() {

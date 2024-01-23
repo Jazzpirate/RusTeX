@@ -1,4 +1,5 @@
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
+use tex_engine::add_node;
 use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::tex::tokens::CompactToken;
@@ -15,6 +16,7 @@ use tex_engine::prelude::*;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread};
 use tex_engine::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus};
+use tex_engine::tex::nodes::vertical::VNode;
 
 pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     crate::engine::register_command(engine, true, "pgfsysdriver", "",
@@ -23,7 +25,6 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     );
     let all: &[(&'static str,fn(Refs,CompactToken))] = &[
         ("rustex!pgf!hbox",pgfhbox),
-        ("rustex!pgf!typesetpicturebox",pgftypesetpicturebox),
         ("rustex!pgf!literal",pgfliteral),
         ("rustex!pgf!gbegin",gbegin),
         ("rustex!pgf!gend",gend),
@@ -32,10 +33,14 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     ];
     for (s,c) in all {
         engine.state.register_primitive(&mut engine.aux,s,PrimitiveCommand::Unexpandable {
-            scope:CommandScope::SwitchesToHorizontalOrMath,
+            scope:CommandScope::Any,//SwitchesToHorizontalOrMath,
             apply:*c
         });
     }
+    engine.state.register_primitive(&mut engine.aux,"rustex!pgf!typesetpicturebox",PrimitiveCommand::Unexpandable {
+        scope:CommandScope::SwitchesToHorizontalOrMath,
+        apply:pgftypesetpicturebox
+    });
     engine.state.register_primitive(&mut engine.aux,"rustex!pgf!flushpath",PrimitiveCommand::Expandable(pgfflushpath));
     register_command(engine, true, "rustex!pgf!get!dimens", "",
                      "=\\pgf@picminx =\\pgf@picminy =\\pgf@picmaxx =\\pgf@picmaxy",
@@ -47,7 +52,7 @@ fn pgfhbox(engine:Refs,_token:CompactToken) {
     let num = engine.read_register_index(false);
     let bx = engine.state.take_box_register(num).unwrap();
     let node = RusTeXNode::PGFEscape(bx);
-    RusTeXStomach::add_node_h(engine, HNode::Custom(node));
+    add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
 }
 fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
     let num = engine.read_register_index(false);
@@ -124,10 +129,11 @@ fn gbegin(engine:Refs,token:CompactToken) {
         }
     }
     let bg = RusTeXNode::PGFGBegin {attrs,tag:key };
-    RusTeXStomach::add_node_h(engine, HNode::Custom(bg));
+    add_node!(RusTeXStomach;engine, VNode::Custom(bg),HNode::Custom(bg),MathNode::Custom(bg));
 }
-fn gend(engine:Refs,_token:CompactToken) {
-    RusTeXStomach::add_node_h(engine, HNode::Custom(RusTeXNode::PGFGEnd));
+fn gend(engine:Refs,token:CompactToken) {
+    engine.skip_argument(&token);
+    add_node!(RusTeXStomach;engine, VNode::Custom(RusTeXNode::PGFGEnd),HNode::Custom(RusTeXNode::PGFGEnd),MathNode::Custom(RusTeXNode::PGFGEnd));
 }
 fn pgfbegin(engine:Refs, _token:CompactToken) { todo!("pgfbegin") }
 fn pgfend(engine:Refs, _token:CompactToken) { todo!("pgfend") }

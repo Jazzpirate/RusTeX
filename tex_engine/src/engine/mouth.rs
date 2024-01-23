@@ -165,10 +165,10 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                 _ => ()
             }
         }
-        unreachable!()
+        self.start_ref.last().copied().unwrap_or_default()
     }
     fn start_ref(&self) -> SourceReference<<ET::File as File>::SourceRefID> {
-        *self.start_ref.last().unwrap()
+        self.start_ref.last().copied().unwrap_or_default()
     }
     fn update_start_ref(&mut self) {
         match self.inputs.last() {

@@ -5,6 +5,7 @@ pub(crate) mod shipout;
 pub(crate) mod extension;
 pub(crate) mod html;
 pub(crate) mod nodes;
+pub mod commands;
 pub mod state;
 pub mod stomach;
 pub(crate) mod pgf;

@@ -15,7 +15,6 @@ use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use RusTeX::engine::Types;
 use RusTeX::files::RusTeXFileSystem;
 use RusTeX::output::RusTeXOutput;
-use RusTeX::stomach::{CLOSE_FONT, close_font};
 use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::engine::{DefaultEngine, TeXEngine};
@@ -28,9 +27,9 @@ fn main() {
     //run()
     //test()
     //temp_test()
-    notes()
+    //notes()
     //test2()
-    //test_all()
+    test_all()
 }
 
 fn test_all() {
@@ -97,14 +96,15 @@ fn test() {
 
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/20 - FrameIT/paper/img/opposite_len_scroll.tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
+    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/ODK/WP6/MACIS17-interop/gap_singular_mitm_fig.tex",true,true,true);
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
-    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html", &ret.out).unwrap();
+    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
 }
 
 fn thesis() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",false,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html", &ret.out).unwrap();
 }
 
@@ -122,13 +122,7 @@ fn profile() {
     println!("Profiling...");
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let mut engine = DefaultEngine::<Types>::new();
-    register_simple_expandable(&mut engine,CLOSE_FONT,close_font);
-    engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
-        scope:CommandScope::Any,
-        apply:|_,_| {
-            println!("HERE!")
-        }
-    });
+    RusTeX::commands::register_primitives_preinit(&mut engine);
     engine.aux.outputs = RusTeXOutput::Print(false);
     engine.initialize_etex();
     register_pdftex_primitives(&mut engine);
@@ -204,13 +198,7 @@ fn run() {
 fn test_latex_ltx() {
     use tex_engine::engine::state::State;
     let mut engine = DefaultEngine::<Types>::new();
-    register_simple_expandable(&mut engine,CLOSE_FONT,close_font);
-    engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
-        scope:CommandScope::Any,
-        apply:|_,_| {
-            println!("HERE!")
-        }
-    });
+    RusTeX::commands::register_primitives_preinit(&mut engine);
 
     //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingcommands,1,true);
     //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingifs,1,true);

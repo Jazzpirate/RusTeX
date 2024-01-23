@@ -236,7 +236,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
         match self.muts.read().unwrap().dimens.get(idx as usize) {
             Some(d) => *d,
             None => match self.file.dimen.get(idx as usize) {
-                Some(d) => self.get_at().scale_float(*d),
+                Some(d) => self.get_at().scale_float(*d as f64),
                 None => D::default()
             }
         }
@@ -274,7 +274,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
             Some(d) => *d,
             None => {
                 let d = self.file.ics[c as usize];
-                self.get_at().scale_float(d)
+                self.get_at().scale_float(d as f64)
             }
         }
     }
@@ -285,17 +285,17 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
 
     fn get_wd(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.widths[c as usize];
-        self.get_at().scale_float(d)
+        self.get_at().scale_float(d as f64)
     }
 
     fn get_ht(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.heights[c as usize];
-        self.get_at().scale_float(d)
+        self.get_at().scale_float(d as f64)
     }
 
     fn get_dp(&self, c: Self::Char) -> Self::Dim {
         let d = self.file.depths[c as usize];
-        self.get_at().scale_float(d)
+        self.get_at().scale_float(d as f64)
     }
 
     fn ligature(&self,char1:Self::Char,char2:Self::Char) -> Option<Self::Char> {

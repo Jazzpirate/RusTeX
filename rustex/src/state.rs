@@ -6,12 +6,12 @@ use tex_engine::tex::catcodes::{CategoryCode, CategoryCodeScheme};
 use tex_engine::tex::numerics::{Dim32, Mu, MuSkip, Skip};
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{CSName, Font, Types};
-use crate::stomach::CLOSE_FONT;
 use tex_engine::tex::tokens::Token;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::prelude::*;
+use crate::commands::CLOSE_FONT;
 
 #[derive(Clone)]
 pub struct RusTeXState(state::tex_state::DefaultState<Types>);

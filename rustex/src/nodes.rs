@@ -57,7 +57,13 @@ pub enum RusTeXNode {
         bx:TeXBox<Types>,
         minx:Dim32,miny:Dim32,maxx:Dim32,maxy:Dim32,
     },
-    PageBegin,PageEnd
+    PageBegin,PageEnd,
+    AnnotBegin {
+        start:SRef,
+        attrs : HMap<String,String>,
+        styles: HMap<String,String>
+    },
+    AnnotEnd(SRef),
 }
 impl CustomNodeTrait<Types> for RusTeXNode {}
 impl NodeTrait<Types> for RusTeXNode {

@@ -174,38 +174,6 @@ impl Stomach<Types> for RusTeXStomach {
     }
 }
 
-pub const CLOSE_FONT:&str = "!\"$%&/(closefont)\\&%$\"!";
-pub fn close_font(engine: Refs, _token: CompactToken) {
-    match engine.stomach.data.open_lists.last_mut() {
-        Some(NodeList::Vertical{ref mut children,..}) => {
-            match children.last() {
-                Some(VNode::Custom(RusTeXNode::FontChange(_,_))) => {
-                    children.pop();
-                }
-                _ => children.push(VNode::Custom(RusTeXNode::FontChangeEnd))
-            }
-        },
-        Some(NodeList::Horizontal{ref mut children,..}) => {
-            match children.last() {
-                Some(HNode::Custom(RusTeXNode::FontChange(_,_))) => {
-                    children.pop();
-                }
-                _ => children.push(HNode::Custom(RusTeXNode::FontChangeEnd))
-            }
-        },
-        Some(NodeList::Math{ref mut children,..}) => {
-            match children.list_mut().last() {
-                Some(MathNode::Custom(RusTeXNode::FontChange(_,_))) => {
-                    children.list_mut().pop();
-                }
-                _ => children.push(MathNode::Custom(RusTeXNode::FontChangeEnd))
-            }
-        },
-        _ => engine.stomach.data.page.push(VNode::Custom(RusTeXNode::FontChangeEnd))
-    }
-}
-
-
 pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> SplitResult<Types> {
     let data = engine.stomach.data_mut();
     data.topmarks.clear();

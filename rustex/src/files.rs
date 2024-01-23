@@ -25,7 +25,7 @@ impl FileSystem for RusTeXFileSystem {
         let id = inner.interner.get_or_intern("<TEXINPUTS>/pgfsys-rustex.def");
         Self{
             inner,
-            svg:(id,StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into())
+            svg:(Some(id),StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into())
         }
     }
     fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {

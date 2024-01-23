@@ -13,7 +13,7 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_tfm::fontstyles::ModifierSeq;
-use crate::shipout::{do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
+use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 use tex_engine::tex::numerics::TeXDimen;
 use tex_tfm::glyphs::GlyphName;
 
@@ -249,7 +249,6 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VN
     };
 
     let children = paragraph_list(children);
-
     state.do_in(node,
         Some(ShipoutMode::Par),|state| {
             state.widths.push(spec.target);
@@ -292,6 +291,7 @@ pub(crate) fn paragraph_list(children:&mut VNodes) -> Vec<HNode<Types>> {
 }
 
 pub(crate) fn do_vbox(state:&mut ShipoutState, engine:Refs,bx:Bx) {
+    //println!("\n\nHere:\n\n {}",bx.display());
     let (wd,ht,bottom,to) = get_box_dims(&bx,state,|bx| bx.height());
     let (children,start,end) = if let TeXBox::V {children,start,end,..} = bx { (children.into_vec(),start,end) } else {unreachable!()};
     /*if wd.is_none() && ht.is_none() && bottom.is_none() && to.is_none() && state.mode().is_v() {
@@ -1102,6 +1102,17 @@ pub(crate) fn do_svg(engine:Refs,state:&mut ShipoutState,bx:TeXBox<Types>,minx:D
                     svg_inner(engine,state,&mut children.into_vec().into())
                 } else { unreachable!() }
             });
+            loop {
+                let node = annotations::close_all(state.mode(),&mut state.nodes,|n| *n == HTMLTag::SvgTop);
+                if node.tag == HTMLTag::SvgTop {
+                    state.nodes.push(node);
+                    break
+                } else if matches!(node.tag,HTMLTag::SvgG(_)) {
+                    state.push(node);
+                } else {
+                    panic!()
+                }
+            }
         })
     })
 }
@@ -1132,7 +1143,7 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
                 state.nodes.push(node);
             }
             HNode::Custom(RusTeXNode::PGFGEnd) => {
-                let node = super::annotations::close_all(state.mode(),&mut state.nodes);
+                let node = annotations::close_all(state.mode(),&mut state.nodes,|n| matches!(n,HTMLTag::SvgG(_)));
                 let mode = state.mode();
                 state.nodes.last_mut().unwrap().push_open_node(mode,node);
             }
@@ -1169,6 +1180,7 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
                 }
             }
             HNode::Space | HNode::Hss => (),
+            HNode::Whatsit(wi) => wi.call(engine),
             HNode::Box(TeXBox::H {children:chs,..}) => children.prefix(chs.into_vec()),
             HNode::Custom(RusTeXNode::FontChange(font,false)) =>
                 super::annotations::do_font(state,&engine.fontsystem.glyphmaps,font),

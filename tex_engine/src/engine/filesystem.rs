@@ -59,7 +59,7 @@ pub trait File:std::fmt::Display+Clone+std::fmt::Debug + 'static {
     /// The type of characters to be read from the file.
     type Char:Character;
     /// A `Copy`able identifier for this file to be used in [`SourceReference`]s.
-    type SourceRefID:Copy+std::fmt::Debug;
+    type SourceRefID:Copy+std::fmt::Debug+Default;
     /// The type of line sources to be read from the file.
     type LineSource: FileLineSource<Self::Char>;
     /// Returns the path of this file.
@@ -112,7 +112,10 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         }
     }
     fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
-        self.interner.resolve(id).unwrap()
+        match id {
+            Some(id) =>self.interner.resolve(id).unwrap(),
+            None => "(NONE)"
+        }
     }
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
         let path = path.as_ref();
@@ -120,7 +123,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             return VirtualFile {
                 path:self.kpse.pwd.clone(),
                 source:None,pipe:false,exists:false,
-                id:self.interner.get_or_intern("")
+                id:Some(self.interner.get_or_intern(""))
             }
         }
         let kpath = self.kpse.kpsewhich(path);
@@ -144,7 +147,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                         path: kpath.path, source,
                         pipe:true,
                         exists:kpath.exists,
-                        id:self.interner.get_or_intern(path)
+                        id:Some(self.interner.get_or_intern(path))
                     };
                     self.files.insert(f.path.clone(),f.clone());
                     return f
@@ -157,7 +160,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 let f = VirtualFile {
                     path: kpath.path,
                     source:None,pipe:false,exists:kpath.exists,
-                    id:self.interner.get_or_intern(string)
+                    id:Some(self.interner.get_or_intern(string))
                 };
                 self.files.insert(f.path.clone(),f.clone());
                 f
@@ -222,7 +225,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             self.write_files.resize((idx+1) as usize, None);
         }
         match &mut self.write_files[idx as usize] {
-            n@None => *n = Some(WritableVirtualFile::new(file.path,file.id)),
+            n@None => *n = Some(WritableVirtualFile::new(file.path,file.id.unwrap())),
             _ => todo!("throw File already open error")
         }
     }
@@ -232,7 +235,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 Some(f) => {
                     let vf = VirtualFile {
                         path:f.1,exists:true,
-                        source:Some(f.0.into()),id:f.2,pipe:false
+                        source:Some(f.0.into()),id:Some(f.2),pipe:false
                     };
                     self.files.insert(vf.path.clone(),vf);
                 }
@@ -281,7 +284,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
 pub struct VirtualFile<C:Character> {
     pub path:PathBuf,
     pub pipe:bool,
-    pub id:string_interner::symbol::SymbolU32,
+    pub id:Option<string_interner::symbol::SymbolU32>,
     pub source:Option<VirtualFileContents<C>>,
     pub exists:bool
 }
@@ -290,10 +293,11 @@ impl<C:Character> std::fmt::Display for VirtualFile<C> {
         write!(f, "{}", self.path.display())
     }
 }
+
 impl<C:Character> File for VirtualFile<C> {
     type Char = C;
     type LineSource = VirtualFileLineSource<C>;
-    type SourceRefID = string_interner::symbol::SymbolU32;
+    type SourceRefID = Option<string_interner::symbol::SymbolU32>;
 
     fn exists(&self) -> bool {
         self.exists
@@ -382,7 +386,7 @@ impl<C:Character> TextLineSource<C> for VirtualFileLineSource<C> {
 
 /// A [`SourceReference`] is a reference to a location in a file.
 #[derive(Debug,Copy,Clone)]
-pub struct SourceReference<FileId:Copy> {
+pub struct SourceReference<FileId:Copy+Default> {
     /// The file this [`SourceReference`] refers to.
     pub file: FileId,
     /// The line number of this [`SourceReference`].
@@ -390,11 +394,21 @@ pub struct SourceReference<FileId:Copy> {
     /// The column number of this [`SourceReference`].
     pub column: usize
 }
-impl<FileID:Copy> SourceReference<FileID> {
+impl<FileID:Copy+Default> SourceReference<FileID> {
     /// Yields a [`Display`](std::fmt::Display)able version of this [`SourceReference`].
     pub fn display<'a,F:File<SourceRefID=FileID>,FS:FileSystem<File=F>>(&'a self,fs:&'a FS) -> impl std::fmt::Display + 'a {
         DisplaySourceReference { rf:self,fs }
     }
+}
+impl<FileID:Copy+Default> Default for SourceReference<FileID> {
+    fn default() -> Self {
+        Self {
+            file:Default::default(),
+            line:0,
+            column:0
+        }
+    }
+
 }
 pub type SourceRef<ET> = SourceReference<<<ET as EngineTypes>::File as File>::SourceRefID>;
 

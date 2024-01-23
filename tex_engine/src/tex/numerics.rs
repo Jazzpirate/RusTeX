@@ -57,11 +57,11 @@ pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output
     /// The units used in this dimension. By default [`DEFAULT_UNITS`].
     const UNITS: &'static[&'static [u8]] = DEFAULT_UNITS;
     /// Scales this dimension by a floating-point number.
-    fn scale_float(&self,times:f32) -> Self;
+    fn scale_float(&self,times:f64) -> Self;
     /// Make a new dimension from a value in "scaled points" (`sp` = `1/65536 pt`).
     fn from_sp(sp:i32) -> Self;
     /// Make a new dimension from a floating-point number and a unit. The unit is assumed to be in [`Self::UNITS`].
-    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,f:f32,dim:&[u8]) -> Self;
+    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,f:f64,dim:&[u8]) -> Self;
 }
 
 /// The default units for dimension values used in plain TeX:
@@ -109,7 +109,7 @@ impl TeXInt for i32 {
 pub struct Dim32(pub i32);
 impl Numeric<i32> for Dim32 {
     fn scale(&self, times: i32, div: i32) -> Self {
-        Self((self.0 as i64 * (times as i64) / (div as i64)) as i32)
+        Self(self.0.scale(times,div))
     }
 }
 impl Add for Dim32 {
@@ -126,15 +126,11 @@ impl Sub for Dim32 {
 }
 impl Div<i32> for Dim32 {
     type Output = Self;
-    fn div(self, rhs: i32) -> Self::Output {
-        self.scale(1,rhs)
-    }
+    fn div(self, rhs: i32) -> Self::Output { Self(self.0 / rhs) }
 }
 impl Mul<i32> for Dim32 {
     type Output = Self;
-    fn mul(self, rhs: i32) -> Self::Output {
-        self.scale(rhs,1)
-    }
+    fn mul(self, rhs: i32) -> Self::Output { Self(self.0 * rhs) }
 }
 impl Dim32 {
     /// Display a number representing 65536 * `unit` (e.g. `pt` in scaled points).
@@ -176,30 +172,32 @@ impl Into<i64> for Dim32 {
 }
 
 impl TeXDimen for Dim32 {
-    fn scale_float(&self, times: f32) -> Self {
-        Self((self.0 as f32 * times).floor() as i32)
+    #[inline(always)]
+    fn scale_float(&self, times: f64) -> Self {
+        let times = (times * 65536.0).round() as i64;
+        Self(((self.0 as i64) * times / 65536) as i32)
     }
     fn from_sp(sp: i32) -> Self { Self(sp) }
-    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self {
+    fn from_float<ET:EngineTypes<Dim=Self>>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self {
         match dim {
-            b"sp" => Self(float.round() as i32),
-            b"pt" => Self((float*65536.0).round() as i32),
-            b"pc" => Self((float*65536.0*12.0).round() as i32),
-            b"in" => Self((float*65536.0*72.27).round() as i32),
-            b"bp" => Self((float*65536.0*72.27/72.0).round() as i32),
-            b"cm" => Self((float*65536.0*72.27/2.54).round() as i32),
-            b"mm" => Self((float*65536.0*72.27/25.4).round() as i32),
-            b"dd" => Self((float*65536.0*1238.0/1157.0).round() as i32),
-            b"cc" => Self((float*65536.0*14856.0/1157.0).round() as i32),
+            b"sp" => Self(1).scale_float(float),
+            b"pt" => Self(65536).scale_float(float),
+            b"pc" => Self(786432).scale_float(float),
+            b"in" => Self(4736286).scale_float(float),
+            b"bp" => Self(65781).scale_float(float),
+            b"cm" => Self(1864679).scale_float(float),
+            b"mm" => Self(186467).scale_float(float),
+            b"dd" => Self(70124).scale_float(float),
+            b"cc" => Self(841489).scale_float(float),
             b"em" => {
                 let f = engine.state.get_current_font();
                 let em = f.get_dim(5);
-                Self((float*(em.0 as f32)).round() as i32)
+                em.scale_float(float)
             }
             b"ex" => {
                 let f = engine.state.get_current_font();
-                let em = f.get_dim(4);
-                Self((float*(em.0 as f32)).round() as i32)
+                let ex = f.get_dim(4);
+                ex.scale_float(float)
             }
             _ => unreachable!()
         }
@@ -228,7 +226,7 @@ pub enum StretchShrink<D:TeXDimen> { Dim(D), Fil(i32), Fill(i32), Filll(i32) }
 impl<D:TeXDimen> StretchShrink<D> {
     /// Returns a new [`StretchShrink`] from a floating-point number and a unit. The unit is assumed to be
     /// `fil`, `fill`, `filll` or in [`D::UNITS`](TeXDimen::UNITS).
-    pub fn from_float<ET: EngineTypes<Dim=D>>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self {
+    pub fn from_float<ET: EngineTypes<Dim=D>>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self {
         match dim {
             b"fil" => Self::Fil((float * 65536.0).round() as i32),
             b"fill" => Self::Fill((float * 65536.0).round() as i32),
@@ -389,7 +387,7 @@ pub trait MuDim:Display+Debug+Clone+Copy+Neg<Output=Self>+Add<Output=Self>+Parti
     /// The set of math units; by default, only `mu`
     const UNITS:&'static[&'static [u8]] = &[b"mu"];
     /// Converts a floating-point number and a unit to a [`Self`]. The unit is assumed to be in [`Self::UNITS`].
-    fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self;
+    fn from_float<ET:EngineTypes>(engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self;
 }
 
 /// A math skip/glue consisting of a [`MuDim`] and optional stretch and shrink components.
@@ -423,7 +421,7 @@ pub enum MuStretchShrink<M:MuDim> {
 impl<M:MuDim> MuStretchShrink<M> {
     /// Returns a new [`MuStretchShrink`] from a floating-point number and a unit. The unit is assumed to be
     /// `fil`, `fill`, `filll` or in [`M::UNITS`](MuDim::UNITS).
-    pub fn from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f32, dim: &[u8]) -> Self {
+    pub fn from_float<ET: EngineTypes>(engine: &EngineReferences<ET>, float: f64, dim: &[u8]) -> Self {
         match dim {
             b"fil" => Self::Fil((float * 65536.0).round() as i32),
             b"fill" => Self::Fill((float * 65536.0).round() as i32),
@@ -483,7 +481,7 @@ impl Mul<i32> for Mu {
     }
 }
 impl MuDim for Mu {
-    fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f32,dim:&[u8]) -> Self {
+    fn from_float<ET:EngineTypes>(_engine: &EngineReferences<ET>,float:f64,dim:&[u8]) -> Self {
         match dim {
             b"mu" => Mu((float*65536.0).round() as i32),
             _ => unreachable!()

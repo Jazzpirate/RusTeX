@@ -822,6 +822,8 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "pdfpkresolution",
     "pdfprotrudechars",
     "tracingstacklevels",
+    "pdfprependkern",
+    "pdfappendkern"
 ];
 
 const PRIMITIVE_DIMS:&[&'static str] = &[
@@ -907,7 +909,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,knbccode);
     cmtodo!(engine,knbscode);
     cmtodo!(engine,pdfadjustinterwordglue);
-    cmtodo!(engine,pdfappendkern);
     cmtodo!(engine,pdfforcepagebox);
     cmtodo!(engine,pdfgamma);
     cmtodo!(engine,pdfimageapplygamma);
@@ -921,7 +922,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfomitinfodict);
     cmtodo!(engine,pdfomitprocset);
     cmtodo!(engine,pdfpagebox);
-    cmtodo!(engine,pdfprependkern);
     cmtodo!(engine,pdfsuppressptexinfo);
     cmtodo!(engine,pdfsuppresswarningdupdest);
     cmtodo!(engine,pdfsuppresswarningdupmap);

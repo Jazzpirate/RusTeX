@@ -30,7 +30,7 @@ use crate::output::RusTeXOutput;
 use crate::shipout;
 use crate::shipout::make_page;
 use crate::state::RusTeXState;
-use crate::stomach::{CLOSE_FONT, close_font, RusTeXStomach};
+use crate::stomach::RusTeXStomach;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::prelude::*;
 
@@ -64,12 +64,11 @@ impl EngineTypes for Types {
     type FontSystem = super::fonts::Fontsystem;
 }
 
-
-
 thread_local! {
     static MAIN_STATE : Mutex<Option<(RusTeXState,MemoryManager<CompactToken>)>> = Mutex::new(None);
     static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = Mutex::new(None);
 }
+
 
 fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
     MAIN_STATE.with(|state| {
@@ -80,19 +79,9 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
                 //let start = std::time::Instant::now();
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
-                register_simple_expandable(&mut engine,CLOSE_FONT,close_font);
-                engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
-                    scope:CommandScope::Any,
-                    apply:|_,_| {
-                        println!("HERE!")
-                    }
-                });
+                crate::commands::register_primitives_preinit(&mut engine);
                 engine.initialize_pdflatex();
-                register_command(&mut engine, true, "LaTeX", "",
-                                 "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",
-                                 true, false
-                );
-                crate::pgf::register_pgf(&mut engine);
+                crate::commands::register_primitives_postinit(&mut engine);
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
                 //println!("Initialized in {:?}", start.elapsed());
