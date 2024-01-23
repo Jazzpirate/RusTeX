@@ -265,7 +265,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Entry point for compilation. This function is called by [`TeXEngine::do_file_default`].
     pub fn top_loop(&mut self) {
         crate::expand_loop!(ET::Stomach::every_top(self) => token => {
-            if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next();continue}
+            if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next(false);continue}
         }; self,
             ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code),
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code),
@@ -279,7 +279,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// If `allow_let` is true, other [`Token`]s which have been `\let` to a [`BeginGroup`](CommandCode::BeginGroup)
     /// are also accepted (e.g. `\bgroup`).
     pub fn expand_until_bgroup(&mut self,allow_let:bool,t:&ET::Token) {
-        while let Some(tk) = self.get_next() {
+        while let Some(tk) = self.get_next(false) {
             if tk.command_code() == CommandCode::BeginGroup {return }
             crate::expand!(self,tk;
                 ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::BeginGroup,..})) if allow_let =>
@@ -300,32 +300,32 @@ macro_rules! expand_loop {
     }};
     ($then:expr => $engine:ident,$tk:ident,$($case:tt)*) => {{
         $then;
-        while let Some($tk) = $engine.get_next() {
+        while let Some($tk) = $engine.get_next(false) {
             crate::expand!(ET;$engine,$tk;$($case)*);
             $then;
         }
     }};
     ($then:expr => $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
         $then;
-        while let Some($tk) = $engine.get_next() {
+        while let Some($tk) = $engine.get_next(false) {
             $first;
             crate::expand!(ET;$engine,$tk;$($case)*);
             $then;
         }
     }};
     ($tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        while let Some($tk) = $engine.get_next() {
+        while let Some($tk) = $engine.get_next(false) {
             $first;
             crate::expand!(ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $engine:ident,$tk:ident,$($case:tt)*) => {{
-        while let Some($tk) = $engine.get_next() {
+        while let Some($tk) = $engine.get_next(false) {
             crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        while let Some($tk) = $engine.get_next() {
+        while let Some($tk) = $engine.get_next(false) {
             $first;
             crate::expand!($ET;$engine,$tk;$($case)*);
         }

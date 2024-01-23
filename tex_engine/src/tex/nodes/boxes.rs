@@ -6,6 +6,7 @@ use crate::engine::filesystem::SourceRef;
 use crate::engine::stomach::methods::ParLineSpec;
 use crate::tex::nodes::{BoxTarget, display_do_indent, NodeList, NodeTrait, NodeType};
 use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
+use crate::tex::nodes::math::{MathAtom, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
@@ -505,6 +506,12 @@ pub enum TeXBox<ET:EngineTypes> {
 }
 
 impl<ET:EngineTypes> TeXBox<ET> {
+    pub fn to_math(self) -> MathNode<ET,UnresolvedMathFontStyle<ET>> {
+        MathNode::Atom(MathAtom {
+            nucleus: MathNucleus::Simple{kernel:MathKernel::Box(self),limits:None,cls:MathClass::Ord},
+            sub:None,sup:None
+        })
+    }
     /// Whether this box is empty
     pub fn is_empty(&self) -> bool {
         match self {

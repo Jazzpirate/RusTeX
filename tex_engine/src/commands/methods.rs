@@ -179,7 +179,7 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
 
 pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
     let mut exp = true;
-    while let Some(token) = engine.get_next() {
+    while let Some(token) = engine.get_next(!exp) {
         if token.is_primitive() == Some(PRIMITIVES.noexpand) {
             exp = false;
             continue
@@ -222,9 +222,9 @@ pub(in crate::commands) enum IfxCmd<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> IfxCmd<ET> {
     pub(in crate::commands) fn read(engine:&mut EngineReferences<ET>) -> Self {
-        match engine.get_next() {
+        match engine.get_next(true) {
             Some(t) if t.is_primitive() == Some(PRIMITIVES.noexpand) =>
-                IfxCmd::Noexpand(engine.get_next().unwrap()),
+                IfxCmd::Noexpand(engine.get_next(true).unwrap()),
             Some(t) => Self::resolve(engine.resolve(&t)),
             _ => todo!("throw error")
         }
@@ -829,7 +829,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// matching [`EndGroup`](CommandCode::EndGroup) token and discards everything
     /// in between.
     pub fn skip_argument(&mut self,token:&ET::Token) {
-        match self.get_next() {
+        match self.get_next(false) {
             Some(t) if t.command_code() == CommandCode::BeginGroup => (),
             _ => todo!("throw error")
         }

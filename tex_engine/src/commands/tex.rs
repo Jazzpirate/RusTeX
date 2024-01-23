@@ -56,7 +56,7 @@ pub fn accent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 }
 
 pub fn afterassignment<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let next = match engine.get_next() {
+    let next = match engine.get_next(true) {
         Some(t) => t,
         None => todo!("file end")
     };
@@ -64,7 +64,7 @@ pub fn afterassignment<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 }
 
 pub fn aftergroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let next = match engine.get_next() {
+    let next = match engine.get_next(true) {
         Some(t) => t,
         None => todo!("file end")
     };
@@ -103,11 +103,11 @@ pub fn endinput<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
 pub fn errorstopmode<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) {}
 
 pub fn expandafter<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    let first = match engine.get_next() {
+    let first = match engine.get_next(false) {
         None => todo!("throw error"),
         Some(t) => t
     };
-    let second = match engine.get_next() {
+    let second = match engine.get_next(false) {
         None => todo!("throw error"),
         Some(t) => t
     };
@@ -349,7 +349,7 @@ pub fn toksdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,g
 }
 
 pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
-    let cm = match engine.get_next() {
+    let cm = match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 CSOrActiveChar::Active(c),
@@ -366,7 +366,7 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
 }
 
 pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
-    let cm = match engine.get_next() {
+    let cm = match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 CSOrActiveChar::Active(c),
@@ -1045,7 +1045,7 @@ pub fn ifx<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> b
 }
 
 pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    while let Some(next) = engine.get_next() {
+    while let Some(next) = engine.get_next(false) {
         if next.command_code() != CommandCode::Space {
             match ET::Gullet::char_or_primitive(engine.state,&next) {
                 Some(CharOrPrimitive::Char(_,CommandCode::Space)) => (),
@@ -1140,7 +1140,7 @@ pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
 }
 
 pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
-    let cm = match engine.get_next() {
+    let cm = match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 CSOrActiveChar::Active(c),
@@ -1151,7 +1151,7 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,glob
     };
     let mut after_eq = false;
     let mut after_space = false;
-    while let Some(next) = engine.get_next() {
+    while let Some(next) = engine.get_next(false) {
         let cmd = match next.to_enum() {
             StandardToken::Character(_,CommandCode::Space) if !after_eq => continue,
             StandardToken::Character(_,CommandCode::Space) if !after_space => {
@@ -1177,7 +1177,7 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,glob
 
 
 pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
-    let cm = match engine.get_next() {
+    let cm = match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 CSOrActiveChar::Active(c),
@@ -1250,7 +1250,7 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
 }
 
 pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) {
-    let cm = match engine.get_next() {
+    let cm = match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 CSOrActiveChar::Active(c),
@@ -1314,7 +1314,7 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 pub fn meaning<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Otherize::new(&mut fi);
-    match engine.get_next() {
+    match engine.get_next(false) {
         None => todo!("throw error"),
         Some(t) => match engine.resolve(&t) {
             ResolvedToken::Cmd(None) => {
@@ -1390,6 +1390,10 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
         _ => todo!("throw error")
     };
     match engine.resolve(&token) {
+        ResolvedToken::Tk {code:CommandCode::AlignmentTab,..} => {
+            engine.mouth.requeue(token);
+            engine.mouth.requeue(ET::Token::primitive(PRIMITIVES.noexpand));
+        }
         ResolvedToken::Tk{..} =>
             engine.mouth.requeue(token),
         ResolvedToken::Cmd(Some(cm)) => {
@@ -1399,6 +1403,10 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
                     PrimitiveCommand::Expandable(_) |
                     PrimitiveCommand::SimpleExpandable(_) |
                     PrimitiveCommand::Conditional(_),..} => {
+                    engine.mouth.requeue(token);
+                    engine.mouth.requeue(ET::Token::primitive(PRIMITIVES.noexpand));
+                }
+                TeXCommand::Primitive {name,..} if *name == PRIMITIVES.cr || *name == PRIMITIVES.crcr => {
                     engine.mouth.requeue(token);
                     engine.mouth.requeue(ET::Token::primitive(PRIMITIVES.noexpand));
                 }
@@ -1548,7 +1556,7 @@ pub fn raise<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
                 TeXBox::H {ref mut info,..} => info.raise(dim),
                 TeXBox::V {ref mut info,..} => info.raise(dim),
             }
-            ET::Stomach::add_node_h(engine,HNode::Box(bx));
+            crate::add_node!(ET::Stomach;engine,unreachable!(),HNode::Box(bx),bx.to_math());
         }
         Ok(None) => (),
         Err(mut bi) => {
@@ -1566,7 +1574,7 @@ pub fn lower<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
                 TeXBox::H {ref mut info,..} => info.raise(-dim),
                 TeXBox::V {ref mut info,..} => info.raise(-dim),
             }
-            ET::Stomach::add_node_h(engine,HNode::Box(bx));
+            crate::add_node!(ET::Stomach;engine,unreachable!(),HNode::Box(bx),bx.to_math());
         }
         Ok(None) => (),
         Err(mut bi) => {
@@ -1577,7 +1585,7 @@ pub fn lower<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 }
 
 pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
-    match engine.get_next() {
+    match engine.get_next(false) {
         Some(t) => {
             if t.command_code() == CommandCode::Space {exp.push(t)}
             else {
@@ -1630,7 +1638,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
     let idx = engine.read_int(false).into();
     let mut tks = Vec::new();
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-    match engine.get_next() {
+    match engine.get_next(false) {
         Some(t) if t.command_code() == CommandCode::BeginGroup => (),
         Some(_) => todo!("should be begingroup"),
         None => todo!("file end")

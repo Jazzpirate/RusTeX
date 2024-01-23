@@ -143,10 +143,7 @@ pub(crate) fn add_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox
             TeXMode::Vertical | TeXMode::InternalVertical => {
                 ET::Stomach::add_node_v(engine, VNode::Box(bx))
             }
-            _ => ET::Stomach::add_node_m(engine, MathNode::Atom(MathAtom {
-                nucleus: MathNucleus::Simple{kernel:MathKernel::Box(bx),limits:None,cls:MathClass::Ord},
-                sub:None,sup:None
-            }))
+            _ => ET::Stomach::add_node_m(engine, bx.to_math())
         }
     }
 }
@@ -226,7 +223,7 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) {
         }}
     }
     crate::expand_loop!(ET;token => {
-        if token.is_primitive() == Some(PRIMITIVES.noexpand) { engine.get_next(); continue}
+        if token.is_primitive() == Some(PRIMITIVES.noexpand) { engine.get_next(false); continue}
     };engine,
         ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other } =>
             char!(char),
@@ -273,7 +270,7 @@ fn add_char<ET:EngineTypes>(slf:&mut ET::Stomach,state:&ET::State,char:ET::Char,
 fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     let (display,every) = match engine.stomach.data_mut().mode() {
         TeXMode::Horizontal => {
-            match engine.get_next() {
+            match engine.get_next(false) {
                 Some(tk) if tk.command_code() == CommandCode::MathShift => {
                     engine.stomach.data_mut().prevgraf = 3; // heuristic
                     (true,PRIMITIVES.everydisplay)
@@ -297,7 +294,7 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
         Some(NodeList::Math{children,start,tp:MathNodeListType::Top {display}}) => {
             if display {
                 engine.stomach.data_mut().prevgraf += 3;
-                match engine.get_next() {
+                match engine.get_next(false) {
                     Some(tk) if tk.command_code() == CommandCode::MathShift => (),
                     _ => todo!("throw error")
                 }
@@ -625,12 +622,12 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
     engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
     engine.push_every(PRIMITIVES.output);
-    engine.get_next(); // '{':BeginGroup
+    engine.get_next(false); // '{':BeginGroup
 
     //crate::debug_log!(debug => "Here: {} at {}",engine.mouth.display_position(),engine.preview());
 
     let depth = engine.state.get_group_level();
-    while let Some(next) = engine.get_next() {
+    while let Some(next) = engine.get_next(false) {
         //println!("HERE: {}",engine.preview());
         if engine.state.get_group_level() == depth && next.command_code() == CommandCode::EndGroup {
             engine.state.pop(engine.aux,engine.mouth);
@@ -648,7 +645,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
             return
         }
         if next.is_primitive() == Some(PRIMITIVES.noexpand) {
-            engine.get_next();continue
+            engine.get_next(false);continue
         }
         crate::expand!(ET;engine,next;
             ResolvedToken::Tk { char, code } => do_char(engine, next, char, code),

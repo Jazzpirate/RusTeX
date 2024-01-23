@@ -191,7 +191,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 }
 
 pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    match engine.get_next() {
+    match engine.get_next(false) {
         Some(t) if t.command_code() == CommandCode::BeginGroup => {
             ET::Gullet::expand_until_endgroup(engine,false,false,&tk,|_,_,t| exp.push(t));
         }
@@ -226,7 +226,7 @@ pub fn ifcsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
 }
 
 pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    match engine.get_next() {
+    match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 engine.state.get_ac_command(c).is_some(),
@@ -449,7 +449,7 @@ pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 }
 
 pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    match engine.get_next() {
+    match engine.get_next(false) {
         None => todo!("file end"),
         Some(t) => match engine.resolve(&t) {
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)})) => {

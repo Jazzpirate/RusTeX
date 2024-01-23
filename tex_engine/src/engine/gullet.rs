@@ -94,7 +94,7 @@ pub trait Gullet<ET:EngineTypes> {
     /// Wrapper around [`Mouth::get_next_opt`] that, in case we are in an `\halign` or `\valign`,
     /// make sure to replace `&`, `\cr` etc. with the appropriate tokens.
     /// See also [`EngineReferences::get_next`].
-    fn get_next_opt(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token> {
+    fn get_next_opt(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State,noexpand:bool) -> Option<ET::Token> {
         match self.get_align_data() {
             None => mouth.get_next_opt(aux,state),
             Some(a) => match mouth.get_next_opt(aux,state) {
@@ -105,19 +105,19 @@ pub trait Gullet<ET:EngineTypes> {
                         a.ingroups -= 1;
                         Some(t)
                     }
-                    CommandCode::AlignmentTab if a.ingroups == a.groupval() => {
+                    CommandCode::AlignmentTab if !noexpand && a.ingroups == a.groupval() => {
                         a.on_alignment_tab(mouth,aux);
-                        self.get_next_opt(mouth,aux,state)
+                        self.get_next_opt(mouth,aux,state,false)
                     }
-                    CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if a.ingroups == a.groupval() => match Self::char_or_primitive(state,&t) {
+                    CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if !noexpand && a.ingroups == a.groupval() => match Self::char_or_primitive(state,&t) {
                         Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                             a.on_cr(mouth,aux,state);
-                            return self.get_next_opt(mouth,aux,state)
+                            return self.get_next_opt(mouth,aux,state,false)
                         }
-                        Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
+                        Some(CharOrPrimitive::Primitive(name)) if !noexpand && name == PRIMITIVES.span => {
                             a.span = true;
                             a.on_alignment_tab(mouth,aux);
-                            self.get_next_opt(mouth,aux,state)
+                            self.get_next_opt(mouth,aux,state,false)
                         }
                         _ => Some(t)
                     }
@@ -432,8 +432,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,token,|a,s,t| cont(a,s,t))
     }
     /// Yields the next [`Token`] from the input stream.
-    pub fn get_next(&mut self) -> Option<ET::Token> {
-        self.gullet.get_next_opt(self.mouth,self.aux,self.state)
+    pub fn get_next(&mut self,noexpand:bool) -> Option<ET::Token> {
+        self.gullet.get_next_opt(self.mouth,self.aux,self.state,noexpand)
     }
     /// Read an integer value from the input stream.
     pub fn read_int(&mut self,skip_eq:bool) -> <ET::Num as NumSet>::Int {
@@ -472,7 +472,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// and `\input myfile.tex` (which would use [`read_string`](EngineReferences::read_string)).
     pub fn read_braced_string(&mut self,skip_ws:bool, expand_protected:bool,token:&ET::Token, mut str:&mut String) {
         loop {
-            match self.get_next() {
+            match self.get_next(false) {
                 Some(t) => match t.command_code() {
                     CommandCode::BeginGroup => break,
                     CommandCode::Space if skip_ws => (),

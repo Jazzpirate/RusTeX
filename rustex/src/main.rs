@@ -26,10 +26,10 @@ fn main() {
     //thesis()
     //run()
     //test()
-    //temp_test()
+    temp_test()
     //notes()
     //test2()
-    test_all()
+    //test_all()
 }
 
 fn test_all() {
@@ -96,8 +96,8 @@ fn test() {
 
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
-    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/ODK/WP6/MACIS17-interop/gap_singular_mitm_fig.tex",true,true,true);
+    //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/mathmodels/blue/LaTeX-bluenote/note.tex",true,true,true);
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
 }

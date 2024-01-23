@@ -64,7 +64,7 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
     let last = delim.last().unwrap();
     let ends_with_bgroup = last.command_code() == CommandCode::BeginGroup;
     let mut remove_braces:Option<Option<usize>> = None;
-    while let Some(t) = engine.get_next() {
+    while let Some(t) = engine.get_next(false) {
         match t.command_code() {
             CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => continue,
             CommandCode::BeginGroup if !ends_with_bgroup => {
@@ -174,7 +174,7 @@ pub fn skip_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,params:To
                     }
                 }
             },
-            _ => match engine.get_next() {
+            _ => match engine.get_next(false) {
                 Some(o) if o == *next =>
                     match inner.get(i) {
                         Some(n) => {next = n; i += 1},
@@ -221,7 +221,7 @@ fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,long:bool,toke
 /// Default implementation for [`Gullet::expand_until_endgroup`].
 pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,token:&ET::Token,mut cont:Fn) {
     let mut ingroups = 0;
-    while let Some(t) = engine.get_next() {
+    while let Some(t) = engine.get_next(false) {
         match t.command_code() {
             CommandCode::EndGroup => {
                 if ingroups == 0 { return }
@@ -250,7 +250,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)})) =>
                     ET::Gullet::do_conditional(engine,*name,t,*cond,false),
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
-                    let next = engine.get_next().unwrap();
+                    let next = engine.get_next(false).unwrap();
                     cont(engine.aux,engine.state,next);
                 }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.unexpanded => {
@@ -271,7 +271,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     })
                 }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
-                    match engine.get_next() {
+                    match engine.get_next(false) {
                         Some(t) if t.command_code() != CommandCode::EndGroup =>
                             cont(engine.aux,engine.state,t),
                         _ => todo!("throw error")
@@ -1444,7 +1444,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Reads a control sequence or active character from the [`Mouth`] and returns it as a
     /// [`CSOrActiveChar`].
     pub fn read_control_sequence(&mut self) -> CSOrActiveChar<ET::Token> {
-        while let Some(token) = self.get_next() {
+        while let Some(token) = self.get_next(false) {
             match self.resolve(&token) {
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Expandable(f)})) =>
                     ET::Gullet::do_expandable(self,*name,token,*f),
