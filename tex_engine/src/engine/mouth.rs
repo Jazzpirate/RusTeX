@@ -65,7 +65,7 @@ pub trait Mouth<ET:EngineTypes> {
     fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,token:&ET::Token,cont:Fn);
     /// `\endinput` - removes the last file from the [`Mouth`] without inserting `\everyeof` or an [`EOF`](crate::tex::catcodes::CommandCode::EOF)
     /// [`Token`].
-    fn endinput(&mut self, aux:&EngineAux<ET>);
+    fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State);
     /// clears the mouth at the end of a run, if desired.
     fn finish(&mut self);
 
@@ -207,13 +207,25 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         self.args = Some(exp);
     }
 
-    fn endinput(&mut self, aux:&EngineAux<ET>) {
+    fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State) {
         for (i,s) in self.inputs.iter().enumerate().rev() {
             match s {
                 TokenSource::File(f,_) => {
                     aux.outputs.file_close(f.source.path().display());
-                    self.inputs.remove(i);
+                    let TokenSource::File(mut r,_) = self.inputs.remove(i) else {unreachable!()};
                     self.start_ref.pop();
+                    let mut ret = Vec::new();
+                    match r.read(aux.memory.cs_interner_mut(),state.get_catcode_scheme(),state.get_endline_char(),|t| ret.push(t)) {
+                        Ok(_) => (),
+                        Err(ic) => {
+                            match aux.error_handler.invalid_character(state, ic.0){
+                                Some(s) => self.push_string(s),
+                                _ => ()
+                            }
+                            return
+                        }
+                    }
+                    self.with_list(|ls| ls.extend(ret.into_iter().rev()));
                     return
                 }
                 _ => ()

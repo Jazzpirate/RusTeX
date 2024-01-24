@@ -632,48 +632,33 @@ pub(crate) fn un_x<ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VNode<
     match data.open_lists.last_mut() {
         None => (),//todo!("throw error: Not allowed in vertical"), <- not entirely true; if there's contributed stuff not yet migrated to the current page, it's allowed
         Some(NodeList::Vertical {children,..}) => {
-            let mut readd = Vec::new();
-            loop {
-                match children.last_mut() {
-                    Some(n) if v(n) => { children.pop();break }
-                    Some(n) if n.opaque() => {
-                        readd.push(children.pop().unwrap());
-                    }
-                    _ => break
+            for (i,n) in children.iter().enumerate().rev() {
+                if n.opaque() {continue}
+                if v(n) {
+                    children.remove(i);
+                    return
                 }
-            }
-            for n in readd.into_iter().rev() {
-                children.push(n);
+                break
             }
         }
         Some(NodeList::Horizontal {children,..}) => {
-            let mut readd = Vec::new();
-            loop {
-                match children.last_mut() {
-                    Some(n) if h(n) => { children.pop();break }
-                    Some(n) if n.opaque() => {
-                        readd.push(children.pop().unwrap());
-                    }
-                    _ => break
+            for (i,n) in children.iter().enumerate().rev() {
+                if n.opaque() {continue}
+                if h(n) {
+                    children.remove(i);
+                    return
                 }
-            }
-            for n in readd.into_iter().rev() {
-                children.push(n);
+                break
             }
         }
         Some(NodeList::Math {children,..}) => {
-            let mut readd = Vec::new();
-            loop {
-                match children.list_mut().last_mut() {
-                    Some(n) if m(n) => { children.list_mut().pop();break }
-                    Some(n) if n.opaque() => {
-                        readd.push(children.list_mut().pop().unwrap());
-                    }
-                    _ => break
+            for (i,n) in children.list().iter().enumerate().rev() {
+                if n.opaque() {continue}
+                if m(n) {
+                    children.list_mut().remove(i);
+                    return
                 }
-            }
-            for n in readd.into_iter().rev() {
-                children.push(n);
+                break
             }
         }
     }

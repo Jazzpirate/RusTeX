@@ -144,79 +144,6 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
     }
     tex_error!(engine,missing_argument,token.clone())
 }
-/*
-pub fn skip_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,params:TokenList<ET::Token>,long:bool,token:&ET::Token) {
-    let mut i = 1usize;
-    let inner = &params.0;
-    let mut next = &inner[0];
-    loop {
-        match next.is_argument_marker() {
-            Some(a) => match inner.get(i) {
-                Some(n) if n.is_argument_marker().is_some() =>
-                    {next = n; i += 1;
-                        skip_argument(engine, long, token)},
-                None => {
-                    skip_argument(engine, long, token);
-                    return
-                },
-                Some(o) => {
-                    let mut delim = vec!(o.clone());
-                    i += 1;
-                    while let Some(n) = inner.get(i) {
-                        if n.is_argument_marker().is_some() {break}
-                        delim.push(n.clone());
-                        i += 1;
-                    }
-                    read_delimited_argument(engine, &mut Vec::new(),&delim, long, token);
-                    match inner.get(i) {
-                        Some(n) => {next = n; i += 1},
-                        _ => return ()
-                    }
-                }
-            },
-            _ => match engine.get_next(false) {
-                Some(o) if o == *next =>
-                    match inner.get(i) {
-                        Some(n) => {next = n; i += 1},
-                        _ => return ()
-                    },
-                _ => tex_error!(engine,missing_argument,token.clone())
-            }
-        }
-    }
-}
-
-fn skip_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,long:bool,token:&ET::Token) {
-    while let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
-        match t.command_code() {
-            CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => continue,
-            CommandCode::Space => continue,
-            CommandCode::BeginGroup => {
-                if long {
-                    engine.mouth.read_until_endgroup(
-                        engine.aux,
-                        engine.state,
-                        |_, t| {}
-                    );
-                } else {
-                    let par = engine.aux.memory.cs_interner().par();
-                    engine.mouth.read_until_endgroup(
-                        engine.aux,
-                        engine.state,
-                        |_,t|
-                            if t.is_cs(&par) {todo!("\\par in read_argument")} else {}
-                    );
-                }
-                return
-            }
-            _ => ()
-        }
-        return
-    }
-    tex_error!(engine,missing_argument,token.clone())
-}
-
- */
 
 /// Default implementation for [`Gullet::expand_until_endgroup`].
 pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(engine:&mut EngineReferences<ET>,expand_protected:bool,edef_like:bool,token:&ET::Token,mut cont:Fn) {
@@ -249,10 +176,6 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     ET::Gullet::do_macro(engine,m.clone(),t),
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::Conditional(cond)})) =>
                     ET::Gullet::do_conditional(engine,*name,t,*cond,false),
-                ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
-                    let next = engine.get_next(false).unwrap();
-                    cont(engine.aux,engine.state,next);
-                }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.unexpanded => {
                     engine.expand_until_bgroup(false,&t);
                     engine.read_until_endgroup(token,|a,s,t|{
@@ -271,7 +194,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                     })
                 }
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
-                    match engine.get_next(false) {
+                    match engine.get_next(true) {
                         Some(t) if t.command_code() != CommandCode::EndGroup =>
                             cont(engine.aux,engine.state,t),
                         _ => todo!("throw error")

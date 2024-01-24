@@ -96,7 +96,7 @@ pub fn discretionary<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
 
 
 pub fn endinput<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
-    engine.mouth.endinput(engine.aux);
+    engine.mouth.endinput(engine.aux,engine.state);
 }
 
 
@@ -626,6 +626,7 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) {
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return
         }
+        Some(ActiveConditional::Else(id)) => todo!("HERE: {}",id.display::<ET::Char>(Some(b'\\'.into()))),
         o => todo!("HERE: {:?}",o)
     };
     let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > Int::<ET>::default();
@@ -673,7 +674,7 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     crate::engine::gullet::methods::false_loop(engine,index,false,true,&tk);
     if trace {
         engine.aux.outputs.write_neg1(
-            format_args!("{{{}or: {}ifcase (level {}) entered on line {}}}",
+            format_args!("{{{}fi: {}ifcase (level {}) entered on line {}}}",
                          <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
                          <ET::Char as Character>::display_opt(engine.state.get_escape_char()),
                          index, engine.mouth.line_number()));
@@ -1556,7 +1557,15 @@ pub fn raise<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
                 TeXBox::H {ref mut info,..} => info.raise(dim),
                 TeXBox::V {ref mut info,..} => info.raise(dim),
             }
-            crate::add_node!(ET::Stomach;engine,unreachable!(),HNode::Box(bx),bx.to_math());
+            match engine.stomach.data_mut().mode() {
+                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
+                    ET::Stomach::add_node_h(engine,HNode::Box(bx));
+                }
+                TeXMode::InlineMath | TeXMode::DisplayMath => {
+                    ET::Stomach::add_node_m(engine,bx.to_math());
+                }
+                _ => unreachable!()
+            }
         }
         Ok(None) => (),
         Err(mut bi) => {
@@ -1574,7 +1583,15 @@ pub fn lower<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
                 TeXBox::H {ref mut info,..} => info.raise(-dim),
                 TeXBox::V {ref mut info,..} => info.raise(-dim),
             }
-            crate::add_node!(ET::Stomach;engine,unreachable!(),HNode::Box(bx),bx.to_math());
+            match engine.stomach.data_mut().mode() {
+                TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
+                    ET::Stomach::add_node_h(engine,HNode::Box(bx));
+                }
+                TeXMode::InlineMath | TeXMode::DisplayMath => {
+                    ET::Stomach::add_node_m(engine,bx.to_math());
+                }
+                _ => unreachable!()
+            }
         }
         Ok(None) => (),
         Err(mut bi) => {

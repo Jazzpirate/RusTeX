@@ -274,6 +274,9 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
         _ => unreachable!()
     }
 }
+pub fn ifpdfprimitive<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
+    todo!()
+}
 
 pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
     where ET::Font: FontWithLpRp {
@@ -866,6 +869,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_conditional(engine,"ifincsname",ifincsname);
     register_conditional(engine,"ifpdfabsdim",ifpdfabsdim);
     register_conditional(engine,"ifpdfabsnum",ifpdfabsnum);
+    register_conditional(engine,"ifpdfprimitive",ifpdfprimitive);
 
     register_unexpandable(engine,"pdfcatalog",CommandScope::Any,pdfcatalog);
     register_unexpandable(engine,"pdfglyphtounicode",CommandScope::Any,pdfglyphtounicode);
@@ -948,7 +952,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfpxdimen);
     cmtodo!(engine,pdfthreadmargin);
     cmtodo!(engine,pdfpkmode);
-    cmtodo!(engine,ifpdfprimitive);
     cmtodo!(engine,pdfescapehex);
     cmtodo!(engine,pdfescapename);
     cmtodo!(engine,pdffiledump);

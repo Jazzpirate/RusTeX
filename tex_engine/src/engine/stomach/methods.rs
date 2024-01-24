@@ -5,7 +5,7 @@ use crate::engine::filesystem::{File, SourceReference};
 use crate::tex::nodes::{BoxTarget, ListTarget, NodeList, NodeTrait};
 use crate::tex::nodes::boxes::{BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
-use crate::tex::nodes::math::{MathAtom, MathClass, MathGroup, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{MathAtom, MathGroup, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::stomach::{Stomach, TeXMode};
 use crate::engine::state::{GroupType, State};

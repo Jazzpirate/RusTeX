@@ -92,39 +92,39 @@ pub trait Gullet<ET:EngineTypes> {
     }
 
     /// Wrapper around [`Mouth::get_next_opt`] that, in case we are in an `\halign` or `\valign`,
-    /// make sure to replace `&`, `\cr` etc. with the appropriate tokens.
+    /// make sure to replace `&`, `\cr` etc. with the appropriate tokens. If `noexpand` is `true`, `\cr`, `\crcr` and `&` are not expanded.
     /// See also [`EngineReferences::get_next`].
-    fn get_next_opt(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State,noexpand:bool) -> Option<ET::Token> {
+    fn get_next_opt(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State,mut noexpand:bool) -> Option<ET::Token> {
         match self.get_align_data() {
             None => mouth.get_next_opt(aux,state),
-            Some(a) => match mouth.get_next_opt(aux,state) {
+            Some(a) => loop {match mouth.get_next_opt(aux,state) {
                 Some(t) => match t.command_code() {
-                    CommandCode::BeginGroup => { a.ingroups += 1; Some(t) }
+                    CommandCode::BeginGroup => { a.ingroups += 1; return Some(t) }
                     CommandCode::EndGroup => {
                         if a.ingroups == 0 { aux.error_handler.too_many_closebraces() }
                         a.ingroups -= 1;
-                        Some(t)
+                        return Some(t)
                     }
                     CommandCode::AlignmentTab if !noexpand && a.ingroups == a.groupval() => {
                         a.on_alignment_tab(mouth,aux);
-                        self.get_next_opt(mouth,aux,state,false)
+                        noexpand = false;
                     }
                     CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if !noexpand && a.ingroups == a.groupval() => match Self::char_or_primitive(state,&t) {
                         Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                             a.on_cr(mouth,aux,state);
-                            return self.get_next_opt(mouth,aux,state,false)
+                            noexpand = false;
                         }
-                        Some(CharOrPrimitive::Primitive(name)) if !noexpand && name == PRIMITIVES.span => {
+                        Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
                             a.span = true;
                             a.on_alignment_tab(mouth,aux);
-                            self.get_next_opt(mouth,aux,state,false)
+                            noexpand = false;
                         }
-                        _ => Some(t)
+                        _ => return Some(t)
                     }
-                    _ => Some(t)
+                    _ => return Some(t)
                 }
-                None => None
-            }
+                None => return None
+            }}
         }
     }
 
@@ -267,6 +267,7 @@ pub trait Gullet<ET:EngineTypes> {
         if trace {
             //crate::debug_log!(error => "Here: {}",engine.preview());
             engine.aux.outputs.write_neg1(format_args!("{{{}: (level {}) entered on line {}}}",name.display(engine.state.get_escape_char()),index+1,engine.mouth.line_number()));
+            //engine.aux.outputs.write_neg1(format_args!("Here: {}",engine.preview()));
         }
         let mut ret = f(engine,token.clone());
         if unless { ret = !ret }
@@ -431,7 +432,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn expand_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,&ET::State,ET::Token)>(&mut self,expand_protected:bool,edef_like:bool,token:&ET::Token,mut cont:Fn) {
         ET::Gullet::expand_until_endgroup(self,expand_protected,edef_like,token,|a,s,t| cont(a,s,t))
     }
-    /// Yields the next [`Token`] from the input stream.
+    /// Yields the next [`Token`] from the input stream. If `noexpand` is `true`, `\cr`, `\crcr` and `&` are not expanded.
     pub fn get_next(&mut self,noexpand:bool) -> Option<ET::Token> {
         self.gullet.get_next_opt(self.mouth,self.aux,self.state,noexpand)
     }
