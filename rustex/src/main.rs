@@ -23,13 +23,13 @@ use tex_engine::pdflatex::PlainPDFTeXEngine;
 
 fn main() {
     //profile()
-    //thesis()
+    thesis()
     //run()
     //test()
     //temp_test()
     //notes()
     //test2()
-    test_all()
+    //test_all()
 }
 
 fn test_all() {

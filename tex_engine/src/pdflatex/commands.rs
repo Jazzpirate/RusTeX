@@ -326,6 +326,26 @@ pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
                       dt.offset().to_string().replace(":","'")).unwrap();
 }
 
+pub fn pdffilemoddate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    use chrono::{Datelike,Timelike};
+    let mut filename = engine.aux.memory.get_string();
+    engine.read_braced_string(true,false,&tk,&mut filename);
+    let f = engine.filesystem.get(&filename);
+    engine.aux.memory.return_string(filename);
+    let path = f.path();
+    match std::fs::metadata(path).map(|md| md.modified()) {
+        Ok(Ok(st)) => {
+            let dt: chrono::DateTime<chrono::Local> = chrono::DateTime::from(st);
+            let mut f = |t| exp.push(t);
+            let mut tk = Otherize::new(&mut f);
+            write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
+                   dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
+                   dt.offset().to_string().replace(":","'")).unwrap();
+        }
+        _ => ()
+    }
+}
+
 pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
     use crate::tex::characters::Character;
     engine.expand_until_bgroup(false,&tk);
@@ -914,6 +934,7 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_expandable(engine,"leftmarginkern",leftmarginkern);
     register_expandable(engine,"rightmarginkern",rightmarginkern);
     register_expandable(engine,"pdfcreationdate",pdfcreationdate);
+    register_expandable(engine,"pdffilemoddate",pdffilemoddate);
     register_expandable(engine,"pdfescapestring",pdfescapestring);
     register_expandable(engine,"pdfescapename",pdfescapename);
     register_expandable(engine,"pdfescapehex",pdfescapehex);
@@ -1020,7 +1041,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfthreadmargin);
     cmtodo!(engine,pdfpkmode);
     cmtodo!(engine,pdffiledump);
-    cmtodo!(engine,pdffilemoddate);
     cmtodo!(engine,pdffontname);
     cmtodo!(engine,pdffontobjnum);
     cmtodo!(engine,pdfincludechars);
