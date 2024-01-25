@@ -1,4 +1,3 @@
-use chrono::{Datelike, Timelike};
 use crate::{add_node, expand_loop};
 use crate::commands::{TeXCommand, Macro, MacroSignature, CommandScope, ActiveConditional, ResolvedToken, PrimitiveCommand, CharOrPrimitive};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
@@ -485,6 +484,7 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,out
             return ET::Stomach::do_assignment(engine,*name,token,*f,true),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Whatsit {get,..},name})) if allow_others =>
             return ET::Stomach::do_whatsit(engine,*name,token,*get),
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Relax,..})) => (),
         ResolvedToken::Cmd(Some(cmd)) =>
             todo!("\\global {}",cmd.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())),
         o => todo!("\\global {:?}",o)
@@ -501,6 +501,7 @@ pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_out
             n if n == PRIMITIVES.edef => return self::edef(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.xdef => return self::xdef(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.gdef => return self::gdef(engine,token,true,long,protected,globally),
+            n if n == PRIMITIVES.relax => (),
             _ => todo!("throw error")
         }
         _ => todo!("throw error")
@@ -518,6 +519,7 @@ pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer
             n if n == PRIMITIVES.edef => return self::edef(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.xdef => return self::xdef(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.gdef => return self::gdef(engine,token,outer,true,protected,globally),
+            n if n == PRIMITIVES.relax => (),
             _ => todo!("throw error")
         }
         _ => todo!("throw error")
@@ -1126,7 +1128,12 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
 pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     let mut fi = |t| exp.push(t);
     let mut f = Otherize::new(&mut fi);
-    write!(f,"{}",engine.aux.jobname).unwrap();
+    let escape = engine.aux.jobname.as_bytes().iter().any(|c| c.is_ascii_whitespace());
+    if escape {
+        write!(f, "\"{}\"", engine.aux.jobname).unwrap();
+    } else {
+        write!(f, "{}", engine.aux.jobname).unwrap();
+    }
 }
 
 pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
@@ -1669,7 +1676,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
 pub fn write_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
     let idx = engine.read_int(false).into();
     let mut out = engine.aux.memory.get_string();
-    engine.read_braced_string(false,true,&tk,&mut out);
+    engine.read_braced_string(false,false,&tk,&mut out);
     engine.filesystem.write(idx,&out,engine.state.get_newline_char(),engine.aux);
     engine.aux.memory.return_string(out);
 }
@@ -1694,12 +1701,6 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
     engine.do_the(|_, _, _, t|exp.push(t))
-}
-
-pub fn time<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
-    let now = engine.aux.start_time;
-    let i = ((now.hour() * 60) + now.minute()) as i32;
-    Int::<ET>::from(i)
 }
 
 pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global:bool) {
@@ -2084,22 +2085,6 @@ pub fn vadjust<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     engine.state.push(engine.aux,GroupType::VAdjust,engine.mouth.line_number());
 }
 
-
-pub fn year<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
-    Int::<ET>::from(engine.aux.start_time.year())
-}
-
-
-pub fn month<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
-    Int::<ET>::from(engine.aux.start_time.month() as i32)
-}
-
-
-pub fn day<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
-    Int::<ET>::from(engine.aux.start_time.day() as i32)
-}
-
-
 pub fn inputlineno<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> Int<ET> {
     Int::<ET>::from(engine.mouth.line_number() as i32)
 }
@@ -2256,11 +2241,11 @@ pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 
 pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) {
 
-    let i = engine.read_int(false).into();
-    if i < 0 || i > u32::MAX as i64 {
+    let i = engine.read_int(false);
+    if i.into() < 0 || i.into() > u32::MAX as i64 {
         todo!("matchchar out of range")
     }
-    let char = MathChar::from_u32(i as u32, engine.state, None);
+    let char = Delimiter::from_int(i,engine.state).unwrap().small;// MathChar::from_u32(i as u32, engine.state, None);
     engine.read_char_or_math_group(|(char,style),engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Radical{
@@ -2493,6 +2478,7 @@ pub fn scriptscriptstyle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:E
 }
 
 const PRIMITIVE_INTS:&[&'static str] = &[
+    "year","month","day","time",
     "adjdemerits",
     "badness",
     "binoppenalty",
@@ -2710,10 +2696,6 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_int(engine,"newlinechar",newlinechar_get,Some(newlinechar_set));
     register_int(engine,"inputlineno",inputlineno,None);
     register_int(engine,"spacefactor",spacefactor_get,Some(spacefactor_set));
-    register_int(engine,"day",day,None);
-    register_int(engine,"time",time,None);
-    register_int(engine,"month",month,None);
-    register_int(engine,"year",year,None);
     register_int(engine,"lastpenalty",lastpenalty,None);
     register_int(engine,"parshape",parshape_get,Some(parshape_set));
     register_int(engine,"deadcycles",deadcycles_get,Some(deadcycles_set));

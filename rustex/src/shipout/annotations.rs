@@ -59,7 +59,10 @@ pub(crate) fn do_font(state:&mut ShipoutState,store:&FontStore,font:Font) {
 
 pub(crate) fn close_font(state:&mut ShipoutState) {
     let mut requeue:Vec<HTMLNode> = vec!();
-    let font = state.fonts.pop().unwrap();
+    let font = match state.fonts.pop() {
+        Some(f) => f,
+        _ => return
+    };
     if state.fonts.last() == Some(&font) || font.filename().ends_with("nullfont") {
         return
     }
@@ -83,7 +86,10 @@ pub(crate) fn close_font(state:&mut ShipoutState) {
             requeue.push(n);
         }
     }
-    //unreachable!()
+    state.fonts.push(font);
+    for c in requeue.into_iter().rev() {
+        state.nodes.push(c)
+    }
 }
 
 pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAction) {
@@ -274,7 +280,9 @@ pub(crate) fn reset_matrix(state:&mut ShipoutState) {
             requeue.push(n);
         }
     }
-    unreachable!()
+    for c in requeue.into_iter().rev() {
+        state.nodes.push(c)
+    }
 }
 
 

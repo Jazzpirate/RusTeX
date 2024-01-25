@@ -23,6 +23,9 @@ use lazy_static::lazy_static;
 use crate::utils::HMap;
 
 /// The result of a [`Kpathsea`] search.
+/// TODO capitalization might be an issue. TeX is more permissive wrt case distinctions
+/// than the filesystem, (apparently) iff either not covered by an ls-R file or
+/// directly in a TEXINPUTS path...?
 pub struct KpseResult {
     /// The path to the file.
     pub path : PathBuf,
@@ -62,6 +65,14 @@ impl Kpathsea {
         } else if filestr.is_empty() {
             panic!("Empty string in kpsewhich")
         }
+        if filestr.contains("./") {
+            let p1 = self.pwd.join(Path::new(filestr));
+            let p = p1.parse_dot().unwrap();
+            if p.is_file() {return KpseResult{exists:true,path:p.to_path_buf()}}
+            let q = PathBuf::from(p.display().to_string() + ".tex");
+            if q.is_file() {return KpseResult{exists:true,path:q}}
+            return KpseResult{exists:false,path:p.to_path_buf()}
+        }
         if Path::new(filestr).is_absolute() {
             if Path::new(filestr).is_file() {return KpseResult{path:PathBuf::from(&filestr),exists:true} }
             let pb = PathBuf::from(filestr.to_string() + ".tex");
@@ -81,7 +92,7 @@ impl Kpathsea {
             Some(p) => return KpseResult{path:p.clone(),exists:true},
             None => ()
         }
-        let p = self.pwd.join(Path::new(filestr)).parse_dot().unwrap().to_path_buf();
+        let p = self.pwd.join(Path::new(filestr));
         KpseResult{exists:p.exists(),path:p}
     }
 }

@@ -77,7 +77,7 @@ impl Character for u8 {
     type Iter<'a> = ByteIterator<'a>;
 
     fn string_to_iter<'a>(string: &'a str) -> Self::Iter<'a> {
-        ByteIterator(string)
+        ByteIterator(string.as_bytes())
     }
 
     fn convert(input:Vec<u8>) -> TextLine<Self> { input.into() }
@@ -102,23 +102,23 @@ impl Character for u8 {
 
 /// Iterator over bytes in a string, converting `^^` encoding to individual bytes (otherwise, we could
 /// simply use `string.as_bytes().iter()`).
-pub struct ByteIterator<'a>(&'a str);
+pub struct ByteIterator<'a>(&'a [u8]);
 impl<'a> Iterator for ByteIterator<'a> {
     type Item = u8;
     fn next(&mut self) -> Option<Self::Item> {
         if self.0.is_empty() { None } else
-        if self.0.starts_with("^^") {
-            let b = self.0.as_bytes()[2];
+        if self.0.starts_with(&[b'^',b'^']) {
+            let b = self.0[2];
             if b <= 60 || self.0.len() == 3 {
                 self.0 = &self.0[3..];
                 Some(b + 64)
             } else {
-                let r = u8::from_str_radix(&self.0[2..4],16).unwrap();
+                let r = u8::from_str_radix(std::str::from_utf8(&self.0[2..4]).unwrap(),16).unwrap();
                 self.0 = &self.0[4..];
                 Some(r)
             }
         } else {
-            let b = self.0.as_bytes()[0];
+            let b = self.0[0];
             self.0 = &self.0[1..];
             Some(b)
         }
@@ -126,10 +126,9 @@ impl<'a> Iterator for ByteIterator<'a> {
 }
 
 impl <'a> ExactSizeIterator for ByteIterator<'_> {
-
     fn len(&self) -> usize {
         let mut num = 0usize;
-        let mut iter = self.0.as_bytes().iter();
+        let mut iter = self.0.iter();
         while let Some(b) = iter.next() {
             if *b == b'^' {
                 if let Some(b'^') = iter.next() {

@@ -351,6 +351,7 @@ pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,
             n if n == PRIMITIVES.edef => return super::tex::edef(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.xdef => return super::tex::xdef(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.gdef => return super::tex::gdef(engine,token,outer,long,true,globally),
+            n if n == PRIMITIVES.relax => (),
             _ => todo!("throw error")
         }
         _ => todo!("throw error")

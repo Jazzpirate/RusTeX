@@ -323,7 +323,7 @@ fn get_page_hbox(children:&Box<[HNode<Types>]>) -> bool {
         HNode::HSkip(_) | HNode::Space | HNode::HKern(_) | HNode::HFil | HNode::HFill | HNode::HFilneg |
         HNode::Penalty(_) | HNode::Mark(_,_) |
         HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(..) | PDFNode::PDFCatalog(_) | PDFNode::PDFLiteral(_) |
-                                          PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFOutline(_))) => false,
+                                          PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFLiteral(_) | PDFNode::PDFOutline(_))) => false,
         HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(_))) => false,
         HNode::Box(TeXBox::H {children,..}) => get_page_hbox(children),
         _ => true
@@ -453,8 +453,10 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
             VNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
             VNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
             VNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
+            VNode::Custom(RusTeXNode::PGFGBegin {..}|RusTeXNode::PGFGEnd) => (), // TODO?
+            VNode::Custom(RusTeXNode::PGFEscape(bx)) => children.prefix(vec!(VNode::Box(bx))),
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
-                                              PDFNode::PDFCatalog(_)| PDFNode::PDFSave| PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | VNode::Penalty(_) => (),
+                                              PDFNode::PDFCatalog(_)| PDFNode::PDFSave| PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | VNode::Penalty(_) => (),
             c => {
                 empty = false;
                 do_v(engine,state,c)
@@ -484,7 +486,7 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) {
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) =>  annotations::do_color(state,engine,act),
             HNode::Custom(RusTeXNode::FontChange(font,true)) => {
                 if state.in_content {
-                    todo!()
+                    //TODO ???
                 }
                 *state.fonts.last_mut().unwrap() = font;
             }
@@ -498,7 +500,7 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) {
             HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
-                                              PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | HNode::Penalty(_) => (),
+                                              PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | HNode::Penalty(_) => (),
             HNode::Custom(RusTeXNode::PGFEscape(bx)) => do_h(engine,state,HNode::Box(bx)),
             c => do_h(engine,state,c)
         }
@@ -563,7 +565,8 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
         HNode::Box(TeXBox::H {info:HBoxInfo::ParIndent(d),..}) => {
             if d > Dim32(0) { state.push_comment(format_args!("<div class=\"rustex-parindent\" style=\"margin-left:{}\"></div>",dim_to_string(d))) }
         }
-        HNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell{..},children,start,end,.. }) => {
+
+        HNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell{..}|HBoxInfo::ParLine {..},children,start,end,.. }) => {
             // TODO
             let bx = TeXBox::H {info: HBoxInfo::new_box(ToOrSpread::None),children,start,end,preskip:None};
             nodes::do_hbox(state,engine,bx)
@@ -682,7 +685,7 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
         MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
         MathNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
         MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
-                                             PDFNode::PDFCatalog(_)| PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | MathNode::Penalty(_) => (),
+                                             PDFNode::PDFCatalog(_)| PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::PDFLiteral(_) | PDFNode::Obj(_))) | MathNode::Penalty(_) => (),
         MathNode::VRule {width,height,depth,start,end} =>
             nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth),
         MathNode::Atom(a) => match a.nucleus {
@@ -825,7 +828,7 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
             MathNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg | MathNode::Penalty(_) => (),
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
-                                                 PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => (),
+                                                 PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => (),
             MathNode::Leaders(_) => (), // TODO?
             o => todo!(" {:?}",o)
         }
@@ -846,7 +849,7 @@ fn mathlist_is_h(ls: &[MNode]) -> bool {
             }
         }
         MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
-                                             PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => true,
+                                             PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => true,
         MathNode::HSkip(_) | MathNode::HFil | MathNode::HFill | MathNode::HFilneg | MathNode::Hss | MathNode::Space |
             MathNode::MSkip {..} | MathNode::MKern {..} | MathNode::HKern(_) | MathNode::Penalty(_) |
             MathNode::Mark(..) | MathNode::VRule {..} | MathNode::Whatsit(_) | MathNode::Custom(_) => true,

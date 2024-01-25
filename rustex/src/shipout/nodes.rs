@@ -1188,6 +1188,9 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) {
                 super::annotations::close_font(state),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) =>
                 super::annotations::do_color(state,engine,act),
+            HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
+            HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
+            HNode::MathGroup(mg) if mg.children.is_empty() => (),
             o => todo!("svg: {:?}",o)
         }
     }

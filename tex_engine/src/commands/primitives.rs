@@ -339,6 +339,10 @@ pub struct PrimitiveInterner {
     pub belowdisplayskip:PrimitiveIdentifier,
     pub iffalse:PrimitiveIdentifier,
     pub iftrue:PrimitiveIdentifier,
+    pub year:PrimitiveIdentifier,
+    pub month:PrimitiveIdentifier,
+    pub day:PrimitiveIdentifier,
+    pub time:PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -417,6 +421,10 @@ impl PrimitiveInterner {
         let belowdisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("belowdisplayskip"));
         let iffalse = PrimitiveIdentifier(interner.get_or_intern_static("iffalse"));
         let iftrue = PrimitiveIdentifier(interner.get_or_intern_static("iftrue"));
+        let year = PrimitiveIdentifier(interner.get_or_intern_static("year"));
+        let month = PrimitiveIdentifier(interner.get_or_intern_static("month"));
+        let day = PrimitiveIdentifier(interner.get_or_intern_static("day"));
+        let time = PrimitiveIdentifier(interner.get_or_intern_static("time"));
         PrimitiveInterner{
             interner:RwLock::new(interner),
             globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
@@ -427,7 +435,7 @@ impl PrimitiveInterner {
             pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
             noalign,omit,baselineskip,lineskip,lineskiplimit,parindent,hrule,vrule,
             vskip,hskip,vfil,hfil,vfill,hfill,parskip,delimiter,abovedisplayskip,
-            belowdisplayskip,iffalse,iftrue
+            belowdisplayskip,iffalse,iftrue,year,month,day,time
         }
     }
 

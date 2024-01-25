@@ -193,6 +193,7 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                         cont(a,s,t)
                     })
                 }
+                /*
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.noexpand => {
                     match engine.get_next(true) {
                         Some(t) if t.command_code() != CommandCode::EndGroup =>
@@ -200,6 +201,8 @@ pub fn expand_until_endgroup<ET:EngineTypes,Fn:FnMut(&mut EngineAux<ET>,&ET::Sta
                         _ => todo!("throw error")
                     }
                 }
+
+                 */
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)})) =>
                     ET::Gullet::do_simple_expandable(engine, *name, t, *e),
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Expandable(e)})) =>
@@ -627,7 +630,7 @@ pub fn read_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) 
 pub fn read_dim_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool,b:u8) -> <ET::Num as NumSet>::Dim {
     if b == b',' || b == b'.' {
         read_dim_float(engine,is_negative,b'.')
-    } else  if b == b'`' {
+    } else if b == b'`' {
         let i = read_int_char(engine,is_negative).into();
         read_unit_or_dim(engine,i as f64)
     }
@@ -730,9 +733,8 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
             }
         }
         ResolvedToken::Cmd(Some(c)) => {
-            let base = read_dim_command(engine,false,c.clone(),token);
             let f = if is_negative {-ret} else {ret};
-            return base.scale_float(f)
+            return read_unit_cmd(engine,f,c.clone(),token)
         }
         _ => todo!("command in read_dim_inner")
     );
@@ -755,29 +757,53 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) 
             Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
             _ => todo!("throw error")
         }
-        ResolvedToken::Cmd(Some(cmd)) => match cmd {
-            TeXCommand::DimRegister(u) => {
-                let base = engine.state.get_dim_register(*u);
-                return base.scale_float(float)
-            }
-            TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim} => {
-                let base = engine.state.get_primitive_dim(*name);
-                return base.scale_float(float)
-            }
-            TeXCommand::SkipRegister(u) => {
-                let base = engine.state.get_skip_register(*u).base;
-                return base.scale_float(float)
-            }
-            TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
-                let base = engine.state.get_primitive_skip(*name).base;
-                return base.scale_float(float)
-            }
-            o => todo!("command in read_unit_or_dim: {:?}",o)
-        }
+        ResolvedToken::Cmd(Some(cmd)) => return read_unit_cmd(engine,float,cmd.clone(),token),
         ResolvedToken::Cmd(None) =>
             tex_error!(engine,undefined,token.clone()),
     );
     todo!("file end")
+}
+
+fn read_unit_cmd<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64,cmd:TeXCommand<ET>,token:ET::Token) -> <ET::Num as NumSet>::Dim {
+    match cmd {
+        TeXCommand::IntRegister(u) => {
+            let base = ET::Dim::from_sp(engine.state.get_int_register(u).into() as i32);
+            return base.scale_float(float)
+        }
+        TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt} => {
+            let base = ET::Dim::from_sp(engine.state.get_primitive_int(name).into() as i32);
+            return base.scale_float(float)
+        }
+        TeXCommand::Primitive{cmd:PrimitiveCommand::Int{read,..},..} => {
+            let base = ET::Dim::from_sp(read(engine,token).into() as i32);
+            return base.scale_float(float)
+        }
+        TeXCommand::DimRegister(u) => {
+            let base = engine.state.get_dim_register(u);
+            return base.scale_float(float)
+        }
+        TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveDim} => {
+            let base = engine.state.get_primitive_dim(name);
+            return base.scale_float(float)
+        }
+        TeXCommand::Primitive{cmd:PrimitiveCommand::Dim{read,..},..} => {
+            let base = read(engine,token);
+            return base.scale_float(float)
+        }
+        TeXCommand::SkipRegister(u) => {
+            let base = engine.state.get_skip_register(u).base;
+            return base.scale_float(float)
+        }
+        TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
+            let base = engine.state.get_primitive_skip(name).base;
+            return base.scale_float(float)
+        }
+        TeXCommand::Primitive{cmd:PrimitiveCommand::Skip{read,..},..} => {
+            let base = read(engine,token).base;
+            return base.scale_float(float)
+        }
+        o => todo!("command in read_unit_or_dim: {:?}",o)
+    }
 }
 
 fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64, mut first:Option<(u8, ET::Token)>) -> <ET::Num as NumSet>::Dim {
@@ -934,12 +960,24 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> StretchShri
                 let base = engine.state.get_primitive_dim(*name);
                 return StretchShrink::Dim(if is_negative {-base} else {base})
             }
+            Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Dim{read,..},..}) => {
+                let base = read(engine,token);
+                return StretchShrink::Dim(if is_negative {-base} else {base})
+            }
             Some(TeXCommand::IntRegister(u)) => {
                 let base = engine.state.get_int_register(*u).into() as f64;
                 return read_stretch_unit(engine,if is_negative {-base} else {base},None)
             }
             Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveInt}) => {
                 let base = engine.state.get_primitive_int(*name).into() as f64;
+                return read_stretch_unit(engine,if is_negative {-base} else {base},None)
+            }
+            Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Int{read,..},..}) => {
+                let base = read(engine,token).into() as f64;
+                return read_stretch_unit(engine,if is_negative {-base} else {base},None)
+            }
+            Some(TeXCommand::CharDef(c)) => {
+                let base = Into::<u64>::into(*c) as f64;
                 return read_stretch_unit(engine,if is_negative {-base} else {base},None)
             }
             o => todo!("command in read_stretch: {:?}",o)
@@ -981,8 +1019,23 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
                 todo!("{}:{:?}",char,code);
             }
         }
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::PrimitiveDim})) => {
+            let base = engine.state.get_primitive_dim(*name);
+            let scale = if is_negative {-ret} else {ret};
+            return StretchShrink::Dim(base.scale_float(scale))
+        }
         ResolvedToken::Cmd(Some(TeXCommand::DimRegister(u))) => {
             let base = engine.state.get_dim_register(*u);
+            let scale = if is_negative {-ret} else {ret};
+            return StretchShrink::Dim(base.scale_float(scale))
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::PrimitiveSkip})) => {
+            let base = engine.state.get_primitive_skip(*name).base;
+            let scale = if is_negative {-ret} else {ret};
+            return StretchShrink::Dim(base.scale_float(scale))
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::SkipRegister(u))) => {
+            let base = engine.state.get_skip_register(*u).base;
             let scale = if is_negative {-ret} else {ret};
             return StretchShrink::Dim(base.scale_float(scale))
         }

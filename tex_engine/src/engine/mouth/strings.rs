@@ -262,7 +262,8 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
     fn get_escape<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>) -> T {
         let name = match self.get_char() {
             None => {
-                self.state = MouthState::NewLine;
+                self.next_line();
+                self.state = MouthState::SkipBlank;
                 match endline {
                     None => handler.empty_str(),
                     Some(c) => {

@@ -1,6 +1,6 @@
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::filesystem::{File, FileSystem};
-use crate::tex::tokens::token_lists::{Otherize, CharWrite};
+use crate::tex::tokens::token_lists::Otherize;
 use crate::tex::catcodes::CommandCode;
 use crate::commands::primitives::*;
 use crate::tex::tokens::{StandardToken, Token};
@@ -327,26 +327,90 @@ pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
 }
 
 pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    // TODO actually escape
+    use crate::tex::characters::Character;
     engine.expand_until_bgroup(false,&tk);
-    let mut f = |t| exp.push(t);
-    let escapechar = engine.state.get_escape_char();
-    engine.expand_until_endgroup(true,false,&tk,|a,st,t| match t.command_code() {
-        CommandCode::Space => f(t),
-        CommandCode::Parameter => { f(t.clone());f(t)}
-        _ => {
-            let mut tokenizer = Otherize::new(&mut f);
-            match t.to_enum() {
-                StandardToken::Character(c, _) =>
-                    tokenizer.push_char(c),
-                StandardToken::ControlSequence(cs) => {
-                    tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
-                }
-                StandardToken::Primitive(id) => {
-                    tokenizer.push_cs(a.memory.cs_interner_mut().new(&id.display::<ET::Char>(None).to_string()),a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
-                }
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+        StandardToken::Character(_, CommandCode::Space) =>
+            ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
+            ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b'(') =>
+            ET::Char::string_to_iter("\\(").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b')') =>
+            ET::Char::string_to_iter("\\)").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b'\\') =>
+            ET::Char::string_to_iter("\\\\").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b'#') =>
+            ET::Char::string_to_iter("\\#").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) =>
+            exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
+        StandardToken::Primitive(_) => (),
+        StandardToken::ControlSequence(_) => ()
+    });
+}
+
+pub fn pdfescapename<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    use crate::tex::characters::Character;
+    engine.expand_until_bgroup(false,&tk);
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+        StandardToken::Character(_, CommandCode::Space) =>
+            ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
+            ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b'(') =>
+            ET::Char::string_to_iter("#28").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b')') =>
+            ET::Char::string_to_iter("#29").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b'\\') =>
+            ET::Char::string_to_iter("#5C").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) if c == ET::Char::from(b'#') =>
+            ET::Char::string_to_iter("#23").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+        StandardToken::Character(c, _) =>
+            exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
+        StandardToken::Primitive(_) => (),
+        StandardToken::ControlSequence(_) => ()
+    });
+}
+
+pub fn pdfescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    use crate::tex::characters::Character;
+    engine.expand_until_bgroup(false,&tk);
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+        StandardToken::Character(c, _) => {
+            let num = c.into();
+            for c in ET::Char::string_to_iter(&format!("{:02X}",num)) {
+                exp.push(ET::Token::from_char_cat(c,CommandCode::Other))
             }
         }
+        StandardToken::Primitive(_) => (),
+        StandardToken::ControlSequence(_) => ()
+    });
+}
+pub fn pdfunescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+    engine.expand_until_bgroup(false,&tk);
+    let mut s = String::new();
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+        StandardToken::Character(c, _) if s.is_empty() => {
+            let num = c.into();
+            if num >= 48 && num <= 57 || num >= 65 && num <= 70 || num >= 97 && num <= 102 {
+                s.push((num as u8).into());
+            } else {
+                // TODO
+            }
+        }
+        StandardToken::Character(c, _) => {
+            let num = c.into();
+            if num >= 48 && num <= 57 || num >= 65 && num <= 70 || num >= 97 && num <= 102 {
+                s.push((num as u8).into());
+            } else {
+                // TODO
+            }
+            let c = u8::from_str_radix(&s,16).unwrap();
+            s.clear();
+            exp.push(ET::Token::from_char_cat(c.into(),CommandCode::Other));
+        }
+        StandardToken::Primitive(_) => (),
+        StandardToken::ControlSequence(_) => ()
     });
 }
 
@@ -771,7 +835,7 @@ pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
         _ => PDFLiteralOption::None
     };
     let mut literal = String::new();
-    engine.read_braced_string(false,true,&tk,&mut literal);
+    engine.read_braced_string(true,true,&tk,&mut literal);
     let node = PDFNode::PDFLiteral(PDFLiteral{ literal, option});
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
 }
@@ -851,6 +915,9 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_expandable(engine,"rightmarginkern",rightmarginkern);
     register_expandable(engine,"pdfcreationdate",pdfcreationdate);
     register_expandable(engine,"pdfescapestring",pdfescapestring);
+    register_expandable(engine,"pdfescapename",pdfescapename);
+    register_expandable(engine,"pdfescapehex",pdfescapehex);
+    register_expandable(engine,"pdfunescapehex",pdfunescapehex);
     register_expandable(engine,"pdffilesize",pdffilesize);
     register_expandable(engine,"pdfmatch",pdfmatch);
     register_expandable(engine,"pdflastmatch",pdflastmatch);
@@ -952,8 +1019,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfpxdimen);
     cmtodo!(engine,pdfthreadmargin);
     cmtodo!(engine,pdfpkmode);
-    cmtodo!(engine,pdfescapehex);
-    cmtodo!(engine,pdfescapename);
     cmtodo!(engine,pdffiledump);
     cmtodo!(engine,pdffilemoddate);
     cmtodo!(engine,pdffontname);
@@ -963,7 +1028,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfnormaldeviate);
     cmtodo!(engine,pdfpageref);
     cmtodo!(engine,pdftexbanner);
-    cmtodo!(engine,pdfunescapehex);
     cmtodo!(engine,pdfuniformdeviate);
     cmtodo!(engine,pdfxformname);
     cmtodo!(engine,pdfximagebbox);

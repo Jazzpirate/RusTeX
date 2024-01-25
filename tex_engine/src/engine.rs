@@ -2,6 +2,7 @@
     some output format.
 */
 use std::fmt::Debug;
+use chrono::{Datelike,Timelike};
 use crate::engine::gullet::{DefaultGullet, Gullet};
 use crate::engine::utils::memory::{MemoryManager};
 use crate::engine::mouth::{DefaultMouth, Mouth};
@@ -147,22 +148,30 @@ pub trait TeXEngine:Sized {
     fn init_file(&mut self,s:&str) -> Result<(),TeXError> {TeXError::catch(|| {
         log::debug!("Initializing with file {}",s);
         let mut comps = self.get_engine_refs();
+        comps.aux.start_time = chrono::Local::now();
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.year,comps.aux.start_time.year().into(),true);
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.month,(comps.aux.start_time.month() as i32).into(),true);
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.day,(comps.aux.start_time.day() as i32).into(),true);
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.time,(((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),true);
         let file = comps.filesystem.get(s);
         comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.push_file(file);
-        comps.aux.start_time = chrono::Local::now();
         comps.top_loop();
     })}
     /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
     fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {TeXError::catch(||{
         log::debug!("Running file {}",s);
         let mut comps = self.get_engine_refs();
+        comps.aux.start_time = chrono::Local::now();
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.year,comps.aux.start_time.year().into(),true);
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.month,(comps.aux.start_time.month() as i32).into(),true);
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.day,(comps.aux.start_time.day() as i32).into(),true);
+        comps.state.set_primitive_int(comps.aux,PRIMITIVES.time,(((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),true);
         let file = comps.filesystem.get(s);
         comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
         comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.push_file(file);
         comps.push_every(PRIMITIVES.everyjob);
-        comps.aux.start_time = chrono::Local::now();
         //comps.aux.elapsed = std::time::Instant::now();
         //debug_log!(debug =>"Here: {}",comps.preview());
         comps.colon = Colon::new(f);
