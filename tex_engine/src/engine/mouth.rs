@@ -7,7 +7,7 @@ use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileLineSource};
 use crate::engine::filesystem::SourceReference;
 use crate::tex::tokens::token_lists::MacroExpansion;
-use crate::engine::mouth::strings::InputTokenizer;
+use crate::engine::mouth::strings::{InputTokenizer, MouthState};
 use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::prelude::{CommandCode, TokenList};
@@ -214,18 +214,20 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     aux.outputs.file_close(f.source.path().display());
                     let TokenSource::File(mut r,_) = self.inputs.remove(i) else {unreachable!()};
                     self.start_ref.pop();
-                    let mut ret = Vec::new();
-                    match r.read(aux.memory.cs_interner_mut(),state.get_catcode_scheme(),state.get_endline_char(),|t| ret.push(t)) {
-                        Ok(_) => (),
-                        Err(ic) => {
-                            match aux.error_handler.invalid_character(state, ic.0){
-                                Some(s) => self.push_string(s),
-                                _ => ()
+                    if r.state != MouthState::NewLine {
+                        let mut ret = Vec::new();
+                        match r.read(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char(), |t| ret.push(t)) {
+                            Ok(_) => (),
+                            Err(ic) => {
+                                match aux.error_handler.invalid_character(state, ic.0) {
+                                    Some(s) => self.push_string(s),
+                                    _ => ()
+                                }
+                                return
                             }
-                            return
                         }
+                        self.with_list(|ls| ls.extend(ret.into_iter().rev()));
                     }
-                    self.with_list(|ls| ls.extend(ret.into_iter().rev()));
                     return
                 }
                 _ => ()

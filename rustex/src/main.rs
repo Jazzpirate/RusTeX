@@ -23,13 +23,13 @@ use tex_engine::pdflatex::PlainPDFTeXEngine;
 
 fn main() {
     //profile()
-    thesis()
+    //thesis()
     //run()
     //test()
     //temp_test()
     //notes()
     //test2()
-    //test_all()
+    test_all()
 }
 
 fn test_all() {
@@ -59,11 +59,22 @@ fn test_all() {
     for (i,f) in allfiles.into_iter().enumerate() {
         println!("Testing file {} of {}: {}",i+1,len,f.display());
         let ret = RusTeXEngine::do_file(f.to_str().unwrap(),false,false,false);
-        for gl in ret.missing_glyphs.into_vec().into_iter() {
-            missing_glyphs.insert(gl);
+        let mut glyphs = ret.missing_glyphs.into_vec();
+        glyphs.retain(|g| !missing_glyphs.contains(g));
+        let mut fonts = ret.missing_fonts.into_vec();
+        fonts.retain(|g| !missing_fonts.contains(g));
+        if !fonts.is_empty() {
+            println!("Missing fonts: {}",fonts.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "));
         }
-        for fnt in ret.missing_fonts.into_vec().into_iter() {
-            missing_fonts.insert(fnt);
+        for f in fonts {
+            missing_fonts.insert(f);
+        }
+        glyphs.sort_by(|a,b| a.2.cmp(&b.2));
+        if !glyphs.is_empty() {
+            println!("Missing glyphs: {}",glyphs.iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "));
+        }
+        for g in glyphs {
+            missing_glyphs.insert(g);
         }
         match ret.error {
             None => {
@@ -82,6 +93,8 @@ fn test_all() {
             }
         }
     }
+    let mut missing_glyphs: Vec<_> = missing_glyphs.into_iter().collect();
+    missing_glyphs.sort_by(|a,b| a.2.cmp(&b.2));
     println!("Finished \\o/\n\nMissing glyphs: {}\nMissing web fonts: {}",
            missing_glyphs.into_iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "),
            missing_fonts.into_iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
@@ -97,7 +110,7 @@ fn test() {
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/pCloudDrive/work attic/LaTeX/Uni Freiburg/Bachelor/1. Semester/Formeln/Formeln (1).tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/csp/slides/AC1-algo.en.tex",true,true,true);
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html", &ret.out).unwrap();

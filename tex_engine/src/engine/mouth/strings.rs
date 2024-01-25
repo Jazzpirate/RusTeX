@@ -56,7 +56,7 @@ assert!(tokenizer.get_next::<T>(&mut cs_handler,cc,eol).unwrap().is_none()); // 
 */
 #[derive(Clone,Debug)]
 pub struct InputTokenizer<C:Character,S:TextLineSource<C>> {
-    state : MouthState,
+    pub state : MouthState,
     line : usize,
     col : usize,
     current_line:TextLine<C>,
@@ -263,7 +263,6 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         let name = match self.get_char() {
             None => {
                 self.next_line();
-                self.state = MouthState::SkipBlank;
                 match endline {
                     None => handler.empty_str(),
                     Some(c) => {
