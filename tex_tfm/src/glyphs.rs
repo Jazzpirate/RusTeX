@@ -32,7 +32,9 @@ impl Glyph {
 
     pub fn name<'a>(&'a self) -> GlyphName<'a> { GlyphName(&self.0) }
 
-
+    pub fn undefined() -> Self {
+        Glyph(GlyphI::S(0))
+    }
     pub fn is_defined(&self) -> bool {
         match self.0 {
             GlyphI::S(i) => i != 0,

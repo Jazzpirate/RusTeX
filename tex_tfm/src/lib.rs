@@ -45,6 +45,7 @@ mod tests {
         let mut es = get_store();
         log::info!("cmr10:\n{}",es.display_encoding("cmr10").unwrap());
         log::info!("cmbx10:\n{}",es.display_encoding("cmbx10").unwrap());
+        log::info!("ptmr7t:\n{}",es.display_encoding("ptmr7t").unwrap());
         /*
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());
         log::info!("ec-lmr10:\n{}",es.display_encoding("ec-lmr10").unwrap());
@@ -52,7 +53,35 @@ mod tests {
         log::info!("ot1-stix2textsc:\n{}",es.display_encoding("ot1-stix2textsc").unwrap());
         log::info!("stix-mathbbit-bold:\n{}",es.display_encoding("stix-mathbbit-bold").unwrap());
         log::info!("MnSymbolE10:\n{}",es.display_encoding("MnSymbolE10").unwrap());
-
          */
     }
+/*
+    #[test]
+    fn vfs() {
+        env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().unwrap();
+        use tex_engine::engine::filesystem::kpathsea::*;
+        let mut store = encodings::EncodingStore::new(|s| {
+            match KPATHSEA.which(s).map(|s| s.to_str().map(|s| s.to_string())).flatten() {
+                Some(s) => s,
+                _ => "".into()
+            }
+        });
+        let vfs = &KPATHSEA.post.clone();
+        for v in vfs.values() {
+            match v.extension() {
+                Some(e) if e == "vf" => {
+                    let name = v.file_stem().unwrap().to_str().unwrap();
+                    log::info!("{}",v.display());
+                    match store.display_encoding(name) {
+                        Some(s) => log::info!("{}",s),
+                        None => log::info!("Failed!")
+                    }
+                    print!("");
+                }
+                _ => ()
+            }
+        }
+    }
+
+ */
 }

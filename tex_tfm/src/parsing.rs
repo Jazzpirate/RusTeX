@@ -137,4 +137,52 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn read_until_parens(&mut self) {
+        let mut parens = 0usize;
+        loop {
+            match self.0.find(|x| x == '(' || x == ')') {
+                Some(i) => {
+                    if self.0.chars().nth(i).unwrap() == '(' {
+                        parens += 1;
+                    } else if parens == 0 {
+                        self.skip(i+1);
+                        return
+                    } else {
+                        parens -= 1;
+                    }
+                    self.skip(i+1);
+                }
+                None => {
+                    self.0 = "";
+                    return
+                }
+            }
+        }
+    }
+
+    pub fn read_enc_num(&mut self) -> u8 {
+        if self.starts_with('D') {
+            self.skip(1);
+            let d = self.read_digit();
+            return d as u8
+        }
+        if self.starts_with('O') {
+            self.skip(1);
+            let d = self.read_digit();
+            return u8::from_str_radix(&format!("{}",d),8).unwrap()
+        }
+        if self.starts_with('H') {
+            self.skip(1);
+            let d = self.read_digit();
+            return u8::from_str_radix(&format!("{}",d),16).unwrap()
+        }
+        if self.starts_with('C') {
+            self.skip(1);
+            let c = self.0.chars().next().unwrap();
+            self.skip(1);
+            return c as u8
+        }
+        todo!()
+    }
+
 }

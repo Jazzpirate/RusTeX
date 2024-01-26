@@ -5720,3 +5720,7 @@ anglebar.left ⟬
 anglebar.right ⟭
 rhd ▷
 leadsto ↝
+envelope ✉
+mobile-alt 📱
+globe-americas 🌎
+lightning ☇
