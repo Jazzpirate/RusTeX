@@ -5724,3 +5724,6 @@ envelope ✉
 mobile-alt 📱
 globe-americas 🌎
 lightning ☇
+EUR €
+bot ⊥
+bigsqcap ⨅

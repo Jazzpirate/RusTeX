@@ -212,8 +212,9 @@ pub(crate) const PREAMBLE: &str = r#"
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-roman">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-sans">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-mono">
-  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/nimbus-roman-no9l">
+  <link rel="stylesheet" type="text/css" href="https://db.onlinewebfonts.com/c/66b48749d01834e2d3663c1a0590dfb2?family=Nimbus+Roman+No9+L+Regular">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/nimbussanl">
+  <link rel="stylesheet" type="text/css" href="https://db.onlinewebfonts.com/c/1abfca112f592f17ef24628ab912f866?family=STIX-Regular">
 </head>
 <body>
 "#;
