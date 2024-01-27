@@ -12,10 +12,10 @@ use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
-use tex_tfm::fontstyles::ModifierSeq;
+use tex_glyphs::fontstyles::ModifierSeq;
 use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 use tex_engine::tex::numerics::TeXDimen;
-use tex_tfm::glyphs::GlyphName;
+use tex_glyphs::glyphs::GlyphName;
 
 pub(crate) trait MuAdd {
     fn merge(&mut self,sk:Dim32,f:&Font);
@@ -670,7 +670,7 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
 }
 
 pub(crate) fn do_mathkernel(engine:Refs,state:&mut ShipoutState,kernel:MathKernel<Types,MathFontStyle<Types>>,cls:Option<MathClass>) {
-    use tex_tfm::fontstyles::FontModifiable;
+    use tex_glyphs::fontstyles::FontModifiable;
     match kernel {
         MathKernel::Char {char,style:MathFontStyle{font,cramped,..}} => {
             let cls = cls.unwrap_or(MathClass::Ord);
@@ -757,7 +757,7 @@ pub(crate) fn do_mathkernel(engine:Refs,state:&mut ShipoutState,kernel:MathKerne
 }
 
 pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState, char:u8, cls:MathClass, font:Font) -> HTMLNode {
-    use tex_tfm::fontstyles::FontModifiable;
+    use tex_glyphs::fontstyles::FontModifiable;
     state.in_content = true;
     let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
     let glyph = glyphtable.get(char);
@@ -777,7 +777,7 @@ pub(crate) fn do_mathchar(engine:Refs, state:&mut ShipoutState, char:u8, cls:Mat
     node
 }
 pub(crate) fn merge_mathchar(engine:Refs, state:&mut ShipoutState, current_class: &mut Option<(MathClass,bool, HTMLNode)>, char:u8, cls:MathClass, font:Font, cramped:bool) {
-    use tex_tfm::fontstyles::FontModifiable;
+    use tex_glyphs::fontstyles::FontModifiable;
     state.in_content = true;
     let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
     let glyph = glyphtable.get(char);

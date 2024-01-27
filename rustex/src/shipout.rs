@@ -19,8 +19,7 @@ use tex_engine::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxI
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
-use tex_tfm::fontstyles::ModifierSeq;
-use tex_tfm::glyphs::Glyph;
+use tex_glyphs::glyphs::Glyph;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::shipout::nodes::{do_mathkernel, MuAdd, SkipAdd};
 
@@ -213,6 +212,8 @@ pub(crate) const PREAMBLE: &str = r#"
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-roman">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-sans">
   <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-mono">
+  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/nimbus-roman-no9l">
+  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/nimbussanl">
 </head>
 <body>
 "#;
@@ -736,7 +737,7 @@ pub(crate) fn do_kernel_in_h(state:&mut ShipoutState,engine:Refs,k:MathKernel<Ty
 }
 
 fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
-    use tex_tfm::fontstyles::FontModifiable;
+    use tex_glyphs::fontstyles::FontModifiable;
     let mut currclass : Option<(MathClass,bool,HTMLNode)> = None;
     macro_rules! flush {
         () => {

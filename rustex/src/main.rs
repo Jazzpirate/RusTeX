@@ -27,9 +27,9 @@ fn main() {
     //run()
     //test()
     //temp_test()
-    //notes()
+    notes()
     //test2()
-    test_all()
+    //test_all()
 }
 
 fn test_all() {
@@ -44,6 +44,7 @@ fn test_all() {
             allfiles.push(PathBuf::from(a));
         }
     }
+    /*
     let files = "/home/jazzpirate/textest_dones.txt";
     let mut dones = Vec::new();
     let donefiles_reader = std::io::BufReader::new(std::fs::File::open(files).unwrap());
@@ -52,6 +53,8 @@ fn test_all() {
         dones.push(PathBuf::from(line));
     }
     let allfiles: Vec<_> = allfiles.into_iter().filter(|x| !dones.contains(x)).collect();
+
+     */
     println!("Testing {} files",allfiles.len());
     let mut missing_glyphs = HashSet::new();
     let mut missing_fonts = HashSet::new();
@@ -78,8 +81,8 @@ fn test_all() {
         }
         match ret.error {
             None => {
-                dones.push(f);
-                std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
+                //dones.push(f);
+                //std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
                 let out = PathBuf::from("/home/jazzpirate/temp/out").join(format!("{}.html",i+1));
                 std::fs::write(out, &ret.out).unwrap();
             }
@@ -110,7 +113,7 @@ fn test() {
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/csp/slides/AC1-algo.en.tex",true,true,true);
+    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/paper.tex",true,true,true);
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html", &ret.out).unwrap();

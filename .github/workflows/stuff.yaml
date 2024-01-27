@@ -19,8 +19,8 @@ jobs:
       - uses: actions/checkout@v3
       - name: TeXLive
         run: sudo apt install texlive-base
-      - name: Test tex_tfm
-        run: cd tex_tfm && cargo test
+      - name: Test tex-glyphs
+        run: cd tex-glyphs && cargo test
   test_rustex:
     runs-on: ubuntu-latest
     steps:

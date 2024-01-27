@@ -26,12 +26,12 @@ codegen-units = 1
 
 [dependencies]
 tex_engine = { path = "../tex_engine",features = ["pdflatex","pdfium"] }
-tex_tfm = { path = "../tex_tfm" }
-env_logger = "0.10.2"
+tex-glyphs = { path = "../tex-glyphs" }
+env_logger = "0.11.0"
 log={version="0.4.20",features=["kv_unstable"]}
 ansi_term = "0.12.1"
-chrono = "0.4.31"
-clap = { version = "4.4.13", features = ["derive"] }
+chrono = "0.4.33"
+clap = { version = "4.4.18", features = ["derive"] }
 lazy_static = "1.4.0"
 pdfium-render = { version="0.8.17" }
 path-dedot = "3.1.1"

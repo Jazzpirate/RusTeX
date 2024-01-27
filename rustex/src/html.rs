@@ -6,7 +6,7 @@ use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::{File, FileSystem};
 use tex_engine::engine::filesystem::SourceReference;
 use tex_engine::tex::numerics::{Dim32, Mu};
-use tex_tfm::glyphs::Glyph;
+use tex_glyphs::glyphs::Glyph;
 use crate::engine::{Font, SRef, Types};
 use crate::fonts::FontStore;
 use crate::shipout::{ShipoutMode, ShipoutState};

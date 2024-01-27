@@ -1,6 +1,6 @@
 use tex_engine::add_node;
-use tex_engine::commands::{CommandScope, PrimitiveCommand};
-use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
+use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};
+use tex_engine::commands::primitives::{PRIMITIVES, register_simple_expandable, register_unexpandable};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::engine::state::State;
 use tex_engine::tex::nodes::horizontal::HNode;
@@ -12,7 +12,7 @@ use crate::engine::{Refs, register_command, Types};
 use crate::nodes::RusTeXNode;
 use tex_engine::engine::stomach::Stomach;
 use crate::stomach::RusTeXStomach;
-use tex_engine::prelude::TeXMode;
+use tex_engine::prelude::*;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::utils::HMap;
 
@@ -34,6 +34,10 @@ pub(crate) fn register_primitives_postinit(engine:&mut DefaultEngine<Types>) {
     crate::pgf::register_pgf(engine);
     register_unexpandable(engine,"rustex@annotateHTML",CommandScope::Any,annot_begin);
     register_unexpandable(engine,"rustex@annotateHTMLEnd",CommandScope::Any,annot_end);
+    engine.state.register_primitive(&mut engine.aux,"if@rustex",PrimitiveCommand::Conditional(tex_engine::commands::tex::iftrue));
+
+
+    register_command(engine, true, "rustex@addNamespaceAbbrev", "#1#2", "", false, false);
     // if@rustex
     // rustex@directHTML
     // rustex@annotateHTML
