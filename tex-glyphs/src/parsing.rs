@@ -182,7 +182,7 @@ impl<'a> Parser<'a> {
             self.skip(1);
             return c as u8
         }
-        todo!()
+        0
     }
 
 }

@@ -57,10 +57,10 @@ pub(crate) fn parse_vf(f:&str) -> Option<VFGlyphMap> {
                         s.read_until_parens();
                         continue
                     }
-                    todo!()
+                    return None
                 }
             }
-            todo!()
+            return None
         }
         if !had_map { maps[idx].push((font, idx as u8)) }
     }

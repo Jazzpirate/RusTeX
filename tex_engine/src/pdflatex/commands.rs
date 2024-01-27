@@ -19,6 +19,7 @@ use crate::tex::nodes::vertical::VNode;
 use crate::engine::stomach::TeXMode;
 use crate::prelude::CSHandler;
 use crate::tex_error;
+use crate::utils::errors::TeXError;
 
 pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
     <ET::Num as NumSet>::Int::from(140)
@@ -274,8 +275,10 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
         _ => unreachable!()
     }
 }
-pub fn ifpdfprimitive<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    todo!()
+pub fn ifpdfprimitive<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
+    use crate::engine::mouth::Mouth;
+    TeXError::throw(format!("Not yet implemented: \\ifpdfprimitive at {}",
+                            engine.mouth.current_sourceref().display(engine.filesystem)))
 }
 
 pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
