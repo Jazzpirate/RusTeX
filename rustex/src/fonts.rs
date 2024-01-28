@@ -4,7 +4,7 @@ use tex_engine::tex::numerics::Dim32;
 use tex_engine::engine::fontsystem::{Font, FontSystem as FontSystemT};
 use tex_engine::tex::tokens::control_sequences::InternedCSName;
 
-pub(crate) type FontStore = tex_glyphs::encodings::EncodingStore<String,fn(&str) -> String>;
+pub(crate) type FontStore = tex_glyphs::encodings::FontInfoStore<String,fn(&str) -> String>;
 
 fn get(s:&str) -> String {
     match tex_engine::engine::filesystem::kpathsea::KPATHSEA.which(s) {

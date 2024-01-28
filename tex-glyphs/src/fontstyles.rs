@@ -1,30 +1,42 @@
+/*! Font modifiers - e.g. bold, fraktur, italic, etc. */
 use std::fmt::{Display, Write};
 use phf::{Map, phf_map};
 
+/// A font modifier
 #[derive(Copy,Clone,Debug,PartialEq,Eq)]
 pub enum FontModifier {
+    /// Blackboard (e.g. `𝔸`)
     Blackboard = 0,
+    /// Fraktur (e.g. `𝔄`)
     Fraktur = 1,
+    /// Script (e.g. `𝒜`)
     Script = 2,
+    /// Bold (e.g. `𝐀`)
     Bold = 3,
+    /// Small capitals (e.g. `ᴀ` for `a`)
     Capitals = 4,
+    /// Monospaced (e.g. `𝙰`, which is distinct from `A`)
     Monospaced = 5,
+    /// Italic (e.g. `𝐴`)
     Italic = 6,
+    /// Oblique (e.g. `𝐴` - in unicode, italic and oblique are the same)
     Oblique = 7,
+    /// Sans serif (e.g. `𝖠`, which is distinct from `A`)
     SansSerif = 8,
 }
 
+/// A sequence of font modifiers, encoded as bitfields
 #[derive(Copy,Clone,Debug,PartialEq,Eq,Default)]
 pub struct ModifierSeq {
-    pub blackboard:bool,
-    pub fraktur:bool,
-    pub script:bool,
-    pub bold:bool,
-    pub capitals:bool,
-    pub monospaced:bool,
-    pub italic:bool,
-    pub oblique:bool,
-    pub sans_serif:bool,
+    pub(crate) blackboard:bool,
+    pub(crate) fraktur:bool,
+    pub(crate) script:bool,
+    pub(crate) bold:bool,
+    pub(crate) capitals:bool,
+    pub(crate) monospaced:bool,
+    pub(crate) italic:bool,
+    pub(crate) oblique:bool,
+    pub(crate) sans_serif:bool,
 }
 impl ModifierSeq {
 
@@ -64,10 +76,12 @@ impl ModifierSeq {
         Self{sans_serif:true,..Default::default()}
     }
 
+    /// And empty sequence of modifiers
     pub fn empty() -> Self {
         Self::default()
     }
 
+    /// Add a modifier to this sequence
     pub fn add(&mut self, m:FontModifier) {
         match m {
             FontModifier::Blackboard => self.blackboard = true,
@@ -82,7 +96,8 @@ impl ModifierSeq {
         }
     }
 
-    fn has(&self, m:FontModifier) -> bool {
+    /// Whether this sequence contains the given modifier
+    pub fn has(&self, m:FontModifier) -> bool {
         match m {
             FontModifier::Blackboard => self.blackboard,
             FontModifier::Fraktur => self.fraktur,
@@ -96,13 +111,6 @@ impl ModifierSeq {
         }
     }
 
-    pub fn from(mods:&[FontModifier]) -> Self {
-        let mut s = Self::empty();
-        for m in mods {
-            s.add(*m);
-        }
-        s
-    }
     fn iter<F:FnMut(&Map<char,char>)>(&self,mut f:F) {
         if self.has(FontModifier::Blackboard) {f(&BLACKBOARD);}
         if self.has(FontModifier::Fraktur) {f(&FRAKTUR);}
@@ -114,7 +122,16 @@ impl ModifierSeq {
         if self.has(FontModifier::SansSerif) {f(&SANS);}
     }
 }
-
+impl From<&[FontModifier]> for ModifierSeq {
+    fn from(mods:&[FontModifier]) -> Self {
+        let mut s = Self::empty();
+        for m in mods {
+            s.add(*m);
+        }
+        s
+    }
+}
+/// A wrapper struct that applies a sequence of font modifiers to a string
 pub struct CharConverter<'a,S:AsRef<str>> {
     maps: ModifierSeq,
     iter:&'a S
@@ -134,18 +151,34 @@ impl<'a,S:AsRef<str>> Display for CharConverter<'a,S> {
     }
 }
 
+/// A trait for applying font modifiers to *something*. Implemented for anything
+/// that implements `AsRef<str>`, and for [`CharConverter`] for chaining.
 pub trait FontModifiable {
+    /// The base type of this object; usually `Self`
     type R:AsRef<str>;
+    /// Apply the given modifiers to this object.
     fn apply<'a>(self,mods:ModifierSeq) -> CharConverter<'a,Self::R> where Self:'a;
-    fn apply_modifiers<'a>(self,mods:&'a [FontModifier]) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Add the given modifiers to this object.
+    fn apply_modifiers<'a>(self,mods:&'a [FontModifier]) -> CharConverter<'a,Self::R> where Self:'a, Self: Sized {
+        self.apply(mods.into())
+    }
+    /// Applies the [`Blackboard`](FontModifier::Blackboard) modifier.
     fn make_blackboard<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Fraktur`](FontModifier::Fraktur) modifier.
     fn make_fraktur<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Script`](FontModifier::Script) modifier.
     fn make_script<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Bold`](FontModifier::Bold) modifier.
     fn make_bold<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Capitals`](FontModifier::Capitals) modifier.
     fn make_smallcaps<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Monospaced`](FontModifier::Monospaced) modifier.
     fn make_monospaced<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Italic`](FontModifier::Italic) modifier.
     fn make_italic<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`Oblique`](FontModifier::Oblique) modifier.
     fn make_oblique<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    /// Applies the [`SansSerif`](FontModifier::SansSerif) modifier.
     fn make_sans<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
 }
 
@@ -154,12 +187,6 @@ impl<'a,S:AsRef<str>> FontModifiable for &'a S {
     fn apply<'b>(self,mods:ModifierSeq) -> CharConverter<'b,S> where Self:'b {
         CharConverter {
             maps: mods,
-            iter:self
-        }
-    }
-    fn apply_modifiers<'b>(self,mods:&'b [FontModifier]) -> CharConverter<'b,S> where Self:'b {
-        CharConverter {
-            maps: ModifierSeq::from(mods),
             iter:self
         }
     }

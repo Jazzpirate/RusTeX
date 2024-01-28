@@ -141,7 +141,7 @@ fn profile() {
     let mut engine = DefaultEngine::<Types>::new();
     RusTeX::commands::register_primitives_preinit(&mut engine);
     engine.aux.outputs = RusTeXOutput::Print(false);
-    engine.initialize_etex();
+    engine.initialize_etex_primitives();
     register_pdftex_primitives(&mut engine);
     engine.init_file("pdftexconfig.tex").unwrap();
     let state = engine.state.clone();
@@ -221,7 +221,7 @@ fn test_latex_ltx() {
     //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingifs,1,true);
 
     engine.aux.outputs = RusTeXOutput::Print(true);
-    engine.initialize_etex();
+    engine.initialize_etex_primitives();
     register_pdftex_primitives(&mut engine);
     engine.init_file("pdftexconfig.tex").unwrap();
     engine.load_latex();

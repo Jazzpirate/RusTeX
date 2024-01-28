@@ -1,16 +1,77 @@
+/*! [`Glyph`] and [`GlyphList`] types.*/
 use std::fmt::{Debug, Display, Write};
 
+/// A glyph is a character in some font.
 #[derive(Clone,PartialEq,Eq,Hash)]
 pub struct Glyph(pub(crate) GlyphI);
 
-#[derive(Clone,PartialEq,Eq,Hash)]
-pub(crate) enum GlyphI {
-    S(u16),
-    Unicode(char),
-    Ls(Box<[GlyphI]>),
-    Undefined(Box<str>)
+impl Glyph {
+    /// Get the name of this glyph as a [`GlyphName`], e.g.
+    /// ```
+    /// # use tex_glyphs::glyphs::Glyph;
+    /// assert_eq!(&Glyph::get("Gamma").to_string(),"Γ");
+    /// ```
+    pub fn name<'a>(&'a self) -> GlyphName<'a> { GlyphName(&self.0) }
+    /// Get the undefined glyph (i.e. the glyph with name `.undefined`).
+    pub fn undefined() -> Self {
+        Glyph(GlyphI::S(0))
+    }
+    /// Whether this glyph is defined.
+    pub fn is_defined(&self) -> bool {
+        match self.0 {
+            GlyphI::S(i) => i != 0,
+            GlyphI::Undefined(_) => false,
+            _ => true
+        }
+    }
+
+    /// Lookup a glyph by *value*, i.e. `Glyph::lookup("Γ")` returns the glyph with name `Gamma`.
+    /// ```
+    /// # use tex_glyphs::glyphs::Glyph;
+    /// assert_eq!(Glyph::lookup("Γ").unwrap(),Glyph::get("Gamma"));
+    /// ```
+    pub fn lookup(s:&str) -> Option<Self> {
+        crate::GLYPH_LOOKUP.get(s).map(|g| Glyph(GlyphI::S(*g)))
+    }
+
+    /// Returns the glyph with the given name or the undefined glyph if no such glyph exists.
+    pub fn get<S:AsRef<str>>(s:S) -> Self {
+        let s = s.as_ref();
+        match get_i(s) {
+            Some(g) => g,
+            None => {
+                Glyph(GlyphI::Undefined(s.into()))
+            }
+        }
+    }
+}
+impl Display for Glyph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0,f)
+    }
+}
+impl Debug for Glyph {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"Glyph({})=\'{}\'",self.name(),self)
+    }
 }
 
+/// A list of glyphs in some font.
+#[derive(Clone,PartialEq,Eq,Hash,Debug)]
+pub struct GlyphList(pub(crate) [Glyph; 256]);
+impl GlyphList {
+    /// Get the glyph at the given index.
+    pub fn get(&self, c:u8) -> Glyph {
+        self.0[c as usize].clone()
+    }
+    /// Whether this is the undefined glyph list, where every glyph is undefined.
+    pub fn is_defined(&self) -> bool {
+        *self == UNDEFINED_LIST
+    }
+}
+
+
+/// Utility struct for displaying the name of a [`Glyph`] (e.g. `uni0041`, `A` or `Gamma`).
 pub struct GlyphName<'a>(&'a GlyphI);
 impl<'a> Display for GlyphName<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -26,43 +87,14 @@ impl<'a> Display for GlyphName<'a> {
             GlyphI::Undefined(s) => Display::fmt(s,f)
         }
     }
-
 }
-impl Glyph {
 
-    pub fn name<'a>(&'a self) -> GlyphName<'a> { GlyphName(&self.0) }
-
-    pub fn undefined() -> Self {
-        Glyph(GlyphI::S(0))
-    }
-    pub fn is_defined(&self) -> bool {
-        match self.0 {
-            GlyphI::S(i) => i != 0,
-            GlyphI::Undefined(_) => false,
-            _ => true
-        }
-    }
-
-    pub fn lookup(s:&str) -> Option<Self> {
-        crate::GLYPH_LOOKUP.get(s).map(|g| Glyph(GlyphI::S(*g)))
-    }
-
-    pub fn get<S:AsRef<str>>(s:S) -> Self {
-        let s = s.as_ref();
-        match get_i(s) {
-            Some(g) => g,
-            None => {
-                Glyph(GlyphI::Undefined(s.into()))
-            }
-        }
-    }
-}
-impl Display for Glyph {
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0,f)
-    }
-
+#[derive(Clone,PartialEq,Eq,Hash)]
+pub(crate) enum GlyphI {
+    S(u16),
+    Unicode(char),
+    Ls(Box<[GlyphI]>),
+    Undefined(Box<str>)
 }
 impl Display for GlyphI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -79,27 +111,9 @@ impl Display for GlyphI {
         }
     }
 }
-impl Debug for Glyph {
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"Glyph({})=\'{}\'",self.name(),self)
-    }
-}
 
 pub(crate) const UNDEFINED:Glyph = Glyph(GlyphI::S(0));
 pub(crate) const UNDEFINED_LIST: GlyphList = GlyphList([UNDEFINED; 256]);
-#[derive(Clone,PartialEq,Eq,Hash,Debug)]
-pub struct GlyphList(pub(crate) [Glyph; 256]);
-impl GlyphList {
-
-    pub fn get(&self, c:u8) -> Glyph {
-        self.0[c as usize].clone()
-    }
-
-    pub fn is_defined(&self) -> bool {
-        *self == UNDEFINED_LIST
-    }
-}
 
 fn get_i(s:&str) -> Option<Glyph> {
     match crate::GLYPH_MAP.get(s) {

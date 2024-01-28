@@ -1,3 +1,4 @@
+/*! Glyph lists for fonts, font attributes etc. */
 mod enc_files;
 mod pfx_files;
 mod vf_files;
@@ -13,8 +14,10 @@ use crate::parsing::Parser;
 
 type HMap<A,B> = ahash::HashMap<A,B>;
 
+/// Information about a font
 #[derive(Debug,Clone)]
-pub struct FontEnc {
+pub struct FontInfo {
+    /// The name of the `.tfm` file
     pub tfm_name: Box<str>,
     //ps_name: Box<str>,
     //fontflags:u32,
@@ -22,39 +25,52 @@ pub struct FontEnc {
     enc_file: Box<str>,
     pfx_file: Box<str>,
     vf_file: bool,
+    /// The [`FontModifier`]s of this font
     pub styles: ModifierSeq,
     glyphlist:Option<usize>,
+    /// The CSS name and web-font link for this font
     pub weblink:Option<(&'static str,&'static str)>
 }
+
+/// An font info store takes care of parsing the `pdftex.map` file and the `.enc` and `.pfb` files
+/// to obtain information about fonts.
 #[derive(Debug,Clone)]
-pub struct EncodingStore<S:AsRef<str>,F:FnMut(&str) -> S> {
-    pdftex_map: HMap<Box<str>,FontEnc>,
+pub struct FontInfoStore<S:AsRef<str>,F:FnMut(&str) -> S> {
+    pdftex_map: HMap<Box<str>, FontInfo>,
     enc_files: HMap<Box<str>,Vec<(Box<str>, usize)>>,
     pfb_files: HMap<Box<str>,usize>,
     glyph_lists:Vec<GlyphList>,
     get:F
 }
 
-impl<S:AsRef<str>,F:FnMut(&str) -> S> EncodingStore<S,F> {
+impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
+    /// Create a new font info store. The function `get` is used to obtain the
+    /// full file paths of files based on their names; the canonical
+    /// implementation would be to call [`kpsewhich`](https://ctan.org/pkg/kpsewhich).
     pub fn new(get:F) -> Self {
         let mut map = HMap::default();
         parse_pdftex_map(&mut map);
         include!(concat!(env!("OUT_DIR"), "/codegen_patch.rs"));
 
-        EncodingStore { pdftex_map: map, enc_files: HMap::default(),pfb_files: HMap::default(), glyph_lists:PATCHED_TABLES.to_vec(),get }
+        FontInfoStore { pdftex_map: map, enc_files: HMap::default(),pfb_files: HMap::default(), glyph_lists:PATCHED_TABLES.to_vec(),get }
     }
+    /// Displays the [`FontInfo`] and [`GlyphList`] of a font as a markdown table, as it would
+    /// appear in [`patches.md`](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/patches.md).
     pub fn display_encoding<'a,S2:AsRef<str>>(&'a mut self,name:S2) -> Option<impl Display + 'a> {
         if let Some(u) = self.get_glyphlist_i(&name) {
             let enc = self.pdftex_map.get(name.as_ref()).unwrap();
             Some(DisplayEncoding { enc, list:self.glyph_lists.get(u).unwrap() })
         } else { None }
     }
-    pub fn get_info<S2:AsRef<str>>(&self,s:S2) -> Option<&FontEnc> {
+    /// Get the [`FontInfo`] for a font
+    pub fn get_info<S2:AsRef<str>>(&self,s:S2) -> Option<&FontInfo> {
         self.pdftex_map.get(s.as_ref())
     }
-    pub fn all_encs(&self) -> impl Iterator<Item=&FontEnc> {
+    #[allow(dead_code)]
+    pub(crate) fn all_encs(&self) -> impl Iterator<Item=&FontInfo> {
         self.pdftex_map.values()
     }
+    /// Get the [`GlyphList`] for a font
     pub fn get_glyphlist<S2:AsRef<str>>(&mut self,name:S2) -> &GlyphList {
         match self.get_glyphlist_i(name) {
             None => &UNDEFINED_LIST,
@@ -81,7 +97,7 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> EncodingStore<S,F> {
                 }
                 enc.clone()
             }
-            _ => FontEnc {
+            _ => FontInfo {
                 tfm_name: name.as_ref().into(),
                 enc_file: "".into(),
                 pfx_file: "".into(),
@@ -196,7 +212,7 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> EncodingStore<S,F> {
     }
 }
 
-fn patch(map:&mut HMap<Box<str>,FontEnc>,name:&'static str,modifiers:ModifierSeq,table:Option<usize>,link:Option<(&'static str,&'static str)>) {
+fn patch(map:&mut HMap<Box<str>, FontInfo>, name:&'static str, modifiers:ModifierSeq, table:Option<usize>, link:Option<(&'static str, &'static str)>) {
     match map.get_mut(name) {
         Some(enc) => {
             enc.styles = modifiers;
@@ -204,7 +220,7 @@ fn patch(map:&mut HMap<Box<str>,FontEnc>,name:&'static str,modifiers:ModifierSeq
             enc.weblink = link;
         }
         _ => {
-            let enc = FontEnc {
+            let enc = FontInfo {
                 tfm_name: name.into(),
                 enc_file: "".into(),
                 pfx_file: "".into(),
@@ -218,7 +234,7 @@ fn patch(map:&mut HMap<Box<str>,FontEnc>,name:&'static str,modifiers:ModifierSeq
     }
 }
 
-fn parse_pdftex_map(map:&mut HMap<Box<str>,FontEnc>) {
+fn parse_pdftex_map(map:&mut HMap<Box<str>, FontInfo>) {
     let enc_file = std::str::from_utf8(std::process::Command::new("kpsewhich")
         .args(vec!("pdftex.map")).output().expect("kpsewhich not found!")
         .stdout.as_slice()).unwrap().trim().to_string();//get("pdftex.map");
@@ -233,7 +249,7 @@ fn parse_pdftex_map(map:&mut HMap<Box<str>,FontEnc>) {
     }
 }
 
-fn parse_pdftex_map_line(st:String) -> FontEnc {
+fn parse_pdftex_map_line(st:String) -> FontInfo {
     let mut s = Parser::new(&st);
     while s.ends_with('\'') || s.ends_with(' ') {
         s.drop_right(1);
@@ -295,7 +311,7 @@ fn parse_pdftex_map_line(st:String) -> FontEnc {
         modify!(ps_name);
     }
 
-    FontEnc {
+    FontInfo {
         tfm_name,
         //ps_name:ps_name.into(),fontflags,special:special.into(),
         enc_file:enc_file.into(),pfx_file:pfx_file.into(),vf_file:false,
@@ -304,8 +320,8 @@ fn parse_pdftex_map_line(st:String) -> FontEnc {
 }
 
 
-pub struct DisplayEncoding<'a> {
-    enc:&'a FontEnc,
+struct DisplayEncoding<'a> {
+    enc:&'a FontInfo,
     list:&'a GlyphList
 }
 impl<'a> Display for DisplayEncoding<'a> {

@@ -1,4 +1,3 @@
-
 pub(crate) struct Parser<'a>(pub(crate) &'a str);
 impl<'a> Parser<'a> {
 

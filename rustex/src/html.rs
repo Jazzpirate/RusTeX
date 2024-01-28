@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::pdflatex::nodes::PDFColor;
+use tex_glyphs::fontstyles::FontModifier;
 use crate::files::RusTeXFileSystem;
 use super::shipout::nodes::Alignment;
 
@@ -659,21 +660,21 @@ fn font_attributes(store:&FontStore, font:&Font,missings:&mut HashSet<String>,pa
                 missings.insert(font.filename().to_string());
                 return (if first.is_empty() {None} else {Some(first)},Some(format!("<!-- Unknown web font for {} -->",font.filename())))
             };
-            if new.styles.capitals && !old.styles.capitals {
+            if new.styles.has(FontModifier::Capitals) && !old.styles.has(FontModifier::Capitals) {
                 first.push_str("font-variant:small-caps;");
-            } else if old.styles.capitals && !new.styles.capitals {
+            } else if old.styles.has(FontModifier::Capitals) && !new.styles.has(FontModifier::Capitals) {
                 first.push_str("font-variant:normal;");
             }
-            if new.styles.bold && !old.styles.bold {
+            if new.styles.has(FontModifier::Bold) && !old.styles.has(FontModifier::Bold) {
                 first.push_str("font-weight:bold;");
-            } else if old.styles.bold && !new.styles.bold {
+            } else if old.styles.has(FontModifier::Bold) && !new.styles.has(FontModifier::Bold) {
                 first.push_str("font-weight:normal;");
             }
-            if new.styles.italic && !old.styles.italic {
+            if new.styles.has(FontModifier::Italic) && !old.styles.has(FontModifier::Italic) {
                 first.push_str("font-style:italic;");
-            } else if new.styles.oblique && !old.styles.oblique {
+            } else if new.styles.has(FontModifier::Oblique) && !old.styles.has(FontModifier::Oblique) {
                 first.push_str("font-style:oblique;");
-            } else if (old.styles.italic || old.styles.oblique) && !(new.styles.italic || new.styles.oblique) {
+            } else if (old.styles.has(FontModifier::Italic) || old.styles.has(FontModifier::Oblique)) && !(new.styles.has(FontModifier::Italic) || new.styles.has(FontModifier::Oblique)) {
                 first.push_str("font-style:normal;");
             }
             let second = match (old.weblink,new.weblink) {
@@ -702,12 +703,12 @@ fn simple_font(store:&FontStore,missings:&mut HashSet<String>, font:&Font) -> (O
         Some(info) => {
             let mut s = String::new();
             write!(s,"font-size:{};",dim_to_string(font.get_at())).unwrap();
-            if info.styles.capitals { s.push_str("font-variant:small-caps;"); }
+            if info.styles.has(FontModifier::Capitals){ s.push_str("font-variant:small-caps;"); }
             else { s.push_str("font-variant:normal;");}
-            if info.styles.bold { s.push_str("font-weight:bold;"); }
+            if info.styles.has(FontModifier::Bold) { s.push_str("font-weight:bold;"); }
             else { s.push_str("font-weight:normal;"); }
-            if info.styles.italic { s.push_str("font-style:italic;"); }
-            else if info.styles.oblique { s.push_str("font-style:oblique;"); }
+            if info.styles.has(FontModifier::Italic) { s.push_str("font-style:italic;"); }
+            else if info.styles.has(FontModifier::Oblique) { s.push_str("font-style:oblique;"); }
             else { s.push_str("font-style:normal;");}
             match info.weblink {
                 None if s.is_empty() => (None,if font.filename().ends_with("nullfont") {None} else {
