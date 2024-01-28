@@ -17,6 +17,7 @@ use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
 use crate::tex_error;
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! add_node {
     ($S:ty;$engine:expr,$v:expr,$h:expr,$m:expr) => {

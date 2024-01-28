@@ -114,7 +114,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             ac_commands:<ET::Char as Character>::CharMap::default(),
             endline_char:Some(ET::Char::from(b'\r')),
             escape_char:Some(ET::Char::from(b'\\')),
-            newline_char:Some(ET::Char::from(b'\n')),
+            newline_char:None,
             empty_list:mem.empty_list(),
             parshape:Vec::new(),
             textfonts:mathfonts.clone(),

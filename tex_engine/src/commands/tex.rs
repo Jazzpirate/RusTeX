@@ -348,15 +348,16 @@ pub fn toksdef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,g
 }
 
 pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
-    let cm = match engine.get_next(false) {
+    let cm = loop { match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                CSOrActiveChar::Active(c),
-            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
+                break CSOrActiveChar::Active(c),
+            StandardToken::Character(_,CommandCode::Space) => (),
+            StandardToken::ControlSequence(cs) => break CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
-    };
+    }};
     let mut parser = MacroParser::new();
     engine.iterate(&tk,|_,_,t| parser.do_signature_token(t));
     engine.read_until_endgroup(&tk,|_,_,t| parser.do_expansion_token(t));
@@ -365,15 +366,16 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
 }
 
 pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,protected:bool,globally:bool) {
-    let cm = match engine.get_next(false) {
+    let cm = loop { match engine.get_next(false) {
         Some(t) => match t.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
-                CSOrActiveChar::Active(c),
-            StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
+                break CSOrActiveChar::Active(c),
+            StandardToken::Character(_,CommandCode::Space) => (),
+            StandardToken::ControlSequence(cs) => break CSOrActiveChar::Name(cs),
             _ => todo!("throw error")
         }
         None => todo!("file end error")
-    };
+    }};
 
     let mut parser = MacroParser::new();
     engine.iterate(&tk,|_,_,t| parser.do_signature_token(t));
@@ -760,7 +762,7 @@ pub fn textfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::To
 
 pub fn textfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let num = engine.mathfont_index(false);
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(true,&tk);
     engine.state.set_textfont(engine.aux,num,fnt,global)
 }
 
@@ -772,7 +774,7 @@ pub fn scriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
 
 pub fn scriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let num = engine.mathfont_index(false);
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(true,&tk);
     engine.state.set_scriptfont(engine.aux,num,fnt,global)
 }
 
@@ -783,7 +785,7 @@ pub fn scriptscriptfont_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_t
 
 pub fn scriptscriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) {
     let num = engine.mathfont_index(false);
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(true,&tk);
     engine.state.set_scriptscriptfont(engine.aux,num,fnt,global)
 }
 
@@ -792,7 +794,7 @@ pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         Ok(i) if i-1 >= 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
         _ => todo!("throw error")
     };
-    let font = engine.read_font(&tk);
+    let font = engine.read_font(false,&tk);
     font.get_dim(idx)
 }
 pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
@@ -801,7 +803,7 @@ pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         Ok(i) if i-1 >= 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
         _ => todo!("throw error: {}",i)
     };
-    let mut font = engine.read_font(&tk);
+    let mut font = engine.read_font(false,&tk);
     let dim = engine.read_dim(true);
     font.set_dim(idx,dim);
 }
@@ -900,21 +902,21 @@ pub fn valign<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
 
 
 pub fn hyphenchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
-    let font = engine.read_font(&tk);
+    let font = engine.read_font(false,&tk);
     font.get_hyphenchar()
 }
 pub fn hyphenchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
-    let mut font = engine.read_font(&tk);
+    let mut font = engine.read_font(false,&tk);
     let val = engine.read_int(true);
     font.set_hyphenchar(val);
 }
 
 pub fn skewchar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Int<ET> {
-    let font = engine.read_font(&tk);
+    let font = engine.read_font(false,&tk);
     font.get_skewchar()
 }
 pub fn skewchar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) {
-    let mut font = engine.read_font(&tk);
+    let mut font = engine.read_font(false,&tk);
     let val = engine.read_int(true);
     font.set_skewchar(val);
 }
@@ -1137,7 +1139,7 @@ pub fn jobname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET
 }
 
 pub fn fontname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    let font = engine.read_font(&tk);
+    let font = engine.read_font(false,&tk);
     let mut fi = |t| exp.push(t);
     let mut f = Otherize::new(&mut fi);
     if font.has_at_set() {
@@ -2528,7 +2530,8 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "uchyph",
     "vbadness",
     "widowpenalty",
-    "synctex" // not technically plain tex, but supported in basically all engines
+    "synctex", // not technically plain tex, but supported in basically all engines
+    "insertpenalties" // todo
 ];
 
 const PRIMITIVE_DIMS:&[&'static str] = &[
@@ -2570,7 +2573,7 @@ const PRIMITIVE_SKIPS:&[&'static str] = &[
     "splittopskip",
     "tabskip",
     "topskip",
-    "xspaceskip"
+    "xspaceskip",
 ];
 
 const PRIMITIVE_MUSKIPS:&[&'static str] = &[
@@ -2924,9 +2927,9 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
         noalign,omit,span
     );
 
-    cmtodos!(engine,insertpenalties,scrollmode,nonstopmode,batchmode,
+    cmtodos!(engine,scrollmode,nonstopmode,batchmode,
         show,showbox,showthe,special,noboundary,setlanguage,
-        bigskip,bye,italiccorr,medskip,smallskip
+        bye,italiccorr
     );
 
     register_primitive_int(engine,PRIMITIVE_INTS);

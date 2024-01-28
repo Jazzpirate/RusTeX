@@ -198,7 +198,7 @@ impl KpathseaBase {
                                 if let Some(i) = k.find('.') {
                                     let pre = &k[..i];
                                     let post = &k[i+1..];
-                                    if post != "pdflatex" { continue }
+                                    if post != "pdftex" { continue }
                                     k = pre;
                                 }
                                 if k.chars().any(|c| c.is_lowercase()) { continue }
@@ -212,7 +212,7 @@ impl KpathseaBase {
                 }
             }
         }
-        vars.insert("progname".to_string(),"pdflatex".to_string());
+        vars.insert("progname".to_string(),"pdftex".to_string());
         vars
     }
 

@@ -8,6 +8,7 @@ use crate::commands::{TeXCommand, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::fontsystem::tfm::TfmFile;
+use crate::prelude::CommandCode;
 use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
@@ -306,7 +307,8 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a font from the input stream (e.g. `\font` for the current font
     /// or a font defined via `\font\foo=...`).
-    pub fn read_font(&mut self,token:&ET::Token) -> <ET::FontSystem as FontSystem>::Font {
+    pub fn read_font(&mut self,skip_eq:bool,token:&ET::Token) -> <ET::FontSystem as FontSystem>::Font {
+        let mut had_eq = !skip_eq;
         crate::expand_loop!(self,token,
             ResolvedToken::Cmd(Some(c)) => match c {
                 TeXCommand::Font(f) => return f.clone(),
@@ -317,6 +319,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                     tex_error!(self,other,"Missing font identifier.");
                     return self.fontsystem.null()
                 }
+            }
+            ResolvedToken::Tk {char,code:CommandCode::Other} if !had_eq && matches!(char.try_into(),Ok(b'=')) => {
+                had_eq = true;
             }
             _ => {
                 tex_error!(self,other,"Missing font identifier.");

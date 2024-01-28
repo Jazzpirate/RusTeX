@@ -200,22 +200,22 @@ pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
 }
 
 pub fn fontchardp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     fnt.get_dp(char)
 }
 pub fn fontcharht<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     fnt.get_ht(char)
 }
 pub fn fontcharwd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     fnt.get_wd(char)
 }
 pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> <ET::Num as NumSet>::Dim {
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     fnt.get_ic(char)
 }
@@ -239,7 +239,7 @@ pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
 }
 
 pub fn iffontchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> bool {
-    let font = engine.read_font(&tk);
+    let font = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     font.has_char(char)
 }

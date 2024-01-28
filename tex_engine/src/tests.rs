@@ -1,27 +1,3 @@
-#[macro_export]
-macro_rules! debug_log {
-    (trace=>$($arg:tt)*) => {
-      #[cfg(debug_assertions)]
-      {log::trace!($($arg)*);}
-    };
-    (debug=>$($arg:tt)*) => {
-      #[cfg(debug_assertions)]
-      {log::debug!($($arg)*);}
-    };
-    (info=>$($arg:tt)*) => {
-      #[cfg(debug_assertions)]
-      {log::info!($($arg)*);}
-    };
-    (warn=>$($arg:tt)*) => {
-      #[cfg(debug_assertions)]
-      {log::warn!($($arg)*);}
-    };
-    (error=>$($arg:tt)*) => {
-       #[cfg(debug_assertions)]
-       {log::error!($($arg)*);}
-    };
-}
-
 #[doc(hidden)]
 #[cfg(any(test,doctest))]
 #[allow(dead_code)]
@@ -62,10 +38,9 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use crate::tests::test_utils::*;
+    use crate::prelude::*;
     use crate::measure;
     use log::*;
-    use crate::tex::catcodes::CommandCode;
-    use crate::tex::characters::StringLineSource;
 
     #[test]
     fn kpsewhich() { measure!(kpsewhich: {
@@ -81,12 +56,11 @@ mod tests {
     #[test]
     fn tokenizer() {
         debug();
-        use crate::utils::errors::ErrorThrower;
         use crate::engine::mouth::strings::InputTokenizer;
         use crate::tex::tokens::StandardToken;
         use crate::tex::catcodes::DEFAULT_SCHEME_U8;
         use crate::utils::Ptr;
-        use crate::tex::tokens::Token;
+        use crate::tex::characters::StringLineSource;
 
         type T = StandardToken<u8,Ptr<str>>;
         let mut cs_handler = ();
@@ -115,6 +89,37 @@ mod tests {
         let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
         assert_eq!(next.command_code(), CommandCode::Space);
         assert!(tokenizer.get_next::<T>(&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
+    }
+
+    const CARLISLE: &str = r#"\let~\catcode~`76~`A13~`F1~`j00~`P2jdefA71F~`7113jdefPALLF
+PA''FwPA;;FPAZZFLaLPA//71F71iPAHHFLPAzzFenPASSFthP;A$$FevP
+A@@FfPARR717273F737271P;ADDFRgniPAWW71FPATTFvePA**FstRsamP
+AGGFRruoPAqq71.72.F717271PAYY7172F727171PA??Fi*LmPA&&71jfi
+Fjfi71PAVVFjbigskipRPWGAUU71727374 75,76Fjpar71727375Djifx
+:76jelse&U76jfiPLAKK7172F71l7271PAXX71FVLnOSeL71SLRyadR@oL
+RrhC?yLRurtKFeLPFovPgaTLtReRomL;PABB71 72,73:Fjif.73.jelse
+B73:jfiXF71PU71 72,73:PWs;AMM71F71diPAJJFRdriPAQQFRsreLPAI
+I71Fo71dPA!!FRgiePBt'el@ lTLqdrYmu.Q.,Ke;vz vzLqpip.Q.,tz;
+;Lql.IrsZ.eap,qn.i. i.eLlMaesLdRcna,;!;h htLqm.MRasZ.ilk,%
+s$;z zLqs'.ansZ.Ymi,/sx ;LYegseZRyal,@i;@ TLRlogdLrDsW,@;G
+LcYlaDLbJsW,SWXJW ree @rzchLhzsW,;WERcesInW qt.'oL.Rtrul;e
+doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye
+    "#;
+
+    #[test]
+    fn carlisle() {
+        info();
+        let mut engine = PlainTeXEngine::new();
+        engine.initialize_plain_tex().unwrap();
+        engine.mouth.push_string(CARLISLE.into());
+        match engine.run(|_,n| {
+            info!("{}",n.display());
+        }) {
+            Ok(_) => (),
+            Err(e) => {
+                panic!("{}",e.msg)
+            }
+        }
     }
 
     #[cfg(feature="pdflatex")]

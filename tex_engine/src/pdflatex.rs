@@ -31,7 +31,7 @@ pub trait PDFTeXEngine: TeXEngine
     }
 
      fn initialize_pdflatex(&mut self) -> Result<(),TeXError> {
-        self.initialize_etex();
+        self.initialize_etex_primitives();
         commands::register_pdftex_primitives(self);
         self.init_file("pdftexconfig.tex")?;
         self.load_latex()

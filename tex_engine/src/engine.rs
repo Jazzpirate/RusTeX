@@ -158,27 +158,33 @@ pub trait TeXEngine:Sized {
         comps.push_file(file);
         comps.top_loop();
     })}
-    /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
-    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {TeXError::catch(||{
-        log::debug!("Running file {}",s);
+
+    fn run<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, f:F) -> Result<(),TeXError> {TeXError::catch(||{
         let mut comps = self.get_engine_refs();
         comps.aux.start_time = chrono::Local::now();
         comps.state.set_primitive_int(comps.aux,PRIMITIVES.year,comps.aux.start_time.year().into(),true);
         comps.state.set_primitive_int(comps.aux,PRIMITIVES.month,(comps.aux.start_time.month() as i32).into(),true);
         comps.state.set_primitive_int(comps.aux,PRIMITIVES.day,(comps.aux.start_time.day() as i32).into(),true);
         comps.state.set_primitive_int(comps.aux,PRIMITIVES.time,(((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),true);
-        let file = comps.filesystem.get(s);
-        comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
-        comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
-        comps.push_file(file);
         comps.push_every(PRIMITIVES.everyjob);
-        //comps.aux.elapsed = std::time::Instant::now();
-        //debug_log!(debug =>"Here: {}",comps.preview());
         comps.colon = Colon::new(f);
         comps.top_loop();
     })}
+
+    /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
+    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
+        log::debug!("Running file {}",s);
+        {
+            let mut comps = self.get_engine_refs();
+            let file = comps.filesystem.get(s);
+            comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
+            comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+            comps.push_file(file);
+        }
+        self.run(f)
+    }
     /// Registers all primitives of plain TeX and sets the default variables.
-    fn initialize_plain_tex(&mut self) {
+    fn initialize_tex_primitives(&mut self) {
         super::commands::tex::register_tex_primitives(self);
         let mag = PRIMITIVES.mag;
         let fam = PRIMITIVES.fam;
@@ -186,13 +192,27 @@ pub trait TeXEngine:Sized {
         refs.state.set_primitive_int(refs.aux,mag, (1000).into(),true);
         refs.state.set_primitive_int(refs.aux,fam, (-1).into(),true);
     }
+
+    /// Initialize the engine by processing `plain.tex`.
+    fn initialize_plain_tex(&mut self) -> Result<(),TeXError> {
+        self.initialize_tex_primitives();
+        self.init_file("plain.tex")
+    }
+
     /// Registers all primitives of plain TeX, e-TeX and sets the default variables.
-    fn initialize_etex(&mut self) {
-        self.initialize_plain_tex();
+    fn initialize_etex_primitives(&mut self) {
+        self.initialize_tex_primitives();
         super::commands::etex::register_etex_primitives(self);
     }
+
+    /// Initialize the engine by processing `eplain.tex`.
+    fn initialize_eplain_tex(&mut self) -> Result<(),TeXError> {
+        self.initialize_etex_primitives();
+        self.init_file("eplain.tex")
+    }
+
     /// Initialized the engine by processing `latex.ltx`. Only call this (for modern LaTeX setups)
-    /// after calling [`initialize_etex`](TeXEngine::initialize_etex) first.
+    /// after calling [`initialize_etex_primitives`](TeXEngine::initialize_etex_primitives) first.
     fn load_latex(&mut self) -> Result<(),TeXError> {
         self.init_file("latex.ltx")
     }

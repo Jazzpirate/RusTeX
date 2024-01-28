@@ -153,7 +153,7 @@ impl RusTeXEngineT for RusTeXEngine {
         engine.stomach.continuous = true;
         if log { engine.aux.outputs = RusTeXOutput::Print(verbose); }
 
-        let start = std::time::Instant::now();
+        //let start = std::time::Instant::now();
         let res = match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
             Ok(_) => None,
             Err(e) => {
@@ -186,7 +186,7 @@ impl RusTeXEngineT for RusTeXEngine {
             (fonts,glyphs)
         };
 
-        println!("Finished after {:?}", start.elapsed());
+        //println!("Finished after {:?}", start.elapsed());
 
         FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem));
 

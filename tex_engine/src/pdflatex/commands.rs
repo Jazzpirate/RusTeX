@@ -283,26 +283,26 @@ pub fn ifpdfprimitive<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
 
 pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
     where ET::Font: FontWithLpRp {
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     fnt.get_lp(char)
 }
 pub fn lpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool)
     where ET::Font: FontWithLpRp {
-    let mut fnt = engine.read_font(&tk);
+    let mut fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     let code = engine.read_int(true);
     fnt.set_lp(char,code)
 }
 pub fn rpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
     where ET::Font: FontWithLpRp {
-    let fnt = engine.read_font(&tk);
+    let fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     fnt.get_rp(char)
 }
 pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool)
     where ET::Font: FontWithLpRp {
-    let mut fnt = engine.read_font(&tk);
+    let mut fnt = engine.read_font(false,&tk);
     let char = engine.read_charcode(false);
     let code = engine.read_int(true);
     fnt.set_rp(char,code)
@@ -884,7 +884,7 @@ pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<
 }
 
 pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    let dim = engine.read_font(&tk).get_at();
+    let dim = engine.read_font(false,&tk).get_at();
     let mut f = |t| exp.push(t);
     let mut t = Otherize::new(&mut f);
     write!(t,"{}",dim).unwrap();
@@ -892,7 +892,7 @@ pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Ve
 
 pub fn pdffontexpand<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
     // TODO
-    let _ = engine.read_font(&tk);
+    let _ = engine.read_font(false,&tk);
     let _ = engine.read_int(false);
     let _ = engine.read_int(false);
     let _ = engine.read_int(false);

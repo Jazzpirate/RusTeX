@@ -176,6 +176,7 @@ pub static STARTING_SCHEME_U8 : CategoryCodeScheme<u8> = {
     catcodes[37] = CategoryCode::Comment;
     const_for!(i in 65..91 => catcodes[i] = CategoryCode::Letter);
     const_for!(i in 97..123 => catcodes[i] = CategoryCode::Letter);
+    catcodes[126] = CategoryCode::Active;
     catcodes
 };
 
