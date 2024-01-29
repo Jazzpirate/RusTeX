@@ -34,7 +34,7 @@ pub(crate) fn register_primitives_postinit(engine:&mut DefaultEngine<Types>) {
     crate::pgf::register_pgf(engine);
     register_unexpandable(engine,"rustex@annotateHTML",CommandScope::Any,annot_begin);
     register_unexpandable(engine,"rustex@annotateHTMLEnd",CommandScope::Any,annot_end);
-    engine.state.register_primitive(&mut engine.aux,"if@rustex",PrimitiveCommand::Conditional(tex_engine::commands::tex::iftrue));
+    //engine.state.register_primitive(&mut engine.aux,"if@rustex",PrimitiveCommand::Conditional(tex_engine::commands::tex::iftrue));
 
 
     register_command(engine, true, "rustex@addNamespaceAbbrev", "#1#2", "", false, false);
