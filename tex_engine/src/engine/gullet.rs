@@ -72,14 +72,14 @@ pub trait Gullet<ET:EngineTypes> {
                         }
                         /*
                         CommandCode::AlignmentTab if data.ingroups == data.groupval() => {
-                            todo!("fuck")
+                            todo!("meh")
                         }
                         CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if data.ingroups == data.groupval() => match Self::char_or_primitive(state,&t) {
                             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
-                                todo!("fuck")
+                                todo!("meh")
                             }
                             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
-                                todo!("fuck")
+                                todo!("meh")
                             }
                             _ => f(aux,state,t)
                         }

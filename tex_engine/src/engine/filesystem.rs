@@ -8,7 +8,6 @@ use crate::engine::state::State;
 use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::{Character, StringLineSource, TextLine, TextLineSource};
-use crate::tex::tokens::Token;
 use crate::utils::{HMap, Ptr};
 use crate::utils::errors::ErrorHandler;
 
@@ -48,7 +47,8 @@ pub trait FileSystem:Clone {
     );
     /// Reads a line from the file with the given index using [`CategoryCode::Other`](crate::tex::catcodes::CategoryCode::Other)
     /// expect for space characters (`\readline`).
-    fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F);
+
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F);
 
     /// Returns a human-readable representation of a [`SourceRefID`](File::SourceRefID); e.g. the file name/path.
     fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
@@ -196,16 +196,16 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                     Err(e) => {eh.invalid_character(state,e.0);}
                 }
             }
-            _ => todo!("throw File not open error")
+            _ => eh.emergency_stop(state)
         }
     }
-    fn readline<T:Token<Char=C>,F:FnMut(T)>(&mut self, idx:u8,cont:F) {
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F) {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
                 //debug_log!(debug => "readline: {}",f.source.path.display());
                 f.readline(cont);
             }
-            _ => todo!("throw File not open error")
+            _ => eh.emergency_stop(state)
         }
     }
     fn eof(&self,idx:u8) -> bool {
@@ -224,10 +224,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         if idx as usize >= self.write_files.len() {
             self.write_files.resize((idx+1) as usize, None);
         }
-        match &mut self.write_files[idx as usize] {
-            n@None => *n = Some(WritableVirtualFile::new(file.path,file.id.unwrap())),
-            _ => todo!("throw File already open error")
-        }
+        self.write_files[idx as usize] = Some(WritableVirtualFile::new(file.path,file.id.unwrap()))
     }
     fn close_out(&mut self,idx:u8) {
         match self.write_files.get_mut(idx as usize) {

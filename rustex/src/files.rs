@@ -82,7 +82,8 @@ impl FileSystem for RusTeXFileSystem {
     ) {
         self.inner.read::<ET,F>(idx,eh,handler,state,cont)
     }
-    fn readline<T:Token<Char=<Self::File as File>::Char>,F:FnMut(T)>(&mut self, idx:u8,cont:F) {
-        self.inner.readline(idx,cont)
+
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F) {
+        self.inner.readline(idx,eh,state,cont)
     }
 }

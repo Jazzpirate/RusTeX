@@ -365,7 +365,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,g
     }
     let cs = engine.read_control_sequence();
     let mut ret = shared_vector::Vector::new();
-    engine.filesystem.readline(idx,|t| ret.push(t));
+    engine.filesystem.readline(idx,&engine.aux.error_handler,engine.state,|t| ret.push(t));
     let m = Macro {
         long:false,outer:false,protected:false,
         expansion:ret.into(),

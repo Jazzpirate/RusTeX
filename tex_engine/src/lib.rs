@@ -16,7 +16,8 @@ See [doc] for more information.
 - Many primitive commands are missing, but those that are seem to be barely used (or at least
     not used in the `.tex` files I have tried).
 - Many algorithms are approximate; in particular: computations of dimensions of boxes/nodes,
-  page and line breaking, when exactly to enter output routines, etc.
+  page and line breaking, when exactly to enter output routines, etc. Also, various
+  details of automatically inserted glue or kerning are not implemented.
 - Some apects are only implemented to the extent that they do not throw errors, e.g. hyphenation,
   badness.
 - Some mechanisms have grown organically and should be overhauled, e.g. the way the stomach handles
@@ -29,7 +30,9 @@ are guided by my own needs and by what I have learned in my previous attempt. Id
 be possible to extend it to support other use cases as well -- at least that is the intention.
 
 I will happily accept pull requests for additional features or suggestions on how to
-make the algorithms here more accurate. I will also happily help anyone
+make the algorithms here more accurate. I am also very open to redesigning interfaces, if someone
+has ideas on how to improve them - the ones I used are the best compromise I could come up with
+between usability, efficiency and modularity. I will also happily help anyone
 willing to contribute to this crate, but bear in mind that I am ridiculously overconstrained
 already, so as much as I wish I could, I am in no position to dig into the various rabbit holes
 that would be required to get this crate more in line with "actual TeX".

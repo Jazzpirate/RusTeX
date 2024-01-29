@@ -1,8 +1,6 @@
 pub mod methods;
 
 use std::fmt::Display;
-use crate::engine::TeXError;
-
 use crate::commands::{CharOrPrimitive, CommandScope, PrimitiveCommand, ResolvedToken};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::mouth::Mouth;
@@ -23,6 +21,7 @@ use crate::tex::nodes::math::{MathAtom, MathChar, MathNode, MathNodeList, MathNo
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::gullet::Gullet;
 use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
+use crate::tex_error;
 
 /// The mode the engine is currently in, e.g. horizontal mode or vertical mode.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -112,7 +111,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     /// To be executed at the end of a document - flushes the current page
     fn flush(engine:&mut EngineReferences<ET>) {
         let open_groups = std::mem::take(&mut engine.stomach.data_mut().open_lists);
-        if !open_groups.is_empty() { todo!("throw error") }
+        if !open_groups.is_empty() { tex_error!(engine,end_inside_group); }
         Self::add_node_v(engine,VNode::Penalty(-10000));
         engine.stomach.data_mut().page.clear();
     }
@@ -124,7 +123,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         token:ET::Token,
         apply:fn(&mut EngineReferences<ET>,ET::Token)
     ) {
-        if Self::maybe_switch_mode(engine,scope,token.clone()) {
+        if Self::maybe_switch_mode(engine,scope,token.clone(),name) {
             engine.trace_command(|engine| name.display(engine.state.get_escape_char()));
             apply(engine, token)
         }
@@ -259,7 +258,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     /// If a paragraph is opened or closed, the provided token is requeued to be reprocessed afterwards in
     /// horizontal/vertical mode, and `false` is returned (as to not process the triggering command
     /// further). Otherwise, all is well and `true` is returned.
-    fn maybe_switch_mode(engine:&mut EngineReferences<ET>, scope: CommandScope, token:ET::Token) -> bool {
+    fn maybe_switch_mode(engine:&mut EngineReferences<ET>, scope: CommandScope, token:ET::Token,name:PrimitiveIdentifier) -> bool {
         match (scope,engine.stomach.data_mut().mode()) {
             (CommandScope::Any, _) => true,
             (CommandScope::SwitchesToHorizontal | CommandScope::SwitchesToHorizontalOrMath, TeXMode::Horizontal | TeXMode::RestrictedHorizontal) => true,
@@ -274,12 +273,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                 Self::open_paragraph(engine,token);
                 false
             }
-            (CommandScope::MathOnly, _) => todo!("throw error"),
-            (a,b) => {
-                let mut str = String::new();
-                token.display_fmt(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char(),&mut str).unwrap();
-                TeXError::throw(format!("switch modes maybe: {:?} in {:?}: {}",a,b,str)) // TODO
-            }
+            (_,_) => {tex_error!(engine,not_allowed_in_mode,token,name);false}
         }
     }
 
@@ -322,7 +316,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                     Self::add_node_h(engine, c);
                 }
             }
-            _ => todo!("throw error")
+            _ => unreachable!("Stomach::close_align called outside of an align")
         };
     }
 
@@ -333,7 +327,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                 children.push(node);
                 return
             }
-            _ => todo!("throw error")
+            _ => unreachable!("Stomach::add_node_m called outside of math mode")
         }
     }
 
@@ -347,7 +341,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                 children.push(node);
                 return
             }
-            _ => todo!("throw error")
+            _ => unreachable!("Stomach::add_node_h called outside of horizontal mode")
         }
     }
 
@@ -412,7 +406,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                 let spec = ParLineSpec::make(engine.state,engine.aux);
                 Self::split_paragraph(engine,spec,children,sourceref);
             }
-            _ => todo!("throw error")
+            _ => unreachable!("Stomach::close_paragraph called outside of horizontal mode")
         }
     }
 
@@ -550,7 +544,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 return b(self,token),
             _ => todo!("error")
         );
-        todo!("file end")
+        tex_error!(self,other,"A <box> was supposed to be here");Ok(None)
     }
 
     /// read a math char or group from the current input stream. Assumes we are in math mode.

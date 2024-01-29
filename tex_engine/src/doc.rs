@@ -55,19 +55,19 @@ engine.do_file_default("/path/to/your/xii.tex",|_,node| {
 ```
 
 This will produce something along the lines of:
-```xml
+```text
 <vbox:vbox>
-<hbox:parline>
-<hbox:parindent></hbox:parindent>On<space>the<space>§rst<space>day<space>of<space>Christmas
-<space>my<space>true<space>love<space>gave<space>to<space>me
-</hbox:parline>
-<vskip:0.0pt plus 1.0pt>
-<hbox:parline>
-<hbox:parindent></hbox:parindent>a<space>partridge<space>in<space>a<space>pear<space>tree.
-</hbox:parline>
-<vskip:12.0pt plus 4.0pt minus 4.0pt>
-<vskip:0.0pt plus 1.0pt>
-...
+  <hbox:parline>
+    <hbox:parindent></hbox:parindent>On<space>the<space>§rst<space>day<space>of<space>Christmas
+    <space>my<space>true<space>love<space>gave<space>to<space>me
+  </hbox:parline>
+  <vskip:0.0pt plus 1.0pt>
+  <hbox:parline>
+    <hbox:parindent></hbox:parindent>a<space>partridge<space>in<space>a<space>pear<space>tree.
+  </hbox:parline>
+  <vskip:12.0pt plus 4.0pt minus 4.0pt>
+  <vskip:0.0pt plus 1.0pt>
+  ...
 ```
 ...representing the nodes produced by the engine, which can then be used to produce e.g. a `.dvi`
 or `.pdf`file.

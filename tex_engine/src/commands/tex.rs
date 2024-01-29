@@ -1429,7 +1429,7 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
 }
 
 pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
-    if ET::Stomach::maybe_switch_mode(engine, CommandScope::SwitchesToHorizontal, tk) {
+    if ET::Stomach::maybe_switch_mode(engine, CommandScope::SwitchesToHorizontal, tk,PRIMITIVES.noindent) {
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Horizontal {children,..}) => match children.last_mut() {
                 Some(HNode::Box(TeXBox::H{info:HBoxInfo::ParIndent {..},..})) => {children.pop();}

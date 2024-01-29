@@ -19,6 +19,7 @@ use crate::commands::primitives::PrimitiveIdentifier;
 use crate::engine::{EngineReferences, EngineTypes};
 use crate::engine::state::State;
 use crate::engine::stomach::Stomach;
+use crate::engine::utils::outputs::Outputs;
 use crate::prelude::CSName;
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::characters::{Character, StringLineSource};
@@ -97,34 +98,37 @@ pub trait ErrorHandler<ET:EngineTypes> {
         TeXError::throw(format!("! Text line contains an invalid character.\n{}",c.display()))
     }
 
-    /// "File ended while scanning use of X"
+    /// "File ended while scanning use of `\foo`"
     fn file_end_while_scanning(&self,state:&ET::State,int:&<ET::CSName as CSName<ET::Char>>::Handler,token:ET::Token) {
         TeXError::throw(format!("! File ended while scanning use of {}",token.display(int,state.get_catcode_scheme(),state.get_escape_char())))
     }
 
+    /// Too many }'s
     fn too_many_closebraces(&self) {
         TeXError::throw(format!("Too many }}'s"))
     }
 
-    /// "You can't use `X` in `Y` mode."
+    /// "You can't use `\foo` in `M` mode."
     fn not_allowed_in_mode(&self,engine:&mut EngineReferences<ET>,_token:ET::Token,name:PrimitiveIdentifier) {
         TeXError::throw(format!("! You can't use `{}` in {} mode.",name.display(engine.state.get_escape_char()),engine.stomach.data_mut().mode()))
     }
 
-    /// "File ended while scanning text of `X`"
+    /// "File ended while scanning text of `\foo`"
     fn missing_begingroup(&self,engine:&mut EngineReferences<ET>,t:ET::Token) {
         TeXError::throw(format!("! File ended while scanning text of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
+    /// "Missing `}` inserted"
     fn missing_endgroup(&self,_engine:&mut EngineReferences<ET>) {
         TeXError::throw(format!("! Missing }} inserted"))
     }
 
+    /// Use of `\foo` doesn't match its definition
     fn wrong_definition(&self,engine:&mut EngineReferences<ET>,token:ET::Token) {
         TeXError::throw(format!("Use of {} doesn't match its definition",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
 
-    /// "File ended while scanning use of `X`"
+    /// "File ended while scanning use of `\foo`"
     fn missing_argument(&self,engine:&mut EngineReferences<ET>,t:ET::Token) {
         TeXError::throw(format!("! File ended while scanning use of {}",t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())))
     }
@@ -139,24 +143,16 @@ pub trait ErrorHandler<ET:EngineTypes> {
         TeXError::throw(format!("Missing keyword: One of {}",kws.iter().map(|s| format!("`{}`",s)).collect::<Vec<_>>().join(", ")));
     }
 
-    fn other(&self,_engine:&mut EngineReferences<ET>,msg:&str) {
-        TeXError::throw(msg.to_string())
+    /// \\end occured inside a group
+    fn end_inside_group(&self,engine:&mut EngineReferences<ET>) {
+        engine.aux.outputs.message(format_args!("(\\end occurred inside a group at level {})",engine.state.get_group_level()));
+        if let Some(g) = engine.state.get_group_type() {
+            engine.aux.outputs.message(format_args!("## {} group",g))
+        }
+        while engine.state.get_group_level() > 0 {
+            engine.state.pop(engine.aux,engine.mouth);
+        }
     }
-
-
-    /*
-    /// "Runaway argument? Paragraph ended before `\foo` was complete."
-    fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
-        //let line = &tokenizer.string.line(start.0)[start.1..];
-        //throw!("Runaway argument?\n{}\n! Paragraph ended before \\{} was complete.",InputLinePresenter(line),name.as_ref());
-    }
-    /// "Runaway argument? File ended while scanning use of `\foo`."
-    fn file_end<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
-        //let line = &tokenizer.string.line(start.0)[start.1..];
-        //throw!("Runaway argument?\n{}\n! File ended while scanning use of \\{}.",InputLinePresenter(line),name.as_ref());
-    }
-
-     */
 
     /// "Undefined `[`control sequence`|`active character`]`"
     fn undefined(&self, engine:&mut EngineReferences<ET>,token:ET::Token) {
@@ -180,6 +176,31 @@ pub trait ErrorHandler<ET:EngineTypes> {
     fn error_message(&self,msg:&str) {
         TeXError::throw(format!("! {}",msg))
     }
+
+    fn emergency_stop(&self,_state:&ET::State) -> ! {
+        TeXError::throw(format!("Emergency stop."))
+    }
+
+    fn other(&self,_engine:&mut EngineReferences<ET>,msg:&str) {
+        TeXError::throw(msg.to_string())
+    }
+
+
+
+    /*
+    /// "Runaway argument? Paragraph ended before `\foo` was complete."
+    fn no_par<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
+        //let line = &tokenizer.string.line(start.0)[start.1..];
+        //throw!("Runaway argument?\n{}\n! Paragraph ended before \\{} was complete.",InputLinePresenter(line),name.as_ref());
+    }
+    /// "Runaway argument? File ended while scanning use of `\foo`."
+    fn file_end<T:Token,St:AsRef<str>,S:TextLineSource<T::Char>>(&self, _tokenizer:&mut InputTokenizer<T::Char,S>, _name:St, _start:(usize, usize)) -> T {
+        //let line = &tokenizer.string.line(start.0)[start.1..];
+        //throw!("Runaway argument?\n{}\n! File ended while scanning use of \\{}.",InputLinePresenter(line),name.as_ref());
+    }
+
+     */
+
 }
 
 
