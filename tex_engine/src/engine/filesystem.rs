@@ -9,7 +9,7 @@ use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::{Character, StringLineSource, TextLine, TextLineSource};
 use crate::utils::{HMap, Ptr};
-use crate::utils::errors::ErrorHandler;
+use crate::utils::errors::{TeXError, TeXResult};
 
 pub mod kpathsea;
 
@@ -40,15 +40,14 @@ pub trait FileSystem:Clone {
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
     /// Reads a line from the file with the given index and current [`CategoryCodeScheme`](crate::tex::catcodes::CategoryCodeScheme) (`\read`),
     /// respecting groups (i.e. will continue reading at the end of a line until all open groups are closed).
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 state:&ET::State, cont:F
-    );
+    ) -> TeXResult<(),ET>;
     /// Reads a line from the file with the given index using [`CategoryCode::Other`](crate::tex::catcodes::CategoryCode::Other)
     /// expect for space characters (`\readline`).
 
-    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F);
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, state:&ET::State,cont:F) -> TeXResult<(),ET>;
 
     /// Returns a human-readable representation of a [`SourceRefID`](File::SourceRefID); e.g. the file name/path.
     fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
@@ -184,28 +183,30 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             _ => unreachable!()
         }
     }
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 state:&ET::State, cont:F
-    ) {
+    ) -> TeXResult<(),ET> {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
                 match f.read(handler,state.get_catcode_scheme(),state.get_endline_char(),cont) {
-                    Ok(_) => (),
-                    Err(e) => {eh.invalid_character(state,e.0);}
+                    Ok(_) => Ok(()),
+                    Err(_) => {
+                        todo!()//e.handle()
+                    }
                 }
             }
-            _ => eh.emergency_stop(state)
+            _ => Err(TeXError::EmergencyStop)
         }
     }
-    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F) {
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, _state:&ET::State,cont:F) -> TeXResult<(),ET> {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
                 //debug_log!(debug => "readline: {}",f.source.path.display());
                 f.readline(cont);
+                Ok(())
             }
-            _ => eh.emergency_stop(state)
+            _ => Err(TeXError::EmergencyStop)
         }
     }
     fn eof(&self,idx:u8) -> bool {

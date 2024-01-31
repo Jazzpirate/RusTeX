@@ -1,6 +1,7 @@
 /*! A TeX engine combines all the necessary components into a struct capable of compiling a TeX file into
     some output format.
 */
+use std::cell::RefCell;
 use std::fmt::Debug;
 use chrono::{Datelike,Timelike};
 use crate::engine::gullet::{DefaultGullet, Gullet};
@@ -21,8 +22,7 @@ use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, MuDim, Numeric, NumSet, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
-use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXError};
-use crate::tex_error;
+use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXResult, Undefined};
 
 pub mod filesystem;
 pub mod mouth;
@@ -61,7 +61,7 @@ pub struct EngineAux<ET:EngineTypes> {
     /// memory management and interning of control sequence names
     pub memory:MemoryManager<ET::Token>,
     /// error handling
-    pub error_handler:Box<dyn ErrorHandler<ET>>,
+    pub error_handler:RefCell<Box<dyn ErrorHandler<ET>>>,
     /// printing to logs or the terminal
     pub outputs:ET::Outputs,
     /// start time of the current job
@@ -73,28 +73,29 @@ pub struct EngineAux<ET:EngineTypes> {
 }
 
 struct Colon<'c,ET:EngineTypes> {
-    out:Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>
+    out:Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) -> TeXResult<(),ET> + 'c>
 }
 impl<'c,ET:EngineTypes> Colon<'c,ET> {
-    fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) + 'c>(f:F) -> Self {
+    fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) -> TeXResult<(),ET> + 'c>(f:F) -> Self {
         Colon { out:Box::new(f) }
     }
-    fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) {
+    fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) -> TeXResult<(),ET> {
         (self.out)(engine,n)
     }
 }
 impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
     fn default() -> Self {
-        Colon { out:Box::new(|_,_|{}) }
+        Colon { out:Box::new(|_,_|Ok(())) }
     }
 }
 
 impl <ET:EngineTypes> EngineReferences<'_,ET> {
     /// ships out the [`VNode`], passing it on to the provided continuation.
-    pub fn shipout(&mut self,n: VNode<ET>) {
+    pub fn shipout(&mut self,n: VNode<ET>) -> TeXResult<(),ET> {
         let mut colon = std::mem::take(&mut self.colon);
-        colon.out(self,n);
+        let r = colon.out(self,n);
         self.colon = colon;
+        r
     }
 }
 
@@ -145,7 +146,7 @@ pub trait TeXEngine:Sized {
     /// Returns mutable references to the components of the engine.
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
     /// Initializes the engine with a file, e.g. `latex.ltx` or `pdftex.cfg`.
-    fn init_file(&mut self,s:&str) -> Result<(),TeXError> {TeXError::catch(|| {
+    fn init_file(&mut self,s:&str) -> TeXResult<(),Self::Types> {
         log::debug!("Initializing with file {}",s);
         let mut comps = self.get_engine_refs();
         comps.aux.start_time = chrono::Local::now();
@@ -156,10 +157,10 @@ pub trait TeXEngine:Sized {
         let file = comps.filesystem.get(s);
         comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
         comps.push_file(file);
-        comps.top_loop();
-    })}
+        comps.top_loop()
+    }
 
-    fn run<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, f:F) -> Result<(),TeXError> {TeXError::catch(||{
+    fn run<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(),Self::Types>>(&mut self, f:F) -> TeXResult<(),Self::Types> {
         let mut comps = self.get_engine_refs();
         comps.aux.start_time = chrono::Local::now();
         comps.state.set_primitive_int(comps.aux,PRIMITIVES.year,comps.aux.start_time.year().into(),true);
@@ -168,11 +169,11 @@ pub trait TeXEngine:Sized {
         comps.state.set_primitive_int(comps.aux,PRIMITIVES.time,(((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),true);
         comps.push_every(PRIMITIVES.everyjob);
         comps.colon = Colon::new(f);
-        comps.top_loop();
-    })}
+        comps.top_loop()
+    }
 
     /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
-    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
+    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(),Self::Types>>(&mut self, s:&str, f:F) -> TeXResult<(),Self::Types> {
         log::debug!("Running file {}",s);
         {
             let mut comps = self.get_engine_refs();
@@ -194,7 +195,7 @@ pub trait TeXEngine:Sized {
     }
 
     /// Initialize the engine by processing `plain.tex`.
-    fn initialize_plain_tex(&mut self) -> Result<(),TeXError> {
+    fn initialize_plain_tex(&mut self) -> TeXResult<(),Self::Types> {
         self.initialize_tex_primitives();
         self.init_file("plain.tex")
     }
@@ -206,14 +207,14 @@ pub trait TeXEngine:Sized {
     }
 
     /// Initialize the engine by processing `eplain.tex`.
-    fn initialize_eplain_tex(&mut self) -> Result<(),TeXError> {
+    fn initialize_eplain_tex(&mut self) -> TeXResult<(),Self::Types> {
         self.initialize_etex_primitives();
         self.init_file("eplain.tex")
     }
 
     /// Initialized the engine by processing `latex.ltx`. Only call this (for modern LaTeX setups)
     /// after calling [`initialize_etex_primitives`](TeXEngine::initialize_etex_primitives) first.
-    fn load_latex(&mut self) -> Result<(),TeXError> {
+    fn load_latex(&mut self) -> TeXResult<(),Self::Types> {
         self.init_file("latex.ltx")
     }
 }
@@ -234,7 +235,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
         let mut memory = MemoryManager::new();
         let mut aux = EngineAux {
             outputs: ET::Outputs::new(),
-            error_handler: ErrorThrower::new(),
+            error_handler: ErrorThrower::new().into(),
             start_time:chrono::Local::now(),
             extension: ET::Extension::new(&mut memory),
             memory,
@@ -292,31 +293,17 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         }
     }
     /// Entry point for compilation. This function is called by [`TeXEngine::do_file_default`].
-    pub fn top_loop(&mut self) {
+    pub fn top_loop(&mut self) -> TeXResult<(),ET> {
+        use crate::utils::errors::RecoverableError;
         crate::expand_loop!(ET::Stomach::every_top(self) => token => {
-            if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next(false);continue}
+            if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next(false).unwrap();continue}
         }; self,
-            ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code),
-            ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code),
-            ResolvedToken::Cmd(None) => tex_error!(self,undefined,token),
+            ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code)?,
+            ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code)?,
+            ResolvedToken::Cmd(None) => Undefined(token).throw(self.aux,self.state,self.mouth)?,
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(self,token,cmd)
         );
-    }
-
-    /// Expand expandable tokens until a [`BeginGroup`](CommandCode::BeginGroup) is found.
-    /// Throws a [`TeXError`] if any unexpandable other token is encountered.
-    /// If `allow_let` is true, other [`Token`]s which have been `\let` to a [`BeginGroup`](CommandCode::BeginGroup)
-    /// are also accepted (e.g. `\bgroup`).
-    pub fn expand_until_bgroup(&mut self,allow_let:bool,t:&ET::Token) {
-        while let Some(tk) = self.get_next(false) {
-            if tk.command_code() == CommandCode::BeginGroup {return }
-            crate::expand!(self,tk;
-                ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::BeginGroup,..})) if allow_let =>
-                    return,
-                _ => break
-            );
-        }
-        tex_error!(self,missing_begingroup,t.clone());
+        Ok(())
     }
 }
 
@@ -328,34 +315,62 @@ macro_rules! expand_loop {
         crate::expand_loop!(ET;$engine,$tk,$($case)*)
     }};
     ($then:expr => $engine:ident,$tk:ident,$($case:tt)*) => {{
-        $then;
-        while let Some($tk) = $engine.get_next(false) {
-            crate::expand!(ET;$engine,$tk;$($case)*);
+        loop {
             $then;
+            let $tk = match $engine.get_next(false) {
+                Ok(t) => t,
+                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
+                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
+                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
+            };
+            crate::expand!(ET;$engine,$tk;$($case)*);
         }
     }};
     ($then:expr => $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        $then;
-        while let Some($tk) = $engine.get_next(false) {
+        loop {
+            $then;
+            let $tk = match $engine.get_next(false) {
+                Ok(t) => t,
+                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
+                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
+                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
+            };
             $first;
             crate::expand!(ET;$engine,$tk;$($case)*);
-            $then;
         }
     }};
     ($tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        while let Some($tk) = $engine.get_next(false) {
+        loop {
+            let $tk = match $engine.get_next(false) {
+                Ok(t) => t,
+                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
+                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
+                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
+            };
             $first;
             crate::expand!(ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $engine:ident,$tk:ident,$($case:tt)*) => {{
-        while let Some($tk) = $engine.get_next(false) {
+        loop {
+            let $tk = match $engine.get_next(false) {
+                Ok(t) => t,
+                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
+                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
+                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
+            };
             crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        while let Some($tk) = $engine.get_next(false) {
-            $first;
+        loop {
+            let $tk = match $engine.get_next(false) {
+                Ok(t) => t,
+                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
+                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
+                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
+            };
+            $first
             crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }}
@@ -371,20 +386,20 @@ macro_rules! expand {
         let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::resolve($engine.state,&$token);
         match cmd {
             crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Macro(m))) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),$token),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),$token)?,
             crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Conditional(cond)})) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,$token,*cond,false),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,$token,*cond,false)?,
             crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Expandable(e)})) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,$token,*e),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,$token,*e)?,
             crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::SimpleExpandable(e)})) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,$token,*e),
+                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,$token,*e)?,
             $($case)*
         }
     }
 }
 
 /// Default treatment of unexpandable tokens, i.e. passed to the relevant [`Stomach`] method or throws
-/// [`ErrorHandler::undefined`] or [`ErrorHandler::not_allowed_in_mode`] errors.
+/// [`ErrorHandler::not_allowed_in_mode`] errors.
 #[macro_export]
 macro_rules! do_cmd {
     ($engine:ident,$token:expr,$cmd:ident) => {
@@ -392,47 +407,47 @@ macro_rules! do_cmd {
     };
     ($ET:ty;$engine:ident,$token:expr,$cmd:ident) => {
         match $cmd {
-            crate::commands::TeXCommand::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other),
+            crate::commands::TeXCommand::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Unexpandable { scope, apply }} =>
-                <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, *scope,$token, *apply),
+                <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, *scope,$token, *apply)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Assignment(assign)} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Int {  assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Dim { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Skip { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::MuSkip { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::FontCmd { assign: Some(assign), .. }} =>
-                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false),
+                <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Box(read)} =>
-                <$ET as EngineTypes>::Stomach::do_box($engine, *name, $token, *read),
+                <$ET as EngineTypes>::Stomach::do_box($engine, *name, $token, *read)?,
             crate::commands::TeXCommand::Font(f) =>
-                <$ET as EngineTypes>::Stomach::assign_font($engine, $token, f.clone(),false),
+                <$ET as EngineTypes>::Stomach::assign_font($engine, $token, f.clone(),false)?,
             crate::commands::TeXCommand::IntRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_int_register($engine, *u,false),
+                <$ET as EngineTypes>::Stomach::assign_int_register($engine, *u,false)?,
             crate::commands::TeXCommand::DimRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_dim_register($engine, *u,false),
+                <$ET as EngineTypes>::Stomach::assign_dim_register($engine, *u,false)?,
             crate::commands::TeXCommand::SkipRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_skip_register($engine, *u,false),
+                <$ET as EngineTypes>::Stomach::assign_skip_register($engine, *u,false)?,
             crate::commands::TeXCommand::MuSkipRegister(u) =>
-               <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false),
+               <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false)?,
             crate::commands::TeXCommand::ToksRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_toks_register($engine,$token, *u,false),
+                <$ET as EngineTypes>::Stomach::assign_toks_register($engine,$token, *u,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Whatsit { get, .. }} =>
-                <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get),
+                <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveInt} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveDim} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,*name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,*name,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveSkip} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,*name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,*name,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveMuSkip} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveToks} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,$token,*name,false),
+                <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,$token,*name,false)?,
             crate::commands::TeXCommand::MathChar(u) =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,Some($token)),
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Relax,..} => (),
@@ -441,7 +456,9 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },name} |
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },name} |
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
-                tex_error!($engine,not_allowed_in_mode,$token,*name),
+                crate::utils::errors::NotAllowedInMode{
+                        name:*name,mode:<$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
+                }.throw($engine.aux,$engine.state,$engine.mouth)?,
             crate::commands::TeXCommand::Macro(_) |
             crate::commands::TeXCommand::Primitive{ cmd:crate::commands::PrimitiveCommand::Conditional { .. } |
                 crate::commands::PrimitiveCommand::Expandable { .. } |

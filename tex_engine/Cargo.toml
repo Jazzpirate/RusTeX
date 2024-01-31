@@ -58,6 +58,8 @@ shared_vector = "0.4.4"
 walkdir = "2.4.0"
 path-dedot = "3.1.1"
 const_for = "0.1.4"
+thiserror = "1.0.56"
+either = "1.9.0"
 #pdfium-render = "0.8.11" #, features = ["static"] }
 
 md5 = { version = "0.7.0",optional = true }

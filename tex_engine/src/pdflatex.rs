@@ -17,7 +17,7 @@ use crate::tex::tokens::control_sequences::InternedCSName;
 use crate::tex::characters::Character;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, Numeric, TeXDimen, TeXInt};
-use crate::utils::errors::TeXError;
+use crate::utils::errors::TeXResult;
 
 pub trait PDFTeXEngine: TeXEngine
     where <Self::Types as EngineTypes>::Extension: PDFExtension<Self::Types>,
@@ -25,12 +25,12 @@ pub trait PDFTeXEngine: TeXEngine
           <Self::Types as EngineTypes>::File: FileWithMD5,
             <Self::Types as EngineTypes>::Font: FontWithLpRp,
 {
-    fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>)>(&mut self, s:&str, f:F) -> Result<(),TeXError> {
+    fn do_file_pdf<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(),Self::Types>>(&mut self, s:&str, f:F) -> TeXResult<(),Self::Types> {
         *self.get_engine_refs().aux.extension.elapsed() = std::time::Instant::now();
         self.do_file_default(s,f)
     }
 
-     fn initialize_pdflatex(&mut self) -> Result<(),TeXError> {
+     fn initialize_pdflatex(&mut self) -> TeXResult<(),Self::Types> {
         self.initialize_etex_primitives();
         commands::register_pdftex_primitives(self);
         self.init_file("pdftexconfig.tex")?;

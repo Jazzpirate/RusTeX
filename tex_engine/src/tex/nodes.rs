@@ -19,6 +19,7 @@ use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
 use crate::tex::nodes::math::{MathNode, MathNodeList, MathNodeListType, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::Skip;
+use crate::utils::errors::TeXResult;
 use crate::utils::Ptr;
 
 /// Common trait for all nodes that end up in the final document.
@@ -86,7 +87,7 @@ impl<ET:EngineTypes<CustomNode = ()>> NodeTrait<ET> for () {
 impl<ET:EngineTypes<CustomNode = ()>> CustomNodeTrait<ET> for () {}
 
 
-type WhatsitFunction<ET> = Ptr<RefCell<Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>>>;
+type WhatsitFunction<ET> = Ptr<RefCell<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>>>;
 /// A Whatsit [node](NodeTrait), essentially representing a callback to the engine to be executed
 /// at shipout, as produced by e.g. `\special` or `\write`.
 #[derive(Clone)]
@@ -100,17 +101,17 @@ impl<ET:EngineTypes> WhatsitNode<ET> {
     /// Create a new Whatsit node produce by the primitive
     /// [Whatsit command](crate::commands::PrimitiveCommand::Whatsit) with the given name,
     /// with the function provided, to be executed at shipout.
-    pub fn new(f:Box<dyn FnOnce(&mut EngineReferences<ET>)>, name:PrimitiveIdentifier) -> Self {
+    pub fn new(f:Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>, name:PrimitiveIdentifier) -> Self {
         WhatsitNode(name.display::<ET::Char>(None).to_string(),
                     Ptr::new(RefCell::new(Some(f)))
         )
     }
     /// Run this Whatsit node's function at shipout, if it has not been run yet.
     /// If it has been run already, this is a no-op.
-    pub fn call(self,engine: &mut EngineReferences<ET>) {
+    pub fn call(self,engine: &mut EngineReferences<ET>) -> TeXResult<(),ET> {
         if let Some(f) = self.1.replace(None) {
-            f(engine);
-        }
+            f(engine)
+        } else {Ok(())}
     }
 }
 
@@ -276,12 +277,12 @@ impl<ET:EngineTypes> NodeList<ET> {
 /// This struct abstracts over that by carrying a continuation function to be called when the box is closed.
 ///
 /// TODO: rethink this in light of [`ListTarget`].
-pub struct BoxTarget<ET:EngineTypes>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,TeXBox<ET>)>>);
+pub struct BoxTarget<ET:EngineTypes>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,TeXBox<ET>) -> TeXResult<(),ET>>>);
 impl<ET:EngineTypes> crate::tex::nodes::BoxTarget<ET> {
     /// Create a new box target from the given continuation function.
-    pub fn new<F:FnOnce(&mut EngineReferences<ET>,TeXBox<ET>) + 'static>(f:F) -> Self { crate::tex::nodes::BoxTarget(Some(Box::new(f))) }
+    pub fn new<F:FnOnce(&mut EngineReferences<ET>,TeXBox<ET>) -> TeXResult<(),ET> + 'static>(f:F) -> Self { crate::tex::nodes::BoxTarget(Some(Box::new(f))) }
     /// Execute the continuation function (once the box is closed)
-    pub fn call(self,engine: &mut EngineReferences<ET>,bx:TeXBox<ET>) {
+    pub fn call(self,engine: &mut EngineReferences<ET>,bx:TeXBox<ET>) -> TeXResult<(),ET> {
         match self.0 {
             Some(f) => f(engine,bx),
             None => unreachable!()
@@ -310,12 +311,12 @@ impl<ET:EngineTypes> Clone for crate::tex::nodes::BoxTarget<ET> {
 /// This struct abstracts over that by carrying a continuation function to be called when the list is closed.
 ///
 /// TODO: rethink this in light of [`BoxTarget`].
-pub struct ListTarget<ET:EngineTypes,N>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>)>>);
+pub struct ListTarget<ET:EngineTypes,N>(Option<Box<dyn FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>) -> TeXResult<(),ET>>>);
 impl<ET:EngineTypes,N> ListTarget<ET,N> {
     /// Create a new list target from the given continuation function.
-    pub fn new<F:FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>) + 'static>(f:F) -> Self { ListTarget(Some(Box::new(f))) }
+    pub fn new<F:FnOnce(&mut EngineReferences<ET>,Vec<N>,SourceRef<ET>) -> TeXResult<(),ET> + 'static>(f:F) -> Self { ListTarget(Some(Box::new(f))) }
     /// Execute the continuation function (once the list is closed)
-    pub fn call(self,engine: &mut EngineReferences<ET>,v:Vec<N>,start:SourceRef<ET>) {
+    pub fn call(self,engine: &mut EngineReferences<ET>,v:Vec<N>,start:SourceRef<ET>) -> TeXResult<(),ET> {
         match self.0 {
             Some(f) => f(engine,v,start),
             None => unreachable!()

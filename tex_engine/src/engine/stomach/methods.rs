@@ -15,7 +15,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
-use crate::tex_error;
+use crate::utils::errors::{GulletError, InvalidCharacter, RecoverableError, TeXResult, TooManyCloseBraces, Undefined};
 
 #[doc(hidden)]
 #[macro_export]
@@ -23,7 +23,7 @@ macro_rules! add_node {
     ($S:ty;$engine:expr,$v:expr,$h:expr,$m:expr) => {
         match $engine.stomach.data_mut().mode() {
             TeXMode::Vertical |
-            TeXMode::InternalVertical => <$S>::add_node_v($engine,$v),
+            TeXMode::InternalVertical => <$S>::add_node_v($engine,$v)?,
             TeXMode::Horizontal |
             TeXMode::RestrictedHorizontal => <$S>::add_node_h($engine,$h),
             _ => <$S>::add_node_m($engine,$m)
@@ -34,13 +34,13 @@ macro_rules! add_node {
 /// inserts the `\afterassignment` [`Token`]
 pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     match std::mem::take(engine.stomach.afterassignment()) {
-        Some(t) => engine.requeue(t),
+        Some(t) => engine.requeue(t).unwrap(),//engine.mouth.requeue(t),
         _ => ()
     }
 }
 
 /// Default implementation for [`Stomach::assign_toks_register`].
-pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,register:usize,global:bool) {
+pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,register:usize,global:bool) -> TeXResult<(),ET> {
     let mut had_eq = false;
     crate::expand_loop!(ET; engine,tk,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
@@ -51,10 +51,10 @@ pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tok
             }
             (_,CommandCode::BeginGroup) => {
                 let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(&token,|_,_,t| tks.push(t));
+                engine.read_until_endgroup(&token,|_,_,t| Ok(tks.push(t)))?;
                 engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
                 insert_afterassignment(engine);
-                return ()
+                return Ok(())
             }
             _ => todo!("throw error")
         }
@@ -62,20 +62,21 @@ pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tok
             let tks = engine.state.get_primitive_tokens(*name).clone();
             engine.state.set_toks_register(engine.aux,register,tks,global);
             insert_afterassignment(engine);
-            return ()
+            return Ok(())
         }
         ResolvedToken::Cmd(Some(TeXCommand::ToksRegister(u))) => {
             let tks = engine.state.get_toks_register(*u).clone();
             engine.state.set_toks_register(engine.aux,register,tks,global);
             insert_afterassignment(engine);
-            return ()
+            return Ok(())
         }
         _ => todo!("throw error")
-    )
+    );
+    todo!("error")
 }
 
 /// Default implementation for [`Stomach::assign_primitive_toks`].
-pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,global:bool) {
+pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,global:bool) -> TeXResult<(),ET> {
     let mut had_eq = false;
     crate::expand_loop!(ET; engine,tk,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
@@ -88,14 +89,14 @@ pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,to
                 let mut tks = shared_vector::Vector::new();
                 if name == PRIMITIVES.output {
                     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                    engine.read_until_endgroup(&token,|_,_,t| tks.push(t));
+                    engine.read_until_endgroup(&token,|_,_,t| Ok(tks.push(t)))?;
                     tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
                 } else {
-                    engine.read_until_endgroup(&token,|_,_,t| tks.push(t));
+                    engine.read_until_endgroup(&token,|_,_,t| Ok(tks.push(t)))?;
                 }
                 engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
                 insert_afterassignment(engine);
-                return ()
+                return Ok(())
             }
             _ => todo!("throw error")
         }
@@ -112,7 +113,7 @@ pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,to
             };
             engine.state.set_primitive_tokens(engine.aux,*name,tks,global);
             insert_afterassignment(engine);
-            return ()
+            return Ok(())
         }
         ResolvedToken::Cmd(Some(TeXCommand::ToksRegister(u))) => {
             let tks = engine.state.get_toks_register(*u);
@@ -127,30 +128,32 @@ pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,to
             };
             engine.state.set_primitive_tokens(engine.aux,name,tks,global);
             insert_afterassignment(engine);
-            return ()
+            return Ok(())
         }
         _ => todo!("throw error")
-    )
+    );
+    todo!("throw error")
 }
 
-pub(crate) fn add_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox<ET>,target:BoxTarget<ET>) {
+pub(crate) fn add_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox<ET>,target:BoxTarget<ET>) -> TeXResult<(),ET> {
     if target.is_some() {
-        target.call(engine,bx)
+        target.call(engine,bx)?
     } else {
         match engine.stomach.data_mut().mode() {
             TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
                 ET::Stomach::add_node_h(engine, HNode::Box(bx))
             }
             TeXMode::Vertical | TeXMode::InternalVertical => {
-                ET::Stomach::add_node_v(engine, VNode::Box(bx))
+                ET::Stomach::add_node_v(engine, VNode::Box(bx))?
             }
             _ => ET::Stomach::add_node_m(engine, bx.to_math())
         }
     }
+    Ok(())
 }
 
 /// Default implementation for [`Stomach::do_char`].
-pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,char:ET::Char,code:CommandCode) {
+pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,char:ET::Char,code:CommandCode) -> TeXResult<(),ET> {
     match code {
         CommandCode::EOF => (),
         CommandCode::Space if engine.stomach.data_mut().mode().is_horizontal() =>
@@ -160,7 +163,7 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
             engine.state.push(engine.aux,GroupType::Math,engine.mouth.line_number());
             engine.stomach.data_mut().open_lists.push(NodeList::new_math(engine.mouth.start_ref()));
         },
-        CommandCode::EndGroup if engine.stomach.data_mut().mode().is_math() => close_group_in_m(engine),
+        CommandCode::EndGroup if engine.stomach.data_mut().mode().is_math() => close_group_in_m(engine)?,
         CommandCode::BeginGroup =>
             engine.state.push(engine.aux, GroupType::Simple, engine.mouth.line_number()),
         CommandCode::EndGroup => {
@@ -168,36 +171,37 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
                 Some(GroupType::Simple) =>
                     engine.state.pop(engine.aux,engine.mouth),
                 Some(GroupType::HBox | GroupType::Math | GroupType::MathChoice | GroupType::LeftRight) =>
-                    ET::Stomach::close_box(engine, BoxType::Horizontal),
+                    ET::Stomach::close_box(engine, BoxType::Horizontal)?,
                 Some(GroupType::VBox | GroupType::VCenter | GroupType::VTop | GroupType::Insert |
                      GroupType::VAdjust | GroupType::Noalign) =>
-                    ET::Stomach::close_box(engine, BoxType::Vertical),
-                _ => tex_error!(engine,other,"Extra }, or forgotten \\endgroup")
+                    ET::Stomach::close_box(engine, BoxType::Vertical)?,
+                _ => engine.general_error("Extra }, or forgotten \\endgroup".to_string())?
             }
         }
         CommandCode::Other | CommandCode::Letter if engine.stomach.data_mut().mode().is_horizontal() =>
-            do_word(engine, char),
+            do_word(engine, char)?,
         CommandCode::Other | CommandCode::Letter | CommandCode::MathShift if engine.stomach.data_mut().mode().is_vertical() =>
             ET::Stomach::open_paragraph(engine, token),
         CommandCode::MathShift if engine.stomach.data_mut().mode().is_math() =>
-            close_math(engine),
-        CommandCode::MathShift => open_math(engine),
+            close_math(engine)?,
+        CommandCode::MathShift => open_math(engine)?,
         CommandCode::Other | CommandCode::Letter => {
             let code = engine.state.get_mathcode(char);
             ET::Stomach::do_mathchar(engine,code,Some(token))
         }
         CommandCode::Superscript if engine.stomach.data_mut().mode().is_math() => {
-            do_superscript(engine)
+            do_superscript(engine)?
         }
         CommandCode::Subscript if engine.stomach.data_mut().mode().is_math() => {
-            do_subscript(engine)
+            do_subscript(engine)?
         }
         _ => todo!("{} > {:?}",char,code)
     }
+    Ok(())
 }
 
 
-fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) {
+fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> TeXResult<(),ET> {
     // TODO trace
     let mut current = char;
     macro_rules! char {
@@ -220,29 +224,34 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) {
             add_char::<ET>(engine.stomach,engine.state,current,font);
             $e;
             engine.stomach.data_mut().spacefactor = 1000;
-            return
+            return Ok(())
         }}
     }
     crate::expand_loop!(ET;token => {
-        if token.is_primitive() == Some(PRIMITIVES.noexpand) { engine.get_next(false); continue}
+        if token.is_primitive() == Some(PRIMITIVES.noexpand) { match engine.get_next(false) {
+                Err(GulletError::MouthEmpty) => return Ok(()),
+                Err(GulletError::TooManyCloseBraces) => TooManyCloseBraces.throw(engine.aux,engine.state,engine.mouth)?,
+                Err(GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
+                _ => ()
+            }; continue}
     };engine,
         ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other } =>
             char!(char),
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code:CommandCode::Letter|CommandCode::Other})) =>
             char!(*char),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.char => {
-            let char = engine.read_charcode(false);
+            let char = engine.read_charcode(false)?;
             char!(char)
         }
         ResolvedToken::Tk { code:CommandCode::Space, .. } |
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) =>
             end!(ET::Stomach::add_node_h(engine,HNode::Space)),
         ResolvedToken::Tk { char, code } =>
-            end!(ET::Stomach::do_char(engine,token,char,code)),
+            end!(ET::Stomach::do_char(engine,token,char,code)?),
         ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) =>
-            end!(ET::Stomach::do_char(engine,token,*char,*code)),
+            end!(ET::Stomach::do_char(engine,token,*char,*code)?),
         ResolvedToken::Cmd(None) => {
-            tex_error!(engine,undefined,token.clone());
+            Undefined(token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
             end!(())
         }
         ResolvedToken::Cmd(Some(cmd)) => {
@@ -268,18 +277,28 @@ fn add_char<ET:EngineTypes>(slf:&mut ET::Stomach,state:&ET::State,char:ET::Char,
     }
 }
 
-fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
     let (display,every) = match engine.stomach.data_mut().mode() {
         TeXMode::Horizontal => {
             match engine.get_next(false) {
-                Some(tk) if tk.command_code() == CommandCode::MathShift => {
-                    engine.stomach.data_mut().prevgraf = 3; // heuristic
-                    (true,PRIMITIVES.everydisplay)
+                Ok(tk) => {
+                    if tk.command_code() == CommandCode::MathShift {
+                        engine.stomach.data_mut().prevgraf = 3; // heuristic
+                        (true,PRIMITIVES.everydisplay)
+                    } else {
+                        engine.requeue(tk)?;
+                        (false,PRIMITIVES.everymath)
+                    }
                 },
-                Some(o) => {
-                    engine.requeue(o);(false,PRIMITIVES.everymath)
+                Err(GulletError::MouthEmpty) => todo!(),
+                Err(GulletError::InvalidChar(c)) => {
+                    InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?;
+                    (false,PRIMITIVES.everymath)
                 }
-                _ => todo!("file end")
+                Err(GulletError::TooManyCloseBraces) => {
+                    TooManyCloseBraces.throw(engine.aux,engine.state,engine.mouth)?;
+                    (false,PRIMITIVES.everymath)
+                }
             }
         }
         _ => (false,PRIMITIVES.everymath)
@@ -288,15 +307,16 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
     engine.state.push(engine.aux,GroupType::MathShift{display},engine.mouth.line_number());
     engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
     engine.push_every(every);
+    Ok(())
 }
 
-fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Math{children,start,tp:MathNodeListType::Top {display}}) => {
             if display {
                 engine.stomach.data_mut().prevgraf += 3;
                 match engine.get_next(false) {
-                    Some(tk) if tk.command_code() == CommandCode::MathShift => (),
+                    Ok(tk) if tk.command_code() == CommandCode::MathShift => (),
                     _ => todo!("throw error")
                 }
             }
@@ -312,15 +332,16 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
         }
         _ => todo!("error")
     }
+    Ok(())
 }
 
-fn close_group_in_m<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+fn close_group_in_m<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
     let ls = engine.stomach.data_mut().open_lists.pop();
     match ls {
         Some(NodeList::Math {children,start,tp:MathNodeListType::Target(t)}) if t.is_some() => {
             engine.state.pop(engine.aux,engine.mouth);
             let (children,None) = children.close(start,engine.mouth.current_sourceref()) else { unreachable!() };
-            t.call(engine,children,start);
+            t.call(engine,children,start)
         }
         Some(NodeList::Math {children,start,tp:MathNodeListType::Target(_)}) => {
             match children {
@@ -337,16 +358,17 @@ fn close_group_in_m<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
                 MathNodeList::EqNo {..} => todo!("throw error")
             }
             engine.state.pop(engine.aux,engine.mouth);
+            Ok(())
         }
         _ => todo!("error")
     }
 }
 
-fn do_superscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+fn do_superscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
     do_xscript(engine,Script::Super)
 }
 
-fn do_subscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
+fn do_subscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
     do_xscript(engine,Script::Sub)
 }
 
@@ -371,14 +393,16 @@ impl Script {
             Script::Super => ListTarget::<ET,_>::new(
                 |engine,children,_| if let Some(NodeList::Math{children:ch,..}) = engine.stomach.data_mut().open_lists.last_mut() {
                     if let Some(MathNode::Atom(a)) = ch.list_mut().last_mut() {
-                        a.sup = Some(children.into())
+                        a.sup = Some(children.into());
+                        Ok(())
                     } else {unreachable!()}
                 } else {unreachable!()}
             ),
             _ => ListTarget::<ET,_>::new(
                 |engine,children,_| if let Some(NodeList::Math{children:ch,..}) = engine.stomach.data_mut().open_lists.last_mut() {
                     if let Some(MathNode::Atom(a)) = ch.list_mut().last_mut() {
-                        a.sub = Some(children.into())
+                        a.sub = Some(children.into());
+                        Ok(())
                     } else {unreachable!()}
                 } else {unreachable!()}
             )
@@ -386,7 +410,7 @@ impl Script {
     }
 }
 
-fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) {
+fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) -> TeXResult<(),ET> {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math { children, .. }) => {
             match children.list_mut().last() {
@@ -410,24 +434,25 @@ fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) {
             }
             _ => unreachable!()
         }
+        Ok(())
     },|script| script.tp(),script)
 }
 
 /// Default implementation for [`Stomach::close_box`].
-pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
+pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) -> TeXResult<(),ET> {
     match engine.stomach.data_mut().open_lists.last() {
-        Some(NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(_),..}) => ET::Stomach::close_paragraph(engine),
+        Some(NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(_),..}) => ET::Stomach::close_paragraph(engine)?,
         _ => ()
     }
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAdjust}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
-            engine.stomach.data_mut().vadjusts.extend(children.into_iter())
+            engine.stomach.data_mut().vadjusts.extend(children.into_iter());
         }
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::Insert(n)}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
             match engine.stomach.data_mut().mode() {
-                TeXMode::Vertical => ET::Stomach::add_node_v(engine, VNode::Insert(n, children.into())),
+                TeXMode::Vertical => ET::Stomach::add_node_v(engine, VNode::Insert(n, children.into()))?,
                 TeXMode::Horizontal if engine.stomach.data_mut().open_lists.len() == 1 => ET::Stomach::add_node_h(engine, HNode::Insert(n, children.into())),
                 _ => engine.stomach.data_mut().inserts.push((n,children.into()))
             }
@@ -437,21 +462,21 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
             let bx = TeXBox::V {
                 children:children.into(),info,start,end:engine.mouth.current_sourceref(),
             };
-            add_box(engine, bx, target)
+            add_box(engine, bx, target)?
         }
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::VCenter(start,scaled)}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
             ET::Stomach::add_node_m(engine, MathNode::Atom(MathAtom {
                 nucleus: MathNucleus::VCenter {children:children.into(),start,end:engine.mouth.current_sourceref(),scaled},
                 sub:None,sup:None
-            }))
+            }));
         }
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::Box(info,start,target)}) if bt == BoxType::Horizontal => {
             engine.state.pop(engine.aux,engine.mouth);
             let bx = TeXBox::H {
                 children:children.into(),info,start,end:engine.mouth.current_sourceref(),preskip:None
             };
-            add_box(engine, bx, target)
+            add_box(engine, bx, target)?
         }
         o =>
             todo!("throw error: {:?}",o),
@@ -470,10 +495,11 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) {
         }
         _ => ()
     }
+    Ok(())
 }
 
 /// Default implementation for [`Stomach::add_node_v`].
-pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VNode<ET>) {
+pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VNode<ET>) -> TeXResult<(),ET> {
     let data = engine.stomach.data_mut();
     let prevdepth = data.prevdepth;
 
@@ -507,7 +533,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
     match data.open_lists.last_mut() {
         Some(NodeList::Vertical {children,..}) => {
             children.push(node);
-            return
+            return Ok(())
         }
         Some(_) => todo!("throw error"),
         _ => ()
@@ -519,7 +545,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
                 data.page_contains_boxes = true;
                 data.pagegoal = engine.state.get_primitive_dim(PRIMITIVES.vsize);
             }
-            n if n.discardable() => return,
+            n if n.discardable() => return Ok(()),
             _ => ()
         }
     }
@@ -533,16 +559,16 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
         if i <= -10000 {
             if data.page_contains_boxes {
                 return ET::Stomach::maybe_do_output(engine, Some(i))
-            } else { return }
+            } else { return Ok(()) }
         }
     }
     let disc = node.discardable();
     data.page.push(node);
-    if disc && data.lastpenalty < 1000 {ET::Stomach::maybe_do_output(engine, None)}
+    if disc && data.lastpenalty < 1000 {ET::Stomach::maybe_do_output(engine, None)} else {Ok(())}
 }
 
 /// Default implementation for [`Stomach::do_output`].
-pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalty:Option<i32>) {
+pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalty:Option<i32>) -> TeXResult<(),ET> {
     let data = engine.stomach.data_mut();
     let page = std::mem::take(&mut data.page);
     let goal = data.pagegoal;
@@ -623,12 +649,22 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
     engine.state.set_box_register(engine.aux,255,Some(bx),false);
 
     engine.push_every(PRIMITIVES.output);
-    engine.get_next(false); // '{':BeginGroup
+    engine.get_next(false).unwrap(); // '{':BeginGroup
 
     //crate::debug_log!(debug => "Here: {} at {}",engine.mouth.display_position(),engine.preview());
 
     let depth = engine.state.get_group_level();
-    while let Some(next) = engine.get_next(false) {
+    loop {
+        let next = match engine.get_next(false) {
+            Ok(t) => t,
+            Err(GulletError::MouthEmpty) => todo!("file end"),
+            Err(GulletError::InvalidChar(c)) => {
+                InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?;continue
+            },
+            Err(GulletError::TooManyCloseBraces) => {
+                TooManyCloseBraces.throw(engine.aux,engine.state,engine.mouth)?;continue
+            },
+        };
         //println!("HERE: {}",engine.preview());
         if engine.state.get_group_level() == depth && next.command_code() == CommandCode::EndGroup {
             engine.state.pop(engine.aux,engine.mouth);
@@ -636,26 +672,25 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
                 Some(NodeList::Vertical {children,tp:VerticalNodeListType::Page}) => {
                     engine.stomach.data_mut().pagegoal = <ET as EngineTypes>::Dim::from_sp(i32::MAX);
                     for c in children {
-                        ET::Stomach::add_node_v(engine, c);
+                        ET::Stomach::add_node_v(engine, c)?;
                     }
-                    for r in rest.into_iter() { ET::Stomach::add_node_v(engine, r) }
+                    for r in rest.into_iter() { ET::Stomach::add_node_v(engine, r)? }
                 }
                 _ => todo!("throw error")
             }
             engine.stomach.data_mut().in_output = false;
-            return
+            return Ok(())
         }
         if next.is_primitive() == Some(PRIMITIVES.noexpand) {
-            engine.get_next(false);continue
+            engine.get_next(false).unwrap();continue
         }
         crate::expand!(ET;engine,next;
-            ResolvedToken::Tk { char, code } => do_char(engine, next, char, code),
-            ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => do_char(engine, next, *char, *code),
-            ResolvedToken::Cmd(None) =>tex_error!(engine,undefined,next),
+            ResolvedToken::Tk { char, code } => do_char(engine, next, char, code)?,
+            ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => do_char(engine, next, *char, *code)?,
+            ResolvedToken::Cmd(None) => Undefined(next).throw(engine.aux,engine.state,engine.mouth)?,
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(ET;engine,next,cmd)
         );
     }
-    todo!("file end")
 }
 
 /// The result of splitting a vertical list

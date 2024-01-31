@@ -18,46 +18,47 @@ use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::engine::stomach::TeXMode;
 use crate::prelude::CSHandler;
-use crate::tex_error;
-use crate::utils::errors::TeXError;
+use crate::utils::errors::{GeneralError, MissingKeyword, RecoverableError, TeXResult};
 
-pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
-    <ET::Num as NumSet>::Int::from(140)
+pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
+    Ok(<ET::Num as NumSet>::Int::from(140))
 }
 
-pub fn pdfmajorversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
-    <ET::Num as NumSet>::Int::from(1)
+pub fn pdfmajorversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
+    Ok(<ET::Num as NumSet>::Int::from(1))
 }
 
-pub fn pdftexrevision<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
+pub fn pdftexrevision<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
     exp.push(ET::Token::from_char_cat(b'2'.into(),CommandCode::Other));
     exp.push(ET::Token::from_char_cat(b'5'.into(),CommandCode::Other));
+    Ok(())
 }
 
 
-pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfcatalog<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     let mut literal = String::new();
-    engine.read_braced_string(true,true,&tk,&mut literal);
-    let action = if engine.read_keyword(b"openaction") {
-        Some(super::nodes::action_spec(engine,&tk))
+    engine.read_braced_string(true,true,&tk,&mut literal)?;
+    let action = if engine.read_keyword(b"openaction")? {
+        Some(super::nodes::action_spec(engine,&tk)?)
     } else { None };
     let node = PDFNode::PDFCatalog(PDFCatalog{
         literal,action
     });
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let index = engine.read_int(false).into();
+    let index = engine.read_int(false)?.into();
     if index < 0 || index >= (engine.aux.extension.colorstacks().len() as i64) {
-        tex_error!(engine,other,&format!("Unknown color stack number {}",index))
+        GeneralError(format!("Unknown color stack number {}",index)).throw(engine.aux,engine.state,engine.mouth)?;
     }
     let index = index as usize;
-    let kw = engine.read_keywords(&[b"push",b"pop",b"set",b"current"]);
+    let kw = engine.read_keywords(&[b"push",b"pop",b"set",b"current"])?;
     match kw {
         Some(b"current") =>
             crate::add_node!(ET::Stomach;engine,
@@ -74,7 +75,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"set") => {
             let mut color = String::new();
-            engine.read_braced_string(true,true,&tk,&mut color);
+            engine.read_braced_string(true,true,&tk,&mut color)?;
             let color = PDFColor::parse(color);
             crate::add_node!(ET::Stomach;engine,
                                      VNode::Custom(PDFNode::Color(ColorStackAction::Set(index,color)).into()),
@@ -84,7 +85,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
         }
         Some(b"push") => {
             let mut color = String::new();
-            engine.read_braced_string(true,true,&tk,&mut color);
+            engine.read_braced_string(true,true,&tk,&mut color)?;
             let color = PDFColor::parse(color);
             crate::add_node!(ET::Stomach;engine,
                                      VNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into()),
@@ -92,98 +93,104 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
                                      MathNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into())
             )
         }
-        _ => tex_error!(engine,missing_keyword,&["current","pop","set","push"])
+        _ => MissingKeyword(&["current","pop","set","push"]).throw(engine.aux,engine.state,engine.mouth)?
     }
+    Ok(())
 }
 
-pub fn pdfcolorstackinit<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
+pub fn pdfcolorstackinit<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Int,ET>
     where ET::Extension : PDFExtension<ET> {
-    engine.read_keyword(b"page");
-    engine.read_keyword(b"direct");
+    engine.read_keyword(b"page")?;
+    engine.read_keyword(b"direct")?;
     let mut color = String::new();
-    engine.read_braced_string(false,true,&tk,&mut color);
+    engine.read_braced_string(false,true,&tk,&mut color)?;
     let color = PDFColor::parse(color);
     let idx = engine.aux.extension.colorstacks().len() as i32;
     engine.aux.extension.colorstacks().push(vec![color]);
-    ET::Int::from(idx)
+    Ok(ET::Int::from(idx))
 }
 
-pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let structnum = if engine.read_keyword(b"struct") {
-        Some(engine.read_int(false).into())
+    let structnum = if engine.read_keyword(b"struct")? {
+        Some(engine.read_int(false)?.into())
     } else { None };
-    let id = match super::nodes::num_or_name(engine,&tk) {
+    let id = match super::nodes::num_or_name(engine,&tk)? {
         Some(n) => n,
         _ => {
-            tex_error!(engine,missing_keyword,&["name","num"]);
+            MissingKeyword(&["name","num"]).throw(engine.aux,engine.state,engine.mouth)?;
             NumOrName::Num(0)
         }
     };
-    let dest = super::nodes::pdfdest_type(engine);
+    let dest = super::nodes::pdfdest_type(engine)?;
     let node = PDFNode::PDFDest(PDFDest{structnum, id, dest});
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfstartlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     let mut width = None;
     let mut height = None;
     let mut depth = None;
     loop {
-        match engine.read_keywords(&[b"width",b"height",b"depth"]) {
-            Some(b"width") => width = Some(engine.read_dim(false)),
-            Some(b"height") => height = Some(engine.read_dim(false)),
-            Some(b"depth") => depth = Some(engine.read_dim(false)),
+        match engine.read_keywords(&[b"width",b"height",b"depth"])? {
+            Some(b"width") => width = Some(engine.read_dim(false)?),
+            Some(b"height") => height = Some(engine.read_dim(false)?),
+            Some(b"depth") => depth = Some(engine.read_dim(false)?),
             _ => break
         }
     }
-    let attr = if engine.read_keyword(b"attr") {
+    let attr = if engine.read_keyword(b"attr")? {
         let mut attr = String::new();
-        engine.read_braced_string(true,true,&tk,&mut attr);
+        engine.read_braced_string(true,true,&tk,&mut attr)?;
         Some(attr)
     } else { None };
-    let action = super::nodes::action_spec(engine,&tk);
+    let action = super::nodes::action_spec(engine,&tk)?;
     let node = PDFNode::PDFStartLink(PDFStartLink {width,height,depth,attr,action});
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfendlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
+pub fn pdfendlink<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     crate::add_node!(ET::Stomach;engine,
         VNode::Custom(PDFNode::PDFEndLink.into()),
         HNode::Custom(PDFNode::PDFEndLink.into()),
         MathNode::Custom(PDFNode::PDFEndLink.into())
-    )
+    );
+    Ok(())
 }
 
-pub fn pdfsave<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
+pub fn pdfsave<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     crate::add_node!(ET::Stomach;engine,
         VNode::Custom(PDFNode::PDFSave.into()),
         HNode::Custom(PDFNode::PDFSave.into()),
         MathNode::Custom(PDFNode::PDFSave.into())
-    )
+    );
+    Ok(())
 }
-pub fn pdfrestore<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
+pub fn pdfrestore<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     crate::add_node!(ET::Stomach;engine,
         VNode::Custom(PDFNode::PDFRestore.into()),
         HNode::Custom(PDFNode::PDFRestore.into()),
         MathNode::Custom(PDFNode::PDFRestore.into())
-    )
+    );
+    Ok(())
 }
 
-pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
-          ET::CustomNode:From<PDFNode<ET>> {
+          ET::CustomNode:From<PDFNode<ET>>{
     let mut str = engine.aux.memory.get_string();
-    engine.read_braced_string(true,true,&tk,&mut str);
+    engine.read_braced_string(true,true,&tk,&mut str)?;
     let mut scale = 0f32;
     let mut rotate = 0f32;
     let mut skewx = 0f32;
@@ -192,7 +199,7 @@ pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
         let f = match s.parse::<f32>() {
             Ok(f) => f,
             _ => {
-                tex_error!(engine,other,"pdfTeX error (\\pdfsetmatrix): Unrecognized format");
+                engine.general_error("pdfTeX error (\\pdfsetmatrix): Unrecognized format".to_string())?;
                 1.0
             }
         };
@@ -201,7 +208,7 @@ pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
             1 => rotate = f,
             2 => skewx = f,
             3 => skewy = f,
-            _ => tex_error!(engine,other,"pdfTeX error (\\pdfsetmatrix): Unrecognized format")
+            _ => engine.general_error("pdfTeX error (\\pdfsetmatrix): Unrecognized format".to_string())?
         }
     }
     engine.aux.memory.return_string(str);
@@ -209,27 +216,28 @@ pub fn pdfsetmatrix<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
         VNode::Custom(PDFNode::PDFMatrix{scale,rotate,skewx,skewy}.into()),
         HNode::Custom(PDFNode::PDFMatrix{scale,rotate,skewx,skewy}.into()),
         MathNode::Custom(PDFNode::PDFMatrix{scale,rotate,skewx,skewy}.into())
-    )
+    );
+    Ok(())
 }
 
 
-pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) {
+pub fn pdfinfo<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     engine.skip_argument(&tk)
 }
 
-pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    *engine.gullet.csnames() > 0
+pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
+    Ok(*engine.gullet.csnames() > 0)
 }
-pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    let first = engine.read_int(false);
-    let rel = match engine.read_chars(&[b'=',b'<',b'>']) {
-        Ok(b) => b,
+pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
+    let first = engine.read_int(false)?;
+    let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
+        either::Left(b) => b,
         _ => {
-            tex_error!(engine,missing_keyword,&["=","<",">"]);
+            MissingKeyword(&["=","<",">"]).throw(engine.aux,engine.state,engine.mouth)?;
             b'='
         }
     };
-    let second = engine.read_int(false);
+    let second = engine.read_int(false)?;
 
     let first = if first < <<ET as EngineTypes>::Num as NumSet>::Int::default() {
         -first
@@ -241,23 +249,23 @@ pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     } else {
         second
     };
-    match rel {
+    Ok(match rel {
         b'=' => first == second,
         b'<' => first < second,
         b'>' => first > second,
         _ => unreachable!()
-    }
+    })
 }
-pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
-    let first = engine.read_dim(false);
-    let rel = match engine.read_chars(&[b'=',b'<',b'>']) {
-        Ok(b) => b,
+pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
+    let first = engine.read_dim(false)?;
+    let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
+        either::Left(b) => b,
         _ => {
-            tex_error!(engine,missing_keyword,&["=","<",">"]);
+            MissingKeyword(&["=","<",">"]).throw(engine.aux,engine.state,engine.mouth)?;
             b'='
         }
     };
-    let second = engine.read_dim(false);
+    let second = engine.read_dim(false)?;
     let first = if first < <<ET as EngineTypes>::Num as NumSet>::Dim::default() {
         -first
     } else {
@@ -268,71 +276,77 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     } else {
         second
     };
-    match rel {
+    Ok(match rel {
         b'=' => first == second,
         b'<' => first < second,
         b'>' => first > second,
         _ => unreachable!()
-    }
+    })
 }
-pub fn ifpdfprimitive<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> bool {
+pub fn ifpdfprimitive<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
     use crate::engine::mouth::Mouth;
-    TeXError::throw(format!("Not yet implemented: \\ifpdfprimitive at {}",
-                            engine.mouth.current_sourceref().display(engine.filesystem)))
+    engine.general_error(format!("Not yet implemented: \\ifpdfprimitive at {}",
+                            engine.mouth.current_sourceref().display(engine.filesystem)))?;
+    Ok(false)
 }
 
-pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
+pub fn lpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Int,ET>
     where ET::Font: FontWithLpRp {
-    let fnt = engine.read_font(false,&tk);
-    let char = engine.read_charcode(false);
-    fnt.get_lp(char)
+    let fnt = engine.read_font(false,&tk)?;
+    let char = engine.read_charcode(false)?;
+    Ok(fnt.get_lp(char))
 }
-pub fn lpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool)
+pub fn lpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) -> TeXResult<(),ET>
     where ET::Font: FontWithLpRp {
-    let mut fnt = engine.read_font(false,&tk);
-    let char = engine.read_charcode(false);
-    let code = engine.read_int(true);
-    fnt.set_lp(char,code)
+    let mut fnt = engine.read_font(false,&tk)?;
+    let char = engine.read_charcode(false)?;
+    let code = engine.read_int(true)?;
+    fnt.set_lp(char,code);
+    Ok(())
 }
-pub fn rpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> ET::Int
+pub fn rpcode_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Int,ET>
     where ET::Font: FontWithLpRp {
-    let fnt = engine.read_font(false,&tk);
-    let char = engine.read_charcode(false);
-    fnt.get_rp(char)
+    let fnt = engine.read_font(false,&tk)?;
+    let char = engine.read_charcode(false)?;
+    Ok(fnt.get_rp(char))
 }
-pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool)
+pub fn rpcode_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_globally:bool) -> TeXResult<(),ET>
     where ET::Font: FontWithLpRp {
-    let mut fnt = engine.read_font(false,&tk);
-    let char = engine.read_charcode(false);
-    let code = engine.read_int(true);
-    fnt.set_rp(char,code)
+    let mut fnt = engine.read_font(false,&tk)?;
+    let char = engine.read_charcode(false)?;
+    let code = engine.read_int(true)?;
+    fnt.set_rp(char,code);
+    Ok(())
 }
 
-pub fn leftmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
+pub fn leftmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
     // todo
-    let _ = engine.read_int(false);
-    Otherize::new(&mut |t| exp.push(t)).write_str("0pt").unwrap();
+    let _ = engine.read_int(false)?;
+    Otherize::new(&mut |t| exp.push(t)).write_str("0pt")?;
+    Ok(())
 }
-pub fn rightmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
+pub fn rightmarginkern<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
     // todo
-    let _ = engine.read_int(false);
-    Otherize::new(&mut |t| exp.push(t)).write_str("0pt").unwrap();
+    let _ = engine.read_int(false)?;
+    Otherize::new(&mut |t| exp.push(t)).write_str("0pt")?;
+    Ok(())
 }
 
-pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) {
+pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
     use chrono::{Datelike,Timelike};
     let dt = engine.aux.start_time;
     let mut f = |t| exp.push(t);
     let mut tk = Otherize::new(&mut f);
     write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
                       dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
-                      dt.offset().to_string().replace(":","'")).unwrap();
+                      dt.offset().to_string().replace(":","'"))?;
+    Ok(())
 }
 
-pub fn pdffilemoddate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdffilemoddate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use chrono::{Datelike,Timelike};
     let mut filename = engine.aux.memory.get_string();
-    engine.read_braced_string(true,false,&tk,&mut filename);
+    engine.read_braced_string(true,false,&tk,&mut filename)?;
     let f = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     let path = f.path();
@@ -343,16 +357,17 @@ pub fn pdffilemoddate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
             let mut tk = Otherize::new(&mut f);
             write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
                    dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
-                   dt.offset().to_string().replace(":","'")).unwrap();
+                   dt.offset().to_string().replace(":","'"))?;
         }
         _ => ()
     }
+    Ok(())
 }
 
-pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use crate::tex::characters::Character;
-    engine.expand_until_bgroup(false,&tk);
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+    engine.expand_until_bgroup(false,&tk)?;
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t|Ok(match t.to_enum() {
         StandardToken::Character(_, CommandCode::Space) =>
             ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
         StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
@@ -369,13 +384,13 @@ pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
             exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
         StandardToken::Primitive(_) => (),
         StandardToken::ControlSequence(_) => ()
-    });
+    }))?;Ok(())
 }
 
-pub fn pdfescapename<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdfescapename<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use crate::tex::characters::Character;
-    engine.expand_until_bgroup(false,&tk);
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+    engine.expand_until_bgroup(false,&tk)?;
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| Ok(match t.to_enum() {
         StandardToken::Character(_, CommandCode::Space) =>
             ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
         StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
@@ -392,13 +407,13 @@ pub fn pdfescapename<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut 
             exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
         StandardToken::Primitive(_) => (),
         StandardToken::ControlSequence(_) => ()
-    });
+    }))?;Ok(())
 }
 
-pub fn pdfescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdfescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use crate::tex::characters::Character;
-    engine.expand_until_bgroup(false,&tk);
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+    engine.expand_until_bgroup(false,&tk)?;
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| Ok(match t.to_enum() {
         StandardToken::Character(c, _) => {
             let num = c.into();
             for c in ET::Char::string_to_iter(&format!("{:02X}",num)) {
@@ -407,12 +422,12 @@ pub fn pdfescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
         }
         StandardToken::Primitive(_) => (),
         StandardToken::ControlSequence(_) => ()
-    });
+    }))?;Ok(())
 }
-pub fn pdfunescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    engine.expand_until_bgroup(false,&tk);
+pub fn pdfunescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.expand_until_bgroup(false,&tk)?;
     let mut s = String::new();
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| match t.to_enum() {
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| Ok(match t.to_enum() {
         StandardToken::Character(c, _) if s.is_empty() => {
             let num = c.into();
             if num >= 48 && num <= 57 || num >= 65 && num <= 70 || num >= 97 && num <= 102 {
@@ -434,12 +449,12 @@ pub fn pdfunescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
         }
         StandardToken::Primitive(_) => (),
         StandardToken::ControlSequence(_) => ()
-    });
+    }))?;Ok(())
 }
 
-pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let mut filename = engine.aux.memory.get_string();
-    engine.read_braced_string(false,true,&tk,&mut filename);
+    engine.read_braced_string(false,true,&tk,&mut filename)?;
     let file = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     if file.exists() {
@@ -448,25 +463,26 @@ pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Ve
             exp.push(ET::Token::from_char_cat(u.into(),CommandCode::Other));
         }
     }
+    Ok(())
 }
 
-pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+pub fn pdfglyphtounicode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     // TODO
-    engine.skip_argument(&tk);
-    engine.skip_argument(&tk);
+    engine.skip_argument(&tk)?;
+    engine.skip_argument(&tk)
 }
 
-pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
+pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET> {
-    let icase = engine.read_keyword(b"icase");
-    let _subcount = if engine.read_keyword(b"subcount") {
-        engine.read_int(false).into()
+    let icase = engine.read_keyword(b"icase")?;
+    let _subcount = if engine.read_keyword(b"subcount")? {
+        engine.read_int(false)?.into()
     } else { -1 }; // TODO use subcount
     let mut pattern_string = String::new();
     let mut target_string = String::new();
     if icase {pattern_string.push_str("(?i)");}
-    engine.read_braced_string(false,true,&tk,&mut pattern_string);
-    engine.read_braced_string(false,true,&tk,&mut target_string);
+    engine.read_braced_string(false,true,&tk,&mut pattern_string)?;
+    engine.read_braced_string(false,true,&tk,&mut target_string)?;
     let pdfmatches = engine.aux.extension.pdfmatches();
     pdfmatches.clear();
 
@@ -493,11 +509,12 @@ pub fn pdfmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
             }
         }
     }
+    Ok(())
 }
 
-pub fn pdflastmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token)
+pub fn pdflastmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>  {
-    let i = engine.read_int(false).into();
+    let i = engine.read_int(false)?.into();
     let i = if i < 0 { 0usize } else { i as usize };
     match engine.aux.extension.pdfmatches().get(i) {
         None =>{
@@ -507,46 +524,48 @@ pub fn pdflastmatch<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut V
         Some(s) => {
             let mut f = |t| exp.push(t);
             let mut t = Otherize::new(&mut f);
-            write!(t,"{}",s).unwrap();
+            write!(t,"{}",s)?;
         }
     }
+    Ok(())
 }
 
-pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)
+pub fn pdfmdfivesum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::File: FileWithMD5 {
     let mut f = |t| exp.push(t);
-    if engine.read_keyword(b"file") {
+    if engine.read_keyword(b"file")? {
         let mut filename = String::new();
-        engine.read_braced_string(true,true,&tk,&mut filename);
+        engine.read_braced_string(true,true,&tk,&mut filename)?;
         let file = engine.filesystem.get(&filename);
         let mut t = Otherize::new(&mut f);
-        write!(t,"{:X}",file.md5()).unwrap()
+        write!(t,"{:X}",file.md5())?
     } else {
         let mut str = String::new();
-        engine.read_braced_string(false,true,&tk,&mut str);
+        engine.read_braced_string(false,true,&tk,&mut str)?;
         let mut t = Otherize::new(&mut f);
-        write!(t,"{:X}",md5::compute(str)).unwrap()
+        write!(t,"{:X}",md5::compute(str))?
     }
+    Ok(())
 }
 
-pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
+pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>>  {
-    let num = match engine.read_keywords(&[b"reserveobjnum",b"useobjnum"]) {
+    let num = match engine.read_keywords(&[b"reserveobjnum",b"useobjnum"])? {
         Some(b"reserveobjnum") => {
             engine.aux.extension.pdfannots().push(PDFAnnot {
                 width:None,height:None,depth:None,content:String::new()
             });
-            return
+            return Ok(())
         }
         Some(b"useobjnum") => {
-            let num = engine.read_int(false).into();
+            let num = engine.read_int(false)?.into();
             if num < 0 {
-                tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+                engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
             }
             let num = num as usize;
             if num >= engine.aux.extension.pdfannots().len() {
-                tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+                engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
             }
             Some(num)
         }
@@ -556,15 +575,15 @@ pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
     let mut height = None;
     let mut depth = None;
     loop {
-        match engine.read_keywords(&[b"width",b"height",b"depth"]) {
-            Some(b"width") => width = Some(engine.read_dim(false)),
-            Some(b"height") => height = Some(engine.read_dim(false)),
-            Some(b"depth") => depth = Some(engine.read_dim(false)),
+        match engine.read_keywords(&[b"width",b"height",b"depth"])? {
+            Some(b"width") => width = Some(engine.read_dim(false)?),
+            Some(b"height") => height = Some(engine.read_dim(false)?),
+            Some(b"depth") => depth = Some(engine.read_dim(false)?),
             _ => break
         }
     }
     let mut content = String::new();
-    engine.read_braced_string(true,true,&tk,&mut content);
+    engine.read_braced_string(true,true,&tk,&mut content)?;
     let annot = PDFAnnot {
         width,height,depth,content
     };
@@ -576,190 +595,196 @@ pub fn pdfannot<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
         VNode::Custom(PDFNode::PDFAnnot(annot).into()),
         HNode::Custom(PDFNode::PDFAnnot(annot).into()),
         MathNode::Custom(PDFNode::PDFAnnot(annot).into())
-    )
+    );
+    Ok(())
 }
 
 
-pub fn pdflastannot<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
+pub fn pdflastannot<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<<ET::Num as NumSet>::Int,ET>
     where ET::Extension : PDFExtension<ET> {
-    <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfannots().len() as i32) - 1)
+    Ok(<ET::Num as NumSet>::Int::from((engine.aux.extension.pdfannots().len() as i32) - 1))
 }
 
-pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Token) -> usize
+pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Token) -> TeXResult<usize,ET>
     where ET::Extension : PDFExtension<ET> {
-    match engine.read_keywords(&[b"reserveobjnum",b"useobjnum",b"stream"]) {
+    match engine.read_keywords(&[b"reserveobjnum",b"useobjnum",b"stream"])? {
         Some(b"reserveobjnum") => {
             engine.aux.extension.pdfobjs().push(PDFObj(String::new()));
-            engine.aux.extension.pdfobjs().len() - 1
+            Ok(engine.aux.extension.pdfobjs().len() - 1)
         }
         Some(b"useobjnum") => {
-            let num = engine.read_int(false).into();
+            let num = engine.read_int(false)?.into();
             if num < 0 {
-                tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+                engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
             }
             let num = num as usize;
             if num >= engine.aux.extension.pdfobjs().len() {
-                tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+                engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
             }
             let mut str = String::new();
-            engine.read_braced_string(false,true,tk,&mut str);
+            engine.read_braced_string(false,true,tk,&mut str)?;
             engine.aux.extension.pdfobjs()[num] = PDFObj(str);
-            num
+            Ok(num)
         }
         Some(b"stream") => {
-            if engine.read_keyword(b"attr") {
+            if engine.read_keyword(b"attr")? {
                 // TODO
             }
             let mut str = String::new();
-            engine.read_braced_string(false,true,tk,&mut str);
+            engine.read_braced_string(false,true,tk,&mut str)?;
             engine.aux.extension.pdfobjs().push(PDFObj(str));
-            engine.aux.extension.pdfobjs().len() - 1
+            Ok(engine.aux.extension.pdfobjs().len() - 1)
         }
         _ => {
-            tex_error!(engine,missing_keyword,&["reserveobjnum","useobjnum","stream"]);
-            0
+            MissingKeyword(&["reserveobjnum","useobjnum","stream"]).throw(engine.aux,engine.state,engine.mouth)?;
+            Ok(0)
         }
     }
 }
 
 pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
-                             -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>
+                             -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>
     where ET::Extension : PDFExtension<ET> {
-    parse_pdfobj(engine,&tk);
-    None
+    parse_pdfobj(engine,&tk)?;
+    Ok(None)
 }
-pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfobj_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let num = parse_pdfobj(engine,&tk);
+    let num = parse_pdfobj(engine,&tk)?;
     let node = PDFNode::Obj(engine.aux.extension.pdfobjs()[num].clone());
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
+pub fn pdfrefobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let num = engine.read_int(false).into();
-    if num < 0{
-        tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+    let num = engine.read_int(false)?.into();
+    if num < 0 {
+        engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
     }
     match engine.aux.extension.pdfobjs().get(num as usize) {
         None => {
-            tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+            engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
         }
         Some(o) => {
             let node = PDFNode::Obj(o.clone());
             crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
         }
     }
+    Ok(())
 }
 
 
-pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
+pub fn pdflastobj<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET>
     where ET::Extension : PDFExtension<ET> {
-    <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfobjs().len() as i32) - 1)
+    Ok(<ET::Num as NumSet>::Int::from((engine.aux.extension.pdfobjs().len() as i32) - 1))
 }
 
-pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfoutline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
     let mut attr = String::new();
-    if engine.read_keyword(b"attr") {
-        engine.read_braced_string(true,true,&tk,&mut attr);
+    if engine.read_keyword(b"attr")? {
+        engine.read_braced_string(true,true,&tk,&mut attr)?;
     }
-    let action = super::nodes::action_spec(engine,&tk);
-    let count = if engine.read_keyword(b"count") {
-        Some(engine.read_int(false).into())
+    let action = super::nodes::action_spec(engine,&tk)?;
+    let count = if engine.read_keyword(b"count")? {
+        Some(engine.read_int(false)?.into())
     } else { None };
     let mut content = String::new();
-    engine.read_braced_string(true,true,&tk,&mut content);
+    engine.read_braced_string(true,true,&tk,&mut content)?;
     let node = PDFNode::PDFOutline(PDFOutline{
         attr,action,count,content
     });
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Token) -> usize
+pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Token) -> TeXResult<usize,ET>
     where ET::Extension : PDFExtension<ET> {
     let mut attr = String::new();
-    if engine.read_keyword(b"attr") {
-        engine.read_braced_string(true,true,tk,&mut attr);
+    if engine.read_keyword(b"attr")? {
+        engine.read_braced_string(true,true,tk,&mut attr)?;
     }
     let mut resources = String::new();
-    if engine.read_keyword(b"resources") {
-        engine.read_braced_string(true,true,tk,&mut resources);
+    if engine.read_keyword(b"resources")? {
+        engine.read_braced_string(true,true,tk,&mut resources)?;
     }
-    let idx = engine.read_register_index(false);
+    let idx = engine.read_register_index(false)?;
     let bx = engine.state.take_box_register(idx);
     engine.aux.extension.pdfxforms().push(PDFXForm {
         attr,resources,bx
     });
-    engine.aux.extension.pdfxforms().len() - 1
+    Ok(engine.aux.extension.pdfxforms().len() - 1)
 }
 pub fn pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
-                              -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>
+                              -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>
     where ET::Extension : PDFExtension<ET> {
-    parse_pdfxform(engine,&tk);
-    None
+    parse_pdfxform(engine,&tk)?;
+    Ok(None)
 }
-pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfxform_immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
       ET::CustomNode:From<PDFNode<ET>> {
-    let num = parse_pdfxform(engine,&tk);
+    let num = parse_pdfxform(engine,&tk)?;
     let form = engine.aux.extension.pdfxforms()[num].clone();
     let node = PDFNode::XForm(form);
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
+pub fn pdfrefxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let num = engine.read_int(false).into();
+    let num = engine.read_int(false)?.into();
     if num < 0 {
-        tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+        engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
     }
     match engine.aux.extension.pdfxforms().get(num as usize) {
         None => {
-            tex_error!(engine,other,"pdfTeX error (ext1): invalid object number.")
+            engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
         }
         Some(n) => {
             let node = PDFNode::XForm(n.clone());
             crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
         }
     }
+    Ok(())
 }
 
 
-pub fn pdflastxform<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
+pub fn pdflastxform<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET>
     where ET::Extension : PDFExtension<ET> {
-    <ET::Num as NumSet>::Int::from((engine.aux.extension.pdfxforms().len() as i32) - 1)
+    Ok(<ET::Num as NumSet>::Int::from((engine.aux.extension.pdfxforms().len() as i32) - 1))
 }
 
 
-pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
+pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET> {
     let mut width : Option<ET::Dim> = None;
     let mut height : Option<ET::Dim> = None;
     let mut depth : Option<ET::Dim> = None;
     loop {
-        match engine.read_keywords(&[b"width",b"height",b"depth"]) {
-            Some(b"width") => width = Some(engine.read_dim(false)),
-            Some(b"height") => height = Some(engine.read_dim(false)),
-            Some(b"depth") => depth = Some(engine.read_dim(false)),
+        match engine.read_keywords(&[b"width",b"height",b"depth"])? {
+            Some(b"width") => width = Some(engine.read_dim(false)?),
+            Some(b"height") => height = Some(engine.read_dim(false)?),
+            Some(b"depth") => depth = Some(engine.read_dim(false)?),
             _ => break
         }
     }
     let mut attr = String::new();
-    if engine.read_keyword(b"attr") {
-        engine.read_braced_string(true,true,&tk,&mut attr)
+    if engine.read_keyword(b"attr")? {
+        engine.read_braced_string(true,true,&tk,&mut attr)?
     }
-    let page = if engine.read_keyword(b"page") {
-        Some(engine.read_int(false).into())
+    let page = if engine.read_keyword(b"page")? {
+        Some(engine.read_int(false)?.into())
     } else {None};
-    let colorspace = if engine.read_keyword(b"colorspace") {
-        Some(engine.read_int(false).into())
+    let colorspace = if engine.read_keyword(b"colorspace")? {
+        Some(engine.read_int(false)?.into())
     } else {None};
-    let boxspec = match engine.read_keywords(&[b"mediabox",b"cropbox",b"bleedbox",b"trimbox",b"artbox"]) {
+    let boxspec = match engine.read_keywords(&[b"mediabox",b"cropbox",b"bleedbox",b"trimbox",b"artbox"])? {
         None => None,
         Some(b"mediabox") => Some(PDFBoxSpec::MediaBox),
         Some(b"cropbox") => Some(PDFBoxSpec::CropBox),
@@ -769,13 +794,13 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
         _ => unreachable!()
     };
     let mut filename = String::new();
-    engine.read_braced_string(true,true,&tk,&mut filename);
+    engine.read_braced_string(true,true,&tk,&mut filename)?;
     let file = engine.filesystem.get(&filename);
     let img = match match image::io::Reader::open(file.path()) {
         Ok(x) => x,
         _ => {
-            crate::tex_error!(engine,other,"unknown type of image");
-            return
+            GeneralError("Unknown type of image".into()).throw(engine.aux,engine.state,engine.mouth)?;
+            return Ok(())
         }
     }.with_guessed_format().map(|i| i.decode()) {
         Ok(Ok(x)) => PDFImage::Img(x),
@@ -783,8 +808,8 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
             match file.path().extension() {
                 Some(s) if s == "pdf" => super::nodes::pdf_as_image(file.path(),&mut engine.aux.extension),
                 _ => {
-                    crate::tex_error!(engine,other,"unknown type of image");
-                    return
+                    GeneralError("Unknown type of image".into()).throw(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(())
                 }
             }
         }
@@ -792,87 +817,92 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
     let img = PDFXImage {
         width,height,depth,attr,page,colorspace,boxspec,img,filepath:file.path().to_path_buf()
     };
-    engine.aux.extension.pdfximages().push(img)
+    engine.aux.extension.pdfximages().push(img);
+    Ok(())
 }
 
 
-pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
+pub fn pdfrefximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    let num = engine.read_int(false).into();
+    let num = engine.read_int(false)?.into();
     if num < 0 {
-        tex_error!(engine,other,"pdfTeX error (ext1): cannot find reference object.")
+        engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
     }
     match engine.aux.extension.pdfximages().get(num as usize) {
         None => {
-            tex_error!(engine,other,"pdfTeX error (ext1): cannot find referenced object.")
+            engine.general_error("pdfTeX error (ext1): invalid object number.".to_string())?;
         }
         Some(n) => {
             let node = PDFNode::XImage(n.clone());
             crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
         }
     }
+    Ok(())
 }
 
-pub fn pdfpageattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfpageattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    engine.expand_until_bgroup(false,&tk);
+    engine.expand_until_bgroup(false,&tk)?;
     let mut v = Vec::new();
-    engine.read_until_endgroup(&tk,|_,_,t| v.push(t));
+    engine.read_until_endgroup(&tk,|_,_,t| Ok(v.push(t)))?;
     let node = PDFNode::PDFPageAttr(v.into());
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfpagesattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfpagesattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>,
           ET::CustomNode:From<PDFNode<ET>> {
-    engine.expand_until_bgroup(false,&tk);
+    engine.expand_until_bgroup(false,&tk)?;
     let mut v = Vec::new();
-    engine.read_until_endgroup(&tk,|_,_,t| v.push(t));
+    engine.read_until_endgroup(&tk,|_,_,t| Ok(v.push(t)))?;
     let node = PDFNode::PDFPagesAttr(v.into());
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) {
-    let name = engine.read_csname();
+pub fn pdfprimitive<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
+    let name = engine.read_csname()?;
     let s = engine.aux.memory.cs_interner_mut().resolve(&name).to_string();
     match engine.state.primitives().get_name(&s) {
         None => (),
-        Some(s) => engine.requeue(ET::Token::primitive(s))
+        Some(s) => engine.requeue(ET::Token::primitive(s))?
     }
+    Ok(())
 }
 
 
-pub fn pdflastximage<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int
+pub fn pdflastximage<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET>
     where ET::Extension : PDFExtension<ET> {
-    (engine.aux.extension.pdfximages().len() as i32 - 1).into()
+    Ok((engine.aux.extension.pdfximages().len() as i32 - 1).into())
 }
 
-pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
+pub fn pdfliteral<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET>
     where ET::Extension : PDFExtension<ET>, ET::CustomNode:From<PDFNode<ET>> {
-    let _ = engine.read_keyword(b"shipout"); // TODO
-    let option = match engine.read_keywords(&[b"direct",b"page"]) {
+    let _ = engine.read_keyword(b"shipout")?; // TODO
+    let option = match engine.read_keywords(&[b"direct",b"page"])? {
         Some(b"direct") => PDFLiteralOption::Direct,
         Some(b"page") => PDFLiteralOption::Page,
         _ => PDFLiteralOption::None
     };
     let mut literal = String::new();
-    engine.read_braced_string(true,true,&tk,&mut literal);
+    engine.read_braced_string(true,true,&tk,&mut literal)?;
     let node = PDFNode::PDFLiteral(PDFLiteral{ literal, option});
-    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()))
+    crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
+    Ok(())
 }
 
-pub fn pdfshellescape<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> <ET::Num as NumSet>::Int {
-    <ET::Num as NumSet>::Int::from(2)
+pub fn pdfshellescape<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
+    Ok(<ET::Num as NumSet>::Int::from(2))
 }
 
-pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
+pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let mut first = String::new();
     let mut second = String::new();
-    engine.read_braced_string(false,true,&tk,&mut first);
-    engine.read_braced_string(false,true,&tk,&mut second);
-
+    engine.read_braced_string(false,true,&tk,&mut first)?;
+    engine.read_braced_string(false,true,&tk,&mut second)?;
     if first == second {
         exp.push(ET::Token::from_char_cat(b'0'.into(),CommandCode::Other))
     } else if first < second {
@@ -881,22 +911,24 @@ pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<
     } else {
         exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
     }
+    Ok(())
 }
 
-pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) {
-    let dim = engine.read_font(false,&tk).get_at();
+pub fn pdffontsize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    let dim = engine.read_font(false,&tk)?.get_at();
     let mut f = |t| exp.push(t);
     let mut t = Otherize::new(&mut f);
-    write!(t,"{}",dim).unwrap();
+    write!(t,"{}",dim)?;Ok(())
 }
 
-pub fn pdffontexpand<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) {
+pub fn pdffontexpand<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     // TODO
-    let _ = engine.read_font(false,&tk);
-    let _ = engine.read_int(false);
-    let _ = engine.read_int(false);
-    let _ = engine.read_int(false);
-    engine.read_keyword(b"autoexpand");
+    let _ = engine.read_font(false,&tk)?;
+    let _ = engine.read_int(false)?;
+    let _ = engine.read_int(false)?;
+    let _ = engine.read_int(false)?;
+    engine.read_keyword(b"autoexpand")?;
+    Ok(())
 }
 
 
@@ -979,8 +1011,8 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
 
     register_whatsit(engine,"pdfobj",pdfobj,pdfobj_immediate,None);
     register_whatsit(engine,"pdfxform",pdfxform,pdfxform_immediate,None);
-    register_whatsit(engine,"pdfpageattr",|e,t| {pdfpageattr(e,t);None},pdfpageattr,Some(|_,_| Vec::new()));
-    register_whatsit(engine,"pdfpagesattr",|e,t| {pdfpagesattr(e,t);None},pdfpagesattr,Some(|_,_| Vec::new()));
+    register_whatsit(engine,"pdfpageattr",|e,t| {pdfpageattr(e,t)?;Ok(None)},pdfpageattr,Some(|_,_| Ok(Vec::new())));
+    register_whatsit(engine,"pdfpagesattr",|e,t| {pdfpagesattr(e,t)?;Ok(None)},pdfpagesattr,Some(|_,_| Ok(Vec::new())));
     register_unexpandable(engine,"pdfrefobj",CommandScope::Any,pdfrefobj);
     register_int(engine,"pdflastobj",pdflastobj,None);
     register_unexpandable(engine,"pdfrefxform",CommandScope::Any,pdfrefxform);

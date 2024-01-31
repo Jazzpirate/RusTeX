@@ -2,6 +2,7 @@
 use std::cell::OnceCell;
 use std::fmt::{Debug, Formatter, Write};
 use std::marker::PhantomData;
+use either::Either;
 use crate::commands::primitives::PRIMITIVES;
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
@@ -1097,15 +1098,15 @@ impl<ET:EngineTypes> Delimiter<ET> {
         }
     }
     /// Create a new [`Delimiter`] from a delimiter code.
-    pub fn from_int(num:ET::Int,state:&ET::State) -> Result<Self,(Self,i64)> {
+    pub fn from_int(num:ET::Int,state:&ET::State) -> Either<Self,(Self,i64)> {
         let num = num.into();
         if num < 0 || num > u32::MAX.into() {
-            return Err((Self::default(),num))
+            return either::Right((Self::default(),num))
         }
         let num = num as u32;
         let large = num & 0xFFF;
         let small = num >> 12;
-        Ok(Delimiter {
+        either::Left(Delimiter {
             small:MathChar::from_u32(small, state, None),
             large:MathChar::from_u32(large, state, None)
         })

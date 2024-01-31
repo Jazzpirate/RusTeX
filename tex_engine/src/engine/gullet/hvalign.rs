@@ -37,6 +37,7 @@ impl <T:Token,D: crate::tex::numerics::TeXDimen> AlignColumn<T,D> {
 
 /// Data structure for a currently open `\halign` (or `\valign`)
 pub struct AlignData<T:Token,D: crate::tex::numerics::TeXDimen> {
+    pub token:T,
     /// The number of braces that are currently open
     pub ingroups:u8,
     /// The index of the current column (or row)
@@ -69,6 +70,7 @@ impl<T:Token,D: crate::tex::numerics::TeXDimen> AlignData<T,D> {
     /// [`AlignData`]s to be used.
     pub fn dummy() -> Self {
         Self {
+            token:T::space(),
             ingroups:125,
             currindex:0,
             repeat_index:None,
