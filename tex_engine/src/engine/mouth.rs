@@ -15,7 +15,7 @@ use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::StringLineSource;
 use crate::tex::tokens::Token;
-use crate::utils::errors::{InvalidCharacter, InvalidCharacterOrEOF, MouthError, RecoverableError, MouthResult, TeXError, TeXResult};
+use crate::utils::errors::{InvalidCharacter, RecoverableError, TeXError, TeXResult};
 
 pub mod strings;
 
@@ -56,7 +56,7 @@ pub trait Mouth<ET:EngineTypes> {
     /// Get the next [`Token`] from the [`Mouth`].
     /// This method should not be called directly, but rather through [`EngineReferences::get_next`]
     /// or [`Gullet::get_next_opt`](crate::engine::gullet::Gullet::get_next).
-    fn get_next(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> MouthResult<ET::Token>;
+    fn get_next(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Result<Option<ET::Token>,InvalidCharacter<ET::Char>>;
     /// Iterate over the [`Token`]s in the [`Mouth`] until `cont` returns `false`. Can be faster than repeatedly calling
     /// [`get_next_opt`](Self::get_next), but
     /// blocking both state changes and expanding macros. Useful for e.g. reading macro arguments or the expansion list
@@ -276,12 +276,12 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         self.start_ref.push(rf);
     }
 
-    fn get_next(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> MouthResult<ET::Token> {
+    fn get_next(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Result<Option<ET::Token>,InvalidCharacter<ET::Char>> {
         while let Some(src) = self.inputs.last_mut() {
             match src {
                 TokenSource::Vec(v) => {
                     match v.pop() {
-                        Some(t) => return Ok(t),
+                        Some(t) => return Ok(Some(t)),
                         _ => {
                             if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
                                 self.vecs.push(v);
@@ -291,10 +291,10 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                 }
                 TokenSource::String(s) => {
                     match s.get_next(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
-                        Ok(t) => return Ok(t),
-                        Err(InvalidCharacterOrEOF::EOF) => return Ok(self.end_file(aux,state)),
-                        Err(InvalidCharacterOrEOF::Invalid(c)) => {
-                            InvalidCharacter(c).recover::<_,MouthError<_>>(aux,state,self)?;
+                        Ok(Some(t)) => return Ok(Some(t)),
+                        Ok(None) => return Ok(Some(self.end_file(aux,state))),
+                        Err(c) => {
+                            c.recover::<_,InvalidCharacter<_>>(aux,state,self)?;
                             continue
                         }
                     }
@@ -303,17 +303,17 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let cc: &CategoryCodeScheme<ET::Char> = state.get_catcode_scheme();
                     let endline: Option<ET::Char> = state.get_endline_char();
                     match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
-                        Ok(t) => return Ok(t),
-                        Err(InvalidCharacterOrEOF::EOF) => return Ok(self.end_file(aux,state)),
-                        Err(InvalidCharacterOrEOF::Invalid(c)) => {
-                            InvalidCharacter(c).recover::<_,MouthError<_>>(aux,state,self)?;
+                        Ok(Some(t)) => return Ok(Some(t)),
+                        Ok(None) => return Ok(Some(self.end_file(aux,state))),
+                        Err(c) => {
+                            c.recover::<_,InvalidCharacter<_>>(aux,state,self)?;
                             continue
                         }
                     }
                 }
             }
         }
-        Err(MouthError::MouthEmpty)
+        Ok(None)
     }
 
     fn iterate<R,E,F:FnMut(&mut EngineAux<ET>,ET::Token) -> TeXResult<Option<R>,ET>>(&mut self, aux:&mut EngineAux<ET>, state:&ET::State, mut cont:F, eof:E) -> TeXResult<R,ET>
@@ -333,13 +333,13 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let endline = state.get_endline_char();
                     loop {
                         match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
-                            Ok(t) =>
+                            Ok(Some(t)) =>
                                 match cont(aux,t)? {Some(r) => return Ok(r),_ => ()},
-                            Err(InvalidCharacterOrEOF::Invalid(c)) => {
-                                InvalidCharacter(c).recover::<_,TeXError<_>>(aux,state,self)?;
+                            Err(c) => {
+                                c.recover::<_,TeXError<_>>(aux,state,self)?;
                                 continue 'top
                             }
-                            Err(InvalidCharacterOrEOF::EOF) => {
+                            Ok(None) => {
                                 eof(aux, state, self)?;
                                 continue 'top
                             }
@@ -351,13 +351,13 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let endline = state.get_endline_char();
                     loop {
                         match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
-                            Ok(t) =>
+                            Ok(Some(t)) =>
                                 match cont(aux,t)? {Some(r) => return Ok(r),_ => ()},
-                            Err(InvalidCharacterOrEOF::Invalid(c)) => {
-                                InvalidCharacter(c).recover::<_,TeXError<_>>(aux,state,self)?;
+                            Err(c) => {
+                                c.recover::<_,TeXError<_>>(aux,state,self)?;
                                 continue 'top
                             }
-                            Err(InvalidCharacterOrEOF::EOF) => {
+                            Ok(None) => {
                                 eof(aux, state, self)?;
                                 continue 'top
                             }

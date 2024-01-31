@@ -25,7 +25,7 @@ use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
 use crate::tex::numerics::Skip;
-use crate::utils::errors::{FileEndWhileUse, InvalidCharacter, MissingBegingroup, MouthError, RecoverableError, TeXResult};
+use crate::utils::errors::{FileEndWhileUse, MissingBegingroup, RecoverableError, TeXResult};
 
 pub(crate) struct MacroParser<T:Token> {
     arity:u8,
@@ -376,20 +376,9 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
     let mut ingroups = 0;
 
 
-    loop {
-        let next = match engine.mouth.get_next(engine.aux, engine.state) {
-            Ok(n) => n,
-            Err(MouthError::MouthEmpty) => {
-                FileEndWhileUse(in_token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
-                continue
-            }
-            Err(MouthError::InvalidChar(c)) => {
-                InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?;
-                continue
-            }
-        };
+    while let Some(next) = engine.mouth.get_next(engine.aux, engine.state)? {
         if next.is_primitive() == Some(PRIMITIVES.noexpand) {
-            let Ok(n) = engine.mouth.get_next(engine.aux, engine.state) else { unreachable!() };
+            let Ok(Some(n)) = engine.mouth.get_next(engine.aux, engine.state) else { unreachable!() };
             cols.push(n);
             continue
         }
@@ -434,19 +423,20 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
                 return Ok(cols.build(in_token.clone()))
             },
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
-                let t = match engine.mouth.get_next(engine.aux,engine.state) {
-                    Ok(t) => t,
-                    Err(MouthError::MouthEmpty) => {
+                let t = match engine.mouth.get_next(engine.aux,engine.state)? {
+                    Some(t) => t,
+                    _ => {
                         FileEndWhileUse(in_token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
                         continue
                     }
-                    Err(MouthError::InvalidChar(c)) => return Err(InvalidCharacter(c).into())
                 };
                 engine.expand(t)?;
             }
             _ => cols.push(next)
         }
     }
+    FileEndWhileUse(in_token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
+    Ok(cols.build(in_token.clone()))
 }
 
 pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) -> TeXResult<(),ET> {
@@ -454,18 +444,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
         d.currindex = 0
     } else { unreachable!() }
     // avoid the gullet here as to not throw an error on '}'!
-    loop {
-        let token = match engine.mouth.get_next(engine.aux, engine.state) {
-            Ok(t) => t,
-            Err(MouthError::MouthEmpty) => {
-                FileEndWhileUse(engine.gullet.get_align_data().unwrap().token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
-                continue
-            }
-            Err(MouthError::InvalidChar(c)) => {
-                InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?;
-                continue
-            }
-        };
+    while let Some(token) = engine.mouth.get_next(engine.aux, engine.state)? {
         crate::expand!(engine,token;
             ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
             ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::EndGroup,..})) => {
@@ -544,6 +523,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
             }
         );
     }
+    FileEndWhileUse(engine.gullet.get_align_data().unwrap().token.clone()).throw(engine.aux,engine.state,engine.mouth)
 }
 
 pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {

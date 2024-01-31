@@ -22,71 +22,7 @@ use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::characters::{Character, StringLineSource};
 use crate::tex::tokens::Token;
 use crate::tex::tokens::StandardToken;
-/*
-/// Error type for TeX errors occurring during compilation.
-#[derive(Clone)]
-pub struct TeXError {
-    /// Error message
-    pub msg:String,
-    source:Option<Box<TeXError>>,
-}
-impl Debug for TeXError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{}",self.msg)
-    }
-}
-impl Display for TeXError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{}",self.msg)
-    }
-}
-impl Error for TeXError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.source {
-            Some(src) => Some(&*src),
-            None => None
-        }
-    }
-}
-impl TeXError {
-    /// Throw a TeX error.
-    pub fn throw<D:Display>(msg:D) -> ! {
-        std::panic::panic_any::<_>(TeXError {
-            msg:msg.to_string(),
-            source: None
-        })
-    }
 
-    /// Catch a TeX error and return a `Result`
-    pub fn catch<R,F:FnOnce() -> R>(f:F) -> Result<R,TeXError> {
-        let old = std::panic::take_hook();
-        let nf = move |p:&PanicInfo<'_>| panic_hook(&old,p);
-        std::panic::set_hook(Box::new(nf));
-        let r = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                match e.downcast::<TeXError>() {
-                    Ok(e) => Err(*e),
-                    Err(e) => {
-                        //std::panic::set_hook(old.into());
-                        std::panic::resume_unwind(e)
-                    }
-                }
-            }
-        };
-        let _ = std::panic::take_hook();
-        //std::panic::set_hook(old);
-        r
-    }
-}
-
-fn panic_hook(old:&(dyn Fn(&std::panic::PanicInfo<'_>) + Send + Sync + 'static),info:&std::panic::PanicInfo<'_>) {
-    match info.payload().downcast_ref::<TeXError>() {
-        Some(_) => (),
-        _ => old(info)
-    }
-}
-*/
 #[derive(Debug,Error)]
 pub enum TeXError<ET:EngineTypes> {
     #[error(transparent)]
@@ -160,30 +96,16 @@ macro_rules! split {
     }};
 }
 
-pub enum MouthError<C:Character> {
-    InvalidChar(C),
-    MouthEmpty,
-}
-impl<C:Character> From<InvalidCharacter<C>> for MouthError<C> {
-    #[inline]
-    fn from(e: InvalidCharacter<C>) -> Self {
-        MouthError::InvalidChar(e.0)
-    }
-}
-pub type MouthResult<T> = Result<T, MouthError<<T as Token>::Char>>;
-
-#[derive(Debug)]
+#[derive(Debug,Error)]
+#[error("! Too many }}'s")]
 pub enum GulletError<C:Character> {
+    #[error("! Text line contains an invalid character.\n{}",.0.display())]
     InvalidChar(C),
-    MouthEmpty,
     TooManyCloseBraces,
 }
-impl<C:Character> From<MouthError<C>> for GulletError<C> {
-    fn from(e: MouthError<C>) -> Self {
-        match e {
-            MouthError::InvalidChar(c) => GulletError::InvalidChar(c),
-            MouthError::MouthEmpty => GulletError::MouthEmpty
-        }
+impl<C:Character> From<InvalidCharacter<C>> for GulletError<C> {
+    fn from(InvalidCharacter(c):InvalidCharacter<C>) -> Self {
+        Self::InvalidChar(c)
     }
 }
 impl<C:Character> From<TooManyCloseBraces> for GulletError<C> {
@@ -191,7 +113,14 @@ impl<C:Character> From<TooManyCloseBraces> for GulletError<C> {
         GulletError::TooManyCloseBraces
     }
 }
-pub type GulletResult<T> = Result<T, GulletError<<T as Token>::Char>>;
+impl<ET:EngineTypes> From<GulletError<ET::Char>> for TeXError<ET> {
+    fn from(e: GulletError<ET::Char>) -> Self {
+        match e {
+            GulletError::InvalidChar(c) => TeXError::InvalidCharacter(InvalidCharacter(c)),
+            GulletError::TooManyCloseBraces => TeXError::TooManyCloseBraces
+        }
+    }
+}
 
 #[derive(Debug,Error)]
 #[error("Errror: {0}")]
@@ -212,7 +141,6 @@ impl<ET:EngineTypes> RecoverableError<ET> for InvalidCharacter<ET::Char> {
     }
 }
 
-
 #[derive(Debug,Error)]
 #[error("Incomplete {}; all text was ignored after line {line_no}",.name.display::<u8>(Some(b'\\')))]
 pub struct IncompleteConditional {
@@ -225,6 +153,7 @@ impl<ET:EngineTypes> RecoverableError<ET> for IncompleteConditional {
     }
 }
 
+#[derive(Debug,Error)]
 pub struct WrongDefinition<T:Token> {
     pub(crate) expected:T,
     pub(crate) found:T,
@@ -241,6 +170,7 @@ impl<ET:EngineTypes> RecoverableError<ET> for WrongDefinition<ET::Token> {
     }
 }
 
+#[derive(Debug,Error)]
 pub struct FileEndWhileUse<T:Token>(pub T);
 impl<ET:EngineTypes> IntoErr<ET,TeXError<ET>> for FileEndWhileUse<ET::Token> {
     fn into_err(self, aux: &EngineAux<ET>, state: &ET::State) -> TeXError<ET> {
@@ -253,6 +183,7 @@ impl<ET:EngineTypes> RecoverableError<ET> for FileEndWhileUse<ET::Token> {
     }
 }
 
+#[derive(Debug,Error)]
 pub struct Undefined<T:Token>(pub T);
 impl<ET:EngineTypes> IntoErr<ET,TeXError<ET>> for Undefined<ET::Token> {
     fn into_err(self, aux: &EngineAux<ET>, state: &ET::State) -> TeXError<ET> {
@@ -273,6 +204,8 @@ impl<ET:EngineTypes> RecoverableError<ET> for Undefined<ET::Token> {
     }
 }
 
+#[derive(Debug,Error)]
+#[error("! Too many }}'s")]
 pub struct TooManyCloseBraces;
 impl<ET:EngineTypes> RecoverableError<ET> for TooManyCloseBraces {
     fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
@@ -297,6 +230,8 @@ impl<ET:EngineTypes> RecoverableError<ET> for NotAllowedInMode {
     }
 }
 
+#[derive(Debug,Error)]
+#[error("! Missing {{ inserted")]
 pub struct MissingBegingroup;
 impl<ET:EngineTypes> RecoverableError<ET> for MissingBegingroup {
     fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
@@ -309,6 +244,8 @@ impl<ET:EngineTypes> From<MissingBegingroup> for TeXError<ET> {
     }
 }
 
+#[derive(Debug,Error)]
+#[error("! Missing }} inserted")]
 pub struct MissingEndgroup;
 impl<ET:EngineTypes> RecoverableError<ET> for MissingEndgroup {
     fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
@@ -321,6 +258,8 @@ impl<ET:EngineTypes> From<MissingEndgroup> for TeXError<ET> {
     }
 }
 
+#[derive(Debug,Error)]
+#[error("Missing number, treated as zero.")]
 pub struct MissingNumber;
 impl<ET:EngineTypes> RecoverableError<ET> for MissingNumber {
     fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
@@ -333,17 +272,8 @@ impl<ET:EngineTypes> From<MissingNumber> for TeXError<ET> {
     }
 }
 
-pub enum InvalidCharacterOrEOF<C:Character> {
-    Invalid(C),
-    EOF
-}
-impl<C:Character> From<InvalidCharacter<C>> for InvalidCharacterOrEOF<C> {
-    #[inline]
-    fn from(e: InvalidCharacter<C>) -> Self {
-        InvalidCharacterOrEOF::Invalid(e.0)
-    }
-}
-
+#[derive(Debug,Error)]
+#[error("! Missing {} inserted",.0[0])]
 pub struct MissingKeyword(pub &'static [&'static str]);
 impl<ET:EngineTypes> RecoverableError<ET> for MissingKeyword {
     fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
@@ -412,23 +342,6 @@ pub trait ErrorHandler<ET:EngineTypes> {
     fn other(&self,_aux:&EngineAux<ET>,_state:&ET::State,_msg:&str) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
-
-/*
-
-    /// `\errmessage`
-    fn error_message(&self,msg:&str) {
-        TeXError::throw(format!("! {}",msg))
-    }
-
-    fn emergency_stop(&self,_state:&ET::State) -> ! {
-        TeXError::throw(format!("Emergency stop."))
-    }
-
-    fn other(&self,_engine:&mut EngineReferences<ET>,msg:&str) {
-        TeXError::throw(msg.to_string())
-    }
-
-*/
 
     /*
     /// "Runaway argument? Paragraph ended before `\foo` was complete."

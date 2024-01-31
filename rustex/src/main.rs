@@ -27,12 +27,12 @@ profile 1:27      ==> 1:43
 thesis  0:15
  */
 fn main() {
-    profile()
+    //profile()
     //thesis()
     //run()
     //test()
     //temp_test()
-    //notes()
+    notes()
     //test2()
     //test_all()
 }

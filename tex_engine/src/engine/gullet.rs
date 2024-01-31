@@ -19,7 +19,7 @@ use crate::tex::characters::Character;
 use crate::tex::numerics::{MuSkip, NumSet, Skip};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;
-use crate::utils::errors::{FileEndWhileUse, GulletError, GulletResult, InvalidCharacter, MissingBegingroup, RecoverableError, TeXError, TeXResult, TooManyCloseBraces};
+use crate::utils::errors::{FileEndWhileUse, GulletError, MissingBegingroup, RecoverableError, TeXError, TeXResult, TooManyCloseBraces};
 
 /// A [`Gullet`] is the part of the engine that reads tokens from the input stream and expands them;
 /// including conditionals etc.
@@ -98,22 +98,25 @@ pub trait Gullet<ET:EngineTypes> {
     /// Wrapper around [`Mouth::get_next`] that, in case we are in an `\halign` or `\valign`,
     /// make sure to replace `&`, `\cr` etc. with the appropriate tokens. If `noexpand` is `true`, `\cr`, `\crcr` and `&` are not expanded.
     /// See also [`EngineReferences::get_next`].
-    fn get_next(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State, mut noexpand:bool) -> GulletResult<ET::Token> {
+    fn get_next(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State, mut noexpand:bool) -> Result<Option<ET::Token>,GulletError<ET::Char>> {
         match self.get_align_data() {
             None => Ok(mouth.get_next(aux, state)?),
             Some(a) => loop {
-                let t = mouth.get_next(aux, state)?;
+                let t = match mouth.get_next(aux, state)? {
+                    None => return Ok(None),
+                    Some(t) => t
+                };
                 match t.command_code() {
                     CommandCode::BeginGroup => {
                         a.ingroups += 1;
-                        return Ok(t)
+                        return Ok(Some(t))
                     }
                     CommandCode::EndGroup => {
                         if a.ingroups == 0 {
                             TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?
                         }
                         a.ingroups -= 1;
-                        return Ok(t)
+                        return Ok(Some(t))
                     }
                     CommandCode::AlignmentTab if !noexpand && a.ingroups == a.groupval() => {
                         a.on_alignment_tab(mouth, aux);
@@ -129,9 +132,9 @@ pub trait Gullet<ET:EngineTypes> {
                             a.on_alignment_tab(mouth, aux);
                             noexpand = false;
                         }
-                        _ => return Ok(t)
+                        _ => return Ok(Some(t))
                     }
-                    _ => return Ok(t)
+                    _ => return Ok(Some(t))
                 }
             }
         }
@@ -474,7 +477,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
     /// Yields the next [`Token`] from the input stream. If `noexpand` is `true`, `\cr`, `\crcr` and `&` are not expanded.
     #[inline]
-    pub fn get_next(&mut self,noexpand:bool) -> GulletResult<ET::Token> {
+    pub fn get_next(&mut self,noexpand:bool) -> Result<Option<ET::Token>,GulletError<ET::Char>> {
         self.gullet.get_next(self.mouth, self.aux, self.state, noexpand)
     }
 
@@ -482,13 +485,11 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// If the input stream is empty, returns a "File ended while scanning use of `in_token`" error.
     pub fn need_next(&mut self,noexpand:bool,in_token:&ET::Token) -> TeXResult<ET::Token,ET> {
         loop {
-            match self.get_next(noexpand) {
-                Ok(t) => return Ok(t),
-                Err(GulletError::MouthEmpty) => {
+            match self.get_next(noexpand)? {
+                Some(t) => return Ok(t),
+                None => {
                     FileEndWhileUse(in_token.clone()).throw(self.aux, self.state, self.mouth)?;
                 }
-                Err(GulletError::InvalidChar(c)) => return Err(InvalidCharacter(c).into()),
-                Err(GulletError::TooManyCloseBraces) => return Err(TooManyCloseBraces.into()),
             }
         }
     }
@@ -533,8 +534,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// and `\input myfile.tex` (which would use [`read_string`](EngineReferences::read_string)).
     pub fn read_braced_string(&mut self,skip_ws:bool, expand_protected:bool,token:&ET::Token, mut str:&mut String) -> TeXResult<(),ET> {
         loop {
-            match self.get_next(false) {
-                Ok(t) => match t.command_code() {
+            match self.get_next(false)? {
+                Some(t) => match t.command_code() {
                     CommandCode::BeginGroup => break,
                     CommandCode::Space if skip_ws => (),
                     _ => {
@@ -542,10 +543,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                         break
                     }
                 }
-                Err(GulletError::MouthEmpty) =>
+                None =>
                     FileEndWhileUse(token.clone()).throw(self.aux,self.state,self.mouth)?,
-                Err(GulletError::InvalidChar(c)) => return Err(InvalidCharacter(c).into()),
-                Err(GulletError::TooManyCloseBraces) => return Err(TooManyCloseBraces.into()),
             }
         }
         ET::Gullet::expand_until_endgroup(self,expand_protected,false,token,|a,s,t| {

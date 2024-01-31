@@ -18,7 +18,7 @@ use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
-use crate::utils::errors::{InvalidCharacterOrEOF, TeXResult};
+use crate::utils::errors::TeXResult;
 
 pub mod primitives;
 pub mod tex;
@@ -377,23 +377,15 @@ impl<T:Token> Macro<T> {
         if !sig.is_empty() {
             let sigsrc: StringLineSource<T::Char> = sig.into();
             let mut sigsrc = InputTokenizer::new(sigsrc);
-            loop {
-                match sigsrc.get_next(int,cc,None) {
-                    Ok(t) => {match parser.do_signature_token::<ET>(t) {Ok(_) => (),_ => return Err(())};},
-                    Err(InvalidCharacterOrEOF::EOF) => break,
-                    Err(_) => return Err(())
-                }
+            while let Some(t) = sigsrc.get_next(int,cc,None).map_err(|_|())? {
+                if let Err(_) = parser.do_signature_token::<ET>(t) { return Err(())};
             }
         }
         let exp = exp.as_ref();
         let expsrc: StringLineSource<T::Char> = exp.into();
         let mut expsrc = InputTokenizer::new(expsrc);
-        loop {
-            match expsrc.get_next(int,cc,None) {
-                Ok(t) => match parser.do_expansion_token::<ET>(t) {Ok(_) => (),_ => return Err(())},
-                Err(InvalidCharacterOrEOF::EOF) => break,
-                Err(_) => return Err(())
-            }
+        while let Some(t) = expsrc.get_next(int,cc,None).map_err(|_|())? {
+            if let Err(_) = parser.do_expansion_token::<ET>(t) { return Err(()) }
         }
         Ok(parser.close(false,false,false))
     }

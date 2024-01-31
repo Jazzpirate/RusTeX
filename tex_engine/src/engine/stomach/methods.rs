@@ -15,7 +15,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
-use crate::utils::errors::{GulletError, InvalidCharacter, RecoverableError, TeXResult, TooManyCloseBraces, Undefined};
+use crate::utils::errors::{RecoverableError, TeXResult, Undefined};
 
 #[doc(hidden)]
 #[macro_export]
@@ -228,12 +228,7 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> Te
         }}
     }
     crate::expand_loop!(ET;token => {
-        if token.is_primitive() == Some(PRIMITIVES.noexpand) { match engine.get_next(false) {
-                Err(GulletError::MouthEmpty) => return Ok(()),
-                Err(GulletError::TooManyCloseBraces) => TooManyCloseBraces.throw(engine.aux,engine.state,engine.mouth)?,
-                Err(GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
-                _ => ()
-            }; continue}
+        if token.is_primitive() == Some(PRIMITIVES.noexpand) { engine.get_next(false)?; continue}
     };engine,
         ResolvedToken::Tk { char, code:CommandCode::Letter|CommandCode::Other } =>
             char!(char),
@@ -280,8 +275,8 @@ fn add_char<ET:EngineTypes>(slf:&mut ET::Stomach,state:&ET::State,char:ET::Char,
 fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
     let (display,every) = match engine.stomach.data_mut().mode() {
         TeXMode::Horizontal => {
-            match engine.get_next(false) {
-                Ok(tk) => {
+            match engine.get_next(false)? {
+                Some(tk) => {
                     if tk.command_code() == CommandCode::MathShift {
                         engine.stomach.data_mut().prevgraf = 3; // heuristic
                         (true,PRIMITIVES.everydisplay)
@@ -290,15 +285,7 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),E
                         (false,PRIMITIVES.everymath)
                     }
                 },
-                Err(GulletError::MouthEmpty) => todo!(),
-                Err(GulletError::InvalidChar(c)) => {
-                    InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?;
-                    (false,PRIMITIVES.everymath)
-                }
-                Err(GulletError::TooManyCloseBraces) => {
-                    TooManyCloseBraces.throw(engine.aux,engine.state,engine.mouth)?;
-                    (false,PRIMITIVES.everymath)
-                }
+                None => todo!(),
             }
         }
         _ => (false,PRIMITIVES.everymath)
@@ -315,8 +302,8 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),
         Some(NodeList::Math{children,start,tp:MathNodeListType::Top {display}}) => {
             if display {
                 engine.stomach.data_mut().prevgraf += 3;
-                match engine.get_next(false) {
-                    Ok(tk) if tk.command_code() == CommandCode::MathShift => (),
+                match engine.get_next(false)? {
+                    Some(tk) if tk.command_code() == CommandCode::MathShift => (),
                     _ => todo!("throw error")
                 }
             }
@@ -655,15 +642,9 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
 
     let depth = engine.state.get_group_level();
     loop {
-        let next = match engine.get_next(false) {
-            Ok(t) => t,
-            Err(GulletError::MouthEmpty) => todo!("file end"),
-            Err(GulletError::InvalidChar(c)) => {
-                InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?;continue
-            },
-            Err(GulletError::TooManyCloseBraces) => {
-                TooManyCloseBraces.throw(engine.aux,engine.state,engine.mouth)?;continue
-            },
+        let next = match engine.get_next(false)? {
+            Some(t) => t,
+            None => todo!("file end"),
         };
         //println!("HERE: {}",engine.preview());
         if engine.state.get_group_level() == depth && next.command_code() == CommandCode::EndGroup {

@@ -28,7 +28,7 @@ use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathC
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::token_lists::CharWrite;
-use crate::utils::errors::{GeneralError, InvalidCharacter, MissingBegingroup, MissingEndgroup, MissingKeyword, MouthError, RecoverableError, TeXError, TeXResult, Undefined};
+use crate::utils::errors::{GeneralError, MissingBegingroup, MissingEndgroup, MissingKeyword, RecoverableError, TeXError, TeXResult, Undefined};
 
 
 pub fn accent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
@@ -1081,22 +1081,18 @@ pub fn ifx<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> Te
 }
 
 pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    loop {
-        let next = match engine.mouth.get_next(engine.aux,engine.state) {
-            Ok(t) => t,
-            Err(MouthError::MouthEmpty) => return Ok(()),
-            Err(MouthError::InvalidChar(c)) => return Err(InvalidCharacter(c).into())
-        };
+    while let Some(next) = engine.mouth.get_next(engine.aux,engine.state)? {
         if next.command_code() != CommandCode::Space {
             match ET::Gullet::char_or_primitive(engine.state,&next) {
                 Some(CharOrPrimitive::Char(_,CommandCode::Space)) => (),
                 _ => {
                     engine.mouth.requeue(next);
-                    return Ok(())
+                    break
                 }
             }
         }
     }
+    Ok(())
 }
 
 pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
@@ -1235,12 +1231,12 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
         StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
         _ => todo!("throw error")
     };
-    let first = match engine.mouth.get_next(engine.aux, engine.state) {
-        Ok(t) => t,
-        Err(_) => todo!("error")
+    let first = match engine.mouth.get_next(engine.aux, engine.state)? {
+        Some(t) => t,
+        _ => todo!("error")
     };
-    let second = match engine.mouth.get_next(engine.aux, engine.state) {
-        Ok(t) => t,
+    let second = match engine.mouth.get_next(engine.aux, engine.state)? {
+        Some(t) => t,
         _ => todo!("error")
     };
     let cmd = match second.to_enum() {
@@ -1438,9 +1434,9 @@ pub fn number<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
 }
 
 pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    let token = match engine.mouth.get_next(engine.aux, engine.state) {
-        Ok(t) if t == ET::Token::eof() => return Ok(()),
-        Ok(t) => t,
+    let token = match engine.mouth.get_next(engine.aux, engine.state)? {
+        Some(t) if t == ET::Token::eof() => return Ok(()),
+        Some(t) => t,
         _ => todo!("throw error")
     };
     match engine.resolve(&token) {

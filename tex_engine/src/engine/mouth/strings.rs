@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use crate::tex::characters::{TextLine, TextLineSource};
-use crate::utils::errors::{InvalidCharacter, InvalidCharacterOrEOF};
+use crate::utils::errors::InvalidCharacter;
 
 /// An [`InputTokenizer`] is in one of three states
 #[derive(Copy,Clone,PartialEq,Eq,Debug)]
@@ -155,22 +155,24 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
 
     /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacterError`]
     /// on encountering a character of code [`CategoryCode::Invalid`].
-    pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<T,InvalidCharacterOrEOF<C>> { loop {
-        match self.get_char() {
-            None if self.eof => return Err(InvalidCharacterOrEOF::EOF),
-            None => match self.return_endline::<T>(cc, endline, handler.par()) {
-                Some(e) => {
-                    //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
-                    return Ok(e)
+    pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<C>> {
+        loop {
+            match self.get_char() {
+                None if self.eof => return Ok(None),
+                None => match self.return_endline::<T>(cc, endline, handler.par()) {
+                    Some(e) => {
+                        //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
+                        return Ok(Some(e))
+                    }
+                    None => ()
                 }
-                None => ()
-            }
-            Some(c) => match self.check_char::<T>(handler, cc, endline, c)? {
-                Some(t) => return Ok(t),
-                None => ()
-            }
-        };
-    }}
+                Some(c) => match self.check_char::<T>(handler, cc, endline, c)? {
+                    Some(t) => return Ok(Some(t)),
+                    None => ()
+                }
+            };
+        }
+    }
 
     fn check_char<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, c:C) -> Result<Option<T>,InvalidCharacter<C>> {
         use CategoryCode::*;

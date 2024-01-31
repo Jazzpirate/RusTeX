@@ -15,7 +15,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::characters::Character;
 use crate::engine::EngineAux;
-use crate::utils::errors::{InvalidCharacter, FileEndWhileUse, MouthError, RecoverableError, TeXResult, WrongDefinition, IncompleteConditional, Undefined, MissingNumber};
+use crate::utils::errors::{FileEndWhileUse, RecoverableError, TeXResult, WrongDefinition, IncompleteConditional, Undefined, MissingNumber};
 
 /// processes the parameter signature `params` of a [`Macro`](crate::commands::Macro) by reading the relevant arguments;
 /// storing them in `args`
@@ -47,16 +47,15 @@ pub fn read_arguments<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&
                     }
                 }
             },
-            _ => match engine.mouth.get_next(engine.aux, engine.state) {
-                Ok(o) if o == *next =>
+            _ => match engine.mouth.get_next(engine.aux, engine.state)? {
+                Some(o) if o == *next =>
                     match inner.get(i) {
                         Some(n) => {next = n; i += 1},
                         _ => return Ok(())
                     },
-                Ok(o) =>
+                Some(o) =>
                     WrongDefinition {expected:next.clone(),found:o,in_macro:token.clone()}.throw(engine.aux,engine.state,engine.mouth)?,
-                Err(MouthError::InvalidChar(c)) => return Err(InvalidCharacter(c).into()),
-                Err(MouthError::MouthEmpty) =>
+                None =>
                     FileEndWhileUse(token.clone()).throw(engine.aux,engine.state,engine.mouth)?,
             }
         }
@@ -125,10 +124,9 @@ fn read_argument<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Ve
         FileEndWhileUse(token.clone()).throw(a,s,m)
     };
     loop {
-        let t = match engine.mouth.get_next(engine.aux, engine.state) {
-            Ok(t) => t,
-            Err(MouthError::InvalidChar(c)) => return Err(InvalidCharacter(c).into()),
-            Err(MouthError::MouthEmpty) => {
+        let t = match engine.mouth.get_next(engine.aux, engine.state)? {
+            Some(t) => t,
+            None => {
                 FileEndWhileUse(token.clone()).throw(engine.aux,engine.state,engine.mouth)?;continue
             }
         };
@@ -430,10 +428,9 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 
 /// reads a character literal triggered by a backtick, when a number is expected
 fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> TeXResult<ET::Int,ET> {
-    let next = loop {match engine.mouth.get_next(engine.aux, engine.state) {
-        Ok(t) => break t,
-        Err(MouthError::MouthEmpty) => todo!("throw error here"),
-        Err(MouthError::InvalidChar(c)) => InvalidCharacter(c).throw(engine.aux,engine.state,engine.mouth)?
+    let next = loop {match engine.mouth.get_next(engine.aux, engine.state)? {
+        Some(t) => break t,
+        None => todo!("throw error here"),
     }};
     let ret = match next.to_enum() {
         StandardToken::Character(c, _) => {

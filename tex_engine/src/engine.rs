@@ -315,62 +315,34 @@ macro_rules! expand_loop {
         crate::expand_loop!(ET;$engine,$tk,$($case)*)
     }};
     ($then:expr => $engine:ident,$tk:ident,$($case:tt)*) => {{
-        loop {
+        $then;
+        while let Some($tk) = $engine.get_next(false)? {
+            crate::expand!($engine,$tk;$($case)*);
             $then;
-            let $tk = match $engine.get_next(false) {
-                Ok(t) => t,
-                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
-                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
-                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
-            };
-            crate::expand!(ET;$engine,$tk;$($case)*);
         }
     }};
     ($then:expr => $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        loop {
-            $then;
-            let $tk = match $engine.get_next(false) {
-                Ok(t) => t,
-                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
-                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
-                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
-            };
+        $then;
+        while let Some($tk) = $engine.get_next(false)? {
             $first;
-            crate::expand!(ET;$engine,$tk;$($case)*);
+            crate::expand!($engine,$tk;$($case)*);
+            $then;
         }
     }};
     ($tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        loop {
-            let $tk = match $engine.get_next(false) {
-                Ok(t) => t,
-                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
-                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
-                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
-            };
+        while let Some($tk) = $engine.get_next(false)? {
             $first;
-            crate::expand!(ET;$engine,$tk;$($case)*);
+            crate::expand!($engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $engine:ident,$tk:ident,$($case:tt)*) => {{
-        loop {
-            let $tk = match $engine.get_next(false) {
-                Ok(t) => t,
-                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
-                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
-                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
-            };
+        while let Some($tk) = $engine.get_next(false)? {
             crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
-        loop {
-            let $tk = match $engine.get_next(false) {
-                Ok(t) => t,
-                Err(crate::utils::errors::GulletError::MouthEmpty) => break,
-                Err(crate::utils::errors::GulletError::InvalidChar(c)) => return Err(crate::utils::errors::InvalidCharacter(c).into()),
-                Err(crate::utils::errors::GulletError::TooManyCloseBraces) => return Err(crate::utils::errors::TooManyCloseBraces.into()),
-            };
-            $first
+        while let Some($tk) = $engine.get_next(false)? {
+            $first;
             crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }}
