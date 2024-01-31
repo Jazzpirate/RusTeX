@@ -21,13 +21,18 @@ use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;
 use tex_engine::pdflatex::PlainPDFTeXEngine;
 
+/*
+notes   5:31
+profile 1:27      ==> 1:43
+thesis  0:15
+ */
 fn main() {
-    //profile()
+    profile()
     //thesis()
     //run()
     //test()
     //temp_test()
-    notes()
+    //notes()
     //test2()
     //test_all()
 }
@@ -89,7 +94,7 @@ fn test_all() {
             Some(e) => {
                 println!("Errored");
                 panic!("Errored: {}\n{}\n\nMissing glyphs: {}\nMissing web fonts: {}",
-                       f.display(),e.msg,
+                       f.display(),e.to_string(),
                        missing_glyphs.into_iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "),
                           missing_fonts.into_iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
                 );

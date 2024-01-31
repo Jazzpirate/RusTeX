@@ -3,7 +3,7 @@ mod annotations;
 
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
-use crate::engine::{Bx, Font, Refs, SRef, Types};
+use crate::engine::{Bx, Font, Refs, Res, SRef, Types};
 use std::fmt::Write;
 use std::vec::IntoIter;
 use tex_engine::commands::primitives::PRIMITIVES;
@@ -20,6 +20,7 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_glyphs::glyphs::Glyph;
+use tex_engine::utils::errors::TeXResult;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::shipout::nodes::{do_mathkernel, MuAdd, SkipAdd};
 
@@ -113,27 +114,27 @@ impl ShipoutState {
     fn mode(&self) -> ShipoutMode {
         *self.modes.last().unwrap()
     }
-    fn do_in_and<F1:FnOnce(&mut Self)>(&mut self, node:HTMLNode,mode:Option<ShipoutMode>, cont:F1) -> HTMLNode {
+    fn do_in_and<F1:FnOnce(&mut Self) -> Res<()>>(&mut self, node:HTMLNode,mode:Option<ShipoutMode>, cont:F1) -> Res<HTMLNode> {
         let disc = node.tag.clone();
         self.nodes.push(node);
         if let Some(mode) = mode {
             self.modes.push(mode);
         }
-        cont(self);
+        cont(self)?;
         let node = annotations::close_all(self.mode(),&mut self.nodes,|t| t == &disc);
         if let Some(_) = mode {
             self.modes.pop();
         }
         if node.tag == disc {
-            node
+            Ok(node)
         } else {
             todo!()
         }
     }
 
-    fn do_in<F1:FnOnce(&mut Self)>(&mut self, node:HTMLNode,mode:Option<ShipoutMode>, cont:F1) {
-        let r = self.do_in_and(node, mode,cont);
-        self.push(r);
+    fn do_in<F1:FnOnce(&mut Self) -> Res<()>>(&mut self, node:HTMLNode,mode:Option<ShipoutMode>, cont:F1) -> Res<()> {
+        let r = self.do_in_and(node, mode,cont)?;
+        self.push(r);Ok(())
     }
 
     pub(crate) fn push_child(&mut self, child:HTMLChild) {
@@ -223,10 +224,10 @@ pub(crate) const POSTAMBLE: &str = r#"
 </html>
 "#;
 
-pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut ShipoutState,f:F) -> HTMLNode {
+pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState) -> Res<()>>(engine:Refs,state:&mut ShipoutState,f:F) -> Res<HTMLNode> {
     let mut page = state.do_in_and(HTMLNode::page(),None,|state| {
         f(engine,state)
-    });
+    })?;
     let page_width = engine.state.get_primitive_dim(PRIMITIVES.pdfpagewidth);
     let text_width = engine.state.get_primitive_dim(PRIMITIVES.hsize);
     let top_font = state.fonts.first().unwrap();
@@ -234,7 +235,7 @@ pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut
     page.styles.insert("--rustex-text-width".into(),dim_to_num(text_width.0).into());
     page.styles.insert("--rustex-page-width".into(),dim_to_num(page_width.0).into());
     page.styles.insert("line-height".into(),"1.2".into()); // TODO
-    page
+    Ok(page)
 }
 
 /*
@@ -370,17 +371,18 @@ fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
     ret
 }
 
-pub(crate) fn shipout(engine:Refs, n: VNode<Types>) {
+pub(crate) fn shipout(engine:Refs, n: VNode<Types>) -> Res<()> {
     //println!("Here: {}",n.display());
     match n {
         VNode::Box(TeXBox::V { children, start,end, .. }) => {
             let children = get_page_inner(children);
             split_state(engine, |engine, state| {
-                do_vlist(engine, state, &mut children.into(), true);
-            });
+                do_vlist(engine, state, &mut children.into(), true)
+            })?;
         }
         _ => unreachable!()
     }
+    Ok(())
     /*
     match n {
         VNode::Box(TeXBox::V { children, start, end, .. }) => {
@@ -422,8 +424,8 @@ pub(crate) fn shipout(engine:Refs, n: VNode<Types>) {
 
 pub(crate) const ZERO_SKIP: Skip<Dim32> = Skip {base:Dim32(0),stretch:None,shrink:None};
 
-fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty: bool) {
-    'A: while let Some(c) = children.next() {
+fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty: bool) -> Res<()> {
+    while let Some(c) = children.next() {
         match c {
             VNode::VKern(kn) => state.push_comment(format!("<div class=\"rustex-vkern\" style=\"margin-bottom:{};\"></div>",dim_to_string(kn))),
             VNode::VSkip(sk) => state.push_comment(format!("<div class=\"rustex-vskip\" style=\"margin-bottom:{};\"></div>",dim_to_string(sk.base))),
@@ -461,15 +463,16 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
                                               PDFNode::PDFCatalog(_)| PDFNode::PDFSave| PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | VNode::Penalty(_) => (),
             c => {
                 empty = false;
-                do_v(engine,state,c)
+                do_v(engine,state,c)?;
             }
 
         }
     }
+    Ok(())
 }
 
 
-fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) {
+fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) -> Res<()> {
     while let Some(c) = children.next() {
         match c {
             HNode::HKern(kn) => {
@@ -503,13 +506,14 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) {
             HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
                                               PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | HNode::Penalty(_) => (),
-            HNode::Custom(RusTeXNode::PGFEscape(bx)) => do_h(engine,state,HNode::Box(bx)),
-            c => do_h(engine,state,c)
+            HNode::Custom(RusTeXNode::PGFEscape(bx)) => do_h(engine,state,HNode::Box(bx))?,
+            c => do_h(engine,state,c)?
         }
     }
+    Ok(())
 }
 
-fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) {
+fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) -> Res<()> {
     match n {
         VNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox {raised:Some(_),..} | VBoxInfo::VTop {raised:Some(_),..},..} | bx @ TeXBox::H {info:HBoxInfo::HBox {raised:Some(_),..},..}) =>
             nodes::do_raise(state,bx,|n,state| do_v(engine,state,VNode::Box(n))),
@@ -523,16 +527,16 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) {
             let bx = TeXBox::H {info: HBoxInfo::new_box(ToOrSpread::None),children,start,end,preskip:None};
             nodes::do_hbox(state,engine,bx)
         }
-        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => Ok(nodes::do_pdfdest(state, id)),
         VNode::Whatsit(wi) => wi.call(engine),
         VNode::HRule {ref start,ref end,ref width,..} => {
             let height = n.height();
             let depth = n.depth();
-            nodes::hrule(state,*start,*end,*width,height,depth)
+            Ok(nodes::hrule(state,*start,*end,*width,height,depth))
         }
         VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFMatrix {scale, rotate,skewx,skewy})) =>
-            annotations::do_matrix(state,scale,rotate,skewx,skewy),
-        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => annotations::reset_matrix(state),
+            Ok(annotations::do_matrix(state,scale,rotate,skewx,skewy)),
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => Ok(annotations::reset_matrix(state)),
         VNode::Custom(RusTeXNode::PDFNode(PDFNode::XImage(img))) => {
             todo!();
             /*
@@ -549,13 +553,13 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) {
         }
         VNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) =>
             nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
-        VNode::Leaders(_) => (), // TODO?
-        VNode::Mark(..) | VNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd | RusTeXNode::HAlignEnd) => (),
+        VNode::Leaders(_) => Ok(()), // TODO?
+        VNode::Mark(..) | VNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd | RusTeXNode::HAlignEnd) => Ok(()),
         _ => panic!("Here: {:?}",n)
     }
 }
 
-fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
+fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) -> Res<()> {
     match n {
         HNode::Box(bx@ TeXBox::V { info: VBoxInfo::VBox {raised:Some(_),..} | VBoxInfo::VTop {raised:Some(_),..},..} | bx @ TeXBox::H {info: HBoxInfo::HBox {raised:Some(_),..},..}) =>
             nodes::do_raise(state,bx,|n,state| do_h(engine,state,HNode::Box(n))),
@@ -566,17 +570,17 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
         HNode::Box(bx@ TeXBox::H { info: HBoxInfo::HBox { .. },.. }) => nodes::do_hbox(state,engine,bx),
         HNode::Box(TeXBox::H {info:HBoxInfo::ParIndent(d),..}) => {
             if d > Dim32(0) { state.push_comment(format_args!("<div class=\"rustex-parindent\" style=\"margin-left:{}\"></div>",dim_to_string(d))) }
+            Ok(())
         }
-
         HNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell{..}|HBoxInfo::ParLine {..},children,start,end,.. }) => {
             // TODO
             let bx = TeXBox::H {info: HBoxInfo::new_box(ToOrSpread::None),children,start,end,preskip:None};
             nodes::do_hbox(state,engine,bx)
         }
-        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => Ok(nodes::do_pdfdest(state, id)),
         HNode::Whatsit(wi) => wi.call(engine),
         HNode::Char {char,font,..} => {
-            if font == engine.fontsystem.null() { return }
+            if font == engine.fontsystem.null() { return Ok(()) }
             state.in_content = true;
             let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
             let glyph = glyphtable.get(char);
@@ -585,9 +589,10 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
             } else {
                 state.push_glyph(glyph)
             }
+            Ok(())
         }
         HNode::Accent {char,font,accent} => {
-            if font == engine.fontsystem.null() { return }
+            if font == engine.fontsystem.null() { return Ok(()) }
             state.in_content = true;
             let glyphtable = engine.fontsystem.glyphmaps.get_glyphlist(font.filename());
             let glyph = glyphtable.get(char);
@@ -600,18 +605,20 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
                 }
                 state.push_glyph(glyph)
             }
+            Ok(())
         }
         HNode::VRule {width,height,depth,start,end} => {
-            nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth)
+            nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth);
+            Ok(())
         }
         HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFMatrix {scale, rotate,skewx,skewy})) =>
-            annotations::do_matrix(state,scale,rotate,skewx,skewy),
-        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => annotations::reset_matrix(state),
+            Ok(annotations::do_matrix(state,scale,rotate,skewx,skewy)),
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => Ok(annotations::reset_matrix(state)),
         HNode::MathGroup(mg) if mathlist_is_h(&mg.children) => do_math_in_h(state,engine,mg),
         HNode::MathGroup(mg) => nodes::do_math(state,engine,mg),
         HNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) =>
             nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
-        HNode::Leaders(_) => (), // TODO?
+        HNode::Leaders(_) => Ok(()), // TODO?
         HNode::Custom(RusTeXNode::PDFNode(p@PDFNode::XImage(_))) => {
             let width = p.width();
             let height = p.height();
@@ -619,6 +626,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
             state.push_child(HTMLChild::Image {
                 width,height,filepath:img.filepath
             });
+            Ok(())
             /*
             let mut attr = String::new();
             if let Some(w) = img.width {
@@ -635,7 +643,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) {
     }
 }
 
-pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<Types>) {
+pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<Types>) -> Res<()> {
     let mut iter: MNodes = bx.children.into_vec().into();
     match bx.display {
         Some((pre,post)) => {
@@ -654,7 +662,7 @@ pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<
         None => do_mathlist_in_h(state,engine,&mut iter)
     }
 }
-pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNodes) {
+pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNodes) -> Res<()> {
     while let Some(c) = iter.next() {match c {
         MathNode::HKern(kn) => {
             if kn!= Dim32(0) {state.push_comment(format!("<div class=\"rustex-hkern\" style=\"margin-left:{};\"></div>",dim_to_string(kn)))}
@@ -693,9 +701,9 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
         MathNode::Atom(a) => match a.nucleus {
             MathNucleus::VCenter {start,end,children,..} =>
             // TODO to/spread for VCenter
-                nodes::do_vcenter(state,engine,start,end,children),
+                nodes::do_vcenter(state,engine,start,end,children)?,
             MathNucleus::Simple{kernel,..} | MathNucleus::Inner(kernel) =>
-                do_kernel_in_h(state,engine,kernel,iter),
+                do_kernel_in_h(state,engine,kernel,iter)?,
             MathNucleus::Overline(kernel) => {
                 let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
                 node.styles.insert("text-decoration".into(),"overline".into());
@@ -703,10 +711,10 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
                     MathKernel::Empty => (),
                     MathKernel::List {children,..} => state.do_in(node,None,|state|
                         do_mathlist_in_h(state,engine,&mut children.into_vec().into())
-                    ),
+                    )?,
                     kernel => state.do_in(node,None,|state|
                             do_kernel_in_h(state,engine,kernel,iter)
-                    )
+                    )?
                 }
             }
             MathNucleus::Underline(kernel) => {
@@ -716,28 +724,30 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
                     MathKernel::Empty => (),
                     MathKernel::List {children,..} => state.do_in(node,None,|state|
                         do_mathlist_in_h(state,engine,&mut children.into_vec().into())
-                    ),
+                    )?,
                     kernel => state.do_in(node,None,|state|
                         do_kernel_in_h(state,engine,kernel,iter)
-                    )
+                    )?
                 }
             }
             _ => unreachable!()
         }
         o => todo!("math in h: {:?}",o)
     }}
+    Ok(())
 }
 
-pub(crate) fn do_kernel_in_h(state:&mut ShipoutState,engine:Refs,k:MathKernel<Types,MathFontStyle<Types>>,iter: &mut MNodes) {
+pub(crate) fn do_kernel_in_h(state:&mut ShipoutState,engine:Refs,k:MathKernel<Types,MathFontStyle<Types>>,iter: &mut MNodes) -> Res<()> {
     match k {
         MathKernel::Empty => (),
         MathKernel::List{children,..} => iter.prefix(children.into_vec()),
-        MathKernel::Box(b) => do_h(engine,state,HNode::Box(b)),
+        MathKernel::Box(b) => do_h(engine,state,HNode::Box(b))?,
         _ => unreachable!()
     }
+    Ok(())
 }
 
-fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
+fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) -> Res<()> {
     use tex_glyphs::fontstyles::FontModifiable;
     let mut currclass : Option<(MathClass,bool,HTMLNode)> = None;
     macro_rules! flush {
@@ -795,16 +805,16 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
                 }
                 n => {
                     flush!();
-                    nodes::do_nucleus(engine,state,n);
+                    nodes::do_nucleus(engine,state,n)?;
                 }
             }
             MathNode::Over {start,end,left,right,top,bottom,sep} => {
                 flush!();
-                nodes::do_over(state, engine, top, bottom, sep, left, right, start, end);
+                nodes::do_over(state, engine, top, bottom, sep, left, right, start, end)?;
             }
             MathNode::Atom(a) => {
                 flush!();
-                nodes::do_sub_sup(engine,state,a)
+                nodes::do_sub_sup(engine,state,a)?
             }
             MathNode::Choice(c) => children.prefix(c.0.into_vec()),
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => {
@@ -823,7 +833,7 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
                 flush!();
                 nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth)
             }
-            MathNode::Whatsit(wi) => wi.call(engine),
+            MathNode::Whatsit(wi) => wi.call(engine)?,
             MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             MathNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
             MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
@@ -836,6 +846,7 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) {
         }
     }
     if let Some((_,_,node)) = currclass { state.push(node) }
+    Ok(())
 }
 
 fn mathlist_is_h(ls: &[MNode]) -> bool {

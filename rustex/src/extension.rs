@@ -48,8 +48,8 @@ impl EngineExtension<Types> for RusTeXExtension {
             evenfoot:memory.cs_interner_mut().new("@evenfoot"),
             mkboth:memory.cs_interner_mut().new("@mkboth"),
             specialpage:memory.cs_interner_mut().new("if@specialpage"),
-            gobbletwo:Macro::new(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"#1#2",""),
-            empty:Macro::new(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"",""),
+            gobbletwo:Macro::new::<_,_,Types>(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"#1#2","").unwrap(),
+            empty:Macro::new::<_,_,Types>(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"","").unwrap(),
         };
         ret.gobbletwo.long = true;
         ret

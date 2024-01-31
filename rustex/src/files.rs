@@ -4,9 +4,10 @@ use tex_engine::engine::filesystem::{File, FileSystem, NoOutputFileSystem, Virtu
 use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::characters::{StringLineSource, TextLine};
 use tex_engine::tex::tokens::Token;
-use tex_engine::utils::errors::ErrorHandler;
+use tex_engine::utils::errors::{ErrorHandler, TeXResult};
 use tex_engine::utils::Ptr;
 use tex_engine::prelude::CSName;
+use crate::engine::Res;
 
 static PGFSYS: &str = include_str!("resources/pgfsys.def");
 
@@ -75,15 +76,14 @@ impl FileSystem for RusTeXFileSystem {
         self.inner.write(idx,string,newlinechar,aux)
     }
 
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 state:&ET::State, cont:F
-    ) {
-        self.inner.read::<ET,F>(idx,eh,handler,state,cont)
+    ) -> TeXResult<(),ET> {
+        self.inner.read::<ET,F>(idx,handler,state,cont)
     }
 
-    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F) {
-        self.inner.readline(idx,eh,state,cont)
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, state:&ET::State,cont:F) -> TeXResult<(),ET> {
+        self.inner.readline(idx,state,cont)
     }
 }

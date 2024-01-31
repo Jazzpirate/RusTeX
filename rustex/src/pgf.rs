@@ -3,7 +3,7 @@ use tex_engine::add_node;
 use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::tex::tokens::CompactToken;
-use crate::engine::{Refs, register_command, Types};
+use crate::engine::{Refs, register_command, Res, Types};
 use tex_engine::engine::TeXEngine;
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::utils::HMap;
@@ -23,7 +23,7 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
                                     "pgfsys-rustex.def",
                                     false, false
     );
-    let all: &[(&'static str,fn(Refs,CompactToken))] = &[
+    let all: &[(&'static str,fn(Refs,CompactToken) -> Res<()>)] = &[
         ("rustex!pgf!hbox",pgfhbox),
         ("rustex!pgf!literal",pgfliteral),
         ("rustex!pgf!gbegin",gbegin),
@@ -48,21 +48,22 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     );
 }
 
-fn pgfhbox(engine:Refs,_token:CompactToken) {
-    let num = engine.read_register_index(false);
+fn pgfhbox(engine:Refs,_token:CompactToken) -> Res<()> {
+    let num = engine.read_register_index(false)?;
     let bx = engine.state.take_box_register(num).unwrap();
     let node = RusTeXNode::PGFEscape(bx);
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
+    Ok(())
 }
-fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
-    let num = engine.read_register_index(false);
+fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) -> Res<()> {
+    let num = engine.read_register_index(false)?;
     let bx = engine.state.take_box_register(num).unwrap();
     let getdimens = engine.aux.memory.cs_interner_mut().new("rustex!pgf!get!dimens");
-    engine.requeue(CompactToken::from_cs(getdimens));
-    let minx = engine.read_dim(true);
-    let miny = engine.read_dim(true);
-    let maxx = engine.read_dim(true);
-    let maxy = engine.read_dim(true);
+    engine.requeue(CompactToken::from_cs(getdimens))?;
+    let minx = engine.read_dim(true)?;
+    let miny = engine.read_dim(true)?;
+    let maxx = engine.read_dim(true)?;
+    let maxy = engine.read_dim(true)?;
     let (start,end) = if let TeXBox::H {start,end,..} = &bx {
         (start.clone(),end.clone())
     } else {
@@ -83,9 +84,10 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) {
             RusTeXStomach::add_node_m(engine, bx)
         }
     }
+    Ok(())
 }
-fn pgfliteral(engine:Refs,_token:CompactToken) { todo!("pgfliteral") }
-fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {
+fn pgfliteral(engine:Refs,_token:CompactToken) -> Res<()> { todo!("pgfliteral") }
+fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) -> Res<()> {
     let path = engine.aux.memory.cs_interner_mut().new("pgf@sys@svgpath");
     let empty = engine.state.get_command(&engine.aux.memory.cs_interner_mut().new("pgfutil@empty")).cloned();
     match engine.state.get_command(&path) {
@@ -93,12 +95,13 @@ fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) {
         _ => todo!("error"),
     };
     engine.state.set_command(engine.aux,path,empty,true);
+    Ok(())
 }
-fn gbegin(engine:Refs,token:CompactToken) {
+fn gbegin(engine:Refs,token:CompactToken) -> Res<()> {
     let mut attrs : HMap<&'static str,String> = HMap::default();
     let mut key = String::new();
     let start = engine.mouth.start_ref();
-    engine.read_braced_string(true,true,&token,&mut key);
+    engine.read_braced_string(true,true,&token,&mut key)?;
     'attr: loop {
         //println!("HERE! {}",engine.preview());
         match engine.read_keywords(&[
@@ -111,7 +114,7 @@ fn gbegin(engine:Refs,token:CompactToken) {
             b"fx",b"fy",b"stroke-miterlimit",b"patternUnits",b"patternTransform",
             b"markerUnits",b"orient",b"overflow",b"attributeName",b"from",b"to",b"stop-color",b"style",
             b"animateTransform",b"animateMotion",b"type",b"gradientTransform",b"offset",b"width",b"height",
-            b"dur",b"restart",b"repeatCount",b"repeatDur",b"begin",b"end"]) {
+            b"dur",b"restart",b"repeatCount",b"repeatDur",b"begin",b"end"])? {
             None => {
                 break 'attr
             },
@@ -123,17 +126,19 @@ fn gbegin(engine:Refs,token:CompactToken) {
             }
             Some(s) => {
                 let mut r = String::new();
-                engine.read_string(true,&mut r);
+                engine.read_string(true,&mut r)?;
                 attrs.insert(std::str::from_utf8(s).unwrap(),r.into());
             }
         }
     }
     let bg = RusTeXNode::PGFGBegin {attrs,tag:key };
     add_node!(RusTeXStomach;engine, VNode::Custom(bg),HNode::Custom(bg),MathNode::Custom(bg));
+    Ok(())
 }
-fn gend(engine:Refs,token:CompactToken) {
-    engine.skip_argument(&token);
+fn gend(engine:Refs,token:CompactToken) -> Res<()> {
+    engine.skip_argument(&token)?;
     add_node!(RusTeXStomach;engine, VNode::Custom(RusTeXNode::PGFGEnd),HNode::Custom(RusTeXNode::PGFGEnd),MathNode::Custom(RusTeXNode::PGFGEnd));
+    Ok(())
 }
-fn pgfbegin(engine:Refs, _token:CompactToken) { todo!("pgfbegin") }
-fn pgfend(engine:Refs, _token:CompactToken) { todo!("pgfend") }
+fn pgfbegin(engine:Refs, _token:CompactToken) -> Res<()> { todo!("pgfbegin") }
+fn pgfend(engine:Refs, _token:CompactToken) -> Res<()> { todo!("pgfend") }

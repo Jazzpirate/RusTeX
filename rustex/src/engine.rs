@@ -10,7 +10,7 @@ use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::tex;
 use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_engine::tex::tokens::CompactToken;
-use tex_engine::utils::errors::{ErrorThrower, TeXError};
+use tex_engine::utils::errors::{ErrorThrower, TeXError, TeXResult};
 use tex_engine::engine::TeXEngine;
 use tex_engine::engine::utils::outputs::Outputs;
 use tex_engine::utils::errors::ErrorHandler;
@@ -43,6 +43,9 @@ pub(crate) type CSName = InternedCSName<u8>;
 
 #[derive(Clone,Debug,Copy)]
 pub struct Types;
+
+pub type Res<R> = TeXResult<R,Types>;
+
 impl EngineTypes for Types {
     type Char = u8;
     type CSName = CSName;
@@ -96,7 +99,7 @@ fn get_engine(log:bool) -> DefaultEngine<Types> {
     let fontsystem = FONT_SYSTEM.with(|f| f.lock().unwrap().clone()).unwrap();
     let mut aux = EngineAux {
         outputs: RusTeXOutput::None,
-        error_handler: ErrorThrower::new(),
+        error_handler: ErrorThrower::new().into(),
         start_time:chrono::Local::now(),
         extension: Extension::new(&mut memory),
         memory,
@@ -116,7 +119,7 @@ fn get_engine(log:bool) -> DefaultEngine<Types> {
 
 pub struct CompilationResult {
     pub out:String,
-    pub error:Option<TeXError>,
+    pub error:Option<TeXError<Types>>,
     pub missing_glyphs: Box<[(String,u8,String)]>,
     pub missing_fonts: Box<[String]>
 }
@@ -130,9 +133,9 @@ pub trait RusTeXEngineT {
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     let e = e.get_engine_refs();
     let name = e.aux.memory.cs_interner_mut().new(name);
-    let mut cmd = Macro::new(
+    let mut cmd = Macro::new::<_,_,Types>(
         e.aux.memory.cs_interner_mut(),
-        &AT_LETTER_SCHEME,sig,exp);
+        &AT_LETTER_SCHEME,sig,exp).unwrap();
     if protect { cmd.protected = true }
     if long { cmd.long = true }
     e.state.set_command(&e.aux, name, Some(TeXCommand::Macro(cmd)), globally)
@@ -172,8 +175,8 @@ impl RusTeXEngineT for RusTeXEngine {
             let mut refs = engine.get_engine_refs();
             let (fonts,glyphs) = shipout::split_state(&mut refs, |engine, state| {
                 let mut page = make_page(engine, state, |_, state| {
-                    for c in out { state.push_child(c) }
-                });
+                    for c in out { state.push_child(c) };Ok(())
+                }).unwrap();
                 page.classes = vec!("rustex-body".into());
                 let topfont = state.fonts.first().unwrap().clone();
                 let dp = page.displayable(&engine.fontsystem.glyphmaps, &engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);

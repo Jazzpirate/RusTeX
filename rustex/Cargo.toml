@@ -23,7 +23,7 @@ path = "src/main.rs"
 opt-level = 2
 lto = "fat"
 codegen-units = 1
-# panic = "abort"
+panic = "abort"
 strip = "symbols"
 
 [dependencies]
