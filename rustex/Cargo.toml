@@ -39,4 +39,4 @@ pdfium-render = { version="0.8.17" }
 path-dedot = "3.1.1"
 
 mimalloc = "0.1.39"
-#rpmalloc = "0.2.0"
+#rpmalloc = "0.2.2"

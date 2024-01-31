@@ -2,9 +2,9 @@
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+//static GLOBAL: rpmalloc::RpMalloc = rpmalloc::RpMalloc;
 
 use std::collections::HashSet;
-//static ALLOC: rpmalloc::RpMalloc = rpmalloc::RpMalloc;
 use RusTeX::engine::{RusTeXEngine,RusTeXEngineT};
 
 use std::env;
@@ -32,9 +32,9 @@ fn main() {
     //run()
     //test()
     //temp_test()
-    notes()
+    //notes()
     //test2()
-    //test_all()
+    test_all()
 }
 
 fn test_all() {
