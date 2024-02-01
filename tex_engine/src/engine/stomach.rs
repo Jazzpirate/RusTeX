@@ -22,7 +22,7 @@ use crate::tex::nodes::math::{MathAtom, MathChar, MathNode, MathNodeList, MathNo
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::gullet::Gullet;
 use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
-use crate::utils::errors::{NotAllowedInMode, TeXResult, RecoverableError};
+use crate::utils::errors::{NotAllowedInMode, TeXResult, RecoverableError, FileEndWhileUse};
 
 /// The mode the engine is currently in, e.g. horizontal mode or vertical mode.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -580,7 +580,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// (e.g. `\mathop X` or `\mathop{ \alpha + \beta }`).
     /// In the latter case a new list is opened and processed "asynchronously". When the list is closed,
     /// the second continuation is called with the list as argument.
-    pub fn read_char_or_math_group<S,F1:FnOnce(S,&mut Self,MathChar<ET>) -> TeXResult<(),ET>,F2:FnOnce(S) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,f:F1,tp:F2,s:S) -> TeXResult<(),ET> {
+    pub fn read_char_or_math_group<S,F1:FnOnce(S,&mut Self,MathChar<ET>) -> TeXResult<(),ET>,F2:FnOnce(S) -> ListTarget<ET,MathNode<ET,UnresolvedMathFontStyle<ET>>>>(&mut self,in_token:&ET::Token,f:F1,tp:F2,s:S) -> TeXResult<(),ET> {
         crate::expand_loop!(self,token,
             ResolvedToken::Tk {code:CommandCode::Space,..} => (),
             ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
@@ -608,6 +608,6 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             }
             o => todo!("??? {:?}",o)
         );
-        todo!("file end")
+        FileEndWhileUse(in_token.clone()).throw(self.aux,self.state,self.mouth)
     }
 }

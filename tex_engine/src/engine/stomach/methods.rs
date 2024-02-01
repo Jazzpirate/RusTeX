@@ -190,10 +190,10 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
             ET::Stomach::do_mathchar(engine,code,Some(token))
         }
         CommandCode::Superscript if engine.stomach.data_mut().mode().is_math() => {
-            do_superscript(engine)?
+            do_superscript(engine,&token)?
         }
         CommandCode::Subscript if engine.stomach.data_mut().mode().is_math() => {
-            do_subscript(engine)?
+            do_subscript(engine,&token)?
         }
         _ => todo!("{} > {:?}",char,code)
     }
@@ -351,12 +351,12 @@ fn close_group_in_m<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResu
     }
 }
 
-fn do_superscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
-    do_xscript(engine,Script::Super)
+fn do_superscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,in_token:&ET::Token) -> TeXResult<(),ET> {
+    do_xscript(engine,Script::Super,in_token)
 }
 
-fn do_subscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
-    do_xscript(engine,Script::Sub)
+fn do_subscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,in_token:&ET::Token) -> TeXResult<(),ET> {
+    do_xscript(engine,Script::Sub,in_token)
 }
 
 pub(crate) enum Script {
@@ -397,7 +397,7 @@ impl Script {
     }
 }
 
-fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) -> TeXResult<(),ET> {
+fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script,in_token:&ET::Token) -> TeXResult<(),ET> {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Math { children, .. }) => {
             match children.list_mut().last() {
@@ -410,7 +410,7 @@ fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script) ->
         }
         _ => unreachable!()
     }
-    engine.read_char_or_math_group(|script,engine,c| {
+    engine.read_char_or_math_group(in_token,|script,engine,c| {
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Math { children, .. }) => {
                 match children.list_mut().last_mut() {

@@ -220,7 +220,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                         let mut ret = Vec::new();
                         match r.read(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char(), |t| ret.push(t)) {
                             Ok(_) => (),
-                            Err(_) => todo!()
+                            Err(e) => e.recover(aux,state,self)?,
                         }
                         self.with_list(|ls| ls.extend(ret.into_iter().rev()));
                     }

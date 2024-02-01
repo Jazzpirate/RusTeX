@@ -2259,8 +2259,8 @@ pub fn nolimits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
     Ok(())
 }
 
-pub fn underline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|_,engine,mc| {
+pub fn underline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(&tk,|_,engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Underline(MathKernel::Char {char: mc.char,style:mc.style}),
             sub: None,
@@ -2274,8 +2274,8 @@ pub fn underline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
             )))
     ),())
 }
-pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|_,engine,mc| {
+pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(&tk,|_,engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Overline(MathKernel::Char {char: mc.char,style:mc.style}),
             sub: None,
@@ -2290,13 +2290,13 @@ pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
     ),())
 }
 
-pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
+pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false)?.into();
     if i < 0 || i > u32::MAX as i64 {
         todo!("matchchar out of range")
     }
     let char = MathChar::from_u32(i as u32, engine.state, None);
-    engine.read_char_or_math_group(|(char,style),engine,mc| {
+    engine.read_char_or_math_group(&tk,|(char,style),engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Accent{
                 accent:(char,style),
@@ -2317,13 +2317,13 @@ pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
     ),(char.char,char.style))
 }
 
-pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
+pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false)?;
     if i.into() < 0 || i.into() > u32::MAX as i64 {
         todo!("matchchar out of range")
     }
     let char = Delimiter::from_int(i,engine.state).left().unwrap().small;// MathChar::from_u32(i as u32, engine.state, None);
-    engine.read_char_or_math_group(|(char,style),engine,mc| {
+    engine.read_char_or_math_group(&tk,|(char,style),engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
             nucleus: MathNucleus::Radical{
                 rad:(char,style),
@@ -2485,51 +2485,51 @@ pub fn atopwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
     Ok(())
 }
 
-pub fn mathord<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Ord))
+pub fn mathord<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Ord),&tk)
 }
-pub fn mathop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Op))
+pub fn mathop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Op),&tk)
 }
-pub fn mathbin<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Bin))
+pub fn mathbin<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Bin),&tk)
 }
-pub fn mathrel<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Rel))
+pub fn mathrel<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Rel),&tk)
 }
-pub fn mathopen<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Open))
+pub fn mathopen<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Open),&tk)
 }
-pub fn mathclose<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Close))
+pub fn mathclose<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Close),&tk)
 }
-pub fn mathpunct<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,Some(MathClass::Punct))
+pub fn mathpunct<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,Some(MathClass::Punct),&tk)
 }
-pub fn mathinner<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    super::methods::do_math_class(engine,None)
+pub fn mathinner<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    super::methods::do_math_class(engine,None,&tk)
 }
-pub fn mathchoice<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|_,engine,mc| mathchoice_i(engine,vec!(MathNode::Atom(mc.to_atom())).into())
-                                   ,|_| ListTarget::<ET,_>::new(
-        |engine,children,_| mathchoice_i(engine,children.into())
-    ),())
+pub fn mathchoice<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(&tk.clone(),|tk,engine,mc| mathchoice_i(engine,vec!(MathNode::Atom(mc.to_atom())).into(),tk)
+                                   ,|tk| ListTarget::<ET,_>::new(
+        |engine,children,_| mathchoice_i(engine,children.into(),tk)
+    ),tk)
 }
 type ML<ET> = Box<[MathNode<ET,UnresolvedMathFontStyle<ET>>]>;
-pub fn mathchoice_i<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|d,engine,mc| mathchoice_ii(engine,d,vec!(MathNode::Atom(mc.to_atom())).into()),
-                                   |d| ListTarget::<ET,_>::new(
-        move |engine,children,_| mathchoice_ii(engine,d,children.into())
-    ),d)
+pub fn mathchoice_i<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(&tk.clone(),|(d,tk),engine,mc| mathchoice_ii(engine,d,vec!(MathNode::Atom(mc.to_atom())).into(),tk),
+                                   |(d,tk)| ListTarget::<ET,_>::new(
+        move |engine,children,_| mathchoice_ii(engine,d,children.into(),tk)
+    ),(d,tk))
 }
-pub fn mathchoice_ii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|(d,t),engine,mc| mathchoice_iii(engine,d,t,vec!(MathNode::Atom(mc.to_atom())).into()),
-                                   |(d,t)| ListTarget::<ET,_>::new(
-        |engine,children,_| mathchoice_iii(engine,d,t,children.into())
-    ),(d,t))
+pub fn mathchoice_ii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(&tk.clone(),|(d,t,tk),engine,mc| mathchoice_iii(engine,d,t,vec!(MathNode::Atom(mc.to_atom())).into(),tk),
+                                   |(d,t,tk)| ListTarget::<ET,_>::new(
+        |engine,children,_| mathchoice_iii(engine,d,t,children.into(),tk)
+    ),(d,t,tk))
 }
-pub fn mathchoice_iii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>,s:ML<ET>) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|(d,t,s),engine,mc| {
+pub fn mathchoice_iii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>,t:ML<ET>,s:ML<ET>,tk:ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(&tk,|(d,t,s),engine,mc| {
         ET::Stomach::add_node_m(engine,MathNode::Choice(UnresolvedMathChoice {
             display: d,
             text: t,

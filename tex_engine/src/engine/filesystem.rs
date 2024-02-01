@@ -191,8 +191,8 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             Some(Some(f)) => {
                 match f.read(handler,state.get_catcode_scheme(),state.get_endline_char(),cont) {
                     Ok(_) => Ok(()),
-                    Err(_) => {
-                        todo!()//e.handle()
+                    Err(e) => {
+                        return Err(e.into())
                     }
                 }
             }

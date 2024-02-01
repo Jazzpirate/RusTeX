@@ -775,8 +775,8 @@ fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBod
     todo!("file end")
 }
 
-pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(|_,engine,mc| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom()))),
+pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>,in_token:&ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(in_token,|_,engine,mc| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom()))),
                                    move |_| ListTarget::<ET,_>::new(move |engine,children,start| {
         let node = MathNode::Atom(MathAtom {
             sub:None, sup:None, nucleus:match cls {
