@@ -1,13 +1,10 @@
 use std::path::PathBuf;
 use tex_engine::engine::{EngineAux, EngineTypes};
 use tex_engine::engine::filesystem::{File, FileSystem, NoOutputFileSystem, VirtualFile};
-use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::characters::{StringLineSource, TextLine};
-use tex_engine::tex::tokens::Token;
-use tex_engine::utils::errors::{ErrorHandler, TeXResult};
+use tex_engine::utils::errors::TeXResult;
 use tex_engine::utils::Ptr;
 use tex_engine::prelude::CSName;
-use crate::engine::Res;
 
 static PGFSYS: &str = include_str!("resources/pgfsys.def");
 
@@ -34,7 +31,6 @@ impl FileSystem for RusTeXFileSystem {
     }
 
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
-        use tex_engine::tex::characters::*;
         let sr = path.as_ref();
         if sr.ends_with("pgfsys-rustex.def") {
             VirtualFile {

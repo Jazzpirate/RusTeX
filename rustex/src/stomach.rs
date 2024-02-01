@@ -1,15 +1,13 @@
-use tex_engine::commands::{TeXCommand, CommandScope, Macro, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, PrimitiveCommand};
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
-use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::{GroupType, State};
 use tex_engine::engine::stomach::{Stomach, StomachData};
-use tex_engine::tex::nodes::{BoxTarget, NodeList};
+use tex_engine::tex::nodes::NodeList;
 use tex_engine::tex::numerics::Dim32;
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Font, Refs, Res, Types};
-use crate::extension::FontChange;
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
@@ -21,9 +19,7 @@ use tex_engine::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
 use tex_engine::prelude::*;
-use tex_engine::tex::catcodes::AT_LETTER_SCHEME;
 use tex_engine::tex::nodes::boxes::{BoxType, ToOrSpread};
-use tex_engine::utils::errors::TeXResult;
 
 pub struct RusTeXStomach {
     afterassignment:Option<CompactToken>,
@@ -57,7 +53,7 @@ impl Stomach<Types> for RusTeXStomach {
                        MathNode::Custom(RusTeXNode::FontChange(f.clone(),g))
         );
         if !g {
-            engine.aux.extension.change_markers.last_mut().unwrap().push(FontChange(f.clone()));
+            *engine.aux.extension.change_markers.last_mut().unwrap() += 1;
         }
         engine.state.set_current_font(engine.aux,f,global);
         insert_afterassignment(engine);Ok(())
@@ -65,7 +61,7 @@ impl Stomach<Types> for RusTeXStomach {
 
     fn close_box(engine:&mut EngineReferences<Types>, bt:BoxType) -> Res<()> {
         let markers = std::mem::take(engine.aux.extension.change_markers.last_mut().unwrap());
-        for _ in markers {
+        for _ in 0..markers {
             tex_engine::add_node!(Self;engine,
                             VNode::Custom(RusTeXNode::FontChangeEnd),
                             HNode::Custom(RusTeXNode::FontChangeEnd),
@@ -119,7 +115,7 @@ impl Stomach<Types> for RusTeXStomach {
                 //data.pagegoal = <Types as EngineTypes>::Dim::from_sp(180224000);
                 //engine.state.set_primitive_dim(engine.aux,PRIMITIVES.vsize,data.pagegoal,true);
                 if data.page_contains_boxes && data.pagetotal > <Types as EngineTypes>::Dim::from_sp(6553600 * 5) {
-                    do_shipout(engine,penalty.or(Some(-10000)),|_|());
+                    do_shipout(engine,penalty.or(Some(-10000)),|_|())?;
                     engine.stomach.data_mut().page_contains_boxes = true;
                     Ok(())
                 } else if penalty.is_some() {

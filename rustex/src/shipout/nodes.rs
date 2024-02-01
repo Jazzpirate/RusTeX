@@ -1,20 +1,17 @@
-use tex_engine::pdflatex::nodes::{NumOrName, PDFColor, PDFNode};
-use tex_engine::engine::EngineTypes;
-use tex_engine::engine::filesystem::File;
-use tex_engine::tex::numerics::{Dim32, StretchShrink, Mu, MuStretchShrink, Skip};
+use tex_engine::pdflatex::nodes::{NumOrName, PDFNode};
+use tex_engine::tex::numerics::{Dim32, StretchShrink, Mu, Skip};
 use crate::engine::{Bx, Font, Refs, Res, SRef, Types};
-use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
+use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag};
 use tex_engine::tex::nodes::NodeTrait;
 use crate::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
-use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
+use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_glyphs::fontstyles::ModifierSeq;
-use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, MNodes, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
-use tex_engine::tex::numerics::TeXDimen;
+use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 use tex_glyphs::glyphs::GlyphName;
 
 pub(crate) trait MuAdd {
@@ -254,7 +251,7 @@ pub(crate) fn do_paragraph(engine:Refs, state:&mut ShipoutState,children:&mut VN
         Some(ShipoutMode::Par),|state| {
             state.widths.push(spec.target);
             state.lineskip.push(lineskip);
-            do_hlist(engine,state,&mut children.into());
+            do_hlist(engine,state,&mut children.into())?;
             state.widths.pop();
             state.lineskip.pop();
             Ok(())
@@ -309,15 +306,15 @@ pub(crate) fn do_vbox(state:&mut ShipoutState, engine:Refs,bx:Bx) -> Res<()> {
             node.classes.push("rustex-vbox-height-container".into());
             node.styles.insert("height".into(),dim_to_string(h).into());
             state.do_in(node,None,|state| {
-                vbox_inner(state,engine,wd.is_some(),to,children,start,end)
+                vbox_inner(state,engine,to,children,start,end)
             })
         }
         None =>
-            vbox_inner(state,engine,wd.is_some(),to,children,start,end),
+            vbox_inner(state,engine,to,children,start,end),
     })
 }
 
-fn vbox_inner(state:&mut ShipoutState, engine:Refs,has_wd:bool, to:Option<Dim32>, children:Vec<VNode<Types>>, start:SRef, end:SRef) -> Res<()> {
+fn vbox_inner(state:&mut ShipoutState, engine:Refs,to:Option<Dim32>, children:Vec<VNode<Types>>, start:SRef, end:SRef) -> Res<()> {
     let mut node = HTMLNode::new(HTMLTag::VBox);
     node.classes.push("rustex-vbox".into());
     node.sourceref = Some((start,end));
@@ -334,7 +331,7 @@ fn vbox_inner(state:&mut ShipoutState, engine:Refs,has_wd:bool, to:Option<Dim32>
     })
 }
 
-pub(crate) fn do_vtop(state:&mut ShipoutState, engine:Refs, mut bx:Bx) -> Res<()> {
+pub(crate) fn do_vtop(state:&mut ShipoutState, engine:Refs, bx:Bx) -> Res<()> {
     let wd = bx.assigned_width();
     let ht = bx.assigned_height();
     let dp = bx.assigned_depth();
@@ -360,7 +357,7 @@ pub(crate) fn do_vtop(state:&mut ShipoutState, engine:Refs, mut bx:Bx) -> Res<()
             let mut node = HTMLNode::new(HTMLTag::VTopHeight);
             node.classes.push("rustex-vtop-height-container".into());
 
-            let oht = if let TeXBox::V {info:VBoxInfo::VTop {computed_height,computed_depth,..},children,..} = &bx {
+            let oht = if let TeXBox::V {info:VBoxInfo::VTop {computed_height,..},children,..} = &bx {
                 *computed_height.get_or_init(||
                     match children.first() {
                         Some(c@VNode::Box(..)) => c.height(),
@@ -464,7 +461,7 @@ fn hbox_inner(state:&mut ShipoutState, engine:Refs,to:Option<Dim32>, children:Ve
     })
 }
 
-pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types>) -> Res<()> {
+pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,bx:MathGroup<Types>) -> Res<()> {
     match bx.display {
         Some((pre,post)) => {
             let mut node = HTMLNode::new(HTMLTag::Display);
@@ -483,7 +480,7 @@ pub(crate) fn do_math(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Type
         None => math_inner(state,engine,bx)
     }
 }
-fn math_inner(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types>) -> Res<()> {
+fn math_inner(state:&mut ShipoutState, engine:Refs,bx:MathGroup<Types>) -> Res<()> {
     let mut node = HTMLNode::new(HTMLTag::Math);
     node.classes.push("rustex-math".into());
     node.sourceref = Some((bx.start,bx.end));
@@ -496,7 +493,7 @@ fn math_inner(state:&mut ShipoutState, engine:Refs,mut bx:MathGroup<Types>) -> R
     })
 }
 
-pub(crate) fn math_escape<F:FnOnce(Refs,&mut ShipoutState) -> Res<()>>(engine:Refs,state:&mut ShipoutState,width:Dim32,height:Dim32,mode:ShipoutMode,f:F) -> Res<()> {
+pub(crate) fn math_escape<F:FnOnce(Refs,&mut ShipoutState) -> Res<()>>(engine:Refs,state:&mut ShipoutState,width:Dim32,mode:ShipoutMode,f:F) -> Res<()> {
     let mut node = HTMLNode::new(HTMLTag::MathEscape);
     node.classes.push("rustex-math-escape".into());
     node.width = Some((width,true));
@@ -511,8 +508,8 @@ pub(crate) fn box_in_math(engine:Refs,state:&mut ShipoutState,bx:Bx) -> Res<()> 
         _ => ShipoutMode::H { escape: false }
     };
     let wd = bx.width();
-    let ht = bx.height() + bx.depth();
-    math_escape(engine,state,wd,ht,mode,move |engine,state| {
+    //let ht = bx.height() + bx.depth();
+    math_escape(engine,state,wd,mode,move |engine,state| {
         match &bx {
             TeXBox::H {..} => {
                 let ls = vec!(VNode::Box(bx));
@@ -607,10 +604,10 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
         MathNucleus::Inner(kernel) => do_mathkernel(engine,state,kernel,None),
         c@MathNucleus::VCenter {..} => {
             let width = c.width();
-            let height = c.height() + c.depth();
+            //let height = c.height() + c.depth();
             if let MathNucleus::VCenter {start,end,children,..} = c {
                 // TODO to/spread for VCenter
-                math_escape(engine, state,width,height, ShipoutMode::H {escape:false}, |engine, state| {
+                math_escape(engine, state,width, ShipoutMode::H {escape:false}, |engine, state| {
                     do_vcenter(state, engine, start, end, children)
                 })
             } else {unreachable!()}
@@ -624,7 +621,7 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
                     node.attrs.insert("stretchy".into(),"true".into());
                     state.push(node);
                 };
-                do_mathlist(engine,state,&mut children.into_vec().into());
+                do_mathlist(engine,state,&mut children.into_vec().into())?;
                 if let Some((c,s)) = right {
                     let mut node =nodes::do_mathchar(engine, state, c, MathClass::Close, s.font);
                     node.attrs.insert("stretchy".into(),"true".into());
@@ -670,7 +667,7 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
                 do_mathlist(engine,state,&mut inner.into_vec().into())
             })
         }
-        o => todo!(" {:?}",o)
+        //o => todo!(" {:?}",o)
     }
 }
 
@@ -990,9 +987,10 @@ pub(crate) fn do_halign(engine:Refs, state:&mut ShipoutState,children:&mut VNode
         state.do_in(HTMLNode::new(HTMLTag::HBody),Some(ShipoutMode::V), |state| {
             for row in rows {
                 match row {
-                    RowOrNoAlign::Row(children,.. ) => {
+                    RowOrNoAlign::Row(children,start,end ) => {
                         let mut cols = 0;
-                        let node = HTMLNode::new(HTMLTag::HRow);
+                        let mut node = HTMLNode::new(HTMLTag::HRow);
+                        node.sourceref = Some((start,end));
                         state.do_in(node,None,|state| {
                             for c in children {
                                 cols += 1;

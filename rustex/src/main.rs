@@ -32,9 +32,9 @@ fn main() {
     //run()
     //test()
     //temp_test()
-    //notes()
+    notes()
     //test2()
-    test_all()
+    //test_all()
 }
 
 fn test_all() {

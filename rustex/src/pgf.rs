@@ -1,19 +1,15 @@
-use pdfium_render::page_objects_common::PdfPageObjectsCommon;
 use tex_engine::add_node;
 use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Refs, register_command, Res, Types};
-use tex_engine::engine::TeXEngine;
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::utils::HMap;
 use crate::nodes::RusTeXNode;
-use tex_engine::engine::mouth::Mouth;
 use tex_engine::engine::state::State;
 use crate::stomach::RusTeXStomach;
 use tex_engine::engine::stomach::Stomach;
 use tex_engine::prelude::*;
-use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread};
 use tex_engine::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
@@ -86,7 +82,7 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) -> Res<()> {
     }
     Ok(())
 }
-fn pgfliteral(engine:Refs,_token:CompactToken) -> Res<()> { todo!("pgfliteral") }
+fn pgfliteral(_engine:Refs,_token:CompactToken) -> Res<()> { todo!("pgfliteral") }
 fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) -> Res<()> {
     let path = engine.aux.memory.cs_interner_mut().new("pgf@sys@svgpath");
     let empty = engine.state.get_command(&engine.aux.memory.cs_interner_mut().new("pgfutil@empty")).cloned();
@@ -100,7 +96,7 @@ fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) -> 
 fn gbegin(engine:Refs,token:CompactToken) -> Res<()> {
     let mut attrs : HMap<&'static str,String> = HMap::default();
     let mut key = String::new();
-    let start = engine.mouth.start_ref();
+    //let start = engine.mouth.start_ref();
     engine.read_braced_string(true,true,&token,&mut key)?;
     'attr: loop {
         //println!("HERE! {}",engine.preview());
@@ -140,5 +136,5 @@ fn gend(engine:Refs,token:CompactToken) -> Res<()> {
     add_node!(RusTeXStomach;engine, VNode::Custom(RusTeXNode::PGFGEnd),HNode::Custom(RusTeXNode::PGFGEnd),MathNode::Custom(RusTeXNode::PGFGEnd));
     Ok(())
 }
-fn pgfbegin(engine:Refs, _token:CompactToken) -> Res<()> { todo!("pgfbegin") }
-fn pgfend(engine:Refs, _token:CompactToken) -> Res<()> { todo!("pgfend") }
+fn pgfbegin(_engine:Refs, _token:CompactToken) -> Res<()> { todo!("pgfbegin") }
+fn pgfend(_engine:Refs, _token:CompactToken) -> Res<()> { todo!("pgfend") }

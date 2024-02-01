@@ -1,24 +1,19 @@
 use pdfium_render::pdfium::Pdfium;
 use tex_engine::commands::Macro;
 use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFAnnot, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
-use tex_engine::engine::{EngineExtension, EngineTypes};
-use crate::engine::{CSName, Font, Refs, Types};
-use crate::nodes::RusTeXNode;
+use tex_engine::engine::EngineExtension;
+use crate::engine::{CSName, Types};
 use crate::shipout::ShipoutState;
-use tex_engine::engine::stomach::Stomach as StomachT;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
 use tex_engine::tex::tokens::CompactToken;
-use crate::stomach::RusTeXStomach;
 use tex_engine::prelude::CSHandler;
 
-#[derive(Debug,Clone)]
-pub(crate) struct FontChange(pub(crate) Font);
 
 pub struct RusTeXExtension {
     pdf: MinimalPDFExtension<Types>,
     pub(crate) state:ShipoutState,
-    pub(crate) change_markers:Vec<Vec<FontChange>>,
+    pub(crate) change_markers:Vec<usize>,
     pub(crate) oddhead:CSName,
     pub(crate) oddfoot:CSName,
     pub(crate) evenhead:CSName,
@@ -30,9 +25,9 @@ pub struct RusTeXExtension {
 }
 impl RusTeXExtension {
     pub(crate) fn push(&mut self) {
-        self.change_markers.push(vec!())
+        self.change_markers.push(0)
     }
-    pub(crate) fn pop(&mut self) -> Vec<FontChange> {
+    pub(crate) fn pop(&mut self) -> usize {
         self.change_markers.pop().unwrap()
     }
 }

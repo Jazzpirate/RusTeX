@@ -1,28 +1,22 @@
 pub(crate) mod nodes;
 mod annotations;
 
-use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
-use crate::engine::{Bx, Font, Refs, Res, SRef, Types};
-use std::fmt::Write;
+use crate::engine::{Font, Refs, Res, Types};
 use std::vec::IntoIter;
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::pdflatex::nodes::{PDFColor, PDFDest, PDFNode};
-use tex_engine::engine::{EngineReferences, EngineTypes};
-use tex_engine::engine::filesystem::{File, SourceReference};
 use tex_engine::tex::nodes::NodeTrait;
 use tex_engine::tex::numerics::{Dim32, Mu, Skip};
 use tex_engine::engine::state::State;
 use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
-use tex_engine::tex::nodes::boxes::{BoxInfo, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
+use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_glyphs::glyphs::Glyph;
-use tex_engine::utils::errors::TeXResult;
 use crate::nodes::{LineSkip, RusTeXNode};
-use crate::shipout::nodes::{do_mathkernel, MuAdd, SkipAdd};
 
 pub(crate) struct ExtensibleIter<T> {
     curr:IntoIter<T>,
@@ -77,7 +71,6 @@ impl ShipoutMode {
 }
 
 pub(crate) struct ShipoutState {
-    pub(crate) done:String,
     pub(crate) output:Vec<HTMLChild>,
     pub(crate) nodes:Vec<HTMLNode>,
     pub(crate) fonts: Vec<Font>,
@@ -94,7 +87,6 @@ pub(crate) struct ShipoutState {
 impl Default for ShipoutState {
     fn default() -> Self {
         Self {
-            done:String::new(),
             output:Vec::new(),
             nodes:Vec::new(),
             fonts:Vec::new(),
@@ -151,13 +143,13 @@ impl ShipoutState {
             None => unreachable!()
         }
     }
-    fn push_string<D:std::fmt::Display>(&mut self, d:D,escape:bool) {
+    /*fn push_string<D:std::fmt::Display>(&mut self, d:D,escape:bool) {
         let mode = self.mode();
         match self.nodes.last_mut() {
             Some(parent) => parent.push_string(d,mode,escape),
             None => unreachable!()
         }
-    }
+    }*/
     fn push_comment<D:std::fmt::Display>(&mut self, d:D) {
         match self.nodes.last_mut() {
             Some(parent) => parent.push_comment(d),
@@ -280,8 +272,9 @@ pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut
 }
 
  */
-pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
-    todo!() /*
+/*
+pub(crate) fn shipout_paginated(_engine:Refs, _n: VNode<Types>) {
+    todo!()
     match n {
         VNode::Box(TeXBox::V {children,start,end,..}) => split_state(engine,|engine,state|{
             let vec = children.into_vec();
@@ -300,9 +293,9 @@ pub(crate) fn shipout_paginated(engine:Refs, n: VNode<Types>) {
         }),
         _ => unreachable!()
     }
-    */
 }
-
+    */
+/*
 fn get_inner_page(bx:TeXBox<Types>) -> Option<Vec<VNode<Types>>> {
     match bx {
         TeXBox::V {children,info:VBoxInfo::VBox {moved_left:Some(_),..},..} => Some(children.into_vec()),
@@ -319,14 +312,14 @@ fn get_inner_page(bx:TeXBox<Types>) -> Option<Vec<VNode<Types>>> {
         _ => None
     }
 }
-
+*/
 fn get_page_hbox(children:&Box<[HNode<Types>]>) -> bool {
     let children = children.clone().into_vec();
     children.iter().any(|n| match n {
         HNode::HSkip(_) | HNode::Space | HNode::HKern(_) | HNode::HFil | HNode::HFill | HNode::HFilneg |
         HNode::Penalty(_) | HNode::Mark(_,_) |
         HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(..) | PDFNode::PDFCatalog(_) | PDFNode::PDFLiteral(_) |
-                                          PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFLiteral(_) | PDFNode::PDFOutline(_))) => false,
+                                          PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFOutline(_))) => false,
         HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(_))) => false,
         HNode::Box(TeXBox::H {children,..}) => get_page_hbox(children),
         _ => true
@@ -374,7 +367,7 @@ fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
 pub(crate) fn shipout(engine:Refs, n: VNode<Types>) -> Res<()> {
     //println!("Here: {}",n.display());
     match n {
-        VNode::Box(TeXBox::V { children, start,end, .. }) => {
+        VNode::Box(TeXBox::V { children, .. }) => {
             let children = get_page_inner(children);
             split_state(engine, |engine, state| {
                 do_vlist(engine, state, &mut children.into(), true)
@@ -436,11 +429,11 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
             VNode::Custom(RusTeXNode::ParagraphBegin{specs,start,end,lineskip,parskip}) => {
                 let parskip = if empty {None} else {Some(parskip)};
                 empty = false;
-                nodes::do_paragraph(engine,state,children,specs,start,end,lineskip,parskip);
+                nodes::do_paragraph(engine,state,children,specs,start,end,lineskip,parskip)?;
             }
             VNode::Custom(RusTeXNode::HAlignBegin) => {
                 empty = false;
-                nodes::do_halign(engine,state,children);
+                nodes::do_halign(engine,state,children)?;
             }
             VNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) => annotations::do_color(state,engine,act),
             VNode::Custom(RusTeXNode::FontChange(font,true)) => {
@@ -537,7 +530,7 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) -> Res<()> {
         VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFMatrix {scale, rotate,skewx,skewy})) =>
             Ok(annotations::do_matrix(state,scale,rotate,skewx,skewy)),
         VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFRestore)) => Ok(annotations::reset_matrix(state)),
-        VNode::Custom(RusTeXNode::PDFNode(PDFNode::XImage(img))) => {
+        VNode::Custom(RusTeXNode::PDFNode(PDFNode::XImage(_))) => {
             todo!();
             /*
             let mut attr = String::new();
@@ -643,7 +636,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) -> Res<()> {
     }
 }
 
-pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,mut bx:MathGroup<Types>) -> Res<()> {
+pub(crate) fn do_math_in_h(state:&mut ShipoutState,engine:Refs,bx:MathGroup<Types>) -> Res<()> {
     let mut iter: MNodes = bx.children.into_vec().into();
     match bx.display {
         Some((pre,post)) => {
@@ -748,7 +741,6 @@ pub(crate) fn do_kernel_in_h(state:&mut ShipoutState,engine:Refs,k:MathKernel<Ty
 }
 
 fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) -> Res<()> {
-    use tex_glyphs::fontstyles::FontModifiable;
     let mut currclass : Option<(MathClass,bool,HTMLNode)> = None;
     macro_rules! flush {
         () => {

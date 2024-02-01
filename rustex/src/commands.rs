@@ -1,6 +1,6 @@
 use tex_engine::add_node;
-use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};
-use tex_engine::commands::primitives::{PRIMITIVES, register_simple_expandable, register_unexpandable};
+use tex_engine::commands::{CommandScope, PrimitiveCommand};
+use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::engine::state::State;
 use tex_engine::tex::nodes::horizontal::HNode;

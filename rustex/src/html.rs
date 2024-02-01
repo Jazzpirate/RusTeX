@@ -1,7 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Formatter};
-use std::thread::current;
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::{File, FileSystem};
 use tex_engine::engine::filesystem::SourceReference;
@@ -9,7 +8,7 @@ use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_glyphs::glyphs::Glyph;
 use crate::engine::{Font, SRef, Types};
 use crate::fonts::FontStore;
-use crate::shipout::{ShipoutMode, ShipoutState};
+use crate::shipout::ShipoutMode;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -17,7 +16,6 @@ use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::pdflatex::nodes::PDFColor;
 use tex_glyphs::fontstyles::FontModifier;
 use crate::files::RusTeXFileSystem;
-use super::shipout::nodes::Alignment;
 
 
 fn dim_to_px(d:i32) -> f32{
@@ -105,9 +103,10 @@ impl HTMLChild {
             }
             HTMLChild::VRuleC { width, height, depth, color, start, end } => {
                 write!(f,
-                       "<div class=\"rustex-vrule-container\" style=\"height:{};--rustex-this-width:{};\"><div style=\"{}background:{};\"></div></div>",
+                       "<div class=\"rustex-vrule-container\" style=\"height:{};--rustex-this-width:{};\" {}><div style=\"{}background:{};\"></div></div>",
                         dim_to_string(*height),
                        dim_to_string(*width),
+                        SourceRange(start,end,files,do_refs),
                        /*match depth {
                            None => "-0.5ex".to_string(),
                            Some(d) => dim_to_string(-*d)
@@ -276,7 +275,7 @@ impl HTMLNode {
         }
     }
 
-    pub fn push_open_node(&mut self,mode:ShipoutMode,mut n:HTMLNode) {
+    pub fn push_open_node(&mut self,mode:ShipoutMode,n:HTMLNode) {
         if self.color.is_none() {
             self.uses_color = self.uses_color || n.uses_color;
         }
@@ -289,7 +288,7 @@ impl HTMLNode {
         match self.tag {
             HTMLTag::FontChange(_) => close_font(self,mode,parent),
             HTMLTag::ColorChange(_) => close_color(self,mode,parent),
-            HTMLTag::Annot(_) => close_annot(self,mode,parent),
+            HTMLTag::Annot(_) => close_annot(self,parent),
             _ if self.children.len() == 1 => match &self.children[0] {
                 HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_))
                 => merge_annotation(self, mode, parent),
@@ -389,7 +388,7 @@ impl HTMLNode {
 }
 
 
-fn close_annot(mut node:HTMLNode, mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
+fn close_annot(mut node:HTMLNode, parent:&mut Vec<HTMLChild>) {
     if node.children.len() == 1 {
         match node.children.first().unwrap() {
             HTMLChild::Node(_) => {
@@ -569,13 +568,13 @@ impl HTMLTag {
             _ => true
         }
     }
-    fn is_math(&self) -> bool {
+    /*fn is_math(&self) -> bool {
         use HTMLTag::*;
         match self {
             Math | MathGroup | Mo | Mi | MUnderOver | MUnder | MOver | MSubSup | MSub | MSup | MathEscape | MFrac | MSqrt => true,
             _ => false
         }
-    }
+    }*/
 }
 impl Display for HTMLTag {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -631,18 +630,6 @@ fn do_indent(indent:usize,f:&mut Formatter<'_>) -> std::fmt::Result {
     Ok(())
 }
 
-
-struct DisplaySourceRef<'a> {
-    files:&'a RusTeXFileSystem,
-    start:&'a SRef,
-    end:&'a SRef
-}
-impl<'a> Display for DisplaySourceRef<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
 fn font_attributes(store:&FontStore, font:&Font,missings:&mut HashSet<String>,parent:Option<&Font>) -> (Option<String>,Option<String>) {
     match parent {
         Some(f) if !f.filename().ends_with("nullfont") => {
@@ -650,7 +637,7 @@ fn font_attributes(store:&FontStore, font:&Font,missings:&mut HashSet<String>,pa
             let old = if let Some(old) = old { old } else { return simple_font(store,missings,font) };
 
             let mut first = String::new();
-            let mut size = ((font.get_at().0 as f32 / (f.get_at().0 as f32)) * 100.0).round();
+            let size = ((font.get_at().0 as f32 / (f.get_at().0 as f32)) * 100.0).round();
             if size != 100.0 {
                 write!(first,"font-size:{}%;",size).unwrap();
             }

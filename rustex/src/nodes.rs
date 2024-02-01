@@ -1,4 +1,3 @@
-use std::fmt::Write;
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::pdflatex::nodes::PDFNode;
 use tex_engine::engine::state::State;

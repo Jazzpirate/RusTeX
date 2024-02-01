@@ -1,5 +1,4 @@
-use std::collections::BTreeSet;
-use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFNode, PDFStartLink};
+use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFStartLink};
 use crate::engine::{Font, Refs, SRef, Types};
 use crate::html::{HTMLChild, HTMLNode, HTMLTag};
 use crate::shipout::{ShipoutMode, ShipoutState};
