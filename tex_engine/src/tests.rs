@@ -112,11 +112,11 @@ doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye"#;
         engine.initialize_plain_tex().unwrap();
         engine.mouth.push_string(CARLISLE.into());
         match engine.run(|_,n| {
-            info!("{}",n.display());
+            info!("{}",n.display());Ok(())
         }) {
             Ok(_) => (),
             Err(e) => {
-                panic!("{}",e.msg)
+                panic!("{}",e)
             }
         }
     }
@@ -150,7 +150,7 @@ doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye"#;
                 panic!("{}",e.msg)
             }
         }
-        engine.do_file_pdf(testpath.to_str().unwrap(),|_,_| {}).unwrap_or_else(|e| {
+        engine.do_file_pdf(testpath.to_str().unwrap(),|_,_| Ok(())).unwrap_or_else(|e| {
             //let pos = engine.mouth.display_position().to_string();
             //let cap = engine.aux.memory.cs_interner().cap();
             //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);

@@ -161,7 +161,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
 
     fn pop(&mut self,aux:&mut EngineAux<ET>,mouth: &mut ET::Mouth) {
         let len = self.stack.stack.len();
-        if len == 0 { todo!("throw error") }
+        assert!(len > 0);
         let traceg = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
             Some(v) if *v > ET::Int::default() => true,
             _ => false
