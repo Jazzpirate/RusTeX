@@ -32,7 +32,7 @@ pub struct FontInfo {
     pub weblink:Option<(&'static str,&'static str)>
 }
 
-/// An font info store takes care of parsing the `pdftex.map` file and the `.enc` and `.pfb` files
+/// A font info store takes care of parsing the `pdftex.map` file and the `.enc` and `.pfb` files
 /// to obtain information about fonts.
 #[derive(Debug,Clone)]
 pub struct FontInfoStore<S:AsRef<str>,F:FnMut(&str) -> S> {
@@ -54,9 +54,9 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
 
         FontInfoStore { pdftex_map: map, enc_files: HMap::default(),pfb_files: HMap::default(), glyph_lists:PATCHED_TABLES.to_vec(),get }
     }
-    /// Displays the [`FontInfo`] and [`GlyphList`] of a font as a markdown table, as it would
+    /// Displays the [`FontInfo`] and [`GlyphList`] of a font as a Markdown table, as it would
     /// appear in [`patches.md`](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/patches.md).
-    pub fn display_encoding<'a,S2:AsRef<str>>(&'a mut self,name:S2) -> Option<impl Display + 'a> {
+    pub fn display_encoding<S2:AsRef<str>>(&mut self,name:S2) -> Option<impl Display + '_> {
         if let Some(u) = self.get_glyphlist_i(&name) {
             let enc = self.pdftex_map.get(name.as_ref()).unwrap();
             Some(DisplayEncoding { enc, list:self.glyph_lists.get(u).unwrap() })
@@ -89,7 +89,7 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
         }
     }
 
-    fn get_glyphlist_i<'a,S2:AsRef<str>>(&'a mut self,name:S2) -> Option<usize> {
+    fn get_glyphlist_i<S2:AsRef<str>>(&mut self,name:S2) -> Option<usize> {
         let mut enc = match self.pdftex_map.get(name.as_ref()) {
             Some(enc) => {
                 if let Some(idx) = enc.glyphlist {
@@ -186,7 +186,7 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
         let deps = m.deps.into_iter().map(|d| { self.get_glyphlist_i(d) }).collect::<Vec<_>>();
         let mut table = UNDEFINED_LIST.clone();
         for (idx,v) in m.maps.into_iter().enumerate() {
-            let mut gls = v.into_iter().map(|(f,i)| match deps.get(f as usize).unwrap() {
+            let mut gls = v.into_iter().flat_map(|(f,i)| match deps.get(f as usize).unwrap() {
                 None => vec!(GlyphI::S(0)),
                 Some(k) => match self.glyph_lists.get(*k).unwrap().get(i).0 {
                     GlyphI::S(0) => vec!(GlyphI::S(0)),
@@ -195,7 +195,7 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
                     GlyphI::Unicode(c) => vec!(GlyphI::Unicode(c)),
                     GlyphI::Ls(ls) => ls.into_vec(),
                 }
-            }).flatten().collect::<Vec<_>>();
+            }).collect::<Vec<_>>();
             let gl = if gls.len() == 1 {
                 Glyph(gls.pop().unwrap())
             } else if gls.is_empty() {
@@ -350,11 +350,11 @@ impl<'a> Display for DisplayEncoding<'a> {
             write!(f,"| **{:X}x** | ",i)?;
             for j in 0..16 {
                 match &self.list.0[i*16+j].0 {
-                    crate::GlyphI::S(0) => f.write_char('|')?,
-                    crate::GlyphI::S(g) => write!(f,"/{} | ",crate::GLYPH_NAMES[*g as usize])?,
-                    crate::GlyphI::Unicode(c) => write!(f,"\\u{:04X} | ",*c as u32)?,
-                    g@crate::GlyphI::Ls(_) => write!(f,"`{}` | ",g.to_string().replace("`","\\`").replace("|","\\|"))?,
-                    crate::GlyphI::Undefined(_) => f.write_char('|')?,
+                    GlyphI::S(0) => f.write_char('|')?,
+                    GlyphI::S(g) => write!(f,"/{} | ",crate::GLYPH_NAMES[*g as usize])?,
+                    GlyphI::Unicode(c) => write!(f,"\\u{:04X} | ",*c as u32)?,
+                    g@GlyphI::Ls(_) => write!(f,"`{}` | ",g.to_string().replace('`',"\\`").replace('|',"\\|"))?,
+                    GlyphI::Undefined(_) => f.write_char('|')?,
                 }
             }
             f.write_char('\n')?;

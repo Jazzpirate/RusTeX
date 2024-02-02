@@ -280,7 +280,7 @@ pub trait EngineExtension<ET:EngineTypes> {
     fn new(memory:&mut MemoryManager<ET::Token>) -> Self;
 }
 impl<ET:EngineTypes<Extension=()>> EngineExtension<ET> for () {
-    fn new(_memory:&mut MemoryManager<ET::Token>) -> Self { () }
+    fn new(_memory:&mut MemoryManager<ET::Token>) -> Self { }
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {

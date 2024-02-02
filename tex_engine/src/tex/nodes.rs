@@ -69,11 +69,11 @@ impl<'a,ET:EngineTypes,N: NodeTrait<ET>> Display for DisplayNode<'a,ET,N> {
 /// additional node types beyond the default ones.
 pub trait CustomNodeTrait<ET:EngineTypes>:NodeTrait<ET> where Self:Into<ET::CustomNode> {
     /// Return this node as a [`VNode`].
-    fn as_v(self) -> VNode<ET> { VNode::Custom(self.into()) }
+    fn into_v(self) -> VNode<ET> { VNode::Custom(self.into()) }
     /// Return this node as an [`HNode`].
-    fn as_h(self) -> HNode<ET> { HNode::Custom(self.into()) }
+    fn into_h(self) -> HNode<ET> { HNode::Custom(self.into()) }
     /// Return this node as a [`MathNode`].
-    fn as_math(self) -> MathNode<ET,UnresolvedMathFontStyle<ET>> { MathNode::Custom(self.into()) }
+    fn into_math(self) -> MathNode<ET,UnresolvedMathFontStyle<ET>> { MathNode::Custom(self.into()) }
 }
 
 impl<ET:EngineTypes<CustomNode = ()>> NodeTrait<ET> for () {
@@ -202,10 +202,7 @@ impl<ET:EngineTypes> LeaderSkip<ET> {
     /// Whether this is a horizontal skip.
     pub fn is_h(&self) -> bool {
         use LeaderSkip::*;
-        match self {
-            HSkip(_) | HFil | HFill => true,
-            _ => false
-        }
+        matches!(self, HSkip(_) | HFil | HFill)
     }
 }
 

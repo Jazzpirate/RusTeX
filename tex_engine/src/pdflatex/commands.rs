@@ -339,7 +339,7 @@ pub fn pdfcreationdate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mu
     let mut tk = Otherize::new(&mut f);
     write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
                       dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
-                      dt.offset().to_string().replace(":","'"))?;
+                      dt.offset().to_string().replace(':',"'"))?;
     Ok(())
 }
 
@@ -350,16 +350,13 @@ pub fn pdffilemoddate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
     let f = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     let path = f.path();
-    match std::fs::metadata(path).map(|md| md.modified()) {
-        Ok(Ok(st)) => {
-            let dt: chrono::DateTime<chrono::Local> = chrono::DateTime::from(st);
-            let mut f = |t| exp.push(t);
-            let mut tk = Otherize::new(&mut f);
-            write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
-                   dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
-                   dt.offset().to_string().replace(":","'"))?;
-        }
-        _ => ()
+    if let Ok(Ok(st)) = std::fs::metadata(path).map(|md| md.modified()) {
+        let dt: chrono::DateTime<chrono::Local> = chrono::DateTime::from(st);
+        let mut f = |t| exp.push(t);
+        let mut tk = Otherize::new(&mut f);
+        write!(tk,"D:{}{:02}{:02}{:02}{:02}{:02}{}'",
+               dt.year(),dt.month(),dt.day(),dt.hour(),dt.minute(),dt.second(),
+               dt.offset().to_string().replace(':',"'"))?;
     }
     Ok(())
 }
@@ -367,89 +364,101 @@ pub fn pdffilemoddate<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut
 pub fn pdfescapestring<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use crate::tex::characters::Character;
     engine.expand_until_bgroup(false,&tk)?;
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t|Ok(match t.to_enum() {
-        StandardToken::Character(_, CommandCode::Space) =>
-            ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
-            ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b'(') =>
-            ET::Char::string_to_iter("\\(").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b')') =>
-            ET::Char::string_to_iter("\\)").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b'\\') =>
-            ET::Char::string_to_iter("\\\\").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b'#') =>
-            ET::Char::string_to_iter("\\#").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) =>
-            exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
-        StandardToken::Primitive(_) => (),
-        StandardToken::ControlSequence(_) => ()
-    }))?;Ok(())
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t|{
+        match t.to_enum() {
+            StandardToken::Character(_, CommandCode::Space) =>
+                ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
+                ET::Char::string_to_iter("\\040").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b'(') =>
+                ET::Char::string_to_iter("\\(").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b')') =>
+                ET::Char::string_to_iter("\\)").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b'\\') =>
+                ET::Char::string_to_iter("\\\\").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b'#') =>
+                ET::Char::string_to_iter("\\#").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) =>
+                exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
+            StandardToken::Primitive(_) => (),
+            StandardToken::ControlSequence(_) => ()
+        };
+        Ok(())
+    })?;Ok(())
 }
 
 pub fn pdfescapename<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use crate::tex::characters::Character;
     engine.expand_until_bgroup(false,&tk)?;
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| Ok(match t.to_enum() {
-        StandardToken::Character(_, CommandCode::Space) =>
-            ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
-            ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b'(') =>
-            ET::Char::string_to_iter("#28").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b')') =>
-            ET::Char::string_to_iter("#29").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b'\\') =>
-            ET::Char::string_to_iter("#5C").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) if c == ET::Char::from(b'#') =>
-            ET::Char::string_to_iter("#23").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
-        StandardToken::Character(c, _) =>
-            exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
-        StandardToken::Primitive(_) => (),
-        StandardToken::ControlSequence(_) => ()
-    }))?;Ok(())
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| {
+        match t.to_enum() {
+            StandardToken::Character(_, CommandCode::Space) =>
+                ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b' ') =>
+                ET::Char::string_to_iter("#20").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b'(') =>
+                ET::Char::string_to_iter("#28").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b')') =>
+                ET::Char::string_to_iter("#29").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b'\\') =>
+                ET::Char::string_to_iter("#5C").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) if c == ET::Char::from(b'#') =>
+                ET::Char::string_to_iter("#23").for_each(|c| exp.push(ET::Token::from_char_cat(c,CommandCode::Other))),
+            StandardToken::Character(c, _) =>
+                exp.push(ET::Token::from_char_cat(c,CommandCode::Other)),
+            StandardToken::Primitive(_) => (),
+            StandardToken::ControlSequence(_) => ()
+        };
+        Ok(())
+    })?;Ok(())
 }
 
 pub fn pdfescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     use crate::tex::characters::Character;
     engine.expand_until_bgroup(false,&tk)?;
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| Ok(match t.to_enum() {
-        StandardToken::Character(c, _) => {
-            let num = c.into();
-            for c in ET::Char::string_to_iter(&format!("{:02X}",num)) {
-                exp.push(ET::Token::from_char_cat(c,CommandCode::Other))
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| {
+        match t.to_enum() {
+            StandardToken::Character(c, _) => {
+                let num = c.into();
+                for c in ET::Char::string_to_iter(&format!("{:02X}",num)) {
+                    exp.push(ET::Token::from_char_cat(c,CommandCode::Other))
+                }
             }
-        }
-        StandardToken::Primitive(_) => (),
-        StandardToken::ControlSequence(_) => ()
-    }))?;Ok(())
+            StandardToken::Primitive(_) => (),
+            StandardToken::ControlSequence(_) => ()
+        };
+        Ok(())
+    })?;Ok(())
 }
 pub fn pdfunescapehex<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     engine.expand_until_bgroup(false,&tk)?;
     let mut s = String::new();
-    engine.expand_until_endgroup(true,false,&tk,|_,_,t| Ok(match t.to_enum() {
-        StandardToken::Character(c, _) if s.is_empty() => {
-            let num = c.into();
-            if num >= 48 && num <= 57 || num >= 65 && num <= 70 || num >= 97 && num <= 102 {
-                s.push((num as u8).into());
-            } else {
-                // TODO
+    engine.expand_until_endgroup(true,false,&tk,|_,_,t| {
+        match t.to_enum() {
+            StandardToken::Character(c, _) if s.is_empty() => {
+                let num = c.into();
+                if (48..=57).contains(&num) || (65..=70).contains(&num) || (97..=102).contains(&num) {
+                    s.push((num as u8).into());
+                } else {
+                    // TODO
+                }
             }
-        }
-        StandardToken::Character(c, _) => {
-            let num = c.into();
-            if num >= 48 && num <= 57 || num >= 65 && num <= 70 || num >= 97 && num <= 102 {
-                s.push((num as u8).into());
-            } else {
-                // TODO
+            StandardToken::Character(c, _) => {
+                let num = c.into();
+                if (48..=57).contains(&num) || (65..=70).contains(&num) || (97..=102).contains(&num) {
+                    s.push((num as u8).into());
+                } else {
+                    // TODO
+                }
+                let c = u8::from_str_radix(&s,16).unwrap();
+                s.clear();
+                exp.push(ET::Token::from_char_cat(c.into(),CommandCode::Other));
             }
-            let c = u8::from_str_radix(&s,16).unwrap();
-            s.clear();
-            exp.push(ET::Token::from_char_cat(c.into(),CommandCode::Other));
-        }
-        StandardToken::Primitive(_) => (),
-        StandardToken::ControlSequence(_) => ()
-    }))?;Ok(())
+            StandardToken::Primitive(_) => (),
+            StandardToken::ControlSequence(_) => ()
+        };
+        Ok(())
+    })?;Ok(())
 }
 
 pub fn pdffilesize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
@@ -846,7 +855,10 @@ pub fn pdfpageattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token
           ET::CustomNode:From<PDFNode<ET>> {
     engine.expand_until_bgroup(false,&tk)?;
     let mut v = Vec::new();
-    engine.read_until_endgroup(&tk,|_,_,t| Ok(v.push(t)))?;
+    engine.read_until_endgroup(&tk,|_,_,t| {
+        v.push(t);
+        Ok(())
+    })?;
     let node = PDFNode::PDFPageAttr(v.into());
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
     Ok(())
@@ -857,7 +869,10 @@ pub fn pdfpagesattr<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Toke
           ET::CustomNode:From<PDFNode<ET>> {
     engine.expand_until_bgroup(false,&tk)?;
     let mut v = Vec::new();
-    engine.read_until_endgroup(&tk,|_,_,t| Ok(v.push(t)))?;
+    engine.read_until_endgroup(&tk,|_,_,t| {
+        v.push(t);
+        Ok(())
+    })?;
     let node = PDFNode::PDFPagesAttr(v.into());
     crate::add_node!(ET::Stomach;engine,VNode::Custom(node.into()),HNode::Custom(node.into()),MathNode::Custom(node.into()));
     Ok(())
@@ -903,13 +918,17 @@ pub fn pdfstrcmp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<
     let mut second = String::new();
     engine.read_braced_string(false,true,&tk,&mut first)?;
     engine.read_braced_string(false,true,&tk,&mut second)?;
-    if first == second {
-        exp.push(ET::Token::from_char_cat(b'0'.into(),CommandCode::Other))
-    } else if first < second {
-        exp.push(ET::Token::from_char_cat(b'-'.into(),CommandCode::Other));
-        exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
-    } else {
-        exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
+    match first.cmp(&second) {
+        std::cmp::Ordering::Less => {
+            exp.push(ET::Token::from_char_cat(b'-'.into(),CommandCode::Other));
+            exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
+        }
+        std::cmp::Ordering::Equal => {
+            exp.push(ET::Token::from_char_cat(b'0'.into(),CommandCode::Other));
+        }
+        std::cmp::Ordering::Greater => {
+            exp.push(ET::Token::from_char_cat(b'1'.into(),CommandCode::Other));
+        }
     }
     Ok(())
 }
@@ -932,7 +951,7 @@ pub fn pdffontexpand<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
 }
 
 
-const PRIMITIVE_INTS:&[&'static str] = &[
+const PRIMITIVE_INTS:&[&str] = &[
     "pdfadjustspacing",
     "pdfcompresslevel",
     "pdfdecimaldigits",
@@ -948,7 +967,7 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "pdfappendkern"
 ];
 
-const PRIMITIVE_DIMS:&[&'static str] = &[
+const PRIMITIVE_DIMS:&[&str] = &[
     "pdfhorigin",
     "pdflinkmargin",
     "pdfpageheight",
@@ -956,7 +975,7 @@ const PRIMITIVE_DIMS:&[&'static str] = &[
     "pdfvorigin"
 ];
 
-const PRIMITIVE_TOKS:&[&'static str] = &[
+const PRIMITIVE_TOKS:&[&str] = &[
     "pdfpageresources",
 ];
 

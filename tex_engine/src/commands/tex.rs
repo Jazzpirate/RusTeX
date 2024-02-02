@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use crate::{add_node, expand_loop};
 use crate::commands::{TeXCommand, Macro, MacroSignature, CommandScope, ActiveConditional, ResolvedToken, PrimitiveCommand, CharOrPrimitive};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
@@ -118,7 +119,7 @@ pub fn catcode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
 pub fn catcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let char = engine.read_charcode(false)?;
     let val: i64 = engine.read_int(true)?.into();
-    if val < 0 || val > 15 {
+    if !(0..=15).contains(&val) {
         todo!("catcode out of range")
     }
     let cc: CategoryCode = (val as u8).try_into().unwrap();
@@ -134,7 +135,7 @@ pub fn sfcode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 pub fn sfcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let char = engine.read_charcode(false)?;
     let val: i64 = engine.read_int(true)?.into();
-    if val < 0 || val > 32767 {
+    if !(0..=32767).contains(&val) {
         todo!("sfcode out of range")
     }
     let sf = val as u16;
@@ -650,7 +651,7 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) -
         Some(u@ActiveConditional::Unfinished(_)) => {
             conds.push(u);
             engine.mouth.requeue(tk);
-            let relax = engine.aux.memory.cs_interner_mut().new("relax");
+            let relax = engine.aux.memory.cs_interner_mut().from_str("relax");
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
@@ -685,7 +686,7 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeX
         Some(u@ActiveConditional::Unfinished(_)) => {
             conds.push(u);
             engine.mouth.requeue(tk);
-            let relax = engine.aux.memory.cs_interner_mut().new("relax");
+            let relax = engine.aux.memory.cs_interner_mut().from_str("relax");
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
@@ -719,11 +720,10 @@ pub fn endlinechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 }
 pub fn endlinechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let val: i64 = engine.read_int(true)?.into();
-    let val = if val == -1 { None } else
-    if val < -1 {
-        todo!("endlinechar out of range")
-    } else {
-        match ET::Char::try_from(val as u64) {
+    let val = match val.cmp(&-1) {
+        Ordering::Less => todo!("endlinechar out of range"),
+        Ordering::Equal => None,
+        Ordering::Greater => match ET::Char::try_from(val as u64) {
             Ok(c) => Some(c),
             _ => todo!("endlinechar out of range")
         }
@@ -740,13 +740,12 @@ pub fn escapechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
 }
 pub fn escapechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let val: i64 = engine.read_int(true)?.into();
-    let val = if val == -1 { None } else
-    if val < -1 {
-        todo!("escapechar out of range")
-    } else {
-        match ET::Char::try_from(val as u64) {
+    let val = match val.cmp(&-1) {
+        Ordering::Less => todo!("escapechar out of range"),
+        Ordering::Equal => None,
+        Ordering::Greater => match ET::Char::try_from(val as u64) {
             Ok(c) => Some(c),
-            _ => todo!("escapechar out of range")
+            _ => todo!("escapeechar out of range")
         }
     };
     engine.state.set_escape_char(engine.aux,val,globally);
@@ -823,7 +822,7 @@ pub fn scriptscriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk
 
 pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let idx = match engine.read_int(false)?.try_into() {
-        Ok(i) if i-1 >= 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
+        Ok(i) if i > 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
         _ => todo!("throw error")
     };
     let font = engine.read_font(false,&tk)?;
@@ -832,7 +831,7 @@ pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
 pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) -> TeXResult<(),ET> {
     let i = engine.read_int(false)?;
     let idx = match i.try_into() {
-        Ok(i) if i-1 >= 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
+        Ok(i) if i > 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
         _ => todo!("throw error: {}",i)
     };
     let mut font = engine.read_font(false,&tk)?;
@@ -863,7 +862,7 @@ pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, _tk:ET::Token, tp
         Some(TeXBox::H {children,..}) if tp == BoxType::Horizontal => {
             match engine.stomach.data_mut().open_lists.last_mut() {
                 Some(NodeList::Horizontal {children:ls,..}) =>
-                    ls.extend(children.into_vec().into_iter()),
+                    ls.extend(children.into_vec()),
                 _ => todo!("error: incompatible list can't be unboxed")
             }
         }
@@ -1001,22 +1000,13 @@ pub fn ifeof<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
 }
 
 pub fn ifhmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
-    Ok(match engine.stomach.data_mut().mode() {
-        TeXMode::Horizontal | TeXMode::RestrictedHorizontal => true,
-        _ => false
-    })
+    Ok(matches!(engine.stomach.data_mut().mode(), TeXMode::Horizontal | TeXMode::RestrictedHorizontal))
 }
 pub fn ifinner<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->TeXResult<bool,ET> {
-    Ok(match engine.stomach.data_mut().mode() {
-        TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::InlineMath => true,
-        _ => false
-    })
+    Ok(matches!(engine.stomach.data_mut().mode(), TeXMode::RestrictedHorizontal | TeXMode::InternalVertical | TeXMode::InlineMath))
 }
 pub fn ifmmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
-    Ok(match engine.stomach.data_mut().mode() {
-        TeXMode::InlineMath | TeXMode::DisplayMath => true,
-        _ => false
-    })
+    Ok(matches!(engine.stomach.data_mut().mode(), TeXMode::InlineMath | TeXMode::DisplayMath))
 }
 
 pub fn ifnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
@@ -1050,17 +1040,11 @@ pub fn iffalse<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token)
 }
 
 pub fn ifvmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
-    Ok(match engine.stomach.data_mut().mode() {
-        TeXMode::Vertical | TeXMode::InternalVertical => true,
-        _ => false
-    })
+    Ok(matches!(engine.stomach.data_mut().mode(), TeXMode::Vertical | TeXMode::InternalVertical))
 }
 pub fn ifvbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
     let idx = engine.read_register_index(false)?;
-    Ok(match engine.state.get_box_register(idx) {
-        Some(TeXBox::V {..}) => true,
-        _ => false
-    })
+    Ok(matches!(engine.state.get_box_register(idx), Some(TeXBox::V {..})))
 }
 pub fn ifvoid<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
     let idx = engine.read_register_index(false)?;
@@ -1068,10 +1052,7 @@ pub fn ifvoid<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
 }
 pub fn ifhbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<bool,ET> {
     let idx = engine.read_register_index(false)?;
-    Ok(match engine.state.get_box_register(idx) {
-        Some(TeXBox::H {..}) => true,
-        _ => false
-    })
+    Ok(matches!(engine.state.get_box_register(idx), Some(TeXBox::H {..})))
 }
 
 pub fn ifx<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<bool,ET> {
@@ -1129,7 +1110,7 @@ pub fn input<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> 
     if filename.is_empty() {
         todo!("throw error")
     }
-    let is_file = !filename.starts_with("|");
+    let is_file = !filename.starts_with('|');
     let file = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     if is_file && !file.exists() {
@@ -1148,7 +1129,7 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeX
         Some(u@ActiveConditional::Unfinished(_)) => {
             conds.push(u);
             engine.mouth.requeue(tk);
-            let relax = engine.aux.memory.cs_interner_mut().new("relax");
+            let relax = engine.aux.memory.cs_interner_mut().from_str("relax");
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
@@ -1269,7 +1250,10 @@ pub fn lowercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
                 }
                 Ok(())
             }
-            _ => Ok(exp.push(t))
+            _ => {
+                exp.push(t);
+                Ok(())
+            }
         }
     })?;
     engine.mouth.push_vec(exp);
@@ -1290,7 +1274,10 @@ pub fn uppercase<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) 
                 }
                 Ok(())
             }
-            _ => Ok(exp.push(t))
+            _ => {
+                exp.push(t);
+                Ok(())
+            }
         }
     })?;
     engine.mouth.push_vec(exp);
@@ -1345,7 +1332,7 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Math{children,start,tp:MathNodeListType::LeftRight(left)}) => {
             engine.state.pop(engine.aux,engine.mouth);
-            let (children,None) = children.close(start,engine.mouth.current_sourceref()).into() else {unreachable!()};
+            let (children,None) = children.close(start,engine.mouth.current_sourceref()) else {unreachable!()};
             ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
                 nucleus: MathNucleus::LeftRight {
                     left:left.map(|d| (d.large.char,d.large.style)),
@@ -1414,11 +1401,10 @@ pub fn newlinechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 }
 pub fn newlinechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let val: i64 = engine.read_int(true)?.into();
-    let val = if val == -1 { None } else
-        if val < -1 {
-            todo!("newlinechar out of range")
-        } else {
-        match ET::Char::try_from(val as u64) {
+    let val = match val.cmp(&-1) {
+        Ordering::Less => todo!("newlinechar out of range"),
+        Ordering::Equal => None,
+        Ordering::Greater => match ET::Char::try_from(val as u64) {
             Ok(c) => Some(c),
             _ => todo!("newlinechar out of range")
         }
@@ -1472,10 +1458,8 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
 pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     if ET::Stomach::maybe_switch_mode(engine, CommandScope::SwitchesToHorizontal, tk,PRIMITIVES.noindent)? {
         match engine.stomach.data_mut().open_lists.last_mut() {
-            Some(NodeList::Horizontal {children,..}) => match children.last_mut() {
-                Some(HNode::Box(TeXBox::H{info:HBoxInfo::ParIndent {..},..})) => {children.pop();}
-                _ => ()
-            }
+            Some(NodeList::Horizontal {children,..}) =>
+                if let Some(HNode::Box(TeXBox::H{info:HBoxInfo::ParIndent {..},..})) = children.last_mut() {children.pop();}
             _ => unreachable!()
         }
     }
@@ -1516,7 +1500,7 @@ pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
         expansion:ret.into(),
         signature:MacroSignature {
             arity:0,
-            params:engine.aux.memory.empty_list().into()
+            params:engine.aux.memory.empty_list()
         }
     };
     engine.set_command(&cs, Some(TeXCommand::Macro(m)), globally);
@@ -1557,7 +1541,10 @@ pub fn setbox<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token,gl
         either::Left(bx) =>
             engine.state.set_box_register(engine.aux,index,bx,globally),
         either::Right(bi) => {
-            let target = BoxTarget::<ET>::new(move |e,b| Ok(e.state.set_box_register(e.aux,index,Some(b),globally)));
+            let target = BoxTarget::<ET>::new(move |e,b| {
+                e.state.set_box_register(e.aux,index,Some(b),globally);
+                Ok(())
+            });
             let mut ls = bi.open_list(engine.mouth.start_ref());
             match ls {
                 NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = target,
@@ -1670,10 +1657,7 @@ pub fn string<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET:
             StandardToken::Character(c, _) => exp.push(ET::Token::from_char_cat(c, CommandCode::Other)),
             StandardToken::ControlSequence(cs) => {
                 let res = engine.aux.memory.cs_interner().resolve(&cs);
-                match engine.state.get_escape_char() {
-                    Some(c) => exp.push(ET::Token::from_char_cat(c, CommandCode::Other)),
-                    _ => ()
-                }
+                if let Some(c) = engine.state.get_escape_char() { exp.push(ET::Token::from_char_cat(c, CommandCode::Other)) }
                 for u in res.iter() {
                     match u.try_into() {
                         Ok(b' ') => exp.push(ET::Token::space()),
@@ -1721,7 +1705,8 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
         MissingBegingroup.throw(engine.aux,engine.state,engine.mouth)?;
     }
     engine.read_until_endgroup(&tk,|_,_,t| {
-        Ok(tks.push(t))
+        tks.push(t);
+        Ok(())
     })?;
     tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
     Ok(Some(Box::new(move |engine| {do_write(engine,tk,idx,tks)})))
@@ -1754,7 +1739,10 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> T
 }
 
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
-    engine.do_the(|_, _, _, t| Ok(exp.push(t)))
+    engine.do_the(|_, _, _, t| {
+        exp.push(t);
+        Ok(())
+    })
 }
 
 pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global:bool) -> TeXResult<(),ET> {
@@ -1769,7 +1757,10 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
             }
             (_,CommandCode::BeginGroup) => {
                 let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(&tk,|_,_,t| Ok(tks.push(t)))?;
+                engine.read_until_endgroup(&tk,|_,_,t| {
+                    tks.push(t);
+                    Ok(())
+                })?;
                 engine.state.set_toks_register(engine.aux,idx,TokenList::from(tks),global);
                 return Ok(())
             }
@@ -2217,11 +2208,8 @@ pub fn displaylimits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::T
     let ls = engine.stomach.data_mut().open_lists.last_mut().unwrap();
     match ls {
         NodeList::Math {children,..} => {
-            match children.list_mut().last_mut() {
-                Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {ref mut limits,..},..})) => {
-                    *limits = None;
-                }
-                _ => ()
+            if let Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {ref mut limits,..},..})) = children.list_mut().last_mut() {
+                *limits = None;
             }
         }
         _ => unreachable!()
@@ -2232,11 +2220,8 @@ pub fn limits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
     let ls = engine.stomach.data_mut().open_lists.last_mut().unwrap();
     match ls {
         NodeList::Math {children,..} => {
-            match children.list_mut().last_mut() {
-                Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {cls:MathClass::Op,ref mut limits,..},..})) => {
-                    *limits = Some(true);
-                }
-                _ => ()
+            if let Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {cls:MathClass::Op,ref mut limits,..},..})) = children.list_mut().last_mut() {
+                *limits = Some(true);
             }
         }
         _ => unreachable!()
@@ -2247,11 +2232,8 @@ pub fn nolimits<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
     let ls = engine.stomach.data_mut().open_lists.last_mut().unwrap();
     match ls {
         NodeList::Math {children,..} => {
-            match children.list_mut().last_mut() {
-                Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {cls:MathClass::Op,ref mut limits,..},..})) => {
-                    *limits = Some(false);
-                }
-                _ => ()
+            if let Some(MathNode::Atom(MathAtom {sub:None,sup:None,nucleus:MathNucleus::Simple {cls:MathClass::Op,ref mut limits,..},..})) = children.list_mut().last_mut() {
+                *limits = Some(false);
             }
         }
         _ => unreachable!()
@@ -2267,11 +2249,14 @@ pub fn underline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
             sup: None,
         }));Ok(())
     },|_| ListTarget::<ET,_>::new(
-            |engine,children,start| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(
-                MathAtom {
-                    sup:None,sub:None,nucleus:MathNucleus::Underline(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()})
-                }
-            )))
+            |engine,children,start| {
+                ET::Stomach::add_node_m(engine,MathNode::Atom(
+                    MathAtom {
+                        sup:None,sub:None,nucleus:MathNucleus::Underline(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()})
+                    }
+                ));
+                Ok(())
+            }
     ),())
 }
 pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
@@ -2282,11 +2267,14 @@ pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
             sup: None,
         }));Ok(())
     },|_| ListTarget::<ET,_>::new(
-        |engine,children,start| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(
-            MathAtom {
-                sup:None,sub:None,nucleus:MathNucleus::Overline(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()})
-            }
-        )))
+        |engine,children,start| {
+            ET::Stomach::add_node_m(engine,MathNode::Atom(
+                MathAtom {
+                    sup:None,sub:None,nucleus:MathNucleus::Overline(MathKernel::List {children:children.into(),start,end:engine.mouth.current_sourceref()})
+                }
+            ));
+            Ok(())
+        }
     ),())
 }
 
@@ -2306,14 +2294,17 @@ pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
             sup: None,
         }));Ok(())
     },|(char,style)| ListTarget::<ET,_>::new(
-        move |engine,children,_| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(
-            MathAtom {
-                sup:None,sub:None,nucleus:MathNucleus::Accent{
-                    accent:(char,style),
-                    inner:children.into()
-                },
-            }
-        )))
+        move |engine,children,_| {
+            ET::Stomach::add_node_m(engine,MathNode::Atom(
+                MathAtom {
+                    sup:None,sub:None,nucleus:MathNucleus::Accent{
+                        accent:(char,style),
+                        inner:children.into()
+                    },
+                }
+            ));
+            Ok(())
+        }
     ),(char.char,char.style))
 }
 
@@ -2333,14 +2324,17 @@ pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
             sup: None,
         }));Ok(())
     },|(char,style)| ListTarget::<ET,_>::new(
-        move |engine,children,_| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(
-            MathAtom {
-                sup:None,sub:None,nucleus:MathNucleus::Radical{
-                    rad:(char,style),
-                    inner:children.into()
-                },
-            }
-        )))
+        move |engine,children,_| {
+            ET::Stomach::add_node_m(engine,MathNode::Atom(
+                MathAtom {
+                    sup:None,sub:None,nucleus:MathNucleus::Radical{
+                        rad:(char,style),
+                        inner:children.into()
+                    },
+                }
+            ));
+            Ok(())
+        }
     ),(char.char,char.style))
 }
 
@@ -2369,7 +2363,7 @@ pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> 
             //let v = std::mem::take(v);
             let old = std::mem::replace(ch,MathNodeList::Over {
                 top: vec!(),
-                bottom: vec!().into(),
+                bottom: vec!(),
                 left:None,right:None,sep:None
             });
             if let MathNodeList::Over {top,..} = ch {
@@ -2390,7 +2384,7 @@ pub fn overwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
             //let v = std::mem::take(v);
             let old = std::mem::replace(ch,MathNodeList::Over {
                 top: vec!(),
-                bottom: vec!().into(),
+                bottom: vec!(),
                 left,right,sep:None
             });
             if let MathNodeList::Over {top,..} = ch {
@@ -2410,7 +2404,7 @@ pub fn above<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
             //let v = std::mem::take(v);
             let old = std::mem::replace(ch,MathNodeList::Over {
                 top: vec!(),
-                bottom: vec!().into(),
+                bottom: vec!(),
                 left:None,right:None,sep:Some(sep)
             });
             if let MathNodeList::Over {top,..} = ch {
@@ -2432,7 +2426,7 @@ pub fn abovewithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
             //let v = std::mem::take(v);
             let old = std::mem::replace(ch,MathNodeList::Over {
                 top: vec!(),
-                bottom: vec!().into(),
+                bottom: vec!(),
                 left,right,sep:Some(sep)
             });
             if let MathNodeList::Over {top,..} = ch {
@@ -2451,7 +2445,7 @@ pub fn atop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> 
             //let v = std::mem::take(v);
             let old = std::mem::replace(ch,MathNodeList::Over {
                 top: vec!(),
-                bottom: vec!().into(),
+                bottom: vec!(),
                 left:None,right:None,sep:Some(ET::Dim::default())
             });
             if let MathNodeList::Over {top,..} = ch {
@@ -2472,7 +2466,7 @@ pub fn atopwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
             //let v = std::mem::take(v);
             let old = std::mem::replace(ch,MathNodeList::Over {
                 top: vec!(),
-                bottom: vec!().into(),
+                bottom: vec!(),
                 left,right,sep:Some(ET::Dim::default())
             });
             if let MathNodeList::Over {top,..} = ch {
@@ -2538,13 +2532,15 @@ pub fn mathchoice_iii<ET:EngineTypes>(engine: &mut EngineReferences<ET>,d:ML<ET>
         }));Ok(())
     },
                                    |(d,t,s)| ListTarget::<ET,_>::new(
-        |engine,children,_|
-            Ok(ET::Stomach::add_node_m(engine,MathNode::Choice(UnresolvedMathChoice {
+        |engine,children,_| {
+            ET::Stomach::add_node_m(engine,MathNode::Choice(UnresolvedMathChoice {
                 display: d,
                 text: t,
                 script: s,
                 scriptscript: children.into()
-            })))
+            }));
+            Ok(())
+        }
     ),(d,t,s))
 }
 
@@ -2561,7 +2557,7 @@ pub fn scriptscriptstyle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:E
     ET::Stomach::add_node_m(engine,MathNode::Marker(UnresolvedMarkers::ScriptScript));Ok(())
 }
 
-const PRIMITIVE_INTS:&[&'static str] = &[
+const PRIMITIVE_INTS:&[&str] = &[
     "year","month","day","time",
     "adjdemerits",
     "badness",
@@ -2616,7 +2612,7 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "insertpenalties" // todo
 ];
 
-const PRIMITIVE_DIMS:&[&'static str] = &[
+const PRIMITIVE_DIMS:&[&str] = &[
     "boxmaxdepth",
     "delimitershortfall",
     "displayindent",
@@ -2640,7 +2636,7 @@ const PRIMITIVE_DIMS:&[&'static str] = &[
     "vsize"
 ];
 
-const PRIMITIVE_SKIPS:&[&'static str] = &[
+const PRIMITIVE_SKIPS:&[&str] = &[
     "abovedisplayshortskip",
     "abovedisplayskip",
     "baselineskip",
@@ -2658,13 +2654,13 @@ const PRIMITIVE_SKIPS:&[&'static str] = &[
     "xspaceskip",
 ];
 
-const PRIMITIVE_MUSKIPS:&[&'static str] = &[
+const PRIMITIVE_MUSKIPS:&[&str] = &[
     "thinmuskip",
     "medmuskip",
     "thickmuskip"
 ];
 
-const PRIMITIVE_TOKS:&[&'static str] = &[
+const PRIMITIVE_TOKS:&[&str] = &[
     "everypar",
     "everymath",
     "everydisplay",
@@ -2707,10 +2703,7 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
             }
             data.currindex += 1;
             if data.columns.len() <= data.currindex {
-                match data.repeat_index {
-                    Some(i) => data.currindex = i,
-                    _ => ()
-                }
+                if let Some(i) = data.repeat_index { data.currindex = i }
             }
             if data.span {
                 match engine.stomach.data_mut().open_lists.last_mut() {
@@ -2734,14 +2727,17 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
                     if *name == PRIMITIVES.crcr => (),*/
                 ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.omit => {
                     engine.gullet.get_align_data().unwrap().omit = true;
-                    return Ok(super::methods::open_align_cell(engine,mode))
+                    super::methods::open_align_cell(engine,mode);
+                    return Ok(())
                 },
                 ResolvedToken::Tk{..} | ResolvedToken::Cmd(_) => {
                     engine.requeue(token)?;
-                    return Ok(super::methods::open_align_cell(engine,mode))
+                    super::methods::open_align_cell(engine,mode);
+                    return Ok(())
                 }
             );
-            return Ok(super::methods::open_align_cell(engine,mode))
+            super::methods::open_align_cell(engine,mode);
+            Ok(())
         }
     }
 }
@@ -2922,8 +2918,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"vadjust",CommandScope::SwitchesToHorizontalOrMath,vadjust);
     {
         let refs = engine.get_engine_refs();
-        let relax = refs.aux.memory.cs_interner_mut().new("relax");
-        let nullfont = refs.aux.memory.cs_interner_mut().new("nullfont");
+        let relax = refs.aux.memory.cs_interner_mut().from_str("relax");
+        let nullfont = refs.aux.memory.cs_interner_mut().from_str("nullfont");
         refs.state.set_command(refs.aux, relax, Some(TeXCommand::Primitive {name:PRIMITIVES.relax,cmd:PrimitiveCommand::Relax}), true);
         refs.state.set_command(refs.aux, nullfont, Some(TeXCommand::Font(refs.fontsystem.null())), true)
     }

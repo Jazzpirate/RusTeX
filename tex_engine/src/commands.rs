@@ -378,14 +378,14 @@ impl<T:Token> Macro<T> {
             let sigsrc: StringLineSource<T::Char> = sig.into();
             let mut sigsrc = InputTokenizer::new(sigsrc);
             while let Some(t) = sigsrc.get_next(int,cc,None).map_err(|_|())? {
-                if let Err(_) = parser.do_signature_token::<ET>(t) { return Err(())};
+                if parser.do_signature_token::<ET>(t).is_err() { return Err(())};
             }
         }
         let exp = exp.as_ref();
         let expsrc: StringLineSource<T::Char> = exp.into();
         let mut expsrc = InputTokenizer::new(expsrc);
         while let Some(t) = expsrc.get_next(int,cc,None).map_err(|_|())? {
-            if let Err(_) = parser.do_expansion_token::<ET>(t) { return Err(()) }
+            if parser.do_expansion_token::<ET>(t).is_err() { return Err(()) }
         }
         Ok(parser.close(false,false,false))
     }

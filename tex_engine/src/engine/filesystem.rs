@@ -50,7 +50,7 @@ pub trait FileSystem:Clone {
     fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, state:&ET::State,cont:F) -> TeXResult<(),ET>;
 
     /// Returns a human-readable representation of a [`SourceRefID`](File::SourceRefID); e.g. the file name/path.
-    fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
+    fn ref_str(&self,id:<Self::File as File>::SourceRefID) -> &str;
 }
 
 /// A (virtual or physical) file.
@@ -110,7 +110,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             interner:string_interner::StringInterner::new()
         }
     }
-    fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
+    fn ref_str(&self, id: <Self::File as File>::SourceRefID) -> &str {
         match id {
             Some(id) =>self.interner.resolve(id).unwrap(),
             None => "(NONE)"
@@ -132,11 +132,11 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 if path.starts_with("|kpsewhich ") {
                     let s = &path[1..];
                     let out = if cfg!(target_os = "windows") {
-                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(&["/C",s])//args.collect::<Vec<&str>>())
+                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(["/C",s])//args.collect::<Vec<&str>>())
                             .output().expect("kpsewhich not found!")
                             .stdout
                     } else {
-                        let args = s[10..].split(" ");
+                        let args = s[10..].split(' ');
                         std::process::Command::new("kpsewhich").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(args.collect::<Vec<&str>>())
                             .output().expect("kpsewhich not found!")
                             .stdout
@@ -176,10 +176,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         }
         match self.read_files.get_mut(idx as usize) {
             Some(n) =>
-                *n = match file.line_source() {
-                    Some(src) => Some(InputTokenizer::new( src)),
-                    _ => None
-                },
+                *n = file.line_source().map(InputTokenizer::new),
             _ => unreachable!()
         }
     }
@@ -192,7 +189,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 match f.read(handler,state.get_catcode_scheme(),state.get_endline_char(),cont) {
                     Ok(_) => Ok(()),
                     Err(e) => {
-                        return Err(e.into())
+                        Err(e.into())
                     }
                 }
             }
@@ -228,19 +225,13 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         self.write_files[idx as usize] = Some(WritableVirtualFile::new(file.path,file.id.unwrap()))
     }
     fn close_out(&mut self,idx:u8) {
-        match self.write_files.get_mut(idx as usize) {
-            Some(o) => match std::mem::take(o) {
-                Some(f) => {
-                    let vf = VirtualFile {
-                        path:f.1,exists:true,
-                        source:Some(f.0.into()),id:Some(f.2),pipe:false
-                    };
-                    self.files.insert(vf.path.clone(),vf);
-                }
-                _ => ()
-            }
-            _ => ()
-        }
+        if let Some(o) = self.write_files.get_mut(idx as usize) { if let Some(f) = std::mem::take(o) {
+            let vf = VirtualFile {
+                path:f.1,exists:true,
+                source:Some(f.0.into()),id:Some(f.2),pipe:false
+            };
+            self.files.insert(vf.path.clone(),vf);
+        } }
     }
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
         if idx < 0 {
@@ -255,19 +246,12 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             match self.write_files.get_mut(idx as usize) {
                 Some(Some(f)) => {
                     let s = string.to_string().into_bytes();
-                    match newlinechar {
-                        Some(c) =>
-                        match c.try_into() {
-                            Ok(u) => {
-                                for l in s.split(|b| *b == u) {
-                                    f.0.push(C::convert(l.to_vec()));
-                                }
-                                return
-                            }
-                            _ => ()
+                    if let Some(c) = newlinechar { if let Ok(u) = c.try_into() {
+                        for l in s.split(|b| *b == u) {
+                            f.0.push(C::convert(l.to_vec()));
                         }
-                        _ => ()
-                    }
+                        return
+                    } }
                     let tl = C::convert(s);
                     f.0.push(tl);
                 }

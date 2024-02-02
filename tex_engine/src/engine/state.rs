@@ -359,7 +359,7 @@ impl<ET:EngineTypes> StateStack<ET> {
     }
     /// Pop a stack level from the stack, as a group ends. Returns the [`GroupType`], the `\aftergroup` [`Token`](crate::tex::tokens::Token)s,
     /// and an iterator over the [`StateChange`]s to be rolled back.
-    pub fn pop<'a>(&'a mut self) -> (GroupType,Vec<ET::Token>,ChangeIter<'a,ET>) {
+    pub fn pop(&mut self) -> (GroupType,Vec<ET::Token>,ChangeIter<'_,ET>) {
         let lvl = self.stack.pop().unwrap();
         (lvl.group_type,lvl.aftergroup,ChangeIter { stack:self, chs:lvl.changes })
     }
@@ -377,14 +377,11 @@ impl<ET:EngineTypes> StateStack<ET> {
     }
     /// Register a local state change, to be rolled back when the current group ends
     pub fn add_change_locally(&mut self,change:StateChange<ET>) {
-        match self.stack.last_mut() {
-            Some(lvl) => {
-                let change = change.into();
-                if lvl.changes.iter().all(|c| !c.equiv(&change)) {
-                    lvl.changes.push(change);
-                }
+        if let Some(lvl) = self.stack.last_mut() {
+            let change = change.into();
+            if lvl.changes.iter().all(|c| !c.equiv(&change)) {
+                lvl.changes.push(change);
             }
-            None => ()
         }
     }
 }

@@ -282,10 +282,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
         }
     }
     fn nodetype(&self) -> NodeType { NodeType::WhatsIt }
-    fn opaque(&self) -> bool { match self {
-        PDFNode::Color(_) => true,
-        _ => false
-    } }
+    fn opaque(&self) -> bool { matches!(self, PDFNode::Color(_)) }
     fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         display_do_indent(indent,f)?;
         match self {
@@ -570,7 +567,7 @@ impl PDFColor {
             PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
         } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
             let x = 255.0 * parse!(ls[0]);
-            if x > 255.0 || x < 0.0  {
+            if !(0.0..=255.0).contains(&x)  {
                 return Self::black();
             }
             let x = (x.round()) as u8;

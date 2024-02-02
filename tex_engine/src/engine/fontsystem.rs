@@ -127,7 +127,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
         let null = Ptr::new(TfmFontI{
             file:Ptr::new(null_file),
             muts:RwLock::new(muts),
-            name:aux.memory.cs_interner_mut().new("nullfont")
+            name:aux.memory.cs_interner_mut().from_str("nullfont")
         });
         TfmFontSystem {
             files:HMap::default(),
@@ -227,7 +227,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
         let at = self.muts.read().unwrap().at;
         match at {
             Some(d) => d,
-            None => D::from_sp(self.file.size as i32)
+            None => D::from_sp(self.file.size)
         }
     }
     fn has_at_set(&self) -> bool {

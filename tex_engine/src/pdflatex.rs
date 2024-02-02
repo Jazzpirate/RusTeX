@@ -49,7 +49,7 @@ impl<C:Character> FileWithMD5 for VirtualFile<C> {
                 Err(_) => md5::compute("")
             }
             Some(s) => {
-                let v : Vec<u8> = s.iter().map(|v| v.iter().map(|c| c.to_char().to_string().into_bytes())).flatten().flatten().collect();
+                let v : Vec<u8> = s.iter().flat_map(|v| v.iter().map(|c| c.to_char().to_string().into_bytes())).flatten().collect();
                 md5::compute(v)
             }
         }

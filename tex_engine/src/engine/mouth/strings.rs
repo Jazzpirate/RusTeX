@@ -66,7 +66,7 @@ pub struct InputTokenizer<C:Character,S:TextLineSource<C>> {
     tempstr:Vec<C>
 }
 
-type CSH<T> = <<T as Token>::CS as CSName<<T as Token>::Char>>::Handler;
+type Csh<T> = <<T as Token>::CS as CSName<<T as Token>::Char>>::Handler;
 
 impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
     /// Create a new [`InputTokenizer`] from a [`TextLineSource`]
@@ -119,7 +119,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
     /// `\read` - read a line of input as [`Character`]s in the currenct [`CategoryCodeScheme`], respecting
     /// braces ([`CategoryCode::BeginGroup`] and [`EndGroup`](CategoryCode::EndGroup)) and passing each token to the
     /// given function.
-    pub fn read<T:Token<Char=C>,F:FnMut(T)>(&mut self, handler:&mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) -> Result<(),InvalidCharacter<C>> {
+    pub fn read<T:Token<Char=C>,F:FnMut(T)>(&mut self, handler:&mut Csh<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) -> Result<(),InvalidCharacter<C>> {
         let mut ingroups = 0;
         let mut ret: Result<(),InvalidCharacter<C>> = Ok(());
         let line = self.line;
@@ -155,26 +155,20 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
 
     /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacterError`]
     /// on encountering a character of code [`CategoryCode::Invalid`].
-    pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut CSH<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<C>> {
+    pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut Csh<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<C>> {
         loop {
             match self.get_char() {
                 None if self.eof => return Ok(None),
-                None => match self.return_endline::<T>(cc, endline, handler.par()) {
-                    Some(e) => {
-                        //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
-                        return Ok(Some(e))
-                    }
-                    None => ()
+                None => if let Some(e) = self.return_endline::<T>(cc, endline, handler.par()) {
+                    //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
+                    return Ok(Some(e))
                 }
-                Some(c) => match self.check_char::<T>(handler, cc, endline, c)? {
-                    Some(t) => return Ok(Some(t)),
-                    None => ()
-                }
+                Some(c) => if let Some(t) = self.check_char::<T>(handler, cc, endline, c)? { return Ok(Some(t)) }
             };
         }
     }
 
-    fn check_char<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, c:C) -> Result<Option<T>,InvalidCharacter<C>> {
+    fn check_char<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, c:C) -> Result<Option<T>,InvalidCharacter<C>> {
         use CategoryCode::*;
         match cc.get(c) {
             EOL if self.state == MouthState::NewLine => {
@@ -253,7 +247,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         ret
     }
 
-    fn get_escape<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>) -> T {
+    fn get_escape<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>) -> T {
         let name = match self.get_char() {
             None => {
                 self.next_line();
@@ -266,17 +260,17 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                     }
                 }
             },
-            Some(next) => self.check_escape::<T>(handler, cc, endline, next)
+            Some(next) => self.check_escape::<T>(handler, cc, next)
         };
         T::from_cs(name)
     }
 
-    fn check_escape<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, next:C) -> T::CS {
+    fn check_escape<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, next:C) -> T::CS {
         use CategoryCode::*;
         match cc.get(next) {
             Superscript => {
                 match self.maybe_superscript(next) {
-                    Some(c) => self.check_escape::<T>(handler, cc, endline, c),
+                    Some(c) => self.check_escape::<T>(handler, cc, c),
                     None => {
                         self.state = MouthState::MidLine;
                         self.tempstr.clear();
@@ -295,7 +289,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         }
     }
 
-    fn get_cs_name<T:Token<Char=C>>(&mut self, handler:&mut CSH<T>, cc:&CategoryCodeScheme<C>, first:C) -> T::CS {
+    fn get_cs_name<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, first:C) -> T::CS {
         self.tempstr.clear();
         self.tempstr.push(first);
         self.state = MouthState::SkipBlank;

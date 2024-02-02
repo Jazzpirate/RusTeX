@@ -101,7 +101,7 @@ impl<C:Character,A:Clone> CSNameMap<C,InternedCSName<C>,A> for CSNameVec<C,A> {
         if self.0.len() <= idx {
             return None
         }
-        std::mem::replace(&mut self.0[idx], None)
+        self.0[idx].take()
     }
 }
 
@@ -122,9 +122,9 @@ pub trait CSHandler<C:Character,CS: CSName<C>>:Default+Clone {
     /// [`Character`]s.
     type Resolved<'a>:ResolvedCSName<'a,C> where Self:'a;
     /// Creates a new control sequence name from a string.
-    fn new(&mut self,s: &str) -> CS;
+    fn from_str(&mut self, s: &str) -> CS;
     /// Creates a new control sequence name from a vector of characters.
-    fn from_chars(&mut self,v: &Vec<C>) -> CS;
+    fn from_chars(&mut self,v: &[C]) -> CS;
     /// Resolves a control sequence name.
     fn resolve<'a>(&'a self,cs:&'a CS) -> Self::Resolved<'a>;
     /// Returns the name of the `\par` control sequence.
@@ -148,16 +148,14 @@ impl<'a,C:Character> ResolvedCSName<'a,C> for &'a str {
 impl<C:Character> CSHandler<C,Ptr<str>> for () {
     type Resolved<'a> = &'a str;
 
-    fn new(&mut self,s: &str) -> Ptr<str> {
+    fn from_str(&mut self, s: &str) -> Ptr<str> {
         s.into()
     }
     fn get(&self, s: &str) -> Option<Ptr<str>> { Some(s.into()) }
-    fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Resolved<'a> {
-        &*cs
-    }
+    fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Resolved<'a> { cs }
     fn par(&self) -> Ptr<str> { "par".to_string().into() }
     fn empty_str(&self) -> Ptr<str> { "".to_string().into() }
-    fn from_chars(&mut self, v: &Vec<C>) -> Ptr<str> {
+    fn from_chars(&mut self, v: &[C]) -> Ptr<str> {
         let mut s = String::new();
         for c in v {
             c.display_fmt(&mut s);
@@ -187,11 +185,11 @@ impl<C:Character> CSInterner<C> {
     }
     /// Interns a `&'static str` as a control sequence name
     pub fn from_static(&mut self,s:&'static str) -> InternedCSName<C> {
-        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice().into())
+        self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
     }
     /// Interns a `String` as a control sequence name
     pub fn from_string<S:AsRef<str>>(&mut self,s:S) -> InternedCSName<C> {
-        self.intern(C::string_to_iter(s.as_ref()).collect::<Vec<_>>().as_slice().into())
+        self.intern(C::string_to_iter(s.as_ref()).collect::<Vec<_>>().as_slice())
     }
     /// Resolves a control sequence name to a sequence of [`Character`]s
     pub fn resolve(&self,i:InternedCSName<C>) -> &[C] {
@@ -199,16 +197,13 @@ impl<C:Character> CSInterner<C> {
     }
 
     fn intern(&mut self,v:&[C]) -> InternedCSName<C> {
-        match self.map.get(v) {
-            Some(x) => return (*x,PhantomData::default()),
-            None => ()
-        }
+        if let Some(x) = self.map.get(v) { return (*x,PhantomData) }
         self.ls.extend(v);
         let len = self.ls.len();
         self.idx.push(len);
         let len = self.idx.len() - 1;
         self.map.insert(v.into(),len as u32);
-        (len as u32,PhantomData::default())
+        (len as u32,PhantomData)
     }
 
     fn get(&self,i:u32) -> &[C] {
@@ -221,17 +216,17 @@ impl<C:Character> CSInterner<C> {
 }
 impl<C:Character> CSHandler<C,InternedCSName<C>> for CSInterner<C> {
     type Resolved<'a> = DisplayCSName<'a,C>;
-    fn new(&mut self,s: &str) -> InternedCSName<C> {
+    fn from_str(&mut self, s: &str) -> InternedCSName<C> {
         self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
     }
     fn get(&self, s: &str) -> Option<InternedCSName<C>> {
-        self.map.get(C::string_to_iter(s).collect::<Vec<_>>().as_slice()).map(|i| (*i,PhantomData::default()))
+        self.map.get(C::string_to_iter(s).collect::<Vec<_>>().as_slice()).map(|i| (*i,PhantomData))
     }
-    fn from_chars(&mut self, v: &Vec<C>) -> InternedCSName<C> {
-        self.intern(v.as_slice())
+    fn from_chars(&mut self, v: &[C]) -> InternedCSName<C> {
+        self.intern(v)
     }
-    fn par(&self) -> InternedCSName<C> { (1,PhantomData::default()) }
-    fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData::default()) }
+    fn par(&self) -> InternedCSName<C> { (1,PhantomData) }
+    fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData) }
     fn resolve<'a>(&'a self, cs: &InternedCSName<C>) -> DisplayCSName<'a,C> {
         DisplayCSName(self.get(cs.0))
     }

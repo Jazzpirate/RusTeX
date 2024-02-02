@@ -101,41 +101,40 @@ pub trait Gullet<ET:EngineTypes> {
     fn get_next(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State, mut noexpand:bool) -> Result<Option<ET::Token>,GulletError<ET::Char>> {
         match self.get_align_data() {
             None => Ok(mouth.get_next(aux, state)?),
-            Some(a) => loop {
-                let t = match mouth.get_next(aux, state)? {
-                    None => return Ok(None),
-                    Some(t) => t
-                };
-                match t.command_code() {
-                    CommandCode::BeginGroup => {
-                        a.ingroups += 1;
-                        return Ok(Some(t))
-                    }
-                    CommandCode::EndGroup => {
-                        if a.ingroups == 0 {
-                            TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?
+            Some(a) => {
+                while let Some(t) = mouth.get_next(aux, state)? {
+                    match t.command_code() {
+                        CommandCode::BeginGroup => {
+                            a.ingroups += 1;
+                            return Ok(Some(t))
                         }
-                        a.ingroups -= 1;
-                        return Ok(Some(t))
-                    }
-                    CommandCode::AlignmentTab if !noexpand && a.ingroups == a.groupval() => {
-                        a.on_alignment_tab(mouth, aux);
-                        noexpand = false;
-                    }
-                    CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if !noexpand && a.ingroups == a.groupval() => match Self::char_or_primitive(state, &t) {
-                        Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
-                            a.on_cr(mouth, aux, state);
-                            noexpand = false;
+                        CommandCode::EndGroup => {
+                            if a.ingroups == 0 {
+                                TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?
+                            }
+                            a.ingroups -= 1;
+                            return Ok(Some(t))
                         }
-                        Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
-                            a.span = true;
+                        CommandCode::AlignmentTab if !noexpand && a.ingroups == a.groupval() => {
                             a.on_alignment_tab(mouth, aux);
                             noexpand = false;
                         }
+                        CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if !noexpand && a.ingroups == a.groupval() => match Self::char_or_primitive(state, &t) {
+                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
+                                a.on_cr(mouth, aux, state);
+                                noexpand = false;
+                            }
+                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
+                                a.span = true;
+                                a.on_alignment_tab(mouth, aux);
+                                noexpand = false;
+                            }
+                            _ => return Ok(Some(t))
+                        }
                         _ => return Ok(Some(t))
                     }
-                    _ => return Ok(Some(t))
                 }
+                Ok(None)
             }
         }
     }
@@ -175,7 +174,8 @@ pub trait Gullet<ET:EngineTypes> {
                 data.ingroups += 1;
             }
         }
-        Ok(mouth.requeue(t))
+        mouth.requeue(t);
+        Ok(())
     }
 
     /// Read an integer from the input stream. See also [`EngineReferences::read_int`].
@@ -238,7 +238,7 @@ pub trait Gullet<ET:EngineTypes> {
         match token.to_enum() {
             StandardToken::Character(c,CommandCode::Active) =>
                 ResolvedToken::Cmd(state.get_ac_command(c)),
-            StandardToken::Character(c,o) => return ResolvedToken::Tk{char:c,code:o},
+            StandardToken::Character(c,o) => ResolvedToken::Tk{char:c,code:o},
             StandardToken::ControlSequence(cs) =>
                 ResolvedToken::Cmd(state.get_command(&cs)),
             StandardToken::Primitive(id) =>
@@ -360,7 +360,7 @@ impl<ET:EngineTypes> Gullet<ET> for DefaultGullet<ET> {
     fn new(_aux: &mut EngineAux<ET>, _state: &mut ET::State, _mouth: &mut ET::Mouth) -> Self {
         DefaultGullet {
             align_data:Vec::new(),
-            phantom:PhantomData::default(),
+            phantom:PhantomData,
             conditionals:Vec::new(),
             csnames:0
         }

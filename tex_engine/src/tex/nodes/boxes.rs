@@ -344,11 +344,11 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
                 *scaled = ToOrSpread::None;
                 VBoxInfo::VBox {
                     scaled: ToOrSpread::None,
-                    assigned_width: assigned_width.clone(),
+                    assigned_width: *assigned_width,
                     assigned_height: None,
                     assigned_depth: None,
-                    moved_left: moved_left.clone(),
-                    raised: raised.clone(),
+                    moved_left: *moved_left,
+                    raised: *raised,
                     computed_width: OnceCell::new(),
                     computed_height: OnceCell::new(),
                     computed_depth: OnceCell::new(),
@@ -360,11 +360,11 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
                 *scaled = ToOrSpread::None;
                 VBoxInfo::VBox {
                     scaled: ToOrSpread::None,
-                    assigned_width: assigned_width.clone(),
+                    assigned_width: *assigned_width,
                     assigned_height: None,
                     assigned_depth: None,
-                    moved_left: moved_left.clone(),
-                    raised: raised.clone(),
+                    moved_left: *moved_left,
+                    raised: *raised,
                     computed_width: OnceCell::new(),
                     computed_height: OnceCell::new(),
                     computed_depth: OnceCell::new(),
@@ -609,22 +609,22 @@ impl <ET:EngineTypes> NodeTrait<ET> for TeXBox<ET> {
 
     fn height(&self) -> ET::Dim {
         match self {
-            TeXBox::H { info, children,preskip,.. } => info.get_height(&children) + preskip.map(|s| s.base).unwrap_or_default(),
-            TeXBox::V { info, children,.. } => info.get_height(&children),
+            TeXBox::H { info, children,preskip,.. } => info.get_height(children) + preskip.map(|s| s.base).unwrap_or_default(),
+            TeXBox::V { info, children,.. } => info.get_height(children),
         }
     }
 
     fn width(&self) -> ET::Dim {
         match self {
-            TeXBox::H { info, children,.. } => info.get_width(&children),
-            TeXBox::V { info, children,.. } => info.get_width(&children),
+            TeXBox::H { info, children,.. } => info.get_width(children),
+            TeXBox::V { info, children,.. } => info.get_width(children),
         }
     }
 
     fn depth(&self) -> ET::Dim {
         match self {
-            TeXBox::H { info, children,.. } => info.get_depth(&children),
-            TeXBox::V { info, children,.. } => info.get_depth(&children),
+            TeXBox::H { info, children,.. } => info.get_depth(children),
+            TeXBox::V { info, children,.. } => info.get_depth(children),
         }
     }
     fn nodetype(&self) -> NodeType { match self{

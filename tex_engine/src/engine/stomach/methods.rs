@@ -33,10 +33,7 @@ macro_rules! add_node {
 
 /// inserts the `\afterassignment` [`Token`]
 pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) {
-    match std::mem::take(engine.stomach.afterassignment()) {
-        Some(t) => engine.requeue(t).unwrap(),//engine.mouth.requeue(t),
-        _ => ()
-    }
+    if let Some(t) = std::mem::take(engine.stomach.afterassignment()) { engine.requeue(t).unwrap() }
 }
 
 /// Default implementation for [`Stomach::assign_toks_register`].
@@ -51,7 +48,10 @@ pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tok
             }
             (_,CommandCode::BeginGroup) => {
                 let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(&token,|_,_,t| Ok(tks.push(t)))?;
+                engine.read_until_endgroup(&token,|_,_,t| {
+                    tks.push(t);
+                    Ok(())
+                })?;
                 engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
                 insert_afterassignment(engine);
                 return Ok(())
@@ -89,10 +89,16 @@ pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,to
                 let mut tks = shared_vector::Vector::new();
                 if name == PRIMITIVES.output {
                     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                    engine.read_until_endgroup(&token,|_,_,t| Ok(tks.push(t)))?;
+                    engine.read_until_endgroup(&token,|_,_,t| {
+                        tks.push(t);
+                        Ok(())
+                    })?;
                     tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
                 } else {
-                    engine.read_until_endgroup(&token,|_,_,t| Ok(tks.push(t)))?;
+                    engine.read_until_endgroup(&token,|_,_,t| {
+                        tks.push(t);
+                        Ok(())
+                    })?;
                 }
                 engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
                 insert_afterassignment(engine);
@@ -427,14 +433,11 @@ fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script,in_
 
 /// Default implementation for [`Stomach::close_box`].
 pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) -> TeXResult<(),ET> {
-    match engine.stomach.data_mut().open_lists.last() {
-        Some(NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(_),..}) => ET::Stomach::close_paragraph(engine)?,
-        _ => ()
-    }
+    if let Some(NodeList::Horizontal {tp:HorizontalNodeListType::Paragraph(_),..}) = engine.stomach.data_mut().open_lists.last() { ET::Stomach::close_paragraph(engine)? }
     match engine.stomach.data_mut().open_lists.pop() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAdjust}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
-            engine.stomach.data_mut().vadjusts.extend(children.into_iter());
+            engine.stomach.data_mut().vadjusts.extend(children);
         }
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::Insert(n)}) if bt == BoxType::Vertical => {
             engine.state.pop(engine.aux,engine.mouth);
@@ -474,7 +477,7 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) -
             let inserts = std::mem::take(&mut data.inserts);
             data.page.extend(inserts.into_iter().map(|(a,b)| VNode::Insert(a,b)));
             let adjusts = std::mem::take(&mut data.vadjusts);
-            data.page.extend(adjusts.into_iter());
+            data.page.extend(adjusts);
         }
         TeXMode::Horizontal => {
             let adjusts = std::mem::take(&mut engine.stomach.data_mut().vadjusts);
@@ -565,7 +568,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
     engine.state.set_primitive_int(engine.aux,PRIMITIVES.badness,(10).into(),true);
 
     let SplitResult{mut first,rest,split_penalty} = match caused_penalty {
-        Some(p) => SplitResult{first:page.into(),rest:vec!().into(),split_penalty:Some(p)},
+        Some(p) => SplitResult{first:page,rest:vec!(),split_penalty:Some(p)},
         _ => ET::Stomach::split_vertical(engine, page, goal)
     };
 
@@ -599,28 +602,24 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
     */
 
     let mut deletes = vec!();
-    for (i,b) in first.iter_mut().enumerate() { match b {
-        VNode::Insert(n,v) => {
-            let children: Box<[VNode<ET>]> = match engine.state.take_box_register(*n) {
-                Some(TeXBox::V {children,..}) => {
-                    let mut c = children.into_vec();
-                    c.extend(std::mem::replace(v, vec!().into()).into_vec().into_iter());
-                    c.into()
-                },
-                _ => std::mem::replace(v, vec!().into())
-            };
-            engine.state.set_box_register(engine.aux,*n,Some(TeXBox::V {
-                info: VBoxInfo::new_box(ToOrSpread::None),
-                children,
-                start:engine.mouth.current_sourceref(),
-                end:engine.mouth.current_sourceref(),
-            }),true);
-            deletes.push(i)
-        }
-        _ => ()
+    for (i,b) in first.iter_mut().enumerate() { if let VNode::Insert(n,v) = b {
+        let children: Box<[VNode<ET>]> = match engine.state.take_box_register(*n) {
+            Some(TeXBox::V {children,..}) => {
+                let mut c = children.into_vec();
+                c.extend(std::mem::replace(v, vec!().into()).into_vec().into_iter());
+                c.into()
+            },
+            _ => std::mem::replace(v, vec!().into())
+        };
+        engine.state.set_box_register(engine.aux,*n,Some(TeXBox::V {
+            info: VBoxInfo::new_box(ToOrSpread::None),
+            children,
+            start:engine.mouth.current_sourceref(),
+            end:engine.mouth.current_sourceref(),
+        }),true);
+        deletes.push(i)
     }}
-    let mut j = 0;
-    for i in deletes { first.remove(i - j);j += 1; }
+    for (j, i) in deletes.into_iter().enumerate() { first.remove(i - j); }
 
     engine.state.set_primitive_int(engine.aux,PRIMITIVES.outputpenalty,split_penalty.into(),true);
 
@@ -698,7 +697,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     for (i,n) in iter {
         match n {
             VNode::Mark(i, v) => {
-                if !data.firstmarks.contains_key(&i) {
+                if !data.firstmarks.contains_key(i) {
                     data.firstmarks.insert(*i,v.clone());
                 }
                 data.botmarks.insert(*i,v.clone());
@@ -730,17 +729,14 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     };
 
     for n in &rest {
-        match n {
-            VNode::Mark(i, v) => {
-                if !data.splitfirstmarks.contains_key(&i) {
-                    data.splitfirstmarks.insert(*i,v.clone());
-                }
-                data.splitbotmarks.insert(*i,v.clone());
+        if let VNode::Mark(i, v) = n {
+            if !data.splitfirstmarks.contains_key(i) {
+                data.splitfirstmarks.insert(*i,v.clone());
             }
-            _ => ()
+            data.splitbotmarks.insert(*i,v.clone());
         }
     }
-    SplitResult{first:nodes,rest:rest,split_penalty}
+    SplitResult{first:nodes,rest,split_penalty}
 }
 
 /// Specification of a (target)line in a paragraph
@@ -772,28 +768,26 @@ impl<ET:EngineTypes> ParLineSpec<ET> {
                     target:hsize + -(leftskip.base + rightskip.base),
                     leftskip,rightskip
                 })
+            } else if hangafter < 0 {
+                let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|_| ParLineSpec {
+                    target:hsize - (leftskip.base + rightskip.base + hangindent),
+                    leftskip:leftskip + hangindent,rightskip
+                }).collect();
+                r.push(ParLineSpec {
+                    target:hsize - (leftskip.base + rightskip.base),
+                    leftskip,rightskip
+                });
+                r
             } else {
-                if hangafter < 0 {
-                    let mut r: Vec<ParLineSpec<ET>> = (0..-hangafter).map(|_| ParLineSpec {
-                        target:hsize - (leftskip.base + rightskip.base + hangindent),
-                        leftskip:leftskip + hangindent,rightskip
-                    }).collect();
-                    r.push(ParLineSpec {
-                        target:hsize - (leftskip.base + rightskip.base),
-                        leftskip,rightskip
-                    });
-                    r
-                } else {
-                    let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|_| ParLineSpec {
-                        target:hsize - (leftskip.base + rightskip.base),
-                        leftskip,rightskip
-                    }).collect();
-                    r.push(ParLineSpec {
-                        target:hsize - (leftskip.base + rightskip.base + hangindent),
-                        leftskip:leftskip + hangindent,rightskip
-                    });
-                    r
-                }
+                let mut r: Vec<ParLineSpec<ET>> = (0..hangafter).map(|_| ParLineSpec {
+                    target:hsize - (leftskip.base + rightskip.base),
+                    leftskip,rightskip
+                }).collect();
+                r.push(ParLineSpec {
+                    target:hsize - (leftskip.base + rightskip.base + hangindent),
+                    leftskip:leftskip + hangindent,rightskip
+                });
+                r
             }
         } else {
             parshape.into_iter().map(|(i,l)| {
@@ -823,7 +817,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>,
     let mut line_spec = hgoals.next().unwrap();
     let mut target = line_spec.target;
     let mut currstart = start;
-    let mut currend = currstart.clone();
+    let mut currend = currstart;
     let mut curr_height = ET::Dim::default();
     let mut curr_depth = ET::Dim::default();
     'A:loop {
@@ -856,8 +850,8 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>,
             match nodes.next() {
                 None => {
                     if !line.is_empty() {
-                        let start = std::mem::replace(&mut currstart,currend.clone());
-                        ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend.clone(),info:HBoxInfo::ParLine {
+                        let start = std::mem::replace(&mut currstart,currend);
+                        ret.push(ParLine::Line(TeXBox::H {children:line.into(),start,end:currend,info:HBoxInfo::ParLine {
                             spec:line_spec.clone(),
                             ends_with_line_break:false,
                             inner_height:std::mem::take(&mut curr_height),
@@ -873,13 +867,13 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>,
                     reinserts.push(VNode::Mark(i,m)),
                 Some(HNode::Insert(n,ch)) =>
                     reinserts.push(VNode::Insert(n,ch)),
-                Some(HNode::VAdjust(ls)) => reinserts.extend(ls.into_vec().into_iter()),
+                Some(HNode::VAdjust(ls)) => reinserts.extend(ls.into_vec()),
                 Some(HNode::MathGroup(g@MathGroup {display:Some(_),..})) => {
                     let ht = g.height();
                     let dp = g.depth();
                     let (a,b) = g.display.unwrap();
                     next_line!(false);
-                    ret.push(ParLine::Line(TeXBox::H {start:g.start.clone(),end:g.end.clone(),children:vec!(HNode::MathGroup(g)).into(),info:HBoxInfo::ParLine {
+                    ret.push(ParLine::Line(TeXBox::H {start:g.start,end:g.end,children:vec!(HNode::MathGroup(g)).into(),info:HBoxInfo::ParLine {
                         spec:line_spec.clone(),
                         ends_with_line_break:false,
                         inner_height:ht + dp + a.base + b.base,
@@ -897,10 +891,7 @@ pub fn split_paragraph_roughly<ET:EngineTypes>(engine:&mut EngineReferences<ET>,
                     break
                 }
                 Some(node) => {
-                    match node.sourceref() {
-                        Some((_,b)) => currend = b.clone(),
-                        _ => ()
-                    }
+                    if let Some((_,b)) = node.sourceref() { currend = *b }
                     target = target + (-node.width());
                     curr_height = curr_height.max(node.height());
                     curr_depth = curr_depth.max(node.depth());

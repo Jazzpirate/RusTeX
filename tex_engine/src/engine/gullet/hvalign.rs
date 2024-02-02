@@ -86,7 +86,7 @@ impl<T:Token,D: crate::tex::numerics::TeXDimen> AlignData<T,D> {
     /// [`Token`] (or a `\span`) is encountered and the number of currently open braces matches the current column's
     /// `inbraces` value.
     pub fn on_alignment_tab<ET:EngineTypes<Token=T,Dim=D>>(&self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>) {
-        let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE));
+        let end_align = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().from_str(END_TEMPLATE));
         mouth.requeue(end_align);
         if !self.omit {
             mouth.push_exp(&self.columns[self.currindex].right);
@@ -100,7 +100,7 @@ impl<T:Token,D: crate::tex::numerics::TeXDimen> AlignData<T,D> {
     pub fn on_cr<ET:EngineTypes<Token=T,Dim=D>>(&self,mouth:&mut ET::Mouth,aux:&mut EngineAux<ET>,state:&ET::State) {
         let everycr = state.get_primitive_tokens(PRIMITIVES.everycr);
         mouth.push_exp(everycr);
-        let end = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().new(END_TEMPLATE_ROW));
+        let end = <ET::Token as Token>::from_cs(aux.memory.cs_interner_mut().from_str(END_TEMPLATE_ROW));
         mouth.requeue(end);
         if !self.omit {
             mouth.push_exp(&self.columns[self.currindex].right);

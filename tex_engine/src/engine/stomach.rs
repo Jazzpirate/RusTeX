@@ -55,31 +55,19 @@ impl Display for TeXMode {
 impl TeXMode {
     /// Returns true if the mode is vertical or internal vertical
     pub fn is_vertical(&self) -> bool {
-        match self {
-            TeXMode::Vertical | TeXMode::InternalVertical => true,
-            _ => false
-        }
+        matches!(self, TeXMode::Vertical | TeXMode::InternalVertical)
     }
     /// Returns true if the mode is horizontal or restricted horizontal
     pub fn is_horizontal(&self) -> bool {
-        match self {
-            TeXMode::Horizontal | TeXMode::RestrictedHorizontal => true,
-            _ => false
-        }
+        matches!(self, TeXMode::Horizontal | TeXMode::RestrictedHorizontal)
     }
     /// Returns true if the mode is inline math or display math
     pub fn is_math(&self) -> bool {
-        match self {
-            TeXMode::InlineMath | TeXMode::DisplayMath => true,
-            _ => false
-        }
+        matches!(self, TeXMode::InlineMath | TeXMode::DisplayMath)
     }
     /// Returns true if the mode is horizontal, restricted horizontal, inline math, or display math
     pub fn h_or_m(&self) -> bool {
-        match self {
-            TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::InlineMath | TeXMode::DisplayMath => true,
-            _ => false
-        }
+        matches!(self, TeXMode::Horizontal | TeXMode::RestrictedHorizontal | TeXMode::InlineMath | TeXMode::DisplayMath)
     }
 }
 impl From<BoxType> for TeXMode {
@@ -249,8 +237,10 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         match bx(engine,token)? {
             either::Left(Some(bx)) => methods::add_box(engine,bx,BoxTarget::none()),
             either::Left(None) => Ok(()),
-            either::Right(bi) =>
-                Ok(engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref())))
+            either::Right(bi) => {
+                engine.stomach.data_mut().open_lists.push(bi.open_list(engine.mouth.start_ref()));
+                Ok(())
+            }
         }
     }
 
@@ -322,7 +312,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     fn close_align(engine:&mut EngineReferences<ET>) -> TeXResult<(),ET> {
         match engine.stomach.data_mut().open_lists.pop() {
             Some(NodeList::Vertical{children,tp:VerticalNodeListType::HAlign}) => {
-                engine.state.pop(engine.aux,&mut engine.mouth);
+                engine.state.pop(engine.aux,engine.mouth);
                 match engine.stomach.data_mut().open_lists.last_mut() {
                     Some(NodeList::Math {..}) => {
                         Self::add_node_m(engine,MathNode::Atom(MathAtom {
@@ -336,7 +326,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                 }
             }
             Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::VAlign}) => {
-                engine.state.pop(engine.aux,&mut engine.mouth);
+                engine.state.pop(engine.aux,engine.mouth);
                 for c in children {
                     Self::add_node_h(engine, c);
                 }
@@ -351,7 +341,6 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Math {children,..}) => {
                 children.push(node);
-                return
             }
             _ => unreachable!("Stomach::add_node_m called outside of math mode")
         }
@@ -365,7 +354,6 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         match engine.stomach.data_mut().open_lists.last_mut() {
             Some(NodeList::Horizontal {children,..}) => {
                 children.push(node);
-                return
             }
             _ => unreachable!("Stomach::add_node_h called outside of horizontal mode")
         }
@@ -496,12 +484,9 @@ impl <ET:EngineTypes> StomachData<ET> {
             Some(NodeList::Vertical{..}) => TeXMode::InternalVertical,
             Some(NodeList::Math{..}) => {
                 for ls in self.open_lists.iter().rev() {
-                    match ls {
-                        NodeList::Math {tp:MathNodeListType::Top{display},..} => {
-                            if *display { return TeXMode::DisplayMath }
-                            else { return TeXMode::InlineMath }
-                        }
-                        _ => ()
+                    if let NodeList::Math {tp:MathNodeListType::Top{display},..} = ls {
+                        if *display { return TeXMode::DisplayMath }
+                        else { return TeXMode::InlineMath }
                     }
                 }
                 unreachable!()

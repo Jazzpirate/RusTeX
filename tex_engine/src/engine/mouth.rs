@@ -146,26 +146,19 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 
     fn finish(&mut self) {
-        for s in self.inputs.drain(..) { match s {
-          TokenSource::Vec(mut v) => {
-              v.clear(); self.vecs.push(v)
-          }
-            _ => ()
+        for s in self.inputs.drain(..) { if let TokenSource::Vec(mut v) = s {
+            v.clear(); self.vecs.push(v)
         } }
         self.start_ref.clear();
     }
 
     fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID> {
         for s in self.inputs.iter().rev() {
-            match s {
-                TokenSource::File(f,id) =>
-                    return SourceReference {
-                        file:*id,
-                        line:f.line(),
-                        column:f.column()
-                    },
-                _ => ()
-            }
+            if let TokenSource::File(f,id) = s { return SourceReference {
+                file:*id,
+                line:f.line(),
+                column:f.column()
+            } }
         }
         self.start_ref.last().copied().unwrap_or_default()
     }
@@ -211,22 +204,19 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
 
     fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State) -> Result<(),InvalidCharacter<ET::Char>> {
         for (i,s) in self.inputs.iter().enumerate().rev() {
-            match s {
-                TokenSource::File(f,_) => {
-                    aux.outputs.file_close(f.source.path().display());
-                    let TokenSource::File(mut r,_) = self.inputs.remove(i) else {unreachable!()};
-                    self.start_ref.pop();
-                    if r.state != MouthState::NewLine {
-                        let mut ret = Vec::new();
-                        match r.read(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char(), |t| ret.push(t)) {
-                            Ok(_) => (),
-                            Err(e) => e.recover(aux,state,self)?,
-                        }
-                        self.with_list(|ls| ls.extend(ret.into_iter().rev()));
+            if let TokenSource::File(f,_) = s {
+                aux.outputs.file_close(f.source.path().display());
+                let TokenSource::File(mut r,_) = self.inputs.remove(i) else {unreachable!()};
+                self.start_ref.pop();
+                if r.state != MouthState::NewLine {
+                    let mut ret = Vec::new();
+                    match r.read(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char(), |t| ret.push(t)) {
+                        Ok(_) => (),
+                        Err(e) => e.recover(aux,state,self)?,
                     }
-                    return Ok(())
+                    self.with_list(|ls| ls.extend(ret.into_iter().rev()));
                 }
-                _ => ()
+                return Ok(())
             }
         }
         Ok(())
@@ -234,10 +224,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
 
     fn line_number(&self) -> usize {
         for s in self.inputs.iter().rev() {
-            match s {
-                TokenSource::File(s,_) => return s.line(),
-                _ => ()
-            }
+            if let TokenSource::File(s,_) = s { return s.line() }
         }
         0
     }
@@ -322,7 +309,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
             match self.inputs.last_mut() {
                 Some(TokenSource::Vec(v)) => {
                     while let Some(t) = v.pop() {
-                        match cont(aux,t)? {Some(r) => return Ok(r),_ => ()}
+                        if let Some(r) = cont(aux,t)? { return Ok(r) }
                     }
                     if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
                         self.vecs.push(v);
@@ -334,7 +321,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     loop {
                         match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) =>
-                                match cont(aux,t)? {Some(r) => return Ok(r),_ => ()},
+                                if let Some(r) = cont(aux,t)? { return Ok(r) },
                             Err(c) => {
                                 c.recover::<_,TeXError<_>>(aux,state,self)?;
                                 continue 'top
@@ -352,7 +339,7 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     loop {
                         match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
                             Ok(Some(t)) =>
-                                match cont(aux,t)? {Some(r) => return Ok(r),_ => ()},
+                                if let Some(r) = cont(aux,t)? { return Ok(r) },
                             Err(c) => {
                                 c.recover::<_,TeXError<_>>(aux,state,self)?;
                                 continue 'top
@@ -404,21 +391,21 @@ impl<ET:EngineTypes> DefaultMouth<ET> {
             inputs:self.inputs.into_iter().map(|s| match s {
                 TokenSource::String(s) => TokenSource::String(s),
                 TokenSource::File(s,id) => TokenSource::File(s,id),
-                TokenSource::Vec(v) => TokenSource::Vec(v.into_iter().map(|t|token(t)).collect())
+                TokenSource::Vec(v) => TokenSource::Vec(v.into_iter().map(&mut token).collect())
             }).collect(),
             args:self.args.map(|[a0,a1,a2,a3,a4,a5,a6,a7,a8]| [
-                a0.into_iter().map(|t| token(t)).collect(),
-                a1.into_iter().map(|t| token(t)).collect(),
-                a2.into_iter().map(|t| token(t)).collect(),
-                a3.into_iter().map(|t| token(t)).collect(),
-                a4.into_iter().map(|t| token(t)).collect(),
-                a5.into_iter().map(|t| token(t)).collect(),
-                a6.into_iter().map(|t| token(t)).collect(),
-                a7.into_iter().map(|t| token(t)).collect(),
-                a8.into_iter().map(|t| token(t)).collect()
+                a0.into_iter().map(&mut token).collect(),
+                a1.into_iter().map(&mut token).collect(),
+                a2.into_iter().map(&mut token).collect(),
+                a3.into_iter().map(&mut token).collect(),
+                a4.into_iter().map(&mut token).collect(),
+                a5.into_iter().map(&mut token).collect(),
+                a6.into_iter().map(&mut token).collect(),
+                a7.into_iter().map(&mut token).collect(),
+                a8.into_iter().map(&mut token).collect()
             ]),
             start_ref:self.start_ref,
-            vecs:self.vecs.into_iter().map(|v| v.into_iter().map(|t| token(t)).collect()).collect()
+            vecs:self.vecs.into_iter().map(|v| v.into_iter().map(&mut token).collect()).collect()
         }
     }
     fn with_list<Fn:FnOnce(&mut Vec<ET::Token>)>(&mut self,f:Fn) {

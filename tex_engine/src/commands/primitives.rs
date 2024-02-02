@@ -257,7 +257,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
     }
     /// Return the [`PrimitiveIdentifier`] of the primitive command with the given name.
     pub fn get_name(&self,s:&str) -> Option<PrimitiveIdentifier> {
-        self.names.get(s).map(|&u| PrimitiveIdentifier::try_from_u16(u)).flatten()
+        self.names.get(s).and_then(|&u| PrimitiveIdentifier::try_from_u16(u))
     }
 }
 
@@ -266,7 +266,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
 ///
 /// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](static@PRIMITIVES) instance.
 pub struct PrimitiveInterner {
-    interner:RwLock<string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
+    interner:RwLock<string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
     pub globaldefs:PrimitiveIdentifier,
     pub relax:PrimitiveIdentifier,
     pub mag:PrimitiveIdentifier,

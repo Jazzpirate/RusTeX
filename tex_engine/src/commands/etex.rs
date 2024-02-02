@@ -43,7 +43,7 @@ fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
             let (int,ret) = expr_loop(engine, byte, cmd)?;
             match ret.to_enum() {
                 StandardToken::Character(char,CommandCode::Other) if matches!(char.try_into(),Ok(b')')) =>
-                    if is_negative {return Ok(-int)} else {return Ok(int)},
+                    if is_negative {Ok(-int)} else {Ok(int)},
                 _ => todo!("throw error")
             }
         } else { byte(engine,is_negative,b)},
@@ -186,8 +186,8 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
                         tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
                     }
                     StandardToken::Primitive(id) => {
-                        tokenizer.push_cs(a.memory.cs_interner_mut().new("pdfprimitive"),a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
-                        let name = a.memory.cs_interner_mut().new(&id.display::<ET::Char>(None).to_string());
+                        tokenizer.push_cs(a.memory.cs_interner_mut().from_str("pdfprimitive"), a.memory.cs_interner(), st.get_catcode_scheme(), escapechar);
+                        let name = a.memory.cs_interner_mut().from_str(&id.display::<ET::Char>(None).to_string());
                         tokenizer.push_cs(name,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
                     }
                 }
@@ -199,7 +199,10 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 
 pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)-> TeXResult<(),ET> {
     if engine.need_next(false,&tk)?.command_code() == CommandCode::BeginGroup {
-        ET::Gullet::expand_until_endgroup(engine,false,false,&tk,|_,_,t| Ok(exp.push(t)))
+        ET::Gullet::expand_until_endgroup(engine,false,false,&tk,|_,_,t| {
+            exp.push(t);
+            Ok(())
+        })
     } else {
         todo!("throw errors")
     }
@@ -304,7 +307,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
     }
     fn muskip_cmd<ET:EngineTypes>(engine: &mut EngineReferences<ET>, is_negative:bool, cmd: TeXCommand<ET>, tk:ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET> {
         crate::engine::gullet::methods::read_muskip_command(
-            engine,is_negative,cmd,tk,|d,e| crate::engine::gullet::methods::read_muskip_ii(e, d),|s| Ok(s)
+            engine,is_negative,cmd,tk,|d,e| crate::engine::gullet::methods::read_muskip_ii(e, d),Ok
         )
     }
     let (i,r) = expr_loop(engine,
@@ -375,7 +378,7 @@ pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,gl
         expansion:ret.into(),
         signature:MacroSignature {
             arity:0,
-            params:engine.aux.memory.empty_list().into()
+            params:engine.aux.memory.empty_list()
         }
     };
     engine.set_command(&cs, Some(TeXCommand::Macro(m)), globally);
@@ -408,10 +411,7 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
                 }
                 if res.len() == 1 {
                     let c = res.iter().next().unwrap();
-                    match state.get_catcode_scheme().get(c) {
-                        CategoryCode::Letter => f(b' '.into()),
-                        _ => ()
-                    }
+                    if state.get_catcode_scheme().get(c) == &CategoryCode::Letter { f(b' '.into()) }
                 } else {
                     f(b' '.into())
                 }
@@ -432,10 +432,7 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
                 let mut res = ET::Char::string_to_iter(&s);
                 if res.len() == 1 {
                     let c = res.next().unwrap();
-                    match state.get_catcode_scheme().get(c) {
-                        CategoryCode::Letter => f(b' '.into()),
-                        _ => ()
-                    }
+                    if state.get_catcode_scheme().get(c) == &CategoryCode::Letter { f(b' '.into()) }
                 } else {
                     f(b' '.into())
                 }
@@ -452,7 +449,8 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 pub fn unexpanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     engine.expand_until_bgroup(false,&tk)?;
     engine.read_until_endgroup(&tk,|_,_,t|{
-        Ok(exp.push(t))
+        exp.push(t);
+        Ok(())
     })?;Ok(())
 }
 
@@ -525,7 +523,7 @@ pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut V
     super::methods::get_marks(engine, exp, |d| &mut d.splitbotmarks, i as usize);Ok(())
 }
 
-const PRIMITIVE_INTS:&[&'static str] = &[
+const PRIMITIVE_INTS:&[&str] = &[
     "savinghyphcodes",
     "tracingassigns",
     "tracinggroups",
@@ -535,7 +533,7 @@ const PRIMITIVE_INTS:&[&'static str] = &[
     "savingvdiscards"
 ];
 
-const PRIMITIVE_TOKS:&[&'static str] = &[
+const PRIMITIVE_TOKS:&[&str] = &[
     "everyeof",
 ];
 

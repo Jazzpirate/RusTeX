@@ -124,8 +124,10 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::MathGroup(mg) => {
                 mg.display_fmt(indent, f)
             }
-            HNode::Char { char, .. } =>
-                Ok(char.display_fmt(f)),
+            HNode::Char { char, .. } => {
+                char.display_fmt(f);
+                Ok(())
+            },
             HNode::Accent { accent, char, .. } => {
                 write!(f,"<accent accent=\"{}\" char=\"{}\" />",accent.display(),char.display())
             }

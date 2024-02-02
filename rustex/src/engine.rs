@@ -44,25 +44,25 @@ impl EngineTypes for Types {
     type CSName = CSName;
     type Token = CompactToken;
     type Extension = Extension;
+    type File = VirtualFile<u8>;
+    type FileSystem = crate::files::RusTeXFileSystem;
     type Int = i32;
     type Dim = Dim32;
     type MuDim = Mu;
     type Num = tex::numerics::DefaultNumSet;
     type State = RusTeXState;
-    type File = VirtualFile<u8>;
-    type FileSystem = crate::files::RusTeXFileSystem;
     type Outputs = RusTeXOutput;
     type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
-    type CustomNode = RusTeXNode;
     type Stomach = RusTeXStomach;
+    type CustomNode = RusTeXNode;
     type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = super::fonts::Fontsystem;
 }
 
 thread_local! {
-    static MAIN_STATE : Mutex<Option<(RusTeXState,MemoryManager<CompactToken>)>> = Mutex::new(None);
-    static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = Mutex::new(None);
+    static MAIN_STATE : Mutex<Option<(RusTeXState,MemoryManager<CompactToken>)>> = const { Mutex::new(None) };
+    static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = const { Mutex::new(None) };
 }
 
 
@@ -70,7 +70,7 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
     MAIN_STATE.with(|state| {
         let mut guard = state.lock().unwrap();
         match &mut *guard {
-            Some((s, m)) =>return  (s.clone(), m.clone()),
+            Some((s, m)) =>(s.clone(), m.clone()),
             n => {
                 //let start = std::time::Instant::now();
                 let mut engine = DefaultEngine::<Types>::new();
@@ -81,7 +81,7 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
                 //println!("Initialized in {:?}", start.elapsed());
-                return (engine.state, engine.aux.memory)
+                (engine.state, engine.aux.memory)
             }
         }
     })
@@ -125,13 +125,13 @@ pub trait RusTeXEngineT {
 
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     let e = e.get_engine_refs();
-    let name = e.aux.memory.cs_interner_mut().new(name);
+    let name = e.aux.memory.cs_interner_mut().from_str(name);
     let mut cmd = Macro::new::<_,_,Types>(
         e.aux.memory.cs_interner_mut(),
         &AT_LETTER_SCHEME,sig,exp).unwrap();
     if protect { cmd.protected = true }
     if long { cmd.long = true }
-    e.state.set_command(&e.aux, name, Some(TeXCommand::Macro(cmd)), globally)
+    e.state.set_command(e.aux, name, Some(TeXCommand::Macro(cmd)), globally)
 }
 
 /*pub struct RusTeXEngine {
@@ -150,7 +150,7 @@ impl RusTeXEngineT for RusTeXEngine {
         if log { engine.aux.outputs = RusTeXOutput::Print(verbose); }
 
         //let start = std::time::Instant::now();
-        let res = match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
+        let res = match engine.do_file_pdf(file.as_ref(),shipout::shipout) {
             Ok(_) => None,
             Err(e) => {
                 engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)));
@@ -172,7 +172,7 @@ impl RusTeXEngineT for RusTeXEngine {
                 }).unwrap();
                 page.classes = vec!("rustex-body".into());
                 let topfont = state.fonts.first().unwrap().clone();
-                let dp = page.displayable(&engine.fontsystem.glyphmaps, &engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);
+                let dp = page.displayable(&engine.fontsystem.glyphmaps, engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);
                 write!(ret, "{}{}{}", shipout::PREAMBLE,dp, shipout::POSTAMBLE).unwrap();
                 for k in dp.get_missings() {
                     state.missing_fonts.insert(k);

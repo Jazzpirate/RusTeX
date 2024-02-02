@@ -55,10 +55,7 @@ impl<ET:EngineTypes> VNode<ET> {
     /// Whether this node is discardable.
     pub fn discardable(&self) -> bool {
         use VNode::*;
-        match self {
-            Penalty(_) | VSkip(_) | VKern(_) | VFil | VFill | VFilneg | Vss  => true,
-            _ => false
-        }
+        matches!(self, Penalty(_) | VSkip(_) | VKern(_) | VFil | VFill | VFilneg | Vss)
     }
 }
 

@@ -54,7 +54,7 @@ fn pgfhbox(engine:Refs,_token:CompactToken) -> Res<()> {
 fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) -> Res<()> {
     let num = engine.read_register_index(false)?;
     let bx = engine.state.take_box_register(num).unwrap();
-    let getdimens = engine.aux.memory.cs_interner_mut().new("rustex!pgf!get!dimens");
+    let getdimens = engine.aux.memory.cs_interner_mut().from_str("rustex!pgf!get!dimens");
     engine.requeue(CompactToken::from_cs(getdimens))?;
     let minx = engine.read_dim(true)?;
     let miny = engine.read_dim(true)?;
@@ -84,8 +84,8 @@ fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) -> Res<()> {
 }
 fn pgfliteral(_engine:Refs,_token:CompactToken) -> Res<()> { todo!("pgfliteral") }
 fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) -> Res<()> {
-    let path = engine.aux.memory.cs_interner_mut().new("pgf@sys@svgpath");
-    let empty = engine.state.get_command(&engine.aux.memory.cs_interner_mut().new("pgfutil@empty")).cloned();
+    let path = engine.aux.memory.cs_interner_mut().from_str("pgf@sys@svgpath");
+    let empty = engine.state.get_command(&engine.aux.memory.cs_interner_mut().from_str("pgfutil@empty")).cloned();
     match engine.state.get_command(&path) {
         Some(TeXCommand::Macro(m)) => ret.extend(m.expansion.0.iter().cloned()),
         _ => todo!("error"),

@@ -8,7 +8,7 @@ pub(crate) fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> Option<GlyphList> {
         .args(vec!(f)).output().expect("t1disasm not found!")
         .stdout.as_slice()) {
         Ok(s) => s.trim().to_string(),
-        _ => return Some(crate::glyphs::UNDEFINED_LIST.clone())
+        _ => return Some(UNDEFINED_LIST.clone())
     };
     let mut s = Parser::new(&disas);
     let _ = s.read_until_strs(&["dict begin","dict dup begin"]);
@@ -61,9 +61,7 @@ fn parse_dict_header(s:&mut Parser<'_>,mods:&mut ModifierSeq) -> bool {
                 }
                 if s.drop("/ItalicAngle") {
                     let i = s.read_digit();
-                    if i != 0 {
-                        if i >= 10 { mods.add(crate::fontstyles::FontModifier::Italic); }
-                    }
+                    if i != 0 && i >= 10 { mods.add(crate::fontstyles::FontModifier::Italic); }
                     s.read_until_str(" def");
                     continue
                 }

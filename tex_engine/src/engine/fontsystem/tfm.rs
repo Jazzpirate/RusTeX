@@ -95,7 +95,7 @@ impl TfmFile {
                 sv.push(c);
                 sv.push(d);
             }
-            typestr = String::from_utf8(sv.get(0..(ln as usize)).unwrap().iter().map(|x| *x).collect()).unwrap();
+            typestr = String::from_utf8(sv.get(0..(ln as usize)).unwrap().to_vec()).unwrap();
         }
         state.skip((lh + 6) - state.i);
 
@@ -174,12 +174,12 @@ impl FontState {
         }
     }
     fn read_word(&mut self) {
-        self.ret.read(&mut self.buf).unwrap();
+        self.ret.read_exact(&mut self.buf).unwrap();
         self.i += 1;
     }
     fn pop(&mut self) -> (u8,u8,u8,u8) {
         self.i += 1;
-        self.ret.read(&mut self.buf).unwrap();
+        self.ret.read_exact(&mut self.buf).unwrap();
         (self.buf[0],self.buf[1],self.buf[2],self.buf[3])
     }
     fn read_int(&mut self) -> (u16,u16) {
@@ -233,7 +233,7 @@ struct FInfoEntry {
     remainder: u8
 }
 impl FInfoEntry {
-    pub fn ligature(&self,ligs:&Vec<(u8,u8,u8,u8)>,map: &mut BTreeMap<(u8,u8),u8>) {
+    pub fn ligature(&self,ligs:&[(u8,u8,u8,u8)],map: &mut BTreeMap<(u8,u8),u8>) {
         if self.tag_field == 1 {
             let mut i = self.remainder as usize;
             match ligs.get(i).copied() {

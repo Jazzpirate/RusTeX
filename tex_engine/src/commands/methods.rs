@@ -287,8 +287,11 @@ impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
 
 pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>, idx:usize, in_token:&ET::Token) -> TeXResult<(),ET> {
     let mut v = shared_vector::Vector::new();
-    engine.expand_until_bgroup(false,&in_token)?;
-    engine.expand_until_endgroup(true, true, &in_token, |_, _, t| Ok(v.push(t)))?;
+    engine.expand_until_bgroup(false,in_token)?;
+    engine.expand_until_endgroup(true, true, in_token, |_, _, t| {
+        v.push(t);
+        Ok(())
+    })?;
     let data = engine.stomach.data_mut();
     for list in data.open_lists.iter_mut().rev() {
         match list {
@@ -312,15 +315,12 @@ pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>, idx:usi
 }
 
 pub(crate) fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
-    match f(engine.stomach.data_mut()).get(&idx) {
-        Some(v) => exp.extend(v.0.iter().cloned()),
-        _ => ()
-    }
+    if let Some(v) = f(engine.stomach.data_mut()).get(&idx) { exp.extend(v.0.iter().cloned()) }
 }
 
 pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>,tk:&ET::Token) -> TeXResult<(),ET> { // TODO use to
     engine.gullet.push_align(AlignData::dummy());
-    engine.expand_until_bgroup(true,&tk)?;
+    engine.expand_until_bgroup(true,tk)?;
     let data = read_align_preamble(engine,inner,between,tk)?;
     *engine.gullet.get_align_data().unwrap() = data;
     ET::Stomach::open_align(engine,inner,between);
@@ -370,7 +370,7 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
         current_u:shared_vector::Vector::new(),
         current_v:shared_vector::Vector::new(),
         in_v:false,
-        tabskip:tabskip,
+        tabskip,
         inner_mode,between_mode
     };
     let mut ingroups = 0;
@@ -503,7 +503,8 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                     }
                 );
                 engine.gullet.get_align_data().unwrap().omit = true;
-                return Ok(open_align_cell(engine,mode))
+                open_align_cell(engine,mode);
+                return Ok(())
             }
             _ => {
                 engine.stomach.data_mut().open_lists.push(
@@ -519,7 +520,8 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                     }
                 );
                 engine.mouth.requeue(token);
-                return Ok(open_align_cell(engine,mode))
+                open_align_cell(engine,mode);
+                return Ok(())
             }
         );
     }
@@ -776,7 +778,10 @@ fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBod
 }
 
 pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>,in_token:&ET::Token) -> TeXResult<(),ET> {
-    engine.read_char_or_math_group(in_token,|_,engine,mc| Ok(ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom()))),
+    engine.read_char_or_math_group(in_token,|_,engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom()));
+        Ok(())
+    },
                                    move |_| ListTarget::<ET,_>::new(move |engine,children,start| {
         let node = MathNode::Atom(MathAtom {
             sub:None, sup:None, nucleus:match cls {
@@ -818,7 +823,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads an integer and makes sure it's in the range of a math font index (0-15)
     pub fn mathfont_index(&mut self,skip_eq:bool) -> TeXResult<u8,ET> {
         let idx = self.read_int(skip_eq)?.into();
-        if idx < 0 || idx > 15 {
+        if !(0..=15).contains(&idx) {
             todo!("throw error")
         }
         Ok(idx as u8)
@@ -859,7 +864,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// a file input/output stream index (0-255)
     pub fn read_file_index(&mut self) -> TeXResult<u8,ET> {
         let idx = self.read_int(false)?.into();
-        if idx < 0 || idx > 255 {
+        if !(0..=255).contains(&idx) {
             todo!("throw error")
         }
         Ok(idx as u8)
