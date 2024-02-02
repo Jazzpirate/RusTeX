@@ -166,38 +166,38 @@ pub trait Gullet<ET:EngineTypes> {
 
     /// Read an integer from the input stream. See also [`EngineReferences::read_int`].
     #[inline]
-    fn read_int(engine:&mut EngineReferences<ET>,skip_eq:bool) -> TeXResult<ET::Int,ET> {
-        methods::read_int(engine,skip_eq)
+    fn read_int(engine:&mut EngineReferences<ET>,skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::Int,ET> {
+        methods::read_int(engine,skip_eq,in_token)
     }
 
     /// Read a dimension value from the input stream. See also [`EngineReferences::read_dim`].
     #[inline]
-    fn read_dim(engine:&mut EngineReferences<ET>,skip_eq:bool) -> TeXResult<ET::Dim,ET> {
-        methods::read_dim(engine,skip_eq)
+    fn read_dim(engine:&mut EngineReferences<ET>,skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::Dim,ET> {
+        methods::read_dim(engine,skip_eq,in_token)
     }
 
     /// Read a skip value from the input stream. See also [`EngineReferences::read_skip`].
     #[inline]
-    fn read_skip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> TeXResult<Skip<ET::Dim>,ET> {
-        methods::read_skip(engine,skip_eq)
+    fn read_skip(engine:&mut EngineReferences<ET>,skip_eq:bool,in_token:&ET::Token) -> TeXResult<Skip<ET::Dim>,ET> {
+        methods::read_skip(engine,skip_eq,in_token)
     }
 
     /// Read a muskip value from the input stream. See also [`EngineReferences::read_muskip`].
     #[inline]
-    fn read_muskip(engine:&mut EngineReferences<ET>,skip_eq:bool) -> TeXResult<MuSkip<ET::MuDim>,ET> {
-        methods::read_muskip(engine,skip_eq)
+    fn read_muskip(engine:&mut EngineReferences<ET>,skip_eq:bool,in_token:&ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET> {
+        methods::read_muskip(engine,skip_eq,in_token)
     }
 
     /// Read a mudim value from the input stream (for `\mkern`). See also [`EngineReferences::read_mudim`].
     #[inline]
-    fn read_mudim(engine:&mut EngineReferences<ET>,skip_eq:bool) -> TeXResult<ET::MuDim,ET> {
-        methods::read_mudim(engine, skip_eq)
+    fn read_mudim(engine:&mut EngineReferences<ET>,skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::MuDim,ET> {
+        methods::read_mudim(engine, skip_eq,in_token)
     }
 
     /// Read a string from the input stream. See also [`EngineReferences::read_string`].
     #[inline]
-    fn read_string(engine:&mut EngineReferences<ET>,skip_eq:bool,target:&mut String) -> TeXResult<(),ET> {
-        methods::read_string(engine,skip_eq,target)
+    fn read_string(engine:&mut EngineReferences<ET>,skip_eq:bool,target:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
+        methods::read_string(engine,skip_eq,target,in_token)
     }
 
     /// Check whether the input stream starts with the given keyword. See also [`EngineReferences::read_keyword`].
@@ -481,13 +481,13 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
     /// Read an integer value from the input stream.
     #[inline]
-    pub fn read_int(&mut self,skip_eq:bool) -> TeXResult<<ET::Num as NumSet>::Int,ET> {
-        ET::Gullet::read_int(self,skip_eq)
+    pub fn read_int(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<<ET::Num as NumSet>::Int,ET> {
+        ET::Gullet::read_int(self,skip_eq,in_token)
     }
     /// Read a string from the input stream.
     #[inline]
-    pub fn read_string(&mut self,skip_eq:bool,target:&mut String) -> TeXResult<(),ET> {
-        ET::Gullet::read_string(self,skip_eq,target)
+    pub fn read_string(&mut self,skip_eq:bool,target:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
+        ET::Gullet::read_string(self,skip_eq,target,in_token)
     }
     /// Check whether the input stream starts with the given keyword.
     #[inline]
@@ -500,8 +500,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         ET::Gullet::read_keywords(self,kw)
     }
     /// Read a character code from the input stream.
-    pub fn read_charcode(&mut self,skip_eq:bool) -> TeXResult<ET::Char,ET> {
-        let i:i64 = ET::Gullet::read_int(self,skip_eq)?.into();
+    pub fn read_charcode(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::Char,ET> {
+        let i:i64 = ET::Gullet::read_int(self,skip_eq,in_token)?.into();
         if i < 0 {
             self.general_error(format!("Bad character code ({})",i))?;
             return Ok(ET::Char::from(0))
@@ -558,23 +558,23 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
     /// Read a dimension value from the input stream.
     #[inline]
-    pub fn read_dim(&mut self,skip_eq:bool) -> TeXResult<ET::Dim,ET> {
-        ET::Gullet::read_dim(self,skip_eq)
+    pub fn read_dim(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::Dim,ET> {
+        ET::Gullet::read_dim(self,skip_eq,in_token)
     }
     /// Read a skip value from the input stream.
     #[inline]
-    pub fn read_skip(&mut self,skip_eq:bool) -> TeXResult<Skip<ET::Dim>,ET> {
-        ET::Gullet::read_skip(self,skip_eq)
+    pub fn read_skip(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<Skip<ET::Dim>,ET> {
+        ET::Gullet::read_skip(self,skip_eq,in_token)
     }
     /// Read a muskip value from the input stream.
     #[inline]
-    pub fn read_muskip(&mut self,skip_eq:bool) -> TeXResult<MuSkip<ET::MuDim>,ET> {
-        ET::Gullet::read_muskip(self,skip_eq)
+    pub fn read_muskip(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET> {
+        ET::Gullet::read_muskip(self,skip_eq,in_token)
     }
     /// Read a mudim value from the input stream (for `\mkern`).
     #[inline]
-    pub fn read_mudim(&mut self,skip_eq:bool) -> TeXResult<ET::MuDim,ET> {
-        ET::Gullet::read_mudim(self,skip_eq)
+    pub fn read_mudim(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::MuDim,ET> {
+        ET::Gullet::read_mudim(self,skip_eq,in_token)
     }
     /// Check whether the next character is one of the provided ones. Returns the character if so,
     /// otherwise returns the inspected [`Token`] to be further processed or [Self::requeue]d.

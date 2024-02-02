@@ -10,7 +10,7 @@ use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::stomach::{Stomach, TeXMode};
 use crate::engine::state::{GroupType, State};
 use crate::engine::mouth::Mouth;
-use crate::prelude::{CommandCode, TokenList};
+use crate::prelude::{Character, CommandCode, TokenList};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 use crate::tex::tokens::Token;
@@ -235,7 +235,16 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
             do_subscript(engine,&token)?
         }
         CommandCode::Escape | CommandCode::Primitive | CommandCode::Active | CommandCode::Argument => unreachable!(),
-        _ => todo!("{} > {:?}",char,code)
+        CommandCode::AlignmentTab => engine.general_error(format!("Misplaced alignment tab character {}",char.display()))?,
+        CommandCode::Parameter => {
+            let mode = engine.stomach.data_mut().mode();
+            engine.general_error(format!("You can't use `macro parameter character {}` in {} mode",char.display(), mode))?
+        },
+        CommandCode::Superscript | CommandCode::Subscript => {
+            TeXError::missing_dollar_inserted(engine.aux,engine.state,engine.mouth)?;
+            engine.mouth.requeue(token);
+            engine.mouth.requeue(ET::Token::from_char_cat(b'$'.into(),CommandCode::MathShift));
+        }
     }
     Ok(())
 }
@@ -275,7 +284,7 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> Te
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code:CommandCode::Letter|CommandCode::Other})) =>
             char!(*char),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) if *name == PRIMITIVES.char => {
-            let char = engine.read_charcode(false)?;
+            let char = engine.read_charcode(false,&token)?;
             char!(char)
         }
         ResolvedToken::Tk { code:CommandCode::Space, .. } |
@@ -293,7 +302,7 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> Te
             end!(crate::do_cmd!(ET;engine,token,cmd))
         }
     );
-    todo!()
+    end!(())
 }
 
 fn add_char<ET:EngineTypes>(slf:&mut ET::Stomach,state:&ET::State,char:ET::Char,font: ET::Font) {
@@ -308,7 +317,7 @@ fn add_char<ET:EngineTypes>(slf:&mut ET::Stomach,state:&ET::State,char:ET::Char,
                 char,font
             });
         }
-        _ => todo!("throw error")
+        _ => unreachable!()
     }
 }
 
@@ -325,7 +334,7 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),E
                         (false,PRIMITIVES.everymath)
                     }
                 },
-                None => todo!(),
+                None => return Err(TeXError::EmergencyStop),
             }
         }
         _ => (false,PRIMITIVES.everymath)
@@ -344,7 +353,7 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),
                 engine.stomach.data_mut().prevgraf += 3;
                 match engine.get_next(false)? {
                     Some(tk) if tk.command_code() == CommandCode::MathShift => (),
-                    _ => todo!("throw error")
+                    _ => engine.general_error("Display math should end with $$".to_string())?
                 }
             }
             let (children,eqno) = children.close(start,engine.mouth.current_sourceref());
@@ -357,7 +366,7 @@ fn close_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),
             engine.state.pop(engine.aux,engine.mouth);
             ET::Stomach::add_node_h(engine, HNode::MathGroup(group));
         }
-        _ => todo!("error")
+        _ => unreachable!()
     }
     Ok(())
 }
@@ -370,7 +379,7 @@ fn close_group_in_m<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResu
             let (children,None) = children.close(start,engine.mouth.current_sourceref()) else { unreachable!() };
             t.call(engine,children,start)
         }
-        Some(NodeList::Math {children,start,tp:MathNodeListType::Target(_)}) => {
+        Some(NodeList::Math {children,start,tp:MathNodeListType::Target(target)}) => {
             match children {
                 MathNodeList::Simple(v) =>
                     ET::Stomach::add_node_m(engine, MathNode::Atom(MathAtom{
@@ -382,12 +391,15 @@ fn close_group_in_m<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResu
                         start,end:engine.mouth.current_sourceref(),
                         top:top.into(),bottom:bottom.into(),sep,left,right
                     }),
-                MathNodeList::EqNo {..} => todo!("throw error")
+                MathNodeList::EqNo {..} => {
+                    engine.general_error("Extra }, or forgotten $".to_string())?;
+                    engine.stomach.data_mut().open_lists.push(NodeList::Math {children,tp:MathNodeListType::Target(target),start});
+                }
             }
             engine.state.pop(engine.aux,engine.mouth);
             Ok(())
         }
-        _ => todo!("error")
+        _ => unreachable!()
     }
 }
 
@@ -442,7 +454,7 @@ fn do_xscript<ET:EngineTypes>(engine:&mut EngineReferences<ET>,script:Script,in_
         Some(NodeList::Math { children, .. }) => {
             match children.list_mut().last() {
                 Some(MathNode::Atom(a)) if script.invalid(a) => {
-                    todo!("throw double xscript error")
+                    engine.general_error(format!("Double {}script",match script {Script::Super => "super",Script::Sub => "sub"}))?; return Ok(())
                 },
                 Some(MathNode::Atom(_)) => (),
                 _ => children.push(MathNode::Atom(MathAtom::empty())),
@@ -502,8 +514,7 @@ pub fn close_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>, bt:BoxType) -
             };
             add_box(engine, bx, target)?
         }
-        o =>
-            todo!("throw error: {:?}",o),
+        _ => unreachable!(),
     }
     match engine.stomach.data_mut().mode() {
         TeXMode::Vertical => {
@@ -559,7 +570,7 @@ pub fn add_node_v<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut node: VN
             children.push(node);
             return Ok(())
         }
-        Some(_) => todo!("throw error"),
+        Some(_) => unreachable!("add_node_v in non-vertical mode"),
         _ => ()
     }
     if !data.page_contains_boxes /*data.pagegoal == <<Self::ET as EngineTypes>::Dim as TeXDimen>::from_sp(i32::MAX)*/ {
@@ -677,7 +688,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
     loop {
         let next = match engine.get_next(false)? {
             Some(t) => t,
-            None => todo!("file end"),
+            None => unreachable!()
         };
         //println!("HERE: {}",engine.preview());
         if engine.state.get_group_level() == depth && next.command_code() == CommandCode::EndGroup {
@@ -690,7 +701,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
                     }
                     for r in rest.into_iter() { ET::Stomach::add_node_v(engine, r)? }
                 }
-                _ => todo!("throw error")
+                _ => unreachable!()
             }
             engine.stomach.data_mut().in_output = false;
             return Ok(())

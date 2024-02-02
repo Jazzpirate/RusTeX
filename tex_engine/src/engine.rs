@@ -1,6 +1,7 @@
 /*! A TeX engine combines all the necessary components into a struct capable of compiling a TeX file into
     some output format.
 */
+use std::convert::Infallible;
 use std::fmt::Debug;
 use chrono::{Datelike,Timelike};
 use crate::engine::gullet::{DefaultGullet, Gullet};
@@ -134,7 +135,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Outputs = LogOutputs;
     type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
-    type CustomNode = ();
+    type CustomNode = Infallible;
     type ErrorHandler = ErrorThrower<Self>;
     type Stomach = DefaultStomach<Self>;
     type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
@@ -399,25 +400,25 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::Font(f) =>
                 <$ET as EngineTypes>::Stomach::assign_font($engine, $token, f.clone(),false)?,
             crate::commands::TeXCommand::IntRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_int_register($engine, *u,false)?,
+                <$ET as EngineTypes>::Stomach::assign_int_register($engine, *u,false,$token)?,
             crate::commands::TeXCommand::DimRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_dim_register($engine, *u,false)?,
+                <$ET as EngineTypes>::Stomach::assign_dim_register($engine, *u,false,$token)?,
             crate::commands::TeXCommand::SkipRegister(u) =>
-                <$ET as EngineTypes>::Stomach::assign_skip_register($engine, *u,false)?,
+                <$ET as EngineTypes>::Stomach::assign_skip_register($engine, *u,false,$token)?,
             crate::commands::TeXCommand::MuSkipRegister(u) =>
-               <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false)?,
+               <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false,$token)?,
             crate::commands::TeXCommand::ToksRegister(u) =>
                 <$ET as EngineTypes>::Stomach::assign_toks_register($engine,$token, *u,false)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Whatsit { get, .. }} =>
                 <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveInt} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false)?,
+                <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false,$token)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveDim} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,*name,false)?,
+                <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,*name,false,$token)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveSkip} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,*name,false)?,
+                <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,*name,false,$token)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveMuSkip} =>
-                <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false)?,
+                <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false,$token)?,
             crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveToks} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,$token,*name,false)?,
             crate::commands::TeXCommand::MathChar(u) =>

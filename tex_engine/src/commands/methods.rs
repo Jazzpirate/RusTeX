@@ -66,9 +66,9 @@ impl<T:Token> MacroParser<T> {
                 match t.char_value() {
                     Some(c) => match c.try_into() {
                         Ok(u) if u > 48 && u == 49 + self.arity => self.params.push(T::argument_marker(self.arity)),
-                        _ => todo!("error")
+                        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
                     }
-                    None => todo!("error")
+                    None => return Err(TeXError::General("TODO: Better error message".to_string()))
                 }
                 self.arity += 1;
             }
@@ -89,9 +89,9 @@ impl<T:Token> MacroParser<T> {
                 match t.char_value() {
                     Some(c) => match c.try_into() {
                         Ok(u) if u > 48 && u - 49 < self.arity => self.exp.push(T::argument_marker(u-49)),
-                        _ => todo!("error")
+                        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
                     }
-                    None => todo!("error")
+                    None => return Err(TeXError::General("TODO: Better error message".to_string()))
                 }
             }
             _ => self.exp.push(t),
@@ -159,14 +159,14 @@ pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(Skip<ET
     Ok(())
 }
 
-pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:GroupType,every:PrimitiveIdentifier) -> TeXResult<ToOrSpread<ET::Dim>,ET> {
+pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:GroupType,every:PrimitiveIdentifier,tk:&ET::Token) -> TeXResult<ToOrSpread<ET::Dim>,ET> {
     let scaled = match engine.read_keywords(&[b"to",b"spread"])? {
         Some(b"to") => {
-            let to = engine.read_dim(false)?;
+            let to = engine.read_dim(false,&tk)?;
             ToOrSpread::To(to)
         }
         Some(b"spread") => {
-            let spread = engine.read_dim(false)?;
+            let spread = engine.read_dim(false,&tk)?;
             ToOrSpread::Spread(spread)
         }
         _ => ToOrSpread::None
@@ -180,9 +180,9 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
             engine.push_every(every);
             return Ok(scaled)
         }
-        o => todo!("throw error: {:?}",o)
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("file end")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>,in_token:&ET::Token) -> TeXResult<(Option<ET::Char>,CommandCode),ET> {
@@ -397,13 +397,15 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
         }
         match ET::Gullet::char_or_primitive(engine.state,&next) {
             Some(CharOrPrimitive::Char(_,CommandCode::Parameter)) => {
-                if cols.in_v { todo!("throw error") }
+                if cols.in_v {
+                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                }
                 cols.in_v = true;
                 cols.ingroups = ingroups;
             }
             Some(CharOrPrimitive::Char(_,CommandCode::AlignmentTab)) => {
                 if ingroups != 0 {
-                    todo!("throw error")
+                    return Err(TeXError::General("TODO: Better error message".to_string()))
                 }
                 if !cols.in_v && cols.current_u.is_empty() {
                     cols.recindex = Some(cols.columns.len());
@@ -414,10 +416,10 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
                     cols.in_v = false;
                 }
             }
-            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true)?,
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true,in_token)?,
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                 if ingroups != 0 {
-                    todo!("throw error")
+                    return Err(TeXError::General("TODO: Better error message".to_string()))
                 }
                 engine.push_every(PRIMITIVES.everycr);
                 return Ok(cols.build(in_token.clone()))
@@ -530,7 +532,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
 
 pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
     match engine.gullet.get_align_data() {
-        None => todo!("throw error"),
+        None => unreachable!(),
         Some(data) => {
             if !data.omit { engine.mouth.push_slice_rev(&data.columns[data.currindex].left); }
             if data.span {
@@ -564,7 +566,7 @@ pub(in crate::commands) fn pop_align_cell<ET:EngineTypes>(state:&mut ET::State,a
 fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start,spans) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignCell(start,i)}) => (children,start,i),
-        _ => todo!("throw error")
+        _ => unreachable!()
     };
     state.pop(aux,mouth);
     let bx = TeXBox::V {
@@ -575,13 +577,13 @@ fn pop_align_cell_v<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,
     match stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::VAlignColumn(..)}) =>
             children.push(VNode::Box(bx)),
-        _ => todo!("throw error")
+        _ => unreachable!()
     }
 }
 fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start,spans) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignCell(start,i)}) => (children,start,i),
-        _ => todo!("throw error")
+        _ => unreachable!()
     };
     state.pop(aux,mouth);
     let bx = TeXBox::H {
@@ -592,7 +594,7 @@ fn pop_align_cell_h<ET:EngineTypes>(state:&mut ET::State,aux:&mut EngineAux<ET>,
     match stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::HAlignRow(..)}) =>
             children.push(HNode::Box(bx)),
-        _ => todo!("throw error")
+        _ => unreachable!()
     }
 }
 
@@ -606,7 +608,7 @@ pub(in crate::commands) fn pop_align_row<ET:EngineTypes>(stomach:&mut ET::Stomac
 fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Vertical{children,tp:VerticalNodeListType::VAlignColumn(start)}) => (children, start),
-        _ => todo!("throw error")
+        _ => unreachable!()
     };
     let bx = TeXBox::V {
         children:children.into(),start,
@@ -616,7 +618,7 @@ fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth
     match stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Horizontal {children,tp:HorizontalNodeListType::VAlign}) =>
             children.push(HNode::Box(bx)),
-        _ => todo!("throw error")
+        _ => unreachable!()
 
     }
 }
@@ -624,7 +626,7 @@ fn pop_align_row_v<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth
 fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth) {
     let (children,start) = match stomach.data_mut().open_lists.pop() {
         Some(NodeList::Horizontal{children,tp:HorizontalNodeListType::HAlignRow(start)}) => (children,start),
-        _ => todo!("throw error")
+        _ => unreachable!()
     };
     let bx = TeXBox::H {
         children:children.into(),start,
@@ -634,7 +636,7 @@ fn pop_align_row_h<ET:EngineTypes>(stomach:&mut ET::Stomach,mouth:&mut ET::Mouth
     match stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Vertical {children,tp:VerticalNodeListType::HAlign}) =>
             children.push(VNode::Box(bx)),
-        _ => todo!("throw error")
+        _ => unreachable!()
 
     }
 }
@@ -709,16 +711,17 @@ pub(crate) fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VN
     None
 }
 
-pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) -> TeXResult<(),ET> {
+pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType,tk:&ET::Token) -> TeXResult<(),ET> {
     match engine.read_keywords(&[b"width",b"height",b"depth"])? {
-        Some(_) => todo!("leaders with dimensions"),
+        Some(_) => return Err(TeXError::General("TODO: leaders with width/height/depth".to_string())),
         _ => crate::expand_loop!(engine,token,
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Box(read),..})) => {
                 match read(engine,token)? {
-                    either::Left(None) => todo!(),
-                    either::Left(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp),
+                    either::Left(None) => return Err(TeXError::General("TODO: Better error message".to_string())),
+                    either::Left(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp,tk),
                     either::Right(bi) => {
-                        let target = BoxTarget::<ET>::new(move |e,b| leaders_skip(e,LeaderBody::Box(b),tp));
+                        let tk = tk.clone();
+                        let target = BoxTarget::<ET>::new(move |e,b| leaders_skip(e,LeaderBody::Box(b),tp,&tk));
                         let mut ls = bi.open_list(engine.mouth.start_ref());
                         match ls {
                             NodeList::Horizontal {tp:HorizontalNodeListType::Box(_,_,ref mut t),..} => *t = target,
@@ -737,44 +740,44 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                 loop {
                     match engine.read_keywords(&[b"width",b"height",b"depth"])? {
                         Some(b"width") => {
-                            width = Some(engine.read_dim(false)?);
+                            width = Some(engine.read_dim(false,&tk)?);
                         }
                         Some(b"height") => {
-                            height = Some(engine.read_dim(false)?);
+                            height = Some(engine.read_dim(false,&tk)?);
                         }
                         Some(b"depth") => {
-                            depth = Some(engine.read_dim(false)?);
+                            depth = Some(engine.read_dim(false,&tk)?);
                         }
                         _ => break
                     }
                 }
-                return leaders_skip(engine,LeaderBody::Rule {width,height,depth},tp)
+                return leaders_skip(engine,LeaderBody::Rule {width,height,depth},tp,&tk)
             }
-            _ => todo!("throw error")
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         )
     }
-    todo!("file end")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
-fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBody<ET>, tp:LeaderType) -> TeXResult<(),ET> {
+fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBody<ET>, tp:LeaderType,tk:&ET::Token) -> TeXResult<(),ET> {
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => {
             let skip = match *name {
-                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false)?),
-                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false)?),
+                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false,&tk)?),
+                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false,&tk)?),
                 n if n == PRIMITIVES.vfil => LeaderSkip::VFil,
                 n if n == PRIMITIVES.hfil => LeaderSkip::HFil,
                 n if n == PRIMITIVES.vfill => LeaderSkip::VFill,
                 n if n == PRIMITIVES.hfill => LeaderSkip::HFill,
-                _ => todo!("throw error")
+                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
             };
             let leaders = Leaders {skip,body,tp};
             crate::add_node!(ET::Stomach;engine,VNode::Leaders(leaders),HNode::Leaders(leaders),MathNode::Leaders(leaders));
             return Ok(())
         }
-        _ => todo!("throw error")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("file end")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>,in_token:&ET::Token) -> TeXResult<(),ET> {
@@ -813,18 +816,18 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
     /// reads an integer from the input stream and makes sure it's in the range of
     /// a state register
-    pub fn read_register_index(&mut self,skip_eq:bool) -> TeXResult<usize,ET> {
-        let idx = self.read_int(skip_eq)?;
+    pub fn read_register_index(&mut self, skip_eq:bool, in_token:&ET::Token) -> TeXResult<usize,ET> {
+        let idx = self.read_int(skip_eq,&in_token)?;
         match ET::State::register_index(idx) {
             Some(idx) => Ok(idx),
-            None => todo!("throw error")
+            None => Err(TeXError::General("TODO: Better error message".to_string()))
         }
     }
     /// reads an integer and makes sure it's in the range of a math font index (0-15)
-    pub fn mathfont_index(&mut self,skip_eq:bool) -> TeXResult<u8,ET> {
-        let idx = self.read_int(skip_eq)?.into();
+    pub fn mathfont_index(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<u8,ET> {
+        let idx = self.read_int(skip_eq,in_token)?.into();
         if !(0..=15).contains(&idx) {
-            todo!("throw error")
+            return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         Ok(idx as u8)
     }
@@ -854,18 +857,16 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 //engine.aux.memory.return_string(name);
                 return Ok(id)
             }
-            ResolvedToken::Cmd(_) => {
-                todo!("csname: {}",token.display(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
-            }
+            ResolvedToken::Cmd(_) => return Err(TeXError::General("TODO: Better error message".to_string()))
         );
-        todo!("file end")
+        Err(TeXError::General("TODO: Better error message".to_string()))
     }
     /// reads a number from the input stream and makes sure it's in the range of
     /// a file input/output stream index (0-255)
-    pub fn read_file_index(&mut self) -> TeXResult<u8,ET> {
-        let idx = self.read_int(false)?.into();
+    pub fn read_file_index(&mut self,in_token:&ET::Token) -> TeXResult<u8,ET> {
+        let idx = self.read_int(false,in_token)?.into();
         if !(0..=255).contains(&idx) {
-            todo!("throw error")
+            return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         Ok(idx as u8)
     }
@@ -873,10 +874,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a number from the input stream, making sure it's in the range of
     /// a file input/output stream index (0-255), and subsequently reads a filename
     /// - i.e. the first two steps of `\openin` or `\openout`
-    pub fn read_filename_and_index(&mut self,prefix:&str) -> TeXResult<(u8,ET::File),ET> {
-        let idx = self.read_file_index()?;
+    pub fn read_filename_and_index(&mut self,prefix:&str,in_token:&ET::Token) -> TeXResult<(u8,ET::File),ET> {
+        let idx = self.read_file_index(in_token)?;
         let mut filename = self.aux.memory.get_string();
-        self.read_string(true,&mut filename)?;
+        self.read_string(true,&mut filename,in_token)?;
         filename.insert_str(0,prefix);
         let file = self.filesystem.get(&filename);
         self.aux.memory.return_string(filename);
@@ -889,17 +890,17 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token) -> TeXResult<(),ET>>(&mut self,mut cont:F) -> TeXResult<(),ET> {
         expand_loop!(self,token,
             ResolvedToken::Cmd(Some(c)) => return c.clone().the(self,token,|a,s,g,t|cont(a,s,g,t).expect("the continuation function should not throw errors on Other characters")),
-            o => todo!("{:?} in \\the",o)
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         );
-        todo!("File end?")
+        Err(TeXError::General("TODO: Better error message".to_string()))
     }
 
     /// reads a [`Delimiter`] from the input stream;
     /// e.g. from `\delimiter` or the `\delcode` of the next character
-    pub fn read_opt_delimiter(&mut self) -> TeXResult<Option<Delimiter<ET>>,ET> {
+    pub fn read_opt_delimiter(&mut self,in_token:&ET::Token) -> TeXResult<Option<Delimiter<ET>>,ET> {
         crate::expand_loop!(self,token,
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..}))  if *name == PRIMITIVES.delimiter => {
-                let num = self.read_int(false)?;
+                let num = self.read_int(false,in_token)?;
                 return Ok(Some(match Delimiter::from_int(num,self.state) {
                     either::Left(d) => d,
                     either::Right((d,i)) => {
@@ -920,8 +921,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 }))
                 };
             }
-            o => todo!("??? {:?}",o)
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         );
-        todo!("file end")
+        Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }

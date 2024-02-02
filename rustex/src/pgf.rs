@@ -44,22 +44,22 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     );
 }
 
-fn pgfhbox(engine:Refs,_token:CompactToken) -> Res<()> {
-    let num = engine.read_register_index(false)?;
+fn pgfhbox(engine:Refs,tk:CompactToken) -> Res<()> {
+    let num = engine.read_register_index(false,&tk)?;
     let bx = engine.state.take_box_register(num).unwrap();
     let node = RusTeXNode::PGFEscape(bx);
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
     Ok(())
 }
-fn pgftypesetpicturebox(engine:Refs, _token:CompactToken) -> Res<()> {
-    let num = engine.read_register_index(false)?;
+fn pgftypesetpicturebox(engine:Refs, tk:CompactToken) -> Res<()> {
+    let num = engine.read_register_index(false,&tk)?;
     let bx = engine.state.take_box_register(num).unwrap();
     let getdimens = engine.aux.memory.cs_interner_mut().from_str("rustex!pgf!get!dimens");
     engine.requeue(CompactToken::from_cs(getdimens))?;
-    let minx = engine.read_dim(true)?;
-    let miny = engine.read_dim(true)?;
-    let maxx = engine.read_dim(true)?;
-    let maxy = engine.read_dim(true)?;
+    let minx = engine.read_dim(true,&tk)?;
+    let miny = engine.read_dim(true,&tk)?;
+    let maxx = engine.read_dim(true,&tk)?;
+    let maxy = engine.read_dim(true,&tk)?;
     let (start,end) = if let TeXBox::H {start,end,..} = &bx {
         (start.clone(),end.clone())
     } else {
@@ -122,7 +122,7 @@ fn gbegin(engine:Refs,token:CompactToken) -> Res<()> {
             }
             Some(s) => {
                 let mut r = String::new();
-                engine.read_string(true,&mut r)?;
+                engine.read_string(true,&mut r,&token)?;
                 attrs.insert(std::str::from_utf8(s).unwrap(),r.into());
             }
         }

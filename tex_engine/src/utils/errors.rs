@@ -42,8 +42,12 @@ pub enum TeXError<ET:EngineTypes> {
     MissingBegingroup,
     #[error("! Missing }} inserted")]
     MissingEndgroup,
+    #[error("! Missing $ inserted")]
+    MissingDollar,
     #[error("Missing number, treated as zero.")]
     MissingNumber,
+    #[error("Runaway argument? Paragraph ended before {0} was complete.")]
+    ParagraphEnded(String),
     #[error("! Missing {} inserted",.0[0])]
     MissingKeyword(&'static [&'static str]),
     #[error("Incomplete {}; all text was ignored after line {line_no}",.name.display::<u8>(Some(b'\\')))]
@@ -119,6 +123,20 @@ impl<ET:EngineTypes> TeXError<ET> {
     }
     pub fn missing_keyword<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,kws:&'static[&'static str]) -> TeXResult<(),ET> {
         throw!(aux,state,mouth,missing_keyword(kws) => TeXError::MissingKeyword(kws))
+    }
+    pub fn missing_dollar_inserted<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,missing_dollar() => TeXError::MissingDollar)
+    }
+    pub fn paragraph_ended<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,t:ET::Token) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,paragraph_ended(&t) => TeXError::ParagraphEnded(
+            match t.to_enum() {
+                StandardToken::ControlSequence(cs) =>
+                    format!("control sequence {}{}",ET::Char::display_opt(state.get_escape_char()),aux.memory.cs_interner().resolve(&cs)),
+                StandardToken::Character(c,_) =>
+                    format!("active character {}",c.display()),
+                _ => unreachable!()
+            }
+        ))
     }
 
 }
@@ -219,6 +237,10 @@ pub trait ErrorHandler<ET:EngineTypes> {
     fn missing_begingroup(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
+    /// "Missing $ inserted".
+    fn missing_dollar(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
+        Err(())
+    }
     /// "Missing } inserted".
     fn missing_endgroup(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
@@ -231,6 +253,11 @@ pub trait ErrorHandler<ET:EngineTypes> {
 
     /// "Undefined `[`control sequence`|`active character`]`"
     fn undefined(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_token:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
+        Err(())
+    }
+
+    /// "Runaway argument? Paragraph ended before `\foo` was complete."
+    fn paragraph_ended(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_token:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 

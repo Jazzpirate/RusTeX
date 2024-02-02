@@ -84,15 +84,21 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
                     )?
                 } else {
                     engine.read_until_endgroup(token,
-                                               |_, _, t| if t.is_cs(&par) { todo!("\\par in read_argument") } else { arg.push(t);
-                                               Ok(()) }
+                                               |a, s, t| if t.is_cs(&par) {
+                                                   Err(TeXError::ParagraphEnded(t.display(a.memory.cs_interner(),s.get_catcode_scheme(),s.get_escape_char()).to_string()))
+                                               } else {
+                                                   arg.push(t);
+                                                    Ok(())
+                                               }
                     )?
                 };
                 arg.push(r);
                 if let Some(ref mut n @ None) = remove_braces { *n = Some(arg.len()) }
                 continue
             }
-            CommandCode::Escape if !long && t.is_cs(&par) => {todo!("\\par in read_argument")}
+            CommandCode::Escape if !long && t.is_cs(&par) => {
+                TeXError::paragraph_ended(engine.aux,engine.state,engine.mouth,token.clone())?
+            }
             _ => ()
         }
         if t == *last {
@@ -146,9 +152,13 @@ fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<E
                     engine.mouth.read_until_endgroup(
                         engine.aux,
                         engine.state,
-                        |_,t|
-                            if t.is_cs(&par) {todo!("\\par in read_argument")} else {arg.push(t);
-                            Ok(())},eof
+                        |a,t|
+                            if t.is_cs(&par) {
+                                Err(TeXError::ParagraphEnded(t.display(a.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string()))
+                            } else {
+                                arg.push(t);
+                                Ok(())
+                            },eof
                     )?;
                 }
                 return Ok(())
@@ -296,8 +306,9 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
                 }
                 else if skipelse {
                     skipelse = false;Ok(None)
+                } else {
+                    Ok(None)// Apparently spurious \elses are just skipped??
                 }
-                else {todo!("throw spurious else in false-loop error")}
             }
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.fi => {
                 if incond == 0 {Ok(Some(()))}
@@ -317,7 +328,8 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
 }
 
 /// Default implementation for [`Gullet::read_string`].
-pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool, ret:&mut String) -> TeXResult<(),ET> {
+pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool, ret:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
+    use std::fmt::Write;
     let mut quoted = false;
     let mut had_eq = !skip_eq;
     let mut was_quoted = false;
@@ -345,9 +357,9 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
             engine.mouth.requeue(token);
             return Ok(())
         }
-        o => todo!("unexpandable in read_string: {:?}",o)
+        _ => write!(ret,"{}",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))?
     );
-    todo!("file end")
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())
 }
 
 
@@ -366,7 +378,7 @@ pub struct NumContinuation<ET:EngineTypes> {
 /// returns in the second component either
 /// the ASCII value of the fist simple [`Token`] encountered, or the relevant [`TeXCommand`]
 /// in the case of a control sequence. Spaces are skipped.
-pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool)
+pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool,in_token:&ET::Token)
                                     -> TeXResult<NumContinuation<ET>,ET> {
     let mut is_negative = false;
     let mut had_eq = !skip_eq;
@@ -381,7 +393,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             }
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) => return Ok(NumContinuation{is_negative,next:either::Left(b)}),
-            _ => todo!("number expected; got: {} {:?} -- l. {}",(char.try_into().ok().unwrap() as char),code,engine.mouth.line_number())
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => match ((*char).try_into(),code) {
             (_,CommandCode::Space) => (),
@@ -393,18 +405,22 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             }
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) => return Ok(NumContinuation{is_negative,next:either::Left(b)}),
-            _ => todo!("number expected")
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(None) =>
             TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
         ResolvedToken::Cmd(Some(cmd)) => return Ok(NumContinuation{is_negative,next:either::Right((cmd.clone(),token))})
     );
-    todo!("file end")
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())?;
+    Ok(NumContinuation {
+        is_negative,
+        next: either::Left(b'0')
+    })
 }
 
 /// default implementation for [`Gullet::read_int`]
-pub fn read_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> TeXResult<ET::Int,ET> {
-    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq)?;
+pub fn read_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::Int,ET> {
+    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq,in_token)?;
     match next {
         Either::Left(b) => read_int_byte(engine,is_negative,b),
         Either::Right((cmd,token)) => read_int_command(engine,is_negative,cmd,token)
@@ -418,7 +434,10 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
         b'\'' => read_oct_int(engine, is_negative),
         b'`' => read_int_char(engine,is_negative),
         b if is_ascii_digit(b) => read_dec_int(engine, is_negative, b),
-        _ => todo!("number expected")
+        _ => {
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            Ok(ET::Int::default())
+        }
     }
 }
 
@@ -426,14 +445,20 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> TeXResult<ET::Int,ET> {
     let next = loop {match engine.mouth.get_next(engine.aux, engine.state)? {
         Some(t) => break t,
-        None => todo!("throw error here"),
+        None => {
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return Ok(ET::Int::default())
+        }
     }};
     let ret = match next.to_enum() {
         StandardToken::Character(c, _) => {
             let i: u64 = c.into();
             match <ET::Num as NumSet>::Int::try_from(i as i64) {
                 Ok(v) => if is_negative { -v } else { v },
-                _ => todo!("throw error here")
+                _ => {
+                    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(ET::Int::default())
+                }
             }
         }
         StandardToken::ControlSequence(cs) => {
@@ -446,10 +471,14 @@ fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:b
                     <ET::Num as NumSet>::Int::from(c.into() as i32)
                 }
             } else  {
-                todo!("throw error here")
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return Ok(ET::Int::default())
             }
         }
-        _ => todo!("throw error here")
+        _ => {
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return Ok(ET::Int::default())
+        }
     };
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk{code,..} => {
@@ -493,7 +522,10 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                     Ok(if is_negative {-val}
                     else {val})
                 }
-                _ => todo!("throw error")
+                _ => {
+                    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(ET::Int::default())
+                }
             }
         }
         TeXCommand::MathChar(u) => {
@@ -502,7 +534,10 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                     Ok(if is_negative {-val}
                     else {val})
                 }
-                _ => todo!("throw error")
+                _ => {
+                    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(ET::Int::default())
+                }
             }
         }
         TeXCommand::DimRegister(u) => {
@@ -529,7 +564,10 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let base = ET::Num::dim_to_int((read)(engine,token)?.base);
             Ok(if is_negative {-base} else {base})
         }
-        o => todo!("read_int: {:?}",o)
+        _ => {
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return Ok(ET::Int::default())
+        }
     }
 }
 
@@ -576,26 +614,42 @@ fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 empty = false;
             }
             (_,CommandCode::Space) =>
-                return Ok((if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())),
+                match (if is_negative {-ret} else {ret}).try_into() {
+                    Ok(v) => return Ok(v),
+                    _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                },
             _ if !empty => {
                 engine.requeue(token)?;
-                return Ok((if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!())) //ret_hex(engine,ret,is_negative)
+                match (if is_negative {-ret} else {ret}).try_into() {
+                    Ok(v) => return Ok(v),
+                    _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                }
             }
-            _ => {
-                todo!("{}:{:?}",char,code);
-            }
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => {
-            return Ok((if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!()))
+            match (if is_negative {-ret} else {ret}).try_into() {
+                Ok(v) => return Ok(v),
+                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            }
         }
         ResolvedToken::Cmd(_) if !empty => {
             engine.mouth.requeue(token);
-            return Ok((if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!()))
+            match (if is_negative {-ret} else {ret}).try_into() {
+                Ok(v) => return Ok(v),
+                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            }
         }
-        o => todo!("{:?}; current: {:?}",o,ret)
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    if empty {todo!()} else {
-        Ok((if is_negative {-ret} else {ret}).try_into().unwrap_or_else(|_| todo!()))
+    if empty {
+        TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+        Ok(ET::Int::default())
+    } else {
+        match (if is_negative {-ret} else {ret}).try_into() {
+            Ok(v) => Ok(v),
+            _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        }
     }
 }
 
@@ -613,9 +667,7 @@ fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 engine.requeue(token)?;
                 return Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
             }
-            _ => {
-                todo!("{}:{:?}",char,code);
-            }
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) if !empty => {
             return Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
@@ -624,16 +676,18 @@ fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
             engine.mouth.requeue(token);
             return Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
         }
-        o => todo!("{:?}; current: {:?}",o,ret)
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    if empty {todo!()} else {
+    if empty {
+        Err(TeXError::General("TODO: Better error message".to_string()))
+    } else {
         Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
     }
 }
 
 /// Default implementation for [`Gullet::read_dim`].
-pub fn read_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> TeXResult<ET::Dim,ET> {
-    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq)?;
+pub fn read_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::Dim,ET> {
+    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq,in_token)?;
     match next {
         Either::Left(b) => read_dim_byte(engine,is_negative,b),
         Either::Right((cmd,token)) => read_dim_command(engine,is_negative,cmd,token)
@@ -651,7 +705,8 @@ pub fn read_dim_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
     else if is_ascii_digit(b) {
         read_dim_float(engine,is_negative,b)
     } else {
-        todo!("error?")
+        TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+        read_unit_or_dim(engine,0f64)
     }
 }
 
@@ -709,7 +764,10 @@ pub fn read_dim_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             let val = read(engine,token)?.base;
             if is_negative {Ok(-val)} else {Ok(val)}
         }
-        o => todo!("command in read_dim: {}",o.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))
+        _ => {
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            read_unit_or_dim(engine,0f64)
+        }
     }
 }
 
@@ -731,7 +789,10 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
-                if in_decimal { todo!("throw error") }
+                if in_decimal {
+                    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                    return read_unit_or_dim(engine,0f64)
+                }
                 in_decimal = true;
             }
             (_,CommandCode::Space) => {
@@ -743,16 +804,18 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
                 return read_dim_unit(engine,f,Some((b,token)))
             }
             _ => {
-                todo!("{}:{:?}",char,code);
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return read_unit_or_dim(engine,0f64)
             }
         }
         ResolvedToken::Cmd(Some(c)) => {
             let f = if is_negative {-ret} else {ret};
             return read_unit_cmd(engine,f,c.clone(),token)
         }
-        _ => todo!("command in read_dim_inner")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("read_dim_inner")
+    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+    read_unit_or_dim(engine,0f64)
 }
 
 fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) -> TeXResult<ET::Dim,ET> {
@@ -762,20 +825,18 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) 
                 return read_dim_unit(engine,float,Some((b,token)))
             }
             (_,CommandCode::Space) => (),
-            _ => {
-                todo!("{}:{:?}",char,code);
-            }
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => (),
         ResolvedToken::Cmd(Some(TeXCommand::Char{char,code:CommandCode::Other | CommandCode::Letter})) => match (*char).try_into() {
             Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
-            _ => todo!("throw error")
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(Some(cmd)) => return read_unit_cmd(engine,float,cmd.clone(),token),
         ResolvedToken::Cmd(None) =>
             TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
     );
-    todo!("file end")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 fn read_unit_cmd<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64,cmd:TeXCommand<ET>,token:ET::Token) -> TeXResult<ET::Dim,ET> {
@@ -816,7 +877,7 @@ fn read_unit_cmd<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64,cmd
             let base = read(engine,token)?.base;
             Ok(base.scale_float(float))
         }
-        o => todo!("command in read_unit_or_dim: {:?}",o)
+        _ => Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
@@ -835,13 +896,13 @@ fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64
     let units = ET::Dim::UNITS;
     match read_keywords(engine,units,first)? {
         Some(d) => Ok(<ET::Num as NumSet>::Dim::from_float(engine,float,d)),
-        _ => todo!("wut: {}",engine.preview())
+        _ => Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
 /// Default implementation for [`Gullet::read_skip`].
-pub fn read_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> TeXResult<Skip<ET::Dim>,ET> {
-    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq)?;
+pub fn read_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool,in_token:&ET::Token) -> TeXResult<Skip<ET::Dim>,ET> {
+    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq,in_token)?;
     match next {
         Either::Left(b) => read_skip_byte(engine,is_negative,b),
         Either::Right((cmd,token)) => read_skip_command(engine,is_negative,cmd,token)
@@ -855,7 +916,7 @@ pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
     } else if is_ascii_digit(b) {
         read_skip_dim(engine,is_negative,b)
     } else {
-        todo!("error?")
+        Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
@@ -917,7 +978,7 @@ pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_ne
             let val = read(engine,token)?;
             Ok(if is_negative {-val} else {val})
         }
-        _ => todo!("read skip command: {:?}",cmd)
+        _ => Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
@@ -963,7 +1024,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<S
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_stretch_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_stretch_float(engine,is_negative,b'.'),
-            _ => todo!("error?")
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
         ResolvedToken::Cmd(cmd) => match cmd {
             Some(TeXCommand::DimRegister(u)) => {
@@ -994,7 +1055,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<S
                 let base = Into::<u64>::into(*c) as f64;
                 return read_stretch_unit(engine,if is_negative {-base} else {base},None)
             }
-            o => todo!("command in read_stretch: {:?}",o)
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
     );
     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
@@ -1018,7 +1079,9 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
-                if in_decimal { todo!("throw error") }
+                if in_decimal {
+                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                }
                 in_decimal = true;
             }
             (_,CommandCode::Space) => {
@@ -1030,7 +1093,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
                 return read_stretch_unit(engine,f,Some((b,token)))
             }
             _ => {
-                todo!("{}:{:?}",char,code);
+                return Err(TeXError::General("TODO: Better error message".to_string()))
             }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::PrimitiveDim})) => {
@@ -1053,9 +1116,9 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
             let scale = if is_negative {-ret} else {ret};
             return Ok(StretchShrink::Dim(base.scale_float(scale)))
         }
-        o => todo!("command in read_stretch_inner: {:?}",o)
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("read_dim_inner")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> TeXResult<StretchShrink<ET::Dim>,ET> {
     let is_true = match &first {
@@ -1079,8 +1142,8 @@ fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:
 }
 
 /// Default implementation for [`Gullet::read_muskip`].
-pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> TeXResult<MuSkip<ET::MuDim>,ET> {
-    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq)?;
+pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool,in_token:&ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET> {
+    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq,in_token)?;
     match next {
         Either::Left(b) => read_muskip_byte(engine,is_negative,b,|d,e| read_muskip_ii(e,d)),
         Either::Right((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|d,e| read_muskip_ii(e,d),Ok)
@@ -1088,8 +1151,8 @@ pub fn read_muskip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:boo
 }
 
 /// Default implementation for [`Gullet::read_mudim`].
-pub fn read_mudim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool) -> TeXResult<ET::MuDim,ET> {
-    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq)?;
+pub fn read_mudim<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bool,in_token:&ET::Token) -> TeXResult<ET::MuDim,ET> {
+    let NumContinuation{is_negative,next} = read_numeric(engine, skip_eq,in_token)?;
     match next {
         Either::Left(b) => read_muskip_byte(engine,is_negative,b,|d,_| Ok(d)),
         Either::Right((cmd,token)) => read_muskip_command(engine,is_negative,cmd,token,|d,_| Ok(d),|s| Ok(s.base))
@@ -1103,7 +1166,7 @@ pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_n
     } else if is_ascii_digit(b) {
         read_muskip_dim(engine,is_negative,b,kern)
     } else {
-        todo!("error?")
+        Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
@@ -1137,7 +1200,7 @@ pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, i
             let base = read_mudim_unit(engine,base,None)?;
             kern(base,engine)
         }
-        _ => todo!("read skip command: {:?}",cmd)
+        _ => Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
@@ -1165,7 +1228,9 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
-                if in_decimal { todo!("throw error") }
+                if in_decimal {
+                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                }
                 in_decimal = true;
             }
             (_,CommandCode::Space) => {
@@ -1177,19 +1242,19 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
                 return read_mudim_unit(engine,f,Some((b,token)))
             }
             _ => {
-                todo!("{}:{:?}",char,code);
+               return Err(TeXError::General("TODO: Better error message".to_string()))
             }
         }
-        _ => todo!("command in read_dim_inner")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("read_dim_inner")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64, first:Option<(u8, ET::Token)>) -> TeXResult<ET::MuDim,ET> {
     let units = ET::MuDim::UNITS;
     match read_keywords(engine,units,first)? {
         Some(d) => Ok(ET::MuDim::from_float(engine,float,d)),
-        _ => todo!("wut")
+        _ => Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
@@ -1226,9 +1291,9 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mustretch_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_mustretch_float(engine,is_negative,b'.'),
-            _ => todo!("error?")
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
-        _ => todo!("command in read_skip")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
     Ok(MuStretchShrink::Mu(ET::MuDim::default()))
@@ -1251,7 +1316,9 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                 }
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
-                if in_decimal { todo!("throw error") }
+                if in_decimal {
+                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                }
                 in_decimal = true;
             }
             (_,CommandCode::Space) => {
@@ -1263,19 +1330,19 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                 return read_mustretch_unit(engine,f,Some((b,token)))
             }
             _ => {
-                todo!("{}:{:?}",char,code);
+                return Err(TeXError::General("TODO: Better error message".to_string()))
             }
         }
-        _ => todo!("command in read_dim_inner")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("read_dim_inner")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64,first:Option<(u8,ET::Token)>) -> TeXResult<MuStretchShrink<ET::MuDim>,ET> {
     match read_keywords(engine,STRETCH_SHRINK_UNITS,first)? {
         Some(d) => Ok(MuStretchShrink::from_float(engine,float,d)),
         _ => match read_keywords(engine,ET::MuDim::UNITS,None)? {
             Some(d) => Ok(MuStretchShrink::from_float(engine,float,d)),
-            _ => todo!("wut")
+            _ => Err(TeXError::General("TODO: Better error message".to_string()))
         }
     }
 }
@@ -1323,7 +1390,7 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
             return Ok(false)
         }
     );
-    todo!("read_keyword")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 /// Default implementation for [`Gullet::read_keywords`].
@@ -1403,7 +1470,7 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
             }
         }
     );
-    todo!("read_keyword")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 /// Default implementation for [`Gullet::read_chars`].
@@ -1422,7 +1489,7 @@ pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) ->
             return Ok(Either::Right(token))
         }
     );
-    todo!("read_chars")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 /// Either a [`CSName`](crate::tex::tokens::control_sequences::CSName) or an active character
@@ -1453,7 +1520,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                     return Ok(ret)
                 }
                 ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-                o => todo!("read_control_sequence: {:?}",o)
+                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
             }
         }
     }

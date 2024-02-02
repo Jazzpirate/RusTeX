@@ -72,7 +72,7 @@ pub enum PDFStruct { Num(i64),Name(String),Other(String) }
 
 pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> TeXResult<Option<NumOrName>,ET> {
     match engine.read_keywords(&[b"num",b"name"])? {
-        Some(b"num") => Ok(Some(NumOrName::Num(engine.read_int(false)?.into()))),
+        Some(b"num") => Ok(Some(NumOrName::Num(engine.read_int(false,token)?.into()))),
         Some(b"name") => {
             let mut str = String::new();
             engine.read_braced_string(true,true,token,&mut str)?;
@@ -82,11 +82,11 @@ pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
     }
 }
 
-pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<PDFDestType<ET::Dim>,ET> {
+pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Token) -> TeXResult<PDFDestType<ET::Dim>,ET> {
     match engine.read_keywords(&[b"xyz",b"fitr",b"fitbh",b"fitbv",b"fitb",b"fith",b"fitv",b"fit"])? {
         Some(b"xyz") => {
             let zoom = if engine.read_keyword(b"zoom")? {
-                Some(engine.read_int(false)?.into())
+                Some(engine.read_int(false,tk)?.into())
             } else {None};
             Ok(PDFDestType::XYZ{zoom})
         }
@@ -96,9 +96,9 @@ pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResu
             let mut depth = None;
             loop {
                 match engine.read_keywords(&[b"width",b"height",b"depth"])? {
-                    Some(b"width") => width = Some(engine.read_dim(false)?),
-                    Some(b"height") => height = Some(engine.read_dim(false)?),
-                    Some(b"depth") => depth = Some(engine.read_dim(false)?),
+                    Some(b"width") => width = Some(engine.read_dim(false,tk)?),
+                    Some(b"height") => height = Some(engine.read_dim(false,tk)?),
+                    Some(b"depth") => depth = Some(engine.read_dim(false,tk)?),
                     _ => break
                 }
             }
@@ -153,7 +153,7 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
                         })),
                         _ => {
                             let page = if engine.read_keyword(b"page")? {
-                                Some(engine.read_int(false)?.into())
+                                Some(engine.read_int(false,token)?.into())
                             } else {None};
                             let mut str = String::new();
                             engine.read_braced_string(true,true,token,&mut str)?;
@@ -170,7 +170,7 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
                         (None,str)
                     } else {
                         let page = if engine.read_keyword(b"page")? {
-                            Some(engine.read_int(false)?.into())
+                            Some(engine.read_int(false,token)?.into())
                         } else {None};
                         let mut str = String::new();
                         engine.read_braced_string(true,true,token,&mut str)?;

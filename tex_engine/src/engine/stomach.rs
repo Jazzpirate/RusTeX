@@ -150,29 +150,29 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         Ok(())
     }
     /// Assign a value to a [count register](TeXCommand::IntRegister) and insert `\afterassignment` if necessary
-    fn assign_int_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) -> TeXResult<(),ET> {
-        let val = engine.read_int(true)?;
+    fn assign_int_register(engine:&mut EngineReferences<ET>,register:usize,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
+        let val = engine.read_int(true,&in_token)?;
         engine.state.set_int_register(engine.aux,register,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
     }
     /// Assign a value to a [dimen register](TeXCommand::DimRegister) and insert `\afterassignment` if necessary
-    fn assign_dim_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) -> TeXResult<(),ET> {
-        let val = engine.read_dim(true)?;
+    fn assign_dim_register(engine:&mut EngineReferences<ET>,register:usize,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
+        let val = engine.read_dim(true,&in_token)?;
         engine.state.set_dim_register(engine.aux,register,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
     }
     /// Assign a value to a [skip register](TeXCommand::SkipRegister) and insert `\afterassignment` if necessary
-    fn assign_skip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) -> TeXResult<(),ET> {
-        let val = engine.read_skip(true)?;
+    fn assign_skip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
+        let val = engine.read_skip(true,&in_token)?;
         engine.state.set_skip_register(engine.aux,register,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
     }
     /// Assign a value to a [muskip register](TeXCommand::MuSkipRegister) and insert `\afterassignment` if necessary
-    fn assign_muskip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool) -> TeXResult<(),ET> {
-        let val = engine.read_muskip(true)?;
+    fn assign_muskip_register(engine:&mut EngineReferences<ET>,register:usize,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
+        let val = engine.read_muskip(true,&in_token)?;
         engine.state.set_muskip_register(engine.aux,register,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
@@ -188,33 +188,33 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
         methods::assign_primitive_toks(engine,token,name,global)
     }
     /// Assign a value to a [primitive integer value](PrimitiveCommand::PrimitiveInt) and insert `\afterassignment` if necessary
-    fn assign_primitive_int(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) -> TeXResult<(),ET> {
+    fn assign_primitive_int(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
         engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_int(true)?;
+        let val = engine.read_int(true,&in_token)?;
         engine.state.set_primitive_int(engine.aux,name,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
     }
     /// Assign a value to a [primitive dimension value](PrimitiveCommand::PrimitiveDim) and insert `\afterassignment` if necessary
-    fn assign_primitive_dim(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) -> TeXResult<(),ET> {
+    fn assign_primitive_dim(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
         engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_dim(true)?;
+        let val = engine.read_dim(true,&in_token)?;
         engine.state.set_primitive_dim(engine.aux,name,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
     }
     /// Assign a value to a [primitive skip value](PrimitiveCommand::PrimitiveSkip) and insert `\afterassignment` if necessary
-    fn assign_primitive_skip(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) -> TeXResult<(),ET> {
+    fn assign_primitive_skip(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
         engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_skip(true)?;
+        let val = engine.read_skip(true,&in_token)?;
         engine.state.set_primitive_skip(engine.aux,name,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
     }
     /// Assign a value to a [primitive muskip value](PrimitiveCommand::PrimitiveMuSkip) and insert `\afterassignment` if necessary
-    fn assign_primitive_muskip(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool) -> TeXResult<(),ET> {
+    fn assign_primitive_muskip(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,global:bool,in_token:ET::Token) -> TeXResult<(),ET> {
         engine.trace_command(|engine| format!("{}", name.display(engine.state.get_escape_char())));
-        let val = engine.read_muskip(true)?;
+        let val = engine.read_muskip(true,&in_token)?;
         engine.state.set_primitive_muskip(engine.aux,name,val,global);
         methods::insert_afterassignment(engine);
         Ok(())
@@ -586,13 +586,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 let mc = MathChar::from_u32(*u, self.state,None);
                 return f(s,self,mc)
             }
-            ResolvedToken::Tk {code,..} => {
-                todo!("??? {:?}",code)
-            }
-            ResolvedToken::Cmd(Some(c)) => {
-                todo!("Here: {}",c.meaning(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
-            }
-            o => todo!("??? {:?}",o)
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         );
         TeXError::file_end_while_use(self.aux,self.state,self.mouth,in_token.clone())
     }

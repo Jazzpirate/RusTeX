@@ -9,6 +9,7 @@ pub mod math;
 pub mod boxes;
 
 use std::cell::RefCell;
+use std::convert::Infallible;
 use std::fmt::{Debug, Display, Formatter, Write};
 use std::marker::PhantomData;
 use crate::commands::primitives::PrimitiveIdentifier;
@@ -76,7 +77,7 @@ pub trait CustomNodeTrait<ET:EngineTypes>:NodeTrait<ET> where Self:Into<ET::Cust
     fn into_math(self) -> MathNode<ET,UnresolvedMathFontStyle<ET>> { MathNode::Custom(self.into()) }
 }
 
-impl<ET:EngineTypes<CustomNode = ()>> NodeTrait<ET> for () {
+impl<ET:EngineTypes<CustomNode = Infallible>> NodeTrait<ET> for Infallible {
     fn height(&self) -> ET::Dim { ET::Dim::default() }
     fn depth(&self) -> ET::Dim { ET::Dim::default() }
     fn width(&self) -> ET::Dim { ET::Dim::default() }
@@ -84,7 +85,7 @@ impl<ET:EngineTypes<CustomNode = ()>> NodeTrait<ET> for () {
     fn display_fmt(&self, _indent:usize, _f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result { Ok(()) }
     fn opaque(&self) -> bool { true }
 }
-impl<ET:EngineTypes<CustomNode = ()>> CustomNodeTrait<ET> for () {}
+impl<ET:EngineTypes<CustomNode = Infallible>> CustomNodeTrait<ET> for Infallible {}
 
 
 type WhatsitFunction<ET> = Ptr<RefCell<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>>>;

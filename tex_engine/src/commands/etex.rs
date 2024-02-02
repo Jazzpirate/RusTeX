@@ -19,7 +19,7 @@ use crate::tex::characters::CharacterMap;
 use crate::tex::nodes::math::{MathNode, MathNucleus};
 use crate::tex::nodes::math::MathAtom;
 use crate::tex::characters::Character;
-use crate::utils::errors::TeXResult;
+use crate::utils::errors::{TeXError, TeXResult};
 
 #[allow(non_snake_case)]
 pub fn eTeXversion<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
@@ -35,16 +35,17 @@ pub fn eTeXrevision<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,exp:&mut 
 fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
 >(engine:&mut EngineReferences<ET>,
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> TeXResult<R,ET>,
-  cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> TeXResult<R,ET>
+  cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> TeXResult<R,ET>,
+    tk:&ET::Token
 )  -> TeXResult<R,ET> {
-    let NumContinuation{is_negative,next} = crate::engine::gullet::methods::read_numeric(engine, false)?;
+    let NumContinuation{is_negative,next} = crate::engine::gullet::methods::read_numeric(engine, false,tk)?;
     match next {
         Either::Left(b) => if b == b'(' {
-            let (int,ret) = expr_loop(engine, byte, cmd)?;
+            let (int,ret) = expr_loop(engine, byte, cmd,tk)?;
             match ret.to_enum() {
                 StandardToken::Character(char,CommandCode::Other) if matches!(char.try_into(),Ok(b')')) =>
                     if is_negative {Ok(-int)} else {Ok(int)},
-                _ => todo!("throw error")
+                _ => Err(TeXError::General("TODO: Better error message".to_string()))
             }
         } else { byte(engine,is_negative,b)},
         Either::Right((c,token)) => cmd(engine,is_negative,c,token)
@@ -92,10 +93,11 @@ impl<ET:EngineTypes,R:Numeric<ET::Int>> std::fmt::Display for Summand<ET,R> {
 fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
     engine:&mut EngineReferences<ET>,
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> TeXResult<R,ET>,
-  cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> TeXResult<R,ET>
+  cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> TeXResult<R,ET>,
+    tk:&ET::Token
 ) -> TeXResult<(R,ET::Token),ET> {
     let mut prev : Option<R> = None;
-    let mut curr = Summand::<ET,R>::new(expr_inner(engine,byte,cmd)?);
+    let mut curr = Summand::<ET,R>::new(expr_inner(engine,byte,cmd,tk)?);
     loop {
         match engine.read_chars(&[b'+',b'-',b'*',b'/'])? {
             Either::Right(r) => {
@@ -106,14 +108,14 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
                 //return (Summand::reduce(adds),r)
             },
             Either::Left(b'+') => {
-                let old = std::mem::replace(&mut curr,Summand::new(expr_inner(engine,byte,cmd)?)).resolve();
+                let old = std::mem::replace(&mut curr,Summand::new(expr_inner(engine,byte,cmd,tk)?)).resolve();
                 prev = match prev {
                     Some(s) => Some(s + old),
                     None => Some(old)
                 }
             },
             Either::Left(b'-') => {
-                let old = std::mem::replace(&mut curr,Summand::new(-expr_inner(engine,byte,cmd)?)).resolve();
+                let old = std::mem::replace(&mut curr,Summand::new(-expr_inner(engine,byte,cmd,tk)?)).resolve();
                 prev = match prev {
                     Some(s) => Some(s + old),
                     None => Some(old)
@@ -122,13 +124,13 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
             Either::Left(b'*') => {
                 curr.mult(expr_inner(engine,
                                            crate::engine::gullet::methods::read_int_byte,
-                                           crate::engine::gullet::methods::read_int_command
+                                           crate::engine::gullet::methods::read_int_command,tk
                 )?)
             },
             Either::Left(b'/') => {
                 curr.div(expr_inner(engine,
                                            crate::engine::gullet::methods::read_int_byte,
-                                           crate::engine::gullet::methods::read_int_command
+                                           crate::engine::gullet::methods::read_int_command,tk
                 )?)
             },
             Either::Left(_) => unreachable!()
@@ -204,28 +206,28 @@ pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<E
             Ok(())
         })
     } else {
-        todo!("throw errors")
+        Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
 pub fn fontchardp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let fnt = engine.read_font(false,&tk)?;
-    let char = engine.read_charcode(false)?;
+    let char = engine.read_charcode(false,&tk)?;
     Ok(fnt.get_dp(char))
 }
 pub fn fontcharht<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let fnt = engine.read_font(false,&tk)?;
-    let char = engine.read_charcode(false)?;
+    let char = engine.read_charcode(false,&tk)?;
     Ok(fnt.get_ht(char))
 }
 pub fn fontcharwd<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let fnt = engine.read_font(false,&tk)?;
-    let char = engine.read_charcode(false)?;
+    let char = engine.read_charcode(false,&tk)?;
     Ok(fnt.get_wd(char))
 }
 pub fn fontcharic<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let fnt = engine.read_font(false,&tk)?;
-    let char = engine.read_charcode(false)?;
+    let char = engine.read_charcode(false,&tk)?;
     Ok(fnt.get_ic(char))
 }
 
@@ -240,20 +242,20 @@ pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
             engine.state.get_ac_command(c).is_some(),
         StandardToken::ControlSequence(name) =>
             engine.state.get_command(&name).is_some(),
-        _ => todo!("Expected active character or control sequence")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     })
 }
 
 pub fn iffontchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<bool,ET> {
     let font = engine.read_font(false,&tk)?;
-    let char = engine.read_charcode(false)?;
+    let char = engine.read_charcode(false,&tk)?;
     Ok(font.has_char(char))
 }
 
-pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
+pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Int,ET> {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_int_byte,
-                          crate::engine::gullet::methods::read_int_command
+                          crate::engine::gullet::methods::read_int_command,&tk
     )?;
     if !r.is_cs_or_active() {
         engine.requeue(r)?
@@ -266,10 +268,10 @@ pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     Ok(i)
 }
 
-pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Dim,ET> {
+pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_dim_byte,
-                          crate::engine::gullet::methods::read_dim_command
+                          crate::engine::gullet::methods::read_dim_command,&tk
     )?;
     if !r.is_cs_or_active() {
         engine.requeue(r)?
@@ -282,10 +284,10 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
     Ok(i)
 }
 
-pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<Skip<ET::Dim>,ET> {
+pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<Skip<ET::Dim>,ET> {
     let (i,r) = expr_loop(engine,
                           crate::engine::gullet::methods::read_skip_byte,
-                          crate::engine::gullet::methods::read_skip_command
+                          crate::engine::gullet::methods::read_skip_command,&tk
     )?;
     if !r.is_cs_or_active() {
         engine.requeue(r)?
@@ -298,7 +300,7 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
     Ok(i)
 }
 
-pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET> {
+pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET> {
     fn muskip_byte<ET:EngineTypes>(engine: &mut EngineReferences<ET>,is_negative:bool,b:u8) -> TeXResult<MuSkip<ET::MuDim>,ET> {
         crate::engine::gullet::methods::read_muskip_byte(
             engine,is_negative,b,
@@ -311,7 +313,7 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
         )
     }
     let (i,r) = expr_loop(engine,
-                          muskip_byte,muskip_cmd
+                          muskip_byte,muskip_cmd,&tk
     )?;
     if !r.is_cs_or_active() {
         engine.requeue(r)?
@@ -358,17 +360,17 @@ pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,
             n if n == PRIMITIVES.xdef => return super::tex::xdef(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.gdef => return super::tex::gdef(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.relax => (),
-            _ => todo!("throw error")
+            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
         }
-        _ => todo!("throw error")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     );
-    todo!("throw error")
+    Err(TeXError::General("TODO: Better error message".to_string()))
 }
 
 pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
-    let idx = engine.read_file_index()?;
+    let idx = engine.read_file_index(&tk)?;
     if !engine.read_keyword("to".as_bytes())? {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     let cs = engine.read_control_sequence(&tk)?;
     let mut ret = shared_vector::Vector::new();
@@ -460,17 +462,17 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
         ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)})) => {
             ET::Gullet::do_conditional(engine,*name,t,*cnd,true)
         }
-        _ => todo!("throw error")
+        _ => Err(TeXError::General("TODO: Better error message".to_string()))
     }
 }
 
-pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
+pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     match engine.state.get_group_type() {
         Some(GroupType::LeftRight) => (),
-        _ => todo!("error?")
+        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
     }
-    let del = match engine.read_opt_delimiter()? {
-        None => todo!("error?"),
+    let del = match engine.read_opt_delimiter(&tk)? {
+        None => return Err(TeXError::General("TODO: Better error message".to_string())),
         Some(c) => c
     };
     ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
@@ -480,45 +482,45 @@ pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -
 }
 
 pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
-    let i = engine.read_int(false)?.into();
+    let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     super::methods::do_marks(engine, i as usize,&tk)
 }
 
-pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
-    let i = engine.read_int(false)?.into();
+pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.topmarks, i as usize);Ok(())
 }
-pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
-    let i = engine.read_int(false)?.into();
+pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.firstmarks, i as usize);Ok(())
 }
-pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
-    let i = engine.read_int(false)?.into();
+pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.botmarks, i as usize);Ok(())
 }
-pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
-    let i = engine.read_int(false)?.into();
+pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.splitfirstmarks, i as usize);Ok(())
 }
-pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
-    let i = engine.read_int(false)?.into();
+pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
+    let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        todo!("throw error")
+        return Err(TeXError::General("TODO: Better error message".to_string()))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.splitbotmarks, i as usize);Ok(())
 }

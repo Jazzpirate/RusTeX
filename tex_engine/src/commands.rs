@@ -275,7 +275,7 @@ impl<ET:EngineTypes> PrimitiveCommand<ET> {
                 }
             }
             _ if name == PRIMITIVES.toks => {
-                let u = engine.read_register_index(false)?;
+                let u = engine.read_register_index(false,&token)?;
                 for t in &engine.state.get_toks_register(u).0 {
                     cont(engine.aux,engine.state,engine.gullet,t.clone())
                 }
