@@ -11,7 +11,7 @@ use crate::tex::characters::Character;
 /** The category code of a character.
 
 To convert between [`CategoryCode`]s and their numerical values (as [`u8`]), use [`CategoryCode::try_from`]
-and [`CategoryCode::into`], respectively.
+and [`u8::from`], respectively.
 
 # Example
 ```rust

@@ -153,7 +153,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         ret
     }
 
-    /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacterError`]
+    /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacter`]
     /// on encountering a character of code [`CategoryCode::Invalid`].
     pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut Csh<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<C>> {
         loop {

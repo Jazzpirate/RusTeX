@@ -22,6 +22,10 @@ See [doc] for more information.
   badness.
 - Some mechanisms have grown organically and should be overhauled, e.g. the way the stomach handles
   node lists.
+- error messages for content errors - a lot of them are TODO placeholders, mostly because
+  they should be handled by an [`ErrorHandler`](crate::utils::errors::ErrorHandler) that may recover
+  from them (as TeX does it - e.g. inserting 0 when a number is expected). This is implemented for
+  *some* errors, but not many.
 
 It should be noted that this crate primarily exists as the basis of (an upcoming reimplementation
 of) [RusTeX](https://github.com/slatex/RusTeX), a TeX-to-HTML converter, the current (old) implementation
