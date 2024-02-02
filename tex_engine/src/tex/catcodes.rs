@@ -24,7 +24,7 @@ let cat2 = CategoryCode::try_from(1).unwrap();
 assert_eq!(cat2,cat);
 ```
  */
-#[derive(Copy,PartialEq,Eq,Clone)]
+#[derive(Copy,PartialEq,Eq,Clone,Default)]
 pub enum CategoryCode {
     /// Escape character (0); usually `\`
     Escape = 0,
@@ -51,6 +51,7 @@ pub enum CategoryCode {
     /// Letter character (11), usually a-z and A-Z
     Letter = 11,
     /// Other character (12), usually e.g. `@`, `!`, `?`, etc.
+    #[default]
     Other = 12,
     /// Active character (13); usually `~`
     Active = 13,
@@ -58,9 +59,6 @@ pub enum CategoryCode {
     Comment = 14,
     /// Invalid character (15)
     Invalid = 15
-}
-impl Default for CategoryCode {
-    fn default() -> Self { CategoryCode::Other }
 }
 
 impl std::fmt::Debug for CategoryCode {
@@ -92,10 +90,10 @@ impl std::fmt::Display for CategoryCode {
     }
 }
 
-impl Into<u8> for CategoryCode {
-    fn into(self) -> u8 {
+impl From<CategoryCode> for u8 {
+    fn from(cc:CategoryCode) -> u8 {
         use CategoryCode::*;
-        match self {
+        match cc {
             Escape => 0,
             BeginGroup => 1,
             EndGroup => 2,

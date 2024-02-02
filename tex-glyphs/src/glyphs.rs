@@ -11,7 +11,7 @@ impl Glyph {
     /// # use tex_glyphs::glyphs::Glyph;
     /// assert_eq!(&Glyph::get("Gamma").to_string(),"Γ");
     /// ```
-    pub fn name<'a>(&'a self) -> GlyphName<'a> { GlyphName(&self.0) }
+    pub fn name(&self) -> GlyphName { GlyphName(&self.0) }
     /// Get the undefined glyph (i.e. the glyph with name `.undefined`).
     pub fn undefined() -> Self {
         Glyph(GlyphI::S(0))
@@ -118,8 +118,8 @@ pub(crate) const UNDEFINED_LIST: GlyphList = GlyphList([UNDEFINED; 256]);
 fn get_i(s:&str) -> Option<Glyph> {
     match crate::GLYPH_MAP.get(s) {
         Some(g) => Some(Glyph(GlyphI::S(*g))),
-        None if s.starts_with(".") => get_i(&s[1..]),
-        None if s.contains(".") => match s.find('.') {
+        None if s.starts_with('.') => get_i(&s[1..]),
+        None if s.contains('.') => match s.find('.') {
             Some(i) => get_i(&s[..i]),
             _ => unreachable!()
         }
@@ -154,10 +154,10 @@ fn get_i(s:&str) -> Option<Glyph> {
             get_i(&s[..s.len()-7]),
         None if s.ends_with("disp") =>
             get_i(&s[..s.len()-4]),
-        None if s.starts_with("_") && s.ends_with("_") =>
+        None if s.starts_with('_') && s.ends_with('_') =>
             get_i(&s[1..s.len()-1]),
-        None if s.contains("_") => {
-            let rets = s.split('_').filter(|v| !v.is_empty()).map(|s| get_i(s)).collect::<Vec<_>>();
+        None if s.contains('_') => {
+            let rets = s.split('_').filter(|v| !v.is_empty()).map(get_i).collect::<Vec<_>>();
             if rets.iter().any(|o| o.is_none()) {return None}
             Some(Glyph(GlyphI::Ls(rets.into_iter().map(|o| o.unwrap().0).collect())))
         }
@@ -169,7 +169,7 @@ fn get_i(s:&str) -> Option<Glyph> {
                     None //UNDEFINED.clone()
             }
         }
-        None if s.starts_with("u") => {
+        None if s.starts_with('u') => {
             match parse_unicode(&s[1..]) {
                 Some(Ok(c)) => Some(Glyph(GlyphI::Unicode(c))),
                 Some(Err(ls)) => Some(Glyph(GlyphI::Ls(ls))),
@@ -177,8 +177,8 @@ fn get_i(s:&str) -> Option<Glyph> {
                     None//UNDEFINED.clone()
             }
         }
-        None if s.ends_with("1") || s.ends_with("2") ||
-            s.ends_with("3") || s.ends_with("4") =>
+        None if s.ends_with('1') || s.ends_with('2') ||
+            s.ends_with('3') || s.ends_with('4') =>
             get_i(&s[..s.len()-1]),
         None if s == "SSsmall" => get_i("germandbls"),
         None if s.starts_with("aux") =>
@@ -203,22 +203,16 @@ fn get_i(s:&str) -> Option<Glyph> {
 }
 
 fn parse_one(s:&str) -> Option<char> {
-    u32::from_str_radix(s,16).map(|c| std::char::from_u32(c)).unwrap_or(None)
+    u32::from_str_radix(s,16).map(std::char::from_u32).unwrap_or(None)
 }
 fn parse_unicode(s:&str) -> Option<Result<char,Box<[GlyphI]>>> {
     let mut s = s.trim_start();
     if s.contains(' ') {
         let r = s.split(' ').map(parse_one).collect::<Option<Vec<_>>>();
-        match r {
-            Some(v) => return Some(Err(v.into_iter().map(|r| GlyphI::Unicode(r)).collect::<Vec<_>>().into())),
-            None => return None
-        }
+        return r.map(|v| Err(v.into_iter().map(GlyphI::Unicode).collect::<Vec<_>>().into()))
     }
     if s.len() == 4 {
-        match parse_one(s) {
-            Some(c) => return Some(Ok(c)),
-            None => return None
-        }
+        return parse_one(s).map(Ok)
     }
     if s.len() % 4 == 0 {
         let mut v = vec!();
@@ -233,9 +227,6 @@ fn parse_unicode(s:&str) -> Option<Result<char,Box<[GlyphI]>>> {
         }
         Some(Err(v.into_boxed_slice()))
     } else {
-        match parse_one(s) {
-            Some(c) => Some(Ok(c)),
-            None => None
-        }
+        parse_one(s).map(Ok)
     }
 }

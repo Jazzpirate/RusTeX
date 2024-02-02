@@ -15,6 +15,7 @@ use crate::tex::catcodes::CategoryCodeScheme;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::StringLineSource;
 use crate::tex::tokens::Token;
+use crate::utils::errors::{InvalidCharacter, RecoverableError, TeXError, TeXResult};
 
 pub mod strings;
 
@@ -44,6 +45,9 @@ pub trait Mouth<ET:EngineTypes> {
     fn push_exp(&mut self,exp:&TokenList<ET::Token>);
     /// Push a [`Vec`] of [`Token`]s to the [`Mouth`]. This is occasionally useful for things like `\write`.
     fn push_vec(&mut self, exp: Vec<ET::Token>);
+    /// Push a slice of [`Token`]s to the [`Mouth`], assumed to be in reverse order (i.e. the first
+    /// token to return is the last one in the slice).
+    fn push_slice_rev(&mut self, exp: &[ET::Token]);
     /// Push a [`MacroExpansion`] (with arguments already read) to the [`Mouth`]. The [`Mouth`] will return the [`Token`]s lazily,
     /// resolving the parameter tokens in the expansion in the process.
     fn push_macro_exp(&mut self,exp:MacroExpansion<ET::Token>);
@@ -52,20 +56,21 @@ pub trait Mouth<ET:EngineTypes> {
     /// This method should not be called directly, but rather through [`EngineReferences::requeue`]
     /// or [`Gullet::requeue`](crate::engine::gullet::Gullet::requeue).
     fn requeue(&mut self,t:ET::Token);
-    /// Get the next [`Token`] from the [`Mouth`]. Returns `None` if the [`Mouth`] is empty.
+    /// Get the next [`Token`] from the [`Mouth`].
     /// This method should not be called directly, but rather through [`EngineReferences::get_next`]
-    /// or [`Gullet::get_next_opt`](crate::engine::gullet::Gullet::get_next_opt).
-    fn get_next_opt(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Option<ET::Token>;
+    /// or [`Gullet::get_next_opt`](crate::engine::gullet::Gullet::get_next).
+    fn get_next(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Result<Option<ET::Token>,InvalidCharacter<ET::Char>>;
     /// Iterate over the [`Token`]s in the [`Mouth`] until `cont` returns `false`. Can be faster than repeatedly calling
-    /// [`get_next_opt`](Self::get_next_opt), but
+    /// [`get_next_opt`](Self::get_next), but
     /// blocking both state changes and expanding macros. Useful for e.g. reading macro arguments or the expansion list
     /// in `\def`.
     /// This method should not be called directly, but rather through [`EngineReferences::iterate`]
     /// or [`Gullet::iterate`](crate::engine::gullet::Gullet::iterate).
-    fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,token:&ET::Token,cont:Fn);
+    fn iterate<R,E,F:FnMut(&mut EngineAux<ET>,ET::Token) -> TeXResult<Option<R>,ET>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,cont:F,eof:E) -> TeXResult<R,ET>
+      where E:Fn(&EngineAux<ET>,&ET::State,&mut Self) -> TeXResult<(),ET>;
     /// `\endinput` - removes the last file from the [`Mouth`] without inserting `\everyeof` or an [`EOF`](crate::tex::catcodes::CommandCode::EOF)
     /// [`Token`].
-    fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State);
+    fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State) -> Result<(),InvalidCharacter<ET::Char>>;
     /// clears the mouth at the end of a run, if desired.
     fn finish(&mut self);
 
@@ -94,23 +99,23 @@ pub trait Mouth<ET:EngineTypes> {
     ///[`Token`] is encountered and returns that. Useful whenever a group is to be taken; e.g. when reading macro arguments.
     /// This method should not be called directly, but rather through [`EngineReferences::read_until_endgroup`]
     /// or [`Gullet::read_until_endgroup`](crate::engine::gullet::Gullet::read_until_endgroup).
-    fn read_until_endgroup<Fn:FnMut(&mut EngineAux<ET>,ET::Token)>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,token:&ET::Token,mut cont:Fn) -> ET::Token {
+    fn read_until_endgroup<E,F:FnMut(&mut EngineAux<ET>,ET::Token) -> TeXResult<(),ET>>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,mut cont:F,eof:E)
+        -> TeXResult<ET::Token,ET>
+        where E:Fn(&EngineAux<ET>,&ET::State,&mut Self) -> TeXResult<(),ET> {
         let mut ingroups = 0;
-        let mut eg:Option<ET::Token> = None;
-        self.iterate(aux,state,token,|a,t| {
+        self.iterate(aux,state,|a,t| {
             match t.command_code() {
                 CommandCode::BeginGroup => ingroups += 1,
                 CommandCode::EndGroup => {
-                    if ingroups == 0 { eg = Some(t);  return false }
+                    if ingroups == 0 { return Ok(Some(t)) }
                     ingroups -= 1;
                 }
-                CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => return true,
+                CommandCode::Primitive if t.is_primitive() == Some(PRIMITIVES.noexpand) => return Ok(None),
                 _ => (),
             }
-            cont(a,t);
-            true
-        });
-        eg.unwrap()
+            cont(a,t)?;
+            Ok(None)
+        },eof)
     }
 
     /// For debugging purposes, this method returns a string representation of the upcoming stuff in the [`Mouth`].
@@ -144,26 +149,19 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 
     fn finish(&mut self) {
-        for s in self.inputs.drain(..) { match s {
-          TokenSource::Vec(mut v) => {
-              v.clear(); self.vecs.push(v)
-          }
-            _ => ()
+        for s in self.inputs.drain(..) { if let TokenSource::Vec(mut v) = s {
+            v.clear(); self.vecs.push(v)
         } }
         self.start_ref.clear();
     }
 
     fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID> {
         for s in self.inputs.iter().rev() {
-            match s {
-                TokenSource::File(f,id) =>
-                    return SourceReference {
-                        file:*id,
-                        line:f.line(),
-                        column:f.column()
-                    },
-                _ => ()
-            }
+            if let TokenSource::File(f,id) = s { return SourceReference {
+                file:*id,
+                line:f.line(),
+                column:f.column()
+            } }
         }
         self.start_ref.last().copied().unwrap_or_default()
     }
@@ -207,40 +205,29 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         self.args = Some(exp);
     }
 
-    fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State) {
+    fn endinput(&mut self, aux:&mut EngineAux<ET>,state:&ET::State) -> Result<(),InvalidCharacter<ET::Char>> {
         for (i,s) in self.inputs.iter().enumerate().rev() {
-            match s {
-                TokenSource::File(f,_) => {
-                    aux.outputs.file_close(f.source.path().display());
-                    let TokenSource::File(mut r,_) = self.inputs.remove(i) else {unreachable!()};
-                    self.start_ref.pop();
-                    if r.state != MouthState::NewLine {
-                        let mut ret = Vec::new();
-                        match r.read(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char(), |t| ret.push(t)) {
-                            Ok(_) => (),
-                            Err(ic) => {
-                                match aux.error_handler.invalid_character(state, ic.0) {
-                                    Some(s) => self.push_string(s),
-                                    _ => ()
-                                }
-                                return
-                            }
-                        }
-                        self.with_list(|ls| ls.extend(ret.into_iter().rev()));
+            if let TokenSource::File(f,_) = s {
+                aux.outputs.file_close(f.source.path().display());
+                let TokenSource::File(mut r,_) = self.inputs.remove(i) else {unreachable!()};
+                self.start_ref.pop();
+                if r.state != MouthState::NewLine {
+                    let mut ret = Vec::new();
+                    match r.read(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char(), |t| ret.push(t)) {
+                        Ok(_) => (),
+                        Err(e) => e.recover(aux,state,self)?,
                     }
-                    return
+                    self.with_list(|ls| ls.extend(ret.into_iter().rev()));
                 }
-                _ => ()
+                return Ok(())
             }
         }
+        Ok(())
     }
 
     fn line_number(&self) -> usize {
         for s in self.inputs.iter().rev() {
-            match s {
-                TokenSource::File(s,_) => return s.line(),
-                _ => ()
-            }
+            if let TokenSource::File(s,_) = s { return s.line() }
         }
         0
     }
@@ -256,6 +243,9 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
 
     fn push_vec(&mut self, exp: Vec<ET::Token>) {
         self.with_list(|v| v.extend(exp.into_iter().rev()))
+    }
+    fn push_slice_rev(&mut self, exp: &[ET::Token]) {
+        self.with_list(|v| v.extend(exp.iter().cloned()))
     }
 
     fn push_string(&mut self, s: StringLineSource<ET::Char>) {
@@ -279,12 +269,12 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         self.start_ref.push(rf);
     }
 
-    fn get_next_opt(&mut self,aux:&mut EngineAux<ET>,state:&ET::State) -> Option<ET::Token> {
+    fn get_next(&mut self, aux:&mut EngineAux<ET>, state:&ET::State) -> Result<Option<ET::Token>,InvalidCharacter<ET::Char>> {
         while let Some(src) = self.inputs.last_mut() {
             match src {
                 TokenSource::Vec(v) => {
                     match v.pop() {
-                        Some(t) => return Some(t),
+                        Some(t) => return Ok(Some(t)),
                         _ => {
                             if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
                                 self.vecs.push(v);
@@ -294,13 +284,10 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                 }
                 TokenSource::String(s) => {
                     match s.get_next(aux.memory.cs_interner_mut(), state.get_catcode_scheme(), state.get_endline_char()) {
-                        Ok(Some(t)) => return Some(t),
-                        Ok(_) => return Some(self.end_file(aux,state)),
-                        Err(ic) => {
-                            match aux.error_handler.invalid_character(state, ic.0){
-                                Some(s) => self.push_string(s),
-                                _ => ()
-                            }
+                        Ok(Some(t)) => return Ok(Some(t)),
+                        Ok(None) => return Ok(Some(self.end_file(aux,state))),
+                        Err(c) => {
+                            c.recover::<_,InvalidCharacter<_>>(aux,state,self)?;
                             continue
                         }
                     }
@@ -309,28 +296,26 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let cc: &CategoryCodeScheme<ET::Char> = state.get_catcode_scheme();
                     let endline: Option<ET::Char> = state.get_endline_char();
                     match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
-                        Ok(Some(t)) => return Some(t),
-                        Ok(_) => return Some(self.end_file(aux,state)),
-                        Err(ic) => {
-                            match aux.error_handler.invalid_character(state, ic.0){
-                                Some(s) => self.push_string(s),
-                                _ => ()
-                            }
+                        Ok(Some(t)) => return Ok(Some(t)),
+                        Ok(None) => return Ok(Some(self.end_file(aux,state))),
+                        Err(c) => {
+                            c.recover::<_,InvalidCharacter<_>>(aux,state,self)?;
                             continue
                         }
                     }
                 }
             }
         }
-        None
+        Ok(None)
     }
 
-    fn iterate<Fn:FnMut(&mut EngineAux<ET>,ET::Token) -> bool>(&mut self,aux:&mut EngineAux<ET>,state:&ET::State,token:&ET::Token,mut cont:Fn) {
+    fn iterate<R,E,F:FnMut(&mut EngineAux<ET>,ET::Token) -> TeXResult<Option<R>,ET>>(&mut self, aux:&mut EngineAux<ET>, state:&ET::State, mut cont:F, eof:E) -> TeXResult<R,ET>
+    where E:Fn(&EngineAux<ET>,&ET::State,&mut Self) -> TeXResult<(),ET> {
         'top: loop {
             match self.inputs.last_mut() {
                 Some(TokenSource::Vec(v)) => {
                     while let Some(t) = v.pop() {
-                        if !cont(aux,t) {return}
+                        if let Some(r) = cont(aux,t)? { return Ok(r) }
                     }
                     if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
                         self.vecs.push(v);
@@ -341,13 +326,14 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let endline = state.get_endline_char();
                     loop {
                         match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
-                            Ok(Some(t)) => if !cont(aux,t) { return },
-                            Ok(_) => aux.error_handler.file_end_while_scanning(state,aux.memory.cs_interner(),token.clone()),
-                            Err(ic) => {
-                                match aux.error_handler.invalid_character(state, ic.0){
-                                    Some(s) => self.push_string(s),
-                                    _ => ()
-                                }
+                            Ok(Some(t)) =>
+                                if let Some(r) = cont(aux,t)? { return Ok(r) },
+                            Err(c) => {
+                                c.recover::<_,TeXError<_>>(aux,state,self)?;
+                                continue 'top
+                            }
+                            Ok(None) => {
+                                eof(aux, state, self)?;
                                 continue 'top
                             }
                         }
@@ -358,19 +344,20 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     let endline = state.get_endline_char();
                     loop {
                         match s.get_next(aux.memory.cs_interner_mut(), cc, endline) {
-                            Ok(Some(t)) => if !cont(aux,t) { return },
-                            Ok(_) => aux.error_handler.file_end_while_scanning(state,aux.memory.cs_interner(),token.clone()),
-                            Err(ic) => {
-                                match aux.error_handler.invalid_character(state, ic.0){
-                                    Some(s) => self.push_string(s),
-                                    _ => ()
-                                }
+                            Ok(Some(t)) =>
+                                if let Some(r) = cont(aux,t)? { return Ok(r) },
+                            Err(c) => {
+                                c.recover::<_,TeXError<_>>(aux,state,self)?;
+                                continue 'top
+                            }
+                            Ok(None) => {
+                                eof(aux, state, self)?;
                                 continue 'top
                             }
                         }
                     }
                 }
-                None => aux.error_handler.file_end_while_scanning(state,aux.memory.cs_interner(),token.clone()),
+                None => eof(aux, state, self)?,
             }
         }
     }
@@ -410,21 +397,21 @@ impl<ET:EngineTypes> DefaultMouth<ET> {
             inputs:self.inputs.into_iter().map(|s| match s {
                 TokenSource::String(s) => TokenSource::String(s),
                 TokenSource::File(s,id) => TokenSource::File(s,id),
-                TokenSource::Vec(v) => TokenSource::Vec(v.into_iter().map(|t|token(t)).collect())
+                TokenSource::Vec(v) => TokenSource::Vec(v.into_iter().map(&mut token).collect())
             }).collect(),
             args:self.args.map(|[a0,a1,a2,a3,a4,a5,a6,a7,a8]| [
-                a0.into_iter().map(|t| token(t)).collect(),
-                a1.into_iter().map(|t| token(t)).collect(),
-                a2.into_iter().map(|t| token(t)).collect(),
-                a3.into_iter().map(|t| token(t)).collect(),
-                a4.into_iter().map(|t| token(t)).collect(),
-                a5.into_iter().map(|t| token(t)).collect(),
-                a6.into_iter().map(|t| token(t)).collect(),
-                a7.into_iter().map(|t| token(t)).collect(),
-                a8.into_iter().map(|t| token(t)).collect()
+                a0.into_iter().map(&mut token).collect(),
+                a1.into_iter().map(&mut token).collect(),
+                a2.into_iter().map(&mut token).collect(),
+                a3.into_iter().map(&mut token).collect(),
+                a4.into_iter().map(&mut token).collect(),
+                a5.into_iter().map(&mut token).collect(),
+                a6.into_iter().map(&mut token).collect(),
+                a7.into_iter().map(&mut token).collect(),
+                a8.into_iter().map(&mut token).collect()
             ]),
             start_ref:self.start_ref,
-            vecs:self.vecs.into_iter().map(|v| v.into_iter().map(|t| token(t)).collect()).collect()
+            vecs:self.vecs.into_iter().map(|v| v.into_iter().map(&mut token).collect()).collect()
         }
     }
     fn with_list<Fn:FnOnce(&mut Vec<ET::Token>)>(&mut self,f:Fn) {

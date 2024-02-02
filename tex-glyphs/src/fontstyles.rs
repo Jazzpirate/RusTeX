@@ -138,8 +138,8 @@ pub struct CharConverter<'a,S:AsRef<str>> {
 }
 impl<'a,S:AsRef<str>> Display for CharConverter<'a,S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut chars = self.iter.as_ref().chars();
-        while let Some(mut c) = chars.next() {
+        let chars = self.iter.as_ref().chars();
+        for mut c in chars {
             self.maps.iter(|m| {
                 if let Some(nc) = m.get(&c) {
                     c = *nc;

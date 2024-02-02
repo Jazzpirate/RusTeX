@@ -1,15 +1,13 @@
-use tex_engine::commands::{TeXCommand, CommandScope, Macro, PrimitiveCommand};
+use tex_engine::commands::{TeXCommand, PrimitiveCommand};
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::engine::{EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference};
-use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::state::{GroupType, State};
 use tex_engine::engine::stomach::{Stomach, StomachData};
-use tex_engine::tex::nodes::{BoxTarget, NodeList};
+use tex_engine::tex::nodes::NodeList;
 use tex_engine::tex::numerics::Dim32;
 use tex_engine::tex::tokens::CompactToken;
-use crate::engine::{Font, Refs, Types};
-use crate::extension::FontChange;
+use crate::engine::{Font, Refs, Res, Types};
 use crate::nodes::{LineSkip, RusTeXNode};
 use crate::state::RusTeXState;
 use tex_engine::engine::mouth::Mouth;
@@ -21,7 +19,6 @@ use tex_engine::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use tex_engine::tex::numerics::TeXDimen;
 use tex_engine::tex::numerics::Skip;
 use tex_engine::prelude::*;
-use tex_engine::tex::catcodes::AT_LETTER_SCHEME;
 use tex_engine::tex::nodes::boxes::{BoxType, ToOrSpread};
 
 pub struct RusTeXStomach {
@@ -48,7 +45,7 @@ impl Stomach<Types> for RusTeXStomach {
         vsplit(engine, nodes, target)
     }
 
-    fn assign_font(engine: Refs, _token: CompactToken, f: Font, global: bool) {
+    fn assign_font(engine: Refs, _token: CompactToken, f: Font, global: bool) -> Res<()> {
         let g = engine.state.get_group_level() == 0 || global || engine.aux.extension.change_markers.len() == 0;
         tex_engine::add_node!(Self;engine,
                        VNode::Custom(RusTeXNode::FontChange(f.clone(),g)),
@@ -56,15 +53,15 @@ impl Stomach<Types> for RusTeXStomach {
                        MathNode::Custom(RusTeXNode::FontChange(f.clone(),g))
         );
         if !g {
-            engine.aux.extension.change_markers.last_mut().unwrap().push(FontChange(f.clone()));
+            *engine.aux.extension.change_markers.last_mut().unwrap() += 1;
         }
         engine.state.set_current_font(engine.aux,f,global);
-        insert_afterassignment(engine);
+        insert_afterassignment(engine);Ok(())
     }
 
-    fn close_box(engine:&mut EngineReferences<Types>, bt:BoxType) {
+    fn close_box(engine:&mut EngineReferences<Types>, bt:BoxType) -> Res<()> {
         let markers = std::mem::take(engine.aux.extension.change_markers.last_mut().unwrap());
-        for _ in markers {
+        for _ in 0..markers {
             tex_engine::add_node!(Self;engine,
                             VNode::Custom(RusTeXNode::FontChangeEnd),
                             HNode::Custom(RusTeXNode::FontChangeEnd),
@@ -74,8 +71,9 @@ impl Stomach<Types> for RusTeXStomach {
         tex_engine::engine::stomach::methods::close_box(engine,bt)
     }
 
-    fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<HNode<Types>>, sourceref: SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>) {
-        if children.is_empty() { return }
+    fn split_paragraph(engine: Refs, specs: Vec<ParLineSpec<Types>>, children: Vec<HNode<Types>>, sourceref: SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>)
+        -> Res<()> {
+        if children.is_empty() { return Ok(()) }
         let ret = split_paragraph_roughly(engine,specs.clone(),children,sourceref.clone());
         engine.stomach.prevent_shipout = true;
         Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphBegin{specs,
@@ -83,19 +81,20 @@ impl Stomach<Types> for RusTeXStomach {
             end:engine.mouth.current_sourceref(),
             lineskip:LineSkip::get(engine.state),
             parskip:engine.state.get_primitive_skip(PRIMITIVES.parskip)
-        }));
+        }))?;
         let mut redo = vec!();
         for line in ret {
             match line {
                 ParLine::Adjust(n) => redo.push(n),
-                ParLine::Line(bx) => Self::add_node_v(engine,VNode::Box(bx))
+                ParLine::Line(bx) => Self::add_node_v(engine,VNode::Box(bx))?
             }
         }
         engine.stomach.prevent_shipout = false;
-        Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphEnd));
+        Self::add_node_v(engine,VNode::Custom(RusTeXNode::ParagraphEnd))?;
         for r in redo.into_iter() {
-            Self::add_node_v(engine,r);
+            Self::add_node_v(engine,r)?;
         }
+        Ok(())
     }
     /*
     fn add_node_v(engine: &mut EngineReferences<Types>, node: VNode<Types>) {
@@ -107,8 +106,8 @@ impl Stomach<Types> for RusTeXStomach {
     }
      */
 
-    fn maybe_do_output(engine:&mut EngineReferences<Types>, penalty:Option<i32>) {
-        if engine.stomach.prevent_shipout { return }
+    fn maybe_do_output(engine:&mut EngineReferences<Types>, penalty:Option<i32>) -> Res<()> {
+        if engine.stomach.prevent_shipout { return Ok(()) }
         let continuous = engine.stomach.continuous;
         let data = engine.stomach.data_mut();
         if !data.in_output && data.open_lists.is_empty() && !data.page.is_empty() {
@@ -116,15 +115,16 @@ impl Stomach<Types> for RusTeXStomach {
                 //data.pagegoal = <Types as EngineTypes>::Dim::from_sp(180224000);
                 //engine.state.set_primitive_dim(engine.aux,PRIMITIVES.vsize,data.pagegoal,true);
                 if data.page_contains_boxes && data.pagetotal > <Types as EngineTypes>::Dim::from_sp(6553600 * 5) {
-                    do_shipout(engine,penalty.or(Some(-10000)),|_|());
+                    do_shipout(engine,penalty.or(Some(-10000)),|_|())?;
                     engine.stomach.data_mut().page_contains_boxes = true;
+                    Ok(())
                 } else if penalty.is_some() {
-                    do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip::new(Dim32(655360),None,None))));
-                }
+                    do_shipout(engine,penalty,|data|data.page.push(VNode::VSkip(Skip::new(Dim32(655360),None,None))))
+                } else {Ok(())}
             } else if data.pagetotal >= data.pagegoal || penalty.is_some() {
                 RusTeXStomach::do_output(engine, penalty)
-            }
-        }
+            } else {Ok(())}
+        } else {Ok(())}
     }
 
     fn open_align(engine: Refs, _inner: BoxType, between: BoxType) {
@@ -140,10 +140,10 @@ impl Stomach<Types> for RusTeXStomach {
                     children: vec!()
                 }
             });
-        Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignBegin))
+        Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignBegin)).unwrap()
     }
-    fn close_align(engine: &mut EngineReferences<Types>) {
-        Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignEnd));
+    fn close_align(engine: &mut EngineReferences<Types>) -> Res<()> {
+        Self::add_node_v(engine,VNode::Custom(RusTeXNode::HAlignEnd))?;
         match engine.state.get_group_type() {
             Some(GroupType::Align) => (),
             _ => todo!("throw error")
@@ -159,7 +159,7 @@ impl Stomach<Types> for RusTeXStomach {
                         }));
                     }
                     _ => for c in children {
-                        Self::add_node_v(engine, c);
+                        Self::add_node_v(engine, c)?;
                     }
                 }
             }
@@ -170,7 +170,7 @@ impl Stomach<Types> for RusTeXStomach {
                 }
             }
             _ => todo!("throw error")
-        };
+        };Ok(())
     }
 }
 
@@ -242,7 +242,7 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
     SplitResult{first:nodes,rest,split_penalty}
 }
 
-fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Types>,penalty:Option<i32>,f:F) {
+fn do_shipout<F:FnOnce(&mut StomachData<Types>)>(engine:&mut EngineReferences<Types>,penalty:Option<i32>,f:F) -> Res<()> {
     macro_rules! set_empty{
         ($id:ident) => {
             engine.state.set_command(&engine.aux,engine.aux.extension.$id,Some(TeXCommand::Macro(engine.aux.extension.empty.clone())),true)

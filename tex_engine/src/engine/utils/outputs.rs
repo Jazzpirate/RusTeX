@@ -1,16 +1,10 @@
 use std::fmt::Display;
-use crate::engine::TeXError;
 
 pub trait Outputs {
     fn new() -> Self;
 
     fn message<D:Display>(&self,text:D) {
         log::info!(target:"message","{}",text);
-    }
-
-    fn errmessage<D:Display>(&self,text:D) {
-        log::error!(target:"errmessage","{}",text);
-        TeXError::throw("run aborted")
     }
 
     fn file_open<D:Display>(&self,text:D) {

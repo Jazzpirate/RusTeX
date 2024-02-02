@@ -7,7 +7,6 @@ use tex_engine::tex::numerics::{Dim32, Mu, MuSkip, Skip};
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{CSName, Font, Types};
 use tex_engine::tex::tokens::Token;
-use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::prelude::*;
@@ -45,9 +44,9 @@ impl State<Types> for RusTeXState {
     fn pop(&mut self, aux: &mut EngineAux<Types>, mouth: &mut <Types as EngineTypes>::Mouth) {
         self.0.pop(aux,mouth);
         let closefont = CompactToken::from_cs(
-            aux.memory.cs_interner_mut().new(CLOSE_FONT)
+            aux.memory.cs_interner_mut().from_str(CLOSE_FONT)
         );
-        for _ in aux.extension.pop() {
+        for _ in 0..aux.extension.pop() {
             mouth.requeue(closefont);
         }
     }

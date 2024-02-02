@@ -65,12 +65,7 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     /// Check if this token is a control sequence or an active character
 
     fn is_cs_or_active(&self) -> bool {
-        match self.to_enum() {
-            StandardToken::ControlSequence(_) => true,
-            StandardToken::Character(_, CommandCode::Active) => true,
-            StandardToken::Primitive(_) => true,
-            _ => false
-        }
+        matches!(self.to_enum(), StandardToken::ControlSequence(_) | StandardToken::Character(_, CommandCode::Active) | StandardToken::Primitive(_))
     }
 
     /// Check if this token is a control sequence with the given name.
@@ -103,7 +98,10 @@ pub trait Token:Clone+Eq+'static+std::fmt::Debug+Sized {
     fn display_fmt<W:Write>(&self, int:&<Self::CS as CSName<Self::Char>>::Handler, cc:&CategoryCodeScheme<Self::Char>, escapechar:Option<Self::Char>, f: &mut W) -> std::fmt::Result {
         match self.to_enum() {
             StandardToken::Character(_,CommandCode::Space) => f.write_char(' '),
-            StandardToken::Character(c,_) => Ok(c.display_fmt(f)),
+            StandardToken::Character(c,_) => {
+                c.display_fmt(f);
+                Ok(())
+            },
             StandardToken::ControlSequence(cs) =>
                 cs.display_fmt(int,cc,escapechar,f),
             StandardToken::Primitive(id) => write!(f, "{}pdfprimitive {}", Self::Char::display_opt(escapechar), id.display(escapechar))
@@ -191,7 +189,7 @@ impl CompactToken {
 
     fn as_string(&self) -> Option<InternedCSName<u8>> {
         if self.is_string() {
-            Some((self.0,PhantomData::default()))
+            Some((self.0,PhantomData))
             //Some(InternedString::try_from_usize(self.0 as usize).unwrap())
         } else {
             None

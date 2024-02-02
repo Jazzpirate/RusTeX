@@ -1,5 +1,6 @@
 /*! Methods for [`PrimitiveCommand`]s and for registering new ones */
 use std::sync::RwLock;
+use either::Either;
 use lazy_static::lazy_static;
 use crate::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
@@ -25,7 +26,7 @@ macro_rules! cmstodos {
 macro_rules! cmtodo {
     ($engine:ident,$name:ident) => {{
         let command = crate::commands::PrimitiveCommand::SimpleExpandable(
-            |e,_| crate::utils::errors::TeXError::throw(format!("Not yet implemented: \\{} at {}",
+            |e,_| e.general_error(format!("Not yet implemented: \\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
@@ -39,7 +40,7 @@ macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {{
         let command = crate::commands::PrimitiveCommand::Unexpandable {
             scope:crate::commands::CommandScope::Any,
-            apply:|e,_| crate::utils::errors::TeXError::throw(format!("Not yet implemented: \\{} at {}",
+            apply:|e,_| e.general_error(format!("Not yet implemented: \\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
@@ -53,12 +54,13 @@ pub(crate) use cmtodos;
 pub(crate) use cmstodos;
 pub(crate) use cmtodo;
 pub(crate) use cmstodo;
+use crate::utils::errors::TeXResult;
 
 /// Creates a new expandable primitive and registers it with the engine.
 pub fn register_expandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,&mut Vec<<E::Types as EngineTypes>::Token>,<E::Types as EngineTypes>::Token)) {
+    f:fn(&mut EngineReferences<E::Types>,&mut Vec<<E::Types as EngineTypes>::Token>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>) {
     let command = PrimitiveCommand::Expandable(f);
     let refs = engine.get_engine_refs();
     refs.state.register_primitive(refs.aux,name,command);
@@ -68,7 +70,7 @@ pub fn register_expandable<E:TeXEngine>(
 pub fn register_simple_expandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token)) {
+    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>) {
     let command = PrimitiveCommand::SimpleExpandable(f);
     let refs = engine.get_engine_refs();
     refs.state.register_primitive(refs.aux,name,command);
@@ -78,7 +80,7 @@ pub fn register_simple_expandable<E:TeXEngine>(
 pub fn register_conditional<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> bool) {
+    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<bool,E::Types>) {
     let command = PrimitiveCommand::Conditional(f);
     let refs = engine.get_engine_refs();
     refs.state.register_primitive(refs.aux,name,command);
@@ -89,7 +91,7 @@ pub fn register_unexpandable<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
     scope: CommandScope,
-    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token)) {
+    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>) {
     let command = PrimitiveCommand::Unexpandable { scope, apply:f };
     let refs = engine.get_engine_refs();
     refs.state.register_primitive(refs.aux,name,command)
@@ -106,8 +108,8 @@ pub fn register_primitive_int<E:TeXEngine>(engine:&mut E,names:&[&'static str]) 
 /// Creates a new primitive command that yields (and optionally assigns) an
 ///integer value and registers it with the engine.
 pub fn register_int<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> <E::Types as EngineTypes>::Int,
-    assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool)>
+                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<<E::Types as EngineTypes>::Int,E::Types>,
+    assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Int { read,assign };
@@ -117,8 +119,8 @@ pub fn register_int<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// dimension value and registers it with the engine.
 pub fn register_dim<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> <E::Types as EngineTypes>::Dim,
-                                 assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool)>
+                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<<E::Types as EngineTypes>::Dim,E::Types>,
+                                 assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Dim { read,assign };
@@ -128,8 +130,8 @@ pub fn register_dim<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// skip value and registers it with the engine.
 pub fn register_skip<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> Skip<<E::Types as EngineTypes>::Dim>,
-                                 assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool)>
+                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Skip<<E::Types as EngineTypes>::Dim>,E::Types>,
+                                 assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Skip { read,assign };
@@ -139,8 +141,8 @@ pub fn register_skip<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// muskip value and registers it with the engine.
 pub fn register_muskip<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> MuSkip<<E::Types as EngineTypes>::MuDim>,
-                                  assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool)>
+                                  read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<MuSkip<<E::Types as EngineTypes>::MuDim>,E::Types>,
+                                  assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::MuSkip { read,assign };
@@ -150,8 +152,8 @@ pub fn register_muskip<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// font value and registers it with the engine.
 pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                    read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> <E::Types as EngineTypes>::Font,
-                                    assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool)>
+                                    read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<<E::Types as EngineTypes>::Font,E::Types>,
+                                    assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::FontCmd { read,assign };
@@ -161,7 +163,7 @@ pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
 /// Creates a new primitive command that yields a
 /// box and registers it with the engine.
 pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> Result<Option<TeXBox<E::Types>>,BoxInfo<E::Types>>
+                                  read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Either<Option<TeXBox<E::Types>>,BoxInfo<E::Types>>,E::Types>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Box(read);
@@ -170,7 +172,7 @@ pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
 
 /// Creates a new primitive assignment command.
 pub fn register_assignment<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 assign:for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool)
+                                 assign:for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Assignment(assign);
@@ -214,9 +216,9 @@ pub fn register_whatsit<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
     get:fn(&mut EngineReferences<E::Types>, <E::Types as EngineTypes>::Token)
-             -> Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>)>>,
-    immediate:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token),
-    the:Option<fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> Vec<<E::Types as EngineTypes>::Token>>
+             -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>) -> TeXResult<(),E::Types>>>,E::Types>,
+    immediate:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>,
+    the:Option<fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Vec<<E::Types as EngineTypes>::Token>,E::Types>>
 ) {
     let command = PrimitiveCommand::Whatsit { get,immediate, the };
     let refs = engine.get_engine_refs();
@@ -255,7 +257,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
     }
     /// Return the [`PrimitiveIdentifier`] of the primitive command with the given name.
     pub fn get_name(&self,s:&str) -> Option<PrimitiveIdentifier> {
-        self.names.get(s).map(|&u| PrimitiveIdentifier::try_from_u16(u)).flatten()
+        self.names.get(s).and_then(|&u| PrimitiveIdentifier::try_from_u16(u))
     }
 }
 
@@ -264,7 +266,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
 ///
 /// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](static@PRIMITIVES) instance.
 pub struct PrimitiveInterner {
-    interner:RwLock<string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
+    interner:RwLock<string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
     pub globaldefs:PrimitiveIdentifier,
     pub relax:PrimitiveIdentifier,
     pub mag:PrimitiveIdentifier,

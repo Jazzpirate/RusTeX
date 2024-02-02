@@ -6,7 +6,7 @@ use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::{display_do_indent, NodeTrait, NodeType};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::CustomNodeTrait;
-use crate::tex_error;
+use crate::utils::errors::{TeXError, TeXResult};
 
 #[derive(Clone,Debug)]
 pub enum PDFNode<ET:EngineTypes> {
@@ -70,71 +70,71 @@ impl NumOrName {
 #[derive(Debug,Clone)]
 pub enum PDFStruct { Num(i64),Name(String),Other(String) }
 
-pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> Option<NumOrName> {
-    match engine.read_keywords(&[b"num",b"name"]) {
-        Some(b"num") => Some(NumOrName::Num(engine.read_int(false).into())),
+pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> TeXResult<Option<NumOrName>,ET> {
+    match engine.read_keywords(&[b"num",b"name"])? {
+        Some(b"num") => Ok(Some(NumOrName::Num(engine.read_int(false)?.into()))),
         Some(b"name") => {
             let mut str = String::new();
-            engine.read_braced_string(true,true,token,&mut str);
-            Some(NumOrName::Name(str))
+            engine.read_braced_string(true,true,token,&mut str)?;
+            Ok(Some(NumOrName::Name(str)))
         }
-        _ => None
+        _ => Ok(None)
     }
 }
 
-pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> PDFDestType<ET::Dim> {
-    match engine.read_keywords(&[b"xyz",b"fitr",b"fitbh",b"fitbv",b"fitb",b"fith",b"fitv",b"fit"]) {
+pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<PDFDestType<ET::Dim>,ET> {
+    match engine.read_keywords(&[b"xyz",b"fitr",b"fitbh",b"fitbv",b"fitb",b"fith",b"fitv",b"fit"])? {
         Some(b"xyz") => {
-            let zoom = if engine.read_keyword(b"zoom") {
-                Some(engine.read_int(false).into())
+            let zoom = if engine.read_keyword(b"zoom")? {
+                Some(engine.read_int(false)?.into())
             } else {None};
-            PDFDestType::XYZ{zoom}
+            Ok(PDFDestType::XYZ{zoom})
         }
         Some(b"fitr") => {
             let mut width = None;
             let mut height = None;
             let mut depth = None;
             loop {
-                match engine.read_keywords(&[b"width",b"height",b"depth"]) {
-                    Some(b"width") => width = Some(engine.read_dim(false)),
-                    Some(b"height") => height = Some(engine.read_dim(false)),
-                    Some(b"depth") => depth = Some(engine.read_dim(false)),
+                match engine.read_keywords(&[b"width",b"height",b"depth"])? {
+                    Some(b"width") => width = Some(engine.read_dim(false)?),
+                    Some(b"height") => height = Some(engine.read_dim(false)?),
+                    Some(b"depth") => depth = Some(engine.read_dim(false)?),
                     _ => break
                 }
             }
-            PDFDestType::Fitr{width,height,depth}
+            Ok(PDFDestType::Fitr{width,height,depth})
         }
-        Some(b"fitbh") => PDFDestType::Fitbh,
-        Some(b"fitbv") => PDFDestType::Fitbv,
-        Some(b"fitb") => PDFDestType::Fitb,
-        Some(b"fith") => PDFDestType::Fith,
-        Some(b"fitv") => PDFDestType::Fitv,
-        Some(b"fit") => PDFDestType::Fit,
+        Some(b"fitbh") => Ok(PDFDestType::Fitbh),
+        Some(b"fitbv") => Ok(PDFDestType::Fitbv),
+        Some(b"fitb") => Ok(PDFDestType::Fitb),
+        Some(b"fith") => Ok(PDFDestType::Fith),
+        Some(b"fitv") => Ok(PDFDestType::Fitv),
+        Some(b"fit") => Ok(PDFDestType::Fit),
         _ => {
-            tex_error!(engine,missing_keyword,&["xyz","fitr","fitbh","fitbv","fitb","fith","fitv","fit"]);
-            PDFDestType::XYZ {zoom:None}
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["xyz","fitr","fitbh","fitbv","fitb","fith","fitv","fit"])?;
+            Ok(PDFDestType::XYZ {zoom:None})
         }
     }
 }
 
-pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> ActionSpec {
-    match engine.read_keywords(&[b"user",b"goto",b"thread"]) {
+pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::Token) -> TeXResult<ActionSpec,ET> {
+    match engine.read_keywords(&[b"user",b"goto",b"thread"])? {
         Some(b"user") => {
             let mut ret = String::new();
-            engine.read_braced_string(true,true,token,&mut ret);
-            ActionSpec::User(ret)
+            engine.read_braced_string(true,true,token,&mut ret)?;
+            Ok(ActionSpec::User(ret))
         }
         Some(b"goto") => {
-            let file = if engine.read_keyword(b"file") {
+            let file = if engine.read_keyword(b"file")? {
                 let mut file = String::new();
-                engine.read_braced_string(true,true,token,&mut file);
+                engine.read_braced_string(true,true,token,&mut file)?;
                 Some(file)
             } else {None};
-            let struct_ = if engine.read_keyword(b"struct") {
-                match num_or_name(engine,token) {
+            let struct_ = if engine.read_keyword(b"struct")? {
+                match num_or_name(engine,token)? {
                     None => {
                         let mut ret = String::new();
-                        engine.read_braced_string(true,true,token,&mut ret);
+                        engine.read_braced_string(true,true,token,&mut ret)?;
                         Some(PDFStruct::Other(ret))
                     },
                     Some(NumOrName::Num(i)) => {
@@ -147,65 +147,65 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
             } else {None};
             match file {
                 None => {
-                    match num_or_name(engine,token) {
-                        Some(n) => ActionSpec::Goto(GotoAction::Current {
+                    match num_or_name(engine,token)? {
+                        Some(n) => Ok(ActionSpec::Goto(GotoAction::Current {
                             struct_,page:None,target:n
-                        }),
+                        })),
                         _ => {
-                            let page = if engine.read_keyword(b"page") {
-                                Some(engine.read_int(false).into())
+                            let page = if engine.read_keyword(b"page")? {
+                                Some(engine.read_int(false)?.into())
                             } else {None};
                             let mut str = String::new();
-                            engine.read_braced_string(true,true,token,&mut str);
-                            ActionSpec::Goto(GotoAction::Current{
+                            engine.read_braced_string(true,true,token,&mut str)?;
+                            Ok(ActionSpec::Goto(GotoAction::Current{
                                 struct_,page,target:NumOrName::Name(str)
-                            })
+                            }))
                         }
                     }
                 }
                 Some(filename) => {
-                    let (page,target) = if engine.read_keyword(b"name") {
+                    let (page,target) = if engine.read_keyword(b"name")? {
                         let mut str = String::new();
-                        engine.read_braced_string(true,true,token,&mut str);
+                        engine.read_braced_string(true,true,token,&mut str)?;
                         (None,str)
                     } else {
-                        let page = if engine.read_keyword(b"page") {
-                            Some(engine.read_int(false).into())
+                        let page = if engine.read_keyword(b"page")? {
+                            Some(engine.read_int(false)?.into())
                         } else {None};
                         let mut str = String::new();
-                        engine.read_braced_string(true,true,token,&mut str);
+                        engine.read_braced_string(true,true,token,&mut str)?;
                         (page,str)
                     };
-                    let newwindow = match engine.read_keywords(&[b"newwindow",b"nonewwindow"]) {
+                    let newwindow = match engine.read_keywords(&[b"newwindow",b"nonewwindow"])? {
                         Some(b"newwindow") => Some(true),
                         Some(b"nonewwindow") => Some(false),
                         _ => None
                     };
-                    ActionSpec::Goto(GotoAction::File{
+                    Ok(ActionSpec::Goto(GotoAction::File{
                         filename,struct_,page,target,newwindow
-                    })
+                    }))
                 }
             }
         }
         Some(b"thread") => {
-            let file = if engine.read_keyword(b"file") {
+            let file = if engine.read_keyword(b"file")? {
                 let mut file = String::new();
-                engine.read_braced_string(true,true,token,&mut file);
+                engine.read_braced_string(true,true,token,&mut file)?;
                 Some(file)
             } else {None};
 
-            match num_or_name(engine,token) {
-                Some(n) => ActionSpec::Thread{file,target:n},
+            match num_or_name(engine,token)? {
+                Some(n) => Ok(ActionSpec::Thread{file,target:n}),
                 None => {
-                    tex_error!(engine,missing_keyword,&["num","name"]);
-                    ActionSpec::Thread {file,target:NumOrName::Num(0)}
+                    TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["num","name"])?;
+                    Ok(ActionSpec::Thread {file,target:NumOrName::Num(0)})
                 }
             }
 
         }
         None => {
-            tex_error!(engine,missing_keyword,&["user","goto","thread"]);
-            ActionSpec::User(String::new())
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["user","goto","thread"])?;
+            Ok(ActionSpec::User(String::new()))
         },
         _ => unreachable!()
     }
@@ -282,10 +282,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
         }
     }
     fn nodetype(&self) -> NodeType { NodeType::WhatsIt }
-    fn opaque(&self) -> bool { match self {
-        PDFNode::Color(_) => true,
-        _ => false
-    } }
+    fn opaque(&self) -> bool { matches!(self, PDFNode::Color(_)) }
     fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         display_do_indent(indent,f)?;
         match self {
@@ -570,7 +567,7 @@ impl PDFColor {
             PDFColor{R:(r.round() as u8), G:(g.round() as u8), B:(b.round() as u8)}
         } else if matches!(ls.last(),Some(&"G")) && ls.len() > 1 {
             let x = 255.0 * parse!(ls[0]);
-            if x > 255.0 || x < 0.0  {
+            if !(0.0..=255.0).contains(&x)  {
                 return Self::black();
             }
             let x = (x.round()) as u8;

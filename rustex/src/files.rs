@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 use tex_engine::engine::{EngineAux, EngineTypes};
 use tex_engine::engine::filesystem::{File, FileSystem, NoOutputFileSystem, VirtualFile};
-use tex_engine::tex::catcodes::CategoryCodeScheme;
 use tex_engine::tex::characters::{StringLineSource, TextLine};
-use tex_engine::tex::tokens::Token;
-use tex_engine::utils::errors::ErrorHandler;
+use tex_engine::utils::errors::TeXResult;
 use tex_engine::utils::Ptr;
 use tex_engine::prelude::CSName;
 
@@ -28,12 +26,11 @@ impl FileSystem for RusTeXFileSystem {
             svg:(Some(id),StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into())
         }
     }
-    fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
+    fn ref_str(&self, id: <Self::File as File>::SourceRefID) -> &str {
         self.inner.ref_str(id)
     }
 
     fn get<S:AsRef<str>>(&mut self,path:S) -> Self::File {
-        use tex_engine::tex::characters::*;
         let sr = path.as_ref();
         if sr.ends_with("pgfsys-rustex.def") {
             VirtualFile {
@@ -75,15 +72,14 @@ impl FileSystem for RusTeXFileSystem {
         self.inner.write(idx,string,newlinechar,aux)
     }
 
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 state:&ET::State, cont:F
-    ) {
-        self.inner.read::<ET,F>(idx,eh,handler,state,cont)
+    ) -> TeXResult<(),ET> {
+        self.inner.read::<ET,F>(idx,handler,state,cont)
     }
 
-    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F) {
-        self.inner.readline(idx,eh,state,cont)
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, state:&ET::State,cont:F) -> TeXResult<(),ET> {
+        self.inner.readline(idx,state,cont)
     }
 }

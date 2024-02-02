@@ -150,7 +150,7 @@ impl Dim32 {
             if delta > 65536 { val = val + 32768 - 50000; }
             write!(f,"{}",val/65536)?;
             val = 10*(val%65536);
-            delta = delta*10;
+            delta *= 10;
         }
         write!(f,"{}",unit)
     }
@@ -167,8 +167,8 @@ impl Display for Dim32 {
         Self::display_num(self.0,"pt",f)
     }
 }
-impl Into<i64> for Dim32 {
-    fn into(self) -> i64 { self.0 as i64 }
+impl From<Dim32> for i64 {
+    fn from(d:Dim32) -> i64 { d.0 as i64 }
 }
 
 impl TeXDimen for Dim32 {
@@ -221,7 +221,7 @@ pub struct Skip<D:TeXDimen> {
 }
 
 /// A stretch/shrink component of a [`Skip`].
-#[derive(Clone,Copy,Eq,PartialEq,Debug,Ord)]
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub enum StretchShrink<D:TeXDimen> { Dim(D), Fil(i32), Fill(i32), Filll(i32) }
 impl<D:TeXDimen> StretchShrink<D> {
     /// Returns a new [`StretchShrink`] from a floating-point number and a unit. The unit is assumed to be
@@ -249,17 +249,23 @@ impl<D:TeXDimen> Add<StretchShrink<D>> for StretchShrink<D> {
 }
 impl<D:TeXDimen> PartialOrd for StretchShrink<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+
+}
+impl<D:TeXDimen> Ord for StretchShrink<D> {
+    fn cmp(&self, other: &Self) -> Ordering {
         match (self,other) {
-            (Self::Dim(d1),Self::Dim(d2)) => d1.partial_cmp(d2),
-            (Self::Fil(i1),Self::Fil(i2)) => i1.partial_cmp(i2),
-            (Self::Fill(i1),Self::Fill(i2)) => i1.partial_cmp(i2),
-            (Self::Filll(i1),Self::Filll(i2)) => i1.partial_cmp(i2),
-            (Self::Filll(_),_) => Some(Ordering::Greater),
-            (_,Self::Filll(_)) => Some(Ordering::Less),
-            (Self::Fill(_),_) => Some(Ordering::Greater),
-            (_,Self::Fill(_)) => Some(Ordering::Less),
-            (Self::Fil(_),_) => Some(Ordering::Greater),
-            (_,Self::Fil(_)) => Some(Ordering::Less),
+            (Self::Dim(d1),Self::Dim(d2)) => d1.cmp(d2),
+            (Self::Fil(i1),Self::Fil(i2)) => i1.cmp(i2),
+            (Self::Fill(i1),Self::Fill(i2)) => i1.cmp(i2),
+            (Self::Filll(i1),Self::Filll(i2)) => i1.cmp(i2),
+            (Self::Filll(_),_) => Ordering::Greater,
+            (_,Self::Filll(_)) => Ordering::Less,
+            (Self::Fill(_),_) => Ordering::Greater,
+            (_,Self::Fill(_)) => Ordering::Less,
+            (Self::Fil(_),_) => Ordering::Greater,
+            (_,Self::Fil(_)) => Ordering::Less,
         }
     }
 }
@@ -272,7 +278,7 @@ impl<D:TeXDimen> Add<D> for Skip<D> {
 }
 impl<D:TeXDimen> PartialOrd for Skip<D> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.base.partial_cmp(&other.base)
+        Some(self.cmp(other))
     }
 }
 impl<D:TeXDimen> Ord for Skip<D> {
@@ -376,8 +382,8 @@ impl<I:TeXInt,D:TeXDimen+Numeric<I>> Numeric<I> for Skip<D> {
     fn scale(&self, times: I, div: I) -> Self {
         Self{
             base:self.base.scale(times,div),
-            stretch:self.stretch.clone(),
-            shrink:self.shrink.clone()
+            stretch:self.stretch,
+            shrink:self.shrink
         }
     }
 }
@@ -414,7 +420,7 @@ impl<M:MuDim> MuSkip<M> {
 }
 
 /// A stretch/shrink component of a [`MuSkip`].
-#[derive(Clone,Copy,Eq,PartialEq,Debug,Ord)]
+#[derive(Clone,Copy,Eq,PartialEq,Debug)]
 pub enum MuStretchShrink<M:MuDim> {
     Mu(M),Fil(i32),Fill(i32),Filll(i32)
 }
@@ -444,17 +450,22 @@ impl<M:MuDim> Add<MuStretchShrink<M>> for MuStretchShrink<M> {
 }
 impl<M:MuDim> PartialOrd for MuStretchShrink<M> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl<M:MuDim> Ord for MuStretchShrink<M> {
+    fn cmp(&self, other: &Self) -> Ordering {
         match (self,other) {
-            (Self::Mu(d1),Self::Mu(d2)) => d1.partial_cmp(d2),
-            (Self::Fil(i1),Self::Fil(i2)) => i1.partial_cmp(i2),
-            (Self::Fill(i1),Self::Fill(i2)) => i1.partial_cmp(i2),
-            (Self::Filll(i1),Self::Filll(i2)) => i1.partial_cmp(i2),
-            (Self::Filll(_),_) => Some(Ordering::Greater),
-            (_,Self::Filll(_)) => Some(Ordering::Less),
-            (Self::Fill(_),_) => Some(Ordering::Greater),
-            (_,Self::Fill(_)) => Some(Ordering::Less),
-            (Self::Fil(_),_) => Some(Ordering::Greater),
-            (_,Self::Fil(_)) => Some(Ordering::Less),
+            (Self::Mu(d1),Self::Mu(d2)) => d1.cmp(d2),
+            (Self::Fil(i1),Self::Fil(i2)) => i1.cmp(i2),
+            (Self::Fill(i1),Self::Fill(i2)) => i1.cmp(i2),
+            (Self::Filll(i1),Self::Filll(i2)) => i1.cmp(i2),
+            (Self::Filll(_),_) => Ordering::Greater,
+            (_,Self::Filll(_)) => Ordering::Less,
+            (Self::Fill(_),_) => Ordering::Greater,
+            (_,Self::Fill(_)) => Ordering::Less,
+            (Self::Fil(_),_) => Ordering::Greater,
+            (_,Self::Fil(_)) => Ordering::Less,
         }
     }
 }
@@ -508,7 +519,7 @@ impl Display for Mu {
 
 impl<M:MuDim> PartialOrd for MuSkip<M> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.base.partial_cmp(&other.base)
+        Some(self.cmp(other))
     }
 }
 impl<M:MuDim> Ord for MuSkip<M> {
@@ -567,7 +578,7 @@ impl<M:MuDim> Default for MuSkip<M> {
 }
 impl<I:TeXInt,M:MuDim+Numeric<I>> Numeric<I> for MuSkip<M> {
     fn scale(&self, times: I, div: I) -> Self {
-        Self{base:self.base.scale(times,div),stretch:self.stretch.clone(),shrink:self.shrink.clone()}
+        Self{base:self.base.scale(times,div),stretch:self.stretch,shrink:self.shrink}
     }
 }
 

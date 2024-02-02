@@ -10,7 +10,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::state::{GroupType, State};
 use crate::engine::stomach::{Stomach, StomachData};
-use crate::{expand_loop, tex_error};
+use crate::expand_loop;
 use crate::tex::catcodes::CommandCode;
 use crate::tex::tokens::Token;
 use crate::utils::HMap;
@@ -25,6 +25,7 @@ use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
 use crate::tex::numerics::Skip;
+use crate::utils::errors::{TeXError, TeXResult};
 
 pub(crate) struct MacroParser<T:Token> {
     arity:u8,
@@ -43,7 +44,7 @@ impl<T:Token> MacroParser<T> {
             exp:shared_vector::Vector::new(),
         }
     }
-    pub(crate) fn do_signature_token(&mut self, t:T) -> bool {
+    pub(crate) fn do_signature_token<ET:EngineTypes<Token=T>>(&mut self, t:T) -> TeXResult<Option<()>,ET> {
         match t.command_code() {
             CommandCode::BeginGroup => {
                 if self.inparam {
@@ -51,7 +52,7 @@ impl<T:Token> MacroParser<T> {
                 self.params.push(t.clone());
                 self.ends_with_brace = Some(t);
                 }
-                return false
+                return Ok(Some(()))
             }
             CommandCode::Parameter if self.inparam => {
                 self.inparam = false;
@@ -73,10 +74,10 @@ impl<T:Token> MacroParser<T> {
             }
             _ => self.params.push(t),
         }
-        true
+        Ok(None)
     }
 
-    pub(crate) fn do_expansion_token(&mut self, t:T) {
+    pub(crate) fn do_expansion_token<ET:EngineTypes>(&mut self, t:T) -> TeXResult<(),ET> {
         match t.command_code() {
             CommandCode::Parameter if self.inparam => {
                 self.inparam = false;
@@ -95,6 +96,7 @@ impl<T:Token> MacroParser<T> {
             }
             _ => self.exp.push(t),
         }
+        Ok(())
     }
 
     pub(crate) fn close(mut self,long:bool,outer:bool,protected:bool) -> Macro<T> {
@@ -109,56 +111,62 @@ impl<T:Token> MacroParser<T> {
     }
 }
 
-pub(in crate::commands) fn modify_int_register<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, idx:usize, globally:bool, op:O) {
-    engine.read_keyword(b"by");
+pub(in crate::commands) fn modify_int_register<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> TeXResult<ET::Int,ET>>(engine: &mut EngineReferences<ET>, idx:usize, globally:bool, op:O) -> TeXResult<(),ET> {
+    engine.read_keyword(b"by")?;
     let old = engine.state.get_int_register(idx);
-    let new = op(old,engine);
+    let new = op(old,engine)?;
     engine.state.set_int_register(engine.aux,idx,new,globally);
+    Ok(())
 }
 
-pub(in crate::commands) fn modify_primitive_int<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> ET::Int>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
-    engine.read_keyword(b"by");
+pub(in crate::commands) fn modify_primitive_int<ET:EngineTypes,O:FnOnce(ET::Int,&mut EngineReferences<ET>) -> TeXResult<ET::Int,ET>>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) -> TeXResult<(),ET> {
+    engine.read_keyword(b"by")?;
     let old = engine.state.get_primitive_int(name);
-    let new = op(old,engine);
+    let new = op(old,engine)?;
     engine.state.set_primitive_int(engine.aux,name,new,globally);
+    Ok(())
 }
 
-pub(in crate::commands) fn modify_dim_register<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, idx:usize, globally:bool, op:O) {
-    engine.read_keyword(b"by");
+pub(in crate::commands) fn modify_dim_register<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> TeXResult<ET::Dim,ET>>(engine: &mut EngineReferences<ET>, idx:usize, globally:bool, op:O) -> TeXResult<(),ET> {
+    engine.read_keyword(b"by")?;
     let old = engine.state.get_dim_register(idx);
-    let new = op(old,engine);
+    let new = op(old,engine)?;
     engine.state.set_dim_register(engine.aux,idx,new,globally);
+    Ok(())
 }
 
-pub(in crate::commands) fn modify_primitive_dim<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> ET::Dim>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
-    engine.read_keyword(b"by");
+pub(in crate::commands) fn modify_primitive_dim<ET:EngineTypes,O:FnOnce(ET::Dim,&mut EngineReferences<ET>) -> TeXResult<ET::Dim,ET>>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) -> TeXResult<(),ET> {
+    engine.read_keyword(b"by")?;
     let old = engine.state.get_primitive_dim(name);
-    let new = op(old,engine);
+    let new = op(old,engine)?;
     engine.state.set_primitive_dim(engine.aux,name,new,globally);
+    Ok(())
 }
 
-pub(in crate::commands) fn modify_skip_register<ET:EngineTypes,O:FnOnce(Skip<ET::Dim>,&mut EngineReferences<ET>) -> Skip<ET::Dim>>(engine: &mut EngineReferences<ET>,idx:usize,globally:bool,op:O) {
-    engine.read_keyword(b"by");
+pub(in crate::commands) fn modify_skip_register<ET:EngineTypes,O:FnOnce(Skip<ET::Dim>,&mut EngineReferences<ET>) -> TeXResult<Skip<ET::Dim>,ET>>(engine: &mut EngineReferences<ET>,idx:usize,globally:bool,op:O) -> TeXResult<(),ET> {
+    engine.read_keyword(b"by")?;
     let old = engine.state.get_skip_register(idx);
-    let new = op(old,engine);
+    let new = op(old,engine)?;
     engine.state.set_skip_register(engine.aux,idx,new,globally);
+    Ok(())
 }
 
-pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(Skip<ET::Dim>,&mut EngineReferences<ET>) -> Skip<ET::Dim>>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) {
-    engine.read_keyword(b"by");
+pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(Skip<ET::Dim>,&mut EngineReferences<ET>) -> TeXResult<Skip<ET::Dim>,ET>>(engine: &mut EngineReferences<ET>, name:PrimitiveIdentifier, globally:bool, op:O) -> TeXResult<(),ET> {
+    engine.read_keyword(b"by")?;
     let old = engine.state.get_primitive_skip(name);
-    let new = op(old,engine);
+    let new = op(old,engine)?;
     engine.state.set_primitive_skip(engine.aux,name,new,globally);
+    Ok(())
 }
 
-pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:GroupType,every:PrimitiveIdentifier) -> ToOrSpread<ET::Dim> {
-    let scaled = match engine.read_keywords(&[b"to",b"spread"]) {
+pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:GroupType,every:PrimitiveIdentifier) -> TeXResult<ToOrSpread<ET::Dim>,ET> {
+    let scaled = match engine.read_keywords(&[b"to",b"spread"])? {
         Some(b"to") => {
-            let to = engine.read_dim(false);
+            let to = engine.read_dim(false)?;
             ToOrSpread::To(to)
         }
         Some(b"spread") => {
-            let spread = engine.read_dim(false);
+            let spread = engine.read_dim(false)?;
             ToOrSpread::Spread(spread)
         }
         _ => ToOrSpread::None
@@ -170,39 +178,39 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
         ResolvedToken::Cmd(Some(TeXCommand::Char{code:CommandCode::BeginGroup,..})) => {
             engine.state.push(engine.aux,tp,engine.mouth.line_number());
             engine.push_every(every);
-            return scaled
+            return Ok(scaled)
         }
         o => todo!("throw error: {:?}",o)
     );
     todo!("file end")
 }
 
-pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> (Option<ET::Char>,CommandCode) {
+pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>,in_token:&ET::Token) -> TeXResult<(Option<ET::Char>,CommandCode),ET> {
     let mut exp = true;
-    while let Some(token) = engine.get_next(!exp) {
+    loop {
+        let token = engine.need_next(!exp,in_token)?;
         if token.is_primitive() == Some(PRIMITIVES.noexpand) {
             exp = false;
             continue
         }
         match engine.resolve(&token) {
-            ResolvedToken::Tk {char,code} => return (Some(char),code),
+            ResolvedToken::Tk { char, code } => return Ok((Some(char), code)),
             ResolvedToken::Cmd(cmd) => match cmd {
                 Some(TeXCommand::Macro(m)) if exp =>
-                    ET::Gullet::do_macro(engine,m.clone(),token),
-                Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Conditional(cond)}) if exp =>
-                    ET::Gullet::do_conditional(engine,*name,token,*cond,false),
-                Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Expandable(e)}) if exp =>
-                    ET::Gullet::do_expandable(engine,*name,token,*e),
-                Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::SimpleExpandable(e)}) if exp =>
-                    ET::Gullet::do_simple_expandable(engine,*name,token,*e),
-                Some(TeXCommand::Char {char,code}, ..) => {
-                    return (Some(*char),*code)
+                    ET::Gullet::do_macro(engine, m.clone(), token)?,
+                Some(TeXCommand::Primitive { name, cmd: PrimitiveCommand::Conditional(cond) }) if exp =>
+                    ET::Gullet::do_conditional(engine, *name, token, *cond, false)?,
+                Some(TeXCommand::Primitive { name, cmd: PrimitiveCommand::Expandable(e) }) if exp =>
+                    ET::Gullet::do_expandable(engine, *name, token, *e)?,
+                Some(TeXCommand::Primitive { name, cmd: PrimitiveCommand::SimpleExpandable(e) }) if exp =>
+                    ET::Gullet::do_simple_expandable(engine, *name, token, *e)?,
+                Some(TeXCommand::Char { char, code }, ..) => {
+                    return Ok((Some(*char), *code))
                 }
-                _ => return (None,CommandCode::Escape)
+                _ => return Ok((None, CommandCode::Escape))
             },
         }
     }
-    todo!("throw error")
 }
 
 pub(in crate::commands) enum IfxCmd<ET:EngineTypes> {
@@ -221,14 +229,15 @@ pub(in crate::commands) enum IfxCmd<ET:EngineTypes> {
     ToksRegister(usize),
 }
 impl<ET:EngineTypes> IfxCmd<ET> {
-    pub(in crate::commands) fn read(engine:&mut EngineReferences<ET>) -> Self {
-        match engine.get_next(true) {
-            Some(t) if t.is_primitive() == Some(PRIMITIVES.noexpand) =>
-                IfxCmd::Noexpand(engine.get_next(true).unwrap()),
-            Some(t) => Self::resolve(engine.resolve(&t)),
-            _ => todo!("throw error")
-        }
+    pub(in crate::commands) fn read(engine:&mut EngineReferences<ET>,in_token:&ET::Token) -> TeXResult<Self,ET> {
+        let next = engine.need_next(true,in_token)?;
+        Ok(if next.is_primitive() == Some(PRIMITIVES.noexpand) {
+            IfxCmd::Noexpand(engine.need_next(true,&next)?)
+        } else {
+            Self::resolve(engine.resolve(&next))
+        })
     }
+
     fn resolve(r:ResolvedToken<ET>) -> Self {
         match r {
             ResolvedToken::Tk {char,code,..} => Self::Char(char,code),
@@ -276,53 +285,54 @@ impl<ET:EngineTypes> PartialEq for IfxCmd<ET> {
     }
 }
 
-pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,tk:&ET::Token) {
+pub(crate) fn do_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>, idx:usize, in_token:&ET::Token) -> TeXResult<(),ET> {
     let mut v = shared_vector::Vector::new();
-    engine.expand_until_bgroup(false,&tk);
-    engine.expand_until_endgroup(true,true,&tk,|_,_,t| v.push(t));
+    engine.expand_until_bgroup(false,in_token)?;
+    engine.expand_until_endgroup(true, true, in_token, |_, _, t| {
+        v.push(t);
+        Ok(())
+    })?;
     let data = engine.stomach.data_mut();
     for list in data.open_lists.iter_mut().rev() {
         match list {
             NodeList::Horizontal {children,tp:HorizontalNodeListType::Paragraph(..)} => {
                 children.push(HNode::Mark(idx, v.into()));
-                return
+                return Ok(())
             }
             NodeList::Vertical {children,..} => {
                 children.push(VNode::Mark(idx, v.into()));
-                return
+                return Ok(())
             }
             NodeList::Math {children,..} => {
                 children.push(MathNode::Mark(idx, v.into()));
-                return
+                return Ok(())
             }
             _ => ()
         }
     }
     data.page.push(VNode::Mark(idx, v.into()));
+    Ok(())
 }
 
 pub(crate) fn get_marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,f:fn(&mut StomachData<ET>) -> &mut HMap<usize,TokenList<ET::Token>>,idx:usize) {
-    match f(engine.stomach.data_mut()).get(&idx) {
-        Some(v) => exp.extend(v.0.iter().cloned()),
-        _ => ()
-    }
+    if let Some(v) = f(engine.stomach.data_mut()).get(&idx) { exp.extend(v.0.iter().cloned()) }
 }
 
-pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>,tk:&ET::Token) { // TODO use to
+pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:BoxType,between:BoxType,_to:Option<ET::Dim>,tk:&ET::Token) -> TeXResult<(),ET> { // TODO use to
     engine.gullet.push_align(AlignData::dummy());
-    engine.expand_until_bgroup(true,&tk);
-    let data = read_align_preamble(engine,inner,between);
+    engine.expand_until_bgroup(true,tk)?;
+    let data = read_align_preamble(engine,inner,between,tk)?;
     *engine.gullet.get_align_data().unwrap() = data;
     ET::Stomach::open_align(engine,inner,between);
-    start_align_row(engine,inner);
+    start_align_row(engine,inner)
 }
 
-fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType) -> AlignData<ET::Token,ET::Dim> {
+fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType,in_token:&ET::Token) -> TeXResult<AlignData<ET::Token,ET::Dim>,ET> {
     struct AlignmentDataBuilder<ET:EngineTypes> {
-        columns: shared_vector::Vector<AlignColumn<ET::Token,ET::Dim>>,
+        columns: Vec<AlignColumn<ET::Token,ET::Dim>>,
         recindex:Option<usize>,
-        current_u: shared_vector::Vector<ET::Token>,
-        current_v: shared_vector::Vector<ET::Token>,
+        current_u: Vec<ET::Token>,
+        current_v: Vec<ET::Token>,
         ingroups:u8,
         in_v:bool,
         tabskip:Skip<ET::Dim>,
@@ -337,11 +347,10 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
                 self.current_u.push(tk)
             }
         }
-    }
-    impl<ET:EngineTypes> Into<AlignData<ET::Token,ET::Dim>> for AlignmentDataBuilder<ET> {
-        fn into(mut self) -> AlignData<ET::Token, ET::Dim> {
+        fn build(mut self,token:ET::Token) -> AlignData<ET::Token, ET::Dim> {
             self.columns.push(AlignColumn::new(self.current_u,self.current_v,self.tabskip,self.ingroups));
             AlignData {
+                token,
                 columns: self.columns.into(),
                 ingroups: 0,
                 currindex: 0,
@@ -355,22 +364,22 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
 
     let tabskip = engine.state.get_primitive_skip(PRIMITIVES.tabskip);
     let mut cols = AlignmentDataBuilder::<ET> {
-        columns:shared_vector::Vector::new(),
+        columns:Vec::new(),
         recindex: None,
         ingroups:0,
-        current_u:shared_vector::Vector::new(),
-        current_v:shared_vector::Vector::new(),
+        current_u:Vec::new(),
+        current_v:Vec::new(),
         in_v:false,
-        tabskip:tabskip,
+        tabskip,
         inner_mode,between_mode
     };
     let mut ingroups = 0;
 
-    while let Some(next) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+
+    while let Some(next) = engine.mouth.get_next(engine.aux, engine.state)? {
         if next.is_primitive() == Some(PRIMITIVES.noexpand) {
-            if let Some(n) = engine.mouth.get_next_opt(engine.aux,engine.state) {
-                cols.push(n);
-            } else { unreachable!() }
+            let Ok(Some(n)) = engine.mouth.get_next(engine.aux, engine.state) else { unreachable!() };
+            cols.push(n);
             continue
         }
         match next.command_code() {
@@ -405,44 +414,48 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
                     cols.in_v = false;
                 }
             }
-            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true),
+            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true)?,
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                 if ingroups != 0 {
                     todo!("throw error")
                 }
                 engine.push_every(PRIMITIVES.everycr);
-                return cols.into()
+                return Ok(cols.build(in_token.clone()))
             },
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
-                if let Some(t) = engine.mouth.get_next_opt(engine.aux,engine.state) {
-                    engine.expand(t);
-                } else {
-                    todo!("File end error")
-                }
+                let t = match engine.mouth.get_next(engine.aux,engine.state)? {
+                    Some(t) => t,
+                    _ => {
+                        TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())?;
+                        continue
+                    }
+                };
+                engine.expand(t)?;
             }
             _ => cols.push(next)
         }
-        // engine.gullet.push_align(AlignData { ingroups: 0 });
     }
-    todo!("throw file end error")
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())?;
+    Ok(cols.build(in_token.clone()))
 }
 
-pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
+pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) -> TeXResult<(),ET> {
     if let Some(d) = engine.gullet.get_align_data() {
         d.currindex = 0
-    } else { todo!("throw error") }
+    } else { unreachable!() }
     // avoid the gullet here as to not throw an error on '}'!
-    while let Some(token) = engine.mouth.get_next_opt(engine.aux,engine.state) {
+    while let Some(token) = engine.mouth.get_next(engine.aux, engine.state)? {
         crate::expand!(engine,token;
             ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
             ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::EndGroup,..})) => {
                 engine.gullet.pop_align();
-                return ET::Stomach::close_align(engine)
+                ET::Stomach::close_align(engine)?;
+                return Ok(())
             }
             ResolvedToken::Tk{code:CommandCode::Space,..} => (),
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.crcr => (),
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.noalign => {
-                engine.expand_until_bgroup(true,&token);
+                engine.expand_until_bgroup(true,&token)?;
                 engine.state.push(engine.aux,GroupType::Noalign,engine.mouth.line_number());
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
@@ -465,7 +478,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                                 move |engine,l| {
                                     if let TeXBox::V {children,info:VBoxInfo::VAlignColumn,..} = l  {
                                         for c in children.into_vec() {
-                                            ET::Stomach::add_node_v(engine,c);
+                                            ET::Stomach::add_node_v(engine,c)?;
                                         }
                                     } else {unreachable!()}
                                     start_align_row(engine,mode)
@@ -474,7 +487,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                         }
                     }
                 );
-                return
+                return Ok(())
             }
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.omit => {
                 engine.stomach.data_mut().open_lists.push(
@@ -490,7 +503,8 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                     }
                 );
                 engine.gullet.get_align_data().unwrap().omit = true;
-                return open_align_cell(engine,mode)
+                open_align_cell(engine,mode);
+                return Ok(())
             }
             _ => {
                 engine.stomach.data_mut().open_lists.push(
@@ -506,18 +520,19 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
                     }
                 );
                 engine.mouth.requeue(token);
-                return open_align_cell(engine,mode)
+                open_align_cell(engine,mode);
+                return Ok(())
             }
         );
     }
-    todo!("file end")
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,engine.gullet.get_align_data().unwrap().token.clone())
 }
 
 pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
     match engine.gullet.get_align_data() {
         None => todo!("throw error"),
         Some(data) => {
-            if !data.omit { engine.mouth.push_exp(&data.columns[data.currindex].left); }
+            if !data.omit { engine.mouth.push_slice_rev(&data.columns[data.currindex].left); }
             if data.span {
                 data.span = false
             } else {
@@ -694,15 +709,15 @@ pub(crate) fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VN
     None
 }
 
-pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) {
-    match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType) -> TeXResult<(),ET> {
+    match engine.read_keywords(&[b"width",b"height",b"depth"])? {
         Some(_) => todo!("leaders with dimensions"),
         _ => crate::expand_loop!(engine,token,
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Box(read),..})) => {
-                match read(engine,token) {
-                    Ok(None) => todo!(),
-                    Ok(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp),
-                    Err(bi) => {
+                match read(engine,token)? {
+                    either::Left(None) => todo!(),
+                    either::Left(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp),
+                    either::Right(bi) => {
                         let target = BoxTarget::<ET>::new(move |e,b| leaders_skip(e,LeaderBody::Box(b),tp));
                         let mut ls = bi.open_list(engine.mouth.start_ref());
                         match ls {
@@ -711,7 +726,7 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                             _ => unreachable!()
                         }
                         engine.stomach.data_mut().open_lists.push(ls);
-                        return ()
+                        return Ok(())
                     }
                 }
             }
@@ -720,15 +735,15 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                 let mut height = None;
                 let mut depth = None;
                 loop {
-                    match engine.read_keywords(&[b"width",b"height",b"depth"]) {
+                    match engine.read_keywords(&[b"width",b"height",b"depth"])? {
                         Some(b"width") => {
-                            width = Some(engine.read_dim(false));
+                            width = Some(engine.read_dim(false)?);
                         }
                         Some(b"height") => {
-                            height = Some(engine.read_dim(false));
+                            height = Some(engine.read_dim(false)?);
                         }
                         Some(b"depth") => {
-                            depth = Some(engine.read_dim(false));
+                            depth = Some(engine.read_dim(false)?);
                         }
                         _ => break
                     }
@@ -741,12 +756,12 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
     todo!("file end")
 }
 
-fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBody<ET>, tp:LeaderType) {
+fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBody<ET>, tp:LeaderType) -> TeXResult<(),ET> {
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => {
             let skip = match *name {
-                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false)),
-                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false)),
+                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false)?),
+                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false)?),
                 n if n == PRIMITIVES.vfil => LeaderSkip::VFil,
                 n if n == PRIMITIVES.hfil => LeaderSkip::HFil,
                 n if n == PRIMITIVES.vfill => LeaderSkip::VFill,
@@ -755,15 +770,18 @@ fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBod
             };
             let leaders = Leaders {skip,body,tp};
             crate::add_node!(ET::Stomach;engine,VNode::Leaders(leaders),HNode::Leaders(leaders),MathNode::Leaders(leaders));
-            return
+            return Ok(())
         }
         _ => todo!("throw error")
     );
     todo!("file end")
 }
 
-pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>) {
-    engine.read_char_or_math_group(|_,engine,mc| ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom())),
+pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>,in_token:&ET::Token) -> TeXResult<(),ET> {
+    engine.read_char_or_math_group(in_token,|_,engine,mc| {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(mc.to_atom()));
+        Ok(())
+    },
                                    move |_| ListTarget::<ET,_>::new(move |engine,children,start| {
         let node = MathNode::Atom(MathAtom {
             sub:None, sup:None, nucleus:match cls {
@@ -774,13 +792,13 @@ pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls
                 },
             },
         });
-        ET::Stomach::add_node_m(engine,node);
+        ET::Stomach::add_node_m(engine,node);Ok(())
     }),())
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// expands the [`Token`] if it is expandable, otherwise requeues it
-    pub fn expand(&mut self,token:ET::Token) {
+    pub fn expand(&mut self,token:ET::Token) -> TeXResult<(),ET> {
         match self.resolve(&token) {
             ResolvedToken::Cmd(Some(cmd)) => match cmd {
                 TeXCommand::Macro(m) => ET::Gullet::do_macro(self, m.clone(), token),
@@ -795,36 +813,37 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 
     /// reads an integer from the input stream and makes sure it's in the range of
     /// a state register
-    pub fn read_register_index(&mut self,skip_eq:bool) -> usize {
-        let idx = self.read_int(skip_eq);
+    pub fn read_register_index(&mut self,skip_eq:bool) -> TeXResult<usize,ET> {
+        let idx = self.read_int(skip_eq)?;
         match ET::State::register_index(idx) {
-            Some(idx) => idx,
+            Some(idx) => Ok(idx),
             None => todo!("throw error")
         }
     }
     /// reads an integer and makes sure it's in the range of a math font index (0-15)
-    pub fn mathfont_index(&mut self,skip_eq:bool) -> u8 {
-        let idx = self.read_int(skip_eq).into();
-        if idx < 0 || idx > 15 {
+    pub fn mathfont_index(&mut self,skip_eq:bool) -> TeXResult<u8,ET> {
+        let idx = self.read_int(skip_eq)?.into();
+        if !(0..=15).contains(&idx) {
             todo!("throw error")
         }
-        idx as u8
+        Ok(idx as u8)
     }
     /// expects a [`BeginGroup`](CommandCode::BeginGroup) token, reads until the
     /// matching [`EndGroup`](CommandCode::EndGroup) token and discards everything
     /// in between.
-    pub fn skip_argument(&mut self,token:&ET::Token) {
-        match self.get_next(false) {
-            Some(t) if t.command_code() == CommandCode::BeginGroup => (),
-            _ => todo!("throw error")
+    pub fn skip_argument(&mut self,token:&ET::Token) -> TeXResult<(),ET> {
+        let t = self.need_next(false,token)?;
+        if t.command_code() != CommandCode::BeginGroup {
+            TeXError::missing_begingroup(self.aux,self.state,self.mouth)?;
         }
-        self.read_until_endgroup(token,|_,_,_| {});
+        self.read_until_endgroup(token,|_,_,_| Ok(()))?;
+        Ok(())
     }
 
     /// reads the name of a control sequence until `\endcsname` and returns the
     /// corresponding [`CSName`](crate::tex::tokens::control_sequences::CSName) (i.e. what `\csname` and
     /// `\ifcsname` do)
-    pub fn read_csname(&mut self) -> ET::CSName {
+    pub fn read_csname(&mut self) -> TeXResult<ET::CSName,ET> {
         *self.gullet.csnames() += 1;
         let mut namev = vec!();
         crate::expand_loop!(self,token,
@@ -833,7 +852,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 *self.gullet.csnames() -= 1;
                 let id = self.aux.memory.cs_interner_mut().from_chars(&namev);
                 //engine.aux.memory.return_string(name);
-                return id
+                return Ok(id)
             }
             ResolvedToken::Cmd(_) => {
                 todo!("csname: {}",token.display(self.aux.memory.cs_interner(),self.state.get_catcode_scheme(),self.state.get_escape_char()))
@@ -843,61 +862,62 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
     /// reads a number from the input stream and makes sure it's in the range of
     /// a file input/output stream index (0-255)
-    pub fn read_file_index(&mut self) -> u8 {
-        let idx = self.read_int(false).into();
-        if idx < 0 || idx > 255 {
+    pub fn read_file_index(&mut self) -> TeXResult<u8,ET> {
+        let idx = self.read_int(false)?.into();
+        if !(0..=255).contains(&idx) {
             todo!("throw error")
         }
-        idx as u8
+        Ok(idx as u8)
     }
 
     /// reads a number from the input stream, making sure it's in the range of
     /// a file input/output stream index (0-255), and subsequently reads a filename
     /// - i.e. the first two steps of `\openin` or `\openout`
-    pub fn read_filename_and_index(&mut self,prefix:&str) -> (u8,ET::File) {
-        let idx = self.read_file_index();
+    pub fn read_filename_and_index(&mut self,prefix:&str) -> TeXResult<(u8,ET::File),ET> {
+        let idx = self.read_file_index()?;
         let mut filename = self.aux.memory.get_string();
-        self.read_string(true,&mut filename);
+        self.read_string(true,&mut filename)?;
         filename.insert_str(0,prefix);
         let file = self.filesystem.get(&filename);
         self.aux.memory.return_string(filename);
-        (idx,file)
+        Ok((idx,file))
     }
 
     /// `\the`, but using a continuation function; this is used for both [`the`](super::tex::the)
     /// as well as in [`expand_until_endgroup`](Self::expand_until_endgroup)
     /// to speed things up
-    pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&mut self,cont:F) {
+    pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token) -> TeXResult<(),ET>>(&mut self,mut cont:F) -> TeXResult<(),ET> {
         expand_loop!(self,token,
-            ResolvedToken::Cmd(Some(c)) => return c.clone().the(self,token,cont),
+            ResolvedToken::Cmd(Some(c)) => return c.clone().the(self,token,|a,s,g,t|cont(a,s,g,t).expect("the continuation function should not throw errors on Other characters")),
             o => todo!("{:?} in \\the",o)
         );
+        todo!("File end?")
     }
 
     /// reads a [`Delimiter`] from the input stream;
     /// e.g. from `\delimiter` or the `\delcode` of the next character
-    pub fn read_opt_delimiter(&mut self) -> Option<Delimiter<ET>> {
+    pub fn read_opt_delimiter(&mut self) -> TeXResult<Option<Delimiter<ET>>,ET> {
         crate::expand_loop!(self,token,
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..}))  if *name == PRIMITIVES.delimiter => {
-                let num = self.read_int(false);
-                return Some(match Delimiter::from_int(num,self.state) {
-                    Ok(d) => d,
-                    Err((d,i)) => {
-                        tex_error!(self,other,&format!("Bad delimiter code ({})",i));
+                let num = self.read_int(false)?;
+                return Ok(Some(match Delimiter::from_int(num,self.state) {
+                    either::Left(d) => d,
+                    either::Right((d,i)) => {
+                        self.general_error(format!("Bad delimiter code ({})",i))?;
                         d
                     }
-                })
+                }))
             }
             ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
                 let num = self.state.get_delcode(char);
-                if num == ET::Int::default() {return None} else {
-                    return Some(match Delimiter::from_int(num,self.state) {
-                    Ok(d) => d,
-                    Err((d,i)) => {
-                        tex_error!(self,other,&format!("Bad delimiter code ({})",i));
+                if num == ET::Int::default() {return Ok(None)} else {
+                    return Ok(Some(match Delimiter::from_int(num,self.state) {
+                    either::Left(d) => d,
+                    either::Right((d,i)) => {
+                        self.general_error(format!("Bad delimiter code ({})",i))?;
                         d
                     }
-                })
+                }))
                 };
             }
             o => todo!("??? {:?}",o)

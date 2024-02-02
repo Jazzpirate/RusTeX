@@ -1,5 +1,4 @@
-use std::collections::BTreeSet;
-use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFNode, PDFStartLink};
+use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFStartLink};
 use crate::engine::{Font, Refs, SRef, Types};
 use crate::html::{HTMLChild, HTMLNode, HTMLTag};
 use crate::shipout::{ShipoutMode, ShipoutState};
@@ -13,13 +12,7 @@ pub(crate) fn close_all<F:Fn(&HTMLTag) -> bool>(mode:ShipoutMode,open: &mut Vec<
     loop {
         let mut last = open.pop().unwrap();
         let m = tag(&last.tag);
-        if !m && matches!(last.tag, HTMLTag::ColorChange(_)) {
-            reopen.push(last);
-        } else if !m && matches!(last.tag, HTMLTag::FontChange(_)) {
-            reopen.push(last);
-        } else if !m && matches!(last.tag, HTMLTag::Link(_)) {
-            reopen.push(last);
-        }else if !m && matches!(last.tag, HTMLTag::Annot(_)) {
+        if !m && matches!(last.tag, HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)|HTMLTag::Annot(_)) {
             reopen.push(last);
         } else {
             if reopen.is_empty() { return last }
@@ -115,7 +108,7 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
         }
         ColorStackAction::Pop(idx) => {
             stack[idx].pop();
-            let old = stack[idx].last().unwrap().clone();
+            let old = *stack[idx].last().unwrap();
             if *engine.aux.extension.current_colorstack() == idx  {
                 state.colors.pop();
                 if curr != old {
@@ -143,7 +136,7 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
             }
         }
         ColorStackAction::Current(idx) => {
-            let old = stack[idx].last().unwrap().clone();
+            let old = *stack[idx].last().unwrap();
             if *engine.aux.extension.current_colorstack() != idx  {
                 *engine.aux.extension.current_colorstack() = idx;
                 if old != curr {
@@ -158,19 +151,19 @@ pub(crate) fn do_link(link:PDFStartLink<Types>,state:&mut ShipoutState) {
     match link.action {
         ActionSpec::Goto(GotoAction::Current {target,..}) => {
             let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
-            node.attrs.insert("href".into(),format!("#{}",target.as_name()).into());
+            node.attrs.insert("href".into(),format!("#{}",target.as_name()));
             state.nodes.push(node);
         },
         ActionSpec::User(str) => {
             let url = if str.contains("/URI(") {
-                str.split("/URI(").last().unwrap().split(")").next().unwrap()
+                str.split("/URI(").last().unwrap().split(')').next().unwrap()
             } else if str.contains("/F(") {
-                str.split("/F(").last().unwrap().split(")").next().unwrap()
+                str.split("/F(").last().unwrap().split(')').next().unwrap()
             } else {
                 ""
             };
             let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
-            node.attrs.insert("href".into(),url.to_string().into());
+            node.attrs.insert("href".into(),url.to_string());
             state.nodes.push(node);
         }
         ActionSpec::Goto(_) => todo!(),
@@ -191,7 +184,7 @@ pub(crate) fn close_link(state:&mut ShipoutState) {
             if !n.children.is_empty() {state.push(n);}
             for mut c in requeue.into_iter().rev() {
                 let mut node = HTMLNode::new(HTMLTag::Link(state.mode()));
-                node.attrs.insert("href".into(),url.clone().into());
+                node.attrs.insert("href".into(),url.clone());
                 node.children = std::mem::take(&mut c.children);
                 if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
                 state.nodes.push(c);
@@ -207,12 +200,12 @@ pub(crate) fn close_link(state:&mut ShipoutState) {
 pub(crate) fn do_annot(state:&mut ShipoutState,start:SRef,attrs:HMap<String,String>,styles:HMap<String,String>) {
     let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
     for (k,v) in attrs.into_iter() {
-        node.attrs.insert(k.into(),v.into());
+        node.attrs.insert(k.into(),v);
     }
     for (k,v) in styles.into_iter() {
         node.styles.insert(k.into(),v.into());
     }
-    node.sourceref = Some((start.clone(),start));
+    node.sourceref = Some((start,start));
     state.nodes.push(node);
 }
 pub(crate) fn close_annot(state:&mut ShipoutState,end:SRef) {
@@ -225,7 +218,7 @@ pub(crate) fn close_annot(state:&mut ShipoutState,end:SRef) {
                 if !n.children.is_empty() {state.push(n);}
                 return
             }
-            let rf = n.sourceref.clone().unwrap();
+            let rf = n.sourceref.unwrap();
             let styles = n.styles.clone();
             let attrs = n.attrs.clone();
             if !n.children.is_empty() {state.push(n);}
@@ -269,7 +262,7 @@ pub(crate) fn reset_matrix(state:&mut ShipoutState) {
             if !n.children.is_empty() {state.push(n);}
             for mut c in requeue.into_iter().rev() {
                 let mut node = HTMLNode::new(HTMLTag::Matrix(state.mode()));
-                node.attrs.insert("transform".into(),transform.clone().into());
+                node.attrs.insert("transform".into(),transform.clone());
                 node.classes.push("rustex-pdfmatrix".into());
                 node.children = std::mem::take(&mut c.children);
                 if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}

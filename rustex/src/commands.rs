@@ -1,6 +1,6 @@
 use tex_engine::add_node;
-use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};
-use tex_engine::commands::primitives::{PRIMITIVES, register_simple_expandable, register_unexpandable};
+use tex_engine::commands::{CommandScope, PrimitiveCommand};
+use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::engine::DefaultEngine;
 use tex_engine::engine::state::State;
 use tex_engine::tex::nodes::horizontal::HNode;
@@ -8,7 +8,7 @@ use tex_engine::tex::nodes::math::MathNode;
 use tex_engine::tex::nodes::NodeList;
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::tokens::CompactToken;
-use crate::engine::{Refs, register_command, Types};
+use crate::engine::{Refs, register_command, Res, Types};
 use crate::nodes::RusTeXNode;
 use tex_engine::engine::stomach::Stomach;
 use crate::stomach::RusTeXStomach;
@@ -21,7 +21,7 @@ pub fn register_primitives_preinit(engine:&mut DefaultEngine<Types>) {
     engine.state.register_primitive(&mut engine.aux,"rustexBREAK",PrimitiveCommand::Unexpandable {
         scope:CommandScope::Any,
         apply:|_,_| {
-            println!("HERE!")
+            println!("HERE!");Ok(())
         }
     });
 }
@@ -52,12 +52,12 @@ pub(crate) fn register_primitives_postinit(engine:&mut DefaultEngine<Types>) {
      */
 }
 
-fn annot_begin(engine:Refs,token:CompactToken) {
+fn annot_begin(engine:Refs,token:CompactToken) -> Res<()> {
     let mut attrs = HMap::default();
     let mut styles = HMap::default();
     let start = engine.mouth.start_ref();
     let mut str = String::new();
-    engine.read_braced_string(true,true,&token,&mut str);
+    engine.read_braced_string(true,true,&token,&mut str)?;
     let mut s = str[..].trim();
     while !s.is_empty() {
         let style = if s.starts_with("style:") {
@@ -89,14 +89,16 @@ fn annot_begin(engine:Refs,token:CompactToken) {
     }
     let node = RusTeXNode::AnnotBegin{attrs,styles,start};
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
+    Ok(())
 }
-fn annot_end(engine:Refs,_token:CompactToken) {
+fn annot_end(engine:Refs,_token:CompactToken) -> Res<()> {
     let node = RusTeXNode::AnnotEnd(engine.mouth.current_sourceref());
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
+    Ok(())
 }
 
 pub const CLOSE_FONT:&str = "!\"$%&/(closefont)\\&%$\"!";
-pub fn close_font(engine: Refs, _token: CompactToken) {
+pub fn close_font(engine: Refs, _token: CompactToken) -> Res<()> {
     match engine.stomach.data_mut().open_lists.last_mut() {
         Some(NodeList::Vertical{ref mut children,..}) => {
             match children.last() {
@@ -124,4 +126,5 @@ pub fn close_font(engine: Refs, _token: CompactToken) {
         },
         _ => engine.stomach.data_mut().page.push(VNode::Custom(RusTeXNode::FontChangeEnd))
     }
+    Ok(())
 }

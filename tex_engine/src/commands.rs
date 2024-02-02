@@ -3,6 +3,7 @@
 */
 
 use std::fmt::Display;
+use either::Either;
 use crate::commands::methods::MacroParser;
 use crate::commands::primitives::{PrimitiveIdentifier, PRIMITIVES};
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
@@ -17,6 +18,7 @@ use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
+use crate::utils::errors::TeXResult;
 
 pub mod primitives;
 pub mod tex;
@@ -98,32 +100,32 @@ impl<ET:EngineTypes> TeXCommand<ET> {
     }
 
     /// implements `\the` for this command, e.g. `\the\count0` or `\the\font`.
-    pub fn the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&self,engine:&mut EngineReferences<ET>,token:ET::Token,mut cont:F) {
+    pub fn the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&self,engine:&mut EngineReferences<ET>,token:ET::Token,mut cont:F) -> TeXResult<(),ET> {
         use crate::tex::tokens::token_lists::Otherize;
         use std::fmt::Write;
         match self {
             TeXCommand::IntRegister(u) => {
                 let val = engine.state.get_int_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             TeXCommand::DimRegister(u) => {
                 let val = engine.state.get_dim_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             TeXCommand::SkipRegister(u) => {
                 let val = engine.state.get_skip_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             TeXCommand::MuSkipRegister(u) => {
                 let val = engine.state.get_muskip_register(*u);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             TeXCommand::CharDef(c) => {
                 let val : u64 = (*c).into();
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             TeXCommand::MathChar(u) => {
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",u).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",u)?;
             }
             TeXCommand::ToksRegister(u) => {
                 for t in &engine.state.get_toks_register(*u).0 {
@@ -134,11 +136,13 @@ impl<ET:EngineTypes> TeXCommand<ET> {
                 let t = fnt.name();
                 cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
             }
-            TeXCommand::Primitive {name,cmd} => cmd.the(engine,token,*name,cont),
-            o => crate::tex_error!(engine,other,&format!("You can't use {} after \\the",
-                o.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
-            )),
+            TeXCommand::Primitive {name,cmd} => return cmd.the(engine,token,*name,cont),
+            o => engine.general_error(format!("You can't use {} after \\the",
+                                                            o.meaning(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
+                    )
+                )?
         }
+        Ok(())
     }
 }
 
@@ -148,54 +152,54 @@ impl<ET:EngineTypes> TeXCommand<ET> {
 #[derive(Copy,Clone,Debug)]
 pub enum PrimitiveCommand<ET:EngineTypes> {
     /// A conditional, e.g. `\ifnum`, `\ifx`, etc.
-    Conditional(fn(&mut EngineReferences<ET>,ET::Token) -> bool),
+    Conditional(fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<bool,ET>),
     /// An expandable primitive, e.g. `\the`, `\number`, etc. - should push its expansion to the `Vec` argument.
-    Expandable(fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token)),
+    Expandable(fn(&mut EngineReferences<ET>,&mut Vec<ET::Token>,ET::Token) -> TeXResult<(),ET>),
     /// An expandable primitive that does not actually produce any tokens, or does via more complicated means
     /// than simply returning a `Vec<ET::Token>` - e.g. `\csname`, `\input`, `\else`, etc.
-    SimpleExpandable(fn(&mut EngineReferences<ET>,ET::Token)),
+    SimpleExpandable(fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<(),ET>),
     /// A primitive that cannot be expanded, e.g. `\relax`, `\end`, etc. See [`CommandScope`].
     Unexpandable{
         scope: CommandScope,
-        apply:fn(&mut EngineReferences<ET>,ET::Token)
+        apply:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<(),ET>
     },
     /// An assignment primitive, e.g. `\def`, `\advance` - basically, an unexpandable primitive that
     /// causes `\afterassignment` to be inserted.
-    Assignment(fn(&mut EngineReferences<ET>,ET::Token,bool)),
+    Assignment(fn(&mut EngineReferences<ET>,ET::Token,bool) -> TeXResult<(),ET>),
     /// A primitive that yields an integer value if one is expected, or optionally can assign one if not;
     /// e.g. `\count`.
     Int {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Int,
-        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<ET::Int,ET>,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool) -> TeXResult<(),ET>>
     },
     /// A primitive that yields a dimension value if one is expected, or optionally can assign one if not;
     /// e.g. `\dimen`.
     Dim {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Dim,
-        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<ET::Dim,ET>,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool) -> TeXResult<(),ET>>
     },
     /// A primitive that yields a skip value if one is expected, or optionally can assign one if not;
     /// e.g. `\skip`.
     Skip {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> Skip<ET::Dim>,
-        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<Skip<ET::Dim>,ET>,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool) -> TeXResult<(),ET>>
     },
     /// A primitive that yields a muskip value if one is expected, or optionally can assign one if not;
     /// e.g. `\muskip`.
     MuSkip {
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> MuSkip<ET::MuDim>,
-        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<MuSkip<ET::MuDim>,ET>,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool) -> TeXResult<(),ET>>
     },
     /// A primitive that yields a [`Font`] if one is expected, or optionally can assign one if not;
     /// e.g. `\font`.
     FontCmd{
-        read:fn(&mut EngineReferences<ET>,ET::Token) -> ET::Font,
-        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool)>
+        read:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<ET::Font,ET>,
+        assign:Option<for <'a,'b> fn(&'a mut EngineReferences<'b,ET>,ET::Token,bool) -> TeXResult<(),ET>>
     },
     /// A primitive that yields either a finished [`TeXBox`], or opens a new one, depending on
     /// the case of the return value. Used for e.g. `\setbox` or `\raise`, which may be followed by
     /// a finished box (e.g. `\box0`) or a new box (e.g. `\hbox{...}`).
-    Box(fn(&mut EngineReferences<ET>,ET::Token) -> Result<Option<TeXBox<ET>>,BoxInfo<ET>>),
+    Box(fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<Either<Option<TeXBox<ET>>,BoxInfo<ET>>,ET>),
     /// A primitive assignable integer value, e.g. `\hangindent` or `\tolerance`.
     PrimitiveInt,
     /// A primitive assignable dimension value, e.g. `\parindent` or `\hsize`.
@@ -209,9 +213,9 @@ pub enum PrimitiveCommand<ET:EngineTypes> {
     /// A Whatsit, e.g. `\write`, `\special`, etc. - if following an `\immediate`, the `immediate` function
     /// is called, otherwise, `get` may return a (boxed) continuation to be called at shipout.
     Whatsit {
-        get:fn(&mut EngineReferences<ET>, ET::Token) -> Option<Box<dyn FnOnce(&mut EngineReferences<ET>)>>,
-        immediate:fn(&mut EngineReferences<ET>,ET::Token),
-        the:Option<fn(&mut EngineReferences<ET>,ET::Token) -> Vec<ET::Token>>
+        get:fn(&mut EngineReferences<ET>, ET::Token) -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>,
+        immediate:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<(),ET>,
+        the:Option<fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<Vec<ET::Token>,ET>>
     },
     /// `\relax` - does nothing.
     Relax,
@@ -219,41 +223,41 @@ pub enum PrimitiveCommand<ET:EngineTypes> {
 impl<ET:EngineTypes> PrimitiveCommand<ET> {
 
     /// implements `\the` for this command, e.g. `\the\count0` or `\the\font`.
-    pub fn the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&self,engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,mut cont:F) {
+    pub fn the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token)>(&self,engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,mut cont:F) -> TeXResult<(),ET> {
         use crate::tex::tokens::token_lists::Otherize;
         use std::fmt::Write;
         match self {
             PrimitiveCommand::Int{read,..} => {
-                let val = read(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                let val = read(engine,token)?;
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::Dim{read,..} => {
-                let val = read(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                let val = read(engine,token)?;
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::Skip{read,..} => {
-                let val = read(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                let val = read(engine,token)?;
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::MuSkip{read,..} => {
-                let val = read(engine,token);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                let val = read(engine,token)?;
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::PrimitiveInt => {
                 let val = engine.state.get_primitive_int(name);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::PrimitiveDim => {
                 let val = engine.state.get_primitive_dim(name);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::PrimitiveSkip => {
                 let val = engine.state.get_primitive_skip(name);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::PrimitiveMuSkip => {
                 let val = engine.state.get_primitive_muskip(name);
-                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val).unwrap();
+                write!(Otherize::new(&mut |t| cont(engine.aux,engine.state,engine.gullet,t)),"{}",val)?;
             }
             PrimitiveCommand::PrimitiveToks => {
                 for t in &engine.state.get_primitive_tokens(name).0 {
@@ -261,23 +265,24 @@ impl<ET:EngineTypes> PrimitiveCommand<ET> {
                 }
             }
             PrimitiveCommand::FontCmd{read,..} => {
-                let fnt = read(engine,token);
+                let fnt = read(engine,token)?;
                 let t = fnt.name();
                 cont(engine.aux,engine.state,engine.gullet,ET::Token::from_cs(t.clone()));
             }
             PrimitiveCommand::Whatsit {the:Some(the),..} => {
-                for t in the(engine,token) {
+                for t in the(engine,token)? {
                     cont(engine.aux,engine.state,engine.gullet,t)
                 }
             }
             _ if name == PRIMITIVES.toks => {
-                let u = engine.read_register_index(false);
+                let u = engine.read_register_index(false)?;
                 for t in &engine.state.get_toks_register(u).0 {
                     cont(engine.aux,engine.state,engine.gullet,t.clone())
                 }
             }
-            _ => crate::tex_error!(engine,other,&format!("You can't use {} after \\the",name.display(engine.state.get_escape_char()))),
+            _ => engine.general_error(format!("You can't use {} after \\the",name.display(engine.state.get_escape_char())))?
         }
+        Ok(())
     }
 }
 
@@ -366,23 +371,23 @@ pub struct Macro<T:Token> {
 impl<T:Token> Macro<T> {
     /// Convenience method for creating a new macro from a signature and expansion as strings; given the provided [`CategoryCodeScheme`].
     /// Allows for e.g. `as_point = Macro::new(int,`[`&DEFAULT_SCHEME_U8`](crate::tex::catcodes::DEFAULT_SCHEME_U8)`,"#1#2","(#1,#2)")`.
-    pub fn new<Sig:AsRef<str>,Exp:AsRef<str>>(int:&mut <T::CS as CSName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,sig:Sig,exp:Exp) -> Self {
+    pub fn new<Sig:AsRef<str>,Exp:AsRef<str>,ET:EngineTypes<Token=T>>(int:&mut <T::CS as CSName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,sig:Sig,exp:Exp) -> Result<Self,()> {
         let mut parser = MacroParser::new();
         let sig = sig.as_ref();
         if !sig.is_empty() {
             let sigsrc: StringLineSource<T::Char> = sig.into();
             let mut sigsrc = InputTokenizer::new(sigsrc);
-            while let Ok(Some(t)) = sigsrc.get_next(int,cc,None) {
-                parser.do_signature_token(t);
+            while let Some(t) = sigsrc.get_next(int,cc,None).map_err(|_|())? {
+                if parser.do_signature_token::<ET>(t).is_err() { return Err(())};
             }
         }
         let exp = exp.as_ref();
         let expsrc: StringLineSource<T::Char> = exp.into();
         let mut expsrc = InputTokenizer::new(expsrc);
-        while let Ok(Some(t)) = expsrc.get_next(int,cc,None) {
-            parser.do_expansion_token(t)
+        while let Some(t) = expsrc.get_next(int,cc,None).map_err(|_|())? {
+            if parser.do_expansion_token::<ET>(t).is_err() { return Err(()) }
         }
-        parser.close(false,false,false)
+        Ok(parser.close(false,false,false))
     }
 
     /// returns a helper struct for displaying the `\meaning` of this command; implements [`Display`].

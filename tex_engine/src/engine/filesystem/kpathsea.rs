@@ -80,18 +80,9 @@ impl Kpathsea {
             return KpseResult{path:PathBuf::from(&filestr),exists:false}
             //else {return KpseResult{path:PathBuf::from(format!("{}.tex",filestr)),exists:false} }
         }
-        match self.global.pre.get(filestr) {
-            Some(p) => return KpseResult{path:p.clone(),exists:true},
-            None => ()
-        }
-        match self.local.get(filestr) {
-            Some(p) => return KpseResult{path:p.clone(),exists:true},
-            None => ()
-        }
-        match self.global.post.get(filestr) {
-            Some(p) => return KpseResult{path:p.clone(),exists:true},
-            None => ()
-        }
+        if let Some(p) = self.global.pre.get(filestr) { return KpseResult{path:p.clone(),exists:true} }
+        if let Some(p) = self.local.get(filestr) { return KpseResult{path:p.clone(),exists:true} }
+        if let Some(p) = self.global.post.get(filestr) { return KpseResult{path:p.clone(),exists:true} }
         let p = self.pwd.join(Path::new(filestr));
         KpseResult{exists:p.exists(),path:p}
     }
@@ -141,14 +132,8 @@ impl KpathseaBase {
         if Path::new(filestr).is_absolute() {
             return Some(PathBuf::from(filestr))
         }
-        match self.pre.get(filestr) {
-            Some(p) => return Some(p.clone()),
-            None => ()
-        }
-        match self.post.get(filestr) {
-            Some(p) => return Some(p.clone()),
-            None => ()
-        }
+        if let Some(p) = self.pre.get(filestr) { return Some(p.clone()) }
+        if let Some(p) = self.post.get(filestr) { return Some(p.clone()) }
         None
     }
 
@@ -183,29 +168,27 @@ impl KpathseaBase {
             .args(vec!("-a","texmf.cnf")).output().expect("kpsewhich not found!")
             .stdout;
         let outstr = std::str::from_utf8(out.as_slice()).unwrap();
-        let rs = outstr.split("\n").map(|x| x.trim()).filter(|s| !s.is_empty());
+        let rs = outstr.split('\n').map(|x| x.trim()).filter(|s| !s.is_empty());
         for r in rs {
             let p = Path::new(r);
             if let Ok(f) = File::open(p) {
                 let lines = std::io::BufReader::new(f).lines();
-                for l in lines {
-                    if let Ok(l) = l {
-                        if !l.starts_with("%") && !l.is_empty() {
-                            let mut kb = l.split("=").map(|x| x.trim()).collect::<Vec<_>>();
-                            if kb.len() == 2 {
-                                let v = kb.pop().unwrap();
-                                let mut k = kb.pop().unwrap();
-                                if let Some(i) = k.find('.') {
-                                    let pre = &k[..i];
-                                    let post = &k[i+1..];
-                                    if post != "pdftex" { continue }
-                                    k = pre;
-                                }
-                                if k.chars().any(|c| c.is_lowercase()) { continue }
-                                match vars.entry(k.to_string()) {
-                                    Entry::Occupied(_) => (),
-                                    Entry::Vacant(e) => { e.insert(v.to_string()); }
-                                }
+                for l in lines.map_while(Result::ok) {
+                    if !l.starts_with('%') && !l.is_empty() {
+                        let mut kb = l.split('=').map(|x| x.trim()).collect::<Vec<_>>();
+                        if kb.len() == 2 {
+                            let v = kb.pop().unwrap();
+                            let mut k = kb.pop().unwrap();
+                            if let Some(i) = k.find('.') {
+                                let pre = &k[..i];
+                                let post = &k[i+1..];
+                                if post != "pdftex" { continue }
+                                k = pre;
+                            }
+                            if k.chars().any(|c| c.is_lowercase()) { continue }
+                            match vars.entry(k.to_string()) {
+                                Entry::Occupied(_) => (),
+                                Entry::Vacant(e) => { e.insert(v.to_string()); }
                             }
                         }
                     }
@@ -223,7 +206,7 @@ impl KpathseaBase {
         for (k,mut v) in std::env::vars() {
             if let Some(td) = todo.iter_mut().find(|x| x.0 == k) {
                 td.1 = true;
-                if v.ends_with(";") || v.ends_with(":") {
+                if v.ends_with(';') || v.ends_with(':') {
                     if let Some(oldv) = vars.get(td.0) {
                         v.push_str(oldv);
                     }
@@ -301,7 +284,7 @@ impl PathParser {
                 recurse = true;
                 s.pop();s.pop();
             }
-            else if s.ends_with("/") {
+            else if s.ends_with('/') {
                 s.pop();
             }
             if s == "." {
@@ -310,7 +293,7 @@ impl PathParser {
                 self.recdot = recurse;
                 continue
             }
-            self.push_path(&Path::new(&s),recurse)
+            self.push_path(Path::new(&s),recurse)
         }
     }
     fn push_path(&mut self,p:&Path,rec:bool) {
@@ -428,7 +411,7 @@ impl PathParser {
 fn get_dot(recdot:bool,pwd:&Path) -> HMap<String,PathBuf> {
     let mut ret = HMap::default();
     let len = pwd.to_str().unwrap().len() + 1;
-    for e in walkdir::WalkDir::new(&pwd).min_depth(1).into_iter().filter_map(|e| match e.ok() {
+    for e in walkdir::WalkDir::new(pwd).min_depth(1).into_iter().filter_map(|e| match e.ok() {
         None => None,
         Some(s) if s.path().as_os_str().to_str().unwrap().contains(".git") => None,
         Some(e) => Some(e)

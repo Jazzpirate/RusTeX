@@ -66,13 +66,13 @@ impl State {
     fn do_name_code(&mut self,glyphname:String,glyphcode:String) {
         if !self.done_glyphs.contains(&glyphcode) {
             self.done_glyphs.push(glyphcode.clone());
-            self.glyphlookup.entry(glyphcode.clone(), &*format!("{}", self.idx));
+            self.glyphlookup.entry(glyphcode.clone(), &format!("{}", self.idx));
         }
-        self.glyphlist.push_str(&*format!(",{:?}", glyphcode));
-        self.glyphnames.push_str(&*format!(",{:?}", glyphname));
+        self.glyphlist.push_str(&format!(",{:?}", glyphcode));
+        self.glyphnames.push_str(&format!(",{:?}", glyphname));
         self.build_map.insert(glyphname.clone(), self.idx);
         self.build_glyphlist.push(glyphname.clone());
-        self.glyphmap.entry(glyphname, &*format!("{}", self.idx));
+        self.glyphmap.entry(glyphname, &format!("{}", self.idx));
     }
 }
 
@@ -249,56 +249,57 @@ fn main() {
     let st = State::go();
 
     let path = Path::new(&std::env::var("OUT_DIR").unwrap()).join("codegen.rs");
-    let mut file = std::io::BufWriter::new(File::create(&path).unwrap());
-    write!(&mut file,
-        "static GLYPH_LIST: [&'static str;{}] = {}];\n",
+    let mut file = std::io::BufWriter::new(File::create(path).unwrap());
+    writeln!(file,"use crate::glyphs::{{GlyphI,UNDEFINED}};").unwrap();
+    writeln!(&mut file,
+        "static GLYPH_LIST: [&'static str;{}] = {}];",
         st.idx+1,st.glyphlist
     ).unwrap();
-    write!(&mut file,
-      "static GLYPH_NAMES: [&'static str;{}] = {}];\n",
+    writeln!(&mut file,
+      "static GLYPH_NAMES: [&'static str;{}] = {}];",
       st.idx+1,st.glyphnames
     ).unwrap();
-    write!(
+    writeln!(
         &mut file,
-        "static GLYPH_MAP: phf::Map<&'static str, u16> = {};\n",
+        "static GLYPH_MAP: phf::Map<&'static str, u16> = {};",
         st.glyphmap.build()
     ).unwrap();
-    write!(
+    writeln!(
         &mut file,
-        "static GLYPH_LOOKUP: phf::Map<&'static str, u16> = {};\n",
+        "static GLYPH_LOOKUP: phf::Map<&'static str, u16> = {};",
         st.glyphlookup.build()
     ).unwrap();
 
     let parser = TableParser::get(st.build_map,st.build_glyphlist);
 
     let path = Path::new(&std::env::var("OUT_DIR").unwrap()).join("codegen_patch.rs");
-    let mut patchfile = std::io::BufWriter::new(File::create(&path).unwrap());
-    write!(&mut patchfile,"{{\n").unwrap();
+    let mut patchfile = std::io::BufWriter::new(File::create(path).unwrap());
+    writeln!(&mut patchfile,"{{").unwrap();
     for (name,val) in parser.map.into_iter() {
-        write!(&mut patchfile,"patch(&mut map,\"{}\",{:?},{:?},{:?});\n",name,
+        writeln!(&mut patchfile,"patch(&mut map,\"{}\",{:?},{:?},{:?});",name,
                val.modifiers,
                val.table.map(|n| parser.tables.iter().enumerate().find(|p| p.1.0 == n).unwrap().0),
                val.fontmap
         ).unwrap();
     }
-    write!(&mut patchfile,"}}").unwrap();
+    writeln!(&mut patchfile,"}}").unwrap();
 
     let tbl = &parser.tables.iter().find(|p| p.0 == "PostScript Standard Encoding").unwrap().1;
-    write!(&mut file,"const STANDARD_ENCODING: GlyphList = GlyphList([\n").unwrap();
+    writeln!(&mut file,"const STANDARD_ENCODING: GlyphList = GlyphList([").unwrap();
     for i in 0..256 {
-        write!(&mut file,"    {},\n",tbl[i]).unwrap();
+        writeln!(&mut file,"    {},",tbl[i]).unwrap();
     }
-    write!(&mut file,"]);\n").unwrap();
+    writeln!(&mut file,"]);").unwrap();
 
-    write!(&mut file,"const PATCHED_TABLES: [GlyphList;{}] = [\n",parser.tables.len()).unwrap();
+    writeln!(&mut file,"const PATCHED_TABLES: [GlyphList;{}] = [",parser.tables.len()).unwrap();
     for (_,table) in parser.tables.into_iter() {
-        write!(&mut file,"    GlyphList([\n").unwrap();
+        writeln!(&mut file,"    GlyphList([").unwrap();
         for i in 0..256 {
-            write!(&mut file,"        {},\n",table[i]).unwrap();
+            writeln!(&mut file,"        {},",table[i]).unwrap();
         }
-        write!(&mut file,"    ]),\n").unwrap();
+        writeln!(&mut file,"    ]),").unwrap();
     }
-    write!(&mut file,"];\n").unwrap();
+    writeln!(&mut file,"];").unwrap();
 
     //panic!("Here: Maps: {:?}\n\nTables: {:?}",parser.map,parser.tables);
     //panic!("Here: {}", glyphmap.display());

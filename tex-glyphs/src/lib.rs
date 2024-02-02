@@ -11,7 +11,7 @@ unicode codepoint. This crate attempts to do exactly that.
 # Usage
 
 This crate attempts to associate a tex font (identified by the file name stem of its `.tfm` file) with:
-1. A list of [`FontModifier`](crate::fontstyles::FontModifier)s (e.g. bold, italic, sans-serif, etc.)
+1. A list of [`FontModifier`](fontstyles::FontModifier)s (e.g. bold, italic, sans-serif, etc.)
 2. A [`GlyphList`], being an array `[`[`Glyph`]`;256]`
 
 A [`Glyph`] then is either undefined (i.e. the glyph is not present in the font, or the crate couldn't
@@ -25,7 +25,7 @@ Here's how to use this crate to obtain the corresponding unicode characters, i.e
 
 ### Instantiation
 
-First, we instantiate a [`FontInfoStore`](crate::encodings::FontInfoStore) with a function that
+First, we instantiate a [`FontInfoStore`](encodings::FontInfoStore) with a function that
 allows it to find files. This function should take a string (e.g. `cmmib10.tfm`) and return a string
 (e.g. `/usr/share/texmf-dist/fonts/tfm/public/cm/cmmib10.tfm`). This could be done by calling `kpsewhich`
 for example, but repeated and frequent calls to `kpsewhich` are slow, so more efficient alternatives
@@ -156,7 +156,7 @@ pub mod encodings;
 mod parsing;
 pub mod glyphs;
 
-use crate::glyphs::{Glyph,GlyphList,GlyphI,UNDEFINED};
+use crate::glyphs::{Glyph,GlyphList};
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 

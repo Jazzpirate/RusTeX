@@ -54,6 +54,7 @@ pub mod doc;
 #[cfg(feature="pdflatex")]
 pub mod pdflatex;
 
+#[cfg(test)]
 #[doc(hidden)]
 pub mod tests;
 

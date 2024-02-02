@@ -1,29 +1,22 @@
 use std::sync::Mutex;
-use lazy_static::lazy_static;
-use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use tex_engine::commands::{TeXCommand, CommandScope, Macro, PrimitiveCommand};
-use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
-use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes, utils};
+use tex_engine::commands::{TeXCommand, Macro};
+use tex_engine::engine::{DefaultEngine, EngineAux, EngineReferences, EngineTypes};
 use tex_engine::engine::filesystem::{File, SourceReference, VirtualFile};
 use tex_engine::engine::gullet::DefaultGullet;
 use tex_engine::engine::mouth::DefaultMouth;
 use tex_engine::tex;
 use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_engine::tex::tokens::CompactToken;
-use tex_engine::utils::errors::{ErrorThrower, TeXError};
+use tex_engine::utils::errors::{ErrorThrower, TeXError, TeXResult};
 use tex_engine::engine::TeXEngine;
-use tex_engine::engine::utils::outputs::Outputs;
-use tex_engine::utils::errors::ErrorHandler;
 use tex_engine::engine::EngineExtension;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::engine::gullet::Gullet;
 use tex_engine::engine::stomach::Stomach as StomachT;
 use tex_engine::engine::filesystem::FileSystem;
-use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::pdflatex::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
-use tex_engine::tex::catcodes::{AT_LETTER_SCHEME, CategoryCodeScheme, DEFAULT_SCHEME_U8};
-use tex_engine::tex::catcodes::CategoryCode;
+use tex_engine::tex::catcodes::AT_LETTER_SCHEME;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use crate::nodes::RusTeXNode;
 use crate::output::RusTeXOutput;
@@ -43,30 +36,34 @@ pub(crate) type CSName = InternedCSName<u8>;
 
 #[derive(Clone,Debug,Copy)]
 pub struct Types;
+
+pub type Res<R> = TeXResult<R,Types>;
+
 impl EngineTypes for Types {
     type Char = u8;
     type CSName = CSName;
     type Token = CompactToken;
     type Extension = Extension;
+    type File = VirtualFile<u8>;
+    type FileSystem = crate::files::RusTeXFileSystem;
     type Int = i32;
     type Dim = Dim32;
     type MuDim = Mu;
     type Num = tex::numerics::DefaultNumSet;
     type State = RusTeXState;
-    type File = VirtualFile<u8>;
-    type FileSystem = crate::files::RusTeXFileSystem;
     type Outputs = RusTeXOutput;
     type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
-    type CustomNode = RusTeXNode;
     type Stomach = RusTeXStomach;
+    type CustomNode = RusTeXNode;
     type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = super::fonts::Fontsystem;
+    type ErrorHandler = ErrorThrower<Self>;
 }
 
 thread_local! {
-    static MAIN_STATE : Mutex<Option<(RusTeXState,MemoryManager<CompactToken>)>> = Mutex::new(None);
-    static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = Mutex::new(None);
+    static MAIN_STATE : Mutex<Option<(RusTeXState,MemoryManager<CompactToken>)>> = const { Mutex::new(None) };
+    static FONT_SYSTEM : Mutex<Option<super::fonts::Fontsystem>> = const { Mutex::new(None) };
 }
 
 
@@ -74,18 +71,18 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
     MAIN_STATE.with(|state| {
         let mut guard = state.lock().unwrap();
         match &mut *guard {
-            Some((s, m)) =>return  (s.clone(), m.clone()),
+            Some((s, m)) =>(s.clone(), m.clone()),
             n => {
                 //let start = std::time::Instant::now();
                 let mut engine = DefaultEngine::<Types>::new();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 crate::commands::register_primitives_preinit(&mut engine);
-                engine.initialize_pdflatex();
+                engine.initialize_pdflatex().unwrap();
                 crate::commands::register_primitives_postinit(&mut engine);
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
                 //println!("Initialized in {:?}", start.elapsed());
-                return (engine.state, engine.aux.memory)
+                (engine.state, engine.aux.memory)
             }
         }
     })
@@ -116,7 +113,7 @@ fn get_engine(log:bool) -> DefaultEngine<Types> {
 
 pub struct CompilationResult {
     pub out:String,
-    pub error:Option<TeXError>,
+    pub error:Option<TeXError<Types>>,
     pub missing_glyphs: Box<[(String,u8,String)]>,
     pub missing_fonts: Box<[String]>
 }
@@ -129,13 +126,13 @@ pub trait RusTeXEngineT {
 
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     let e = e.get_engine_refs();
-    let name = e.aux.memory.cs_interner_mut().new(name);
-    let mut cmd = Macro::new(
+    let name = e.aux.memory.cs_interner_mut().from_str(name);
+    let mut cmd = Macro::new::<_,_,Types>(
         e.aux.memory.cs_interner_mut(),
-        &AT_LETTER_SCHEME,sig,exp);
+        &AT_LETTER_SCHEME,sig,exp).unwrap();
     if protect { cmd.protected = true }
     if long { cmd.long = true }
-    e.state.set_command(&e.aux, name, Some(TeXCommand::Macro(cmd)), globally)
+    e.state.set_command(e.aux, name, Some(TeXCommand::Macro(cmd)), globally)
 }
 
 /*pub struct RusTeXEngine {
@@ -154,7 +151,7 @@ impl RusTeXEngineT for RusTeXEngine {
         if log { engine.aux.outputs = RusTeXOutput::Print(verbose); }
 
         //let start = std::time::Instant::now();
-        let res = match engine.do_file_pdf(file.as_ref(),|e,n| shipout::shipout(e,n)) {
+        let res = match engine.do_file_pdf(file.as_ref(),shipout::shipout) {
             Ok(_) => None,
             Err(e) => {
                 engine.aux.outputs.errmessage(format!("{}\n\nat {}",e,engine.mouth.current_sourceref().display(&engine.filesystem)));
@@ -172,11 +169,11 @@ impl RusTeXEngineT for RusTeXEngine {
             let mut refs = engine.get_engine_refs();
             let (fonts,glyphs) = shipout::split_state(&mut refs, |engine, state| {
                 let mut page = make_page(engine, state, |_, state| {
-                    for c in out { state.push_child(c) }
-                });
+                    for c in out { state.push_child(c) };Ok(())
+                }).unwrap();
                 page.classes = vec!("rustex-body".into());
                 let topfont = state.fonts.first().unwrap().clone();
-                let dp = page.displayable(&engine.fontsystem.glyphmaps, &engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);
+                let dp = page.displayable(&engine.fontsystem.glyphmaps, engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);
                 write!(ret, "{}{}{}", shipout::PREAMBLE,dp, shipout::POSTAMBLE).unwrap();
                 for k in dp.get_missings() {
                     state.missing_fonts.insert(k);

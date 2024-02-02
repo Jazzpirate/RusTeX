@@ -28,7 +28,7 @@ strip = "symbols"
 
 [dependencies]
 tex_engine = { path = "../tex_engine",features = ["pdflatex","pdfium"] }
-tex-glyphs = "0.1.0"#{ path = "../tex-glyphs" }
+tex-glyphs = { path = "../tex-glyphs" }
 env_logger = "0.11.1"
 log={version="0.4.20",features=["kv_unstable"]}
 ansi_term = "0.12.1"
@@ -39,4 +39,4 @@ pdfium-render = { version="0.8.17" }
 path-dedot = "3.1.1"
 
 mimalloc = "0.1.39"
-#rpmalloc = "0.2.0"
+#rpmalloc = "0.2.2"

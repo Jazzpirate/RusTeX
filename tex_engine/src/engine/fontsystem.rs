@@ -12,8 +12,8 @@ use crate::prelude::CommandCode;
 use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
-use crate::tex_error;
 use crate::utils::{HMap, Ptr};
+use crate::utils::errors::{TeXError, TeXResult};
 
 /// A font system provides [`Font`]s, which in turn provide various information about [`Character`]s (or, rather, glyphs)
 /// in that font.
@@ -127,7 +127,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
         let null = Ptr::new(TfmFontI{
             file:Ptr::new(null_file),
             muts:RwLock::new(muts),
-            name:aux.memory.cs_interner_mut().new("nullfont")
+            name:aux.memory.cs_interner_mut().from_str("nullfont")
         });
         TfmFontSystem {
             files:HMap::default(),
@@ -227,7 +227,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
         let at = self.muts.read().unwrap().at;
         match at {
             Some(d) => d,
-            None => D::from_sp(self.file.size as i32)
+            None => D::from_sp(self.file.size)
         }
     }
     fn has_at_set(&self) -> bool {
@@ -307,28 +307,28 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads a font from the input stream (e.g. `\font` for the current font
     /// or a font defined via `\font\foo=...`).
-    pub fn read_font(&mut self,skip_eq:bool,token:&ET::Token) -> <ET::FontSystem as FontSystem>::Font {
+    pub fn read_font(&mut self,skip_eq:bool,token:&ET::Token) -> TeXResult<<ET::FontSystem as FontSystem>::Font,ET> {
         let mut had_eq = !skip_eq;
         crate::expand_loop!(self,token,
             ResolvedToken::Cmd(Some(c)) => match c {
-                TeXCommand::Font(f) => return f.clone(),
+                TeXCommand::Font(f) => return Ok(f.clone()),
                 TeXCommand::Primitive{cmd:PrimitiveCommand::FontCmd{read,..},..} => {
                     return read(self,token)
                 }
                 _ => {
-                    tex_error!(self,other,"Missing font identifier.");
-                    return self.fontsystem.null()
+                    self.general_error("Missing font identifier.".to_string())?;
+                    return Ok(self.fontsystem.null())
                 }
             }
             ResolvedToken::Tk {char,code:CommandCode::Other} if !had_eq && matches!(char.try_into(),Ok(b'=')) => {
                 had_eq = true;
             }
             _ => {
-                tex_error!(self,other,"Missing font identifier.");
-                return self.fontsystem.null()
+                self.general_error("Missing font identifier.".to_string())?;
+                return Ok(self.fontsystem.null())
             }
         );
-        self.aux.error_handler.file_end_while_scanning(self.state,&self.aux.memory.cs_interner(),token.clone());
-        self.fontsystem.null()
+        TeXError::file_end_while_use(self.aux,self.state,self.mouth,token.clone())?;
+        Ok(self.fontsystem.null())
     }
 }

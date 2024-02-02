@@ -9,7 +9,7 @@ use crate::engine::utils::outputs::Outputs;
 use crate::tex::tokens::control_sequences::CSName;
 use crate::tex::characters::{Character, StringLineSource, TextLine, TextLineSource};
 use crate::utils::{HMap, Ptr};
-use crate::utils::errors::ErrorHandler;
+use crate::utils::errors::{TeXError, TeXResult};
 
 pub mod kpathsea;
 
@@ -40,18 +40,17 @@ pub trait FileSystem:Clone {
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>);
     /// Reads a line from the file with the given index and current [`CategoryCodeScheme`](crate::tex::catcodes::CategoryCodeScheme) (`\read`),
     /// respecting groups (i.e. will continue reading at the end of a line until all open groups are closed).
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 state:&ET::State, cont:F
-    );
+    ) -> TeXResult<(),ET>;
     /// Reads a line from the file with the given index using [`CategoryCode::Other`](crate::tex::catcodes::CategoryCode::Other)
     /// expect for space characters (`\readline`).
 
-    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F);
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, state:&ET::State,cont:F) -> TeXResult<(),ET>;
 
     /// Returns a human-readable representation of a [`SourceRefID`](File::SourceRefID); e.g. the file name/path.
-    fn ref_str<'a>(&'a self,id:<Self::File as File>::SourceRefID) -> &'a str;
+    fn ref_str(&self,id:<Self::File as File>::SourceRefID) -> &str;
 }
 
 /// A (virtual or physical) file.
@@ -111,7 +110,7 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             interner:string_interner::StringInterner::new()
         }
     }
-    fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
+    fn ref_str(&self, id: <Self::File as File>::SourceRefID) -> &str {
         match id {
             Some(id) =>self.interner.resolve(id).unwrap(),
             None => "(NONE)"
@@ -133,11 +132,11 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 if path.starts_with("|kpsewhich ") {
                     let s = &path[1..];
                     let out = if cfg!(target_os = "windows") {
-                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(&["/C",s])//args.collect::<Vec<&str>>())
+                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(["/C",s])//args.collect::<Vec<&str>>())
                             .output().expect("kpsewhich not found!")
                             .stdout
                     } else {
-                        let args = s[10..].split(" ");
+                        let args = s[10..].split(' ');
                         std::process::Command::new("kpsewhich").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(args.collect::<Vec<&str>>())
                             .output().expect("kpsewhich not found!")
                             .stdout
@@ -177,35 +176,34 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         }
         match self.read_files.get_mut(idx as usize) {
             Some(n) =>
-                *n = match file.line_source() {
-                    Some(src) => Some(InputTokenizer::new( src)),
-                    _ => None
-                },
+                *n = file.line_source().map(InputTokenizer::new),
             _ => unreachable!()
         }
     }
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self,
-                                                                                idx:u8, eh:&Box<dyn ErrorHandler<ET>>,
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
                                                                                 handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
                                                                                 state:&ET::State, cont:F
-    ) {
+    ) -> TeXResult<(),ET> {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
                 match f.read(handler,state.get_catcode_scheme(),state.get_endline_char(),cont) {
-                    Ok(_) => (),
-                    Err(e) => {eh.invalid_character(state,e.0);}
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        Err(e.into())
+                    }
                 }
             }
-            _ => eh.emergency_stop(state)
+            _ => Err(TeXError::EmergencyStop)
         }
     }
-    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, eh:&Box<dyn ErrorHandler<ET>>,state:&ET::State,cont:F) {
+    fn readline<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8, _state:&ET::State,cont:F) -> TeXResult<(),ET> {
         match self.read_files.get_mut(idx as usize) {
             Some(Some(f)) => {
                 //debug_log!(debug => "readline: {}",f.source.path.display());
                 f.readline(cont);
+                Ok(())
             }
-            _ => eh.emergency_stop(state)
+            _ => Err(TeXError::EmergencyStop)
         }
     }
     fn eof(&self,idx:u8) -> bool {
@@ -227,19 +225,13 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         self.write_files[idx as usize] = Some(WritableVirtualFile::new(file.path,file.id.unwrap()))
     }
     fn close_out(&mut self,idx:u8) {
-        match self.write_files.get_mut(idx as usize) {
-            Some(o) => match std::mem::take(o) {
-                Some(f) => {
-                    let vf = VirtualFile {
-                        path:f.1,exists:true,
-                        source:Some(f.0.into()),id:Some(f.2),pipe:false
-                    };
-                    self.files.insert(vf.path.clone(),vf);
-                }
-                _ => ()
-            }
-            _ => ()
-        }
+        if let Some(o) = self.write_files.get_mut(idx as usize) { if let Some(f) = std::mem::take(o) {
+            let vf = VirtualFile {
+                path:f.1,exists:true,
+                source:Some(f.0.into()),id:Some(f.2),pipe:false
+            };
+            self.files.insert(vf.path.clone(),vf);
+        } }
     }
     fn write<ET:EngineTypes,D:std::fmt::Display>(&mut self,idx:i64,string:D,newlinechar:Option<ET::Char>,aux:&mut EngineAux<ET>) {
         if idx < 0 {
@@ -254,19 +246,12 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
             match self.write_files.get_mut(idx as usize) {
                 Some(Some(f)) => {
                     let s = string.to_string().into_bytes();
-                    match newlinechar {
-                        Some(c) =>
-                        match c.try_into() {
-                            Ok(u) => {
-                                for l in s.split(|b| *b == u) {
-                                    f.0.push(C::convert(l.to_vec()));
-                                }
-                                return
-                            }
-                            _ => ()
+                    if let Some(c) = newlinechar { if let Ok(u) = c.try_into() {
+                        for l in s.split(|b| *b == u) {
+                            f.0.push(C::convert(l.to_vec()));
                         }
-                        _ => ()
-                    }
+                        return
+                    } }
                     let tl = C::convert(s);
                     f.0.push(tl);
                 }

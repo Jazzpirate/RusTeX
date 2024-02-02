@@ -136,10 +136,7 @@ impl<'a,W:Write,C:Character,CS: CSName<C>> CharWrite<C,CS> for StringCharWrite<'
         write!(self, "{}{}", C::display_opt(esc), res).unwrap();
         if res.len() == 1 {
             let c = res.iter().next().unwrap();
-            match cc.get(c) {
-                CategoryCode::Letter => self.write_char(' ').unwrap(),
-                _ => ()
-            }
+            if cc.get(c) == &CategoryCode::Letter { self.write_char(' ').unwrap() }
         } else {
             self.write_char(' ').unwrap()
         }
@@ -177,10 +174,7 @@ impl<'a,T:Token,F:FnMut(T)> CharWrite<T::Char,T::CS> for Otherize<'a,T,F> {
         }
         if res.len() == 1 {
             let c = res.iter().next().unwrap();
-            match cc.get(c) {
-                CategoryCode::Letter => (self.0)(T::space()),
-                _ => ()
-            }
+            if cc.get(c) == &CategoryCode::Letter { (self.0)(T::space()) }
         } else {
             (self.0)(T::space())
         }

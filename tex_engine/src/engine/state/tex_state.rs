@@ -52,16 +52,10 @@ pub struct DefaultState<ET:EngineTypes> {
 }
 impl<ET:EngineTypes> DefaultState<ET> {
     fn tracing_assigns(&self) -> bool {
-        match self.primitive_ints.get(&PRIMITIVES.tracingassigns) {
-            Some(v) if *v > ET::Int::default() => true,
-            _ => false
-        }
+        matches!(self.primitive_ints.get(&PRIMITIVES.tracingassigns), Some(v) if *v > ET::Int::default())
     }
     fn tracing_restores(&self) -> bool {
-        match self.primitive_ints.get(&PRIMITIVES.tracingrestores) {
-            Some(v) if *v > ET::Int::default() => true,
-            _ => false
-        }
+        matches!(self.primitive_ints.get(&PRIMITIVES.tracingrestores), Some(v) if *v > ET::Int::default())
     }
 }
 
@@ -79,15 +73,14 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
             *uccodes.get_mut(i.into()) = (i-32).into();
             *lccodes.get_mut((i-32).into()) = i.into();
             *mathcodes.get_mut(ET::Char::from(i-32)) = (i as u32-32) +
-                (1 * 16 * 16) +
+                (16 * 16) +
                 (7 * 16 * 16 * 16);
             *mathcodes.get_mut(ET::Char::from(i)) = (i as u32) +
-                (1 * 16 * 16) +
+                (16 * 16) +
                 (7 * 16 * 16 * 16);
         }
         for i in 48..58 {
             *mathcodes.get_mut(ET::Char::from(i)) = (i as u32) +
-                (0 * 16 * 16) +
                 (7 * 16 * 16 * 16);
         }
         let mathfonts = array_init::array_init(|_| nullfont.clone());
@@ -125,7 +118,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
 
     fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd: PrimitiveCommand<ET>) {
         let id = self.primitives.register(name,cmd.clone());
-        let name = aux.memory.cs_interner_mut().new(name);
+        let name = aux.memory.cs_interner_mut().from_str(name);
         self.commands.insert(name, TeXCommand::Primitive {name:id, cmd});
     }
     fn primitives(&self) -> &PrimitiveCommands<ET> { &self.primitives }
@@ -147,10 +140,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
 
     fn push(&mut self,aux:&mut EngineAux<ET>, group_type: GroupType,line_number:usize) {
         self.stack.push(group_type);
-        let tracing = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
-            Some(v) if *v > ET::Int::default() => true,
-            _ => false
-        };
+        let tracing = matches!(self.primitive_ints.get(&PRIMITIVES.tracinggroups), Some(v) if *v > ET::Int::default());
         if tracing {
             aux.outputs.write_neg1(format_args!(
                 "{{entering {} group (level {}) at line {}}}",group_type,
@@ -161,11 +151,8 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
 
     fn pop(&mut self,aux:&mut EngineAux<ET>,mouth: &mut ET::Mouth) {
         let len = self.stack.stack.len();
-        if len == 0 { todo!("throw error") }
-        let traceg = match self.primitive_ints.get(&PRIMITIVES.tracinggroups) {
-            Some(v) if *v > ET::Int::default() => true,
-            _ => false
-        };
+        assert!(len > 0);
+        let traceg = matches!(self.primitive_ints.get(&PRIMITIVES.tracinggroups), Some(v) if *v > ET::Int::default());
         let trace = self.tracing_restores();
 
         let (gt,ag,ch) = self.stack.pop();
@@ -308,7 +295,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                                                             <ET::Char as Character>::display_opt(self.escape_char),
                                                             idx, old));
                     }
-                    self.int_register[idx as usize] = old;
+                    self.int_register[idx] = old;
                 }
                 StateChange::DimRegister {idx,old} => {
                     if trace {
@@ -316,7 +303,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                                                             <ET::Char as Character>::display_opt(self.escape_char),
                                                             idx, old));
                     }
-                    self.dim_register[idx as usize] = old;
+                    self.dim_register[idx] = old;
                 }
                 StateChange::SkipRegister {idx,old} => {
                     if trace {
@@ -324,7 +311,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                                                             <ET::Char as Character>::display_opt(self.escape_char),
                                                             idx, old));
                     }
-                    self.skip_register[idx as usize] = old;
+                    self.skip_register[idx] = old;
                 }
                 StateChange::MuSkipRegister {idx,old} => {
                     if trace {
@@ -332,7 +319,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                                                             <ET::Char as Character>::display_opt(self.escape_char),
                                                             idx, old));
                     }
-                    self.muskip_register[idx as usize] = old;
+                    self.muskip_register[idx] = old;
                 }
                 StateChange::ToksRegister {idx,old} => {
                     if trace {
@@ -341,13 +328,13 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                                                             idx, old.display(aux.memory.cs_interner(), &self.catcodes, self.escape_char,false)
                                                             ));
                     }
-                    self.toks_register[idx as usize] = old;
+                    self.toks_register[idx] = old;
                 }
                 StateChange::BoxRegister {idx,old} => {
                     if trace {
                         aux.outputs.write_neg1("TODO trace box restore")
                     }
-                    self.box_register[idx as usize] = old;
+                    self.box_register[idx] = old;
                 }
                 StateChange::PrimitiveInt {name,old} => {
                     if trace {
@@ -764,7 +751,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
     }
     fn set_primitive_int(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::Int, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_ints.insert(name,v).unwrap_or(ET::Int::default());
+            let old = s.primitive_ints.insert(name,v).unwrap_or_default();
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
                 aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
@@ -963,7 +950,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
     }
     fn set_primitive_dim(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: ET::Dim, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_dims.insert(name,v).unwrap_or(ET::Dim::default());
+            let old = s.primitive_dims.insert(name,v).unwrap_or_default();
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
                 aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
@@ -980,7 +967,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
     }
     fn set_primitive_skip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: Skip<ET::Dim>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_skips.insert(name,v).unwrap_or(Skip::default());
+            let old = s.primitive_skips.insert(name,v).unwrap_or_default();
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
                 aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
@@ -997,7 +984,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
     }
     fn set_primitive_muskip(&mut self,aux:&EngineAux<ET>, name: PrimitiveIdentifier, v: MuSkip<ET::MuDim>, globally: bool) {
         self.change_field(globally,|s,g| {
-            let old = s.primitive_muskips.insert(name,v).unwrap_or(MuSkip::default());
+            let old = s.primitive_muskips.insert(name,v).unwrap_or_default();
             if s.tracing_assigns() {
                 aux.outputs.write_neg1(format_args!("{{{}changing {}={}}}",if g {"globally "} else {""},name.display(s.escape_char),old));
                 aux.outputs.write_neg1(format_args!("{{into {}={}}}",name.display(s.escape_char),v))
@@ -1054,7 +1041,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                                              ET::Char::display_opt(s.escape_char)
                                 )
                             ),
-                            Some(ref c) => aux.outputs.write_neg1(
+                            Some(c) => aux.outputs.write_neg1(
                                 format_args!("{{{}changing {}{}={}}}",
                                              if g { "globally " } else { "" },
                                              ET::Char::display_opt(s.escape_char),

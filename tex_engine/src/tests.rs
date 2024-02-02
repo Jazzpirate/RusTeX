@@ -35,63 +35,61 @@ pub mod test_utils {
 }
 
 
-#[cfg(test)]
-mod tests {
-    use crate::tests::test_utils::*;
+use crate::tests::test_utils::*;
     use crate::prelude::*;
     use crate::measure;
     use log::*;
 
-    #[test]
-    fn kpsewhich() { measure!(kpsewhich: {
-        use crate::engine::filesystem::kpathsea::*;
-        debug();
-        let kpse = Kpathsea::new(std::env::current_dir().unwrap());
-        info!(target:"kpsewhich", "latex.ltx: {:?}", kpse.kpsewhich("latex.ltx").path);
-        info!(target:"kpsewhich", "article.cls: {:?}",kpse.kpsewhich("article.cls").path);
-        info!(target:"kpsewhich", "expl3-code: {:?}",kpse.kpsewhich("expl3-code").path);
-        info!(target:"kpsewhich", "-var-value MATHHUB: {:?}",kpse.kpsewhich("|kpsewhich -var-value MATHHUB").path);
-    });}
+#[test]
+fn kpsewhich() { measure!(kpsewhich: {
+    use crate::engine::filesystem::kpathsea::*;
+    debug();
+    let kpse = Kpathsea::new(std::env::current_dir().unwrap());
+    info!(target:"kpsewhich", "latex.ltx: {:?}", kpse.kpsewhich("latex.ltx").path);
+    info!(target:"kpsewhich", "article.cls: {:?}",kpse.kpsewhich("article.cls").path);
+    info!(target:"kpsewhich", "expl3-code: {:?}",kpse.kpsewhich("expl3-code").path);
+    info!(target:"kpsewhich", "-var-value MATHHUB: {:?}",kpse.kpsewhich("|kpsewhich -var-value MATHHUB").path);
+});}
 
-    #[test]
-    fn tokenizer() {
-        debug();
-        use crate::engine::mouth::strings::InputTokenizer;
-        use crate::tex::tokens::StandardToken;
-        use crate::tex::catcodes::DEFAULT_SCHEME_U8;
-        use crate::utils::Ptr;
-        use crate::tex::characters::StringLineSource;
+#[test]
+fn tokenizer() {
+    debug();
+    use crate::engine::mouth::strings::InputTokenizer;
+    use crate::tex::tokens::StandardToken;
+    use crate::tex::catcodes::DEFAULT_SCHEME_U8;
+    use crate::utils::Ptr;
+    use crate::tex::characters::StringLineSource;
 
-        type T = StandardToken<u8,Ptr<str>>;
-        let mut cs_handler = ();
-        let cc = &DEFAULT_SCHEME_U8;
+    type T = StandardToken<u8,Ptr<str>>;
+    let mut cs_handler = ();
+    let cc = &DEFAULT_SCHEME_U8;
 
-        let string = "\\foo   \n  \n   {a}{!}";
-        let input: StringLineSource<u8> = string.into();
-        let mut tokenizer = InputTokenizer::new(input);
-        let eol = Some(b'\r');
-        let next = tokenizer.get_next(&mut cs_handler,cc,None); // \foo
-        assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));
-        let next = tokenizer.get_next(&mut cs_handler,cc,eol); // \par
-        assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "par"));
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // {
-        assert_eq!(next.command_code(), CommandCode::BeginGroup);
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // a
-        assert_eq!(next.command_code(), CommandCode::Letter);
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // }
-        assert_eq!(next.command_code(), CommandCode::EndGroup);
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // {
-        assert_eq!(next.command_code(), CommandCode::BeginGroup);
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // !
-        assert_eq!(next.command_code(), CommandCode::Other);
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // }
-        assert_eq!(next.command_code(), CommandCode::EndGroup);
-        let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
-        assert_eq!(next.command_code(), CommandCode::Space);
-        assert!(tokenizer.get_next::<T>(&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
-    }
+    let string = "\\foo   \n  \n   {a}{!}";
+    let input: StringLineSource<u8> = string.into();
+    let mut tokenizer = InputTokenizer::new(input);
+    let eol = Some(b'\r');
+    let next = tokenizer.get_next(&mut cs_handler,cc,None); // \foo
+    assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "foo"));
+    let next = tokenizer.get_next(&mut cs_handler,cc,eol); // \par
+    assert!(matches!(next,Ok(Some(T::ControlSequence(s))) if &*s == "par"));
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // {
+    assert_eq!(next.command_code(), CommandCode::BeginGroup);
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // a
+    assert_eq!(next.command_code(), CommandCode::Letter);
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // }
+    assert_eq!(next.command_code(), CommandCode::EndGroup);
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // {
+    assert_eq!(next.command_code(), CommandCode::BeginGroup);
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // !
+    assert_eq!(next.command_code(), CommandCode::Other);
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // }
+    assert_eq!(next.command_code(), CommandCode::EndGroup);
+    let next : T = tokenizer.get_next(&mut cs_handler,cc,eol).unwrap().unwrap(); // end of line => space
+    assert_eq!(next.command_code(), CommandCode::Space);
+    assert!(tokenizer.get_next::<T>(&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
+}
 
-    const CARLISLE: &str = r#"\let~\catcode~`76~`A13~`F1~`j00~`P2jdefA71F~`7113jdefPALLF
+const CARLISLE: &str = r#"\let~\catcode~`76~`A13~`F1~`j00~`P2jdefA71F~`7113jdefPALLF
 PA''FwPA;;FPAZZFLaLPA//71F71iPAHHFLPAzzFenPASSFthP;A$$FevP
 A@@FfPARR717273F737271P;ADDFRgniPAWW71FPATTFvePA**FstRsamP
 AGGFRruoPAqq71.72.F717271PAYY7172F727171PA??Fi*LmPA&&71jfi
@@ -105,59 +103,60 @@ s$;z zLqs'.ansZ.Ymi,/sx ;LYegseZRyal,@i;@ TLRlogdLrDsW,@;G
 LcYlaDLbJsW,SWXJW ree @rzchLhzsW,;WERcesInW qt.'oL.Rtrul;e
 doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye"#;
 
-    #[test]
-    fn carlisle() {
-        info();
-        let mut engine = PlainTeXEngine::new();
-        engine.initialize_plain_tex().unwrap();
-        engine.mouth.push_string(CARLISLE.into());
-        match engine.run(|_,n| {
-            info!("{}",n.display());
-        }) {
-            Ok(_) => (),
-            Err(e) => {
-                panic!("{}",e.msg)
-            }
+#[test]
+fn carlisle() {
+    info();
+    let mut engine = PlainTeXEngine::new();
+    engine.initialize_plain_tex().unwrap();
+    engine.mouth.push_string(CARLISLE.into());
+    let r = engine.run(|_,n| {
+        info!("{}",n.display());Ok(())
+    });
+    match r {
+        Ok(_) => (),
+        Err(e) => {
+            panic!("{}",e)
         }
     }
+}
 
-    #[cfg(feature="pdflatex")]
-    #[test]
-    fn pdflatex_init() {
-        use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
-        debug();
-        let mut engine = PlainPDFTeXEngine::new();
-        match engine.initialize_pdflatex() {
-            Ok(_) => (),
-            Err(e) => {
-                panic!("{}",e.msg)
-            }
+#[cfg(feature="pdflatex")]
+#[test]
+fn pdflatex_init() {
+    use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
+    debug();
+    let mut engine = PlainPDFTeXEngine::new();
+    match engine.initialize_pdflatex() {
+        Ok(_) => (),
+        Err(e) => {
+            panic!("{}",e)
         }
     }
+}
 
-    #[cfg(feature="pdflatex")]
-    #[test]
-    fn testfile() {
-        use crate::utils::PWD;
-        use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
-        use path_dedot::*;
-        let testpath = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
-        debug();
-        let mut engine = PlainPDFTeXEngine::new();
-        match engine.initialize_pdflatex() {
-            Ok(_) => (),
-            Err(e) => {
-                panic!("{}",e.msg)
-            }
+#[cfg(feature="pdflatex")]
+#[test]
+fn testfile() {
+    use crate::utils::PWD;
+    use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
+    use path_dedot::*;
+    let testpath = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
+    debug();
+    let mut engine = PlainPDFTeXEngine::new();
+    match engine.initialize_pdflatex() {
+        Ok(_) => (),
+        Err(e) => {
+            panic!("{}",e)
         }
-        engine.do_file_pdf(testpath.to_str().unwrap(),|_,_| {}).unwrap_or_else(|e| {
-            //let pos = engine.mouth.display_position().to_string();
-            //let cap = engine.aux.memory.cs_interner().cap();
-            //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
-            panic!("{}",e.msg);
-        });
-
     }
+    engine.do_file_pdf(testpath.to_str().unwrap(),|_,_| Ok(())).unwrap_or_else(|e| {
+        //let pos = engine.mouth.display_position().to_string();
+        //let cap = engine.aux.memory.cs_interner().cap();
+        //error!("{}:\n{}\n\nCapacity: {} of {} ({:.2}%)",pos,engine.get_engine_refs().preview(),cap,0x8000_0000,(cap as f32 / (0x8000_0000u32 as f32)) * 100.0);
+        panic!("{}",e);
+    });
+
+}
 
 /*
     #[cfg(feature="pdflatex")]
@@ -237,4 +236,3 @@ doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye"#;
          */
     }
  */
-}

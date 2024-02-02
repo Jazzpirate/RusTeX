@@ -50,7 +50,7 @@ engine.initialize_plain_tex().unwrap();
 // the engine is now ready to process a document:
 engine.do_file_default("/path/to/your/xii.tex",|_,node| {
     // do something with the nodes produced, e.g. print them to stdout:
-    println!("{}",node.display());
+    println!("{}",node.display());Ok(())
 }).unwrap()
 ```
 
@@ -102,7 +102,7 @@ You can then process a `.tex` file by calling
 # let mut engine = PlainPDFTeXEngine::new();
 engine.do_file_pdf("/path/to/your/tex/file.tex",|e,node| {
     // do something with the nodes produced, e.g. print them to stdout:
-    println!("{}",node.display());
+    println!("{}",node.display());Ok(())
 }).unwrap()
 ```
 

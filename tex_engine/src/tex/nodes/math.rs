@@ -2,6 +2,7 @@
 use std::cell::OnceCell;
 use std::fmt::{Debug, Formatter, Write};
 use std::marker::PhantomData;
+use either::Either;
 use crate::commands::primitives::PRIMITIVES;
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
@@ -530,10 +531,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for MathAtom<ET,MathFontStyle<ET>> {
             return self.nucleus.height();
         }
         let h = self.nucleus.height();
-        let limits = match self.nucleus {
-            MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
-            _ => false
-        };
+        let limits = matches!(self.nucleus, MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..});
         let sup = self.sup.as_ref().unwrap().iter().map(|c| c.height() + c.depth()).max().unwrap_or_default();
         if limits {
             h + sup +
@@ -555,10 +553,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for MathAtom<ET,MathFontStyle<ET>> {
             Some(ref ls) => ls.iter().map(|c| c.width()).sum(),
             _ => ET::Dim::default()
         };
-        let limits = match self.nucleus {
-            MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
-            _ => false
-        };
+        let limits = matches!(self.nucleus, MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..});
         if limits {
             w.max(sup).max(sub)
         } else {
@@ -570,10 +565,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for MathAtom<ET,MathFontStyle<ET>> {
             return self.nucleus.depth();
         }
         let h = self.nucleus.depth();
-        let limits = match self.nucleus {
-            MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..} => true,
-            _ => false
-        };
+        let limits = matches!(self.nucleus, MathNucleus::Simple {cls:MathClass::Op,limits:Some(true),..});
         let sub = self.sub.as_ref().unwrap().iter().map(|c| c.depth() + c.height()).max().unwrap_or_default();
         if limits {
             h + sub +
@@ -753,9 +745,10 @@ impl<ET:EngineTypes> NodeTrait<ET> for MathNucleus<ET,MathFontStyle<ET>> {
 }
 
 /// The kernel of a [`MathNucleus`]; the actual content of the nucleus.
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,Default)]
 pub enum MathKernel<ET:EngineTypes,S:MathFontStyleT<ET>> {
     /// empty
+    #[default]
     Empty,
     /// a single character
     Char {
@@ -770,9 +763,6 @@ pub enum MathKernel<ET:EngineTypes,S:MathFontStyleT<ET>> {
         children:Box<[MathNode<ET,S>]>,
         end:SourceRef<ET>
     }
-}
-impl<ET:EngineTypes,S:MathFontStyleT<ET>> Default for MathKernel<ET,S> {
-    fn default() -> Self { MathKernel::Empty }
 }
 impl<ET:EngineTypes> NodeTrait<ET> for MathKernel<ET,MathFontStyle<ET>> {
     fn display_fmt(&self, indent: usize, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -899,15 +889,10 @@ impl<ET:EngineTypes> MathGroup<ET> {
             computed_width: OnceCell::new(),
             computed_height: OnceCell::new(),
             computed_depth: OnceCell::new(),
-            eqno:match eqno {
-                None => None,
-                Some((pos,ch)) => {
-                    Some((pos,Self::close_i(state,ch,MathStyle {
+            eqno:eqno.map(|(pos,ch)| (pos,Self::close_i(state,ch,MathStyle {
                         style:MathStyleType::Text,
                         cramped:false,
                     }).into()))
-                }
-            }
         }
     }
     fn close_i(state:&ET::State,ls: Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,mut style:MathStyle) -> Vec<MathNode<ET,MathFontStyle<ET>>> {
@@ -926,14 +911,8 @@ impl<ET:EngineTypes> MathGroup<ET> {
                 top: Self::close_i(state,top.into_vec(),style.numerator()).into(),
                 sep,
                 bottom: Self::close_i(state,bottom.into_vec(),style.denominator()).into(),
-                left: match left {
-                    None => None,
-                    Some((c,s)) => Some((c,Self::resolve_style(state,style,s)))
-                },
-                right: match right {
-                    None => None,
-                    Some((c,s)) => Some((c,Self::resolve_style(state,style,s)))
-                }
+                left: left.map(|(c,s)| (c,Self::resolve_style(state,style,s))),
+                right: right.map(|(c,s)| (c,Self::resolve_style(state,style,s)))
             }),
             MathNode::Choice(c) => Some(match style {
                 MathStyle { style:MathStyleType::Display, .. } => MathNode::Choice(ResolvedChoice(Self::close_i(state,c.display.into_vec(),style).into())),
@@ -953,14 +932,8 @@ impl<ET:EngineTypes> MathGroup<ET> {
             MathNode::MKern {kern,style:unresolved} => Some(MathNode::MKern {kern,style:Self::resolve_style(state,style, unresolved)}),
             MathNode::Atom(a) => Some(MathNode::Atom(MathAtom {
                 nucleus: Self::resolve_nucleus(state,a.nucleus,style),
-                sup: match a.sup {
-                    None => None,
-                    Some(l) => Some(Self::close_i(state,l.into_vec(),style.sup()).into())
-                },
-                sub: match a.sub {
-                    None => None,
-                    Some(l) => Some(Self::close_i(state,l.into_vec(),style.sub()).into())
-                }
+                sup: a.sup.map(|l| Self::close_i(state,l.into_vec(),style.sup()).into()),
+                sub: a.sub.map(|l| Self::close_i(state,l.into_vec(),style.sub()).into())
             })),
         }).collect()
     }
@@ -1054,7 +1027,7 @@ impl<ET:EngineTypes> MathChar<ET> {
         if cls == 7 {
             let i = state.get_primitive_int(PRIMITIVES.fam).into();
             match i {
-                i if i < 0 || i > 15 => {
+                i if !(0..=15).contains(&i) => {
                     cls = 0;
                 }
                 i => {
@@ -1097,15 +1070,15 @@ impl<ET:EngineTypes> Delimiter<ET> {
         }
     }
     /// Create a new [`Delimiter`] from a delimiter code.
-    pub fn from_int(num:ET::Int,state:&ET::State) -> Result<Self,(Self,i64)> {
+    pub fn from_int(num:ET::Int,state:&ET::State) -> Either<Self,(Self,i64)> {
         let num = num.into();
         if num < 0 || num > u32::MAX.into() {
-            return Err((Self::default(),num))
+            return either::Right((Self::default(),num))
         }
         let num = num as u32;
         let large = num & 0xFFF;
         let small = num >> 12;
-        Ok(Delimiter {
+        either::Left(Delimiter {
             small:MathChar::from_u32(small, state, None),
             large:MathChar::from_u32(large, state, None)
         })

@@ -36,7 +36,7 @@ pub trait Character: Sized + Eq + Copy + Display + Debug + From<u8> + TryInto<u8
     fn starting_catcode_scheme() -> CategoryCodeScheme<Self>;
 
     /// Convert a string to an iterator over characters.
-    fn string_to_iter<'a>(string:&'a str) -> Self::Iter<'a>;
+    fn string_to_iter(string:&str) -> Self::Iter<'_>;
 }
 
 /// Helper structure to display a [`Character`] in a `format!` or `write!` macro.
@@ -76,7 +76,7 @@ impl Character for u8 {
     
     type Iter<'a> = ByteIterator<'a>;
 
-    fn string_to_iter<'a>(string: &'a str) -> Self::Iter<'a> {
+    fn string_to_iter(string: &str) -> Self::Iter<'_> {
         ByteIterator(string.as_bytes())
     }
 
@@ -96,7 +96,7 @@ impl Character for u8 {
     }
 
     fn starting_catcode_scheme() -> [CategoryCode;256] {
-        super::catcodes::STARTING_SCHEME_U8.clone()
+        super::catcodes::STARTING_SCHEME_U8
     }
 }
 
@@ -106,8 +106,8 @@ pub struct ByteIterator<'a>(&'a [u8]);
 impl<'a> Iterator for ByteIterator<'a> {
     type Item = u8;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.0.is_empty() { None } else
-        if self.0.starts_with(&[b'^',b'^']) {
+        if self.0.is_empty() { None }
+        else if self.0.starts_with(&[b'^',b'^']) {
             let b = self.0[2];
             if b <= 60 || self.0.len() == 3 {
                 self.0 = &self.0[3..];
@@ -125,7 +125,7 @@ impl<'a> Iterator for ByteIterator<'a> {
     }
 }
 
-impl <'a> ExactSizeIterator for ByteIterator<'_> {
+impl ExactSizeIterator for ByteIterator<'_> {
     fn len(&self) -> usize {
         let mut num = 0usize;
         let mut iter = self.0.iter();
@@ -159,8 +159,7 @@ impl <A:Clone+Default> CharacterMap<u8,A> for [A;256] {
 
     fn get_mut(&mut self,c: u8) -> &mut A { &mut self[c as usize] }
     fn default() -> Self {
-        let v = array_init::array_init(|_| A::default());
-        v
+        array_init::array_init(|_| A::default())
     }
 }
 
