@@ -26,7 +26,7 @@ impl FileSystem for RusTeXFileSystem {
             svg:(Some(id),StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into())
         }
     }
-    fn ref_str<'a>(&'a self, id: <Self::File as File>::SourceRefID) -> &'a str {
+    fn ref_str(&self, id: <Self::File as File>::SourceRefID) -> &str {
         self.inner.ref_str(id)
     }
 

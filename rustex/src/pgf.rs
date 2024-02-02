@@ -15,7 +15,7 @@ use tex_engine::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 
 pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
-    crate::engine::register_command(engine, true, "pgfsysdriver", "",
+    register_command(engine, true, "pgfsysdriver", "",
                                     "pgfsys-rustex.def",
                                     false, false
     );

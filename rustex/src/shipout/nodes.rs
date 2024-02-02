@@ -11,7 +11,7 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_glyphs::fontstyles::ModifierSeq;
-use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, nodes, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
+use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
 use tex_glyphs::glyphs::GlyphName;
 
 pub(crate) trait MuAdd {
@@ -192,10 +192,7 @@ pub(crate) fn node_from_class(cls:MathClass,cramped:bool) -> HTMLNode {
 pub(crate) fn wrap<F:FnOnce(&mut ShipoutState) -> Res<()>>(state:&mut ShipoutState,refs:Option<(SRef,SRef)>,f:F) -> Res<()> {
     let node = HTMLNode::new(HTMLTag::MathGroup);
     let mut node = state.do_in_and(node, None,|state| f(state))?;
-    match (refs,node.sourceref) {
-        (Some(r),None) => node.sourceref = Some(r),
-        _ => ()
-    }
+    if let (Some(r),None) = (refs,node.sourceref) { node.sourceref = Some(r) }
     if node.children.len() == 1 {
         match node.children.pop() {
             Some(HTMLChild::Node(n)) => state.push(n),
@@ -577,7 +574,7 @@ pub(crate) fn do_sub_sup(engine:Refs, state:&mut ShipoutState,a: MathAtom<Types,
                 Some(HTMLChild::Node(n)) if n.tag == HTMLTag::Mi => {
                     if n.children.len() == 1 {
                         match n.children.first() {
-                            Some(HTMLChild::Text(s)) if s == "′" || s == "'" || s == "’" || s == "′" => {
+                            Some(HTMLChild::Text(s)) if ["′","'","’","′"].iter().any(|st| st == s) => {
                                 let Some(HTMLChild::Node(_)) = node.children.pop() else {unreachable!()};
                                 let Some(HTMLChild::Node(first)) = node.children.pop() else {unreachable!()};
                                 state.push(first);
@@ -617,13 +614,13 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
             node.sourceref = Some((start,end));
             state.do_in(node,None,|state| {
                 if let Some((c,s)) = left {
-                    let mut node = nodes::do_mathchar(engine, state, c, MathClass::Open, s.font);
+                    let mut node = do_mathchar(engine, state, c, MathClass::Open, s.font);
                     node.attrs.insert("stretchy".into(),"true".into());
                     state.push(node);
                 };
                 do_mathlist(engine,state,&mut children.into_vec().into())?;
                 if let Some((c,s)) = right {
-                    let mut node =nodes::do_mathchar(engine, state, c, MathClass::Close, s.font);
+                    let mut node = do_mathchar(engine, state, c, MathClass::Close, s.font);
                     node.attrs.insert("stretchy".into(),"true".into());
                     state.push(node);
                 };
@@ -631,7 +628,7 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
             })
         }
         MathNucleus::Middle(c,s) => {
-            let mut node = nodes::do_mathchar(engine, state, c, MathClass::Op, s.font);
+            let mut node = do_mathchar(engine, state, c, MathClass::Op, s.font);
             node.attrs.insert("stretchy".into(),"true".into());
             state.push(node);Ok(())
         }
@@ -1195,11 +1192,11 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) -> Res
             HNode::Whatsit(wi) => wi.call(engine)?,
             HNode::Box(TeXBox::H {children:chs,..}) => children.prefix(chs.into_vec()),
             HNode::Custom(RusTeXNode::FontChange(font,false)) =>
-                super::annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
+                annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             HNode::Custom(RusTeXNode::FontChangeEnd) =>
-                super::annotations::close_font(state),
+                annotations::close_font(state),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) =>
-                super::annotations::do_color(state,engine,act),
+                annotations::do_color(state,engine,act),
             HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
             HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             HNode::MathGroup(mg) if mg.children.is_empty() => (),
@@ -1275,7 +1272,7 @@ pub fn parse_transform(ts : String) -> String {
     }
     ret
 }
-fn parse_get_num<'a>(s:&mut &'a str) -> f32 {
+fn parse_get_num(s:&mut &str) -> f32 {
     match s.find(|x| x == ' ' || x == ')' || x == ',') {
         Some(i) => {
             let f = s[..i].parse::<f32>().unwrap();

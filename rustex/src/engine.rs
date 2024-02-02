@@ -93,7 +93,7 @@ fn get_engine(log:bool) -> DefaultEngine<Types> {
     let fontsystem = FONT_SYSTEM.with(|f| f.lock().unwrap().clone()).unwrap();
     let mut aux = EngineAux {
         outputs: RusTeXOutput::None,
-        error_handler: ErrorThrower::new().into(),
+        error_handler: ErrorThrower::new(),
         start_time:chrono::Local::now(),
         extension: Extension::new(&mut memory),
         memory,
