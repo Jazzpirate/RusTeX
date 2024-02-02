@@ -58,6 +58,7 @@ impl EngineTypes for Types {
     type CustomNode = RusTeXNode;
     type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = super::fonts::Fontsystem;
+    type ErrorHandler = ErrorThrower<Self>;
 }
 
 thread_local! {

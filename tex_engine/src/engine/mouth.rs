@@ -45,6 +45,9 @@ pub trait Mouth<ET:EngineTypes> {
     fn push_exp(&mut self,exp:&TokenList<ET::Token>);
     /// Push a [`Vec`] of [`Token`]s to the [`Mouth`]. This is occasionally useful for things like `\write`.
     fn push_vec(&mut self, exp: Vec<ET::Token>);
+    /// Push a slice of [`Token`]s to the [`Mouth`], assumed to be in reverse order (i.e. the first
+    /// token to return is the last one in the slice).
+    fn push_slice_rev(&mut self, exp: &[ET::Token]);
     /// Push a [`MacroExpansion`] (with arguments already read) to the [`Mouth`]. The [`Mouth`] will return the [`Token`]s lazily,
     /// resolving the parameter tokens in the expansion in the process.
     fn push_macro_exp(&mut self,exp:MacroExpansion<ET::Token>);
@@ -240,6 +243,9 @@ impl<ET:EngineTypes> Mouth<ET> for DefaultMouth<ET> {
 
     fn push_vec(&mut self, exp: Vec<ET::Token>) {
         self.with_list(|v| v.extend(exp.into_iter().rev()))
+    }
+    fn push_slice_rev(&mut self, exp: &[ET::Token]) {
+        self.with_list(|v| v.extend(exp.iter().cloned()))
     }
 
     fn push_string(&mut self, s: StringLineSource<ET::Char>) {

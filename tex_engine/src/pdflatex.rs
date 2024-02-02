@@ -17,7 +17,7 @@ use crate::tex::tokens::control_sequences::InternedCSName;
 use crate::tex::characters::Character;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, Numeric, TeXDimen, TeXInt};
-use crate::utils::errors::TeXResult;
+use crate::utils::errors::{ErrorThrower, TeXResult};
 
 pub trait PDFTeXEngine: TeXEngine
     where <Self::Types as EngineTypes>::Extension: PDFExtension<Self::Types>,
@@ -109,6 +109,7 @@ impl EngineTypes for DefaultPDFTeXEngineTypes {
     type Gullet = DefaultGullet<Self>;
     type CustomNode = PDFNode<Self>;
     type Stomach = DefaultStomach<Self>;
+    type ErrorHandler = ErrorThrower<Self>;
     type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;//InternedString>;
 }

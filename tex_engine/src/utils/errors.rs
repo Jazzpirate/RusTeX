@@ -17,6 +17,7 @@ use thiserror::Error;
 use crate::commands::primitives::PrimitiveIdentifier;
 use crate::engine::{EngineAux, EngineReferences, EngineTypes};
 use crate::engine::state::State;
+use crate::engine::utils::memory::MemoryManager;
 use crate::prelude::{Mouth, TeXMode};
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::tex::characters::{Character, StringLineSource};
@@ -82,9 +83,8 @@ pub trait RecoverableError<ET:EngineTypes>:Sized {
 }
 macro_rules! split {
     ($self:ident,$aux:expr,$state:ident,$mouth:ident,$f:ident($($arg:expr),*)) => {{
-        let eh = $aux.error_handler.replace(ErrorThrower::new());
-        let ret = eh.$f($aux,$state$(,$arg)*);
-        $aux.error_handler.replace(eh);
+        let eh = &$aux.error_handler;
+        let ret = eh.$f(&$aux.outputs,&$aux.memory,$state$(,$arg)*);
         match ret {
             Ok(Some(src)) => {
                 $mouth.push_string(src);
@@ -290,56 +290,56 @@ impl<ET:EngineTypes> From<MissingKeyword> for TeXError<ET> {
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler<ET:EngineTypes> {
     /// "Text line contains an invalid character".
-    fn invalid_character(&self, _aux:&EngineAux<ET>, _state:&ET::State, _c:ET::Char) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn invalid_character(&self, _out:&ET::Outputs,_memory:&MemoryManager<ET::Token>, _state:&ET::State, _c:ET::Char) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
     /// "Use of `\foo` doesn't match its definition".
-    fn wrong_definition(&self, _aux:&EngineAux<ET>, _state:&ET::State, _found:&ET::Token, _expected:&ET::Token, _in_macro:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn wrong_definition(&self, _out:&ET::Outputs,_memory:&MemoryManager<ET::Token>, _state:&ET::State, _found:&ET::Token, _expected:&ET::Token, _in_macro:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
     /// "File ended while scanning use of `\foo`".
-    fn file_end_while_use(&self, _aux:&EngineAux<ET>, _state:&ET::State, _in_macro:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn file_end_while_use(&self, _out:&ET::Outputs,_memory:&MemoryManager<ET::Token>, _state:&ET::State, _in_macro:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
     /// "Too many }'s".
-    fn too_many_closebraces(&self, _aux:&EngineAux<ET>, _state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn too_many_closebraces(&self, _out:&ET::Outputs,_memory:&MemoryManager<ET::Token>, _state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
     /// "Missing { inserted".
-    fn missing_begingroup(&self,_aux:&EngineAux<ET>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn missing_begingroup(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
     /// "Missing } inserted".
-    fn missing_endgroup(&self,_aux:&EngineAux<ET>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn missing_endgroup(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 
     /// "Incomplete \if...; all text was ignored after line `n`".
-    fn incomplete_conditional(&self,_aux:&EngineAux<ET>,_state:&ET::State,_name:PrimitiveIdentifier,_line_no:usize) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn incomplete_conditional(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_name:PrimitiveIdentifier,_line_no:usize) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 
     /// "Undefined `[`control sequence`|`active character`]`"
-    fn undefined(&self,_aux:&EngineAux<ET>,_state:&ET::State,_token:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn undefined(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_token:&ET::Token) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 
     /// "You can't use `\foo` in `M` mode."
-    fn not_allowed_in_mode(&self,_aux:&EngineAux<ET>,_state:&ET::State,_name:PrimitiveIdentifier,_mode:TeXMode) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn not_allowed_in_mode(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_name:PrimitiveIdentifier,_mode:TeXMode) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
     /// "Missing `x` inserted"
-    fn missing_keyword(&self,_aux:&EngineAux<ET>,_state:&ET::State,_kws:&'static[&'static str]) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn missing_keyword(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_kws:&'static[&'static str]) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 
     /// "Missing number, treated as zero."
-    fn missing_number(&self,_aux:&EngineAux<ET>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn missing_number(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 
     /// Any other possibly recoverable error.
-    fn other(&self,_aux:&EngineAux<ET>,_state:&ET::State,_msg:&str) -> Result<Option<StringLineSource<ET::Char>>,()> {
+    fn other(&self,_out:&ET::Outputs,_memory:&MemoryManager<ET::Token>,_state:&ET::State,_msg:&str) -> Result<Option<StringLineSource<ET::Char>>,()> {
         Err(())
     }
 
@@ -356,15 +356,15 @@ pub trait ErrorHandler<ET:EngineTypes> {
     }
 
      */
+    fn new() -> Self;
 
 }
 
 
 /// Default [`ErrorHandler`] that just throws a [`TeXError`].
 pub struct ErrorThrower<ET:EngineTypes>(PhantomData<ET>);
-impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {}
-impl<ET:EngineTypes> ErrorThrower<ET> {
-    pub fn new() -> Box<dyn ErrorHandler<ET>> { Box::new(Self(PhantomData)) }
+impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {
+    fn new() -> Self { Self(PhantomData) }
 }
 
 impl<ET:EngineTypes> EngineReferences<'_,ET> {

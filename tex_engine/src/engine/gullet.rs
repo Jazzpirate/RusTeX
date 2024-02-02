@@ -62,32 +62,8 @@ pub trait Gullet<ET:EngineTypes> {
             None => mouth.iterate(aux, state, |a,t| cont(a, state, t), eof),
             Some(data) => {
                 mouth.iterate(aux,state,|aux,t| {
-                    match t.command_code() {
-                        CommandCode::BeginGroup => {
-                            data.ingroups += 1;
-                        }
-                        CommandCode::EndGroup => {
-                            if data.ingroups == 0 {
-                                //TooManyCloseBraces.throw(aux,state,mouth)?;
-                                return Err(TeXError::TooManyCloseBraces)
-                            }
-                            data.ingroups -= 1;
-                        }
-                        /*
-                        CommandCode::AlignmentTab if data.ingroups == data.groupval() => {
-                            todo!("meh")
-                        }
-                        CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if data.ingroups == data.groupval() => match Self::char_or_primitive(state,&t) {
-                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
-                                todo!("meh")
-                            }
-                            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
-                                todo!("meh")
-                            }
-                            _ => f(aux,state,t)
-                        }
-                         */
-                        _ => ()
+                    if let Some(false) = data.check_token(&t) {
+                        return Err(TeXError::TooManyCloseBraces)
                     }
                     cont(aux, state, t)
                 },eof)
@@ -98,43 +74,53 @@ pub trait Gullet<ET:EngineTypes> {
     /// Wrapper around [`Mouth::get_next`] that, in case we are in an `\halign` or `\valign`,
     /// make sure to replace `&`, `\cr` etc. with the appropriate tokens. If `noexpand` is `true`, `\cr`, `\crcr` and `&` are not expanded.
     /// See also [`EngineReferences::get_next`].
-    fn get_next(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State, mut noexpand:bool) -> Result<Option<ET::Token>,GulletError<ET::Char>> {
+    fn get_next(&mut self, mouth:&mut ET::Mouth, aux:&mut EngineAux<ET>, state:&ET::State, noexpand:bool) -> Result<Option<ET::Token>,GulletError<ET::Char>> {
         match self.get_align_data() {
             None => Ok(mouth.get_next(aux, state)?),
             Some(a) => {
-                while let Some(t) = mouth.get_next(aux, state)? {
-                    match t.command_code() {
-                        CommandCode::BeginGroup => {
-                            a.ingroups += 1;
+                if let Some(t) = mouth.get_next(aux,state)? {
+                    match a.check_token(&t) {
+                        Some(false) => {
+                            TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?;
                             return Ok(Some(t))
                         }
-                        CommandCode::EndGroup => {
-                            if a.ingroups == 0 {
+                        Some(true) => return Ok(Some(t)),
+                        _ => ()
+                    }
+                    if noexpand || a.ingroups != a.groupval() {
+                        return Ok(Some(t))
+                    }
+                    match t.command_code() {
+                        CommandCode::AlignmentTab => {
+                            let t = a.on_alignment_tab(mouth, aux);
+                            if a.check_token(&t) == Some(false) {
                                 TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?
                             }
-                            a.ingroups -= 1;
-                            return Ok(Some(t))
+                            Ok(Some(t))
                         }
-                        CommandCode::AlignmentTab if !noexpand && a.ingroups == a.groupval() => {
-                            a.on_alignment_tab(mouth, aux);
-                            noexpand = false;
-                        }
-                        CommandCode::Escape | CommandCode::Active | CommandCode::Primitive if !noexpand && a.ingroups == a.groupval() => match Self::char_or_primitive(state, &t) {
+                        CommandCode::Escape | CommandCode::Active | CommandCode::Primitive => match Self::char_or_primitive(state, &t) {
                             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
-                                a.on_cr(mouth, aux, state);
-                                noexpand = false;
+                                let t = a.on_cr(mouth, aux, state);
+                                if a.check_token(&t) == Some(false) {
+                                    TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?
+                                }
+                                Ok(Some(t))
                             }
                             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.span => {
                                 a.span = true;
-                                a.on_alignment_tab(mouth, aux);
-                                noexpand = false;
+                                let t = a.on_alignment_tab(mouth, aux);
+                                if a.check_token(&t) == Some(false) {
+                                    TooManyCloseBraces.recover::<_,GulletError<_>>(aux,state,mouth)?
+                                }
+                                Ok(Some(t))
                             }
-                            _ => return Ok(Some(t))
+                            _ => Ok(Some(t))
                         }
-                        _ => return Ok(Some(t))
+                        _ => Ok(Some(t))
                     }
+                } else {
+                    Ok(None)
                 }
-                Ok(None)
             }
         }
     }

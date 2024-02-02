@@ -329,10 +329,10 @@ pub(crate) fn do_align<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner:Bo
 
 fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mode:BoxType,between_mode:BoxType,in_token:&ET::Token) -> TeXResult<AlignData<ET::Token,ET::Dim>,ET> {
     struct AlignmentDataBuilder<ET:EngineTypes> {
-        columns: shared_vector::Vector<AlignColumn<ET::Token,ET::Dim>>,
+        columns: Vec<AlignColumn<ET::Token,ET::Dim>>,
         recindex:Option<usize>,
-        current_u: shared_vector::Vector<ET::Token>,
-        current_v: shared_vector::Vector<ET::Token>,
+        current_u: Vec<ET::Token>,
+        current_v: Vec<ET::Token>,
         ingroups:u8,
         in_v:bool,
         tabskip:Skip<ET::Dim>,
@@ -364,11 +364,11 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
 
     let tabskip = engine.state.get_primitive_skip(PRIMITIVES.tabskip);
     let mut cols = AlignmentDataBuilder::<ET> {
-        columns:shared_vector::Vector::new(),
+        columns:Vec::new(),
         recindex: None,
         ingroups:0,
-        current_u:shared_vector::Vector::new(),
-        current_v:shared_vector::Vector::new(),
+        current_u:Vec::new(),
+        current_v:Vec::new(),
         in_v:false,
         tabskip,
         inner_mode,between_mode
@@ -532,7 +532,7 @@ pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineRef
     match engine.gullet.get_align_data() {
         None => todo!("throw error"),
         Some(data) => {
-            if !data.omit { engine.mouth.push_exp(&data.columns[data.currindex].left); }
+            if !data.omit { engine.mouth.push_slice_rev(&data.columns[data.currindex].left); }
             if data.span {
                 data.span = false
             } else {

@@ -1,7 +1,6 @@
 /*! A TeX engine combines all the necessary components into a struct capable of compiling a TeX file into
     some output format.
 */
-use std::cell::RefCell;
 use std::fmt::Debug;
 use chrono::{Datelike,Timelike};
 use crate::engine::gullet::{DefaultGullet, Gullet};
@@ -52,6 +51,7 @@ pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Mouth: Mouth<Self>;
     type Gullet:Gullet<Self>;
     type Stomach:Stomach<Self>;
+    type ErrorHandler:ErrorHandler<Self>;
     type CustomNode:CustomNodeTrait<Self>;
     type Font:Font<Char=Self::Char,Int=Self::Int, Dim=Self::Dim,CS=Self::CSName>;
     type FontSystem: FontSystem<Font=Self::Font,Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
@@ -61,7 +61,7 @@ pub struct EngineAux<ET:EngineTypes> {
     /// memory management and interning of control sequence names
     pub memory:MemoryManager<ET::Token>,
     /// error handling
-    pub error_handler:RefCell<Box<dyn ErrorHandler<ET>>>,
+    pub error_handler:ET::ErrorHandler,
     /// printing to logs or the terminal
     pub outputs:ET::Outputs,
     /// start time of the current job
@@ -135,6 +135,7 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Mouth = DefaultMouth<Self>;
     type Gullet = DefaultGullet<Self>;
     type CustomNode = ();
+    type ErrorHandler = ErrorThrower<Self>;
     type Stomach = DefaultStomach<Self>;
     type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
     type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;
@@ -235,7 +236,7 @@ impl<ET:EngineTypes> DefaultEngine<ET> {
         let mut memory = MemoryManager::new();
         let mut aux = EngineAux {
             outputs: ET::Outputs::new(),
-            error_handler: ErrorThrower::new().into(),
+            error_handler: ET::ErrorHandler::new(),
             start_time:chrono::Local::now(),
             extension: ET::Extension::new(&mut memory),
             memory,
