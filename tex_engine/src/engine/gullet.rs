@@ -19,7 +19,7 @@ use crate::tex::characters::Character;
 use crate::tex::numerics::{MuSkip, NumSet, Skip};
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::tokens::control_sequences::CSHandler;
-use crate::utils::errors::{FileEndWhileUse, GulletError, MissingBegingroup, RecoverableError, TeXError, TeXResult, TooManyCloseBraces};
+use crate::utils::errors::{GulletError, RecoverableError, TeXError, TeXResult, TooManyCloseBraces};
 
 /// A [`Gullet`] is the part of the engine that reads tokens from the input stream and expands them;
 /// including conditionals etc.
@@ -449,7 +449,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         -> TeXResult<ET::Token,ET> {
         self.gullet.read_until_endgroup(self.mouth,self.aux,self.state,cont,
                                         |a,s,m| {
-                                            FileEndWhileUse(in_token.clone()).throw(a,s,m)
+                                            TeXError::file_end_while_use(a,s,m,in_token.clone())
                                         }
         )
     }
@@ -474,7 +474,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             match self.get_next(noexpand)? {
                 Some(t) => return Ok(t),
                 None => {
-                    FileEndWhileUse(in_token.clone()).throw(self.aux, self.state, self.mouth)?;
+                    TeXError::file_end_while_use(self.aux,self.state,self.mouth,in_token.clone())?
                 }
             }
         }
@@ -525,12 +525,12 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                     CommandCode::BeginGroup => break,
                     CommandCode::Space if skip_ws => (),
                     _ => {
-                        MissingBegingroup.throw(self.aux,self.state,self.mouth)?;
+                        TeXError::missing_begingroup(self.aux,self.state,self.mouth)?;
                         break
                     }
                 }
                 None =>
-                    FileEndWhileUse(token.clone()).throw(self.aux,self.state,self.mouth)?,
+                    TeXError::file_end_while_use(self.aux,self.state,self.mouth,token.clone())?,
             }
         }
         ET::Gullet::expand_until_endgroup(self,expand_protected,false,token,|a,s,t| {
@@ -553,7 +553,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 _ => break
             );
         }
-        MissingBegingroup.throw(self.aux,self.state,self.mouth)
+        TeXError::missing_begingroup(self.aux,self.state,self.mouth)
     }
 
     /// Read a dimension value from the input stream.

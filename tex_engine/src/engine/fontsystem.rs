@@ -13,7 +13,7 @@ use crate::tex::tokens::control_sequences::{CSName,CSHandler};
 use crate::tex::characters::Character;
 use crate::tex::numerics::{Numeric, TeXDimen, TeXInt};
 use crate::utils::{HMap, Ptr};
-use crate::utils::errors::{FileEndWhileUse, RecoverableError, TeXResult};
+use crate::utils::errors::{TeXError, TeXResult};
 
 /// A font system provides [`Font`]s, which in turn provide various information about [`Character`]s (or, rather, glyphs)
 /// in that font.
@@ -328,7 +328,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 return Ok(self.fontsystem.null())
             }
         );
-        FileEndWhileUse(token.clone()).throw(self.aux,self.state,self.mouth)?;
+        TeXError::file_end_while_use(self.aux,self.state,self.mouth,token.clone())?;
         Ok(self.fontsystem.null())
     }
 }

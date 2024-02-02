@@ -29,7 +29,7 @@ use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathC
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::token_lists::CharWrite;
-use crate::utils::errors::{GeneralError, MissingBegingroup, MissingEndgroup, MissingKeyword, RecoverableError, TeXError, TeXResult, Undefined};
+use crate::utils::errors::{TeXError, TeXResult};
 
 
 pub fn accent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
@@ -76,7 +76,7 @@ pub fn begingroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 pub fn endgroup<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
     match engine.state.get_group_type() {
         Some(GroupType::SemiSimple) => (),
-        _ => MissingEndgroup.throw(engine.aux,engine.state,engine.mouth)?
+        _ => TeXError::missing_endgroup(engine.aux,engine.state,engine.mouth)?
     }
     engine.state.pop(engine.aux,engine.mouth);
     Ok(())
@@ -981,7 +981,7 @@ pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
     let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
         either::Left(b) => b,
         _ => {
-            MissingKeyword(&["=","<",">"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
             b'='
         }
     };
@@ -1014,7 +1014,7 @@ pub fn ifnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) ->
     let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
         either::Left(b) => b,
         _ => {
-            MissingKeyword(&["=","<",">"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
             b'='
         }
     };
@@ -1095,7 +1095,7 @@ pub fn immediate<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
         ResolvedToken::Tk {char,code} => return ET::Stomach::do_char(engine,token,char,code),
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => return ET::Stomach::do_char(engine,token,*char,*code),
         ResolvedToken::Cmd(None) =>
-            return Undefined(token).throw(engine.aux,engine.state,engine.mouth),
+            return TeXError::undefined(engine.aux,engine.state,engine.mouth,token),
         ResolvedToken::Cmd(Some(c)) => {
             crate::do_cmd!(engine,token,c);
             return Ok(())
@@ -1489,7 +1489,7 @@ pub fn prevdepth_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::T
 pub fn read<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let idx = engine.read_file_index()?;
     if !engine.read_keyword("to".as_bytes())? {
-        MissingKeyword(&["to"]).throw(engine.aux,engine.state,engine.mouth)?;
+        TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["to"])?;
     }
     let cs = engine.read_control_sequence(&tk)?;
     let mut ret = shared_vector::Vector::new();
@@ -1702,7 +1702,7 @@ pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
     let t = engine.need_next(false,&tk)?;
     if t.command_code() != CommandCode::BeginGroup {
-        MissingBegingroup.throw(engine.aux,engine.state,engine.mouth)?;
+        TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
     }
     engine.read_until_endgroup(&tk,|_,_,t| {
         tks.push(t);
@@ -1899,7 +1899,7 @@ pub fn delimiter<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
     let delim = match Delimiter::from_int(num,engine.state) {
         either::Left(d) => d,
         either::Right((d,i)) => {
-            GeneralError(format!("Bad delimiter code ({})",i)).throw(engine.aux,engine.state,engine.mouth)?;
+            engine.general_error(format!("Bad delimiter code ({})",i))?;
             d
         }
     };
@@ -2090,7 +2090,7 @@ pub fn prevgraf_get<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 pub fn prevgraf_set<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_globally:bool) -> TeXResult<(),ET> {
     let d = engine.read_int(true)?.into();
     if d < 0 {
-        GeneralError(format!("Bad prevgraf ({})",d)).throw(engine.aux,engine.state,engine.mouth)?;
+        engine.general_error(format!("Bad prevgraf ({})",d))?;
     } else {
         engine.stomach.data_mut().prevgraf = d as u16;
     }

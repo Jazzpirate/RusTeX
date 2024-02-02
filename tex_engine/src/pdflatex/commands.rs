@@ -18,7 +18,7 @@ use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::engine::stomach::TeXMode;
 use crate::prelude::CSHandler;
-use crate::utils::errors::{GeneralError, MissingKeyword, RecoverableError, TeXResult};
+use crate::utils::errors::{TeXError, TeXResult};
 
 pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
     Ok(<ET::Num as NumSet>::Int::from(140))
@@ -55,7 +55,7 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
           ET::CustomNode:From<PDFNode<ET>> {
     let index = engine.read_int(false)?.into();
     if index < 0 || index >= (engine.aux.extension.colorstacks().len() as i64) {
-        GeneralError(format!("Unknown color stack number {}",index)).throw(engine.aux,engine.state,engine.mouth)?;
+        engine.general_error(format!("Unknown color stack number {}",index))?;
     }
     let index = index as usize;
     let kw = engine.read_keywords(&[b"push",b"pop",b"set",b"current"])?;
@@ -93,7 +93,8 @@ pub fn pdfcolorstack<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
                                      MathNode::Custom(PDFNode::Color(ColorStackAction::Push(index,color)).into())
             )
         }
-        _ => MissingKeyword(&["current","pop","set","push"]).throw(engine.aux,engine.state,engine.mouth)?
+        _ =>
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["current","pop","set","push"])?
     }
     Ok(())
 }
@@ -119,7 +120,7 @@ pub fn pdfdest<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) ->
     let id = match super::nodes::num_or_name(engine,&tk)? {
         Some(n) => n,
         _ => {
-            MissingKeyword(&["name","num"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["name","num"])?;
             NumOrName::Num(0)
         }
     };
@@ -233,7 +234,7 @@ pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
         either::Left(b) => b,
         _ => {
-            MissingKeyword(&["=","<",">"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
             b'='
         }
     };
@@ -261,7 +262,7 @@ pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Tok
     let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
         either::Left(b) => b,
         _ => {
-            MissingKeyword(&["=","<",">"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
             b'='
         }
     };
@@ -645,7 +646,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Tok
             Ok(engine.aux.extension.pdfobjs().len() - 1)
         }
         _ => {
-            MissingKeyword(&["reserveobjnum","useobjnum","stream"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["reserveobjnum","useobjnum","stream"])?;
             Ok(0)
         }
     }
@@ -808,7 +809,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
     let img = match match image::io::Reader::open(file.path()) {
         Ok(x) => x,
         _ => {
-            GeneralError("Unknown type of image".into()).throw(engine.aux,engine.state,engine.mouth)?;
+            engine.general_error("Unknown type of image".into())?;
             return Ok(())
         }
     }.with_guessed_format().map(|i| i.decode()) {
@@ -817,7 +818,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
             match file.path().extension() {
                 Some(s) if s == "pdf" => super::nodes::pdf_as_image(file.path(),&mut engine.aux.extension),
                 _ => {
-                    GeneralError("Unknown type of image".into()).throw(engine.aux,engine.state,engine.mouth)?;
+                    engine.general_error("Unknown type of image".into())?;
                     return Ok(())
                 }
             }

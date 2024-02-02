@@ -25,7 +25,7 @@ use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::nodes::NodeTrait;
 use crate::engine::stomach::TeXMode;
 use crate::tex::numerics::Skip;
-use crate::utils::errors::{FileEndWhileUse, MissingBegingroup, RecoverableError, TeXResult};
+use crate::utils::errors::{TeXError, TeXResult};
 
 pub(crate) struct MacroParser<T:Token> {
     arity:u8,
@@ -426,7 +426,7 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
                 let t = match engine.mouth.get_next(engine.aux,engine.state)? {
                     Some(t) => t,
                     _ => {
-                        FileEndWhileUse(in_token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
+                        TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())?;
                         continue
                     }
                 };
@@ -435,7 +435,7 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
             _ => cols.push(next)
         }
     }
-    FileEndWhileUse(in_token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())?;
     Ok(cols.build(in_token.clone()))
 }
 
@@ -525,7 +525,7 @@ pub(in crate::commands) fn start_align_row<ET:EngineTypes>(engine:&mut EngineRef
             }
         );
     }
-    FileEndWhileUse(engine.gullet.get_align_data().unwrap().token.clone()).throw(engine.aux,engine.state,engine.mouth)
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,engine.gullet.get_align_data().unwrap().token.clone())
 }
 
 pub(in crate::commands) fn open_align_cell<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mode:BoxType) {
@@ -834,7 +834,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn skip_argument(&mut self,token:&ET::Token) -> TeXResult<(),ET> {
         let t = self.need_next(false,token)?;
         if t.command_code() != CommandCode::BeginGroup {
-            MissingBegingroup.throw(self.aux,self.state,self.mouth)?;
+            TeXError::missing_begingroup(self.aux,self.state,self.mouth)?;
         }
         self.read_until_endgroup(token,|_,_,_| Ok(()))?;
         Ok(())

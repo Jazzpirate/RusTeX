@@ -6,7 +6,7 @@ use crate::tex::nodes::boxes::TeXBox;
 use crate::tex::nodes::{display_do_indent, NodeTrait, NodeType};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::nodes::CustomNodeTrait;
-use crate::utils::errors::{MissingKeyword, RecoverableError, TeXResult};
+use crate::utils::errors::{TeXError, TeXResult};
 
 #[derive(Clone,Debug)]
 pub enum PDFNode<ET:EngineTypes> {
@@ -111,7 +111,7 @@ pub fn pdfdest_type<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResu
         Some(b"fitv") => Ok(PDFDestType::Fitv),
         Some(b"fit") => Ok(PDFDestType::Fit),
         _ => {
-            MissingKeyword(&["xyz","fitr","fitbh","fitbv","fitb","fith","fitv","fit"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["xyz","fitr","fitbh","fitbv","fitb","fith","fitv","fit"])?;
             Ok(PDFDestType::XYZ {zoom:None})
         }
     }
@@ -197,14 +197,14 @@ pub fn action_spec<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
             match num_or_name(engine,token)? {
                 Some(n) => Ok(ActionSpec::Thread{file,target:n}),
                 None => {
-                    MissingKeyword(&["num","name"]).throw(engine.aux,engine.state,engine.mouth)?;
+                    TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["num","name"])?;
                     Ok(ActionSpec::Thread {file,target:NumOrName::Num(0)})
                 }
             }
 
         }
         None => {
-            MissingKeyword(&["user","goto","thread"]).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["user","goto","thread"])?;
             Ok(ActionSpec::User(String::new()))
         },
         _ => unreachable!()

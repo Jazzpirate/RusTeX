@@ -46,12 +46,15 @@ pub enum TeXError<ET:EngineTypes> {
     MissingNumber,
     #[error("! Missing {} inserted",.0[0])]
     MissingKeyword(&'static [&'static str]),
-    #[error(transparent)]
-    IncompleteConditional(#[from] IncompleteConditional),
-    #[error(transparent)]
-    NotAllowedInMode(#[from] NotAllowedInMode),
-    #[error(transparent)]
-    General(#[from] GeneralError),
+    #[error("Incomplete {}; all text was ignored after line {line_no}",.name.display::<u8>(Some(b'\\')))]
+    IncompleteConditional{
+        name:PrimitiveIdentifier,
+        line_no:usize
+    },
+    #[error("You can't use {} in {mode} mode",.name.display::<u8>(Some(b'\\')))]
+    NotAllowedInMode { name:PrimitiveIdentifier,mode:TeXMode },
+    #[error("Errror: {0}")]
+    General(String),
     #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
     /*
@@ -62,6 +65,62 @@ pub enum TeXError<ET:EngineTypes> {
     MissingKeyword(&'static[&'static str]),
     EndInsideGroup,
      */
+}
+
+macro_rules! throw {
+    ($aux:expr,$state:expr,$mouth:expr,$f:ident($($arg:expr),*) => $err:expr) => {{
+        let eh = &$aux.error_handler;
+        let ret = eh.$f(&$aux.outputs,&$aux.memory,$state$(,$arg)*);
+        match ret {
+            Ok(Some(src)) => {
+                $mouth.push_string(src);
+                Ok(())
+            },
+            Ok(None) => Ok(()),
+            _ => Err($err)
+        }
+    }};
+}
+impl<ET:EngineTypes> TeXError<ET> {
+    pub fn incomplete_conditional<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,name:PrimitiveIdentifier) -> TeXResult<(),ET> {
+        let line_no = mouth.line_number();
+        throw!(aux,state,mouth,incomplete_conditional(name,line_no) => TeXError::IncompleteConditional{name,line_no})
+    }
+    pub fn wrong_definition<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,found:ET::Token,expected:ET::Token,in_macro:ET::Token) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,wrong_definition(&found,&expected,&in_macro) =>
+        TeXError::WrongDefinition(in_macro.display(aux.memory.cs_interner(),state.get_catcode_scheme(),state.get_escape_char()).to_string())
+        )
+    }
+    pub fn file_end_while_use<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,in_macro:ET::Token) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,file_end_while_use(&in_macro) => TeXError::FileEndedWhileScanningUseOf(in_macro.display(aux.memory.cs_interner(),state.get_catcode_scheme(),state.get_escape_char()).to_string()))
+    }
+    pub fn undefined<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,token:ET::Token) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,undefined(&token) => TeXError::Undefined(
+            match token.to_enum() {
+                StandardToken::ControlSequence(cs) =>
+                    format!("control sequence {}{}",ET::Char::display_opt(state.get_escape_char()),aux.memory.cs_interner().resolve(&cs)),
+                StandardToken::Character(c,_) =>
+                    format!("active character {}",c.display()),
+                _ => unreachable!()
+            }
+        ))
+    }
+    pub fn not_allowed_in_mode<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,name:PrimitiveIdentifier,mode:TeXMode) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,not_allowed_in_mode(name,mode) => TeXError::NotAllowedInMode{name,mode})
+    }
+    pub fn missing_begingroup<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,missing_begingroup() => TeXError::MissingBegingroup)
+    }
+    pub fn missing_endgroup<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,missing_endgroup() => TeXError::MissingEndgroup)
+    }
+    pub fn missing_number<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,missing_number() => TeXError::MissingNumber)
+    }
+    pub fn missing_keyword<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,kws:&'static[&'static str]) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,missing_keyword(kws) => TeXError::MissingKeyword(kws))
+    }
+
 }
 pub type TeXResult<A,ET> = Result<A,TeXError<ET>>;
 
@@ -83,16 +142,7 @@ pub trait RecoverableError<ET:EngineTypes>:Sized {
 }
 macro_rules! split {
     ($self:ident,$aux:expr,$state:ident,$mouth:ident,$f:ident($($arg:expr),*)) => {{
-        let eh = &$aux.error_handler;
-        let ret = eh.$f(&$aux.outputs,&$aux.memory,$state$(,$arg)*);
-        match ret {
-            Ok(Some(src)) => {
-                $mouth.push_string(src);
-                Ok(())
-            },
-            Ok(None) => Ok(()),
-            _ => Err($self.into_err($aux,$state))
-        }
+        throw!($aux,$state,$mouth,$f($($arg),*) => $self.into_err($aux,$state))
     }};
 }
 
@@ -122,15 +172,6 @@ impl<ET:EngineTypes> From<GulletError<ET::Char>> for TeXError<ET> {
     }
 }
 
-#[derive(Debug,Error)]
-#[error("Errror: {0}")]
-pub struct GeneralError(pub String);
-impl<ET:EngineTypes> RecoverableError<ET> for GeneralError {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,other(&self.0))
-    }
-}
-
 /// An error indicating that an invalid [`Character`] was encountered
 #[derive(Debug,Error)]
 #[error("! Text line contains an invalid character.\n{}",.0.display())]
@@ -141,68 +182,6 @@ impl<ET:EngineTypes> RecoverableError<ET> for InvalidCharacter<ET::Char> {
     }
 }
 
-#[derive(Debug,Error)]
-#[error("Incomplete {}; all text was ignored after line {line_no}",.name.display::<u8>(Some(b'\\')))]
-pub struct IncompleteConditional {
-    pub name:PrimitiveIdentifier,
-    pub line_no:usize
-}
-impl<ET:EngineTypes> RecoverableError<ET> for IncompleteConditional {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,incomplete_conditional(self.name,self.line_no))
-    }
-}
-
-#[derive(Debug,Error)]
-pub struct WrongDefinition<T:Token> {
-    pub(crate) expected:T,
-    pub(crate) found:T,
-    pub(crate) in_macro:T
-}
-impl<ET:EngineTypes> IntoErr<ET,TeXError<ET>> for WrongDefinition<ET::Token> {
-    fn into_err(self, aux: &EngineAux<ET>, state: &ET::State) -> TeXError<ET> {
-        TeXError::WrongDefinition(self.in_macro.display(aux.memory.cs_interner(),state.get_catcode_scheme(),state.get_escape_char()).to_string())
-    }
-}
-impl<ET:EngineTypes> RecoverableError<ET> for WrongDefinition<ET::Token> {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,wrong_definition(&self.found,&self.expected,&self.in_macro))
-    }
-}
-
-#[derive(Debug,Error)]
-pub struct FileEndWhileUse<T:Token>(pub T);
-impl<ET:EngineTypes> IntoErr<ET,TeXError<ET>> for FileEndWhileUse<ET::Token> {
-    fn into_err(self, aux: &EngineAux<ET>, state: &ET::State) -> TeXError<ET> {
-        TeXError::FileEndedWhileScanningUseOf(self.0.display(aux.memory.cs_interner(), state.get_catcode_scheme(), state.get_escape_char()).to_string())
-    }
-}
-impl<ET:EngineTypes> RecoverableError<ET> for FileEndWhileUse<ET::Token> {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,file_end_while_use(&self.0))
-    }
-}
-
-#[derive(Debug,Error)]
-pub struct Undefined<T:Token>(pub T);
-impl<ET:EngineTypes> IntoErr<ET,TeXError<ET>> for Undefined<ET::Token> {
-    fn into_err(self, aux: &EngineAux<ET>, state: &ET::State) -> TeXError<ET> {
-        TeXError::Undefined(
-            match self.0.to_enum() {
-                StandardToken::ControlSequence(cs) =>
-                    format!("control sequence {}{}",ET::Char::display_opt(state.get_escape_char()),aux.memory.cs_interner().resolve(&cs)),
-                StandardToken::Character(c,_) =>
-                    format!("active character {}",c.display()),
-                _ => unreachable!()
-            }
-        )
-    }
-}
-impl<ET:EngineTypes> RecoverableError<ET> for Undefined<ET::Token> {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,undefined(&self.0))
-    }
-}
 
 #[derive(Debug,Error)]
 #[error("! Too many }}'s")]
@@ -217,75 +196,6 @@ impl<ET:EngineTypes> From<TooManyCloseBraces> for TeXError<ET> {
         TeXError::TooManyCloseBraces
     }
 }
-
-#[derive(Debug,Error)]
-#[error("You can't use {} in {mode} mode",.name.display::<u8>(Some(b'\\')))]
-pub struct NotAllowedInMode {
-    pub name:PrimitiveIdentifier,
-    pub mode:TeXMode
-}
-impl<ET:EngineTypes> RecoverableError<ET> for NotAllowedInMode {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,not_allowed_in_mode(self.name,self.mode))
-    }
-}
-
-#[derive(Debug,Error)]
-#[error("! Missing {{ inserted")]
-pub struct MissingBegingroup;
-impl<ET:EngineTypes> RecoverableError<ET> for MissingBegingroup {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,missing_begingroup())
-    }
-}
-impl<ET:EngineTypes> From<MissingBegingroup> for TeXError<ET> {
-    fn from(_: MissingBegingroup) -> Self {
-        TeXError::MissingBegingroup
-    }
-}
-
-#[derive(Debug,Error)]
-#[error("! Missing }} inserted")]
-pub struct MissingEndgroup;
-impl<ET:EngineTypes> RecoverableError<ET> for MissingEndgroup {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,missing_endgroup())
-    }
-}
-impl<ET:EngineTypes> From<MissingEndgroup> for TeXError<ET> {
-    fn from(_: MissingEndgroup) -> Self {
-        TeXError::MissingEndgroup
-    }
-}
-
-#[derive(Debug,Error)]
-#[error("Missing number, treated as zero.")]
-pub struct MissingNumber;
-impl<ET:EngineTypes> RecoverableError<ET> for MissingNumber {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,missing_number())
-    }
-}
-impl<ET:EngineTypes> From<MissingNumber> for TeXError<ET> {
-    fn from(_: MissingNumber) -> Self {
-        TeXError::MissingNumber
-    }
-}
-
-#[derive(Debug,Error)]
-#[error("! Missing {} inserted",.0[0])]
-pub struct MissingKeyword(pub &'static [&'static str]);
-impl<ET:EngineTypes> RecoverableError<ET> for MissingKeyword {
-    fn recover<M:Mouth<ET>,Err>(self,aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> Result<(),Err> where Self:IntoErr<ET,Err> {
-        split!(self,aux,state,mouth,missing_keyword(self.0))
-    }
-}
-impl<ET:EngineTypes> From<MissingKeyword> for TeXError<ET> {
-    fn from(MissingKeyword(els): MissingKeyword) -> Self {
-        TeXError::MissingKeyword(els)
-    }
-}
-
 
 /// Trait for error recovery, to be implemented for an engine.
 pub trait ErrorHandler<ET:EngineTypes> {
@@ -370,6 +280,6 @@ impl<ET:EngineTypes> ErrorHandler<ET> for ErrorThrower<ET> {
 impl<ET:EngineTypes> EngineReferences<'_,ET> {
     #[inline]
     pub fn general_error(&mut self,msg:String) -> TeXResult<(),ET> {
-        GeneralError(msg).recover::<_,TeXError<_>>(self.aux,self.state,self.mouth)
+        throw!(self.aux,self.state,self.mouth,other(&msg) => TeXError::General(msg))
     }
 }

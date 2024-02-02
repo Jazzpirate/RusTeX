@@ -3,13 +3,12 @@
 use crate::commands::methods::{END_TEMPLATE, END_TEMPLATE_ROW};
 use crate::commands::primitives::PRIMITIVES;
 use crate::engine::{EngineAux, EngineTypes};
-use crate::prelude::{CommandCode, Token, TokenList};
+use crate::prelude::{CommandCode, Token};
 use crate::tex::nodes::boxes::BoxType;
 use crate::tex::tokens::control_sequences::CSHandler;
 use crate::engine::mouth::Mouth;
 use crate::engine::state::State;
 use crate::tex::numerics::Skip;
-use crate::utils::errors::{GulletError, TooManyCloseBraces};
 
 /// Specification on a column in an `\halign` (or a row in a `\valign`); in particular:
 /// - the alignment template for the column (or row)

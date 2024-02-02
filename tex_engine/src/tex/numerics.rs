@@ -167,8 +167,8 @@ impl Display for Dim32 {
         Self::display_num(self.0,"pt",f)
     }
 }
-impl Into<i64> for Dim32 {
-    fn into(self) -> i64 { self.0 as i64 }
+impl From<Dim32> for i64 {
+    fn from(d:Dim32) -> i64 { d.0 as i64 }
 }
 
 impl TeXDimen for Dim32 {

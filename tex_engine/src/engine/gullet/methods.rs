@@ -15,7 +15,7 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::tokens::{StandardToken, Token};
 use crate::tex::characters::Character;
 use crate::engine::EngineAux;
-use crate::utils::errors::{FileEndWhileUse, RecoverableError, TeXResult, WrongDefinition, IncompleteConditional, Undefined, MissingNumber};
+use crate::utils::errors::{TeXResult, TeXError};
 
 /// processes the parameter signature `params` of a [`Macro`](crate::commands::Macro) by reading the relevant arguments;
 /// storing them in `args`
@@ -54,9 +54,9 @@ pub fn read_arguments<ET:EngineTypes>(engine:&mut EngineReferences<ET>,args:&mut
                         _ => return Ok(())
                     },
                 Some(o) =>
-                    WrongDefinition {expected:next.clone(),found:o,in_macro:token.clone()}.throw(engine.aux,engine.state,engine.mouth)?,
+                    TeXError::wrong_definition(engine.aux,engine.state,engine.mouth,o,next.clone(),token.clone())?,
                 None =>
-                    FileEndWhileUse(token.clone()).throw(engine.aux,engine.state,engine.mouth)?,
+                    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,token.clone())?,
             }
         }
     }
@@ -119,13 +119,13 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
 fn read_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:&mut Vec<ET::Token>,long:bool,token:&ET::Token)
                                  -> TeXResult<(),ET> {
     let eof = |a:&_,s:&_,m:&mut _| {
-        FileEndWhileUse(token.clone()).throw(a,s,m)
+        TeXError::file_end_while_use(a,s,m,token.clone())
     };
     loop {
         let t = match engine.mouth.get_next(engine.aux, engine.state)? {
             Some(t) => t,
             None => {
-                FileEndWhileUse(token.clone()).throw(engine.aux,engine.state,engine.mouth)?;continue
+                TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,token.clone())?;continue
             }
         };
         match t.command_code() {
@@ -267,7 +267,7 @@ pub(crate) fn case_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usi
             _ => Ok(None)
         }
     },|a,s,m| {
-        IncompleteConditional::recover(IncompleteConditional { name: PRIMITIVES.ifcase, line_no: m.line_number() }, a, s, m)
+        TeXError::incomplete_conditional(a,s,m,PRIMITIVES.ifcase)
     })?;
     *engine.gullet.get_conditionals() = conds;
     Ok(())
@@ -310,7 +310,7 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
             _ => Ok(None)
         }
     },|a,s,m| {
-        IncompleteConditional::recover(IncompleteConditional { name: PRIMITIVES.ifcase, line_no: m.line_number() }, a, s, m)
+        TeXError::incomplete_conditional(a,s,m,cond)
     })?;
     *engine.gullet.get_conditionals() = conds;
     Ok(())
@@ -396,7 +396,7 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             _ => todo!("number expected")
         }
         ResolvedToken::Cmd(None) =>
-            Undefined(token).throw(engine.aux,engine.state,engine.mouth)?,
+            TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
         ResolvedToken::Cmd(Some(cmd)) => return Ok(NumContinuation{is_negative,next:either::Right((cmd.clone(),token))})
     );
     todo!("file end")
@@ -773,7 +773,7 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) 
         }
         ResolvedToken::Cmd(Some(cmd)) => return read_unit_cmd(engine,float,cmd.clone(),token),
         ResolvedToken::Cmd(None) =>
-            Undefined(token).throw(engine.aux,engine.state,engine.mouth)?,
+            TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
     );
     todo!("file end")
 }
@@ -997,7 +997,7 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<S
             o => todo!("command in read_stretch: {:?}",o)
         }
     );
-    MissingNumber.throw(engine.aux,engine.state,engine.mouth)?;
+    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
     Ok(StretchShrink::Dim(ET::Dim::default()))
 }
 fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> TeXResult<StretchShrink<ET::Dim>,ET> {
@@ -1230,7 +1230,7 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult
         }
         _ => todo!("command in read_skip")
     );
-    MissingNumber.throw(engine.aux,engine.state,engine.mouth)?;
+    TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
     Ok(MuStretchShrink::Mu(ET::MuDim::default()))
 }
 fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> TeXResult<MuStretchShrink<ET::MuDim>,ET> {

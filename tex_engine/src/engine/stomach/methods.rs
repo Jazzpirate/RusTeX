@@ -15,7 +15,8 @@ use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
 use crate::tex::tokens::Token;
 use crate::engine::fontsystem::Font;
-use crate::utils::errors::{RecoverableError, TeXResult, Undefined};
+use crate::engine::gullet::Gullet;
+use crate::utils::errors::{TeXError, TeXResult};
 
 #[doc(hidden)]
 #[macro_export]
@@ -36,75 +37,102 @@ pub fn insert_afterassignment<ET:EngineTypes>(engine:&mut EngineReferences<ET>) 
     if let Some(t) = std::mem::take(engine.stomach.afterassignment()) { engine.requeue(t).unwrap() }
 }
 
+fn read_tokens<ET:EngineTypes,F:FnOnce(&mut EngineReferences<ET>,TokenList<ET::Token>)>(engine:&mut EngineReferences<ET>,token:ET::Token,f:F) -> TeXResult<(),ET> {
+    let mut tks = shared_vector::Vector::new();
+    engine.read_until_endgroup(&token,|_,_,t| {
+        tks.push(t);
+        Ok(())
+    })?;
+    f(engine,TokenList::from(tks));
+    Ok(())
+}
+
 /// Default implementation for [`Stomach::assign_toks_register`].
 pub fn assign_toks_register<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,register:usize,global:bool) -> TeXResult<(),ET> {
     let mut had_eq = false;
+    let cont = |engine:&mut EngineReferences<ET>,ls| {
+        engine.state.set_toks_register(engine.aux,register,ls,global);
+        insert_afterassignment(engine);
+    };
     crate::expand_loop!(ET; engine,tk,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) if !had_eq => {
-                if had_eq { todo!("throw error") }
+                if had_eq {
+                    TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
+                    if let Some(a) = engine.gullet.get_align_data() {a.ingroups += 1}
+                    return read_tokens(engine,token,cont);
+                }
                 had_eq = true;
             }
             (_,CommandCode::BeginGroup) => {
-                let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(&token,|_,_,t| {
-                    tks.push(t);
-                    Ok(())
-                })?;
-                engine.state.set_toks_register(engine.aux,register,TokenList::from(tks),global);
-                insert_afterassignment(engine);
-                return Ok(())
+                return read_tokens(engine,token,cont);
             }
-            _ => todo!("throw error")
+            _ => {
+                TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
+                if let Some(a) = engine.gullet.get_align_data() {a.ingroups += 1}
+                return read_tokens(engine,token,cont);
+            }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) => {
-            let tks = engine.state.get_primitive_tokens(*name).clone();
-            engine.state.set_toks_register(engine.aux,register,tks,global);
-            insert_afterassignment(engine);
+            cont(engine,engine.state.get_primitive_tokens(*name).clone());
             return Ok(())
         }
         ResolvedToken::Cmd(Some(TeXCommand::ToksRegister(u))) => {
-            let tks = engine.state.get_toks_register(*u).clone();
-            engine.state.set_toks_register(engine.aux,register,tks,global);
-            insert_afterassignment(engine);
+            cont(engine,engine.state.get_toks_register(*u).clone());
             return Ok(())
         }
-        _ => todo!("throw error")
+        _ => {
+            TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
+            if let Some(a) = engine.gullet.get_align_data() {a.ingroups += 1}
+            return read_tokens(engine,token,cont);
+        }
     );
-    todo!("error")
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,token.clone())?;
+    Ok(())
 }
 
 /// Default implementation for [`Stomach::assign_primitive_toks`].
 pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,name:PrimitiveIdentifier,global:bool) -> TeXResult<(),ET> {
     let mut had_eq = false;
+    macro_rules! read { () => {{
+        let mut tks = shared_vector::Vector::new();
+        if name == PRIMITIVES.output {
+            tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
+            engine.read_until_endgroup(&token,|_,_,t| {
+                tks.push(t);
+                Ok(())
+            })?;
+            tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
+        } else {
+            engine.read_until_endgroup(&token,|_,_,t| {
+                tks.push(t);
+                Ok(())
+            })?;
+        }
+        engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
+        insert_afterassignment(engine);
+        return Ok(())
+    }}}
     crate::expand_loop!(ET; engine,tk,
         ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
             (Ok(b'='),CommandCode::Other) if !had_eq => {
-                if had_eq { todo!("throw error") }
+                if had_eq {
+                    TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
+                    if let Some(a) = engine.gullet.get_align_data() {a.ingroups += 1}
+                    read!();
+                }
                 had_eq = true;
             }
             (_,CommandCode::BeginGroup) => {
-                let mut tks = shared_vector::Vector::new();
-                if name == PRIMITIVES.output {
-                    tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
-                    engine.read_until_endgroup(&token,|_,_,t| {
-                        tks.push(t);
-                        Ok(())
-                    })?;
-                    tks.push(ET::Token::from_char_cat(b'}'.into(),CommandCode::EndGroup));
-                } else {
-                    engine.read_until_endgroup(&token,|_,_,t| {
-                        tks.push(t);
-                        Ok(())
-                    })?;
-                }
-                engine.state.set_primitive_tokens(engine.aux,name,TokenList::from(tks),global);
-                insert_afterassignment(engine);
-                return Ok(())
+                read!()
             }
-            _ => todo!("throw error")
+            _ => {
+                TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
+                if let Some(a) = engine.gullet.get_align_data() {a.ingroups += 1}
+                read!();
+            }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveToks})) => {
             let tks = engine.state.get_primitive_tokens(*name);
@@ -136,9 +164,14 @@ pub fn assign_primitive_toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,to
             insert_afterassignment(engine);
             return Ok(())
         }
-        _ => todo!("throw error")
+        _ => {
+            TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
+            if let Some(a) = engine.gullet.get_align_data() {a.ingroups += 1}
+            read!();
+        }
     );
-    todo!("throw error")
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,token.clone())?;
+    Ok(())
 }
 
 pub(crate) fn add_box<ET:EngineTypes>(engine:&mut EngineReferences<ET>,bx:TeXBox<ET>,target:BoxTarget<ET>) -> TeXResult<(),ET> {
@@ -201,6 +234,7 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
         CommandCode::Subscript if engine.stomach.data_mut().mode().is_math() => {
             do_subscript(engine,&token)?
         }
+        CommandCode::Escape | CommandCode::Primitive | CommandCode::Active | CommandCode::Argument => unreachable!(),
         _ => todo!("{} > {:?}",char,code)
     }
     Ok(())
@@ -252,7 +286,7 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> Te
         ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) =>
             end!(ET::Stomach::do_char(engine,token,*char,*code)?),
         ResolvedToken::Cmd(None) => {
-            Undefined(token.clone()).throw(engine.aux,engine.state,engine.mouth)?;
+            TeXError::undefined(engine.aux,engine.state,engine.mouth,token.clone())?;
             end!(())
         }
         ResolvedToken::Cmd(Some(cmd)) => {
@@ -667,7 +701,7 @@ pub fn do_output<ET:EngineTypes>(engine:&mut EngineReferences<ET>, caused_penalt
         crate::expand!(ET;engine,next;
             ResolvedToken::Tk { char, code } => do_char(engine, next, char, code)?,
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => do_char(engine, next, *char, *code)?,
-            ResolvedToken::Cmd(None) => Undefined(next).throw(engine.aux,engine.state,engine.mouth)?,
+            ResolvedToken::Cmd(None) => TeXError::undefined(engine.aux,engine.state,engine.mouth,next)?,
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(ET;engine,next,cmd)
         );
     }

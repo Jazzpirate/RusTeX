@@ -90,10 +90,10 @@ impl std::fmt::Display for CategoryCode {
     }
 }
 
-impl Into<u8> for CategoryCode {
-    fn into(self) -> u8 {
+impl From<CategoryCode> for u8 {
+    fn from(cc:CategoryCode) -> u8 {
         use CategoryCode::*;
-        match self {
+        match cc {
             Escape => 0,
             BeginGroup => 1,
             EndGroup => 2,

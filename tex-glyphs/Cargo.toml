@@ -20,17 +20,17 @@ rustdoc-args = [ "--html-in-header", "katex-header.html" ]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [build-dependencies]
-phf = { version = "0.11.2", default-features = false }
-phf_codegen = "0.11.2"
-array-init = "2.1.0"
-log={version="0.4.20",features=["kv_unstable"]}
+phf = { version = "0.11", default-features = false }
+phf_codegen = "0.11"
+array-init = "2"
+log={version="0.4",features=["kv_unstable"]}
 env_logger = "0.11"
 
 [dev-dependencies]
-log={version="0.4.20",features=["kv_unstable"]}
+log={version="0.4",features=["kv_unstable"]}
 env_logger = "0.11"
 
 [dependencies]
-phf = { version = "0.11.2", features = ["macros"] }
-ahash = "0.8.7"
-array-init = "2.1.0"
+phf = { version = "0.11", features = ["macros"] }
+ahash = "0.8"
+array-init = "2.1"

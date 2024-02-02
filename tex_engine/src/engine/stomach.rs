@@ -22,7 +22,7 @@ use crate::tex::nodes::math::{MathAtom, MathChar, MathNode, MathNodeList, MathNo
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::gullet::Gullet;
 use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
-use crate::utils::errors::{NotAllowedInMode, TeXResult, RecoverableError, FileEndWhileUse};
+use crate::utils::errors::{TeXResult, TeXError};
 
 /// The mode the engine is currently in, e.g. horizontal mode or vertical mode.
 #[derive(Clone,Copy,Eq,PartialEq,Debug)]
@@ -288,7 +288,8 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
                 Self::open_paragraph(engine,token);
                 Ok(false)
             }
-            (_,_) => {NotAllowedInMode {name,mode:engine.stomach.data_mut().mode()}.throw(engine.aux,engine.state,engine.mouth)?;Ok(false)}
+            (_,_) => {
+                TeXError::not_allowed_in_mode(engine.aux,engine.state,engine.mouth,name,engine.stomach.data_mut().mode())?;Ok(false)}
         }
     }
 
@@ -593,6 +594,6 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             }
             o => todo!("??? {:?}",o)
         );
-        FileEndWhileUse(in_token.clone()).throw(self.aux,self.state,self.mouth)
+        TeXError::file_end_while_use(self.aux,self.state,self.mouth,in_token.clone())
     }
 }

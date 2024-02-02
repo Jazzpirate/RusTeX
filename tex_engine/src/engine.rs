@@ -21,7 +21,7 @@ use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, MuDim, Numeric, NumSet, TeXDimen, TeXInt};
 use crate::tex::tokens::Token;
-use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXResult, Undefined};
+use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXResult,TeXError};
 
 pub mod filesystem;
 pub mod mouth;
@@ -295,13 +295,12 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     }
     /// Entry point for compilation. This function is called by [`TeXEngine::do_file_default`].
     pub fn top_loop(&mut self) -> TeXResult<(),ET> {
-        use crate::utils::errors::RecoverableError;
         crate::expand_loop!(ET::Stomach::every_top(self) => token => {
             if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next(false).unwrap();continue}
         }; self,
             ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code)?,
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code)?,
-            ResolvedToken::Cmd(None) => Undefined(token).throw(self.aux,self.state,self.mouth)?,
+            ResolvedToken::Cmd(None) => TeXError::undefined(self.aux,self.state,self.mouth,token)?,
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(self,token,cmd)
         );
         Ok(())
@@ -429,9 +428,9 @@ macro_rules! do_cmd {
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },name} |
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },name} |
             crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
-                crate::utils::errors::NotAllowedInMode{
-                        name:*name,mode:<$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
-                }.throw($engine.aux,$engine.state,$engine.mouth)?,
+            TeXError::not_allowed_in_mode($engine.aux,$engine.state,$engine.mouth,*name,
+                <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
+            )?,
             crate::commands::TeXCommand::Macro(_) |
             crate::commands::TeXCommand::Primitive{ cmd:crate::commands::PrimitiveCommand::Conditional { .. } |
                 crate::commands::PrimitiveCommand::Expandable { .. } |
