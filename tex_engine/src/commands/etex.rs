@@ -42,10 +42,13 @@ fn expr_inner<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>,
     match next {
         Either::Left(b) => if b == b'(' {
             let (int,ret) = expr_loop(engine, byte, cmd,tk)?;
-            match ret.to_enum() {
-                StandardToken::Character(char,CommandCode::Other) if matches!(char.try_into(),Ok(b')')) =>
-                    if is_negative {Ok(-int)} else {Ok(int)},
-                _ => Err(TeXError::General("TODO: Better error message".to_string()))
+            match ret {
+                Some(ret) => match ret.to_enum() {
+                    StandardToken::Character(char,CommandCode::Other) if matches!(char.try_into(),Ok(b')')) =>
+                        if is_negative {Ok(-int)} else {Ok(int)},
+                    _ => Err(TeXError::General("Closing Parenthesis expected\nTODO: Better error message".to_string()))
+                }
+                _ => Err(TeXError::General("Closing Parenthesis expected\nTODO: Better error message".to_string()))
             }
         } else { byte(engine,is_negative,b)},
         Either::Right((c,token)) => cmd(engine,is_negative,c,token)
@@ -95,7 +98,7 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
   byte:fn(&mut EngineReferences<ET>,bool,u8) -> TeXResult<R,ET>,
   cmd:fn(&mut EngineReferences<ET>, bool, TeXCommand<ET>, ET::Token) -> TeXResult<R,ET>,
     tk:&ET::Token
-) -> TeXResult<(R,ET::Token),ET> {
+) -> TeXResult<(R,Option<ET::Token>),ET> {
     let mut prev : Option<R> = None;
     let mut curr = Summand::<ET,R>::new(expr_inner(engine,byte,cmd,tk)?);
     loop {
@@ -201,13 +204,13 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
 
 pub fn expanded<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token)-> TeXResult<(),ET> {
     if engine.need_next(false,&tk)?.command_code() == CommandCode::BeginGroup {
-        ET::Gullet::expand_until_endgroup(engine,false,false,&tk,|_,_,t| {
-            exp.push(t);
-            Ok(())
-        })
     } else {
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        TeXError::missing_begingroup(engine.aux,engine.state,engine.mouth)?;
     }
+    ET::Gullet::expand_until_endgroup(engine,false,false,&tk,|_,_,t| {
+        exp.push(t);
+        Ok(())
+    })
 }
 
 pub fn fontchardp<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
@@ -242,7 +245,7 @@ pub fn ifdefined<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token)
             engine.state.get_ac_command(c).is_some(),
         StandardToken::ControlSequence(name) =>
             engine.state.get_command(&name).is_some(),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => true
     })
 }
 
@@ -257,12 +260,14 @@ pub fn numexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
                           crate::engine::gullet::methods::read_int_byte,
                           crate::engine::gullet::methods::read_int_command,&tk
     )?;
-    if !r.is_cs_or_active() {
-        engine.requeue(r)?
-    } else {
-        match ET::Gullet::char_or_primitive(engine.state,&r) {
-            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
-            _ => engine.requeue(r)?,
+    if let Some(r) = r {
+        if !r.is_cs_or_active() {
+            engine.requeue(r)?
+        } else {
+            match ET::Gullet::char_or_primitive(engine.state, &r) {
+                Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+                _ => engine.requeue(r)?,
+            }
         }
     }
     Ok(i)
@@ -273,12 +278,14 @@ pub fn dimexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -
                           crate::engine::gullet::methods::read_dim_byte,
                           crate::engine::gullet::methods::read_dim_command,&tk
     )?;
-    if !r.is_cs_or_active() {
-        engine.requeue(r)?
-    } else {
-        match ET::Gullet::char_or_primitive(engine.state,&r) {
-            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
-            _ => engine.requeue(r)?,
+    if let Some(r) = r {
+        if !r.is_cs_or_active() {
+            engine.requeue(r)?
+        } else {
+            match ET::Gullet::char_or_primitive(engine.state, &r) {
+                Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+                _ => engine.requeue(r)?,
+            }
         }
     }
     Ok(i)
@@ -289,12 +296,14 @@ pub fn glueexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
                           crate::engine::gullet::methods::read_skip_byte,
                           crate::engine::gullet::methods::read_skip_command,&tk
     )?;
-    if !r.is_cs_or_active() {
-        engine.requeue(r)?
-    } else {
-        match ET::Gullet::char_or_primitive(engine.state,&r) {
-            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
-            _ => engine.requeue(r)?,
+    if let Some(r) = r {
+        if !r.is_cs_or_active() {
+            engine.requeue(r)?
+        } else {
+            match ET::Gullet::char_or_primitive(engine.state, &r) {
+                Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+                _ => engine.requeue(r)?,
+            }
         }
     }
     Ok(i)
@@ -312,15 +321,17 @@ pub fn muexpr<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
             engine,is_negative,cmd,tk,|d,e| crate::engine::gullet::methods::read_muskip_ii(e, d),Ok
         )
     }
-    let (i,r) = expr_loop(engine,
-                          muskip_byte,muskip_cmd,&tk
+    let (i, r) = expr_loop(engine,
+                           muskip_byte, muskip_cmd, &tk
     )?;
-    if !r.is_cs_or_active() {
-        engine.requeue(r)?
-    } else {
-        match ET::Gullet::char_or_primitive(engine.state,&r) {
-            Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
-            _ => engine.requeue(r)?,
+    if let Some(r) = r {
+        if !r.is_cs_or_active() {
+            engine.requeue(r)?
+        } else {
+            match ET::Gullet::char_or_primitive(engine.state, &r) {
+                Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.relax => (),
+                _ => engine.requeue(r)?,
+            }
         }
     }
     Ok(i)
@@ -348,7 +359,7 @@ pub fn lastnodetype<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
     })
 }
 
-pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,long:bool,_protected:bool,globally:bool) -> TeXResult<(),ET> {
+pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,long:bool,_protected:bool,globally:bool) -> TeXResult<(),ET> {
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return super::tex::outer(engine,token,outer,long,true,globally),
@@ -360,17 +371,25 @@ pub fn protected<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,
             n if n == PRIMITIVES.xdef => return super::tex::xdef(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.gdef => return super::tex::gdef(engine,token,outer,long,true,globally),
             n if n == PRIMITIVES.relax => (),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            r => {
+                let s = r.display(engine.state.get_escape_char()).to_string();
+                engine.requeue(token)?;
+                return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
+            }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            let s = token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string();
+            engine.requeue(token)?;
+            return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 
 pub fn readline<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let idx = engine.read_file_index(&tk)?;
     if !engine.read_keyword("to".as_bytes())? {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["to"])?
     }
     let cs = engine.read_control_sequence(&tk)?;
     let mut ret = shared_vector::Vector::new();
@@ -462,7 +481,10 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
         ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::Conditional(cnd)})) => {
             ET::Gullet::do_conditional(engine,*name,t,*cnd,true)
         }
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            let s = t.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string();
+            engine.general_error(format!("You can't use `\\unless` before {}",s))
+        }
     }
 }
 
@@ -532,7 +554,8 @@ const PRIMITIVE_INTS:&[&str] = &[
     "tracingifs",
     "tracingnesting",
     "tracingscantokens",
-    "savingvdiscards"
+    "savingvdiscards",
+    "predisplaydirection"
 ];
 
 const PRIMITIVE_TOKS:&[&str] = &[
@@ -604,7 +627,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodo!(engine,parshapedimen);
     cmtodo!(engine,parshapeindent);
     cmtodo!(engine,parshapelength);
-    cmtodo!(engine,predisplaydirection);
     cmtodo!(engine,showgroups);
     cmtodo!(engine,showifs);
     cmtodo!(engine,showtokens);

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{HashSet};
 use std::fmt::{Display, Formatter};
 use tex_engine::engine::EngineTypes;
 use tex_engine::engine::filesystem::{File, FileSystem};
@@ -8,14 +8,16 @@ use tex_engine::tex::numerics::{Dim32, Mu};
 use tex_glyphs::glyphs::Glyph;
 use crate::engine::{Font, SRef, Types};
 use crate::fonts::FontStore;
-use crate::shipout::ShipoutMode;
+use crate::shipout::utils::ShipoutMode;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::pdflatex::nodes::PDFColor;
+use tex_engine::utils::HMap;
 use tex_glyphs::fontstyles::FontModifier;
 use crate::files::RusTeXFileSystem;
+use crate::utils::VecMap;
 
 
 fn dim_to_px(d:i32) -> f32{
@@ -139,8 +141,8 @@ pub struct HTMLNode {
     pub font:Option<(Font,bool)>, // true = absolute, false = relative
     pub width:Option<(Dim32,bool)>, // true = absolute, false = relative
     pub classes:Vec<Cow<'static,str>>,
-    pub attrs:BTreeMap<Cow<'static,str>,String>,
-    pub styles:BTreeMap<Cow<'static,str>,Cow<'static,str>>,
+    pub attrs:VecMap<Cow<'static,str>,String>,
+    pub styles:VecMap<Cow<'static,str>,Cow<'static,str>>,
     pub sourceref:Option<(Ref,Ref)>,
 }
 
@@ -169,8 +171,8 @@ impl HTMLNode {
             color:None,font:None,
             width:None,
             classes:Vec::new(),
-            attrs:BTreeMap::new(),
-            styles:BTreeMap::new(),
+            attrs:VecMap::default(),
+            styles:VecMap::default(),
             sourceref:None
         }
     }
@@ -183,8 +185,8 @@ impl HTMLNode {
             color:None,font:None,
             width:None,
             classes:vec!("rustex-page".into()),
-            attrs:BTreeMap::new(),
-            styles:BTreeMap::new(),
+            attrs:VecMap::default(),
+            styles:VecMap::default(),
             sourceref:None
         }
     }
@@ -223,8 +225,8 @@ impl HTMLNode {
             sourceref:Some((start,end)),
             width:Some((width,false)),
             classes:vec!("rustex-paragraph".into()),
-            attrs:BTreeMap::new(),
-            styles:BTreeMap::new(),
+            attrs:VecMap::default(),
+            styles:VecMap::default(),
         }
     }
     pub fn push_comment<D:Display>(&mut self,d:D) {
@@ -288,7 +290,7 @@ impl HTMLNode {
         match self.tag {
             HTMLTag::FontChange(_) => close_font(self,mode,parent),
             HTMLTag::ColorChange(_) => close_color(self,mode,parent),
-            HTMLTag::Annot(_) => close_annot(self,parent),
+            HTMLTag::Annot(_,None) => close_annot(self,mode,parent),
             _ if self.children.len() == 1 => match &self.children[0] {
                 HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_))
                 => merge_annotation(self, mode, parent),
@@ -388,7 +390,7 @@ impl HTMLNode {
 }
 
 
-fn close_annot(mut node:HTMLNode, parent:&mut Vec<HTMLChild>) {
+fn close_annot(mut node:HTMLNode,mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
     if node.children.len() == 1 {
         match node.children.first().unwrap() {
             HTMLChild::Node(_) => {
@@ -403,19 +405,13 @@ fn close_annot(mut node:HTMLNode, parent:&mut Vec<HTMLChild>) {
                     for (k,v) in node.attrs {
                         n.attrs.insert(k,v);
                     }
-                    match (node.color,n.color) {
-                        (Some(c),None) => {
-                            n.color = Some(c);
-                            n.uses_color = false;
-                        }
-                        _ => {}
+                    if let (Some(c),None) = (node.color,n.color) {
+                        n.color = Some(c);
+                        n.uses_color = false;
                     }
-                    match (node.font,&n.font) {
-                        (Some(c),None) => {
-                            n.font = Some(c);
-                            n.uses_font = false;
-                        }
-                        _ => {}
+                    if let (Some(c),None) = (node.font,&n.font) {
+                        n.font = Some(c);
+                        n.uses_font = false;
                     }
                     for s in node.styles {
                         n.styles.insert(s.0,s.1);
@@ -424,6 +420,14 @@ fn close_annot(mut node:HTMLNode, parent:&mut Vec<HTMLChild>) {
                 } else {unreachable!()}
             }
             _ => parent.push(HTMLChild::Node(node))
+        }
+    } else {
+        match &mut node.tag {
+            HTMLTag::Annot(m,_) => {
+                *m = mode;
+                parent.push(HTMLChild::Node(node));
+            }
+            _ => unreachable!()
         }
     }
 }
@@ -551,7 +555,7 @@ pub enum HTMLTag {
     HBoxContainer,HBox,Display,Raise,MoveLeft,
     HAlign,HBody,HRow,HCell,NoAlignH,
     FontChange(ShipoutMode),ColorChange(ShipoutMode),Link(ShipoutMode),
-    Annot(ShipoutMode),
+    Annot(ShipoutMode,Option<String>),
     Matrix(ShipoutMode),
     Dest(ShipoutMode),
     Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,MSqrt,
@@ -564,7 +568,7 @@ impl HTMLTag {
         match self {
             HBoxContainer | HBox | Paragraph | Mi | Mo => false,
             FontChange(m) | ColorChange(m) | Link(m) |
-            Matrix(m) | Annot(m) => !m.is_h(),
+            Matrix(m) | Annot(m,_) => !m.is_h(),
             _ => true
         }
     }
@@ -605,11 +609,12 @@ impl Display for HTMLTag {
             MSub => f.write_str("msub"),
             MSup => f.write_str("msup"),
             MSqrt => f.write_str("msqrt"),
-            FontChange(mode) | ColorChange(mode) | Annot(mode) | Matrix(mode) => {
+            FontChange(mode) | ColorChange(mode) | Annot(mode,None) | Matrix(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }
                 else { f.write_str("span") }
             }
+            Annot(_,Some(s)) => f.write_str(s),
             Link(mode) => {
                 if *mode == ShipoutMode::Math { f.write_str("mrow") }
                 else if *mode == ShipoutMode::SVG { f.write_str("g") }

@@ -8,6 +8,7 @@ use tex_engine::tex::numerics::{Dim32, Skip};
 use tex_engine::utils::HMap;
 use crate::engine::{Font, SRef, Types};
 use crate::state::RusTeXState;
+use crate::utils::VecMap;
 
 #[derive(Debug,Clone,Default,PartialEq)]
 pub struct LineSkip {
@@ -48,7 +49,7 @@ pub enum RusTeXNode {
     HAlignBegin,HAlignEnd,
     Br,
     PGFGBegin {
-        attrs : HMap<&'static str,String>,tag:String,
+        attrs : VecMap<&'static str,String>,tag:String,
     },
     PGFGEnd,
     PGFEscape(TeXBox<Types>),
@@ -58,11 +59,13 @@ pub enum RusTeXNode {
     },
     PageBegin,PageEnd,
     AnnotBegin {
+        tag:Option<String>,
         start:SRef,
-        attrs : HMap<String,String>,
-        styles: HMap<String,String>
+        attrs : VecMap<String,String>,
+        styles: VecMap<String,String>
     },
     AnnotEnd(SRef),
+    Literal(String)
 }
 impl CustomNodeTrait<Types> for RusTeXNode {}
 impl NodeTrait<Types> for RusTeXNode {

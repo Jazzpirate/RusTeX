@@ -6,8 +6,13 @@ use crate::tex::tokens::control_sequences::ResolvedCSName;
 use crate::tex::characters::CharacterMap;
 
 /// A list of [`Token`]s; conceptually, a wrapper around `Rc<[T]>`
+#[cfg(not(feature = "multithreaded"))]
 #[derive(Clone,Debug,PartialEq)]
 pub struct TokenList<T:Token>(pub shared_vector::SharedVector<T>);
+
+#[cfg(feature = "multithreaded")]
+#[derive(Clone,Debug,PartialEq)]
+pub struct TokenList<T:Token>(pub shared_vector::AtomicSharedVector<T>);
 impl<T:Token> TokenList<T> {
     /// Whether the list is empty
 
@@ -30,6 +35,13 @@ impl<T:Token> TokenList<T> {
             escapechar,
             double_par
         }
+    }
+}
+impl<T:Token> FromIterator<T> for TokenList<T> {
+    fn from_iter<I:IntoIterator<Item=T>>(iter:I) -> Self {
+        let mut v = shared_vector::Vector::new();
+        for t in iter { v.push(t); }
+        Self(v.into())
     }
 }
 

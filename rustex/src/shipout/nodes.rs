@@ -11,7 +11,7 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_glyphs::fontstyles::ModifierSeq;
-use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, HNodes, MNode, ShipoutMode, ShipoutState, VNodes, ZERO_SKIP};
+use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, ShipoutMode, ZERO_SKIP};
 use tex_glyphs::glyphs::GlyphName;
 
 pub(crate) trait MuAdd {
@@ -633,12 +633,12 @@ pub(crate) fn do_nucleus(engine:Refs,state:&mut ShipoutState,n:MathNucleus<Types
             state.push(node);Ok(())
         }
         MathNucleus::Underline(k) => {
-            let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+            let mut node = HTMLNode::new(HTMLTag::Annot(state.mode(),None));
             node.styles.insert("text-decoration".into(),"underline".into());
             state.do_in(node,None,|state| do_mathkernel(engine,state,k,None))
         }
         MathNucleus::Overline(k) => {
-            let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+            let mut node = HTMLNode::new(HTMLTag::Annot(state.mode(),None));
             node.styles.insert("text-decoration".into(),"overline".into());
             state.do_in(node,None,|state| do_mathkernel(engine,state,k,None))
         }
@@ -1197,7 +1197,7 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) -> Res
                 annotations::close_font(state),
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) =>
                 annotations::do_color(state,engine,act),
-            HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
+            HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
             HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             HNode::MathGroup(mg) if mg.children.is_empty() => (),
             o => todo!("svg: {:?}",o)
@@ -1206,6 +1206,8 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) -> Res
     Ok(())
 }
 use std::fmt::Write;
+use crate::shipout::state::ShipoutState;
+use crate::shipout::utils::{HNodes, MNode, VNodes};
 
 pub fn parse_path(ts : String) -> String {
     let mut ret = String::new();

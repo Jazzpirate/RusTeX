@@ -39,8 +39,14 @@ pub mod fontsystem;
 pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
     type Char: Character;
     type CSName: CSName<Self::Char>;
+    #[cfg(feature="multithreaded")]
+    type Token: Token<Char = Self::Char, CS = Self::CSName> + Send + Sync;
+    #[cfg(not(feature="multithreaded"))]
     type Token: Token<Char = Self::Char, CS = Self::CSName>;
     type Extension: EngineExtension<Self>;
+    #[cfg(feature="multithreaded")]
+    type File: File<Char=Self::Char> + Send + Sync;
+    #[cfg(not(feature="multithreaded"))]
     type File: File<Char=Self::Char>;
     type FileSystem: FileSystem<File=Self::File>;
     type Int:TeXInt;
@@ -313,12 +319,12 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
 #[macro_export]
 macro_rules! expand_loop {
     ($engine:ident,$tk:ident,$($case:tt)*) => {{
-        crate::expand_loop!(ET;$engine,$tk,$($case)*)
+        $crate::expand_loop!(ET;$engine,$tk,$($case)*)
     }};
     ($then:expr => $engine:ident,$tk:ident,$($case:tt)*) => {{
         $then;
         while let Some($tk) = $engine.get_next(false)? {
-            crate::expand!($engine,$tk;$($case)*);
+            $crate::expand!($engine,$tk;$($case)*);
             $then;
         }
     }};
@@ -326,25 +332,25 @@ macro_rules! expand_loop {
         $then;
         while let Some($tk) = $engine.get_next(false)? {
             $first;
-            crate::expand!($engine,$tk;$($case)*);
+            $crate::expand!($engine,$tk;$($case)*);
             $then;
         }
     }};
     ($tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
         while let Some($tk) = $engine.get_next(false)? {
             $first;
-            crate::expand!($engine,$tk;$($case)*);
+            $crate::expand!($engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $engine:ident,$tk:ident,$($case:tt)*) => {{
         while let Some($tk) = $engine.get_next(false)? {
-            crate::expand!($ET;$engine,$tk;$($case)*);
+            $crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }};
     ($ET:ty; $tk:ident => $first:expr; $engine:ident,$($case:tt)*) => {{
         while let Some($tk) = $engine.get_next(false)? {
             $first;
-            crate::expand!($ET;$engine,$tk;$($case)*);
+            $crate::expand!($ET;$engine,$tk;$($case)*);
         }
     }}
 }
@@ -353,19 +359,19 @@ macro_rules! expand_loop {
 #[macro_export]
 macro_rules! expand {
     ($engine:ident,$tk:expr;$($case:tt)*) => {
-        crate::expand!(ET;$engine,$tk;$($case)*)
+        $crate::expand!(ET;$engine,$tk;$($case)*)
     };
     ($ET:ty; $engine:ident,$token:expr;$($case:tt)*) => {
-        let cmd = <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::resolve($engine.state,&$token);
+        let cmd = <<$ET as EngineTypes>::Gullet as $crate::engine::gullet::Gullet<$ET>>::resolve($engine.state,&$token);
         match cmd {
-            crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Macro(m))) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),$token)?,
-            crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Conditional(cond)})) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,$token,*cond,false)?,
-            crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Expandable(e)})) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,$token,*e)?,
-            crate::commands::ResolvedToken::Cmd(Some(crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::SimpleExpandable(e)})) =>
-                <<$ET as EngineTypes>::Gullet as crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,$token,*e)?,
+            $crate::commands::ResolvedToken::Cmd(Some($crate::commands::TeXCommand::Macro(m))) =>
+                <<$ET as EngineTypes>::Gullet as $crate::engine::gullet::Gullet<$ET>>::do_macro($engine,m.clone(),$token)?,
+            $crate::commands::ResolvedToken::Cmd(Some($crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Conditional(cond)})) =>
+                <<$ET as EngineTypes>::Gullet as $crate::engine::gullet::Gullet<$ET>>::do_conditional($engine,*name,$token,*cond,false)?,
+            $crate::commands::ResolvedToken::Cmd(Some($crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Expandable(e)})) =>
+                <<$ET as EngineTypes>::Gullet as $crate::engine::gullet::Gullet<$ET>>::do_expandable($engine,*name,$token,*e)?,
+            $crate::commands::ResolvedToken::Cmd(Some($crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::SimpleExpandable(e)})) =>
+                <<$ET as EngineTypes>::Gullet as $crate::engine::gullet::Gullet<$ET>>::do_simple_expandable($engine,*name,$token,*e)?,
             $($case)*
         }
     }
@@ -376,66 +382,66 @@ macro_rules! expand {
 #[macro_export]
 macro_rules! do_cmd {
     ($engine:ident,$token:expr,$cmd:ident) => {
-        crate::do_cmd!(ET;$engine,$token,$cmd)
+        $crate::do_cmd!(ET;$engine,$token,$cmd)
     };
     ($ET:ty;$engine:ident,$token:expr,$cmd:ident) => {
         match $cmd {
-            crate::commands::TeXCommand::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Unexpandable { scope, apply }} =>
+            $crate::commands::TeXCommand::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other)?,
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Unexpandable { scope, apply }} =>
                 <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, *scope,$token, *apply)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Assignment(assign)} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Assignment(assign)} =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Int {  assign: Some(assign), .. }} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Int {  assign: Some(assign), .. }} =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Dim { assign: Some(assign), .. }} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Dim { assign: Some(assign), .. }} =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Skip { assign: Some(assign), .. }} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Skip { assign: Some(assign), .. }} =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::MuSkip { assign: Some(assign), .. }} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::MuSkip { assign: Some(assign), .. }} =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::FontCmd { assign: Some(assign), .. }} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::FontCmd { assign: Some(assign), .. }} =>
                 <$ET as EngineTypes>::Stomach::do_assignment($engine, *name, $token, *assign,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Box(read)} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Box(read)} =>
                 <$ET as EngineTypes>::Stomach::do_box($engine, *name, $token, *read)?,
-            crate::commands::TeXCommand::Font(f) =>
+            $crate::commands::TeXCommand::Font(f) =>
                 <$ET as EngineTypes>::Stomach::assign_font($engine, $token, f.clone(),false)?,
-            crate::commands::TeXCommand::IntRegister(u) =>
+            $crate::commands::TeXCommand::IntRegister(u) =>
                 <$ET as EngineTypes>::Stomach::assign_int_register($engine, *u,false,$token)?,
-            crate::commands::TeXCommand::DimRegister(u) =>
+            $crate::commands::TeXCommand::DimRegister(u) =>
                 <$ET as EngineTypes>::Stomach::assign_dim_register($engine, *u,false,$token)?,
-            crate::commands::TeXCommand::SkipRegister(u) =>
+            $crate::commands::TeXCommand::SkipRegister(u) =>
                 <$ET as EngineTypes>::Stomach::assign_skip_register($engine, *u,false,$token)?,
-            crate::commands::TeXCommand::MuSkipRegister(u) =>
+            $crate::commands::TeXCommand::MuSkipRegister(u) =>
                <$ET as EngineTypes>::Stomach::assign_muskip_register($engine, *u,false,$token)?,
-            crate::commands::TeXCommand::ToksRegister(u) =>
+            $crate::commands::TeXCommand::ToksRegister(u) =>
                 <$ET as EngineTypes>::Stomach::assign_toks_register($engine,$token, *u,false)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::Whatsit { get, .. }} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Whatsit { get, .. }} =>
                 <$ET as EngineTypes>::Stomach::do_whatsit($engine, *name,$token, *get)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveInt} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::PrimitiveInt} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_int($engine,*name,false,$token)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveDim} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::PrimitiveDim} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_dim($engine,*name,false,$token)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveSkip} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::PrimitiveSkip} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_skip($engine,*name,false,$token)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveMuSkip} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::PrimitiveMuSkip} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false,$token)?,
-            crate::commands::TeXCommand::Primitive{name,cmd:crate::commands::PrimitiveCommand::PrimitiveToks} =>
+            $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::PrimitiveToks} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,$token,*name,false)?,
-            crate::commands::TeXCommand::MathChar(u) =>
+            $crate::commands::TeXCommand::MathChar(u) =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,Some($token)),
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Relax,..} => (),
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Int { .. },name} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Dim { .. },name} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::Skip { .. },name} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::MuSkip { .. },name} |
-            crate::commands::TeXCommand::Primitive{cmd:crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
+            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Relax,..} => (),
+            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Int { .. },name} |
+            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Dim { .. },name} |
+            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Skip { .. },name} |
+            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::MuSkip { .. },name} |
+            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
             TeXError::not_allowed_in_mode($engine.aux,$engine.state,$engine.mouth,*name,
                 <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
             )?,
-            crate::commands::TeXCommand::Macro(_) |
-            crate::commands::TeXCommand::Primitive{ cmd:crate::commands::PrimitiveCommand::Conditional { .. } |
-                crate::commands::PrimitiveCommand::Expandable { .. } |
-                crate::commands::PrimitiveCommand::SimpleExpandable { .. },..
+            $crate::commands::TeXCommand::Macro(_) |
+            $crate::commands::TeXCommand::Primitive{ cmd:$crate::commands::PrimitiveCommand::Conditional { .. } |
+                $crate::commands::PrimitiveCommand::Expandable { .. } |
+                $crate::commands::PrimitiveCommand::SimpleExpandable { .. },..
             } | TeXCommand::Char {..} => unreachable!(),
         }
     }

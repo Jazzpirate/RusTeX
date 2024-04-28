@@ -66,9 +66,9 @@ impl<T:Token> MacroParser<T> {
                 match t.char_value() {
                     Some(c) => match c.try_into() {
                         Ok(u) if u > 48 && u == 49 + self.arity => self.params.push(T::argument_marker(self.arity)),
-                        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                        _ => return Err(TeXError::General("Invalid argument number\nTODO: Better error message".to_string()))
                     }
-                    None => return Err(TeXError::General("TODO: Better error message".to_string()))
+                    None => return Err(TeXError::General("Missing argument number\nTODO: Better error message".to_string()))
                 }
                 self.arity += 1;
             }
@@ -89,9 +89,9 @@ impl<T:Token> MacroParser<T> {
                 match t.char_value() {
                     Some(c) => match c.try_into() {
                         Ok(u) if u > 48 && u - 49 < self.arity => self.exp.push(T::argument_marker(u-49)),
-                        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                        _ => return Err(TeXError::General("Invalid argument number\nTODO: Better error message".to_string()))
                     }
-                    None => return Err(TeXError::General("TODO: Better error message".to_string()))
+                    None => return Err(TeXError::General("Missing argument number\nTODO: Better error message".to_string()))
                 }
             }
             _ => self.exp.push(t),
@@ -180,9 +180,9 @@ pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineRefere
             engine.push_every(every);
             return Ok(scaled)
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("Begin group expected in box start\nTODO: Better error message".to_string()))
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    Err(TeXError::General("File ended unexpectedly\nTODO: Better error message".to_string()))
 }
 
 pub(in crate::commands) fn get_if_token<ET:EngineTypes>(engine:&mut EngineReferences<ET>,in_token:&ET::Token) -> TeXResult<(Option<ET::Char>,CommandCode),ET> {
@@ -398,14 +398,14 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
         match ET::Gullet::char_or_primitive(engine.state,&next) {
             Some(CharOrPrimitive::Char(_,CommandCode::Parameter)) => {
                 if cols.in_v {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    return Err(TeXError::General("Unexpected # in alignment\nTODO: Better error message".to_string()))
                 }
                 cols.in_v = true;
                 cols.ingroups = ingroups;
             }
             Some(CharOrPrimitive::Char(_,CommandCode::AlignmentTab)) => {
                 if ingroups != 0 {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    return Err(TeXError::General("Unbalanced number of braces in alignment\nTODO: Better error message".to_string()))
                 }
                 if !cols.in_v && cols.current_u.is_empty() {
                     cols.recindex = Some(cols.columns.len());
@@ -419,7 +419,7 @@ fn read_align_preamble<ET:EngineTypes>(engine:&mut EngineReferences<ET>,inner_mo
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.tabskip => cols.tabskip = engine.read_skip(true,in_token)?,
             Some(CharOrPrimitive::Primitive(name)) if name == PRIMITIVES.cr || name == PRIMITIVES.crcr => {
                 if ingroups != 0 {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    return Err(TeXError::General("Unbalanced number of braces in alignment\nTODO: Better error message".to_string()))
                 }
                 engine.push_every(PRIMITIVES.everycr);
                 return Ok(cols.build(in_token.clone()))
@@ -713,11 +713,11 @@ pub(crate) fn last_x<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>,v:fn(&VN
 
 pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:LeaderType,tk:&ET::Token) -> TeXResult<(),ET> {
     match engine.read_keywords(&[b"width",b"height",b"depth"])? {
-        Some(_) => return Err(TeXError::General("TODO: leaders with width/height/depth".to_string())),
+        Some(_) => return Err(TeXError::General("Not yet implemented: leaders with width/height/depth".to_string())),
         _ => crate::expand_loop!(engine,token,
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Box(read),..})) => {
                 match read(engine,token)? {
-                    either::Left(None) => return Err(TeXError::General("TODO: Better error message".to_string())),
+                    either::Left(None) => return Err(TeXError::General("Box expected for leaders\nTODO: Better error message".to_string())),
                     either::Left(Some(bx)) => return leaders_skip(engine,LeaderBody::Box(bx),tp,tk),
                     either::Right(bi) => {
                         let tk = tk.clone();
@@ -753,10 +753,10 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                 }
                 return leaders_skip(engine,LeaderBody::Rule {width,height,depth},tp,&tk)
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return Err(TeXError::General("Box expected for leaders\nTODO: Better error message".to_string()))
         )
     }
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    Err(TeXError::General("File ended unexpectedly\nTODO: Better error message".to_string()))
 }
 
 fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBody<ET>, tp:LeaderType,tk:&ET::Token) -> TeXResult<(),ET> {
@@ -769,15 +769,15 @@ fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBod
                 n if n == PRIMITIVES.hfil => LeaderSkip::HFil,
                 n if n == PRIMITIVES.vfill => LeaderSkip::VFill,
                 n if n == PRIMITIVES.hfill => LeaderSkip::HFill,
-                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                _ => return Err(TeXError::General("Glue expected for leaders\nTODO: Better error message".to_string()))
             };
             let leaders = Leaders {skip,body,tp};
             crate::add_node!(ET::Stomach;engine,VNode::Leaders(leaders),HNode::Leaders(leaders),MathNode::Leaders(leaders));
             return Ok(())
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("Glue expected for leaders\nTODO: Better error message".to_string()))
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    Err(TeXError::General("File ended unexpectedly\nTODO: Better error message".to_string()))
 }
 
 pub(crate) fn do_math_class<ET:EngineTypes>(engine:&mut EngineReferences<ET>,cls:Option<MathClass>,in_token:&ET::Token) -> TeXResult<(),ET> {
@@ -820,14 +820,14 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
         let idx = self.read_int(skip_eq,&in_token)?;
         match ET::State::register_index(idx) {
             Some(idx) => Ok(idx),
-            None => Err(TeXError::General("TODO: Better error message".to_string()))
+            None => Err(TeXError::General("Invalid register index\nTODO: Better error message".to_string()))
         }
     }
     /// reads an integer and makes sure it's in the range of a math font index (0-15)
     pub fn mathfont_index(&mut self,skip_eq:bool,in_token:&ET::Token) -> TeXResult<u8,ET> {
         let idx = self.read_int(skip_eq,in_token)?.into();
         if !(0..=15).contains(&idx) {
-            return Err(TeXError::General("TODO: Better error message".to_string()))
+            return Err(TeXError::General("Invalid math font index\nTODO: Better error message".to_string()))
         }
         Ok(idx as u8)
     }
@@ -857,16 +857,16 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 //engine.aux.memory.return_string(name);
                 return Ok(id)
             }
-            ResolvedToken::Cmd(_) => return Err(TeXError::General("TODO: Better error message".to_string()))
+            ResolvedToken::Cmd(_) => return Err(TeXError::General("Unexpandable command in \\csname\nTODO: Better error message".to_string()))
         );
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        Err(TeXError::General("File ended while reading \\csname\nTODO: Better error message".to_string()))
     }
     /// reads a number from the input stream and makes sure it's in the range of
     /// a file input/output stream index (0-255)
     pub fn read_file_index(&mut self,in_token:&ET::Token) -> TeXResult<u8,ET> {
         let idx = self.read_int(false,in_token)?.into();
         if !(0..=255).contains(&idx) {
-            return Err(TeXError::General("TODO: Better error message".to_string()))
+            return Err(TeXError::General("Invalid file stream index\nTODO: Better error message".to_string()))
         }
         Ok(idx as u8)
     }
@@ -890,9 +890,9 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn do_the<F:FnMut(&mut EngineAux<ET>,&ET::State,&mut ET::Gullet,ET::Token) -> TeXResult<(),ET>>(&mut self,mut cont:F) -> TeXResult<(),ET> {
         expand_loop!(self,token,
             ResolvedToken::Cmd(Some(c)) => return c.clone().the(self,token,|a,s,g,t|cont(a,s,g,t).expect("the continuation function should not throw errors on Other characters")),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return Err(TeXError::General("command expected after \\the\nTODO: Better error message".to_string()))
         );
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        Err(TeXError::General("File ended while reading command for \\the\nTODO: Better error message".to_string()))
     }
 
     /// reads a [`Delimiter`] from the input stream;
@@ -921,8 +921,8 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 }))
                 };
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return Err(TeXError::General("Unexpected token for delimiter\nTODO: Better error message".to_string()))
         );
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        Err(TeXError::General("File ended while expecting delimiter\nTODO: Better error message".to_string()))
     }
 }

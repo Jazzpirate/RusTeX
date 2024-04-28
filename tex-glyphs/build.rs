@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
 use std::path::Path;
@@ -98,7 +98,7 @@ struct FontMap {
 }
 struct TableParser{
     s:&'static str,
-    map:BTreeMap<String,FontMap>,
+    map:HashMap<String,FontMap>,
     tables:Vec<(String,[String;256])>,
     glyphmap:HashMap<String,u16>,
     glyphlist:Vec<String>
@@ -110,7 +110,7 @@ impl TableParser {
         patch = &patch[patch.find('\n').unwrap()..].trim_start();
         patch = &patch[patch.find('\n').unwrap()..].trim_start();
         assert!(patch.starts_with('|'),"???: {}",patch);
-        let mut ret = TableParser{s:patch,map:BTreeMap::new(),tables:vec!(),glyphmap,glyphlist};
+        let mut ret = TableParser{s:patch,map:HashMap::default(),tables:vec!(),glyphmap,glyphlist};
         loop {
             if !ret.read_line() {break}
         }

@@ -18,6 +18,7 @@ use crate::engine::mouth::strings::InputTokenizer;
 use crate::engine::state::State;
 use crate::tex::characters::StringLineSource;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
+use crate::tex::nodes::WhatsitFunction;
 use crate::utils::errors::TeXResult;
 
 pub mod primitives;
@@ -213,7 +214,7 @@ pub enum PrimitiveCommand<ET:EngineTypes> {
     /// A Whatsit, e.g. `\write`, `\special`, etc. - if following an `\immediate`, the `immediate` function
     /// is called, otherwise, `get` may return a (boxed) continuation to be called at shipout.
     Whatsit {
-        get:fn(&mut EngineReferences<ET>, ET::Token) -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>,
+        get:fn(&mut EngineReferences<ET>, ET::Token) -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET>,
         immediate:fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<(),ET>,
         the:Option<fn(&mut EngineReferences<ET>,ET::Token) -> TeXResult<Vec<ET::Token>,ET>>
     },

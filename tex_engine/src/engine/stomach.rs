@@ -8,7 +8,7 @@ use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::TokenList;
 use crate::engine::state::{GroupType, State};
 use crate::tex::catcodes::CommandCode;
-use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, ListTarget};
+use crate::tex::nodes::{BoxTarget, NodeList, WhatsitNode, ListTarget, WhatsitFunction};
 use crate::utils::HMap;
 use crate::tex::numerics::{Skip, TeXDimen};
 use crate::tex::tokens::{StandardToken, Token};
@@ -18,7 +18,7 @@ use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread};
 use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
-use crate::tex::nodes::math::{MathAtom, MathChar, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::gullet::Gullet;
 use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
@@ -221,7 +221,7 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     }
     /// Executes a [Whatsit](PrimitiveCommand::Whatsit) command
     fn do_whatsit(engine:&mut EngineReferences<ET>,name:PrimitiveIdentifier,token:ET::Token,read:fn(&mut EngineReferences<ET>,ET::Token)
-                                                                                                          -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>) -> TeXResult<(),ET> {
+                                                                                                          -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET>) -> TeXResult<(),ET> {
         if let Some(ret) = read(engine,token)? {
             let wi = WhatsitNode::new(ret, name);
             match engine.stomach.data_mut().mode() {
@@ -586,7 +586,17 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                 let mc = MathChar::from_u32(*u, self.state,None);
                 return f(s,self,mc)
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.delimiter => {
+                let int = self.read_int(true,&token)?;
+                match Delimiter::from_int(int,self.state) {
+                    either::Left(d) => return f(s,self,d.small),
+                    either::Right((d,i)) => {
+                        self.general_error(format!("Bad delimiter code ({})",i))?;
+                        return f(s,self,d.small)
+                    }
+                }
+            }
+            _ => return Err(TeXError::General("Begingroup or math character expected\nTODO: Better error message".to_string()))
         );
         TeXError::file_end_while_use(self.aux,self.state,self.mouth,in_token.clone())
     }

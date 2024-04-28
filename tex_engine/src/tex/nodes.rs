@@ -8,7 +8,6 @@ pub mod horizontal;
 pub mod math;
 pub mod boxes;
 
-use std::cell::RefCell;
 use std::convert::Infallible;
 use std::fmt::{Debug, Display, Formatter, Write};
 use std::marker::PhantomData;
@@ -87,12 +86,19 @@ impl<ET:EngineTypes<CustomNode = Infallible>> NodeTrait<ET> for Infallible {
 }
 impl<ET:EngineTypes<CustomNode = Infallible>> CustomNodeTrait<ET> for Infallible {}
 
+#[cfg(feature="multithreaded")]
+pub type WhatsitFunction<ET> = dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET> + Send + Sync;
+#[cfg(not(feature="multithreaded"))]
+pub type WhatsitFunction<ET> = dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>;
 
-type WhatsitFunction<ET> = Ptr<RefCell<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>>>;
+#[cfg(feature="multithreaded")]
+type WhatsitF<ET> = Ptr<std::sync::RwLock<Option<Box<WhatsitFunction<ET>>>>>;
+#[cfg(not(feature="multithreaded"))]
+type WhatsitF<ET> = Ptr<std::cell::RefCell<Option<Box<WhatsitFunction<ET>>>>>;
 /// A Whatsit [node](NodeTrait), essentially representing a callback to the engine to be executed
 /// at shipout, as produced by e.g. `\special` or `\write`.
 #[derive(Clone)]
-pub struct WhatsitNode<ET:EngineTypes>(String,WhatsitFunction<ET>);
+pub struct WhatsitNode<ET:EngineTypes>(String, WhatsitF<ET>);
 impl<ET:EngineTypes> std::fmt::Debug for WhatsitNode<ET> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f,"<whatsit {}>",self.0)
@@ -102,13 +108,24 @@ impl<ET:EngineTypes> WhatsitNode<ET> {
     /// Create a new Whatsit node produce by the primitive
     /// [Whatsit command](crate::commands::PrimitiveCommand::Whatsit) with the given name,
     /// with the function provided, to be executed at shipout.
-    pub fn new(f:Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>, name:PrimitiveIdentifier) -> Self {
-        WhatsitNode(name.display::<ET::Char>(None).to_string(),
-                    Ptr::new(RefCell::new(Some(f)))
-        )
+    pub fn new(f:Box<WhatsitFunction<ET>>, name:PrimitiveIdentifier) -> Self {
+        #[cfg(feature="multithreaded")]
+        let i = std::sync::RwLock::new(Some(f));
+        #[cfg(not(feature="multithreaded"))]
+        let i = std::cell::RefCell::new(Some(f));
+        WhatsitNode(name.display::<ET::Char>(None).to_string(), Ptr::new(i))
     }
     /// Run this Whatsit node's function at shipout, if it has not been run yet.
     /// If it has been run already, this is a no-op.
+
+    #[cfg(feature="multithreaded")]
+    pub fn call(self,engine: &mut EngineReferences<ET>) -> TeXResult<(),ET> {
+        let mut lock = self.1.write().unwrap();
+        if let Some(f) = std::mem::take(&mut *lock) {
+            f(engine)
+        } else {Ok(())}
+    }
+    #[cfg(not(feature="multithreaded"))]
     pub fn call(self,engine: &mut EngineReferences<ET>) -> TeXResult<(),ET> {
         if let Some(f) = self.1.replace(None) {
             f(engine)

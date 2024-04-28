@@ -15,22 +15,23 @@ exclude = [".idea/*","build.rs","resources/*","target/*"]
 crate-type = ["lib"]
 path = "src/lib.rs"
 
-[profile.dev]
-#opt-level = 3
-#lto = true
+#[profile.dev]
+#opt-level = 2
+#lto = "fat"
 #debug = 2
 #split-debuginfo = "off"
 #strip = "none"
 
 [profile.release]
 opt-level = 2
-lto = true
+lto = "fat"
 #debug = 2
 
 [features]
 default = []
 pdflatex = ["md5","image","regex"]
 pdfium = ["pdflatex","pdfium-render"]
+multithreaded = []
 #pdfium-static = ["pdflatex","pdfium-render/static"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -41,16 +42,12 @@ pdfium = ["pdflatex","pdfium-render"]
 
 [dev-dependencies]
 env_logger = "0.11"
-#rand = "0.8.5"
-#ansi_term = "0.12.1"
 
 [dependencies]
 lazy_static = "1.4"
 log={version="0.4",features=["kv_unstable"]}
 ahash = "0.8"
 string-interner = "0.14"
-#rand = "0.8.5"
-#paste="1.0.13"
 chrono = "0.4"
 array-init = "2.1"
 arrayvec = "0.7"
@@ -63,18 +60,9 @@ either = "1.9"
 #pdfium-render = "0.8.11" #, features = ["static"] }
 
 md5 = { version = "0.7",optional = true }
-image = { version = "0.24",optional = true }
+image = { version = "0.25",optional = true }
 regex = { version="1.10",optional = true }
 pdfium-render = {version="0.8", optional = true }
 
 
-#hashbrown = {version="0.14.0",features=["raw"]}
-#interned = "0.1.1"
-#staticize = "0.1.1"
-#bumpalo = {version ="3.13.0", features = ["collections"]}
-#blink-alloc = "0.3.0"
-#allocator-api2 = "0.2.16"
-#include_dir = "0.7.3"
-#base64 =  "0.21.0"
-#clap = { version = "4.1.4", features = ["derive"] }
-#serde = { version = "1.0.183", features = ["derive"] }
+

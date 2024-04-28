@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::PathBuf;
+use crate::utils::HMap;
 
 /// A TeX Font Metric file.
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub struct TfmFile {
     /// The italic correction of the characters in the font (as (originally) fixed-point numbers); to be scaled by `size`.
     pub ics:[f32;256],
     /// The ligatures of the font.
-    pub ligs:BTreeMap<(u8,u8),u8>,
+    pub ligs:HMap<(u8,u8),u8>,
     /// The path to the `.tfm`-file.
     pub filepath:PathBuf,
 }
@@ -57,7 +57,7 @@ impl TfmFile {
         let mut depths: [f32;256] = [0.0;256];
         let mut ics: [f32;256] = [0.0;256];
         let mut defined = [false;256];
-        let mut ligs:BTreeMap<(u8,u8),u8> = BTreeMap::new();
+        let mut ligs:HMap<(u8,u8),u8> = HMap::default();
 
         let (lf,lh) = state.read_int();
         let (bc,ec) = state.read_int();
@@ -233,7 +233,7 @@ struct FInfoEntry {
     remainder: u8
 }
 impl FInfoEntry {
-    pub fn ligature(&self,ligs:&[(u8,u8,u8,u8)],map: &mut BTreeMap<(u8,u8),u8>) {
+    pub fn ligature(&self,ligs:&[(u8,u8,u8,u8)],map: &mut HMap<(u8,u8),u8>) {
         if self.tag_field == 1 {
             let mut i = self.remainder as usize;
             match ligs.get(i).copied() {

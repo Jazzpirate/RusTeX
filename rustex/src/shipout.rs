@@ -1,7 +1,8 @@
 pub(crate) mod nodes;
-mod annotations;
+pub(crate) mod annotations;
+pub(crate) mod utils;
+pub(crate) mod state;
 
-use std::collections::{BTreeSet, HashSet};
 use crate::engine::{Font, Refs, Res, Types};
 use std::vec::IntoIter;
 use tex_engine::commands::primitives::PRIMITIVES;
@@ -15,206 +16,11 @@ use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
+use tex_engine::utils::HSet;
 use tex_glyphs::glyphs::Glyph;
 use crate::nodes::{LineSkip, RusTeXNode};
-
-pub(crate) struct ExtensibleIter<T> {
-    curr:IntoIter<T>,
-    next:Vec<IntoIter<T>>
-
-}
-impl<T> ExtensibleIter<T> {
-    pub fn prefix(&mut self,vec:Vec<T>) {
-        let old = std::mem::replace(&mut self.curr,vec.into_iter());
-        self.next.push(old);
-    }
-}
-impl<T> From<Vec<T>> for ExtensibleIter<T> {
-    fn from(v: Vec<T>) -> Self {
-        Self { curr:v.into_iter(),next:Vec::new() }
-    }
-}
-impl<T> Iterator for ExtensibleIter<T> {
-    type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(n) = self.curr.next() { return Some(n) }
-        while let Some(mut it) = self.next.pop() {
-            if let Some(n) = it.next() {
-                self.curr = it;
-                return Some(n)
-            }
-        }
-        None
-    }
-}
-
-pub(crate) type VNodes = ExtensibleIter<VNode<Types>>;
-pub(crate) type HNodes = ExtensibleIter<HNode<Types>>;
-pub(crate) type MNodes = ExtensibleIter<MNode>;
-pub(crate) type MNode = MathNode<Types,MathFontStyle<Types>>;
-
-#[derive(Copy,Clone,PartialEq,Eq,Debug)]
-pub enum ShipoutMode {Top,V,H{escape:bool},Par,Math,SVG}
-impl ShipoutMode {
-    pub fn is_v(&self) -> bool {
-        match self {
-            ShipoutMode::V | ShipoutMode::Top => true,
-            _ => false
-        }
-    }
-    pub fn is_h(&self) -> bool {
-        match self {
-            ShipoutMode::H{..} | ShipoutMode::Par => true,
-            _ => false
-        }
-    }
-}
-
-pub(crate) struct ShipoutState {
-    pub(crate) output:Vec<HTMLChild>,
-    pub(crate) nodes:Vec<HTMLNode>,
-    pub(crate) fonts: Vec<Font>,
-    pub(crate) colors:Vec<PDFColor>,
-    pub(crate) widths: Vec<Dim32>,
-    pub(crate) lineskip:Vec<LineSkip>,
-    pub(crate) modes:Vec<ShipoutMode>,
-    pub(crate) fontlinks:BTreeSet<String>,
-    pub(crate) in_content:bool,
-    pub(crate) nullfont:Option<Font>,
-    pub(crate) missing_glyphs: HashSet<(String,u8,String)>,
-    pub(crate) missing_fonts: HashSet<String>
-}
-impl Default for ShipoutState {
-    fn default() -> Self {
-        Self {
-            output:Vec::new(),
-            nodes:Vec::new(),
-            fonts:Vec::new(),
-            widths:Vec::new(),
-            colors:vec!(PDFColor::black()),
-            fontlinks:BTreeSet::new(),
-            modes:vec!(ShipoutMode::Top),
-            lineskip:Vec::new(),
-            in_content:false,
-            nullfont:None,
-            missing_fonts:HashSet::new(),
-            missing_glyphs:HashSet::new()
-        }
-    }
-}
-impl ShipoutState {
-    fn mode(&self) -> ShipoutMode {
-        *self.modes.last().unwrap()
-    }
-    fn do_in_and<F1:FnOnce(&mut Self) -> Res<()>>(&mut self, node:HTMLNode,mode:Option<ShipoutMode>, cont:F1) -> Res<HTMLNode> {
-        let disc = node.tag.clone();
-        self.nodes.push(node);
-        if let Some(mode) = mode {
-            self.modes.push(mode);
-        }
-        cont(self)?;
-        let node = annotations::close_all(self.mode(),&mut self.nodes,|t| t == &disc);
-        if let Some(_) = mode {
-            self.modes.pop();
-        }
-        if node.tag == disc {
-            Ok(node)
-        } else {
-            todo!()
-        }
-    }
-
-    fn do_in<F1:FnOnce(&mut Self) -> Res<()>>(&mut self, node:HTMLNode,mode:Option<ShipoutMode>, cont:F1) -> Res<()> {
-        let r = self.do_in_and(node, mode,cont)?;
-        self.push(r);Ok(())
-    }
-
-    pub(crate) fn push_child(&mut self, child:HTMLChild) {
-        let mode = self.mode();
-        match self.nodes.last_mut() {
-            Some(parent) => parent.push_child(mode,child),
-            None => self.output.push(child),
-        }
-    }
-    fn push_space(&mut self) {
-        let mode = self.mode();
-        match self.nodes.last_mut() {
-            Some(parent) => parent.push_space(mode),
-            None => unreachable!()
-        }
-    }
-    /*fn push_string<D:std::fmt::Display>(&mut self, d:D,escape:bool) {
-        let mode = self.mode();
-        match self.nodes.last_mut() {
-            Some(parent) => parent.push_string(d,mode,escape),
-            None => unreachable!()
-        }
-    }*/
-    fn push_comment<D:std::fmt::Display>(&mut self, d:D) {
-        match self.nodes.last_mut() {
-            Some(parent) => parent.push_comment(d),
-            None => self.output.push(HTMLChild::Text(d.to_string()))
-        }
-    }
-
-    fn push(&mut self, node:HTMLNode) {
-        let mode = self.mode();
-        match self.nodes.last_mut() {
-            Some(parent) => parent.push_open_node(mode,node),
-            None => node.close(mode,&mut self.output),
-        }
-    }
-
-    fn push_glyph(&mut self,glyph:Glyph) {
-        let mode = self.mode();
-        self.nodes.last_mut().unwrap().push_glyph(mode,glyph)
-    }
-}
-
-
-pub(crate) fn split_state<R,F:FnOnce(Refs,&mut ShipoutState) -> R>(engine:Refs,f:F) -> R {
-    let mut state = std::mem::take(&mut engine.aux.extension.state);
-    if state.nullfont.is_none() {
-        state.nullfont = Some(engine.fontsystem.null())
-    }
-    if state.fonts.is_empty() {
-        state.fonts.push(engine.state.get_current_font().clone());
-    }
-    if state.widths.is_empty() {
-        state.widths.push(engine.state.get_primitive_dim(PRIMITIVES.hsize));
-    }
-    let r = f(engine,&mut state);
-    engine.aux.extension.state = state;
-    r
-}
-
-pub(crate) const PREAMBLE: &str = r#"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>example</title>
-  <link rel="stylesheet" type="text/css" href="file:///home/jazzpirate/work/Software/sTeX/RusTeXNew/rustex/src/resources/html.css">
-
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif/cmun-serif.css">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif%20Slanted/cmun-serif-slanted.css">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Typewriter/cmun-typewriter.css">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Typewriter%20Variable/cmun-typewriter-variable.css">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Sans/cmun-sans.css">
-  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Sans%20Demi-Condensed/cmun-sans-demicondensed.css">
-  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-roman">
-  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-sans">
-  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/latin-modern-mono">
-  <link rel="stylesheet" type="text/css" href="https://db.onlinewebfonts.com/c/66b48749d01834e2d3663c1a0590dfb2?family=Nimbus+Roman+No9+L+Regular">
-  <link rel="stylesheet" type="text/css" href="https://fonts.cdnfonts.com/css/nimbussanl">
-  <link rel="stylesheet" type="text/css" href="https://db.onlinewebfonts.com/c/1abfca112f592f17ef24628ab912f866?family=STIX-Regular">
-</head>
-<body>
-"#;
-pub(crate) const POSTAMBLE: &str = r#"
-</body>
-</html>
-"#;
+use crate::shipout::state::ShipoutState;
+use crate::shipout::utils::{HNodes, MNode, MNodes, ShipoutMode, VNodes};
 
 pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState) -> Res<()>>(engine:Refs,state:&mut ShipoutState,f:F) -> Res<HTMLNode> {
     let mut page = state.do_in_and(HTMLNode::page(),None,|state| {
@@ -230,89 +36,74 @@ pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState) -> Res<()>>(engine:Refs
     Ok(page)
 }
 
-/*
-pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState)>(engine:Refs,state:&mut ShipoutState,f:F,start:SRef,end:SRef) -> HTMLNode {
-    let mut node = HTMLNode::new(crate::html::labels::PAGE, true);
-    node.sourceref(start,end);
-    state.do_in(node,|state| {
-        f(engine,state)
-    },|state,node| if node.label == crate::html::labels::PAGE {state.output.push(HTMLChild::Node(node));None} else {
-        todo!()
-    });
-    let mut page = if let Some(HTMLChild::Node(page)) = state.output.pop() {page} else {unreachable!()};
-    let mut inner = HTMLNode::new(crate::html::labels::INNER_PAGE, true);
-    inner.children = std::mem::take(&mut page.children);
-
-    let pagewidth = engine.state.get_primitive_dim(PRIMITIVES.pdfpagewidth);
-    page.style("max-width",dim_to_string(pagewidth));
-    let font = state.fonts.first().unwrap();
-    inner.style("max-width",dim_to_string(pagewidth));
-    let textwidth = state.widths.first().copied().unwrap();
-    let scale = (textwidth.0 as f32) / (pagewidth.0 as f32);
-    inner.style("--document-width",format!("calc({:.2} * min(100vw,{}))",scale,dim_to_string(pagewidth)));
-    let margin = (pagewidth.0 as f32 - (textwidth.0 as f32)) / (2.0 * pagewidth.0 as f32) * 100.0;
-    inner.style("padding-left",format!("{:.2}%",margin));
-    inner.style("padding-right",format!("{:.2}%",margin));
-    inner.style("line-height",format!("{:.2}",state.lineskip.factor(font) / (font.get_at().0 as f32)));
-    page.children.push(HTMLChild::Node(inner));
-
-    page.style("font-size",dim_to_string(font.get_at()));
-    let store = &mut engine.fontsystem.glyphmaps;
-    let fi = store.get_info(font.filename());
-    match fi.map(|f| f.weblink).flatten() {
-        Some((name,link)) => {
-            state.fontlinks.insert(link.to_string());
-            page.style("font-family",name.into());
-        }
-        _ => {
-            page.children.insert(0,HTMLChild::Text(format!("<!-- Unknown web font for {} -->",font.filename())));
-        }
-    }
-    page
-}
-
- */
-/*
-pub(crate) fn shipout_paginated(_engine:Refs, _n: VNode<Types>) {
-    todo!()
+pub(crate) fn shipout(engine:Refs, n: VNode<Types>) -> Res<()> {
+    //println!("Here: {}\n\n-------------------------------------------\n\n",n.display());
     match n {
-        VNode::Box(TeXBox::V {children,start,end,..}) => split_state(engine,|engine,state|{
-            let vec = children.into_vec();
-            let page = make_page(engine,state,|engine,state| {
-                do_vlist(engine,state,&mut vec.into(),true)
-            },start,end);
-
-            let mut done = std::mem::take(&mut state.done);
-            page.display(&mut engine.fontsystem.glyphmaps,state,&mut done).unwrap();
-
-
-            state.done = done;
-
-            std::fs::write(TEST_FILE,&format!("{}{}{}",PREAMBLE,state.done,POSTAMBLE)).unwrap();
-            println!("HERE")
-        }),
+        VNode::Box(TeXBox::V { children, .. }) => {
+            let children = get_page_inner(children.into_vec());
+            //for c in &children {
+            //    println!("{}",c.display());
+            //}
+            state::split_state(engine, |engine, state| {
+                do_vlist(engine, state, &mut children.into(), true)
+            })?;
+        }
         _ => unreachable!()
     }
+    Ok(())
 }
-    */
-/*
-fn get_inner_page(bx:TeXBox<Types>) -> Option<Vec<VNode<Types>>> {
-    match bx {
-        TeXBox::V {children,info:VBoxInfo::VBox {moved_left:Some(_),..},..} => Some(children.into_vec()),
-        TeXBox::V {children,..} => {
-            for c in children.into_vec().into_iter() { match c {
-                VNode::Box(bx) => match get_inner_page(bx) {
-                    None => (),
-                    Some(v) => return Some(v)
-                }
-                _ => ()
-            }}
-            None
+
+fn get_page_inner(children:Vec<VNode<Types>>) -> Vec<VNode<Types>> {
+    let mut ret = Vec::new();
+    let mut list:VNodes = children.into();
+    while let Some(c) = list.next() {
+        match c {
+            VNode::Box(TeXBox::V {children,..}) if children.iter().any(|n| matches!(n,VNode::Custom(RusTeXNode::PageBegin))) =>
+                ret.extend(children.into_vec().into_iter().filter(|p| !matches!(p,VNode::Custom(RusTeXNode::PageBegin|RusTeXNode::PageEnd)))),
+            VNode::Box(TeXBox::V {children,..}) =>
+                list.prefix(children.into_vec()),
+            VNode::Box(TeXBox::H {children,..}) if hbox_works(&children) =>
+                get_page_hbox(children, &mut ret,&mut list),
+            VNode::VSkip(_) | VNode::VKern(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss |
+            VNode::Penalty(_) | VNode::Mark(..) => (),
+            VNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(..) | PDFNode::PDFCatalog(_) | PDFNode::PDFLiteral(_) |
+            PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFOutline(_))) => (),
+            VNode::Custom(RusTeXNode::PageBegin) => for c in list.by_ref() {
+                if let VNode::Custom(RusTeXNode::PageEnd) = c { break }
+                else { ret.push(c) }
+            }
+            _ => ret.push(c)
         }
-        _ => None
+    }
+    ret
+}
+
+fn get_page_hbox(children:Box<[HNode<Types>]>,ret:&mut Vec<VNode<Types>>,list:&mut VNodes) {
+    for c in children.into_vec().into_iter() {
+        match c {
+            HNode::HSkip(_) | HNode::Hss | HNode::Space | HNode::HKern(_) | HNode::HFil | HNode::HFill | HNode::HFilneg |
+            HNode::Penalty(_) | HNode::Mark(_,_) |
+            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(..) | PDFNode::PDFCatalog(_) | PDFNode::PDFLiteral(_) |
+            PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFOutline(_))) => (),
+            HNode::Custom(n @ (RusTeXNode::PDFNode(PDFNode::Color(_)) | RusTeXNode::FontChange(..)|RusTeXNode::FontChangeEnd)) =>
+                ret.push(VNode::Custom(n)),
+            HNode::Box(TeXBox::H {children,..}) if hbox_works(&children) => get_page_hbox(children,ret,list),
+            HNode::Box(b) => list.prefix(vec!(VNode::Box(b))),
+            _ => unreachable!()
+        }
     }
 }
-*/
+
+fn hbox_works(children:&[HNode<Types>]) -> bool {
+    children.iter().all(|n| matches!(n, HNode::HSkip(_) | HNode::Hss | HNode::Space | HNode::HKern(_) | HNode::HFil | HNode::HFill | HNode::HFilneg |
+        HNode::Penalty(_) | HNode::Mark(_,_) |
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(..) | PDFNode::PDFCatalog(_) | PDFNode::PDFLiteral(_) |
+        PDFNode::XForm(..) | PDFNode::Obj(..) | PDFNode::PDFOutline(_))) |
+        HNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(_))) |
+        HNode::Custom(RusTeXNode::FontChange(..)|RusTeXNode::FontChangeEnd) | HNode::Box(TeXBox::H {..}) | HNode::Box(TeXBox::V {..})))
+}
+
+/*
 fn get_page_hbox(children:&Box<[HNode<Types>]>) -> bool {
     let children = children.clone().into_vec();
     children.iter().any(|n| match n {
@@ -325,95 +116,8 @@ fn get_page_hbox(children:&Box<[HNode<Types>]>) -> bool {
         _ => true
     })
 }
-fn get_page_inner(children:Box<[VNode<Types>]>) -> Vec<VNode<Types>> {
-    let mut ret = Vec::new();
-    let vec = children.into_vec();
-    let mut list:VNodes = vec.into();
-    while let Some(c) = list.next() {
-        match c {
-            VNode::Box(TeXBox::V {children,..}) => {
-                if children.iter().any(|n| match n {
-                    VNode::Box(TeXBox::H {children,..}) => get_page_hbox(children),
-                    _ => false
-                }) {
-                    ret.extend(children.into_vec().into_iter())
-                } else {
-                    list.prefix(children.into_vec())
-                }
-            }
-            VNode::VSkip(_) | VNode::VKern(_) | VNode::VFil | VNode::VFill | VNode::VFilneg | VNode::Vss => (),
-            VNode::Custom(RusTeXNode::PageBegin) => (),
-            VNode::Custom(RusTeXNode::PageEnd) => (),
-            _ => ret.push(c)
-        }
-    }
-    /*
-    let mut in_page:usize = 0;
-    while let Some(c) = list.next() {
-        match c {
-            VNode::Box(TeXBox::V {children,..}) if in_page == 0 => list.prefix(children.into_vec()),
-            VNode::Custom(RusTeXNode::PageBegin) => in_page += 1,
-            VNode::Custom(RusTeXNode::PageEnd) => in_page -= 1,
-            VNode::Custom(_) | VNode::Whatsit(_) => ret.push(c),
-            _ if in_page == 0 => (),
-            _ => ret.push(c)
-        }
-    }
 
-     */
-    ret
-}
-
-pub(crate) fn shipout(engine:Refs, n: VNode<Types>) -> Res<()> {
-    //println!("Here: {}",n.display());
-    match n {
-        VNode::Box(TeXBox::V { children, .. }) => {
-            let children = get_page_inner(children);
-            split_state(engine, |engine, state| {
-                do_vlist(engine, state, &mut children.into(), true)
-            })?;
-        }
-        _ => unreachable!()
-    }
-    Ok(())
-    /*
-    match n {
-        VNode::Box(TeXBox::V { children, start, end, .. }) => {
-            let children = get_page_inner(children);
-            split_state(engine, |engine, state| {
-                let node = HTMLNode::new(crate::html::labels::PAGE, true);
-                state.do_in(node, |state| {
-                    do_vlist(engine, state, &mut children.into(), true)
-                }, |state, node| if node.label == crate::html::labels::PAGE { state.output.push(HTMLChild::Node(node));None } else {
-                    todo!()
-                });;
-                let mut done = std::mem::take(&mut state.done);
-                let nodes = if let Some(HTMLChild::Node(n)) = state.output.pop() { n.children } else { unreachable!() };
-                for c in nodes {
-                    match c {
-                        HTMLChild::Node(n) => {
-                            n.display(&mut engine.fontsystem.glyphmaps, state, &mut done).unwrap();
-                            done.write_char('\n').unwrap();
-                        },
-                        _ => ()
-                    }
-                }
-                state.done = done;
-                let page = make_page(engine,state,|engine,state| {
-                    state.nodes.last_mut().unwrap().push_text(state.done.clone())
-                },start,end);
-
-                let mut out = String::new();
-                page.display(&mut engine.fontsystem.glyphmaps,state,&mut out).unwrap();
-
-                std::fs::write(TEST_FILE,&format!("{}{}{}",PREAMBLE,out,POSTAMBLE)).unwrap();
-                println!("HERE")
-            });
-        }
-        _ => unreachable!()
-    }
-    */
-}
+ */
 
 pub(crate) const ZERO_SKIP: Skip<Dim32> = Skip {base:Dim32(0),stretch:None,shrink:None};
 
@@ -448,7 +152,7 @@ fn do_vlist(engine:Refs, state:&mut ShipoutState, children:&mut VNodes,mut empty
                 annotations::close_link(state),
             VNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             VNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-            VNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
+            VNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
             VNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             VNode::Custom(RusTeXNode::PGFGBegin {..}|RusTeXNode::PGFGEnd) => (), // TODO?
             VNode::Custom(RusTeXNode::PGFEscape(bx)) => children.prefix(vec!(VNode::Box(bx))),
@@ -494,7 +198,7 @@ fn do_hlist(engine:Refs, state:&mut ShipoutState, children:&mut HNodes) -> Res<(
                 annotations::close_link(state),
             HNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             HNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-            HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
+            HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
             HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             HNode::Custom(RusTeXNode::PGFGBegin{..}|RusTeXNode::PGFGEnd) => (),  // TODO???
             HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
@@ -544,10 +248,16 @@ fn do_v(engine:Refs, state:&mut ShipoutState, n: VNode<Types>) -> Res<()> {
 
              */
         }
+        VNode::Box(TeXBox::H { info: HBoxInfo::HAlignCell{..}|HBoxInfo::ParLine {..},children,start,end,.. }) => {
+            // TODO
+            let bx = TeXBox::H {info: HBoxInfo::new_box(ToOrSpread::None),children,start,end,preskip:None};
+            nodes::do_hbox(state,engine,bx)
+        }
         VNode::Custom(RusTeXNode::PGFSvg {bx,minx,miny,maxx,maxy}) =>
             nodes::do_svg(engine,state,bx,minx,miny,maxx,maxy),
         VNode::Leaders(_) => Ok(()), // TODO?
         VNode::Mark(..) | VNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd | RusTeXNode::HAlignEnd) => Ok(()),
+        VNode::Custom(RusTeXNode::Literal(s)) => {state.push_comment(s);Ok(())}
         _ => panic!("Here: {:?}",n)
     }
 }
@@ -632,6 +342,7 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) -> Res<()> {
 
              */
         }
+        HNode::Custom(RusTeXNode::Literal(s)) => {state.push_comment(s);Ok(())}
         _ => todo!("{:?}",n)
     }
 }
@@ -685,12 +396,13 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
         }
         MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
         MathNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-        MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
+        MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
         MathNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
         MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
                                              PDFNode::PDFCatalog(_)| PDFNode::PDFAnnot(_) | PDFNode::XForm(_) | PDFNode::PDFLiteral(_) | PDFNode::Obj(_))) | MathNode::Penalty(_) => (),
         MathNode::VRule {width,height,depth,start,end} =>
             nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth),
+        MathNode::Custom(RusTeXNode::Literal(s)) => {state.push_comment(s)}
         MathNode::Atom(a) => match a.nucleus {
             MathNucleus::VCenter {start,end,children,..} =>
             // TODO to/spread for VCenter
@@ -698,7 +410,7 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
             MathNucleus::Simple{kernel,..} | MathNucleus::Inner(kernel) =>
                 do_kernel_in_h(state,engine,kernel,iter)?,
             MathNucleus::Overline(kernel) => {
-                let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+                let mut node = HTMLNode::new(HTMLTag::Annot(state.mode(),None));
                 node.styles.insert("text-decoration".into(),"overline".into());
                 match kernel {
                     MathKernel::Empty => (),
@@ -711,7 +423,7 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
                 }
             }
             MathNucleus::Underline(kernel) => {
-                let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+                let mut node = HTMLNode::new(HTMLTag::Annot(state.mode(),None));
                 node.styles.insert("text-decoration".into(),"underline".into());
                 match kernel {
                     MathKernel::Empty => (),
@@ -828,12 +540,13 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) -> Re
             MathNode::Whatsit(wi) => wi.call(engine)?,
             MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
             MathNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-            MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles}) => annotations::do_annot(state,start,attrs,styles),
+            MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
             MathNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg | MathNode::Penalty(_) => (),
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
                                                  PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => (),
             MathNode::Leaders(_) => (), // TODO?
+            MathNode::Custom(RusTeXNode::Literal(s)) => {state.push_comment(s)}
             o => todo!(" {:?}",o)
         }
     }

@@ -23,6 +23,9 @@ impl<T:Token> MemoryManager<T> {
             strings: Vec::new(),
             bytes: Vec::new(),
             token_vecs: Vec::new(),
+            #[cfg(feature = "multithreaded")]
+            empty: TokenList(shared_vector::AtomicSharedVector::new()),
+            #[cfg(not(feature = "multithreaded"))]
             empty: TokenList(shared_vector::SharedVector::new())
         }
     }
@@ -63,6 +66,9 @@ impl<T:Token> MemoryManager<T> {
             strings: Vec::new(),
             bytes: Vec::new(),
             token_vecs: Vec::new(),
+            #[cfg(feature = "multithreaded")]
+            empty: TokenList(shared_vector::AtomicSharedVector::new()),
+            #[cfg(not(feature = "multithreaded"))]
             empty: TokenList(shared_vector::SharedVector::new())
         }
     }

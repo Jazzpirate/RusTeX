@@ -2,7 +2,6 @@
 
 use lazy_static::lazy_static;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 pub mod errors;
 
@@ -10,7 +9,11 @@ pub mod errors;
 pub type HMap<A,B> = ahash::HashMap<A,B>;
 pub type HSet<A> = ahash::HashSet<A>;
 /// The reference counting pointer type used throughout the engine.
-pub type Ptr<A> = Rc<A>;
+
+#[cfg(feature = "multithreaded")]
+pub type Ptr<A> = std::sync::Arc<A>;
+#[cfg(not(feature = "multithreaded"))]
+pub type Ptr<A> = std::rc::Rc<A>;
 
 lazy_static! {
     /// The current working directory.

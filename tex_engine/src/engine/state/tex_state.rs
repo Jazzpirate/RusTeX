@@ -38,7 +38,7 @@ pub struct DefaultState<ET:EngineTypes> {
     muskip_register:Vec<MuSkip<ET::MuDim>>,
     toks_register:Vec<TokenList<ET::Token>>,
     box_register:Vec<Option<TeXBox<ET>>>,
-    commands:<ET::CSName as CSName<ET::Char>>::Map<TeXCommand<ET>>,//Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
+    pub commands:<ET::CSName as CSName<ET::Char>>::Map<TeXCommand<ET>>,//Vec<Option<Command<ET>>>,//HMap<<ET::Token as Token>::CS,Command<ET>>,
     ac_commands:<ET::Char as Character>::CharMap<Option<TeXCommand<ET>>>,
     endline_char:Option<ET::Char>,
     escape_char:Option<ET::Char>,
@@ -56,6 +56,12 @@ impl<ET:EngineTypes> DefaultState<ET> {
     }
     fn tracing_restores(&self) -> bool {
         matches!(self.primitive_ints.get(&PRIMITIVES.tracingrestores), Some(v) if *v > ET::Int::default())
+    }
+    pub fn set_command_direct(&mut self, name:ET::CSName, cmd: Option<TeXCommand<ET>>) {
+        match cmd {
+            None => self.commands.remove(&name),
+            Some(c) => self.commands.insert(name,c)
+        };
     }
 }
 

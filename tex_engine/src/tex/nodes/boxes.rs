@@ -1,5 +1,5 @@
 /*! [`TeXBox`]es */
-use std::cell::OnceCell;
+
 use std::fmt::{Display, Formatter};
 use crate::engine::EngineTypes;
 use crate::engine::filesystem::SourceRef;
@@ -10,6 +10,11 @@ use crate::tex::nodes::math::{MathAtom, MathClass, MathKernel, MathNode, MathNuc
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::tex::numerics::TeXDimen;
 use crate::tex::numerics::Skip;
+
+#[cfg(feature = "multithreaded")]
+type Once<A> = std::sync::OnceLock<A>;
+#[cfg(not(feature = "multithreaded"))]
+type Once<A> = std::cell::OnceCell<A>;
 
 
 /// The type of a box, e.g. `\hbox` or `\vbox`.
@@ -68,11 +73,11 @@ pub enum HBoxInfo<ET:EngineTypes> {
         /// vertical movement, if raised via e.g. `\raise 50pt` (or `\lower`)
         raised:Option<ET::Dim>,
         /// computed width by summing the widths of all children
-        computed_width:OnceCell<ET::Dim>,
+        computed_width:Once<ET::Dim>,
         /// computed height by taking the maximum height of all children
-        computed_height:OnceCell<ET::Dim>,
+        computed_height:Once<ET::Dim>,
         /// computed depth by taking the maximum depth of all children
-        computed_depth:OnceCell<ET::Dim>,
+        computed_depth:Once<ET::Dim>,
     },
     /// A line in a paragraph
     ParLine {
@@ -92,11 +97,11 @@ pub enum HBoxInfo<ET:EngineTypes> {
         /// The width of the cell, as computed by comparing all cells in the same columng (not yet implemented)
         to: Option<ET::Dim>,
         /// The computed width of the cell as the sum of the widths of the children
-        computed_width:OnceCell<ET::Dim>,
+        computed_width:Once<ET::Dim>,
         /// The computed height of the cell as the maximum height of the children
-        computed_height:OnceCell<ET::Dim>,
+        computed_height:Once<ET::Dim>,
         /// The computed depth of the cell as the maximum depth of the children
-        computed_depth:OnceCell<ET::Dim>,
+        computed_depth:Once<ET::Dim>,
         /// The number of *additional* columns this cell spans (i.e. by default 0)
         spans:u8
     },
@@ -125,9 +130,9 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
             assigned_depth: None,
             moved_left: None,
             raised: None,
-            computed_width: OnceCell::new(),
-            computed_height: OnceCell::new(),
-            computed_depth: OnceCell::new(),
+            computed_width: Once::new(),
+            computed_height: Once::new(),
+            computed_depth: Once::new(),
         }
     }
     /// Convert this to a simple `\hbox` box info
@@ -148,9 +153,9 @@ impl<ET:EngineTypes> HBoxInfo<ET> {
     pub fn new_cell(spans:u8) -> Self {
         HBoxInfo::HAlignCell {
             to: None,
-            computed_width: OnceCell::new(),
-            computed_height: OnceCell::new(),
-            computed_depth: OnceCell::new(),
+            computed_width: Once::new(),
+            computed_height: Once::new(),
+            computed_depth: Once::new(),
             spans
         }
     }
@@ -235,11 +240,11 @@ pub enum VBoxInfo<ET:EngineTypes> {
         /// vertical movement, if raised via e.g. `\raise 50pt` (or `\lower`)
         raised:Option<ET::Dim>,
         /// computed width by taking the maximum width of all children
-        computed_width: OnceCell<ET::Dim>,
+        computed_width: Once<ET::Dim>,
         /// computed height by summing the heights and depths of all children (except for the last)
-        computed_height: OnceCell<ET::Dim>,
+        computed_height: Once<ET::Dim>,
         /// computed depth by taking the depth of the last child box
-        computed_depth: OnceCell<ET::Dim>,
+        computed_depth: Once<ET::Dim>,
     },
     /// A `\vtop` box
     VTop {
@@ -256,11 +261,11 @@ pub enum VBoxInfo<ET:EngineTypes> {
         /// vertical movement, if raised via e.g. `\raise 50pt` (or `\lower`)
         raised:Option<ET::Dim>,
         /// computed width by taking the maximum width of all children
-        computed_width: OnceCell<ET::Dim>,
+        computed_width: Once<ET::Dim>,
         /// computed height by taking the height of the first child box
-        computed_height: OnceCell<ET::Dim>,
+        computed_height: Once<ET::Dim>,
         /// computed depth by taking the height + depth of all children minus the computed height
-        computed_depth: OnceCell<ET::Dim>,
+        computed_depth: Once<ET::Dim>,
     },
     /// A column in a `\valign`; should only contain [VBoxInfo::VAlignCell]s
     VAlignColumn,
@@ -294,9 +299,9 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             assigned_depth: None,
             moved_left: None,
             raised: None,
-            computed_width: OnceCell::new(),
-            computed_height: OnceCell::new(),
-            computed_depth: OnceCell::new(),
+            computed_width: Once::new(),
+            computed_height: Once::new(),
+            computed_depth: Once::new(),
         }
     }
 
@@ -321,9 +326,9 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
             assigned_depth: None,
             moved_left: None,
             raised: None,
-            computed_width: OnceCell::new(),
-            computed_height: OnceCell::new(),
-            computed_depth: OnceCell::new(),
+            computed_width: Once::new(),
+            computed_height: Once::new(),
+            computed_depth: Once::new(),
         }
     }
     /// Turns this box info into the corresponding [`NodeList`]
@@ -349,9 +354,9 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
                     assigned_depth: None,
                     moved_left: *moved_left,
                     raised: *raised,
-                    computed_width: OnceCell::new(),
-                    computed_height: OnceCell::new(),
-                    computed_depth: OnceCell::new(),
+                    computed_width: Once::new(),
+                    computed_height: Once::new(),
+                    computed_depth: Once::new(),
                 }
             },
             VBoxInfo::VTop { scaled, assigned_width, assigned_height, assigned_depth, moved_left, raised,.. } => {
@@ -365,9 +370,9 @@ impl<ET:EngineTypes> VBoxInfo<ET> {
                     assigned_depth: None,
                     moved_left: *moved_left,
                     raised: *raised,
-                    computed_width: OnceCell::new(),
-                    computed_height: OnceCell::new(),
-                    computed_depth: OnceCell::new(),
+                    computed_width: Once::new(),
+                    computed_height: Once::new(),
+                    computed_depth: Once::new(),
                 }
             },
             _ => unreachable!()

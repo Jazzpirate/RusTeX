@@ -1,18 +1,20 @@
 use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFStartLink};
 use crate::engine::{Font, Refs, SRef, Types};
 use crate::html::{HTMLChild, HTMLNode, HTMLTag};
-use crate::shipout::{ShipoutMode, ShipoutState};
+use crate::shipout::ShipoutMode;
 use tex_engine::pdflatex::nodes::PDFExtension;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::utils::HMap;
 use crate::fonts::FontStore;
+use crate::shipout::state::ShipoutState;
+use crate::utils::VecMap;
 
 pub(crate) fn close_all<F:Fn(&HTMLTag) -> bool>(mode:ShipoutMode,open: &mut Vec<HTMLNode>,tag:F) -> HTMLNode {
     let mut reopen:Vec<HTMLNode> = vec!();
     loop {
         let mut last = open.pop().unwrap();
         let m = tag(&last.tag);
-        if !m && matches!(last.tag, HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)|HTMLTag::Annot(_)) {
+        if !m && matches!(last.tag, HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)|HTMLTag::Annot(_,_)) {
             reopen.push(last);
         } else {
             if reopen.is_empty() { return last }
@@ -197,8 +199,8 @@ pub(crate) fn close_link(state:&mut ShipoutState) {
     unreachable!()
 }
 
-pub(crate) fn do_annot(state:&mut ShipoutState,start:SRef,attrs:HMap<String,String>,styles:HMap<String,String>) {
-    let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
+pub(crate) fn do_annot(state:&mut ShipoutState,start:SRef,tag:Option<String>,attrs:VecMap<String,String>,styles:VecMap<String,String>) {
+    let mut node = HTMLNode::new(HTMLTag::Annot(state.mode(),tag));
     for (k,v) in attrs.into_iter() {
         node.attrs.insert(k.into(),v);
     }
@@ -211,29 +213,31 @@ pub(crate) fn do_annot(state:&mut ShipoutState,start:SRef,attrs:HMap<String,Stri
 pub(crate) fn close_annot(state:&mut ShipoutState,end:SRef) {
     let mut requeue:Vec<HTMLNode> = vec!();
     while let Some(mut n) = state.nodes.pop() {
-        if matches!(n.tag,HTMLTag::Annot(_)) {
-            let Some((start,_)) = std::mem::take(&mut n.sourceref) else {unreachable!()};
-            n.sourceref = Some((start,end));
-            if requeue.is_empty() {
+        match &n.tag {
+            HTMLTag::Annot(_,tag) => {
+                let Some((start,_)) = std::mem::take(&mut n.sourceref) else {unreachable!()};
+                n.sourceref = Some((start,end));
+                if requeue.is_empty() {
+                    if !n.children.is_empty() || tag.is_some() {state.push(n);}
+                    return
+                }
+                let rf = n.sourceref.unwrap();
+                let styles = n.styles.clone();
+                let attrs = n.attrs.clone();
+                let tag = tag.clone();
                 if !n.children.is_empty() {state.push(n);}
+                for mut c in requeue.into_iter().rev() {
+                    let mut node = HTMLNode::new(HTMLTag::Annot(state.mode(),tag.clone()));
+                    node.attrs = attrs.clone();
+                    node.styles = styles.clone();
+                    node.sourceref = Some(rf);
+                    node.children = std::mem::take(&mut c.children);
+                    if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
+                    state.nodes.push(c);
+                }
                 return
             }
-            let rf = n.sourceref.unwrap();
-            let styles = n.styles.clone();
-            let attrs = n.attrs.clone();
-            if !n.children.is_empty() {state.push(n);}
-            for mut c in requeue.into_iter().rev() {
-                let mut node = HTMLNode::new(HTMLTag::Annot(state.mode()));
-                node.attrs = attrs.clone();
-                node.styles = styles.clone();
-                node.sourceref = Some(rf);
-                node.children = std::mem::take(&mut c.children);
-                if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
-                state.nodes.push(c);
-            }
-            return
-        } else {
-            requeue.push(n);
+            _ => {requeue.push(n);}
         }
     }
     unreachable!()

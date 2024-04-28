@@ -23,7 +23,7 @@ use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::engine::fontsystem::Font;
 use crate::engine::stomach::methods::SplitResult;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
-use crate::tex::nodes::{BoxTarget, LeaderType, ListTarget, NodeList, NodeTrait};
+use crate::tex::nodes::{BoxTarget, LeaderType, ListTarget, NodeList, NodeTrait, WhatsitFunction};
 use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
 use crate::tex::nodes::math::{Delimiter, EqNoPosition, MathAtom, MathChar, MathClass, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMarkers, UnresolvedMathChoice, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
@@ -516,7 +516,7 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,oute
     );
     Err(TeXError::General("TODO: Better error message".to_string()))
 }
-pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_outer:bool,long:bool,protected:bool,globally:bool) -> TeXResult<(),ET> {
+pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_outer:bool,long:bool,protected:bool,globally:bool) -> TeXResult<(),ET> {
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,true,long,protected,globally),
@@ -528,14 +528,22 @@ pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,_out
             n if n == PRIMITIVES.xdef => return self::xdef(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.gdef => return self::gdef(engine,token,true,long,protected,globally),
             n if n == PRIMITIVES.relax => (),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            n => {
+                let s = n.display(engine.state.get_escape_char()).to_string();
+                engine.requeue(token)?;
+                return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
+            }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            let s = token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string();
+            engine.requeue(token)?;
+            return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 
-pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer:bool,_long:bool,protected:bool,globally:bool) -> TeXResult<(),ET> {
+pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:bool,_long:bool,protected:bool,globally:bool) -> TeXResult<(),ET> {
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => match *name {
             n if n == PRIMITIVES.outer => return self::outer(engine,token,outer,true,protected,globally),
@@ -547,11 +555,19 @@ pub fn long<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token,outer
             n if n == PRIMITIVES.xdef => return self::xdef(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.gdef => return self::gdef(engine,token,outer,true,protected,globally),
             n if n == PRIMITIVES.relax => (),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            n => {
+                let s = n.display(engine.state.get_escape_char()).to_string();
+                engine.requeue(token)?;
+                return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
+            }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            let s = token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string();
+            engine.requeue(token)?;
+            return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 
 macro_rules! modify_num {
@@ -1469,7 +1485,7 @@ pub fn noindent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 }
 
 pub fn openout<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
-               -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET> {
+               -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET> {
     let (idx,file) = engine.read_filename_and_index("./",&tk)?;
     Ok(Some(Box::new(move |engine| {engine.filesystem.open_out(idx,file);Ok(())})))
 }
@@ -1681,7 +1697,7 @@ pub fn openin<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> 
 }
 
 pub fn closeout<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token)
-                               -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET> {
+                               -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET> {
     let idx = engine.read_file_index(&tk)?;
     Ok(Some(Box::new(move |engine| {engine.filesystem.close_out(idx);Ok(())})))
 }
@@ -1698,7 +1714,7 @@ pub fn closein<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) ->
 }
 
 pub fn write<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
-                             -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET> {
+                             -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET> {
     let idx = engine.read_int(false,&tk)?.into();
     let mut tks = Vec::new();
     tks.push(ET::Token::from_char_cat(b'{'.into(),CommandCode::BeginGroup));
@@ -1749,30 +1765,7 @@ pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::To
 
 pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global:bool) -> TeXResult<(),ET> {
     let idx = engine.read_register_index(false,&tk)?;
-    let mut had_eq = false;
-    crate::expand_loop!(engine,token,
-        ResolvedToken::Tk{char,code} => match (char.try_into(),code) {
-            (_,CommandCode::Space) => (),
-            (Ok(b'='),CommandCode::Other) if !had_eq => {
-                if had_eq {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
-                }
-                had_eq = true;
-            }
-            (_,CommandCode::BeginGroup) => {
-                let mut tks = shared_vector::Vector::new();
-                engine.read_until_endgroup(&tk,|_,_,t| {
-                    tks.push(t);
-                    Ok(())
-                })?;
-                engine.state.set_toks_register(engine.aux,idx,TokenList::from(tks),global);
-                return Ok(())
-            }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
-        }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
-    );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    ET::Stomach::assign_toks_register(engine,tk,idx,global)
 }
 
 pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {

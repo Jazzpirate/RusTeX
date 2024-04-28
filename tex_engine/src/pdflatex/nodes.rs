@@ -75,7 +75,7 @@ pub fn num_or_name<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:&ET::T
         Some(b"num") => Ok(Some(NumOrName::Num(engine.read_int(false,token)?.into()))),
         Some(b"name") => {
             let mut str = String::new();
-            engine.read_braced_string(true,true,token,&mut str)?;
+            engine.read_maybe_braced_string(true,&mut str,token)?;
             Ok(Some(NumOrName::Name(str)))
         }
         _ => Ok(None)

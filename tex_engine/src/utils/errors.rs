@@ -46,6 +46,8 @@ pub enum TeXError<ET:EngineTypes> {
     MissingDollar,
     #[error("Missing number, treated as zero.")]
     MissingNumber,
+    #[error("Illegal unit of measure (pt inserted)")]
+    MissingUnit,
     #[error("Runaway argument? Paragraph ended before {0} was complete.")]
     ParagraphEnded(String),
     #[error("! Missing {} inserted",.0[0])]
@@ -120,6 +122,9 @@ impl<ET:EngineTypes> TeXError<ET> {
     }
     pub fn missing_number<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> TeXResult<(),ET> {
         throw!(aux,state,mouth,missing_number() => TeXError::MissingNumber)
+    }
+    pub fn missing_unit<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M) -> TeXResult<(),ET> {
+        throw!(aux,state,mouth,missing_number() => TeXError::MissingUnit)
     }
     pub fn missing_keyword<M:Mouth<ET>>(aux:&EngineAux<ET>,state:&ET::State,mouth:&mut M,kws:&'static[&'static str]) -> TeXResult<(),ET> {
         throw!(aux,state,mouth,missing_keyword(kws) => TeXError::MissingKeyword(kws))

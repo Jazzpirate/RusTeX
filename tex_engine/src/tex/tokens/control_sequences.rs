@@ -45,6 +45,7 @@ pub trait CSNameMap<C:Character,CS:CSName<C>,A:Clone>:Clone+Default {
     fn insert(&mut self,cs:CS,a:A) -> Option<A>;
     /// Removes the value associated with the given control sequence name, returning it if any.
     fn remove(&mut self,cs:&CS) -> Option<A>;
+    fn into_iter(self) -> impl Iterator<Item = (CS,A)>;
 }
 
 impl<C:Character,CS:CSName<C>,A:Clone> CSNameMap<C,CS,A> for HMap<CS,A> {
@@ -54,6 +55,9 @@ impl<C:Character,CS:CSName<C>,A:Clone> CSNameMap<C,CS,A> for HMap<CS,A> {
     fn insert(&mut self, cs: CS, a: A) -> Option<A> { self.insert(cs,a) }
 
     fn remove(&mut self, cs: &CS) -> Option<A> { self.remove(cs) }
+    fn into_iter(self) -> impl Iterator<Item=(CS,A)> {
+        <HMap<CS,A> as IntoIterator>::into_iter(self)
+    }
 }
 
 impl<C:Character> CSName<C> for Ptr<str> {
@@ -81,7 +85,6 @@ impl<C:Character> CSName<C> for InternedCSName<C> {
 #[derive(Clone)]
 pub struct CSNameVec<C:Character,A:Clone>(Vec<Option<A>>,PhantomData<C>);
 impl<C:Character,A:Clone> Default for CSNameVec<C,A> {
-
     fn default() -> Self { Self(Vec::new(),PhantomData) }
 }
 
@@ -102,6 +105,9 @@ impl<C:Character,A:Clone> CSNameMap<C,InternedCSName<C>,A> for CSNameVec<C,A> {
             return None
         }
         self.0[idx].take()
+    }
+    fn into_iter(self) -> impl Iterator<Item=(InternedCSName<C>,A)> {
+        self.0.into_iter().enumerate().filter_map(|(i,x)| x.map(|x| ((i as u32,PhantomData),x)))
     }
 }
 
@@ -196,7 +202,7 @@ impl<C:Character> CSInterner<C> {
         self.get(i.0)
     }
 
-    fn intern(&mut self,v:&[C]) -> InternedCSName<C> {
+    pub fn intern(&mut self,v:&[C]) -> InternedCSName<C> {
         if let Some(x) = self.map.get(v) { return (*x,PhantomData) }
         self.ls.extend(v);
         let len = self.ls.len();

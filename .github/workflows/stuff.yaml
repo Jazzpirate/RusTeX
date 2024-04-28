@@ -12,7 +12,7 @@ jobs:
       - name: rustup
         run: rustup update && rustup toolchain install nightly
       - name: Test tex_engine
-        run: cd tex_engine && cargo test --features pdflatex
+        run: cd tex_engine && cargo test --release --features pdflatex
   test_tex_tfm:
     runs-on: ubuntu-latest
     steps:
@@ -20,7 +20,7 @@ jobs:
       - name: TeXLive
         run: sudo apt install texlive-base
       - name: Test tex-glyphs
-        run: cd tex-glyphs && cargo test
+        run: cd tex-glyphs && cargo test --release
   test_rustex:
     runs-on: ubuntu-latest
     steps:
@@ -30,4 +30,4 @@ jobs:
       - name: rustup
         run: rustup update
       - name: Test rustex
-        run: cd rustex && cargo test
+        run: cd rustex && cargo test --release

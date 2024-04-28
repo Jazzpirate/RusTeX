@@ -199,6 +199,10 @@ pub trait Gullet<ET:EngineTypes> {
     fn read_string(engine:&mut EngineReferences<ET>,skip_eq:bool,target:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
         methods::read_string(engine,skip_eq,target,in_token)
     }
+    #[inline]
+    fn read_maybe_braced_string(engine:&mut EngineReferences<ET>,skip_eq:bool,target:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
+        methods::read_maybe_braced_string(engine,skip_eq,target,in_token)
+    }
 
     /// Check whether the input stream starts with the given keyword. See also [`EngineReferences::read_keyword`].
     #[inline]
@@ -214,7 +218,7 @@ pub trait Gullet<ET:EngineTypes> {
 
     /// Check whether the next character is one of the provided ones. See also [`EngineReferences::read_chars`].
     #[inline]
-    fn read_chars(engine:& mut EngineReferences<ET>,kws:&[u8]) -> TeXResult<Either<u8,ET::Token>,ET> {
+    fn read_chars(engine:& mut EngineReferences<ET>,kws:&[u8]) -> TeXResult<Either<u8,Option<ET::Token>>,ET> {
         methods::read_chars(engine,kws)
     }
 
@@ -489,6 +493,10 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     pub fn read_string(&mut self,skip_eq:bool,target:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
         ET::Gullet::read_string(self,skip_eq,target,in_token)
     }
+    #[inline]
+    pub fn read_maybe_braced_string(&mut self,skip_eq:bool,target:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
+        ET::Gullet::read_maybe_braced_string(self,skip_eq,target,in_token)
+    }
     /// Check whether the input stream starts with the given keyword.
     #[inline]
     pub fn read_keyword(&mut self,kw:&[u8]) -> TeXResult<bool,ET> {
@@ -579,7 +587,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// Check whether the next character is one of the provided ones. Returns the character if so,
     /// otherwise returns the inspected [`Token`] to be further processed or [Self::requeue]d.
     #[inline]
-    pub fn read_chars(&mut self,kws:&[u8]) -> TeXResult<Either<u8,ET::Token>,ET> {
+    pub fn read_chars(&mut self,kws:&[u8]) -> TeXResult<Either<u8,Option<ET::Token>>,ET> {
         ET::Gullet::read_chars(self,kws)
     }
     /// Inspect the given [`Token`] and return its current definition, if any.

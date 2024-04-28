@@ -10,13 +10,20 @@ use tex_engine::tex::tokens::Token;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::prelude::*;
+use tex_engine::tex::tokens::control_sequences::CSNameVec;
 use crate::commands::CLOSE_FONT;
 
 #[derive(Clone)]
 pub struct RusTeXState(state::tex_state::DefaultState<Types>);
+impl RusTeXState {
+    pub fn destruct(self) -> CSNameVec<u8,TeXCommand<Types>> {
+        self.0.commands
+    }
+    pub fn set_command_direct(&mut self, name:CSName, cmd: Option<TeXCommand<Types>>) {
+        self.0.set_command_direct(name,cmd)
+    }
+}
 impl StateChangeTracker<Types> for RusTeXState {
-
-
     fn stack(&mut self) -> &mut StateStack<Types> { self.0.stack() }
 }
 impl State<Types> for RusTeXState {
@@ -33,7 +40,6 @@ impl State<Types> for RusTeXState {
     }
 
     fn aftergroup(&mut self, token: CompactToken) { self.0.aftergroup(token) }
-
 
     fn push(&mut self, aux: &mut EngineAux<Types>, group_type: GroupType, line_number: usize) {
         self.0.push(aux,group_type,line_number);

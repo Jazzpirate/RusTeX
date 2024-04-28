@@ -3,11 +3,12 @@ use tex_engine::commands::Macro;
 use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFAnnot, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
 use tex_engine::engine::EngineExtension;
 use crate::engine::{CSName, Types};
-use crate::shipout::ShipoutState;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
 use tex_engine::tex::tokens::CompactToken;
 use tex_engine::prelude::CSHandler;
+use crate::shipout::state::ShipoutState;
+use crate::utils::VecMap;
 
 
 pub struct RusTeXExtension {
@@ -22,6 +23,10 @@ pub struct RusTeXExtension {
     pub(crate) specialpage:CSName,
     pub(crate) gobbletwo:Macro<CompactToken>,
     pub(crate) empty:Macro<CompactToken>,
+    pub(crate) namespaces:VecMap<String,String>,
+    pub(crate) metas:Vec<VecMap<String,String>>,
+    pub(crate) top:VecMap<String,String>,
+    pub(crate) css_files:Vec<String>,
 }
 impl RusTeXExtension {
     pub(crate) fn push(&mut self) {
@@ -33,6 +38,8 @@ impl RusTeXExtension {
 }
 impl EngineExtension<Types> for RusTeXExtension {
     fn new(memory:&mut MemoryManager<CompactToken>) -> Self {
+        let mut namespaces = VecMap::default();
+        namespaces.insert("dc".to_string(),"http://purl.org/dc/terms/".to_string());
         let mut ret = Self {
             pdf: MinimalPDFExtension::new(memory),
             state:ShipoutState::default(),
@@ -45,6 +52,10 @@ impl EngineExtension<Types> for RusTeXExtension {
             specialpage:memory.cs_interner_mut().from_str("if@specialpage"),
             gobbletwo:Macro::new::<_,_,Types>(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"#1#2","").unwrap(),
             empty:Macro::new::<_,_,Types>(memory.cs_interner_mut(),&DEFAULT_SCHEME_U8,"","").unwrap(),
+            namespaces,
+            metas:vec!(),
+            top:VecMap::default(),
+            css_files:vec!(),
         };
         ret.gobbletwo.long = true;
         ret

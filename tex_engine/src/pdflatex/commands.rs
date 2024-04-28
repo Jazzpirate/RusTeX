@@ -18,6 +18,7 @@ use crate::tex::nodes::math::MathNode;
 use crate::tex::nodes::vertical::VNode;
 use crate::engine::stomach::TeXMode;
 use crate::prelude::CSHandler;
+use crate::tex::nodes::WhatsitFunction;
 use crate::utils::errors::{TeXError, TeXResult};
 
 pub fn pdftexversion<ET:EngineTypes>(_engine: &mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<ET::Int,ET> {
@@ -653,7 +654,7 @@ pub fn parse_pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::Tok
 }
 
 pub fn pdfobj<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
-                             -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>
+                             -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET>
     where ET::Extension : PDFExtension<ET> {
     parse_pdfobj(engine,&tk)?;
     Ok(None)
@@ -730,7 +731,7 @@ pub fn parse_pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:&ET::T
     Ok(engine.aux.extension.pdfxforms().len() - 1)
 }
 pub fn pdfxform<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
-                              -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<ET>) -> TeXResult<(),ET>>>,ET>
+                              -> TeXResult<Option<Box<WhatsitFunction<ET>>>,ET>
     where ET::Extension : PDFExtension<ET> {
     parse_pdfxform(engine,&tk)?;
     Ok(None)

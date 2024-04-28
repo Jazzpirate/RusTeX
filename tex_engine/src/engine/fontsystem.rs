@@ -1,7 +1,6 @@
 /*! Fonts */
 mod tfm;
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use crate::commands::{TeXCommand, PrimitiveCommand, ResolvedToken};
@@ -120,7 +119,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
             heights:[0.0;256],
             depths:[0.0;256],
             ics:[0.0;256],
-            ligs:BTreeMap::default(),
+            ligs:HMap::default(),
             filepath:std::path::PathBuf::from("/nullfont")
         };
         let muts = Mutables::default();

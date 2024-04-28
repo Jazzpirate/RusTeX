@@ -13,6 +13,7 @@ use tex_engine::prelude::*;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread};
 use tex_engine::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
+use crate::utils::VecMap;
 
 pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
     register_command(engine, true, "pgfsysdriver", "",
@@ -94,7 +95,7 @@ fn pgfflushpath(engine:Refs, ret:&mut Vec<CompactToken>,_token:CompactToken) -> 
     Ok(())
 }
 fn gbegin(engine:Refs,token:CompactToken) -> Res<()> {
-    let mut attrs : HMap<&'static str,String> = HMap::default();
+    let mut attrs : VecMap<&'static str,String> = VecMap::default();
     let mut key = String::new();
     //let start = engine.mouth.start_ref();
     engine.read_braced_string(true,true,&token,&mut key)?;

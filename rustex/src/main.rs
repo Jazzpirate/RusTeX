@@ -5,21 +5,21 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 //static GLOBAL: rpmalloc::RpMalloc = rpmalloc::RpMalloc;
 
 use std::collections::HashSet;
-use RusTeX::engine::{RusTeXEngine,RusTeXEngineT};
+use RusTeX::engine::{RusTeXEngine, RusTeXEngineT};
 
-use std::env;
-use std::path::{Path, PathBuf};
 use clap::Parser;
 use log::info;
 use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use RusTeX::engine::Types;
-use RusTeX::files::RusTeXFileSystem;
-use RusTeX::output::RusTeXOutput;
-use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
+use std::env;
+use std::path::{Path, PathBuf};
 use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
+use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;
 use tex_engine::pdflatex::PlainPDFTeXEngine;
+use RusTeX::engine::Types;
+use RusTeX::files::RusTeXFileSystem;
+use RusTeX::output::RusTeXOutput;
 
 /*
 notes   5:31
@@ -28,10 +28,10 @@ thesis  0:15
  */
 fn main() {
     //profile()
-    thesis()
+    //thesis()
     //run()
     //test()
-    //temp_test()
+    temp_test()
     //notes()
     //test2()
     //test_all()
@@ -44,7 +44,7 @@ fn test_all() {
     let mut allfiles = Vec::new();
     for line in allfiles_reader.lines() {
         let line = line.unwrap();
-        let (a,b) = line.split_once("|").unwrap();
+        let (a, b) = line.split_once("|").unwrap();
         if b.trim() == "true" {
             allfiles.push(PathBuf::from(a));
         }
@@ -60,26 +60,40 @@ fn test_all() {
     let allfiles: Vec<_> = allfiles.into_iter().filter(|x| !dones.contains(x)).collect();
 
      */
-    println!("Testing {} files",allfiles.len());
+    println!("Testing {} files", allfiles.len());
     let mut missing_glyphs = HashSet::new();
     let mut missing_fonts = HashSet::new();
     let len = allfiles.len();
-    for (i,f) in allfiles.into_iter().enumerate() {
-        println!("Testing file {} of {}: {}",i+1,len,f.display());
-        let ret = RusTeXEngine::do_file(f.to_str().unwrap(),false,false,false);
+    for (i, f) in allfiles.into_iter().enumerate() {
+        println!("Testing file {} of {}: {}", i + 1, len, f.display());
+        let ret = RusTeXEngine::do_file(f.to_str().unwrap(), false, false, false);
         let mut glyphs = ret.missing_glyphs.into_vec();
         glyphs.retain(|g| !missing_glyphs.contains(g));
         let mut fonts = ret.missing_fonts.into_vec();
         fonts.retain(|g| !missing_fonts.contains(g));
         if !fonts.is_empty() {
-            println!("Missing fonts: {}",fonts.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", "));
+            println!(
+                "Missing fonts: {}",
+                fonts
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
         for f in fonts {
             missing_fonts.insert(f);
         }
-        glyphs.sort_by(|a,b| a.2.cmp(&b.2));
+        glyphs.sort_by(|a, b| a.2.cmp(&b.2));
         if !glyphs.is_empty() {
-            println!("Missing glyphs: {}",glyphs.iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "));
+            println!(
+                "Missing glyphs: {}",
+                glyphs
+                    .iter()
+                    .map(|(x, c, y)| format!("({},{},{})", x, c, y))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
         for g in glyphs {
             missing_glyphs.insert(g);
@@ -88,54 +102,110 @@ fn test_all() {
             None => {
                 //dones.push(f);
                 //std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
-                let out = PathBuf::from("/home/jazzpirate/temp/out").join(format!("{}.html",i+1));
+                let out =
+                    PathBuf::from("/home/jazzpirate/temp/out").join(format!("{}.html", i + 1));
                 std::fs::write(out, &ret.out).unwrap();
             }
             Some(e) => {
                 println!("Errored");
-                panic!("Errored: {}\n{}\n\nMissing glyphs: {}\nMissing web fonts: {}",
-                       f.display(),e.to_string(),
-                       missing_glyphs.into_iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "),
-                          missing_fonts.into_iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
+                panic!(
+                    "Errored: {}\n{}\n\nMissing glyphs: {}\nMissing web fonts: {}",
+                    f.display(),
+                    e.to_string(),
+                    missing_glyphs
+                        .into_iter()
+                        .map(|(x, c, y)| format!("({},{},{})", x, c, y))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    missing_fonts
+                        .into_iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
         }
     }
     let mut missing_glyphs: Vec<_> = missing_glyphs.into_iter().collect();
-    missing_glyphs.sort_by(|a,b| a.2.cmp(&b.2));
-    println!("Finished \\o/\n\nMissing glyphs: {}\nMissing web fonts: {}",
-           missing_glyphs.into_iter().map(|(x,c,y)| format!("({},{},{})",x,c,y)).collect::<Vec<_>>().join(", "),
-           missing_fonts.into_iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
+    missing_glyphs.sort_by(|a, b| a.2.cmp(&b.2));
+    println!(
+        "Finished \\o/\n\nMissing glyphs: {}\nMissing web fonts: {}",
+        missing_glyphs
+            .into_iter()
+            .map(|(x, c, y)| format!("({},{},{})", x, c, y))
+            .collect::<Vec<_>>()
+            .join(", "),
+        missing_fonts
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     );
 }
 
 fn test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.tex",false,true,true);
-    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html", &ret.out).unwrap();
+    let ret = RusTeXEngine::do_file(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.tex",
+        false,
+        true,
+        true,
+    );
+    std::fs::write(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html",
+        &ret.out,
+    )
+    .unwrap();
 }
 
 fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/paper.tex",true,true,true);
+    let ret = RusTeXEngine::do_file(
+        "/home/jazzpirate/work/MathHub/Papers/24-cicm-views-in-alea/source/ex/model-satisfies-formula-view-fol.en.tex",
+        true,
+        true,
+        true,
+    );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
-    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html", &ret.out).unwrap();
+    std::fs::write(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/temp_test.html",
+        &ret.out,
+    )
+    .unwrap();
 }
 
 fn thesis() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",false,true,true);
-    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html", &ret.out).unwrap();
+    let ret = RusTeXEngine::do_file(
+        "/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",
+        false,
+        true,
+        true,
+    );
+    std::fs::write(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html",
+        &ret.out,
+    )
+    .unwrap();
 }
 
 fn notes() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     // /home/jazzpirate/work/MathHub/MiKoMH/AI/source/search/slides/ts-ex.en.tex
-    let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",false,true,true);
+    let ret = RusTeXEngine::do_file(
+        "/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",
+        false,
+        true,
+        true,
+    );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/CompLog/source/kr/tikz/axioms2.tex",true,true,true);
-    std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html", &ret.out).unwrap();
+    std::fs::write(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html",
+        &ret.out,
+    )
+    .unwrap();
 }
 
 fn profile() {
@@ -157,7 +227,7 @@ fn profile() {
     }
 }
 
-#[derive(Parser,Debug)]
+#[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Parameters {
     /// Input file (tex)
@@ -175,11 +245,11 @@ struct Parameters {
     /// Output file (html)
     #[clap(short, long)]
     output: Option<String>,
-/*
-    /// log file (html)
-    #[clap(short, long)]
-    log: Option<String>,
-*/
+    /*
+        /// log file (html)
+        #[clap(short, long)]
+        log: Option<String>,
+    */
     /// insert source references
     #[clap(short, long, default_value_t = true)]
     sourcerefs: bool,
@@ -204,9 +274,14 @@ fn run() {
         profile();
         return;
     }
-    match (params.input,params.output) {
-        (Some(i),Some(o)) => {
-            let ret = RusTeXEngine::do_file(i.as_str(),params.verbose,params.console,params.sourcerefs);
+    match (params.input, params.output) {
+        (Some(i), Some(o)) => {
+            let ret = RusTeXEngine::do_file(
+                i.as_str(),
+                params.verbose,
+                params.console,
+                params.sourcerefs,
+            );
             std::fs::write(o, &ret.out).unwrap();
         }
         _ => {

@@ -333,31 +333,95 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
     let mut quoted = false;
     let mut had_eq = !skip_eq;
     let mut was_quoted = false;
+    let mut is_empty = true;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code,..} => match code {
-            CommandCode::Space if ret.is_empty() && !was_quoted => (),
+            CommandCode::Space if is_empty && !was_quoted => (),
             CommandCode::Space if quoted => ret.push(' '),
             CommandCode::Space => return Ok(()),
-            CommandCode::Other if !had_eq && ret.is_empty() && matches!(char.try_into(),Ok(b'=')) => {
+            CommandCode::Other if !had_eq && is_empty && matches!(char.try_into(),Ok(b'=')) => {
                 had_eq = true;
             }
             _ => {
                 if matches!(char.try_into(),Ok(b'\"')) {
                     was_quoted = true;
+                    is_empty = false;
                     quoted = !quoted;
                 } else {
+                    is_empty = false;
                     char.display_fmt(ret);
                 }
             }
         }
-        ResolvedToken::Cmd(Some(TeXCommand::CharDef(c))) => c.display_fmt(ret),
-        ResolvedToken::Cmd(Some(TeXCommand::Char{char,..})) => char.display_fmt(ret),
+        ResolvedToken::Cmd(Some(TeXCommand::CharDef(c))) => {
+            c.display_fmt(ret);
+            is_empty = false;
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::Char{char,..})) => {
+            is_empty = false;
+            char.display_fmt(ret)
+        }
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) if !quoted => return Ok(()),
         ResolvedToken::Cmd(_) if !quoted => {
             engine.mouth.requeue(token);
             return Ok(())
         }
-        _ => write!(ret,"{}",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))?
+        _ => {
+            is_empty = false;
+            write!(ret,"{}",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))?;
+        }
+    );
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())
+}
+
+
+/// Default implementation for [`Gullet::read_maybe_braced_string`].
+pub fn read_maybe_braced_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool, ret:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
+    use std::fmt::Write;
+    let mut quoted = false;
+    let mut had_eq = !skip_eq;
+    let mut was_quoted = false;
+    let mut is_empty = true;
+    let mut braced = false;
+    crate::expand_loop!(engine,token,
+        ResolvedToken::Tk {char,code,..} => match code {
+            CommandCode::Space if is_empty && !was_quoted && !braced => (),
+            CommandCode::Space if quoted || braced => ret.push(' '),
+            CommandCode::Space => return Ok(()),
+            CommandCode::BeginGroup if !braced && is_empty => {braced = true;is_empty = false}
+            CommandCode::EndGroup if braced => return Ok(()),
+            CommandCode::Other if !had_eq && is_empty && matches!(char.try_into(),Ok(b'=')) => {
+                had_eq = true;
+            }
+            _ => {
+                if matches!(char.try_into(),Ok(b'\"')) {
+                    if quoted {return Ok(())}
+                    was_quoted = true;
+                    is_empty = false;
+                    quoted = !quoted;
+                } else {
+                    is_empty = false;
+                    char.display_fmt(ret);
+                }
+            }
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::CharDef(c))) => {
+            c.display_fmt(ret);
+            is_empty = false;
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::Char{char,..})) => {
+            is_empty = false;
+            char.display_fmt(ret)
+        }
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) if !quoted && !braced => return Ok(()),
+        ResolvedToken::Cmd(_) if !quoted => {
+            engine.mouth.requeue(token);
+            return Ok(())
+        }
+        _ => {
+            is_empty = false;
+            write!(ret,"{}",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))?;
+        }
     );
     TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,in_token.clone())
 }
@@ -393,7 +457,10 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             }
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) => return Ok(NumContinuation{is_negative,next:either::Left(b)}),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return Err(TeXError::General(format!(
+                "Unexpected token when reading numeric:{}\nTODO: Better error message",
+                token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
+            )))
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => match ((*char).try_into(),code) {
             (_,CommandCode::Space) => (),
@@ -405,7 +472,10 @@ pub fn read_numeric<ET:EngineTypes>(engine:&mut EngineReferences<ET>, skip_eq:bo
             }
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) => return Ok(NumContinuation{is_negative,next:either::Left(b)}),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return Err(TeXError::General(format!(
+                "Unexpected token when reading numeric:{}\nTODO: Better error message",
+                token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char())
+            )))
         }
         ResolvedToken::Cmd(None) =>
             TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
@@ -443,13 +513,13 @@ pub fn read_int_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negati
 
 /// reads a character literal triggered by a backtick, when a number is expected
 fn read_int_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool) -> TeXResult<ET::Int,ET> {
-    let next = loop {match engine.mouth.get_next(engine.aux, engine.state)? {
-        Some(t) => break t,
+    let next = match engine.mouth.get_next(engine.aux, engine.state)? {
+        Some(t) => t,
         None => {
             TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
             return Ok(ET::Int::default())
         }
-    }};
+    };
     let ret = match next.to_enum() {
         StandardToken::Character(c, _) => {
             let i: u64 = c.into();
@@ -524,7 +594,7 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                 }
                 _ => {
                     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
-                    return Ok(ET::Int::default())
+                    Ok(ET::Int::default())
                 }
             }
         }
@@ -536,7 +606,7 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                 }
                 _ => {
                     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
-                    return Ok(ET::Int::default())
+                    Ok(ET::Int::default())
                 }
             }
         }
@@ -566,7 +636,7 @@ pub fn read_int_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
         }
         _ => {
             TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
-            return Ok(ET::Int::default())
+            Ok(ET::Int::default())
         }
     }
 }
@@ -613,42 +683,56 @@ fn read_hex_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 ret = 16*ret + hex_to_num(b);
                 empty = false;
             }
-            (_,CommandCode::Space) =>
-                match (if is_negative {-ret} else {ret}).try_into() {
+            (_,CommandCode::Space) => {
+                let ret = if is_negative {-ret} else {ret};
+                match ret.try_into() {
                     Ok(v) => return Ok(v),
-                    _ => return Err(TeXError::General("TODO: Better error message".to_string()))
-                },
-            _ if !empty => {
-                engine.requeue(token)?;
-                match (if is_negative {-ret} else {ret}).try_into() {
-                    Ok(v) => return Ok(v),
-                    _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                    _ => return Err(TeXError::General(format!("Integer out of range: {}\nTODO: Better error message",ret)))
                 }
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ if !empty => {
+                engine.requeue(token)?;
+                let ret = if is_negative {-ret} else {ret};
+                match ret.try_into() {
+                    Ok(v) => return Ok(v),
+                    _ => return Err(TeXError::General(format!("Integer out of range: {}\nTODO: Better error message",ret)))
+                }
+            }
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return Ok(ET::Int::default())
+            }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => {
-            match (if is_negative {-ret} else {ret}).try_into() {
+            let ret = if is_negative {-ret} else {ret};
+            match ret.try_into() {
                 Ok(v) => return Ok(v),
-                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                _ => return Err(TeXError::General(format!("Integer out of range: {}\nTODO: Better error message",ret)))
             }
         }
         ResolvedToken::Cmd(_) if !empty => {
             engine.mouth.requeue(token);
-            match (if is_negative {-ret} else {ret}).try_into() {
+            let ret = if is_negative {-ret} else {ret};
+            match ret.try_into() {
                 Ok(v) => return Ok(v),
-                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                _ => return Err(TeXError::General(format!("Integer out of range: {}\nTODO: Better error message",ret)))
             }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return Ok(ET::Int::default())
+        }
     );
     if empty {
         TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
         Ok(ET::Int::default())
     } else {
-        match (if is_negative {-ret} else {ret}).try_into() {
+        let ret = if is_negative {-ret} else {ret};
+        match ret.try_into() {
             Ok(v) => Ok(v),
-            _ => Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => Err(TeXError::General(format!("Integer out of range: {}\nTODO: Better error message",ret)))
         }
     }
 }
@@ -667,7 +751,11 @@ fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
                 engine.requeue(token)?;
                 return Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return Ok(ET::Int::default())
+            }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) if !empty => {
             return Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
@@ -676,10 +764,15 @@ fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
             engine.mouth.requeue(token);
             return Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return Ok(ET::Int::default())
+        }
     );
     if empty {
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+        return Ok(ET::Int::default())
     } else {
         Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
     }
@@ -804,6 +897,7 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
                 return read_dim_unit(engine,f,Some((b,token)))
             }
             _ => {
+                engine.requeue(token)?;
                 TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
                 return read_unit_or_dim(engine,0f64)
             }
@@ -812,7 +906,11 @@ fn read_dim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:
             let f = if is_negative {-ret} else {ret};
             return read_unit_cmd(engine,f,c.clone(),token)
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return read_unit_or_dim(engine,0f64)
+        }
     );
     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
     read_unit_or_dim(engine,0f64)
@@ -825,18 +923,27 @@ fn read_unit_or_dim<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64) 
                 return read_dim_unit(engine,float,Some((b,token)))
             }
             (_,CommandCode::Space) => (),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                return Ok(ET::Dim::from_float(engine,float,b"pt"))
+            }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::Space,..})) => (),
         ResolvedToken::Cmd(Some(TeXCommand::Char{char,code:CommandCode::Other | CommandCode::Letter})) => match (*char).try_into() {
             Ok(b) => return read_dim_unit(engine,float,Some((b,token))),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                return Ok(ET::Dim::from_float(engine,float,b"pt"))
+            }
         }
         ResolvedToken::Cmd(Some(cmd)) => return read_unit_cmd(engine,float,cmd.clone(),token),
         ResolvedToken::Cmd(None) =>
             TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+    Ok(ET::Dim::from_float(engine,float,b"pt"))
 }
 
 fn read_unit_cmd<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64,cmd:TeXCommand<ET>,token:ET::Token) -> TeXResult<ET::Dim,ET> {
@@ -877,7 +984,11 @@ fn read_unit_cmd<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64,cmd
             let base = read(engine,token)?.base;
             Ok(base.scale_float(float))
         }
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+            Ok(ET::Dim::from_float(engine,float,b"pt"))
+        }
     }
 }
 
@@ -896,7 +1007,10 @@ fn read_dim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, mut float:f64
     let units = ET::Dim::UNITS;
     match read_keywords(engine,units,first)? {
         Some(d) => Ok(<ET::Num as NumSet>::Dim::from_float(engine,float,d)),
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+            Ok(ET::Dim::from_float(engine,float,b"pt"))
+        }
     }
 }
 
@@ -916,7 +1030,8 @@ pub fn read_skip_byte<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
     } else if is_ascii_digit(b) {
         read_skip_dim(engine,is_negative,b)
     } else {
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+        read_skip_dim(engine,false,b)
     }
 }
 
@@ -978,7 +1093,12 @@ pub fn read_skip_command<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_ne
             let val = read(engine,token)?;
             Ok(if is_negative {-val} else {val})
         }
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            let base = read_unit_or_dim(engine,0f64)?;
+            read_skip_ii(engine,base)
+        }
     }
 }
 
@@ -1024,7 +1144,11 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<S
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_stretch_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_stretch_float(engine,is_negative,b'.'),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return read_stretch_unit(engine,0f64,None)
+            }
         }
         ResolvedToken::Cmd(cmd) => match cmd {
             Some(TeXCommand::DimRegister(u)) => {
@@ -1055,11 +1179,15 @@ fn read_stretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<S
                 let base = Into::<u64>::into(*c) as f64;
                 return read_stretch_unit(engine,if is_negative {-base} else {base},None)
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return read_stretch_unit(engine,0f64,None)
+            }
         }
     );
     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
-    Ok(StretchShrink::Dim(ET::Dim::default()))
+    read_stretch_unit(engine,0f64,None)
 }
 fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bool, first:u8) -> TeXResult<StretchShrink<ET::Dim>,ET> {
     let mut ret = 0f64;
@@ -1080,7 +1208,9 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    engine.requeue(token)?;
+                    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(StretchShrink::Dim(ET::Dim::from_float(engine,ret,b"pt")))
                 }
                 in_decimal = true;
             }
@@ -1093,7 +1223,9 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
                 return read_stretch_unit(engine,f,Some((b,token)))
             }
             _ => {
-                return Err(TeXError::General("TODO: Better error message".to_string()))
+                engine.requeue(token)?;
+                TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                return Ok(StretchShrink::Dim(ET::Dim::from_float(engine,ret,b"pt")))
             }
         }
         ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,cmd:PrimitiveCommand::PrimitiveDim})) => {
@@ -1116,9 +1248,14 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
             let scale = if is_negative {-ret} else {ret};
             return Ok(StretchShrink::Dim(base.scale_float(scale)))
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+            return Ok(StretchShrink::Dim(ET::Dim::from_float(engine,ret,b"pt")))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+    return Ok(StretchShrink::Dim(ET::Dim::from_float(engine,ret,b"pt")))
 }
 fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> TeXResult<StretchShrink<ET::Dim>,ET> {
     let is_true = match &first {
@@ -1166,7 +1303,8 @@ pub fn read_muskip_byte<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_n
     } else if is_ascii_digit(b) {
         read_muskip_dim(engine,is_negative,b,kern)
     } else {
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+        read_muskip_dim(engine,false,b,kern)
     }
 }
 
@@ -1200,7 +1338,12 @@ pub fn read_muskip_command<R,ET:EngineTypes>(engine:&mut EngineReferences<ET>, i
             let base = read_mudim_unit(engine,base,None)?;
             kern(base,engine)
         }
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            let base = read_mudim_unit(engine,0f64,None)?;
+            kern(base,engine)
+        }
     }
 }
 
@@ -1229,7 +1372,9 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    engine.requeue(token)?;
+                    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(ET::MuDim::from_float(engine,ret,b"mu"))
                 }
                 in_decimal = true;
             }
@@ -1242,19 +1387,29 @@ fn read_mudim_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negativ
                 return read_mudim_unit(engine,f,Some((b,token)))
             }
             _ => {
-               return Err(TeXError::General("TODO: Better error message".to_string()))
+                engine.requeue(token)?;
+                TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                return Ok(ET::MuDim::from_float(engine,ret,b"mu"))
             }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+            return Ok(ET::MuDim::from_float(engine,ret,b"mu"))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+    Ok(ET::MuDim::from_float(engine,ret,b"mu"))
 }
 
 fn read_mudim_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, float:f64, first:Option<(u8, ET::Token)>) -> TeXResult<ET::MuDim,ET> {
     let units = ET::MuDim::UNITS;
     match read_keywords(engine,units,first)? {
         Some(d) => Ok(ET::MuDim::from_float(engine,float,d)),
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+            Ok(ET::MuDim::from_float(engine,float,b"mu"))
+        }
     }
 }
 
@@ -1291,9 +1446,17 @@ fn read_mustretch<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult
             (Ok(b'+'),CommandCode::Other) => (),
             (Ok(b),CommandCode::Other) if is_ascii_digit(b) => return read_mustretch_float(engine,is_negative,b),
             (Ok(b','|b'.'),CommandCode::Other) => return read_mustretch_float(engine,is_negative,b'.'),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                engine.requeue(token)?;
+                TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+                return read_mustretch_unit(engine,0f64,None)
+            }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
+            return read_mustretch_unit(engine,0f64,None)
+        }
     );
     TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
     Ok(MuStretchShrink::Mu(ET::MuDim::default()))
@@ -1317,7 +1480,9 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
             }
             (Ok(b','|b'.'),CommandCode::Other) => {
                 if in_decimal {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    engine.requeue(token)?;
+                    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                    return Ok(MuStretchShrink::Mu(ET::MuDim::from_float(engine,ret,b"mu")))
                 }
                 in_decimal = true;
             }
@@ -1330,19 +1495,29 @@ fn read_mustretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_neg
                 return read_mustretch_unit(engine,f,Some((b,token)))
             }
             _ => {
-                return Err(TeXError::General("TODO: Better error message".to_string()))
+                engine.requeue(token)?;
+                TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                return Ok(MuStretchShrink::Mu(ET::MuDim::from_float(engine,ret,b"mu")))
             }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.requeue(token)?;
+            TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+            return Ok(MuStretchShrink::Mu(ET::MuDim::from_float(engine,ret,b"mu")))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+    Ok(MuStretchShrink::Mu(ET::MuDim::from_float(engine,ret,b"mu")))
 }
 fn read_mustretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,float:f64,first:Option<(u8,ET::Token)>) -> TeXResult<MuStretchShrink<ET::MuDim>,ET> {
     match read_keywords(engine,STRETCH_SHRINK_UNITS,first)? {
         Some(d) => Ok(MuStretchShrink::from_float(engine,float,d)),
         _ => match read_keywords(engine,ET::MuDim::UNITS,None)? {
             Some(d) => Ok(MuStretchShrink::from_float(engine,float,d)),
-            _ => Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
+                Ok(MuStretchShrink::Mu(ET::MuDim::from_float(engine,float,b"mu")))
+            }
         }
     }
 }
@@ -1364,33 +1539,28 @@ pub fn read_keyword<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kw:&[u8],fi
                 read.push(token);
                 if !kw.starts_with(&ret) {
                     for t in read.into_iter().rev() {engine.requeue(t)?}
-                    //engine.aux.memory.return_bytes(ret);
-                    //engine.aux.memory.return_token_vec(read);
                     return Ok(false)
                 }
                 if kw.len() == ret.len() {
-                    //engine.aux.memory.return_token_vec(read);
-                    //engine.aux.memory.return_bytes(ret);
                     return Ok(true)
                 }
             }
             _ => {
                 read.push(token);
                 for t in read.into_iter().rev() {engine.requeue(t)?}
-                //engine.aux.memory.return_bytes(ret);
-                //engine.aux.memory.return_token_vec(read);
                 return Ok(false)
             }
         }
         ResolvedToken::Cmd(_) => {
             read.push(token);
             for t in read.into_iter().rev() {engine.requeue(t)?}
-            //engine.aux.memory.return_bytes(ret);
-            //engine.aux.memory.return_token_vec(read);
             return Ok(false)
         }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    if kw.len() != ret.len() || !kw.starts_with(&ret) {
+        for t in read.into_iter().rev() {engine.requeue(t)?}
+        Ok(false)
+    } else { Ok(true) }
 }
 
 /// Default implementation for [`Gullet::read_keywords`].
@@ -1412,40 +1582,30 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
                     match kws.iter().find(|e| **e == ret.as_slice()) {
                         Some(w) => {
                             engine.requeue(token)?;
-                            //engine.aux.memory.return_token_vec(read);
-                            //engine.aux.memory.return_bytes(ret);
                             return Ok(Some(w))
                         }
                         None => {
                             engine.requeue(token)?;
                             for t in read.into_iter().rev() {engine.requeue(t)?}
-                            //engine.aux.memory.return_bytes(ret);
-                            //engine.aux.memory.return_token_vec(read);
                             return Ok(None)
                         }
                     }
                 }
                 read.push(token);
                 if curr.len() == 1 && curr[0].len() == ret.len() {
-                    //engine.aux.memory.return_token_vec(read);
-                    //engine.aux.memory.return_bytes(ret);
                     return Ok(Some(curr[0]))
                 }
             }
             _ => {
                 let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
-                match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
-                    Some((i,_)) => {
+                match curr.iter().find(|b| ***b == ret.as_slice()) {
+                    Some(b) => {
                         engine.requeue(token)?;
-                        //engine.aux.memory.return_token_vec(read);
-                        //engine.aux.memory.return_bytes(ret);
-                        return Ok(Some(curr[i]))
+                        return Ok(Some(**b))
                     }
                     _ => {
                         engine.requeue(token)?;
                         for t in read.into_iter().rev() {engine.requeue(t)?}
-                        //engine.aux.memory.return_bytes(ret);
-                        //engine.aux.memory.return_token_vec(read);
                         return Ok(None)
                     }
                 }
@@ -1453,28 +1613,32 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
         }
         ResolvedToken::Cmd(_) => {
             let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
-            match curr.iter().enumerate().find(|(_,b)| ***b == ret.as_slice()) {
-                Some((i,_)) => {
+            match curr.iter().find(|b| ***b == ret.as_slice()) {
+                Some(b) => {
                     engine.mouth.requeue(token);
-                    //engine.aux.memory.return_token_vec(read);
-                    //engine.aux.memory.return_bytes(ret);
-                    return Ok(Some(curr[i]))
+                    return Ok(Some(**b))
                 }
                 _ => {
                     engine.mouth.requeue(token);
                     for t in read.into_iter().rev() {engine.requeue(t)?}
-                    //engine.aux.memory.return_bytes(ret);
-                    //engine.aux.memory.return_token_vec(read);
                     return Ok(None)
                 }
             }
         }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    match kws.iter().find(|b| **b == ret.as_slice()) {
+        Some(b) => {
+            Ok(Some(*b))
+        }
+        _ => {
+            for t in read.into_iter().rev() {engine.requeue(t)?}
+            Ok(None)
+        }
+    }
 }
 
 /// Default implementation for [`Gullet::read_chars`].
-pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) -> TeXResult<Either<u8,ET::Token>,ET> {
+pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) -> TeXResult<Either<u8,Option<ET::Token>>,ET> {
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code} => match (char.try_into(),code) {
             (_,CommandCode::Space) => (),
@@ -1482,14 +1646,14 @@ pub fn read_chars<ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[u8]) ->
                 return Ok(Either::Left(b))
             }
             _ => {
-                return Ok(Either::Right(token))
+                return Ok(Either::Right(Some(token)))
             }
         }
         ResolvedToken::Cmd(_) => {
-            return Ok(Either::Right(token))
+            return Ok(Either::Right(Some(token)))
         }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    Ok(Either::Right(None))
 }
 
 /// Either a [`CSName`](crate::tex::tokens::control_sequences::CSName) or an active character
@@ -1520,7 +1684,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
                     return Ok(ret)
                 }
                 ResolvedToken::Tk {code:CommandCode::Space,..} => (),
-                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                _ => return Err(TeXError::General("Control sequence expected\n TODO: Better error message".to_string()))
             }
         }
     }

@@ -1,5 +1,5 @@
 pub mod engine;
-pub(crate) mod fonts;
+pub mod fonts;
 pub mod files;
 pub(crate) mod shipout;
 pub(crate) mod extension;
@@ -9,8 +9,9 @@ pub mod commands;
 pub mod state;
 pub mod stomach;
 pub(crate) mod pgf;
-
 pub mod output;
+
+pub mod utils;
 
 #[cfg(test)]
 mod tests {

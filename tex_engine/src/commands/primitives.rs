@@ -25,7 +25,7 @@ macro_rules! cmstodos {
 
 macro_rules! cmtodo {
     ($engine:ident,$name:ident) => {{
-        let command = crate::commands::PrimitiveCommand::SimpleExpandable(
+        let command = $crate::commands::PrimitiveCommand::SimpleExpandable(
             |e,_| e.general_error(format!("Not yet implemented: \\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
@@ -38,11 +38,11 @@ macro_rules! cmtodo {
 
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {{
-        let command = crate::commands::PrimitiveCommand::Unexpandable {
-            scope:crate::commands::CommandScope::Any,
+        let command = $crate::commands::PrimitiveCommand::Unexpandable {
+            scope:$crate::commands::CommandScope::Any,
             apply:|e,_| e.general_error(format!("Not yet implemented: \\{} at {}",
                 stringify!($name),
-                crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
+                $crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
         };
         let refs = $engine.get_engine_refs();
@@ -54,6 +54,7 @@ pub(crate) use cmtodos;
 pub(crate) use cmstodos;
 pub(crate) use cmtodo;
 pub(crate) use cmstodo;
+use crate::tex::nodes::WhatsitFunction;
 use crate::utils::errors::TeXResult;
 
 /// Creates a new expandable primitive and registers it with the engine.
@@ -216,7 +217,7 @@ pub fn register_whatsit<E:TeXEngine>(
     engine:&mut E,
     name:&'static str,
     get:fn(&mut EngineReferences<E::Types>, <E::Types as EngineTypes>::Token)
-             -> TeXResult<Option<Box<dyn FnOnce(&mut EngineReferences<E::Types>) -> TeXResult<(),E::Types>>>,E::Types>,
+             -> TeXResult<Option<Box<WhatsitFunction<E::Types>>>,E::Types>,
     immediate:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>,
     the:Option<fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Vec<<E::Types as EngineTypes>::Token>,E::Types>>
 ) {
