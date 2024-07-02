@@ -102,27 +102,36 @@ pub struct KpathseaBase {
 }
 impl KpathseaBase {
     fn new() -> KpathseaBase {
-        let mut vars = Self::get_vars();
-        let home = if cfg!(target_os = "windows") {
-            std::env::vars().find(|x| x.0 == "HOMEDRIVE").unwrap().1 +
-                &std::env::vars().find(|x| x.0 == "HOMEPATH").unwrap().1
+        let locout = std::process::Command::new("kpsewhich")
+            .args(vec!("-var-value","SELFAUTOLOC")).output().expect("kpsewhich not found!")
+            .stdout;
+        let loc = std::str::from_utf8(locout.as_slice()).unwrap().trim();
+        let selfautoloc = Path::new(loc);
+        
+        let (pre,dot,post) = if loc.contains("miktex") {
+            todo!()
         } else {
-            std::env::vars().find(|x| x.0 == "HOME").unwrap().1
-        };
+            let mut vars = Self::get_vars(selfautoloc);
+            let home = if cfg!(target_os = "windows") {
+                std::env::vars().find(|x| x.0 == "HOMEDRIVE").unwrap().1 + &std::env::vars().find(|x| x.0 == "HOMEPATH").unwrap().1
+            } else {
+                std::env::vars().find(|x| x.0 == "HOME").unwrap().1
+            };
 
-        let paths = Self::paths_to_scan(&mut vars);
-        let mut parser = PathParser {
-            vars,
-            diddot:false,
-            recdot:false,
-            predot:vec!(),
-            postdot:vec!(),
-            home:PathBuf::from(home),
-            resolved_vars:HMap::default()
-        };
+            let paths = Self::paths_to_scan(&mut vars);
+            let mut parser = PathParser {
+                vars,
+                diddot: false,
+                recdot: false,
+                predot: vec!(),
+                postdot: vec!(),
+                home: PathBuf::from(home),
+                resolved_vars: HMap::default()
+            };
 
-        for s in paths { parser.do_dir(&s); }
-        let (pre,dot,post) = parser.close();
+            for s in paths { parser.do_dir(&s); }
+            parser.close()
+        };
         KpathseaBase { pre, recdot:dot, post }
     }
 
@@ -137,13 +146,8 @@ impl KpathseaBase {
         None
     }
 
-    fn get_vars() -> HMap<String,String> {
+    fn get_vars(selfautoloc:&Path) -> HMap<String,String> {
         let mut vars = HMap::<String,String>::default();
-        let locout = std::process::Command::new("kpsewhich")
-            .args(vec!("-var-value","SELFAUTOLOC")).output().expect("kpsewhich not found!")
-            .stdout;
-        let loc = std::str::from_utf8(locout.as_slice()).unwrap().trim();
-        let selfautoloc = Path::new(loc);
         vars.insert("SELFAUTOLOC".to_string(),selfautoloc.to_str().unwrap().to_string());
         if let Some(autodir) = selfautoloc.parent() {
             vars.insert("SELFAUTODIR".to_string(), autodir.to_str().unwrap().to_string());
@@ -316,7 +320,7 @@ impl PathParser {
     fn parse_bytes(&mut self,mut s:&[u8]) -> Vec<Vec<u8>> {
         let mut ret: Vec<Vec<u8>> = vec!();
         let mut currs = StringSet::new();
-        let breaks = [b';',b':',b'$',b'!',b'{',b'~'];
+        let breaks = if cfg!(target_os = "window") {[b';',b';',b'$',b'!',b'{',b'~']} else {[b';',b':',b'$',b'!',b'{',b'~']};
         while !s.is_empty() {
             if let Some((i,b)) = s.iter().enumerate().find(|(_,c)| breaks.contains(*c)) {
                 let first = &s[..i];

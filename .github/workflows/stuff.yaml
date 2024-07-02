@@ -6,7 +6,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: TeXLive
-        run: sudo apt install texlive-full
+        run: sudo apt update && sudo apt install texlive-full
   #    - name: Packages
   #      run: tlmgr init-usertree && tlmgr install article geometry xcolor amsmath graphicx stex wrapfig mdframed listings tcolorbox
       - name: rustup
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: TeXLive
-        run: sudo apt install texlive-base
+        run: sudo apt update && sudo apt install texlive-base
       - name: Test tex-glyphs
         run: cd tex-glyphs && cargo test --release
   test_rustex:
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: TeXLive
-        run: sudo apt install texlive-full
+        run: sudo apt update && sudo apt install texlive-full
       - name: rustup
         run: rustup update
       - name: Test rustex

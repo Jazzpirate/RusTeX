@@ -13,6 +13,7 @@ and [`CompactToken`] as a significantly more efficient representation.
 
 use std::fmt::Write;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 use crate::commands::primitives::PrimitiveIdentifier;
 use crate::tex::catcodes::{CategoryCodeScheme, CommandCode};
 use crate::tex::characters::Character;
@@ -182,10 +183,10 @@ make a Token from a control sequence name or display a [`CompactToken`] to the u
 (Also, we can only have 2³¹ control sequences in total, but that limit is ridiculously large.)
 */
 #[derive(Clone,Copy,Eq, Debug)]
-pub struct CompactToken(u32);
+pub struct CompactToken(NonZeroU32);
 impl CompactToken {
 
-    fn is_string(&self) -> bool { self.0 < 0x8000_0000 }
+    fn is_string(&self) -> bool { self.0.get() < 0x8000_0000 }
 
     fn as_string(&self) -> Option<InternedCSName<u8>> {
         if self.is_string() {
@@ -196,13 +197,13 @@ impl CompactToken {
         }
     }
 
-    fn commandcode_value(&self) -> u8 { ((self.0 & 0x00FF_0000) >> 16) as u8 }
+    fn commandcode_value(&self) -> u8 { ((self.0.get() & 0x00FF_0000) >> 16) as u8 }
 
     fn code(&self) -> CommandCode {
         CommandCode::try_from(self.commandcode_value()).unwrap()
     }
 
-    fn u8(&self) -> u8 { (self.0 & 0x0000_00FF) as u8 }
+    fn u8(&self) -> u8 { (self.0.get() & 0x0000_00FF) as u8 }
 }
 impl PartialEq for CompactToken {
     fn eq(&self,other:&Self) -> bool {
@@ -233,7 +234,7 @@ impl Token for CompactToken {
     fn from_cs(cs: Self::CS) -> Self { Self(cs.0) }
 
     fn from_char_cat(c:u8,cat:CommandCode) -> Self {
-        Self(0x8000_0000 | ((cat.as_byte() as u32) << 16) |(c as u32))
+        Self(NonZeroU32::new(0x8000_0000 | ((cat.as_byte() as u32) << 16) |(c as u32)).unwrap())
     }
 
     fn space() -> Self { Self::from_char_cat(32,CommandCode::Space) }
@@ -241,11 +242,11 @@ impl Token for CompactToken {
     fn eof() -> Self { Self::from_char_cat(0,CommandCode::EOF) }
 
     fn primitive(id: PrimitiveIdentifier) -> Self {
-        Self(0x8000_0000 | ((CommandCode::Primitive.as_byte() as u32) << 16) |(id.as_u16() as u32))
+        Self(NonZeroU32::new(0x8000_0000 | ((CommandCode::Primitive.as_byte() as u32) << 16) |(id.as_u16() as u32)).unwrap())
     }
     fn is_primitive(&self) -> Option<PrimitiveIdentifier> {
-        if !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Primitive.as_byte() {
-           PrimitiveIdentifier::try_from_u16((self.0 & 0x0000_FFFF) as u16)
+        if !self.is_string() && (((self.0.get() & 0x00FF_0000) >> 16) as u8) == CommandCode::Primitive.as_byte() {
+           PrimitiveIdentifier::try_from_u16((self.0.get() & 0x0000_FFFF) as u16)
         } else { None }
     }
 
@@ -261,7 +262,7 @@ impl Token for CompactToken {
 
     fn is_cs_or_active(&self) -> bool {
         self.is_string() || {
-            let cc = ((self.0 & 0x00FF_0000) >> 16) as u8;
+            let cc = ((self.0.get() & 0x00FF_0000) >> 16) as u8;
             cc == CommandCode::Active.as_byte() || cc == CommandCode::Primitive.as_byte()
         }
     }
@@ -271,6 +272,6 @@ impl Token for CompactToken {
     }
 
     fn is_argument_marker(&self) -> Option<u8> {
-        if !self.is_string() && (((self.0 & 0x00FF_0000) >> 16) as u8) == CommandCode::Argument.as_byte() {Some(self.u8())} else { None }
+        if !self.is_string() && (((self.0.get() & 0x00FF_0000) >> 16) as u8) == CommandCode::Argument.as_byte() {Some(self.u8())} else { None }
     }
 }

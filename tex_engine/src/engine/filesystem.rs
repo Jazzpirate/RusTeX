@@ -86,6 +86,7 @@ pub trait FileLineSource<C:Character>:TextLineSource<C> {
 pub struct NoOutputFileSystem<C:Character> {
     pub kpse:Kpathsea,
     files:HMap<PathBuf,VirtualFile<C>>,
+    pub envs:HMap<String,String>,
     write_files:Vec<Option<WritableVirtualFile<C>>>,
     read_files:Vec<Option<InputTokenizer<C,VirtualFileLineSource<C>>>>,
     pub interner:string_interner::StringInterner<string_interner::DefaultBackend<string_interner::symbol::SymbolU32>,ahash::RandomState>
@@ -95,6 +96,7 @@ impl<C:Character> Clone for NoOutputFileSystem<C> {
         kpse:self.kpse.clone(),
         files:self.files.clone(),
         write_files:self.write_files.clone(),
+        envs:self.envs.clone(),
         read_files:Vec::new(),
         interner:self.interner.clone()
     } }
@@ -102,7 +104,10 @@ impl<C:Character> Clone for NoOutputFileSystem<C> {
 impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     type File = VirtualFile<C>;
     fn new(pwd:PathBuf) -> Self {
-        Self {
+        let mut envs = HMap::default();
+        envs.insert("PWD".to_string(),pwd.display().to_string());
+        envs.insert("CD".to_string(),pwd.display().to_string());
+        Self {envs,
             kpse:Kpathsea::new(pwd),
             files:HMap::default(),
             write_files:Vec::new(),
@@ -132,12 +137,12 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
                 if path.starts_with("|kpsewhich ") {
                     let s = &path[1..];
                     let out = if cfg!(target_os = "windows") {
-                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(["/C",s])//args.collect::<Vec<&str>>())
+                        std::process::Command::new("cmd").current_dir(&self.kpse.pwd).envs(self.envs.iter()).args(["/C",s])//args.collect::<Vec<&str>>())
                             .output().expect("kpsewhich not found!")
                             .stdout
                     } else {
                         let args = s[10..].split(' ');
-                        std::process::Command::new("kpsewhich").current_dir(&self.kpse.pwd).env("PWD",&self.kpse.pwd).env("CD",&self.kpse.pwd).args(args.collect::<Vec<&str>>())
+                        std::process::Command::new("kpsewhich").current_dir(&self.kpse.pwd).envs(self.envs.iter()).args(args.collect::<Vec<&str>>())
                             .output().expect("kpsewhich not found!")
                             .stdout
                     };

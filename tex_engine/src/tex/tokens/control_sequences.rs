@@ -9,6 +9,7 @@
 use std::fmt::{Debug, Display, Write};
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 use crate::prelude::{CategoryCode, CategoryCodeScheme};
 use crate::tex::characters::Character;
 use crate::utils::{HMap, Ptr};
@@ -73,11 +74,11 @@ impl<C:Character> CSName<C> for Ptr<str> {
 
 /// A control sequence name that has been interned.
 /// Uses *consecutive* `u32` values
-pub type InternedCSName<C> = (u32,PhantomData<C>);
+pub type InternedCSName<C> = (NonZeroU32,PhantomData<C>);
 impl<C:Character> CSName<C> for InternedCSName<C> {
     type Handler = CSInterner<C>;
     type Map<A> = CSNameVec<C,A> where A:Clone;
-    fn id(&self) -> usize { self.0 as usize }
+    fn id(&self) -> usize { self.0.get() as usize - 1 }
 }
 
 /// A [`CSNameMap`] that uses a [`Vec`] to store the values for [`InternedCSName`].
@@ -90,24 +91,24 @@ impl<C:Character,A:Clone> Default for CSNameVec<C,A> {
 
 impl<C:Character,A:Clone> CSNameMap<C,InternedCSName<C>,A> for CSNameVec<C,A> {
     fn get(&self, cs: &InternedCSName<C>) -> Option<&A> {
-        self.0.get(cs.0 as usize).and_then(|x| x.as_ref())
+        self.0.get(cs.0.get() as usize - 1).and_then(|x| x.as_ref())
     }
     fn insert(&mut self, cs: InternedCSName<C>, a: A) -> Option<A> {
-        let idx = cs.0 as usize;
+        let idx = cs.0.get() as usize - 1;
         if self.0.len() <= idx {
             self.0.resize(idx + 1, None);
         }
         std::mem::replace(&mut self.0[idx], Some(a))
     }
     fn remove(&mut self, cs: &InternedCSName<C>) -> Option<A> {
-        let idx = cs.0 as usize;
+        let idx = cs.0.get() as usize - 1;
         if self.0.len() <= idx {
             return None
         }
         self.0[idx].take()
     }
     fn into_iter(self) -> impl Iterator<Item=(InternedCSName<C>,A)> {
-        self.0.into_iter().enumerate().filter_map(|(i,x)| x.map(|x| ((i as u32,PhantomData),x)))
+        self.0.into_iter().enumerate().filter_map(|(i,x)| x.map(|x| ((NonZeroU32::new(i as u32).unwrap(),PhantomData),x)))
     }
 }
 
@@ -173,7 +174,7 @@ impl<C:Character> CSHandler<C,Ptr<str>> for () {
 /// A [`CSHandler`] that interns control sequence names as `u32`.
 #[derive(Clone)]
 pub struct CSInterner<C:Character> {
-    map:HMap<Box<[C]>,u32>,
+    map:HMap<Box<[C]>,NonZeroU32>,
     ls:Vec<C>,
     idx:Vec<usize>
 }
@@ -181,8 +182,8 @@ impl<C:Character> CSInterner<C> {
     #[allow(dead_code)]
     fn cap(&self) -> usize { self.idx.len() }
     fn new() -> Self {
-        let mut map: HMap<Box<[C]>,u32> = HMap::default();
-        map.insert(Box::new([]),0);
+        let mut map: HMap<Box<[C]>,NonZeroU32> = HMap::default();
+        map.insert(Box::new([]),NonZeroU32::new(1).unwrap());
         let mut r = CSInterner {
             map, ls:Vec::new(),idx:vec!(0)
         };
@@ -208,13 +209,14 @@ impl<C:Character> CSInterner<C> {
         let len = self.ls.len();
         self.idx.push(len);
         let len = self.idx.len() - 1;
-        self.map.insert(v.into(),len as u32);
-        (len as u32,PhantomData)
+        let r = NonZeroU32::new(len as u32 + 1).unwrap();
+        self.map.insert(v.into(),r);
+        (r,PhantomData)
     }
 
-    fn get(&self,i:u32) -> &[C] {
+    fn get(&self,i:NonZeroU32) -> &[C] {
+        let i = i.get() as usize - 1;
         if i == 0 { return &[] }
-        let i = i as usize;
         let s = self.idx[i - 1];
         let e = self.idx[i];
         &self.ls[s..e]
@@ -231,8 +233,8 @@ impl<C:Character> CSHandler<C,InternedCSName<C>> for CSInterner<C> {
     fn from_chars(&mut self, v: &[C]) -> InternedCSName<C> {
         self.intern(v)
     }
-    fn par(&self) -> InternedCSName<C> { (1,PhantomData) }
-    fn empty_str(&self) -> InternedCSName<C> { (0,PhantomData) }
+    fn par(&self) -> InternedCSName<C> { (NonZeroU32::new(2).unwrap(),PhantomData) }
+    fn empty_str(&self) -> InternedCSName<C> { (NonZeroU32::new(1).unwrap(),PhantomData) }
     fn resolve<'a>(&'a self, cs: &InternedCSName<C>) -> DisplayCSName<'a,C> {
         DisplayCSName(self.get(cs.0))
     }

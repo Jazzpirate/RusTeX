@@ -158,6 +158,28 @@ fn testfile() {
 
 }
 
+#[test]
+fn memory_things() {
+    use std::num::NonZeroU32;
+    use crate::engine::DefaultPlainTeXEngineTypes;
+    use crate::utils::errors::{InvalidCharacter, TeXResult};
+    debug();
+    type Tk = crate::tex::tokens::CompactToken;
+    info!("tk: {}",std::mem::size_of::<Tk>());
+    info!("Option<Tk>: {}",std::mem::size_of::<Option<Tk>>());
+    info!("Result<Bar(NonZeroU32),()>: {}",std::mem::size_of::<TeXResult<Tk,DefaultPlainTeXEngineTypes>>());
+    info!("Full: {}",std::mem::size_of::<Result<Option<Tk>,InvalidCharacter<u8>>>());
+    struct Foo(u32);
+    info!("Foo(u32): {}",std::mem::size_of::<Foo>());
+    info!("Option<Foo(u32)>: {}",std::mem::size_of::<Option<Foo>>());
+    struct Bar(NonZeroU32);
+    info!("Bar(NonZeroU32): {}",std::mem::size_of::<Bar>());
+    info!("Option<Bar(NonZeroU32)>: {}",std::mem::size_of::<Option<Bar>>());
+    info!("Option<NonZeroU32>: {}",std::mem::size_of::<Option<NonZeroU32>>());
+    info!("Result<Bar(NonZeroU32),()>: {}",std::mem::size_of::<TeXResult<Bar,DefaultPlainTeXEngineTypes>>());
+    info!("FullBar: {}",std::mem::size_of::<Result<Option<Bar>,InvalidCharacter<u8>>>());
+}
+
 /*
     #[cfg(feature="pdflatex")]
     #[test]
