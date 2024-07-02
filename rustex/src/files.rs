@@ -13,13 +13,19 @@ pub struct RusTeXFileSystem{
     pub(crate) inner: NoOutputFileSystem<u8>,
     pub(crate) svg: (<VirtualFile<u8> as File>::SourceRefID,Ptr<[TextLine<u8>]>)
 }
-
+impl RusTeXFileSystem {
+    pub fn new_with_envs<I:IntoIterator<Item=(String,String)>>(pwd:PathBuf,envs:I) -> Self {
+        let mut ret = Self::new(pwd);
+        ret.inner.envs.extend(envs);
+        ret
+    }
+}
 
 impl FileSystem for RusTeXFileSystem {
     type File = VirtualFile<u8>;
 
     fn new(pwd: PathBuf) -> Self {
-        let mut inner = tex_engine::engine::filesystem::NoOutputFileSystem::new(pwd);
+        let mut inner = NoOutputFileSystem::new(pwd);
         let id = inner.interner.get_or_intern("<TEXINPUTS>/pgfsys-rustex.def");
         Self{
             inner,

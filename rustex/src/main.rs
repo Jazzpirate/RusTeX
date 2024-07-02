@@ -27,11 +27,11 @@ profile 1:27      ==> 1:43
 thesis  0:15
  */
 fn main() {
-    //profile()
+    profile()
     //thesis()
     //run()
     //test()
-    temp_test()
+    //temp_test()
     //notes()
     //test2()
     //test_all()
@@ -162,7 +162,8 @@ fn temp_test() {
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
-        "/home/jazzpirate/work/MathHub/Papers/24-cicm-views-in-alea/source/ex/model-satisfies-formula-view-fol.en.tex",
+        //"/home/jazzpirate/work/MathHub/Papers/24-cicm-views-in-alea/source/ex/model-satisfies-formula-view-fol.en.tex",
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/tmptest.tex",
         true,
         true,
         true,
