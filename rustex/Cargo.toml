@@ -30,14 +30,14 @@ strip = "symbols"
 multithreaded = ["tex_engine/multithreaded"]
 
 [dependencies]
-tex_engine = { path = "../tex_engine",features = ["pdflatex","pdfium"] }
-tex-glyphs = { path = "../tex-glyphs" }
+tex_engine = { workspace=true,features = ["pdflatex","pdfium"] }
+tex-glyphs = { workspace=true }
 env_logger = "0.11"
 log={version="0.4",features=["kv_unstable"]}
 ansi_term = "0.12"
 chrono = "0.4"
 clap = { version = "4.5", features = ["derive"] }
-lazy_static = "1.4"
+lazy_static = "1.5"
 pdfium-render = { version="0.8" }
 path-dedot = "3.1"
 

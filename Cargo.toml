@@ -1,0 +1,15 @@
+[workspace]
+members = ["rustex", "tex-glyphs", "tex_engine"]
+resolver = "2"
+
+[profile.release]
+opt-level = 2
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[workspace.dependencies]
+tex_engine = { path = "tex_engine",version = "0.1.0" }
+tex-glyphs = { path = "tex-glyphs",version = "0.1.1" }
+rustex = { path = "rustex",version = "0.0.1" }

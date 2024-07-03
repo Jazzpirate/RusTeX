@@ -44,19 +44,19 @@ multithreaded = []
 env_logger = "0.11"
 
 [dependencies]
-lazy_static = "1.4"
+lazy_static = "1.5"
 log={version="0.4",features=["kv_unstable"]}
 ahash = "0.8"
-string-interner = "0.14"
+string-interner = "0.17"
 chrono = "0.4"
 array-init = "2.1"
 arrayvec = "0.7"
 shared_vector = "0.4"
-walkdir = "2.4"
+walkdir = "2.5"
 path-dedot = "3.1"
 const_for = "0.1"
 thiserror = "1"
-either = "1.9"
+either = "1.13"
 #pdfium-render = "0.8.11" #, features = ["static"] }
 
 md5 = { version = "0.7",optional = true }
