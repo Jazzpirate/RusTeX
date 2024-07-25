@@ -538,10 +538,10 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) -> Re
                 nodes::vrule(state,start,end,width.unwrap_or(Dim32(26214)),height,depth)
             }
             MathNode::Whatsit(wi) => wi.call(engine)?,
-            MathNode::Custom(RusTeXNode::FontChange(font,false)) => annotations::do_font(state,&engine.fontsystem.glyphmaps,font),
-            MathNode::Custom(RusTeXNode::FontChangeEnd) => annotations::close_font(state),
-            MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
-            MathNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
+            MathNode::Custom(RusTeXNode::FontChange(font,false)) => {flush!();annotations::do_font(state,&engine.fontsystem.glyphmaps,font)}
+            MathNode::Custom(RusTeXNode::FontChangeEnd) => {flush!();annotations::close_font(state)}
+            MathNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => {flush!();annotations::do_annot(state,start,tag,attrs,styles)}
+            MathNode::Custom(RusTeXNode::AnnotEnd(end)) => {flush!();annotations::close_annot(state,end)}
             MathNode::HFil | MathNode::HFill | MathNode::Hss | MathNode::HFilneg | MathNode::Penalty(_) => (),
             MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
                                                  PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => (),

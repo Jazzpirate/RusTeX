@@ -767,7 +767,7 @@ pub fn vsplit_roughly<ET:EngineTypes>(engine: &mut EngineReferences<ET>, mut nod
     let split_penalty = match rest.first() {
         Some(VNode::Penalty(p)) => {
             let p = *p;
-            rest.remove(0);
+            rest.drain(..1).next();
             Some(p)
         }
         _ => None

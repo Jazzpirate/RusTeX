@@ -222,7 +222,7 @@ pub fn vsplit(engine: Refs, mut nodes: Vec<VNode<Types>>, mut target: Dim32) -> 
     let split_penalty = match rest.first() {
         Some(VNode::Penalty(p)) => {
             let p = *p;
-            rest.remove(0);
+            rest.drain(..1).next();
             Some(p)
         }
         _ => None

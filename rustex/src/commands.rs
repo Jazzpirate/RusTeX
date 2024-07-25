@@ -42,6 +42,7 @@ pub fn register_primitives_postinit(engine:&mut DefaultEngine<Types>) {
     register_unexpandable(engine,"rustex@annotateTop",CommandScope::Any,annot_top);
     register_unexpandable(engine,"rustex@cssLink",CommandScope::Any,css_link);
     register_unexpandable(engine,"rustex@HTMLLiteral",CommandScope::Any,html_literal);
+    register_unexpandable(engine,"rustex@directHTML",CommandScope::Any,html_literal);
     // if@rustex
     // rustex@directHTML
 }
@@ -66,34 +67,6 @@ fn namespace(engine:Refs,token:CompactToken) -> Res<()> {
     let mut value = String::new();
     engine.read_braced_string(true,true,&token,&mut value)?;
     engine.aux.extension.namespaces.insert(key,value);
-    Ok(())
-}
-
-fn annot_top(engine:Refs,token:CompactToken) -> Res<()> {
-    let mut str = String::new();
-    engine.read_braced_string(true,true,&token,&mut str)?;
-    let mut s = str[..].trim();
-    let top = &mut engine.aux.extension.top;
-    while !s.is_empty() {
-        let key = if let Some(i) = s.find('=') {
-            let (n,v) = s.split_at(i);
-            s = &v[1..].trim_start();
-            n.trim()
-        } else { todo!() };
-        let delim = if s.starts_with('"') {
-            s = &s[1..];
-            '"'
-        } else if s.starts_with('\'') {
-            s = &s[1..];
-            '\''
-        } else { todo!() };
-        let val = if let Some(i) = s.find(delim) {
-            let (v,r) = s.split_at(i);
-            s = r[1..].trim_start();
-            v.trim()
-        } else { todo!() };
-        top.insert(key.to_string(),val.to_string());
-    }
     Ok(())
 }
 
@@ -123,6 +96,34 @@ fn meta(engine:Refs,token:CompactToken) -> Res<()> {
         attrs.insert(key.to_string(),val.to_string());
     }
     engine.aux.extension.metas.push(attrs);
+    Ok(())
+}
+
+fn annot_top(engine:Refs,token:CompactToken) -> Res<()> {
+    let mut str = String::new();
+    engine.read_braced_string(true,true,&token,&mut str)?;
+    let mut s = str[..].trim();
+    let top = &mut engine.aux.extension.top;
+    while !s.is_empty() {
+        let key = if let Some(i) = s.find('=') {
+            let (n,v) = s.split_at(i);
+            s = &v[1..].trim_start();
+            n.trim()
+        } else { todo!() };
+        let delim = if s.starts_with('"') {
+            s = &s[1..];
+            '"'
+        } else if s.starts_with('\'') {
+            s = &s[1..];
+            '\''
+        } else { todo!() };
+        let val = if let Some(i) = s.find(delim) {
+            let (v,r) = s.split_at(i);
+            s = r[1..].trim_start();
+            v.trim()
+        } else { todo!() };
+        top.insert(key.to_string(),val.to_string());
+    }
     Ok(())
 }
 

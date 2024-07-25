@@ -108,7 +108,7 @@ fn read_delimited_argument<ET:EngineTypes>(engine:&mut EngineReferences<ET>,arg:
                 if let Some(Some(n)) = remove_braces {
                     if arg.len() == n {
                         arg.pop();
-                        arg.remove(0);
+                        arg.drain(..1).next();
                     }
                 }
                 if ends_with_bgroup {

@@ -3,6 +3,7 @@ use tex_engine::prelude::{HNode, MathNode, VNode};
 use tex_engine::tex::nodes::math::MathFontStyle;
 use crate::engine::Types;
 
+#[derive(Debug)]
 pub(crate) struct ExtensibleIter<T> {
     curr:IntoIter<T>,
     next:Vec<IntoIter<T>>
