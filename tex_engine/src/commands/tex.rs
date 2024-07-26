@@ -54,7 +54,7 @@ pub fn accent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
             return Ok(())
         }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    engine.general_error("Unexpected token after accent command".to_string())
 }
 
 pub fn afterassignment<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
@@ -120,7 +120,7 @@ pub fn catcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
     let char = engine.read_charcode(false,&tk)?;
     let val: i64 = engine.read_int(true,&tk)?.into();
     if !(0..=15).contains(&val) {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal category code {val}"))
     }
     let cc: CategoryCode = (val as u8).try_into().unwrap();
     engine.state.set_catcode(engine.aux,char,cc,globally);
@@ -136,7 +136,7 @@ pub fn sfcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     let char = engine.read_charcode(false,&tk)?;
     let val: i64 = engine.read_int(true,&tk)?.into();
     if !(0..=32767).contains(&val) {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal spacefactor code {val}"))
     }
     let sf = val as u16;
     engine.state.set_sfcode(engine.aux,char,sf,globally);
@@ -149,7 +149,7 @@ pub fn spacefactor_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 pub fn spacefactor_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,_globally:bool) -> TeXResult<(),ET> {
     let val = match engine.read_int(true,&tk)?.try_into() {
         Ok(v) => v,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("Illegal spacefactor code".to_string())
     };
     engine.stomach.data_mut().spacefactor = val;
     Ok(())
@@ -161,7 +161,7 @@ pub fn parshape_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::To
 pub fn parshape_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let len = engine.read_int(false,&tk)?.into();
     if len < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal parshape length {len}"))
     }
     let mut shape = Vec::with_capacity(len as usize);
     for _ in 0..len {
@@ -178,7 +178,7 @@ pub fn lccode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     let u = engine.state.get_lccode(char).into();
     match ET::Int::try_from(u as i64) {
         Ok(v) => Ok(v),
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {engine.general_error(format!("Illegal lowercase code {u}"))?;Ok(ET::Int::from(0))}
     }
 }
 pub fn lccode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
@@ -193,7 +193,7 @@ pub fn uccode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     let u = engine.state.get_uccode(char).into();
     match ET::Int::try_from(u as i64) {
         Ok(v) => Ok(v),
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {engine.general_error(format!("Illegal uppercase code {u}"))?;Ok(ET::Int::from(0))}
     }
 }
 pub fn uccode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
@@ -208,14 +208,14 @@ pub fn mathcode_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Tok
     let u = engine.state.get_mathcode(char);
     match ET::Int::try_from(u as i64) {
         Ok(v) => Ok(v),
-        _ => Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {engine.general_error(format!("Illegal mathcode {u}"))?;Ok(ET::Int::from(0))}
     }
 }
 pub fn mathcode_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let char = engine.read_charcode(false,&tk)?;
-    let val = engine.read_int(true,&tk)?.into();
+    let mut val = engine.read_int(true,&tk)?.into();
     if val < 0 || val > u32::MAX.into() {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        engine.general_error(format!("Illegal mathcode {val}"))?;val = 0;
     }
     engine.state.set_mathcode(engine.aux,char,val as u32,globally);
     Ok(())
@@ -272,8 +272,8 @@ pub fn csname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) ->
     Ok(())
 }
 
-pub fn endcsname<ET:EngineTypes>(_engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
-    Err(TeXError::General("TODO: Better error message".to_string()))
+pub fn endcsname<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<(),ET> {
+    engine.general_error("Unexpected `\\endcsname`".to_string())
 }
 
 
@@ -369,12 +369,12 @@ pub fn def<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:b
                 break CSOrActiveChar::Active(c),
             StandardToken::Character(_,CommandCode::Space) => (),
             StandardToken::ControlSequence(cs) => break CSOrActiveChar::Name(cs),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return engine.general_error("Expected control sequence after `\\def`".to_string())
         }
     };
     let mut parser = MacroParser::new();
     engine.iterate(|_,_,t| parser.do_signature_token(t),|_,_,_|
-        Err(TeXError::General("TODO: Better error message".to_string()))
+        Err(TeXError::General("Unexpected Token in `\\def`-signature".to_string()))
     )?;
     engine.read_until_endgroup(&tk,|_,_,t| parser.do_expansion_token(t))?;
     let cmd = parser.close(long,outer,protected);
@@ -390,13 +390,13 @@ pub fn edef<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,outer:
                 break CSOrActiveChar::Active(c),
             StandardToken::Character(_,CommandCode::Space) => (),
             StandardToken::ControlSequence(cs) => break CSOrActiveChar::Name(cs),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return engine.general_error("Expected control sequence after `\\edef`".to_string())
         }
     };
 
     let mut parser = MacroParser::new();
     engine.iterate(|_,_,t| parser.do_signature_token(t),
-                   |_,_,_| Err(TeXError::General("TODO: Better error message".to_string()))
+                   |_,_,_| Err(TeXError::General("Unexpected token in `\\edef`-signature".to_string()))
     )?;
     engine.expand_until_endgroup(false,true,&tk,|_,_,t| parser.do_expansion_token(t))?;
     let cmd = parser.close(long,outer,protected);
@@ -475,7 +475,7 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,oute
             n if n == PRIMITIVES.xdef => return self::xdef(engine,token,outer,long,protected,true),
             n if n == PRIMITIVES.gdef => return self::gdef(engine,token,outer,long,protected,true),
             n if allow_others => return ET::Stomach::do_assignment(engine,n,token,*a,true),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return engine.general_error(format!("Illegal command after `\\global`: {}",name.display::<ET::Char>(Some(b'\\'.into()))))
         }
         ResolvedToken::Cmd(Some(TeXCommand::IntRegister(u))) if allow_others =>
             return ET::Stomach::assign_int_register(engine,*u,true,tk),
@@ -510,11 +510,16 @@ pub fn global<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,oute
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Whatsit {get,..},name})) if allow_others =>
             return ET::Stomach::do_whatsit(engine,*name,token,*get),
         ResolvedToken::Cmd(Some(TeXCommand::Primitive {cmd:PrimitiveCommand::Relax,..})) => (),
-        ResolvedToken::Cmd(Some(_)) =>
-            return Err(TeXError::General("TODO: Better error message".to_string())),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        ResolvedToken::Cmd(Some(_)) => {
+            let s = token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string();
+            return engine.general_error(format!("Illegal command after `\\global`: {s}"))
+        }
+        _ => {
+            let s = token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()).to_string();
+            return engine.general_error(format!("Illegal command after `\\global`: {s}"))
+        }
     );
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 pub fn outer<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,_outer:bool,long:bool,protected:bool,globally:bool) -> TeXResult<(),ET> {
     crate::expand_loop!(engine,token,
@@ -604,11 +609,18 @@ macro_rules! modify_num {
                 TeXCommand::Primitive{name,cmd:PrimitiveCommand::PrimitiveSkip} => {
                     return crate::commands::methods::modify_primitive_skip($engine,*name,$globally,$skip)
                 }
-                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                _ => {
+                    let s = token.display($engine.aux.memory.cs_interner(),$engine.state.get_catcode_scheme(),$engine.state.get_escape_char()).to_string();
+                    $engine.requeue(token)?;
+                    return Err(TeXError::General(format!("Unexpected token in \\divide/\\multiply: {s}")))
+                }
             }
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => {
+                let s = token.display($engine.aux.memory.cs_interner(),$engine.state.get_catcode_scheme(),$engine.state.get_escape_char()).to_string();
+                $engine.requeue(token)?;
+                return Err(TeXError::General(format!("Unexpected token in \\divide/\\multiply: {s}")))
+            }
         );
-        return Err(TeXError::General("TODO: Better error message".to_string()))
     };
 }
 
@@ -618,27 +630,29 @@ pub fn advance<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,gl
         |a,e| Ok(a + e.read_dim(false,&tk)?),
         |a,e| Ok(a + e.read_skip(false,&tk)?)
     );
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 pub fn divide<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     modify_num!(engine,globally,|a,e| {
         let b = e.read_int(false,&tk)?;
         if b == ET::Int::default() {
-            return Err(TeXError::General("TODO: Better error message".to_string()))
+            return Err(TeXError::General("Division by zero".to_string()))
         }
         Ok(a / b)
     },|a,e| {
         let b = e.read_int(false,&tk)?;
         if b == ET::Int::default() {
-            return Err(TeXError::General("TODO: Better error message".to_string()))
+            return Err(TeXError::General("Division by zero".to_string()))
         }
         Ok(a / b)
     },|a,e| {
         let b = e.read_int(false,&tk)?;
         if b == ET::Int::default() {
-            return Err(TeXError::General("TODO: Better error message".to_string()))
+            return Err(TeXError::General("Division by zero".to_string()))
         }
         Ok(a / b)
     });
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 pub fn multiply<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     modify_num!(engine,globally,
@@ -652,6 +666,7 @@ pub fn multiply<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,g
             Ok(a * b)
         }
     );
+    TeXError::file_end_while_use(engine.aux,engine.state,engine.mouth,tk)
 }
 
 pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) -> TeXResult<(),ET> {
@@ -671,8 +686,8 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) -
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
-        Some(ActiveConditional::Else(_)) => return Err(TeXError::General("TODO: Better error message".to_string())),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        Some(ActiveConditional::Else(_)) => return Err(TeXError::General("Unexpected `\\else` in `\\else`-branch".to_string())),
+        _ => return Err(TeXError::General("Unexpected `\\else` outside of a condition".to_string()))
     };
     let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > ET::Int::default();
     let index = conds.len();
@@ -706,7 +721,7 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeX
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("`\\or` outside of `\\case`".to_string())
     };
     let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > ET::Int::default();
     let index = conds.len();
@@ -737,11 +752,11 @@ pub fn endlinechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 pub fn endlinechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let val: i64 = engine.read_int(true,&tk)?.into();
     let val = match val.cmp(&-1) {
-        Ordering::Less => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Ordering::Less => return engine.general_error(format!("Illegal endline character: {val}")),
         Ordering::Equal => None,
         Ordering::Greater => match ET::Char::try_from(val as u64) {
             Ok(c) => Some(c),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return engine.general_error(format!("Illegal endline character: {val}"))
         }
     };
     engine.state.set_endline_char(engine.aux,val,globally);
@@ -757,11 +772,11 @@ pub fn escapechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::
 pub fn escapechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let val: i64 = engine.read_int(true,&tk)?.into();
     let val = match val.cmp(&-1) {
-        Ordering::Less => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Ordering::Less => return engine.general_error(format!("Illegal escape character: {val}")),
         Ordering::Equal => None,
         Ordering::Greater => match ET::Char::try_from(val as u64) {
             Ok(c) => Some(c),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return engine.general_error(format!("Illegal escape character: {val}")),
         }
     };
     engine.state.set_escape_char(engine.aux,val,globally);
@@ -776,7 +791,7 @@ pub fn font_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token)
 pub fn font_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,global:bool) -> TeXResult<(),ET> {
     let cs = match engine.read_control_sequence(&tk)? {
         CSOrActiveChar::Name(name) => name,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("control sequence expected after \\font".to_string()),
     };
     let mut name = engine.aux.memory.get_string();
     engine.read_string(true,&mut name,&tk)?;
@@ -839,7 +854,10 @@ pub fn scriptscriptfont_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk
 pub fn fontdimen_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<ET::Dim,ET> {
     let idx = match engine.read_int(false,&tk)?.try_into() {
         Ok(i) if i > 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            engine.general_error("Illegal \\fontdimen index".to_string())?;
+            return Ok(ET::Dim::default())
+        }
     };
     let font = engine.read_font(false,&tk)?;
     Ok(font.get_dim(idx))
@@ -848,7 +866,9 @@ pub fn fontdimen_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::To
     let i = engine.read_int(false,&tk)?;
     let idx = match i.try_into() {
         Ok(i) if i > 0 && i-1 <= u16::MAX.into() => (i-1) as u16,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => {
+            return engine.general_error("Illegal \\fontdimen index".to_string())
+        }
     };
     let mut font = engine.read_font(false,&tk)?;
     let dim = engine.read_dim(true,&tk)?;
@@ -879,10 +899,12 @@ pub fn unbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token, tp:
             match engine.stomach.data_mut().open_lists.last_mut() {
                 Some(NodeList::Horizontal {children:ls,..}) =>
                     ls.extend(children.into_vec()),
-                _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+                _ => {
+                    return engine.general_error("Cannot unbox \\hbox outside of horizontal mode".to_string())
+                }
             }
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error(format!("Cannot unbox box {idx} in {tp} mode"))
     }
     Ok(())
 }
@@ -931,7 +953,7 @@ pub fn halign<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
             return ET::Stomach::close_paragraph(engine)
         },
         TeXMode::DisplayMath | TeXMode::Vertical | TeXMode::InternalVertical => (),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("\\halign not allowed in math mode".to_string())
     }
     let wd = if engine.read_keyword(b"to")? {
         Some(engine.read_dim(false,&tk)?)
@@ -1095,7 +1117,7 @@ pub fn ignorespaces<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
 pub fn insert<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let n = engine.read_int(false,&tk)?.into();
     if n < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal insert index {n}"))
     }
     engine.expand_until_bgroup(false,&tk)?;
     engine.state.push(engine.aux,GroupType::Insert,engine.mouth.line_number());
@@ -1126,13 +1148,13 @@ pub fn input<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> T
     let mut filename = engine.aux.memory.get_string();
     engine.read_string(false,&mut filename,&tk)?;
     if filename.is_empty() {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error("empty file name in \\input".to_string())
     }
     let is_file = !filename.starts_with('|');
     let file = engine.filesystem.get(&filename);
     engine.aux.memory.return_string(filename);
     if is_file && !file.exists() {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("File does not exist: {}",file.path().display()))
     }
     engine.aux.outputs.file_open(&file);
     engine.push_file(file);
@@ -1151,7 +1173,7 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeX
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("Unexpected \\fi".to_string())
     };
     let trace = engine.state.get_primitive_int(PRIMITIVES.tracingifs) > ET::Int::default();
     let index = conds.len() + 1;
@@ -1194,7 +1216,7 @@ pub fn let_<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globa
         StandardToken::Character(c,CommandCode::Active) =>
             CSOrActiveChar::Active(c),
         StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("Control sequence expected after \\let".to_string())
     };
     let mut after_eq = false;
     let mut after_space = false;
@@ -1228,15 +1250,15 @@ pub fn futurelet<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token
         StandardToken::Character(c,CommandCode::Active) =>
             CSOrActiveChar::Active(c),
         StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("Control sequence expected after \\futurelet".to_string()))
     };
     let first = match engine.mouth.get_next(engine.aux, engine.state)? {
         Some(t) => t,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::FileEndedWhileScanningUseOf("futurelet".to_string()))
     };
     let second = match engine.mouth.get_next(engine.aux, engine.state)? {
         Some(t) => t,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::FileEndedWhileScanningUseOf("futurelet".to_string()))
     };
     let cmd = match second.to_enum() {
         StandardToken::ControlSequence(cs) =>
@@ -1308,11 +1330,11 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
         StandardToken::Character(c,CommandCode::Active) =>
             CSOrActiveChar::Active(c),
         StandardToken::ControlSequence(cs) => CSOrActiveChar::Name(cs),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("Expected control sequence after \\mathchardef".to_string()))
     };
     let i = engine.read_int(true,&tk)?.into();
     if i < 0 || i > u32::MAX as i64 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal math char: {i}"))
     }
     let i = i as u32;
     engine.set_command(&cm, Some(TeXCommand::MathChar(i)), globally);
@@ -1322,7 +1344,7 @@ pub fn mathchardef<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
 pub fn mathchar<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 || i > u32::MAX as i64 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal math char: {i}"))
     }
     let i = i as u32;
     let ret = MathChar::from_u32(i, engine.state, None);
@@ -1344,7 +1366,7 @@ pub fn left<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> T
 }
 pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     if engine.state.get_group_type() != Some(GroupType::LeftRight) {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return Err(TeXError::General("\\right outside of \\left\\right group".to_string()))
     }
     let del = engine.read_opt_delimiter(&tk)?;
     match engine.stomach.data_mut().open_lists.pop() {
@@ -1361,7 +1383,7 @@ pub fn right<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
                 sub:None,sup:None
             }));
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("Unexpected open list in \\right".to_string()))
     }
     Ok(())
 }
@@ -1420,11 +1442,11 @@ pub fn newlinechar_get<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET:
 pub fn newlinechar_set<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token,globally:bool) -> TeXResult<(),ET> {
     let val: i64 = engine.read_int(true,&tk)?.into();
     let val = match val.cmp(&-1) {
-        Ordering::Less => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Ordering::Less => return engine.general_error(format!("Illegal newline character: {val}")),
         Ordering::Equal => None,
         Ordering::Greater => match ET::Char::try_from(val as u64) {
             Ok(c) => Some(c),
-            _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+            _ => return engine.general_error(format!("Illegal newline character: {val}")),
         }
     };
     engine.state.set_newline_char(engine.aux,val,globally);
@@ -1441,7 +1463,7 @@ pub fn noexpand<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) 
     let token = match engine.mouth.get_next(engine.aux, engine.state)? {
         Some(t) if t == ET::Token::eof() => return Ok(()),
         Some(t) => t,
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("control sequence expected after \\noexpand".to_string()))
     };
     match engine.resolve(&token) {
         ResolvedToken::Tk {code:CommandCode::AlignmentTab,..} => {
@@ -1753,7 +1775,7 @@ pub fn par<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> T
     if mode == TeXMode::Horizontal {
         return ET::Stomach::close_paragraph(engine)
     }
-    Err(TeXError::General("TODO: Better error message".to_string()))
+    Err(TeXError::General("\\par not allowed in math mode".to_string()))
 }
 
 pub fn the<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,_tk:ET::Token) -> TeXResult<(),ET> {
@@ -1771,7 +1793,7 @@ pub fn toks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token,global
 pub fn penalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = match engine.read_int(false,&tk)?.try_into() {
         Ok(i) => i,
-        Err(_) => return Err(TeXError::General("TODO: Better error message".to_string()))
+        Err(_) => return engine.general_error("Number expected after \\penalty".to_string()),
     };
     crate::add_node!(ET::Stomach;engine, VNode::Penalty(i), HNode::Penalty(i), MathNode::Penalty(i));
     Ok(())
@@ -1940,7 +1962,7 @@ pub fn unpenalty<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token)
 
 pub fn lastbox<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Token) -> TeXResult<Either<Option<TeXBox<ET>>,BoxInfo<ET>>,ET> {
     if engine.stomach.data_mut().mode() == TeXMode::Vertical {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return Err(TeXError::General("\\lastbox not allowed outside of vertical mode".to_string()))
     }
     let data = engine.stomach.data_mut();
     match data.open_lists.last_mut() {
@@ -2111,10 +2133,10 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
         Some(TeXBox::V{info,children,start,end}) => {
             (info.clone_for_split(), std::mem::take(children).into_vec(),*start,*end)
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General(format!("No \\vsplittable box in register {idx}"))),
     };
     if !engine.read_keyword(b"to")? {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return Err(TeXError::General("`to` expected after \\vsplit".to_string()))
     }
     let target = engine.read_dim(false,&tk)?;
     match &mut info {
@@ -2278,7 +2300,7 @@ pub fn overline<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) 
 pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 || i > u32::MAX as i64 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return Err(TeXError::General(format!("Illegal math accent number {i}")))
     }
     let char = MathChar::from_u32(i as u32, engine.state, None);
     engine.read_char_or_math_group(&tk,|(char,style),engine,mc| {
@@ -2308,7 +2330,7 @@ pub fn mathaccent<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
 pub fn radical<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?;
     if i.into() < 0 || i.into() > u32::MAX as i64 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return Err(TeXError::General(format!("Illegal radical number {i}")))
     }
     let char = Delimiter::from_int(i,engine.state).left().unwrap().small;// MathChar::from_u32(i as u32, engine.state, None);
     engine.read_char_or_math_group(&tk,|(char,style),engine,mc| {
@@ -2345,7 +2367,7 @@ fn do_eqno<ET:EngineTypes>(engine:&mut EngineReferences<ET>,pos:EqNoPosition) ->
             let MathNodeList::EqNo {main,..} = ch else {unreachable!()};
             *main = children;
         }
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return Err(TeXError::General("\\eqno outside of math mode".to_string()))
     }
     Ok(())
 }
@@ -2367,7 +2389,7 @@ pub fn over<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> 
                 *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
             } else {unreachable!()}
         }
-        Some(NodeList::Math {..}) => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Some(NodeList::Math {..}) => return Err(TeXError::General("Incompatible list for \\over".to_string())),
         _ => unreachable!()
     }
     Ok(())
@@ -2388,7 +2410,7 @@ pub fn overwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::T
                 *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
             } else {unreachable!()}
         }
-        Some(NodeList::Math {..}) => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Some(NodeList::Math {..}) => return Err(TeXError::General("Incompatible list for \\overwithdelims".to_string())),
         _ => unreachable!()
     }
     Ok(())
@@ -2408,7 +2430,7 @@ pub fn above<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
                 *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
             } else {unreachable!()}
         }
-        Some(NodeList::Math {..}) => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Some(NodeList::Math {..}) => return Err(TeXError::General("Incompatible list for \\above".to_string())),
         _ => unreachable!()
     }
     Ok(())
@@ -2430,7 +2452,7 @@ pub fn abovewithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::
                 *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
             } else {unreachable!()}
         }
-        Some(NodeList::Math {..}) => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Some(NodeList::Math {..}) => return Err(TeXError::General("Incompatible list for \\abovewithdelims".to_string())),
         _ => unreachable!()
     }
     Ok(())
@@ -2449,7 +2471,7 @@ pub fn atop<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) -> 
                 *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
             } else {unreachable!()}
         }
-        Some(NodeList::Math {..}) => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Some(NodeList::Math {..}) => return Err(TeXError::General("Incompatible list for \\atop".to_string())),
         _ => unreachable!()
     }
     Ok(())
@@ -2470,7 +2492,7 @@ pub fn atopwithdelims<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::T
                 *top = if let MathNodeList::Simple(v) = old {v} else {unreachable!()};
             } else {unreachable!()}
         }
-        Some(NodeList::Math {..}) => return Err(TeXError::General("TODO: Better error message".to_string())),
+        Some(NodeList::Math {..}) => return Err(TeXError::General("Incompatible list for \\atopwithdelims".to_string())),
         _ => unreachable!()
     }
     Ok(())
@@ -2717,7 +2739,7 @@ pub fn end_template<ET:EngineTypes>(engine:&mut EngineReferences<ET>,_tk:ET::Tok
             crate::expand_loop!(engine,token,
                 ResolvedToken::Tk{code:CommandCode::EndGroup,..} |
                 ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::EndGroup,..})) => {
-                    return Err(TeXError::General("TODO: Better error message".to_string()))
+                    return Err(TeXError::General("Unexpected end group character in alignment".to_string()))
                 }
                 ResolvedToken::Tk{code:CommandCode::Space,..} => (),
                 /*ResolvedToken::Cmd {cmd:Some(Command::Unexpandable(Unexpandable {name,..})),..}
@@ -2925,7 +2947,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"-",CommandScope::Any,char_dash);
     register_unexpandable(engine,"showlists",CommandScope::Any,|_,_| Ok(())); // TODO
     register_unexpandable(engine,"crcr",CommandScope::Any,|_,_| Ok(()));
-    register_unexpandable(engine,"cr",CommandScope::Any,|_,_| {Err(TeXError::General("TODO: Better error message".to_string()))});
+    register_unexpandable(engine,"cr",CommandScope::Any,|_,_| {Err(TeXError::General("Unexpected \\cr".to_string()))});
     register_unexpandable(engine,END_TEMPLATE,CommandScope::Any,end_template);
     register_unexpandable(engine,END_TEMPLATE_ROW,CommandScope::Any,end_template_row);
 

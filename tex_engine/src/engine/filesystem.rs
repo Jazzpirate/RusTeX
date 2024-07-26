@@ -172,6 +172,8 @@ impl<C:Character> FileSystem for NoOutputFileSystem<C> {
         }
     }
     fn set_pwd(&mut self, pwd:PathBuf) -> PathBuf {
+        self.envs.insert("PWD".to_string(),pwd.display().to_string());
+        self.envs.insert("CD".to_string(),pwd.display().to_string());
         let old = std::mem::replace(&mut self.kpse, Kpathsea::new(pwd));
         old.pwd
     }

@@ -331,17 +331,20 @@ pub fn false_loop<ET:EngineTypes>(engine:&mut EngineReferences<ET>,idx:usize,all
 pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool, ret:&mut String,in_token:&ET::Token) -> TeXResult<(),ET> {
     use std::fmt::Write;
     let mut quoted = false;
+    let mut braced = false;
     let mut had_eq = !skip_eq;
     let mut was_quoted = false;
     let mut is_empty = true;
     crate::expand_loop!(engine,token,
         ResolvedToken::Tk {char,code,..} => match code {
-            CommandCode::Space if is_empty && !was_quoted => (),
-            CommandCode::Space if quoted => ret.push(' '),
+            CommandCode::Space if is_empty && !was_quoted && !braced => (),
+            CommandCode::BeginGroup if is_empty && !was_quoted && !quoted && !braced => braced = true,
+            CommandCode::Space if quoted || braced => ret.push(' '),
             CommandCode::Space => return Ok(()),
             CommandCode::Other if !had_eq && is_empty && matches!(char.try_into(),Ok(b'=')) => {
                 had_eq = true;
             }
+            CommandCode::EndGroup if braced => return Ok(()),
             _ => {
                 if matches!(char.try_into(),Ok(b'\"')) {
                     was_quoted = true;
@@ -361,8 +364,8 @@ pub fn read_string<ET:EngineTypes>(engine:&mut EngineReferences<ET>,skip_eq:bool
             is_empty = false;
             char.display_fmt(ret)
         }
-        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) if !quoted => return Ok(()),
-        ResolvedToken::Cmd(_) if !quoted => {
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) if !quoted && !braced => return Ok(()),
+        ResolvedToken::Cmd(_) if !quoted && !braced => {
             engine.mouth.requeue(token);
             return Ok(())
         }

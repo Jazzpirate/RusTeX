@@ -491,10 +491,10 @@ pub fn unless<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     match engine.state.get_group_type() {
         Some(GroupType::LeftRight) => (),
-        _ => return Err(TeXError::General("TODO: Better error message".to_string()))
+        _ => return engine.general_error("You can't use `\\middle` outside of a `\\left`-`\\right` pair".to_string())
     }
     let del = match engine.read_opt_delimiter(&tk)? {
-        None => return Err(TeXError::General("TODO: Better error message".to_string())),
+        None => return engine.general_error("Delimiter expected after `\\middle`".to_string()),
         Some(c) => c
     };
     ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
@@ -506,7 +506,7 @@ pub fn middle<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) ->
 pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal \\marks register: {i}"))
     }
     super::methods::do_marks(engine, i as usize,&tk)
 }
@@ -514,35 +514,35 @@ pub fn marks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tk:ET::Token) -> T
 pub fn topmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal \\topmarks register: {i}"))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.topmarks, i as usize);Ok(())
 }
 pub fn firstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal \\firstmarks register: {i}"))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.firstmarks, i as usize);Ok(())
 }
 pub fn botmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal \\botmarks register: {i}"))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.botmarks, i as usize);Ok(())
 }
 pub fn splitfirstmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal \\splitfirstmarks register: {i}"))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.splitfirstmarks, i as usize);Ok(())
 }
 pub fn splitbotmarks<ET:EngineTypes>(engine:&mut EngineReferences<ET>,exp:&mut Vec<ET::Token>,tk:ET::Token) -> TeXResult<(),ET> {
     let i = engine.read_int(false,&tk)?.into();
     if i < 0 {
-        return Err(TeXError::General("TODO: Better error message".to_string()))
+        return engine.general_error(format!("Illegal \\splitbotmarks register: {i}"))
     }
     super::methods::get_marks(engine, exp, |d| &mut d.splitbotmarks, i as usize);Ok(())
 }

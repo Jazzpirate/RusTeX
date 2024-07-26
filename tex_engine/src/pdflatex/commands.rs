@@ -1043,6 +1043,9 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     register_simple_expandable(engine,"pdfprimitive",pdfprimitive);
     register_int(engine,"pdflastximage",pdflastximage,None);
     register_int(engine,"pdflastannot",pdflastannot,None);
+    register_simple_expandable(engine,"pdfsavepos",|_,_| Ok(()));
+    register_int(engine,"pdflastxpos",|_,_| Ok(<E::Types as EngineTypes>::Int::default()),None);
+    register_int(engine,"pdflastypos",|_,_| Ok(<E::Types as EngineTypes>::Int::default()),None);
 
     register_primitive_int(engine,PRIMITIVE_INTS);
     register_primitive_dim(engine,PRIMITIVE_DIMS);
@@ -1083,8 +1086,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdflastlink);
     cmtodo!(engine,pdflastximagecolordepth);
     cmtodo!(engine,pdflastximagepages);
-    cmtodo!(engine,pdflastxpos);
-    cmtodo!(engine,pdflastypos);
     cmtodo!(engine,pdfrandomseed);
     cmtodo!(engine,pdfretval);
     cmtodo!(engine,pdfdestmargin);
@@ -1123,7 +1124,6 @@ pub fn register_pdftex_primitives<E:TeXEngine>(engine:&mut E)
     cmtodo!(engine,pdfnoligatures);
     cmtodo!(engine,pdfrunninglinkoff);
     cmtodo!(engine,pdfrunninglinkon);
-    cmtodo!(engine,pdfsavepos);
     cmtodo!(engine,pdfsetrandomseed);
     cmtodo!(engine,pdfspacefont);
     cmtodo!(engine,pdfthread);

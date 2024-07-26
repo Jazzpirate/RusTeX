@@ -29,9 +29,9 @@ thesis  0:15
 fn main() {
     //profile()
     //thesis()
-    run()
+    //run()
     //test()
-    //temp_test()
+    temp_test()
     //notes()
     //test2()
     //test_all()
@@ -163,7 +163,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/Papers/24-cicm-views-in-alea/source/ex/model-satisfies-formula-view-fol.en.tex",
-        "/home/jazzpirate/work/MathHub/sTeX/DemoExamples/source/quickstart.tex",
+        "/home/jazzpirate/work/MathHub/sTeX/CategoryTheory/source/mod/diagrams/Pushout.en.tex",
         true,
         true,
         true,
@@ -171,7 +171,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     std::fs::write(
-        "/home/jazzpirate/work/MathHub/sTeX/DemoExamples/source/quickstart.tex.html",
+        "/home/jazzpirate/work/MathHub/sTeX/CategoryTheory/source/mod/diagrams/Pushout.en.tex.html",
         &ret.out,
     )
     .unwrap();
