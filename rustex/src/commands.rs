@@ -42,7 +42,6 @@ pub fn register_primitives_postinit(engine:&mut DefaultEngine<Types>) {
     register_unexpandable(engine,"rustex@annotateTop",CommandScope::Any,annot_top);
     register_unexpandable(engine,"rustex@cssLink",CommandScope::Any,css_link);
     register_unexpandable(engine,"rustex@HTMLLiteral",CommandScope::Any,html_literal);
-    register_unexpandable(engine,"rustex@directHTML",CommandScope::Any,html_literal);
     // if@rustex
     // rustex@directHTML
 }
