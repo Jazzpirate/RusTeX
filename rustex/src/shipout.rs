@@ -547,7 +547,7 @@ fn do_mathlist(engine:Refs, state:&mut ShipoutState, children:&mut MNodes) -> Re
                                                  PDFNode::PDFCatalog(_) | PDFNode::PDFSave | PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) => (),
             MathNode::Leaders(_) => (), // TODO?
             MathNode::Custom(RusTeXNode::Literal(s)) => {state.push_comment(s)}
-            HNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
+            MathNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFDest(PDFDest{id,..}))) => nodes::do_pdfdest(state, id),
             o => todo!(" {:?}",o)
         }
     }
