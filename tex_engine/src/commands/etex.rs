@@ -1,6 +1,6 @@
 use either::Either;
 use crate::commands::{CharOrPrimitive, TeXCommand, CommandScope, Macro, MacroSignature, PrimitiveCommand, ResolvedToken};
-use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
+use crate::engine::{EngineAux, EngineReferences, EngineTypes, TeXEngine};
 use crate::engine::mouth::Mouth;
 use crate::tex::tokens::token_lists::{Otherize, CharWrite};
 use crate::engine::state::{GroupType, State};
@@ -175,28 +175,29 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     engine.expand_until_bgroup(false,&tk)?;
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
+    let mut g = |a:&mut EngineAux<ET>,st:&<ET as EngineTypes>::State,t:ET::Token,f:&mut _| {
+        let mut tokenizer = Otherize::new(f);
+        match t.to_enum() {
+            StandardToken::Character(c, _) =>
+                tokenizer.push_char(c),
+            StandardToken::ControlSequence(cs) => {
+                tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
+            }
+            StandardToken::Primitive(id) => {
+                tokenizer.push_cs(a.memory.cs_interner_mut().from_str("pdfprimitive"), a.memory.cs_interner(), st.get_catcode_scheme(), escapechar);
+                let name = a.memory.cs_interner_mut().from_str(&id.display::<ET::Char>(None).to_string());
+                tokenizer.push_cs(name,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
+            }
+        }
+    };
     engine.read_until_endgroup(&tk,|a,st,t| {
         match t.command_code() {
             CommandCode::Space => f(t),
             CommandCode::Parameter => {
-                f(t.clone());
-                f(t)
+                g(a,st,t.clone(),&mut f);
+                g(a,st,t,&mut f)
             }
-            _ => {
-                let mut tokenizer = Otherize::new(&mut f);
-                match t.to_enum() {
-                    StandardToken::Character(c, _) =>
-                        tokenizer.push_char(c),
-                    StandardToken::ControlSequence(cs) => {
-                        tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
-                    }
-                    StandardToken::Primitive(id) => {
-                        tokenizer.push_cs(a.memory.cs_interner_mut().from_str("pdfprimitive"), a.memory.cs_interner(), st.get_catcode_scheme(), escapechar);
-                        let name = a.memory.cs_interner_mut().from_str(&id.display::<ET::Char>(None).to_string());
-                        tokenizer.push_cs(name,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
-                    }
-                }
-            }
+            _ => g(a,st,t,&mut f)
         }
         Ok(())
     })?;Ok(())
@@ -420,7 +421,7 @@ pub fn scantokens<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token
     let escapechar = engine.state.get_escape_char();
     engine.read_until_endgroup(&tk,|a,state,t| {
         match t.to_enum() {
-            StandardToken::Character(c,CommandCode::Parameter) => {f(c);f(c)},
+            //StandardToken::Character(c,CommandCode::Parameter) => {f(c);f(c)},
             StandardToken::Character(c,_) => f(c),
             StandardToken::ControlSequence(cs) => {
                 if let Some(esc) = escapechar {

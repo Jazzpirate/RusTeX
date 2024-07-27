@@ -2004,7 +2004,7 @@ cieuckorean ㅈ
 cieucparenkorean ㈈
 cieucuparenkorean ㈜
 cigmalunate Ϲ
-circle ○
+circle ∘
 circleR ®
 circleS Ⓢ
 circleasterisk ⊛
