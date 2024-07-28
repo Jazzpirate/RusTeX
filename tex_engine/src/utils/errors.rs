@@ -3,13 +3,8 @@
    An instance of [`ErrorHandler`] provides methods that get called when errors occur during compilation.
    The signatures of these methods reflect where they are called and what needs to be returned in order
    to recover from the error.
-
-    Alternatively, we can throw a [`TeXError`] which will abort compilation. Good practice would be to
-    pass our errors around using `Result` and `?`, but that would require a lot of boilerplate code,
-    and lots of pattern matching, which is usually perfectly harmless, but in performance critical
-    code, it introduces non-ngligible overhead. So instead, we panic! with a [`TeXError`], and catch
-    it at the top level of the engine to abort compilation.
  */
+#![allow(clippy::result_unit_err)]
 
 use std::fmt::Debug;
 use std::marker::PhantomData;

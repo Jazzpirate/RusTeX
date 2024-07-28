@@ -320,7 +320,7 @@ impl PathParser {
     fn parse_bytes(&mut self,mut s:&[u8]) -> Vec<Vec<u8>> {
         let mut ret: Vec<Vec<u8>> = vec!();
         let mut currs = StringSet::new();
-        let breaks = if cfg!(target_os = "window") {[b';',b';',b'$',b'!',b'{',b'~']} else {[b';',b':',b'$',b'!',b'{',b'~']};
+        let breaks = if cfg!(target_os = "windows") {[b';',b';',b'$',b'!',b'{',b'~']} else {[b';',b':',b'$',b'!',b'{',b'~']};
         while !s.is_empty() {
             if let Some((i,b)) = s.iter().enumerate().find(|(_,c)| breaks.contains(*c)) {
                 let first = &s[..i];

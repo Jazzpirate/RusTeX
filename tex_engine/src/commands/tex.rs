@@ -6,7 +6,7 @@ use crate::engine::filesystem::{File, FileSystem};
 use crate::engine::gullet::Gullet;
 use crate::engine::gullet::methods::CSOrActiveChar;
 use crate::engine::mouth::Mouth;
-use crate::tex::tokens::token_lists::{Otherize, TokenList};
+use crate::tex::tokens::token_lists::Otherize;
 use super::primitives::*;
 use crate::engine::state::{GroupType, State};
 use crate::tex::catcodes::{CategoryCode, CommandCode};

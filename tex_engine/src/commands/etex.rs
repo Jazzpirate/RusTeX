@@ -175,7 +175,7 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
     engine.expand_until_bgroup(false,&tk)?;
     let mut f = |t| exp.push(t);
     let escapechar = engine.state.get_escape_char();
-    let mut g = |a:&mut EngineAux<ET>,st:&<ET as EngineTypes>::State,t:ET::Token,f:&mut _| {
+    let g = |a:&mut EngineAux<ET>,st:&<ET as EngineTypes>::State,t:ET::Token,f:&mut _| {
         let mut tokenizer = Otherize::new(f);
         match t.to_enum() {
             StandardToken::Character(c, _) =>

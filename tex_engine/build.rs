@@ -1,10 +1,10 @@
 // https://github.com/bblanchon/pdfium-binaries/releases
-#[cfg(feature="pdfium-static")]
-use std::path::Path;
-#[cfg(feature="pdfium-static")]
-use std::env;
 
 fn main() {
+    #[cfg(feature="pdfium-static")]
+    use std::path::Path;
+    #[cfg(feature="pdfium-static")]
+    use std::env;
     #[cfg(feature="pdfium-static")]
     {
         let dir = env::var("CARGO_MANIFEST_DIR").unwrap();

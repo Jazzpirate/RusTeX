@@ -22,17 +22,12 @@ path = "src/lib.rs"
 #split-debuginfo = "off"
 #strip = "none"
 
-[profile.release]
-opt-level = 2
-lto = "fat"
-#debug = 2
-
 [features]
 default = []
 pdflatex = ["md5","image","regex"]
 pdfium = ["pdflatex","pdfium-render"]
 multithreaded = []
-#pdfium-static = ["pdflatex","pdfium-render/static"]
+pdfium-static = ["pdflatex","pdfium-render/static"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
