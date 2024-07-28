@@ -89,7 +89,7 @@ pub struct NoOutputFileSystem<C:Character> {
     pub envs:HMap<String,String>,
     write_files:Vec<Option<WritableVirtualFile<C>>>,
     read_files:Vec<Option<InputTokenizer<C,VirtualFileLineSource<C>>>>,
-    pub interner:string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU32>,ahash::RandomState>
+    pub interner:string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU32>,rustc_hash::FxBuildHasher>
 }
 impl<C:Character> Clone for NoOutputFileSystem<C> {
     fn clone(&self) -> Self { Self {

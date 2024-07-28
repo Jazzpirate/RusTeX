@@ -267,7 +267,7 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
 ///
 /// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](static@PRIMITIVES) instance.
 pub struct PrimitiveInterner {
-    interner:RwLock<string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>>,
+    interner:RwLock<string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, rustc_hash::FxBuildHasher>>,
     pub globaldefs:PrimitiveIdentifier,
     pub relax:PrimitiveIdentifier,
     pub mag:PrimitiveIdentifier,
@@ -349,7 +349,7 @@ pub struct PrimitiveInterner {
 }
 impl PrimitiveInterner {
     fn new() -> Self {
-        let mut interner = string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, ahash::RandomState>::new();
+        let mut interner = string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, rustc_hash::FxBuildHasher>::new();
         let globaldefs = PrimitiveIdentifier(interner.get_or_intern_static("globaldefs"));
         let relax = PrimitiveIdentifier(interner.get_or_intern_static("relax"));
         let mag = PrimitiveIdentifier(interner.get_or_intern_static("mag"));

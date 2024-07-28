@@ -12,7 +12,7 @@ use crate::{GlyphList, PATCHED_TABLES};
 use crate::glyphs::{Glyph, GlyphI, UNDEFINED_LIST};
 use crate::parsing::Parser;
 
-type HMap<A,B> = ahash::HashMap<A,B>;
+type HMap<A,B> = rustc_hash::FxHashMap<A,B>;
 
 /// Information about a font
 #[derive(Debug,Clone)]
