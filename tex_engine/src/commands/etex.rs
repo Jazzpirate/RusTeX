@@ -556,7 +556,8 @@ const PRIMITIVE_INTS:&[&str] = &[
     "tracingnesting",
     "tracingscantokens",
     "savingvdiscards",
-    "predisplaydirection"
+    "predisplaydirection",
+    "interactionmode"
 ];
 
 const PRIMITIVE_TOKS:&[&str] = &[
@@ -620,7 +621,6 @@ pub fn register_etex_primitives<E:TeXEngine>(engine:&mut E) {
     cmtodo!(engine,gluestretch);
     cmtodo!(engine,gluestretchorder);
     cmtodo!(engine,gluetomu);
-    cmtodo!(engine,interactionmode);
     cmtodo!(engine,interlinepenalties);
     cmtodo!(engine,lastlinefit);
     cmtodo!(engine,mutoglue);
