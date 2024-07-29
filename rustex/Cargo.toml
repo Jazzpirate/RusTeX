@@ -19,13 +19,6 @@ path = "src/main.rs"
 #split-debuginfo = "off"
 #strip = "none"
 
-[profile.release]
-opt-level = 2
-lto = "fat"
-codegen-units = 1
-panic = "abort"
-strip = "symbols"
-
 [features]
 multithreaded = ["tex_engine/multithreaded"]
 

@@ -219,7 +219,7 @@ fn parse_unicode(s:&str) -> Option<Result<char,Box<[GlyphI]>>> {
         while !s.is_empty() {
             match parse_one(&s[..4]) {
                 Some(c) => {
-                    s = &s[4..].trim_start();
+                    s = s[4..].trim_start();
                     v.push(GlyphI::Unicode(c));
                 }
                 None => return None

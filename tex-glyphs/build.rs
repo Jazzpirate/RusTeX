@@ -107,8 +107,8 @@ impl TableParser {
     fn get(glyphmap:HashMap<String,u16>,glyphlist:Vec<String>) -> Self {
         let mut patch =  PATCHES.trim_start();
         patch = patch[patch.find("<!--- START -->").unwrap() + 15..].trim_start();
-        patch = &patch[patch.find('\n').unwrap()..].trim_start();
-        patch = &patch[patch.find('\n').unwrap()..].trim_start();
+        patch = patch[patch.find('\n').unwrap()..].trim_start();
+        patch = patch[patch.find('\n').unwrap()..].trim_start();
         assert!(patch.starts_with('|'),"???: {}",patch);
         let mut ret = TableParser{s:patch,map:HashMap::default(),tables:vec!(),glyphmap,glyphlist};
         loop {
@@ -125,7 +125,7 @@ impl TableParser {
     }
     fn read_table(&mut self) -> bool {
         if !self.s.starts_with('-') {return false}
-        self.s = &self.s[1..].trim_start();
+        self.s = self.s[1..].trim_start();
         let idx = self.s.find('\n').unwrap();
         let (mut name,rest) = self.s.split_at(idx);
         if name.ends_with('\r') {name = &name[..name.len()-1]}
@@ -147,12 +147,12 @@ impl TableParser {
     }
     fn read_glyph(&mut self) -> String {
         assert!(self.s.starts_with('|'));
-        self.s = &self.s[1..].trim_start();
+        self.s = self.s[1..].trim_start();
 
         if self.s.starts_with('|') {return "UNDEFINED".to_string()}
         if self.s.starts_with("\\u") {
             let u = u32::from_str_radix(&self.s[2..6],16).unwrap();
-            self.s = &self.s[6..].trim_start();
+            self.s = self.s[6..].trim_start();
             assert!(self.s.starts_with('|'));
             return format!("Glyph(GlyphI::Unicode({:?}))",char::from_u32(u).unwrap());
         }
@@ -252,11 +252,11 @@ fn main() {
     let mut file = std::io::BufWriter::new(File::create(path).unwrap());
     writeln!(file,"use crate::glyphs::{{GlyphI,UNDEFINED}};").unwrap();
     writeln!(&mut file,
-        "static GLYPH_LIST: [&'static str;{}] = {}];",
+        "static GLYPH_LIST: [&str;{}] = {}];",
         st.idx+1,st.glyphlist
     ).unwrap();
     writeln!(&mut file,
-      "static GLYPH_NAMES: [&'static str;{}] = {}];",
+      "static GLYPH_NAMES: [&str;{}] = {}];",
       st.idx+1,st.glyphnames
     ).unwrap();
     writeln!(
@@ -286,16 +286,16 @@ fn main() {
 
     let tbl = &parser.tables.iter().find(|p| p.0 == "PostScript Standard Encoding").unwrap().1;
     writeln!(&mut file,"const STANDARD_ENCODING: GlyphList = GlyphList([").unwrap();
-    for i in 0..256 {
-        writeln!(&mut file,"    {},",tbl[i]).unwrap();
+    for t in tbl {
+        writeln!(&mut file,"    {t},").unwrap();
     }
     writeln!(&mut file,"]);").unwrap();
 
     writeln!(&mut file,"const PATCHED_TABLES: [GlyphList;{}] = [",parser.tables.len()).unwrap();
     for (_,table) in parser.tables.into_iter() {
         writeln!(&mut file,"    GlyphList([").unwrap();
-        for i in 0..256 {
-            writeln!(&mut file,"        {},",table[i]).unwrap();
+        for t in table {
+            writeln!(&mut file,"        {t},").unwrap();
         }
         writeln!(&mut file,"    ]),").unwrap();
     }

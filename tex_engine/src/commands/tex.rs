@@ -2152,10 +2152,14 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
     let ret = TeXBox::V{
         children:first.into(), info, start, end
     };
-    if let Some(TeXBox::V{children,..}) = engine.state.get_box_register_mut(idx) {
-        *children = rest.into();
+    if rest.is_empty() {
+        engine.state.set_box_register(engine.aux,idx,None,false);
     } else {
-        unreachable!()
+        if let Some(TeXBox::V { children, .. }) = engine.state.get_box_register_mut(idx) {
+            *children = rest.into();
+        } else {
+            unreachable!()
+        }
     }
     Ok(either::Left(Some(ret)))
 }

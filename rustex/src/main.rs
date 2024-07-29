@@ -27,9 +27,9 @@ profile 1:38 / 1:38     ==> 1:43
 thesis  0:15
  */
 fn main() {
-    profile()
+    //profile()
     //thesis()
-    //run()
+    run()
     //test()
     //temp_test()
     //notes()
@@ -163,7 +163,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/Papers/24-cicm-views-in-alea/source/ex/model-satisfies-formula-view-fol.en.tex",
-        "/home/jazzpirate/work/MathHub/smglom/algebra/source/mod/quotient-group.en.tex",
+        "/home/jazzpirate/work/MathHub/courses/Jacobs/GenCS/problems/source/atp0/sec/plnq-tableaux.en.tex",
         true,
         true,
         true,
@@ -171,7 +171,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     std::fs::write(
-        "/home/jazzpirate/work/MathHub/smglom/algebra/source/mod/quotient-group.en.tex.html",
+        "/home/jazzpirate/work/MathHub/courses/Jacobs/GenCS/problems/source/atp0/sec/plnq-tableaux.en.tex.html",
         &ret.out,
     )
     .unwrap();

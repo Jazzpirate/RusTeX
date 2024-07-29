@@ -141,8 +141,8 @@ because `enc` and `pfa`/`pfb` files might contain wrong or unknown glyph names, 
 font modifiers are determined heuristically. For that reason, we provide a way to fix mistakes:
 1. The map from glyphnames to unicode is stored in the file [glyphmap.txt](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/glyphmap.txt)
 2. Font modifiers, web font names and links, or even full glyph lists can be added
-  to the markdown file [patches.md](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/patches.md),
-  which additionally serves as a how-to guide for patching any mistakes you might find.
+   to the markdown file [patches.md](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/patches.md),
+   which additionally serves as a how-to guide for patching any mistakes you might find.
 
 Both files are parsed *during compilation*.
 

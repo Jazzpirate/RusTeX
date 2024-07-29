@@ -38,7 +38,7 @@ impl<'a> Parser<'a> {
 
 
     pub fn skip(&mut self, n: usize) {
-        self.0 = &self.0[n..].trim_start();
+        self.0 = self.0[n..].trim_start();
     }
 
 
