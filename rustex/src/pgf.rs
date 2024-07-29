@@ -1,6 +1,7 @@
 use tex_engine::add_node;
 use tex_engine::commands::{TeXCommand, CommandScope, PrimitiveCommand};
 use tex_engine::engine::DefaultEngine;
+use tex_engine::engine::filesystem::SourceRef;
 use tex_engine::tex::tokens::CompactToken;
 use crate::engine::{Refs, register_command, Res, Types};
 use tex_engine::tex::nodes::horizontal::HNode;
@@ -47,7 +48,13 @@ pub(crate) fn register_pgf(engine:&mut DefaultEngine<Types>) {
 
 fn pgfhbox(engine:Refs,tk:CompactToken) -> Res<()> {
     let num = engine.read_register_index(false,&tk)?;
-    let bx = engine.state.take_box_register(num).unwrap();
+    let bx = engine.state.take_box_register(num).unwrap_or_else(|| TeXBox::H {
+        info: HBoxInfo::new_box(ToOrSpread::None),
+        children: vec!().into(),
+        start: SourceRef::<Types>::default(),
+        end: SourceRef::<Types>::default(),
+        preskip: None
+    });
     let node = RusTeXNode::PGFEscape(bx);
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
     Ok(())
