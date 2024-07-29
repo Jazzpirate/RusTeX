@@ -284,17 +284,17 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> Font for TfmFont<I,D,CS> {
     }
 
     fn get_wd(&self, c: Self::Char) -> Self::Dim {
-        let d = self.file.widths[c as usize];
+        let d = self.file.widths[c as usize].max(0.0);
         self.get_at().scale_float(d as f64)
     }
 
     fn get_ht(&self, c: Self::Char) -> Self::Dim {
-        let d = self.file.heights[c as usize];
+        let d = self.file.heights[c as usize].max(0.0);
         self.get_at().scale_float(d as f64)
     }
 
     fn get_dp(&self, c: Self::Char) -> Self::Dim {
-        let d = self.file.depths[c as usize];
+        let d = self.file.depths[c as usize].max(0.0);
         self.get_at().scale_float(d as f64)
     }
 

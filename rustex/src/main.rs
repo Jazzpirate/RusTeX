@@ -163,7 +163,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex",
-        "/home/jazzpirate/work/MathHub/talks/opendreamkit/source/talks/WP6-poster.tex",
+        "/home/jazzpirate/work/MathHub/sTeX/Logic/General/source/mod/grammar/GrammarLanguage.en.tex",
         true,
         true,
         true,
@@ -171,7 +171,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     std::fs::write(
-        "/home/jazzpirate/work/MathHub/talks/opendreamkit/source/talks/WP6-poster.tex.html",
+        "/home/jazzpirate/work/MathHub/sTeX/Logic/General/source/mod/grammar/GrammarLanguage.en.tex.html",
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html",
         &ret.out,
     )

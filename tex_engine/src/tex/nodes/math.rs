@@ -571,6 +571,7 @@ impl <ET:EngineTypes> NodeTrait<ET> for MathAtom<ET,MathFontStyle<ET>> {
             h + sub +
                 ET::Dim::from_sp(65536 * 3) // TODO heuristic
         } else {
+            //println!("HERE: {self:?}\n{h}+{sub}*0.75={}",sub.scale_float(0.75));
             h + sub.scale_float(0.75) // TODO heuristic
         }
     }
