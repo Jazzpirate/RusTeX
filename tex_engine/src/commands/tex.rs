@@ -2133,7 +2133,13 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
         Some(TeXBox::V{info,children,start,end}) => {
             (info.clone_for_split(), std::mem::take(children).into_vec(),*start,*end)
         }
-        _ => return Err(TeXError::General(format!("No \\vsplittable box in register {idx}"))),
+        _ => {
+            if !engine.read_keyword(b"to")? {
+                return Err(TeXError::General("`to` expected after \\vsplit".to_string()))
+            }
+            let _ = engine.read_dim(false,&tk)?;
+            return Ok(either::Left(None))
+        },
     };
     if !engine.read_keyword(b"to")? {
         return Err(TeXError::General("`to` expected after \\vsplit".to_string()))
@@ -3030,7 +3036,7 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     );
 
     cmtodos!(engine,scrollmode,nonstopmode,batchmode,
-        show,showbox,showthe,special,noboundary,setlanguage,
+        show,showbox,showthe,noboundary,setlanguage,
         bye,italiccorr
     );
 
@@ -3039,4 +3045,6 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_primitive_skip(engine,PRIMITIVE_SKIPS);
     register_primitive_muskip(engine,PRIMITIVE_MUSKIPS);
     register_primitive_toks(engine,PRIMITIVE_TOKS);
+
+    register_unexpandable(engine, "special", CommandScope::Any, |e,t| e.skip_argument(&t));
 }
