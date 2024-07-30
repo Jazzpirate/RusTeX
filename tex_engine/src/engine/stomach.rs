@@ -18,7 +18,7 @@ use crate::engine::filesystem::File;
 use crate::engine::filesystem::SourceReference;
 use crate::tex::nodes::boxes::{BoxInfo, BoxType, HBoxInfo, TeXBox, ToOrSpread};
 use crate::tex::nodes::horizontal::{HNode, HorizontalNodeListType};
-use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
+use crate::tex::nodes::math::{Delimiter, MathAtom, MathChar, MathClass, MathKernel, MathNode, MathNodeList, MathNodeListType, MathNucleus, UnresolvedMathFontStyle};
 use crate::tex::nodes::vertical::{VerticalNodeListType, VNode};
 use crate::engine::gullet::Gullet;
 use crate::engine::stomach::methods::{ParLine, ParLineSpec, SplitResult};
@@ -247,6 +247,19 @@ pub trait Stomach<ET:EngineTypes/*<Stomach = Self>*/> {
     /// Processes a character depending on the current [`TeXMode`] and its [`CommandCode`]
     fn do_char(engine:&mut EngineReferences<ET>,token:ET::Token,char:ET::Char,code:CommandCode) -> TeXResult<(),ET> {
         methods::do_char(engine,token,char,code)
+    }
+    fn do_char_in_math(engine:&mut EngineReferences<ET>,char:ET::Char) -> TeXResult<(),ET> {
+        ET::Stomach::add_node_m(engine,MathNode::Atom(MathAtom {
+            sup:None,sub:None,nucleus:MathNucleus::Simple {
+                cls:MathClass::Ord,
+                limits:None,
+                kernel:MathKernel::Char {
+                    char,
+                    style:UnresolvedMathFontStyle::of_fam(0)
+                }
+            }
+        }));
+        Ok(())
     }
     /// Processes a mathchar value (assumes we are in math mode)
     fn do_mathchar(engine:&mut EngineReferences<ET>,code:u32,token:Option<ET::Token>) {

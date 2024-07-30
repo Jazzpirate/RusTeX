@@ -386,6 +386,8 @@ macro_rules! do_cmd {
     };
     ($ET:ty;$engine:ident,$token:expr,$cmd:ident) => {
         match $cmd {
+            $crate::commands::TeXCommand::CharDef(char) if <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode().is_math() =>
+                <$ET as EngineTypes>::Stomach::do_char_in_math($engine, *char)?,
             $crate::commands::TeXCommand::CharDef(char)  => <$ET as EngineTypes>::Stomach::do_char($engine, $token, *char, CommandCode::Other)?,
             $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::Unexpandable { scope, apply }} =>
                 <$ET as EngineTypes>::Stomach::do_unexpandable($engine, *name, *scope,$token, *apply)?,
