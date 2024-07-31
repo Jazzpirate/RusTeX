@@ -1200,6 +1200,7 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) -> Res
             HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
             HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
             HNode::MathGroup(mg) if mg.children.is_empty() => (),
+            HNode::Custom(RusTeXNode::Literal(s)) => state.push_comment(s),
             o => todo!("svg: {:?}",o)
         }
     }
