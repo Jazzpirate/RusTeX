@@ -330,17 +330,6 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) -> Res<()> {
                 width,height,filepath:img.filepath
             });
             Ok(())
-            /*
-            let mut attr = String::new();
-            if let Some(w) = img.width {
-                attr.push_str(&format!(" width=\"{}\"",dim_to_string(w)));
-            }
-            if let Some(h) = img.height {
-                attr.push_str(&format!(" height=\"{}\"",dim_to_string(h)));
-            }
-            state.push_text(format!("<img src=\"{}\"{}/>",img.filepath.display(),attr));
-
-             */
         }
         HNode::Custom(RusTeXNode::Literal(s)) => {state.push_comment(s);Ok(())}
         _ => todo!("{:?}",n)
@@ -436,6 +425,14 @@ pub(crate) fn do_mathlist_in_h(state:&mut ShipoutState,engine:Refs,iter:&mut MNo
                 }
             }
             _ => unreachable!()
+        }
+        MathNode::Custom(RusTeXNode::PDFNode(p@PDFNode::XImage(_))) => {
+            let width = p.width();
+            let height = p.height();
+            let PDFNode::XImage(img) = p else {unreachable!()};
+            state.push_child(HTMLChild::Image {
+                width,height,filepath:img.filepath
+            });
         }
         o => todo!("math in h: {:?}",o)
     }}
