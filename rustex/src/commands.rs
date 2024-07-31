@@ -14,6 +14,7 @@ use tex_engine::engine::stomach::Stomach;
 use crate::stomach::RusTeXStomach;
 use tex_engine::prelude::*;
 use tex_engine::engine::mouth::Mouth;
+use tex_engine::utils::errors::TeXError;
 use tex_engine::utils::HMap;
 use crate::utils::VecMap;
 
@@ -183,19 +184,25 @@ fn annot_begin(engine:Refs,token:CompactToken) -> Res<()> {
             let (n,v) = s.split_at(i);
             s = &v[1..].trim_start();
             n.trim()
-        } else { todo!() };
+        } else {
+            return Err(TeXError::General("Invalid annotation".to_string()))
+        };
         let delim = if s.starts_with('"') {
             s = &s[1..];
             '"'
         } else if s.starts_with('\'') {
             s = &s[1..];
             '\''
-        } else { todo!() };
+        } else {
+            return Err(TeXError::General("Invalid annotation".to_string()))
+        };
         let val = if let Some(i) = s.find(delim) {
             let (v,r) = s.split_at(i);
             s = r[1..].trim_start();
             v.trim()
-        } else { todo!() };
+        } else {
+            return Err(TeXError::General("Invalid annotation".to_string()))
+        };
         if style {
             styles.insert(key.to_string(),val.to_string());
         } else {
