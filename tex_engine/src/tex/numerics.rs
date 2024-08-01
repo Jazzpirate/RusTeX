@@ -76,7 +76,9 @@ pub trait TeXDimen:Copy + Eq + Ord + Default + Debug + Display + Add<Self,Output
 /// - cc (cicero) = 12 dd
 /// - em (width of a capital M) = (`\fontdimen6` of the current font)
 /// - ex (height of an x) = (`\fontdimen5` of the current font)
-pub const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc",b"sp",b"em",b"ex"];
+///
+/// - px: technically only available id pdftex; here: =1bp
+pub const DEFAULT_UNITS:&[&[u8]] = &[b"pt",b"pc",b"in",b"bp",b"cm",b"mm",b"dd",b"cc",b"sp",b"em",b"ex",b"px"];
 
 /// The default [`NumSet`] used in plain TeX, using `i32`, [`Dim32`] and [`Mu`] for integers, dimensions and mu
 /// dimensions, respectively.
@@ -185,6 +187,7 @@ impl TeXDimen for Dim32 {
             b"pc" => Self(786432).scale_float(float),
             b"in" => Self(4736286).scale_float(float),
             b"bp" => Self(65781).scale_float(float),
+            b"px" => Self(65781).scale_float(float),
             b"cm" => Self(1864679).scale_float(float),
             b"mm" => Self(186467).scale_float(float),
             b"dd" => Self(70124).scale_float(float),
