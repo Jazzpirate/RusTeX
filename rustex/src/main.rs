@@ -8,9 +8,6 @@ use std::collections::HashSet;
 use RusTeX::engine::{RusTeXEngine, RusTeXEngineT};
 
 use clap::Parser;
-use log::info;
-use pdfium_render::page_objects_common::PdfPageObjectsCommon;
-use std::env;
 use std::path::{Path, PathBuf};
 use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};

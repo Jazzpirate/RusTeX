@@ -58,7 +58,7 @@ either = "1.13"
 md5 = { version = "0.7",optional = true }
 image = { version = "0.25",optional = true }
 regex = { version="1.10",optional = true }
-pdfium-render = {version="0.8.22", optional = true }
+pdfium-render = {version="0.8.24", optional = true }
 
 
 

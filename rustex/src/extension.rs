@@ -1,4 +1,4 @@
-use pdfium_render::pdfium::Pdfium;
+use pdfium_render::prelude::Pdfium;
 use tex_engine::commands::Macro;
 use tex_engine::pdflatex::nodes::{MinimalPDFExtension, PDFAnnot, PDFColor, PDFExtension, PDFObj, PDFXForm, PDFXImage};
 use tex_engine::engine::EngineExtension;
