@@ -303,10 +303,10 @@ fn do_h(engine:Refs, state:&mut ShipoutState, n: HNode<Types>) -> Res<()> {
             if !glyph.is_defined() {
                 nodes::do_missing_glyph(state,glyph.name(),char,&font);
             } else {
+                state.push_glyph(glyph);
                 if accent.is_defined() {
                     state.push_glyph(accent) // TODO properly
                 }
-                state.push_glyph(glyph)
             }
             Ok(())
         }
