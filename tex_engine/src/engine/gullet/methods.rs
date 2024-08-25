@@ -1579,10 +1579,10 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
             (_,CommandCode::Space) if ret.is_empty() => (),
             (Ok(b),_) => {
                 ret.push(b.to_ascii_lowercase());
-                let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
+                let curr = kws.iter().filter(|k| k.to_ascii_lowercase().starts_with(&ret)).collect::<Vec<_>>();
                 if curr.is_empty() {
                     ret.pop();
-                    match kws.iter().find(|e| **e == ret.as_slice()) {
+                    match kws.iter().find(|e| e.eq_ignore_ascii_case(ret.as_slice())) {
                         Some(w) => {
                             engine.requeue(token)?;
                             return Ok(Some(w))
@@ -1600,8 +1600,8 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
                 }
             }
             _ => {
-                let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
-                match curr.iter().find(|b| ***b == ret.as_slice()) {
+                let curr = kws.iter().filter(|k| k.to_ascii_lowercase().starts_with(&ret)).collect::<Vec<_>>();
+                match curr.iter().find(|b| b.eq_ignore_ascii_case(ret.as_slice())) {
                     Some(b) => {
                         engine.requeue(token)?;
                         return Ok(Some(**b))
@@ -1615,7 +1615,7 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
             }
         }
         ResolvedToken::Cmd(_) => {
-            let curr = kws.iter().filter(|k| k.starts_with(&ret)).collect::<Vec<_>>();
+            let curr = kws.iter().filter(|k| k.to_ascii_lowercase().starts_with(&ret)).collect::<Vec<_>>();
             match curr.iter().find(|b| ***b == ret.as_slice()) {
                 Some(b) => {
                     engine.mouth.requeue(token);
@@ -1629,7 +1629,7 @@ pub fn read_keywords<'a,ET:EngineTypes>(engine:&mut EngineReferences<ET>,kws:&[&
             }
         }
     );
-    match kws.iter().find(|b| **b == ret.as_slice()) {
+    match kws.iter().find(|b| b.eq_ignore_ascii_case(ret.as_slice())) {
         Some(b) => {
             Ok(Some(*b))
         }

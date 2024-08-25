@@ -107,10 +107,9 @@ fn gbegin(engine:Refs,token:CompactToken) -> Res<()> {
     //let start = engine.mouth.start_ref();
     engine.read_braced_string(true,true,&token,&mut key)?;
     'attr: loop {
-        //println!("HERE! {}",engine.preview());
         match engine.read_keywords(&[
             b"about",b"datatype",b"href",b"inlist",b"prefix",b"property",b"rel",
-            b"resource",b"rev",b"src",b"typeof",b"content",
+            b"resource",b"rev",b"src",b"typeof",b"content",b"cx",b"cy",b"r",b"rx",b"ry",
             b"clip-path",b"fill-rule",b"opacity",b"stroke-opacity",b"fill-opacity",
             b"transform",b"stroke-dasharray",b"stroke-dashoffset",b"stroke-width",
             b"stroke",b"fill",b"id",b"marker-start",b"marker-end",b"d",b"fill",

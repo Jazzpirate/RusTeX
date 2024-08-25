@@ -89,7 +89,7 @@ pub(crate) fn close_font(state:&mut ShipoutState) {
 
 pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAction) {
     let stack = engine.aux.extension.colorstacks();
-    let curr = *state.colors.last().unwrap();
+    let curr = state.colors.last().copied().unwrap_or_default();
     match color {
         ColorStackAction::Set(idx,c) => {
             *stack[idx].last_mut().unwrap() = c;
@@ -110,7 +110,7 @@ pub(crate) fn do_color(state:&mut ShipoutState, engine:Refs, color:ColorStackAct
         }
         ColorStackAction::Pop(idx) => {
             stack[idx].pop();
-            let old = *stack[idx].last().unwrap();
+            let old = stack[idx].last().copied().unwrap_or_default();
             if *engine.aux.extension.current_colorstack() == idx  {
                 state.colors.pop();
                 if curr != old {

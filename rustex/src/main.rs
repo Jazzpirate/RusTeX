@@ -46,7 +46,7 @@ fn test_all() {
             allfiles.push(PathBuf::from(a));
         }
     }
-    /*
+
     let files = "/home/jazzpirate/textest_dones.txt";
     let mut dones = Vec::new();
     let donefiles_reader = std::io::BufReader::new(std::fs::File::open(files).unwrap());
@@ -54,14 +54,14 @@ fn test_all() {
         let line = line.unwrap();
         dones.push(PathBuf::from(line));
     }
-    let allfiles: Vec<_> = allfiles.into_iter().filter(|x| !dones.contains(x)).collect();
+    let len = allfiles.len();
+    let allfiles: Vec<_> = allfiles.into_iter().enumerate().filter(|(_,x)| !dones.contains(x)).collect();
 
-     */
+
     println!("Testing {} files", allfiles.len());
     let mut missing_glyphs = HashSet::new();
     let mut missing_fonts = HashSet::new();
-    let len = allfiles.len();
-    for (i, f) in allfiles.into_iter().enumerate() {
+    for (i, f) in allfiles.into_iter() {
         println!("Testing file {} of {}: {}", i + 1, len, f.display());
         let ret = RusTeXEngine::do_file(f.to_str().unwrap(), false, false, false);
         let mut glyphs = ret.missing_glyphs.into_vec();
@@ -97,8 +97,8 @@ fn test_all() {
         }
         match ret.error {
             None => {
-                //dones.push(f);
-                //std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
+                dones.push(f);
+                std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
                 let out =
                     PathBuf::from("/home/jazzpirate/temp/out").join(format!("{}.html", i + 1));
                 std::fs::write(out, &ret.out).unwrap();
@@ -160,7 +160,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex",
-        "/home/jazzpirate/work/MathHub/sTeX/MathTutorial/source/textbook.en.tex",
+        "/home/jazzpirate/work/MathHub/courses/IISc/ATC/course/source/sec/CFG-CNF-UMC205.tex",
         true,
         true,
         true,
@@ -168,7 +168,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     std::fs::write(
-        "/home/jazzpirate/work/MathHub/sTeX/MathTutorial/source/textbook.en.tex.html",
+        "/home/jazzpirate/work/MathHub/courses/IISc/ATC/course/source/sec/CFG-CNF-UMC205.tex.html",
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html",
         &ret.out,
     )

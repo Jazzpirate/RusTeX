@@ -650,8 +650,8 @@
     \xdef\pgfutil@tempa{%
       \def\noexpand\pgf@sys@svg@sh@defs{\pgf@sys@svg@thestops}%
       \def\noexpand\pgf@sys@svg@sh{\pgf@sys@svg@node{rect}{%
-        width="\pgf@sys@tonumber{\pgf@x}"
-        height="\pgf@sys@tonumber{\pgf@y}"
+        width="\pgf@sys@tonumber{\pgf@x}" %
+        height="\pgf@sys@tonumber{\pgf@y}" %
         style="fill:url(\noexpand\#pgfsh\the\pgf@sys@svg@objectcount);
           stroke:none"}{}}%
       \def\noexpand\pgf@sys@svg@pos{\noexpand\pgfpoint{\the\pgf@x}{\the\pgf@y}}%
@@ -673,8 +673,8 @@
   {%
     \pgf@parsefunc{#3}%
     \global\advance\pgf@sys@svg@objectcount by1\relax%
-    \pgf@sys@svg@addtostops{\pgf@sys@svg@node@begin{linearGradient}{
-      id="pgfsh\the\pgf@sys@svg@objectcount"
+    \pgf@sys@svg@addtostops{\pgf@sys@svg@node@begin{linearGradient}{%
+      id="pgfsh\the\pgf@sys@svg@objectcount" %
       gradientTransform="rotate(90)"}}%
     \pgf@sys@svg@shading@stops%
     \pgf@sys@svg@addtostops{\pgf@sys@svg@node@end{linearGradient}}%
@@ -682,8 +682,8 @@
     \xdef\pgfutil@tempa{%
       \def\noexpand\pgf@sys@svg@sh@defs{\pgf@sys@svg@thestops}%
       \def\noexpand\pgf@sys@svg@sh{\pgf@sys@svg@node{rect}{%
-        width="\pgf@sys@tonumber{\pgf@y}"
-        height="\pgf@sys@tonumber{\pgf@x}"
+        width="\pgf@sys@tonumber{\pgf@y}" %
+        height="\pgf@sys@tonumber{\pgf@x}" %
         style="fill:url(\noexpand\#pgfsh\the\pgf@sys@svg@objectcount);
           stroke:none"}{}}%
       \def\noexpand\pgf@sys@svg@pos{\noexpand\pgfpoint{\the\pgf@y}{\the\pgf@x}}%
@@ -718,9 +718,9 @@
     \xdef\pgfutil@tempa{%
       \def\noexpand\pgf@sys@svg@sh@defs{\pgf@sys@svg@thestops}%
       \def\noexpand\pgf@sys@svg@sh{\pgf@sys@svg@node{circle}{%
-        cx="\pgf@sys@tonumber{\pgf@xa}"
-        cy="\pgf@sys@tonumber{\pgf@xa}"
-        r="\pgf@sys@tonumber{\pgf@xa}"
+        cx="\pgf@sys@tonumber{\pgf@xa}" %
+        cy="\pgf@sys@tonumber{\pgf@xa}" %
+        r="\pgf@sys@tonumber{\pgf@xa}" %
         style="fill:url(\noexpand\#pgfsh\the\pgf@sys@svg@objectcount);
           stroke:none"}{}}%
       \def\noexpand\pgf@sys@svg@pos{\noexpand\pgfpoint{\the\pgf@xb}{\the\pgf@xb}}%

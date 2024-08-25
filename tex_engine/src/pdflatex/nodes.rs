@@ -533,7 +533,7 @@ pub struct PDFCatalog {
     pub action:Option<ActionSpec>
 }
 
-#[derive(Debug,Clone,Copy,PartialEq,Eq)]
+#[derive(Debug,Clone,Copy,PartialEq,Eq,Default)]
 #[allow(non_snake_case)]
 pub struct PDFColor{R:u8,G:u8,B:u8}
 impl PDFColor {
@@ -576,10 +576,6 @@ impl PDFColor {
             Self::black()
         }
     }
-}
-impl Default for PDFColor {
-
-    fn default() -> Self { PDFColor::black() }
 }
 impl std::fmt::Display for PDFColor {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
