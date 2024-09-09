@@ -28,6 +28,7 @@ use output::RusTeXOutput;
 use crate::{shipout, RUSTEX_CSS_URL};
 use state::RusTeXState;
 use stomach::RusTeXStomach;
+use tex_engine::engine::fontsystem::FontSystem;
 use tex_engine::engine::utils::memory::MemoryManager;
 use tex_engine::pdflatex::nodes::PDFColor;
 use tex_engine::prelude::*;
@@ -213,9 +214,9 @@ impl RusTeXEngineT for RusTeXEngine {
         let out = std::mem::take(&mut self.aux.extension.state.output);
         let css = std::mem::take(&mut self.aux.extension.css);
         let font_data = std::mem::take(&mut self.aux.extension.state.font_data);
-        let top_font = self.aux.extension.state.top_font.clone().unwrap();
-        let top_width = self.aux.extension.state.top_width.clone().unwrap();
-        let page_width = self.aux.extension.state.page_width.clone().unwrap();
+        let top_font = self.aux.extension.state.top_font.clone().unwrap_or_else(|| self.fontsystem.null());
+        let top_width = self.aux.extension.state.top_width.clone().unwrap_or_default();
+        let page_width = self.aux.extension.state.page_width.clone().unwrap_or_default();
         let top = std::mem::take(&mut self.aux.extension.top);
         let metas = std::mem::take(&mut self.aux.extension.metas);
         CompilationResult {
