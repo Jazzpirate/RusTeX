@@ -139,7 +139,7 @@ impl<'a> Parser<'a> {
     pub fn read_until_parens(&mut self) {
         let mut parens = 0usize;
         loop {
-            match self.0.find(|x| x == '(' || x == ')') {
+            match self.0.find(['(',')']) {
                 Some(i) => {
                     if self.0.chars().nth(i).unwrap() == '(' {
                         parens += 1;

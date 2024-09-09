@@ -5,7 +5,7 @@ use crate::parsing::Parser;
 pub(crate) fn parse_enc(f:&str) -> Vec<(Box<str>, GlyphList)> {
     let file = std::fs::read_to_string(f).unwrap();
     let mut s = Parser::new(&file);
-    let mut ret = vec!();
+    let mut ret = Vec::new();
     while !s.is_empty() {
         if s.starts_with('%') { s.skip_until_endline();continue }
         if s.starts_with_str("LIGKERN") {s.read_until(';');continue}

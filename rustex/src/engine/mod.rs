@@ -25,7 +25,7 @@ use tex_engine::tex::catcodes::AT_LETTER_SCHEME;
 use tex_engine::tex::nodes::boxes::TeXBox;
 use nodes::RusTeXNode;
 use output::RusTeXOutput;
-use crate::{shipout, RUSTEX_CSS_URL};
+use crate::shipout;
 use state::RusTeXState;
 use stomach::RusTeXStomach;
 use tex_engine::engine::fontsystem::FontSystem;
@@ -95,7 +95,7 @@ fn get_state(log:bool) -> (RusTeXState,MemoryManager<CompactToken>) {
             Some((s, m)) =>(s.clone(), m.clone()),
             n => {
                 //let start = std::time::Instant::now();
-                let mut engine = DefaultEngine::<Types>::new();
+                let mut engine = DefaultEngine::<Types>::default();
                 if log { engine.aux.outputs = RusTeXOutput::Print(true);}
                 commands::register_primitives_preinit(&mut engine);
                 engine.initialize_pdflatex().unwrap();
@@ -175,7 +175,7 @@ pub trait RusTeXEngineT {
 
 pub(crate) fn register_command(e: &mut DefaultEngine<Types>, globally:bool, name:&'static str, sig:&'static str, exp:&'static str, protect:bool, long:bool) {
     let e = e.get_engine_refs();
-    let name = e.aux.memory.cs_interner_mut().from_str(name);
+    let name = e.aux.memory.cs_interner_mut().cs_from_str(name);
     let mut cmd = Macro::new::<_,_,Types>(
         e.aux.memory.cs_interner_mut(),
         &AT_LETTER_SCHEME,sig,exp).unwrap();

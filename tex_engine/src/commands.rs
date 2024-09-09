@@ -372,21 +372,21 @@ pub struct Macro<T:Token> {
 impl<T:Token> Macro<T> {
     /// Convenience method for creating a new macro from a signature and expansion as strings; given the provided [`CategoryCodeScheme`].
     /// Allows for e.g. `as_point = Macro::new(int,`[`&DEFAULT_SCHEME_U8`](crate::tex::catcodes::DEFAULT_SCHEME_U8)`,"#1#2","(#1,#2)")`.
-    pub fn new<Sig:AsRef<str>,Exp:AsRef<str>,ET:EngineTypes<Token=T>>(int:&mut <T::CS as CSName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,sig:Sig,exp:Exp) -> Result<Self,()> {
+    pub fn new<Sig:AsRef<str>,Exp:AsRef<str>,ET:EngineTypes<Token=T,Char=T::Char>>(int:&mut <T::CS as CSName<T::Char>>::Handler,cc:&CategoryCodeScheme<T::Char>,sig:Sig,exp:Exp) -> TeXResult<Self,ET> {
         let mut parser = MacroParser::new();
         let sig = sig.as_ref();
         if !sig.is_empty() {
             let sigsrc: StringLineSource<T::Char> = sig.into();
             let mut sigsrc = InputTokenizer::new(sigsrc);
-            while let Some(t) = sigsrc.get_next(int,cc,None).map_err(|_|())? {
-                if parser.do_signature_token::<ET>(t).is_err() { return Err(())};
+            while let Some(t) = sigsrc.get_next(int,cc,None)? {
+                parser.do_signature_token::<ET>(t)?;
             }
         }
         let exp = exp.as_ref();
         let expsrc: StringLineSource<T::Char> = exp.into();
         let mut expsrc = InputTokenizer::new(expsrc);
-        while let Some(t) = expsrc.get_next(int,cc,None).map_err(|_|())? {
-            if parser.do_expansion_token::<ET>(t).is_err() { return Err(()) }
+        while let Some(t) = expsrc.get_next(int,cc,None)? {
+            parser.do_expansion_token::<ET>(t)?
         }
         Ok(parser.close(false,false,false))
     }

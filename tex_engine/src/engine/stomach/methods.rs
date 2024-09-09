@@ -250,6 +250,7 @@ pub fn do_char<ET:EngineTypes>(engine:&mut EngineReferences<ET>,token:ET::Token,
 }
 
 
+#[allow(clippy::no_effect)]
 fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> TeXResult<(),ET> {
     // TODO trace
     let mut current = char;
@@ -267,6 +268,7 @@ fn do_word<ET:EngineTypes>(engine:&mut EngineReferences<ET>,char:ET::Char) -> Te
             }
         }};
     }
+
     macro_rules! end {
         ($e:expr) => {{
             let font = engine.state.get_current_font().clone();
@@ -339,7 +341,7 @@ fn open_math<ET:EngineTypes>(engine:&mut EngineReferences<ET>) -> TeXResult<(),E
         }
         _ => (false,PRIMITIVES.everymath)
     };
-    engine.stomach.data_mut().open_lists.push(NodeList::Math {children:MathNodeList::new(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
+    engine.stomach.data_mut().open_lists.push(NodeList::Math {children:MathNodeList::default(),start:engine.mouth.start_ref(),tp:MathNodeListType::Top{display}});
     engine.state.push(engine.aux,GroupType::MathShift{display},engine.mouth.line_number());
     engine.state.set_primitive_int(engine.aux,PRIMITIVES.fam,(-1).into(),false);
     engine.push_every(every);

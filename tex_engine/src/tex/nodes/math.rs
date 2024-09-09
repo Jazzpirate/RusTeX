@@ -1113,9 +1113,10 @@ pub enum MathNodeList<ET:EngineTypes> {
         eqno:Vec<MathNode<ET,UnresolvedMathFontStyle<ET>>>,
     }
 }
+impl<ET:EngineTypes> Default for MathNodeList<ET> {
+    fn default() -> Self { MathNodeList::Simple(Vec::new()) }
+}
 impl <ET:EngineTypes> MathNodeList<ET> {
-    /// Create a new simple list.
-    pub fn new() -> Self { MathNodeList::Simple(Vec::new()) }
     /// Push a node to the list.
     pub fn push(&mut self, n:MathNode<ET,UnresolvedMathFontStyle<ET>>) {
         match self {

@@ -11,6 +11,9 @@ readme = "README.md"
 categories = ["encoding","data-structures"]
 exclude = [".idea/*","target/*","src/resources/missing.txt"]
 
+[lints]
+workspace = true
+
 [lib]
 crate-type = ["lib"]
 path = "src/lib.rs"

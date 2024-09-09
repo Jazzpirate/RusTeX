@@ -126,9 +126,8 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
                             enc.glyphlist = Some(retls[0].1);
                             self.pdftex_map.insert(name.as_ref().into(),enc);
                             return Some(retls[0].1)
-                        } else {
-                            enc.enc_file = "".into();
                         }
+                        enc.enc_file = "".into();
                     } else {
                         enc.enc_file = "".into();
                     }
@@ -152,9 +151,8 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
                                 enc.glyphlist = Some(idx);
                                 self.pdftex_map.insert(name.as_ref().into(),enc);
                                 return Some(idx)
-                            } else {
-                                enc.pfx_file = "".into();
                             }
+                            enc.pfx_file = "".into();
                         } else {
                             enc.pfx_file = "".into();
                         }
@@ -169,14 +167,14 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
             return None
         }
         enc.vf_file = true;
-        let f = format!("{}.vf",enc.tfm_name);
-        let f = (self.get)(&f);
-        let p = Path::new(f.as_ref());
-        if !p.is_file() {
+        let file = format!("{}.vf",enc.tfm_name);
+        let file = (self.get)(&file);
+        let path = Path::new(file.as_ref());
+        if !path.is_file() {
             self.pdftex_map.insert(name.as_ref().into(),enc);
             return None
         }
-        let m = match vf_files::parse_vf(f.as_ref()) {
+        let m = match vf_files::parse_vf(file.as_ref()) {
             None => {
                 self.pdftex_map.insert(name.as_ref().into(),enc);
                 return None
@@ -187,12 +185,12 @@ impl<S:AsRef<str>,F:FnMut(&str) -> S> FontInfoStore<S,F> {
         let mut table = UNDEFINED_LIST.clone();
         for (idx,v) in m.maps.into_iter().enumerate() {
             let mut gls = v.into_iter().flat_map(|(f,i)| match deps.get(f as usize).unwrap() {
-                None => vec!(GlyphI::S(0)),
+                None => vec![GlyphI::S(0)],
                 Some(k) => match self.glyph_lists.get(*k).unwrap().get(i).0 {
-                    GlyphI::S(0) => vec!(GlyphI::S(0)),
-                    GlyphI::Undefined(_) => vec!(GlyphI::S(0)),
-                    GlyphI::S(i) => vec!(GlyphI::S(i)),
-                    GlyphI::Unicode(c) => vec!(GlyphI::Unicode(c)),
+                    GlyphI::S(0) => vec![GlyphI::S(0)],
+                    GlyphI::Undefined(_) => vec![GlyphI::S(0)],
+                    GlyphI::S(i) => vec![GlyphI::S(i)],
+                    GlyphI::Unicode(c) => vec![GlyphI::Unicode(c)],
                     GlyphI::Ls(ls) => ls.into_vec(),
                 }
             }).collect::<Vec<_>>();

@@ -232,14 +232,15 @@ pub struct PrimitiveCommands<ET:EngineTypes> {
     commands: Vec<TeXCommand<ET>>,
     names:HMap<&'static str,u16>
 }
-impl<ET:EngineTypes> PrimitiveCommands<ET> {
-    /// Creates a new store for primitive commands. Usually kept in an engine's [`State`] component.
-    pub fn new() -> Self {
+impl<ET:EngineTypes> Default for PrimitiveCommands<ET> {
+    fn default() -> Self {
         Self {
             commands: Vec::new(),
             names: HMap::default()
         }
     }
+}
+impl<ET:EngineTypes> PrimitiveCommands<ET> {
     /// Registers a new primitive command.
     pub fn register(&mut self,name:&'static str,cmd: PrimitiveCommand<ET>) -> PrimitiveIdentifier {
         let id = PRIMITIVES.new_id(name);

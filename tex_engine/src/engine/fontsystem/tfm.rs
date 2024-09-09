@@ -13,8 +13,8 @@ pub struct TfmFile {
     pub dimen:Vec<f32>,
     /// The design size of the font in scaled points
     pub size : i32,
-    /// The type string of the font as read from the `.tfm`-file.
-    pub typestr : String,
+    // /// The type string of the font as read from the `.tfm`-file.
+    //pub typestr : String,
     /// Which characters in the font have glyphs.
     pub defined:[bool;256],
     /// The widths of the characters in the font (as (originally) fixed-point numbers); to be scaled by `size`.
@@ -51,7 +51,7 @@ impl TfmFile {
         let skewchar : u8 = 255;
         let mut dimen = vec!();
         let mut size: i32 = 65536;
-        let mut typestr = "".to_string();
+        //let mut typestr = "".to_string();
         let mut widths: [f32;256] = [0.0;256];
         let mut heights: [f32;256] = [0.0;256];
         let mut depths: [f32;256] = [0.0;256];
@@ -84,7 +84,7 @@ impl TfmFile {
 
         if lh >= 12 {
             let mut sv : Vec<u8> = vec!();
-            let (ln,b,c,d) = state.pop();
+            let (_ln,b,c,d) = state.pop();
             sv.push(b);
             sv.push(c);
             sv.push(d);
@@ -95,7 +95,7 @@ impl TfmFile {
                 sv.push(c);
                 sv.push(d);
             }
-            typestr = String::from_utf8(sv.get(0..(ln as usize)).unwrap().to_vec()).unwrap();
+            //typestr = String::from_utf8(sv.get(0..(ln as usize)).unwrap().to_vec()).unwrap();
         }
         state.skip((lh + 6) - state.i);
 
@@ -154,8 +154,8 @@ impl TfmFile {
         assert_eq!(state.i,lf);
 
         TfmFile {
-            hyphenchar,skewchar,dimen,size,typestr,widths,
-            heights,depths,ics,ligs,filepath,defined
+            hyphenchar,skewchar,dimen,size,//typestr,
+            widths,heights,depths,ics,ligs,filepath,defined
         }
     }
 }

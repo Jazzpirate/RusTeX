@@ -256,7 +256,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                     Some(c) => {
                         self.tempstr.clear();
                         self.tempstr.push(c);
-                        handler.from_chars(&self.tempstr)
+                        handler.cs_from_chars(&self.tempstr)
                     }
                 }
             },
@@ -275,7 +275,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                         self.state = MouthState::MidLine;
                         self.tempstr.clear();
                         self.tempstr.push(next);
-                        handler.from_chars(&self.tempstr)
+                        handler.cs_from_chars(&self.tempstr)
                     }
                 }
             }
@@ -284,7 +284,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                 self.state = MouthState::MidLine;
                 self.tempstr.clear();
                 self.tempstr.push(next);
-                handler.from_chars(&self.tempstr)
+                handler.cs_from_chars(&self.tempstr)
             }
         }
     }
@@ -316,7 +316,7 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                 }
             }
         }
-        handler.from_chars(&self.tempstr)
+        handler.cs_from_chars(&self.tempstr)
     }
 
 

@@ -282,7 +282,7 @@ pub enum NodeList<ET:EngineTypes> {
 impl<ET:EngineTypes> NodeList<ET> {
     /// Create a new math list.
     pub fn new_math(start:SourceRef<ET>) -> Self {
-        NodeList::Math{children:MathNodeList::new(),start,tp:MathNodeListType::Target(ListTarget::none())}
+        NodeList::Math{children:MathNodeList::default(),start,tp:MathNodeListType::Target(ListTarget::none())}
     }
 }
 

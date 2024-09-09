@@ -15,9 +15,8 @@ pub struct MemoryManager<T:Token> {
     token_vecs: Vec<Vec<T>>,
     empty: TokenList<T>
 }
-impl<T:Token> MemoryManager<T> {
-    /// Creates a new memory manager.
-    pub fn new() -> Self {
+impl<T:Token> Default for MemoryManager<T> {
+    fn default() -> Self {
         MemoryManager {
             cs_interner: <T::CS as CSName<T::Char>>::Handler::default(),
             strings: Vec::new(),
@@ -29,6 +28,8 @@ impl<T:Token> MemoryManager<T> {
             empty: TokenList(shared_vector::SharedVector::new())
         }
     }
+}
+impl<T:Token> MemoryManager<T> {
     /// Provides an empty `Vec<u8>` that can be returned using [`return_bytes`](Self::return_bytes), avoiding
     /// the need to allocate a new `Vec<u8>` every time.
     pub fn get_bytes(&mut self) -> Vec<u8> {

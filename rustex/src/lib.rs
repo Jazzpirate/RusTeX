@@ -10,7 +10,7 @@ const RUSTEX_CSS_URL:&str = "https://raw.githack.com/Jazzpirate/RusTeX/main/rust
 mod tests {
     use std::path::PathBuf;
     use tex_engine::utils::PWD;
-    use crate::engine::RusTeXEngine;
+    use crate::engine::{RusTeXEngine, Settings};
     use crate::engine::RusTeXEngineT;
     use path_dedot::*;
 
@@ -22,8 +22,8 @@ mod tests {
     #[test]
     fn test_tex() {
         let testpath:PathBuf = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
-        let ret = RusTeXEngine::do_file(testpath.to_str().unwrap(),false,true,true);
+        let ret = RusTeXEngine::do_file(testpath.to_str().unwrap(),Settings::default());
         let out = testpath.with_extension("html");
-        std::fs::write(out.to_str().unwrap(), &ret.out).unwrap();
+        ret.write_out(&out).unwrap();
     }
 }

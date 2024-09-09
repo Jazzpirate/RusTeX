@@ -503,7 +503,7 @@ impl<ET:EngineTypes> PDFXImage<ET> {
         }
     }
     pub fn depth(&self) -> ET::Dim {
-        self.depth.unwrap_or(ET::Dim::default())
+        self.depth.unwrap_or_default()
     }
 }
 

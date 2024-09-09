@@ -763,9 +763,9 @@ impl<ET:EngineTypes> TeXBox<ET> {
     /// The "scaling factor" of this box, i.e. the `to` or `spread` in e.g. `\hbox to 50pt` or `\hbox spread 10pt`
     pub fn to_or_scaled(&self) -> ToOrSpread<ET::Dim> {
         match self {
-            TeXBox::H{ info: HBoxInfo::HBox { scaled, .. },..} => scaled.clone(),
-            TeXBox::V{ info: VBoxInfo::VBox { scaled, .. },..} => scaled.clone(),
-            TeXBox::V{ info: VBoxInfo::VTop { scaled, .. },..} => scaled.clone(),
+            TeXBox::H{ info: HBoxInfo::HBox { scaled, .. },..} => *scaled,
+            TeXBox::V{ info: VBoxInfo::VBox { scaled, .. },..} => *scaled,
+            TeXBox::V{ info: VBoxInfo::VTop { scaled, .. },..} => *scaled,
             _ => ToOrSpread::None
         }
     }

@@ -5,7 +5,7 @@ use crate::parsing::Parser;
 
 pub(crate) fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> Option<GlyphList> {
     let disas = match std::str::from_utf8(std::process::Command::new("t1disasm")
-        .args(vec!(f)).output().expect("t1disasm not found!")
+        .args(vec![f]).output().expect("t1disasm not found!")
         .stdout.as_slice()) {
         Ok(s) => s.trim().to_string(),
         _ => return Some(UNDEFINED_LIST.clone())

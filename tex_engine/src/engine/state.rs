@@ -342,18 +342,17 @@ impl<ET:EngineTypes> Clone for StateStack<ET> {
         }
     }
 }
+impl<ET:EngineTypes> Default for StateStack<ET> {
+    fn default() -> Self { Self { stack:vec!(),vecs:vec!() } }
+}
 impl<ET:EngineTypes> StateStack<ET> {
-    /// Create a new [`StateStack`]
-    pub fn new() -> Self { Self { stack:vec!(),vecs:vec!() } }
+
     /// Push a new stack level onto the stack with the given [`GroupType`], as a new group begins
     pub fn push(&mut self,group_type:GroupType) {
         let lvl = StackLevel {
             group_type,
             aftergroup:vec!(),
-            changes:match self.vecs.pop() {
-                Some(v) => v,
-                _ => Vec::new()
-            }
+            changes:self.vecs.pop().unwrap_or_default()
         };
         self.stack.push(lvl);
     }

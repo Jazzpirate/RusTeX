@@ -775,7 +775,7 @@ fn read_oct_int<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negative:bo
     );
     if empty {
         TeXError::missing_number(engine.aux,engine.state,engine.mouth)?;
-        return Ok(ET::Int::default())
+        Ok(ET::Int::default())
     } else {
         Ok(if is_negative {- ET::Int::from(ret)} else {ET::Int::from(ret)})
     }
@@ -1258,7 +1258,7 @@ fn read_stretch_float<ET:EngineTypes>(engine:&mut EngineReferences<ET>, is_negat
         }
     );
     TeXError::missing_unit(engine.aux,engine.state,engine.mouth)?;
-    return Ok(StretchShrink::Dim(ET::Dim::from_float(engine,ret,b"pt")))
+    Ok(StretchShrink::Dim(ET::Dim::from_float(engine,ret,b"pt")))
 }
 fn read_stretch_unit<ET:EngineTypes>(engine:&mut EngineReferences<ET>,mut float:f64,mut first:Option<(u8,ET::Token)>) -> TeXResult<StretchShrink<ET::Dim>,ET> {
     let is_true = match &first {

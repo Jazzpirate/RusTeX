@@ -508,8 +508,10 @@ impl <ET:EngineTypes> StomachData<ET> {
             None => TeXMode::Vertical
         }
     }
-    /// Constructs a new [`StomachData`]
-    pub fn new() -> Self {
+}
+
+impl<ET:EngineTypes> Default for StomachData<ET> {
+    fn default() -> Self {
         StomachData {
             page:vec!(),
             open_lists:vec!(),
@@ -548,7 +550,7 @@ impl<ET:EngineTypes/*<Stomach=Self>*/> Stomach<ET> for DefaultStomach<ET> {
     fn new(_aux: &mut EngineAux<ET>, _state: &mut ET::State) -> Self {
         DefaultStomach {
             afterassignment:None,
-            data:StomachData::new()
+            data:StomachData::default()
         }
     }
 
@@ -585,7 +587,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             ResolvedToken::Tk {code:CommandCode::BeginGroup,..} |
             ResolvedToken::Cmd(Some(TeXCommand::Char {code:CommandCode::BeginGroup,..})) => {
                 self.state.push(self.aux,GroupType::Math,self.mouth.line_number());
-                let list = NodeList::Math{children:MathNodeList::new(),start:self.mouth.start_ref(),
+                let list = NodeList::Math{children:MathNodeList::default(),start:self.mouth.start_ref(),
                     tp:MathNodeListType::Target(tp(s))};
                 self.stomach.data_mut().open_lists.push(list);
                 return Ok(())

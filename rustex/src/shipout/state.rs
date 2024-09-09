@@ -1379,6 +1379,7 @@ pub(crate) enum ShipoutNodeM {
     VRule {width:Option<Dim32>,height:Option<Dim32>,depth:Option<Dim32>},
     MSkip{base:i32,mu:bool},
     Common(Common<Self>),
+    Img(PDFXImage<Types>),
     Over {
         sref:SourceRef,
         top:Vec<Self>,
@@ -1467,6 +1468,7 @@ impl ShipoutNodeT for ShipoutNodeM {
             ShipoutNodeM::Space => false,
             ShipoutNodeM::Phantom{..} => false,
             ShipoutNodeM::VRule {..} => true,
+            ShipoutNodeM::Img(_) => false,
             ShipoutNodeM::Underline {uses_color,..} => *uses_color,
             ShipoutNodeM::Radical {uses_color,..} => *uses_color,
             ShipoutNodeM::Over {uses_color,..} => *uses_color,
@@ -1490,6 +1492,7 @@ impl ShipoutNodeT for ShipoutNodeM {
             ShipoutNodeM::Space => false,
             ShipoutNodeM::Phantom{..} => false,
             ShipoutNodeM::VRule {..} => false,
+            ShipoutNodeM::Img(_) => false,
             ShipoutNodeM::Underline {uses_font,..} => *uses_font,
             ShipoutNodeM::LeftRight {uses_font,..} => *uses_font,
             ShipoutNodeM::Radical {uses_font,..} => *uses_font,

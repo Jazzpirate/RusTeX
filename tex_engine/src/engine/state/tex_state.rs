@@ -91,8 +91,8 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
         }
         let mathfonts = array_init::array_init(|_| nullfont.clone());
         Self {
-            stack: StateStack::new(),
-            primitives:PrimitiveCommands::new(),
+            stack: StateStack::default(),
+            primitives:PrimitiveCommands::default(),
             catcodes: ET::Char::starting_catcode_scheme(),
             sfcodes: CharacterMap::default(),
             delcodes: CharacterMap::default(),
@@ -124,7 +124,7 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
 
     fn register_primitive(&mut self,aux:&mut EngineAux<ET>,name:&'static str,cmd: PrimitiveCommand<ET>) {
         let id = self.primitives.register(name,cmd.clone());
-        let name = aux.memory.cs_interner_mut().from_str(name);
+        let name = aux.memory.cs_interner_mut().cs_from_str(name);
         self.commands.insert(name, TeXCommand::Primitive {name:id, cmd});
     }
     fn primitives(&self) -> &PrimitiveCommands<ET> { &self.primitives }

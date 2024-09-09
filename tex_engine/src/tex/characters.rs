@@ -107,7 +107,7 @@ impl<'a> Iterator for ByteIterator<'a> {
     type Item = u8;
     fn next(&mut self) -> Option<Self::Item> {
         if self.0.is_empty() { None }
-        else if self.0.starts_with(&[b'^',b'^']) {
+        else if self.0.starts_with(b"^^") {
             let b = self.0[2];
             if b <= 60 || self.0.len() == 3 {
                 self.0 = &self.0[3..];

@@ -15,7 +15,6 @@ use crate::engine::stomach::RusTeXStomach;
 use tex_engine::prelude::*;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::utils::errors::TeXError;
-use tex_engine::utils::HMap;
 use crate::engine::extension::CSS;
 use crate::utils::VecMap;
 

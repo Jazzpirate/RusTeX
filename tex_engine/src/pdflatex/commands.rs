@@ -232,7 +232,7 @@ pub fn ifincsname<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Toke
 }
 pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<bool,ET> {
     let first = engine.read_int(false,&tk)?;
-    let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
+    let rel = match engine.read_chars(b"=<>")? {
         either::Left(b) => b,
         _ => {
             TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
@@ -260,7 +260,7 @@ pub fn ifpdfabsnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Toke
 }
 pub fn ifpdfabsdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<bool,ET> {
     let first = engine.read_dim(false,&tk)?;
-    let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
+    let rel = match engine.read_chars(b"=<>")? {
         either::Left(b) => b,
         _ => {
             TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;

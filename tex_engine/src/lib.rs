@@ -46,6 +46,7 @@ Feel free to contact me [on github](https://github.com/Jazzpirate) if you have q
 #![forbid(unsafe_code)]
 //#![warn(missing_docs)]
 #![doc(html_root_url = "https://docs.rs")]
+#![allow(clippy::type_complexity)]
 
 pub mod utils;
 pub mod engine;

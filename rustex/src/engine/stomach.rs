@@ -30,7 +30,7 @@ pub struct RusTeXStomach {
 impl Stomach<Types> for RusTeXStomach {
 
     fn new(_aux: &mut EngineAux<Types>, _state: &mut RusTeXState) -> Self {
-        Self { afterassignment:None, data:StomachData::new(), prevent_shipout:false,continuous:false }
+        Self { afterassignment:None, data:StomachData::default(), prevent_shipout:false,continuous:false }
     }
 
     fn afterassignment(&mut self) -> &mut Option<CompactToken> {

@@ -237,10 +237,10 @@ pub struct DefaultEngine<ET:EngineTypes> {
     pub gullet: ET::Gullet,
     pub stomach: ET::Stomach,
 }
-impl<ET:EngineTypes> DefaultEngine<ET> {
-    /// Creates a new engine.
-    pub fn new() -> Self {
-        let mut memory = MemoryManager::new();
+impl<ET:EngineTypes> Default for DefaultEngine<ET> {
+
+    fn default() -> Self {
+        let mut memory = MemoryManager::default();
         let mut aux = EngineAux {
             outputs: ET::Outputs::new(),
             error_handler: ET::ErrorHandler::new(),

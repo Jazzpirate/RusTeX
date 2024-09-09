@@ -102,7 +102,7 @@ fn expr_loop<ET:EngineTypes,R:Numeric<<ET::Num as NumSet>::Int>>(
     let mut prev : Option<R> = None;
     let mut curr = Summand::<ET,R>::new(expr_inner(engine,byte,cmd,tk)?);
     loop {
-        match engine.read_chars(&[b'+',b'-',b'*',b'/'])? {
+        match engine.read_chars(b"+-*/")? {
             Either::Right(r) => {
                 match prev {
                     Some(p) => return Ok((p + curr.resolve(),r)),
@@ -184,8 +184,8 @@ pub fn detokenize<ET:EngineTypes>(engine: &mut EngineReferences<ET>,exp:&mut Vec
                 tokenizer.push_cs(cs,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar)
             }
             StandardToken::Primitive(id) => {
-                tokenizer.push_cs(a.memory.cs_interner_mut().from_str("pdfprimitive"), a.memory.cs_interner(), st.get_catcode_scheme(), escapechar);
-                let name = a.memory.cs_interner_mut().from_str(&id.display::<ET::Char>(None).to_string());
+                tokenizer.push_cs(a.memory.cs_interner_mut().cs_from_str("pdfprimitive"), a.memory.cs_interner(), st.get_catcode_scheme(), escapechar);
+                let name = a.memory.cs_interner_mut().cs_from_str(&id.display::<ET::Char>(None).to_string());
                 tokenizer.push_cs(name,a.memory.cs_interner(),st.get_catcode_scheme(),escapechar);
             }
         }

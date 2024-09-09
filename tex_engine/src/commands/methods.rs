@@ -162,11 +162,11 @@ pub(in crate::commands) fn modify_primitive_skip<ET:EngineTypes,O:FnOnce(Skip<ET
 pub(in crate::commands) fn do_box_start<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:GroupType,every:PrimitiveIdentifier,tk:&ET::Token) -> TeXResult<ToOrSpread<ET::Dim>,ET> {
     let scaled = match engine.read_keywords(&[b"to",b"spread"])? {
         Some(b"to") => {
-            let to = engine.read_dim(false,&tk)?;
+            let to = engine.read_dim(false,tk)?;
             ToOrSpread::To(to)
         }
         Some(b"spread") => {
-            let spread = engine.read_dim(false,&tk)?;
+            let spread = engine.read_dim(false,tk)?;
             ToOrSpread::Spread(spread)
         }
         _ => ToOrSpread::None
@@ -740,18 +740,18 @@ pub(crate) fn do_leaders<ET:EngineTypes>(engine:&mut EngineReferences<ET>,tp:Lea
                 loop {
                     match engine.read_keywords(&[b"width",b"height",b"depth"])? {
                         Some(b"width") => {
-                            width = Some(engine.read_dim(false,&tk)?);
+                            width = Some(engine.read_dim(false,tk)?);
                         }
                         Some(b"height") => {
-                            height = Some(engine.read_dim(false,&tk)?);
+                            height = Some(engine.read_dim(false,tk)?);
                         }
                         Some(b"depth") => {
-                            depth = Some(engine.read_dim(false,&tk)?);
+                            depth = Some(engine.read_dim(false,tk)?);
                         }
                         _ => break
                     }
                 }
-                return leaders_skip(engine,LeaderBody::Rule {width,height,depth},tp,&tk)
+                return leaders_skip(engine,LeaderBody::Rule {width,height,depth},tp,tk)
             }
             _ => return Err(TeXError::General("Box expected for leaders\nTODO: Better error message".to_string()))
         )
@@ -763,8 +763,8 @@ fn leaders_skip<ET:EngineTypes>(engine:&mut EngineReferences<ET>, body:LeaderBod
     crate::expand_loop!(engine,token,
         ResolvedToken::Cmd(Some(TeXCommand::Primitive{name,..})) => {
             let skip = match *name {
-                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false,&tk)?),
-                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false,&tk)?),
+                n if n == PRIMITIVES.vskip => LeaderSkip::VSkip(engine.read_skip(false,tk)?),
+                n if n == PRIMITIVES.hskip => LeaderSkip::HSkip(engine.read_skip(false,tk)?),
                 n if n == PRIMITIVES.vfil => LeaderSkip::VFil,
                 n if n == PRIMITIVES.hfil => LeaderSkip::HFil,
                 n if n == PRIMITIVES.vfill => LeaderSkip::VFill,
@@ -817,7 +817,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
     /// reads an integer from the input stream and makes sure it's in the range of
     /// a state register
     pub fn read_register_index(&mut self, skip_eq:bool, in_token:&ET::Token) -> TeXResult<usize,ET> {
-        let idx = self.read_int(skip_eq,&in_token)?;
+        let idx = self.read_int(skip_eq,in_token)?;
         match ET::State::register_index(idx) {
             Some(idx) => Ok(idx),
             None => Err(TeXError::General("Invalid register index\nTODO: Better error message".to_string()))
@@ -853,7 +853,7 @@ impl<ET:EngineTypes> EngineReferences<'_,ET> {
             ResolvedToken::Tk {char,..} => namev.push(char),
             ResolvedToken::Cmd(Some(TeXCommand::Primitive {name,..})) if *name == PRIMITIVES.endcsname => {
                 *self.gullet.csnames() -= 1;
-                let id = self.aux.memory.cs_interner_mut().from_chars(&namev);
+                let id = self.aux.memory.cs_interner_mut().cs_from_chars(&namev);
                 //engine.aux.memory.return_string(name);
                 return Ok(id)
             }

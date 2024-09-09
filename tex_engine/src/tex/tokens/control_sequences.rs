@@ -121,6 +121,8 @@ pub trait ResolvedCSName<'a,C:Character>:Display {
     fn iter(&self) -> Self::Iter;
     /// Returns the length of the control sequence name in terms of the underlying [`Character`] type.
     fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool { self.len() == 0 }
 }
 
 /** Handles control sequence names - conversion from/to strings, displaying etc. */
@@ -129,9 +131,9 @@ pub trait CSHandler<C:Character,CS: CSName<C>>:Default+Clone {
     /// [`Character`]s.
     type Resolved<'a>:ResolvedCSName<'a,C> where Self:'a;
     /// Creates a new control sequence name from a string.
-    fn from_str(&mut self, s: &str) -> CS;
+    fn cs_from_str(&mut self, s: &str) -> CS;
     /// Creates a new control sequence name from a vector of characters.
-    fn from_chars(&mut self,v: &[C]) -> CS;
+    fn cs_from_chars(&mut self,v: &[C]) -> CS;
     /// Resolves a control sequence name.
     fn resolve<'a>(&'a self,cs:&'a CS) -> Self::Resolved<'a>;
     /// Returns the name of the `\par` control sequence.
@@ -155,14 +157,14 @@ impl<'a,C:Character> ResolvedCSName<'a,C> for &'a str {
 impl<C:Character> CSHandler<C,Ptr<str>> for () {
     type Resolved<'a> = &'a str;
 
-    fn from_str(&mut self, s: &str) -> Ptr<str> {
+    fn cs_from_str(&mut self, s: &str) -> Ptr<str> {
         s.into()
     }
     fn get(&self, s: &str) -> Option<Ptr<str>> { Some(s.into()) }
     fn resolve<'a>(&'a self, cs: &'a Ptr<str>) -> Self::Resolved<'a> { cs }
     fn par(&self) -> Ptr<str> { "par".to_string().into() }
     fn empty_str(&self) -> Ptr<str> { "".to_string().into() }
-    fn from_chars(&mut self, v: &[C]) -> Ptr<str> {
+    fn cs_from_chars(&mut self, v: &[C]) -> Ptr<str> {
         let mut s = String::new();
         for c in v {
             c.display_fmt(&mut s);
@@ -224,13 +226,13 @@ impl<C:Character> CSInterner<C> {
 }
 impl<C:Character> CSHandler<C,InternedCSName<C>> for CSInterner<C> {
     type Resolved<'a> = DisplayCSName<'a,C>;
-    fn from_str(&mut self, s: &str) -> InternedCSName<C> {
+    fn cs_from_str(&mut self, s: &str) -> InternedCSName<C> {
         self.intern(C::string_to_iter(s).collect::<Vec<_>>().as_slice())
     }
     fn get(&self, s: &str) -> Option<InternedCSName<C>> {
         self.map.get(C::string_to_iter(s).collect::<Vec<_>>().as_slice()).map(|i| (*i,PhantomData))
     }
-    fn from_chars(&mut self, v: &[C]) -> InternedCSName<C> {
+    fn cs_from_chars(&mut self, v: &[C]) -> InternedCSName<C> {
         self.intern(v)
     }
     fn par(&self) -> InternedCSName<C> { (NonZeroU32::new(2).unwrap(),PhantomData) }

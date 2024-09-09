@@ -682,7 +682,7 @@ pub fn r#else<ET:EngineTypes>(engine: &mut EngineReferences<ET>, tk:ET::Token) -
         Some(u@ActiveConditional::Unfinished(_)) => {
             conds.push(u);
             engine.mouth.requeue(tk);
-            let relax = engine.aux.memory.cs_interner_mut().from_str("relax");
+            let relax = engine.aux.memory.cs_interner_mut().cs_from_str("relax");
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
@@ -717,7 +717,7 @@ pub fn or<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeX
         Some(u@ActiveConditional::Unfinished(_)) => {
             conds.push(u);
             engine.mouth.requeue(tk);
-            let relax = engine.aux.memory.cs_interner_mut().from_str("relax");
+            let relax = engine.aux.memory.cs_interner_mut().cs_from_str("relax");
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
@@ -1016,7 +1016,7 @@ pub fn ifcat<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> 
 
 pub fn ifdim<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<bool,ET> {
     let first = engine.read_dim(false,&tk)?;
-    let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
+    let rel = match engine.read_chars(b"=<>")? {
         either::Left(b) => b,
         _ => {
             TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
@@ -1049,7 +1049,7 @@ pub fn ifmmode<ET:EngineTypes>(engine: &mut EngineReferences<ET>,_tk:ET::Token) 
 
 pub fn ifnum<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeXResult<bool,ET> {
     let first = engine.read_int(false,&tk)?;
-    let rel = match engine.read_chars(&[b'=',b'<',b'>'])? {
+    let rel = match engine.read_chars(b"=<>")? {
         either::Left(b) => b,
         _ => {
             TeXError::missing_keyword(engine.aux,engine.state,engine.mouth,&["=","<",">"])?;
@@ -1169,7 +1169,7 @@ pub fn fi<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> TeX
         Some(u@ActiveConditional::Unfinished(_)) => {
             conds.push(u);
             engine.mouth.requeue(tk);
-            let relax = engine.aux.memory.cs_interner_mut().from_str("relax");
+            let relax = engine.aux.memory.cs_interner_mut().cs_from_str("relax");
             engine.mouth.requeue(ET::Token::from_cs(relax));
             return Ok(())
         }
@@ -1356,7 +1356,7 @@ pub fn left<ET:EngineTypes>(engine: &mut EngineReferences<ET>,tk:ET::Token) -> T
     let del = engine.read_opt_delimiter(&tk)?;
     engine.stomach.data_mut().open_lists.push(
         NodeList::Math {
-            children: MathNodeList::new(),
+            children: MathNodeList::default(),
             start:engine.mouth.start_ref(),
             tp: MathNodeListType::LeftRight(del)
         }
@@ -2160,12 +2160,10 @@ pub fn vsplit<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token) ->
     };
     if rest.is_empty() {
         engine.state.set_box_register(engine.aux,idx,None,false);
+    } else if let Some(TeXBox::V { children, .. }) = engine.state.get_box_register_mut(idx) {
+        *children = rest.into();
     } else {
-        if let Some(TeXBox::V { children, .. }) = engine.state.get_box_register_mut(idx) {
-            *children = rest.into();
-        } else {
-            unreachable!()
-        }
+        unreachable!()
     }
     Ok(either::Left(Some(ret)))
 }
@@ -2947,8 +2945,8 @@ pub fn register_tex_primitives<E:TeXEngine>(engine:&mut E) {
     register_unexpandable(engine,"vadjust",CommandScope::SwitchesToHorizontalOrMath,vadjust);
     {
         let refs = engine.get_engine_refs();
-        let relax = refs.aux.memory.cs_interner_mut().from_str("relax");
-        let nullfont = refs.aux.memory.cs_interner_mut().from_str("nullfont");
+        let relax = refs.aux.memory.cs_interner_mut().cs_from_str("relax");
+        let nullfont = refs.aux.memory.cs_interner_mut().cs_from_str("nullfont");
         refs.state.set_command(refs.aux, relax, Some(TeXCommand::Primitive {name:PRIMITIVES.relax,cmd:PrimitiveCommand::Relax}), true);
         refs.state.set_command(refs.aux, nullfont, Some(TeXCommand::Font(refs.fontsystem.null())), true)
     }

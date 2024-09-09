@@ -50,7 +50,7 @@ impl State<Types> for RusTeXState {
     fn pop(&mut self, aux: &mut EngineAux<Types>, mouth: &mut <Types as EngineTypes>::Mouth) {
         self.0.pop(aux,mouth);
         let closefont = CompactToken::from_cs(
-            aux.memory.cs_interner_mut().from_str(CLOSE_FONT)
+            aux.memory.cs_interner_mut().cs_from_str(CLOSE_FONT)
         );
         for _ in 0..aux.extension.pop() {
             mouth.requeue(closefont);

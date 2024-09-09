@@ -16,8 +16,11 @@ path = "src/main.rs"
 #lto = "fat"
 #debug = 1
 
-split-debuginfo = "off"
-strip = "none"
+#split-debuginfo = "off"
+#strip = "none"
+
+[lints]
+workspace = true
 
 [features]
 multithreaded = ["tex_engine/multithreaded"]

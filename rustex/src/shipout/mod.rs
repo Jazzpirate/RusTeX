@@ -455,6 +455,8 @@ impl Shipout<'_,'_,Math> {
             MNode::Whatsit(wi) => wi.call(self.engine).map_err(|_| None)?,
             MNode::Custom(RusTeXNode::Literal(s)) =>
                 self.push(Common::Literal(s).into()),
+            MNode::Custom(RusTeXNode::PDFNode(PDFNode::XImage(img))) =>
+                self.push(ShipoutNodeM::Img(img)),
             MNode::Custom(RusTeXNode::PGFGBegin {..}|RusTeXNode::PGFGEnd) => todo!(),
             MNode::Space => self.push(ShipoutNodeM::Space),
             MNode::MSkip {skip,..} => self.push(ShipoutNodeM::MSkip{base:skip.base.0,mu:true}),

@@ -113,7 +113,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
             skewchar:255,
             dimen:vec!(),
             size:0,
-            typestr:"nullfont".to_string(),
+            //typestr:"nullfont".to_string(),
             widths:[0.0;256],
             defined:[false;256],
             heights:[0.0;256],
@@ -126,7 +126,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
         let null = Ptr::new(TfmFontI{
             file:Ptr::new(null_file),
             muts:RwLock::new(muts),
-            name:aux.memory.cs_interner_mut().from_str("nullfont")
+            name:aux.memory.cs_interner_mut().cs_from_str("nullfont")
         });
         TfmFontSystem {
             files:HMap::default(),
@@ -139,7 +139,7 @@ impl<I:TeXInt,D:TeXDimen + Numeric<I>,CS: CSName<u8>> FontSystem for TfmFontSyst
         let f = if path.ends_with(".tfm") {
             fs.get(path)
         } else {
-            fs.get(&format!("{}.tfm",path))
+            fs.get(format!("{path}.tfm"))
         };
         let ff = match self.files.get(f.path()) {
             Some(ff) => ff.clone(),

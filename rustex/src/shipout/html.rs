@@ -976,6 +976,29 @@ impl CompilationDisplay<'_,'_> {
             }/>);
             Ok(())
         }
+        ShipoutNodeM::Img(img) => {
+            match &self.image {
+                ImageOptions::AsIs => {
+                    let width = img.width().0;
+                    let height = img.height().0;
+                    node!(self <img "src"=img.filepath.display();
+                    "width"=Self::dim_to_string(width);
+                    "height"=Self::dim_to_string(height);
+                />>);
+                    Ok(())
+                }
+                ImageOptions::ModifyURL(f) => {
+                    let width = img.width().0;
+                    let height = img.height().0;
+                    node!(self <img "src"=f(&img.filepath);
+                    "width"=Self::dim_to_string(width);
+                    "height"=Self::dim_to_string(height);
+                />>);
+                    Ok(())
+                }
+                _ => todo!()
+            }
+        }
         _ => todo!("{c:?}")
     } }
 

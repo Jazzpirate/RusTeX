@@ -7,7 +7,7 @@ pub(crate) struct VFGlyphMap{
 
 pub(crate) fn parse_vf(f:&str) -> Option<VFGlyphMap> {
     let disas = match std::str::from_utf8(std::process::Command::new("vftovp")
-        .args(vec!(f)).output().expect("vftovp not found!")
+        .args(vec![f]).output().expect("vftovp not found!")
         .stdout.as_slice()) {
         Ok(s) => s.trim().to_string(),
         _ => return None
