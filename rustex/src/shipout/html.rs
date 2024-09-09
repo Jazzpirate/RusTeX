@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use tex_engine::engine::filesystem::{File, FileSystem};
 use crate::engine::{Font, Types};
 use std::fmt::Write;
+use std::path::Path;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::pdflatex::nodes::{NumOrName, PDFColor};
 use tex_engine::tex::nodes::boxes::{HBoxInfo, ToOrSpread, VBoxInfo};
@@ -17,7 +18,7 @@ use crate::utils::{Flex, VecMap};
 #[derive(Default)]
 pub enum ImageOptions {
     #[default] AsIs,
-    ModifyURL(Box<dyn Fn(String) -> String>),
+    ModifyURL(Box<dyn Fn(&Path) -> String>),
     Embed
 }
 
@@ -135,6 +136,9 @@ macro_rules! node {
         $self.do_styles()?;
         $self.f.write_char('"')?;
         node!(@BODY $self;$tag; $($tk)* $(WIDTH=$w;)?);
+    };
+    (@BODY $self:ident;$tag:expr; />>) => {
+        $self.f.write_str("/>")?
     };
     (@BODY $self:ident;$tag:expr; /> $(WIDTH=$w:expr;)?) => {
         write!($self.f,"></{}>",$tag)?;
@@ -629,7 +633,16 @@ impl CompilationDisplay<'_,'_> {
                     node!(self <img "src"=img.filepath.display();
                         "width"=Self::dim_to_string(width);
                         "height"=Self::dim_to_string(height);
-                    />);
+                    />>);
+                    Ok(())
+                }
+                ImageOptions::ModifyURL(f) => {
+                    let width = img.width().0;
+                    let height = img.height().0;
+                    node!(self <img "src"=f(&img.filepath);
+                        "width"=Self::dim_to_string(width);
+                        "height"=Self::dim_to_string(height);
+                    />>);
                     Ok(())
                 }
                 _ => todo!()
