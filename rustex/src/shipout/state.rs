@@ -380,13 +380,6 @@ impl ShipoutWrapper {
                 let r0 = std::mem::replace(&mut r.0,rclone);
                 let curr0 = std::mem::replace(&mut curr.0,r0);
                 let idx = state.previous.len() - last;
-
-                if let ShipoutWrapper::Annotation {attrs,..} = &curr.1 {
-                    println!("Closing annotation: {:?}",attrs);
-                }
-
-
-
                 curr.1.clone().close_i(state.engine,&mut state.top_state.font_data,curr0,&mut state.previous.get_mut(idx).unwrap().0);
                 last = 1;
                 state.previous.push(r);
