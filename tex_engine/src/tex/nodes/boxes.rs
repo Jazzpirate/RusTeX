@@ -45,7 +45,7 @@ impl Display for BoxType {
 }
 
 /// The "scaling factor" of a box, e.g. `\hbox to 50pt` or `\hbox spread 10pt`.
-#[derive(Debug,Clone,PartialEq,Eq)]
+#[derive(Debug,Clone,Copy,PartialEq,Eq)]
 pub enum ToOrSpread<D:TeXDimen> {
     /// unscaled
     None,
@@ -476,6 +476,188 @@ impl<ET:EngineTypes> BoxInfo<ET> {
         match self {
             BoxInfo::H(h) => h.raise(d),
             BoxInfo::V(v) => v.raise(d),
+        }
+    }
+
+    pub fn assigned_height(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(h) => h.assigned_height(),
+            BoxInfo::V(v) => v.assigned_height(),
+        }
+    }
+    pub fn assigned_width(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(h) => h.assigned_width(),
+            BoxInfo::V(v) => v.assigned_width(),
+        }
+    }
+    pub fn assigned_depth(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(h) => h.assigned_depth(),
+            BoxInfo::V(v) => v.assigned_depth(),
+        }
+    }
+    pub fn computed_height(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(h) => h.computed_height(),
+            BoxInfo::V(v) => v.computed_height(),
+        }
+    }
+    pub fn computed_width(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(h) => h.computed_width(),
+            BoxInfo::V(v) => v.computed_width(),
+        }
+    }
+    pub fn computed_depth(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(h) => h.computed_depth(),
+            BoxInfo::V(v) => v.computed_depth(),
+        }
+    }
+    pub fn to_or_scaled(&self) -> Option<ToOrSpread<ET::Dim>> {
+        match self {
+            BoxInfo::H(HBoxInfo::HBox { scaled, .. }) => Some(*scaled),
+            BoxInfo::V(VBoxInfo::VBox { scaled, .. }) => Some(*scaled),
+            BoxInfo::V(VBoxInfo::VTop { scaled, .. }) => Some(*scaled),
+            _ => None
+        }
+    }
+    pub fn raised(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(HBoxInfo::HBox { raised, .. }) => *raised,
+            BoxInfo::V(VBoxInfo::VBox { raised, .. }) => *raised,
+            BoxInfo::V(VBoxInfo::VTop { raised, .. }) => *raised,
+            _ => None
+        }
+    }
+    pub fn moved_left(&self) -> Option<ET::Dim> {
+        match self {
+            BoxInfo::H(HBoxInfo::HBox { moved_left, .. }) => *moved_left,
+            BoxInfo::V(VBoxInfo::VBox { moved_left, .. }) => *moved_left,
+            BoxInfo::V(VBoxInfo::VTop { moved_left, .. }) => *moved_left,
+            _ => None
+        }
+    }
+}
+impl<ET:EngineTypes> VBoxInfo<ET> {
+    pub fn assigned_height(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { assigned_height, .. } => *assigned_height,
+            VBoxInfo::VTop { assigned_height, .. } => *assigned_height,
+            _ => None
+        }
+    }
+    pub fn assigned_width(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { assigned_width, .. } => *assigned_width,
+            VBoxInfo::VTop { assigned_width, .. } => *assigned_width,
+            _ => None
+        }
+    }
+    pub fn assigned_depth(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { assigned_depth, .. } => *assigned_depth,
+            VBoxInfo::VTop { assigned_depth, .. } => *assigned_depth,
+            _ => None
+        }
+    }
+    pub fn computed_height(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { computed_height, .. } => computed_height.get().copied(),
+            VBoxInfo::VTop { computed_height, .. } => computed_height.get().copied(),
+            _ => None
+        }
+    }
+    pub fn computed_width(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { computed_width, .. } => computed_width.get().copied(),
+            VBoxInfo::VTop { computed_width, .. } => computed_width.get().copied(),
+            _ => None
+        }
+    }
+    pub fn computed_depth(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { computed_depth, .. } => computed_depth.get().copied(),
+            VBoxInfo::VTop { computed_depth, .. } => computed_depth.get().copied(),
+            _ => None
+        }
+    }
+    pub fn raised(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { raised, .. } => *raised,
+            VBoxInfo::VTop { raised, .. } => *raised,
+            _ => None
+        }
+    }
+    pub fn moved_left(&self) -> Option<ET::Dim> {
+        match self {
+            VBoxInfo::VBox { moved_left, .. } => *moved_left,
+            VBoxInfo::VTop { moved_left, .. } => *moved_left,
+            _ => None
+        }
+    }
+    pub fn to_or_scaled(&self) -> Option<ToOrSpread<ET::Dim>> {
+        match self {
+            VBoxInfo::VBox { scaled, .. } => Some(*scaled),
+            VBoxInfo::VTop { scaled, .. } => Some(*scaled),
+            _ => None
+        }
+    }
+}
+impl<ET:EngineTypes> HBoxInfo<ET> {
+    pub fn assigned_height(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { assigned_height, .. } => *assigned_height,
+            _ => None
+        }
+    }
+    pub fn assigned_width(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { assigned_width, .. } => *assigned_width,
+            _ => None
+        }
+    }
+    pub fn assigned_depth(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { assigned_depth, .. } => *assigned_depth,
+            _ => None
+        }
+    }
+    pub fn computed_height(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { computed_height, .. } => computed_height.get().copied(),
+            _ => None
+        }
+    }
+    pub fn computed_width(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { computed_width, .. } => computed_width.get().copied(),
+            _ => None
+        }
+    }
+    pub fn computed_depth(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { computed_depth, .. } => computed_depth.get().copied(),
+            _ => None
+        }
+    }
+    pub fn raised(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { raised, .. } => *raised,
+            _ => None
+        }
+    }
+    pub fn moved_left(&self) -> Option<ET::Dim> {
+        match self {
+            HBoxInfo::HBox { moved_left, .. } => *moved_left,
+            _ => None
+        }
+    }
+    pub fn to_or_scaled(&self) -> Option<ToOrSpread<ET::Dim>> {
+        match self {
+            HBoxInfo::HBox { scaled, .. } => Some(*scaled),
+            _ => None
         }
     }
 }

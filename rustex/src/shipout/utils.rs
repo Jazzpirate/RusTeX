@@ -7,7 +7,6 @@ use crate::engine::Types;
 pub(crate) struct ExtensibleIter<T> {
     curr:IntoIter<T>,
     next:Vec<IntoIter<T>>
-
 }
 impl<T> ExtensibleIter<T> {
     pub fn prefix(&mut self,vec:Vec<T>) {
@@ -18,6 +17,11 @@ impl<T> ExtensibleIter<T> {
 impl<T> From<Vec<T>> for ExtensibleIter<T> {
     fn from(v: Vec<T>) -> Self {
         Self { curr:v.into_iter(),next:Vec::new() }
+    }
+}
+impl<T> From<Box<[T]>> for ExtensibleIter<T> {
+    fn from(v: Box<[T]>) -> Self {
+        Self { curr:v.into_vec().into_iter(),next:Vec::new() }
     }
 }
 impl<T> Iterator for ExtensibleIter<T> {
@@ -39,14 +43,3 @@ pub(crate) type HNodes = ExtensibleIter<HNode<Types>>;
 pub(crate) type MNodes = ExtensibleIter<MNode>;
 pub(crate) type MNode = MathNode<Types,MathFontStyle<Types>>;
 
-
-#[derive(Copy,Clone,PartialEq,Eq,Debug)]
-pub(crate) enum ShipoutMode {Top,V,H{escape:bool},Par,Math,SVG}
-impl ShipoutMode {
-    pub fn is_v(&self) -> bool {
-        matches!(self, ShipoutMode::V | ShipoutMode::Top)
-    }
-    pub fn is_h(&self) -> bool {
-        matches!(self, ShipoutMode::H{..} | ShipoutMode::Par)
-    }
-}

@@ -1,11 +1,12 @@
+/*
 use tex_engine::pdflatex::nodes::{ActionSpec, ColorStackAction, GotoAction, PDFStartLink};
 use crate::engine::{Font, Refs, SRef, Types};
-use crate::html::{HTMLChild, HTMLNode, HTMLTag};
+use crate::shipout::html::{HTMLChild, HTMLNode, HTMLTag};
 use crate::shipout::ShipoutMode;
 use tex_engine::pdflatex::nodes::PDFExtension;
 use tex_engine::engine::fontsystem::Font as FontT;
 use tex_engine::utils::HMap;
-use crate::fonts::FontStore;
+use crate::engine::fonts::FontStore;
 use crate::shipout::state::ShipoutState;
 use crate::utils::VecMap;
 
@@ -14,7 +15,7 @@ pub(crate) fn close_all<F:Fn(&HTMLTag) -> bool>(mode:ShipoutMode,open: &mut Vec<
     loop {
         let mut last = open.pop().unwrap();
         let m = tag(&last.tag);
-        if !m && matches!(last.tag, HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)|HTMLTag::Annot(_,_)) {
+        if !m && matches!(last.tag, HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)|HTMLTag::Link(_)|HTMLTag::Annot(_,_)|HTMLTag::Invisible(_)) {
             reopen.push(last);
         } else {
             if reopen.is_empty() { return last }
@@ -210,6 +211,7 @@ pub(crate) fn do_annot(state:&mut ShipoutState,start:SRef,tag:Option<String>,att
     node.sourceref = Some((start,start));
     state.nodes.push(node);
 }
+
 pub(crate) fn close_annot(state:&mut ShipoutState,end:SRef) {
     let mut requeue:Vec<HTMLNode> = vec!();
     while let Some(mut n) = state.nodes.pop() {
@@ -231,6 +233,33 @@ pub(crate) fn close_annot(state:&mut ShipoutState,end:SRef) {
                     node.attrs = attrs.clone();
                     node.styles = styles.clone();
                     node.sourceref = Some(rf);
+                    node.children = std::mem::take(&mut c.children);
+                    if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
+                    state.nodes.push(c);
+                }
+                return
+            }
+            _ => {requeue.push(n);}
+        }
+    }
+    unreachable!()
+}
+
+pub(crate) fn do_invisible(state:&mut ShipoutState) {
+    let node = HTMLNode::new(HTMLTag::Invisible(state.mode()));
+    state.nodes.push(node);
+}
+pub(crate) fn close_invisible(state:&mut ShipoutState) {
+    let mut requeue:Vec<HTMLNode> = vec!();
+    while let Some(mut n) = state.nodes.pop() {
+        match &n.tag {
+            HTMLTag::Invisible(_) => {
+                if !n.children.is_empty() {state.push(n);}
+                if requeue.is_empty() {
+                    return
+                }
+                for mut c in requeue.into_iter().rev() {
+                    let mut node = HTMLNode::new(HTMLTag::Invisible(state.mode()));
                     node.children = std::mem::take(&mut c.children);
                     if !node.children.is_empty() {c.children.push(HTMLChild::Node(node));}
                     state.nodes.push(c);
@@ -281,10 +310,5 @@ pub(crate) fn reset_matrix(state:&mut ShipoutState) {
         state.nodes.push(c)
     }
 }
-
-
-/*
-
-
 
  */

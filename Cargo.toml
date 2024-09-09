@@ -2,6 +2,11 @@
 members = ["rustex", "tex-glyphs", "tex_engine"]
 resolver = "2"
 
+#[profile.dev]
+#opt-level = 2
+#lto = "fat"
+#debug = 1
+
 [profile.release]
 opt-level = 2
 lto = "fat"

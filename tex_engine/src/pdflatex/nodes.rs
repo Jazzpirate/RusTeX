@@ -251,33 +251,19 @@ impl<ET:EngineTypes> NodeTrait<ET> for PDFNode<ET>
     where ET::CustomNode : From<PDFNode<ET>> {
     fn height(&self) -> ET::Dim {
         match self {
-            PDFNode::XImage(img) => match (img.height,img.width) {
-                (None,Some(w)) => {
-                    let scale = img.img.width() as f32 / (w.into() as f32);
-                    ET::Dim::from_sp((img.img.height() as f32 / scale).round() as i32)
-                }
-                (Some(h),_) => h,
-                _ => ET::Dim::from_sp(65536 * (img.img.height() as i32))
-            }
+            PDFNode::XImage(img) => img.height(),
             _ => ET::Dim::default()
         }
     }
     fn width(&self) -> ET::Dim {
         match self {
-            PDFNode::XImage(img) => match (img.height,img.width) {
-                (Some(h),None) => {
-                    let scale = img.img.height() as f32 / (h.into() as f32);
-                    ET::Dim::from_sp((img.img.width() as f32 / scale).round() as i32)
-                }
-                (_,Some(w)) => w,
-                _ => ET::Dim::from_sp(65536 * (img.img.width() as i32))
-            }
+            PDFNode::XImage(img) => img.width(),
             _ => ET::Dim::default()
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
-            PDFNode::XImage(img) => img.depth.unwrap_or(ET::Dim::default()),
+            PDFNode::XImage(img) => img.depth(),
             _ => ET::Dim::default()
         }
     }
@@ -493,6 +479,32 @@ pub struct PDFXImage<ET:EngineTypes> {
     pub boxspec:Option<PDFBoxSpec>,
     pub filepath:PathBuf,
     pub img:PDFImage
+}
+impl<ET:EngineTypes> PDFXImage<ET> {
+    pub fn height(&self) -> ET::Dim {
+        match (self.height,self.width) {
+            (None,Some(w)) => {
+                let scale = self.img.width() as f32 / (w.into() as f32);
+                ET::Dim::from_sp((self.img.height() as f32 / scale).round() as i32)
+            }
+            (Some(h),_) => h,
+            _ => ET::Dim::from_sp(65536 * (self.img.height() as i32))
+        }
+    }
+
+    pub fn width(&self) -> ET::Dim {
+        match (self.height,self.width) {
+            (Some(h),None) => {
+                let scale = self.img.height() as f32 / (h.into() as f32);
+                ET::Dim::from_sp((self.img.width() as f32 / scale).round() as i32)
+            }
+            (_,Some(w)) => w,
+            _ => ET::Dim::from_sp(65536 * (self.img.width() as i32))
+        }
+    }
+    pub fn depth(&self) -> ET::Dim {
+        self.depth.unwrap_or(ET::Dim::default())
+    }
 }
 
 #[cfg(feature="pdfium")]

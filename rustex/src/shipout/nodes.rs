@@ -1,9 +1,9 @@
 use tex_engine::pdflatex::nodes::{NumOrName, PDFNode};
 use tex_engine::tex::numerics::{Dim32, StretchShrink, Mu, Skip};
 use crate::engine::{Bx, Font, Refs, Res, SRef, Types};
-use crate::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag};
+//use crate::shipout::html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag};
 use tex_engine::tex::nodes::NodeTrait;
-use crate::nodes::{LineSkip, RusTeXNode};
+use crate::engine::nodes::{LineSkip, RusTeXNode};
 use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
 use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
@@ -11,8 +11,8 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_glyphs::fontstyles::ModifierSeq;
-use crate::shipout::{annotations, do_hlist, do_mathlist, do_vlist, ShipoutMode, ZERO_SKIP};
 use tex_glyphs::glyphs::GlyphName;
+/*
 
 pub(crate) trait MuAdd {
     fn merge(&mut self,sk:Dim32,f:&Font);
@@ -24,29 +24,6 @@ impl MuAdd for Mu {
         self.0 += nb;
     }
 }
-/*
-pub(crate) fn mu_to_dim(mu:Mu,f:&Font) -> Dim32 {
-    let em = f.get_dim(5);
-    Dim32(((mu.0 as f32) * (em.0 as f32) / 65536.0 / 18.0) as i32)
-}
-pub(crate) fn muskip_to_skip(ms:MuSkip,f:&Font) -> Skip<Dim32> {
-    let em : Dim32 = f.get_dim(5);
-    let base = em.scale_float((ms.base.0 as f32) / (65536.0 * 18.0));
-    let stretch = match ms.stretch {
-        Some(MuFill::mu(i)) => Some(Fill::pt(Dim32(i))),
-        Some(MuFill::fil(i)) => Some(Fill::fil(i)),
-        Some(MuFill::fill(i)) => Some(Fill::fill(i)),
-        None => None
-    };
-    let shrink = match ms.shrink {
-        Some(MuFill::mu(i)) => Some(Fill::pt(Dim32(i))),
-        Some(MuFill::fil(i)) => Some(Fill::fil(i)),
-        Some(MuFill::fill(i)) => Some(Fill::fill(i)),
-        None => None
-    };
-    Skip { base,stretch,shrink }
-}
- */
 
 pub(crate) trait SkipAdd {
     fn merge(&mut self,sk:Skip<Dim32>);
@@ -129,38 +106,6 @@ pub(crate) fn alignment(mut v:Vec<HNode<Types>>) -> (Alignment, Vec<HNode<Types>
         nv.push(HNode::HKern(right.base))
     }
     (Alignment::from(left,right),nv)
-}
-
-fn get_box_dims(bx: &Bx,state:&ShipoutState,scale:fn(&Bx) -> Dim32) -> (Option<Dim32>,Option<Dim32>,Option<Dim32>,Option<Dim32>) {
-    let wd = match bx.assigned_width() {
-        Some(w) =>  Some(w),
-        _ if state.mode() == ShipoutMode::Top => match bx.width() {
-            w if w < Dim32(0) => Some(Dim32(0)),
-            _ => None
-        }
-        _ => None
-    };
-    let (ht,mut bottom) = match bx.assigned_height() {
-        Some(h) if h < Dim32(0) => (Some(Dim32(0)),Some(h)),
-        Some(h) => (Some(h),None),
-        _ if state.mode() == ShipoutMode::Top && bx.height() < Dim32(0) => (Some(Dim32(0)),None),
-        _ => (None,None)
-    };
-    match (bottom,bx.assigned_depth()) {
-        (Some(b),Some(d)) => {
-            let s = b + d;
-            if s != Dim32(0) { bottom = Some(b);
-            } else { bottom = None; }
-        }
-        (_,Some(d)) if d != Dim32(0) => bottom = Some(d),
-        _ => ()
-    }
-    let to = match bx.to_or_scaled() {
-        ToOrSpread::To(d) => Some(d),
-        ToOrSpread::Spread(s) => Some(s + scale(bx)),
-        _ => None
-    };
-    (wd,ht,bottom,to)
 }
 
 pub(crate) fn class_from_mathclass(cls:MathClass,cramped:bool) -> &'static str {
@@ -309,6 +254,38 @@ pub(crate) fn do_vbox(state:&mut ShipoutState, engine:Refs,bx:Bx) -> Res<()> {
         None =>
             vbox_inner(state,engine,to,children,start,end),
     })
+}
+
+fn get_box_dims(bx: &Bx,state:&ShipoutState,scale:fn(&Bx) -> Dim32) -> (Option<Dim32>,Option<Dim32>,Option<Dim32>,Option<Dim32>) {
+    let wd = match bx.assigned_width() {
+        Some(w) =>  Some(w),
+        _ if state.mode() == ShipoutMode::Top => match bx.width() {
+            w if w < Dim32(0) => Some(Dim32(0)),
+            _ => None
+        }
+        _ => None
+    };
+    let (ht,mut bottom) = match bx.assigned_height() {
+        Some(h) if h < Dim32(0) => (Some(Dim32(0)),Some(h)),
+        Some(h) => (Some(h),None),
+        _ if state.mode() == ShipoutMode::Top && bx.height() < Dim32(0) => (Some(Dim32(0)),None),
+        _ => (None,None)
+    };
+    match (bottom,bx.assigned_depth()) {
+        (Some(b),Some(d)) => {
+            let s = b + d;
+            if s != Dim32(0) { bottom = Some(b);
+            } else { bottom = None; }
+        }
+        (_,Some(d)) if d != Dim32(0) => bottom = Some(d),
+        _ => ()
+    }
+    let to = match bx.to_or_scaled() {
+        ToOrSpread::To(d) => Some(d),
+        ToOrSpread::Spread(s) => Some(s + scale(bx)),
+        _ => None
+    };
+    (wd,ht,bottom,to)
 }
 
 fn vbox_inner(state:&mut ShipoutState, engine:Refs,to:Option<Dim32>, children:Vec<VNode<Types>>, start:SRef, end:SRef) -> Res<()> {
@@ -1199,6 +1176,8 @@ fn svg_inner(engine:Refs,state: &mut ShipoutState, children: &mut HNodes) -> Res
                 annotations::do_color(state,engine,act),
             HNode::Custom(RusTeXNode::AnnotBegin {start,attrs,styles,tag}) => annotations::do_annot(state,start,tag,attrs,styles),
             HNode::Custom(RusTeXNode::AnnotEnd(end)) => annotations::close_annot(state,end),
+            HNode::Custom(RusTeXNode::InvisibleBegin) => annotations::do_invisible(state),
+            HNode::Custom(RusTeXNode::InvisibleEnd) => annotations::close_invisible(state),
             HNode::MathGroup(mg) if mg.children.is_empty() => (),
             HNode::Custom(RusTeXNode::Literal(s)) => state.push_comment(s),
             o => todo!("svg: {:?}",o)
@@ -1291,3 +1270,5 @@ fn parse_get_num(s:&mut &str) -> f32 {
 }
 
 fn scale(f:f32) -> f32 { 1.5 * f }
+
+ */

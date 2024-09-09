@@ -1,17 +1,10 @@
 pub mod engine;
-pub mod fonts;
-pub mod files;
 pub(crate) mod shipout;
-pub(crate) mod extension;
-pub(crate) mod html;
-pub(crate) mod nodes;
-pub mod commands;
-pub mod state;
-pub mod stomach;
-pub(crate) mod pgf;
-pub mod output;
 
 pub mod utils;
+pub use shipout::html::ImageOptions;
+
+const RUSTEX_CSS_URL:&str = "https://raw.githubusercontent.com/Jazzpirate/RusTeX/main/rustex/src/resources/rustex.css";
 
 #[cfg(test)]
 mod tests {

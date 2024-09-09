@@ -23,7 +23,7 @@ span {display:contents;}
 .rustex-withwidth {
     min-width: var(--rustex-curr-width);
     max-width: var(--rustex-curr-width);
-    --rustex-curr-width: calc(var(--rustex-this-width) * 1px);
+    --rustex-curr-width: var(--rustex-this-width);
 }
 .rustex-scalewidth {
     --rustex-this-width: calc(var(--rustex-curr-width) * var(--rustex-scale-width));
@@ -111,7 +111,7 @@ span {display:contents;}
     margin-right: auto;
     line-height: 0;
     &:before {
-        content: "&nbsp;";
+        content: " ";
     }
 }
 
