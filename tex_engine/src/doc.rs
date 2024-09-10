@@ -44,7 +44,7 @@ Then:
 use tex_engine::prelude::*;
 
 // instantiate a new plain TeX engine:
-let mut engine = PlainTeXEngine::new();
+let mut engine = PlainTeXEngine::default();
 // register the default primitive commands and process `plain.tex`:
 engine.initialize_plain_tex().unwrap();
 // the engine is now ready to process a document:
@@ -76,7 +76,7 @@ Now, chances are, if you have a `.tex` file, it will requite at least LaTeX (whi
 just a set of macros on top of plain TeX). You can load the LaTeX macros by calling
 ```no_run
 # use tex_engine::prelude::*;
-# let mut engine = PlainTeXEngine::new();
+# let mut engine = PlainTeXEngine::default();
 engine.initialize_etex_primitives(); // registers the plain TeX + e-TeX primitives
 engine.load_latex().unwrap(); // processes `latex.ltx`
 ```
@@ -88,7 +88,7 @@ Assuming the feature is enabled, you can load the pdfTeX primitives by calling
 ```no_run
 # use tex_engine::prelude::*;
 use tex_engine::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
-let mut engine = PlainPDFTeXEngine::new();
+let mut engine = PlainPDFTeXEngine::default();
 // registers the plain TeX + e-TeX + pdfTeX primitives,
 // and processes `pdftexconfig.tex` and `latex.ltx`
 engine.initialize_pdflatex().unwrap();
@@ -99,7 +99,7 @@ You can then process a `.tex` file by calling
 ```no_run
 # use tex_engine::prelude::*;
 # use tex_engine::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
-# let mut engine = PlainPDFTeXEngine::new();
+# let mut engine = PlainPDFTeXEngine::default();
 engine.do_file_pdf("/path/to/your/tex/file.tex",|e,node| {
     // do something with the nodes produced, e.g. print them to stdout:
     println!("{}",node.display());Ok(())
