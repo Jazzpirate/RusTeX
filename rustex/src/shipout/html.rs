@@ -510,9 +510,9 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeH::Common(Common::PDFDest(n)) => {
             match n {
                 NumOrName::Name(s) =>
-                    node!(self !<a "id"=s; "name"=s;/>),
+                    node!(self <a "id"=s; "name"=s;/>),
                 NumOrName::Num(n) =>
-                    node!(self !<a "id"=format_args!("NUM_{}",n); "name"=format_args!("NUM_{}",n);/>)
+                    node!(self <a "id"=format_args!("NUM_{}",n); "name"=format_args!("NUM_{}",n);/>)
             }
             Ok(())
         }
@@ -686,6 +686,15 @@ impl CompilationDisplay<'_,'_> {
             self.do_color("mrow",color,children,|s,n| s.do_math(n,cls,cramped)),
         ShipoutNodeM::Common(Common::WithAnnotation {attrs,styles,children,..}) => {
             self.do_annotations("mrow",attrs,styles,children,|s,n| s.do_math(n,cls,cramped))
+        }
+        ShipoutNodeM::Common(Common::PDFDest(n)) => {
+            match n {
+                NumOrName::Name(s) =>
+                    node!(self !<mspace "id"=s; "name"=s;/>),
+                NumOrName::Num(n) =>
+                    node!(self !<mspace "id"=format_args!("NUM_{}",n); "name"=format_args!("NUM_{}",n);/>)
+            }
+            Ok(())
         }
         ShipoutNodeM::MSkip{base,mu} if !*mu => {
             self.do_indent()?;
