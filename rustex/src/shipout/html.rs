@@ -687,9 +687,9 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeM::Common(Common::WithAnnotation {attrs,styles,children,..}) => {
             self.do_annotations("mrow",attrs,styles,children,|s,n| s.do_math(n,cls,cramped))
         }
-        ShipoutNodeM::Common(Common::WithFont{font,..}) => {
+        ShipoutNodeM::Common(Common::WithFont{font,children,..}) => {
             // TODO check if this is right - maybe move it down to the next non-math-node...?
-            self.do_font("mrow",font,&[],|_,_| Ok(()))
+            self.do_font("mrow",font,children,|_,_| Ok(()))
         }
         ShipoutNodeM::Common(Common::PDFDest(n)) => {
             match n {
