@@ -106,7 +106,7 @@ doTsW,Wk;Rri@stW aHAHHFndZPpqar.tridgeLinZpe.LtYer.W,:jbye"#;
 #[test]
 fn carlisle() {
     info();
-    let mut engine = PlainTeXEngine::new();
+    let mut engine = PlainTeXEngine::default();
     engine.initialize_plain_tex().unwrap();
     engine.mouth.push_string(CARLISLE.into());
     let r = engine.run(|_,n| {
@@ -125,7 +125,7 @@ fn carlisle() {
 fn pdflatex_init() {
     use crate::pdflatex::{PDFTeXEngine,PlainPDFTeXEngine};
     debug();
-    let mut engine = PlainPDFTeXEngine::new();
+    let mut engine = PlainPDFTeXEngine::default();
     match engine.initialize_pdflatex() {
         Ok(_) => (),
         Err(e) => {
@@ -142,7 +142,7 @@ fn testfile() {
     use path_dedot::*;
     let testpath = PWD.join("../test/test.tex").parse_dot().unwrap().to_path_buf();
     debug();
-    let mut engine = PlainPDFTeXEngine::new();
+    let mut engine = PlainPDFTeXEngine::default();
     match engine.initialize_pdflatex() {
         Ok(_) => (),
         Err(e) => {
