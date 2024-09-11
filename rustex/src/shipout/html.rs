@@ -689,7 +689,7 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::Common(Common::WithFont{font,children,..}) => {
             // TODO check if this is right - maybe move it down to the next non-math-node...?
-            self.do_font("mrow",font,children,|_,_| Ok(()))
+            self.do_font("mrow",font,children,|s,n| s.do_math(n,cls,cramped))
         }
         ShipoutNodeM::Common(Common::PDFDest(n)) => {
             match n {
@@ -1103,6 +1103,10 @@ impl CompilationDisplay<'_,'_> {
                 self.do_svg_node(c)?
             }} />);
             Ok(())
+        }
+        ShipoutNodeSVG::Common(Common::WithFont{font,children,..}) => {
+            // that should be okay...
+            self.do_font("g",font,children,|s,n| s.do_svg_node(n))
         }
         ShipoutNodeSVG::Common(Common::WithColor {color,children,..}) =>
             self.do_color("g",color,children,|s,n| s.do_svg_node(n)),

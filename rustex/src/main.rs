@@ -26,9 +26,9 @@ thesis  0:15
 fn main() {
     //profile()
     //thesis()
-    //run()
+    run()
     //test()
-    temp_test()
+    //temp_test()
     //notes()
     //test2()
     //test_all()
@@ -164,7 +164,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex",
-        "/home/jazzpirate/work/MathHub/courses/FAU/IWGS/course/source/databases/slides/sqlite-parasubst.en.tex",
+        "/home/jazzpirate/work/MathHub/courses/FAU/AI/hwexam/source/SS23/exams/annotated.exam.tex",
         Settings {
             verbose:true,
             log:true,
@@ -175,7 +175,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     ret.write_out(&Path::new(
-        "/home/jazzpirate/work/MathHub/courses/FAU/IWGS/course/source/databases/slides/sqlite-parasubst.en.tex.html"
+        "/home/jazzpirate/work/MathHub/courses/FAU/AI/hwexam/source/SS23/exams/annotated.exam.tex.html"
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html"
     ))
     .unwrap();
