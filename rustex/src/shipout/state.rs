@@ -198,7 +198,10 @@ impl ShipoutWrapper {
         }
     }
     fn close_i(self,engine:Refs,fonts:&mut HMap<Box<str>,FontData>,nodes:ShipoutNodes,target:&mut ShipoutNodes) {
-        if nodes.is_empty() {
+        if nodes.is_empty() || (match &nodes {
+            ShipoutNodes::V(v) => v.iter().all(|n| matches!(n,ShipoutNodeV::KernSkip(_))),
+            _ => false
+        }) {
             match self.kind() {
                 Some(WrapperKind::Color | WrapperKind::Annotation | WrapperKind::Font | WrapperKind::Link) => {
                     return

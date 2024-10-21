@@ -210,8 +210,8 @@ impl CompilationDisplay<'_,'_> {
                 None => write!(self.f,"\t<!-- Missing web font for {name} -->\n")?,
             }
         }
-        self.f.write_str("</head>\n<body>")?;
-        write!(self.f,"<page class=\"rustex-body\" style=\"--rustex-text-width:{};--rustex-page-width:{};",
+        self.f.write_str("</head>")?;
+        write!(self.f,"<body class=\"rustex-body\" style=\"--rustex-text-width:{};--rustex-page-width:{};",
             Self::dim_to_num(self.width),
             Self::dim_to_num(page_width)
         )?;
@@ -225,7 +225,7 @@ impl CompilationDisplay<'_,'_> {
         for c in out.iter() {
             self.do_v(c,true)?;
         }
-        self.f.write_str("\n</page></body></html>")
+        self.f.write_str("\n</body></html>")
     }
 
     #[inline(always)]
