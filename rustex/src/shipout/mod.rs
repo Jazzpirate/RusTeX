@@ -4,23 +4,18 @@ pub(crate) mod utils;
 pub(crate) mod state;
 pub(crate) mod html;
 
-use crate::engine::{Font, Refs, Res, SRef, Types};
-use std::vec::IntoIter;
-use tex_engine::commands::primitives::PRIMITIVES;
-use tex_engine::pdflatex::nodes::{PDFColor, PDFDest, PDFNode};
+use crate::engine::{Refs, Res, SRef, Types};
+use tex_engine::pdflatex::nodes::{PDFDest, PDFNode};
 use tex_engine::tex::nodes::NodeTrait;
-use tex_engine::tex::numerics::{Dim32, Mu, Skip};
-use tex_engine::engine::state::State;
-//use html::{dim_to_num, dim_to_string, HTMLChild, HTMLNode, HTMLTag, mudim_to_string};
-use tex_engine::engine::fontsystem::{Font as FontT, FontSystem};
+use tex_engine::tex::numerics::{Dim32, Skip};
 use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
-use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
+use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::utils::errors::TeXError;
 use crate::engine::nodes::{LineSkip, RusTeXNode};
-use crate::shipout::state::{Common, HLike, Math, ModeKind, Par, Row, Shipout, ShipoutNodeH, ShipoutNodeM, ShipoutNodeT, ShipoutNodeTable, ShipoutNodeV, ShipoutState, SourceRef, VLike, SVG};
+use crate::shipout::state::{Common, HLike, Math, ModeKind, Row, Shipout, ShipoutNodeH, ShipoutNodeM, ShipoutNodeT, ShipoutNodeTable, ShipoutNodeV, ShipoutState, VLike, SVG};
 use crate::shipout::utils::{HNodes, MNode, MNodes, VNodes};
 use crate::utils::{Flex, Margin};
 /*
@@ -40,7 +35,7 @@ pub(crate) fn make_page<F:FnOnce(Refs,&mut ShipoutState) -> Res<()>>(engine:Refs
 
  */
 
-pub(crate) fn shipout(engine:Refs, n: VNode<Types>) -> Res<()> {
+pub fn shipout(engine:Refs, n: VNode<Types>) -> Res<()> {
     //println!("Here: {}\n\n-------------------------------------------\n\n",n.display());
     match n {
         VNode::Box(TeXBox::V { children, .. }) => {
@@ -436,7 +431,7 @@ impl Shipout<'_,'_,Math> {
             MNode::Custom(RusTeXNode::PDFNode(PDFNode::PDFOutline(_) | PDFNode::PDFPageAttr(_) | PDFNode::PDFPagesAttr(_) |
             PDFNode::PDFCatalog(_)| PDFNode::PDFSave| PDFNode::PDFAnnot(_) | PDFNode::PDFLiteral(_) | PDFNode::XForm(_) | PDFNode::Obj(_))) | MNode::Penalty(_) |
             MNode::Mark(..) | MNode::Custom(RusTeXNode::PageBegin | RusTeXNode::PageEnd | RusTeXNode::HAlignEnd) => (),
-            MNode::Custom(RusTeXNode::PGFEscape(bx)) => todo!(),// children.prefix(vec!(VNode::Box(bx))),
+            MNode::Custom(RusTeXNode::PGFEscape(_bx)) => todo!(),// children.prefix(vec!(VNode::Box(bx))),
             MNode::Custom(RusTeXNode::PDFNode(PDFNode::Color(act))) =>
                 self.do_color(act),
             MNode::Custom(RusTeXNode::FontChange(font,global)) =>
@@ -631,7 +626,7 @@ impl Shipout<'_,'_,SVG> {
                 let children = vec![c];
                 self.in_h(start, end, bx, None, |state| state.do_hlist(&mut children.into())).map_err(|_| None)?
             }
-            HNode::Char {char,font,..} => (), // TODO?
+            HNode::Char { ..} => (), // TODO?
             _ => todo!("{c:?}")
         }}
         Ok(())

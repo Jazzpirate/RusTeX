@@ -1,5 +1,5 @@
 pub mod engine;
-pub(crate) mod shipout;
+pub mod shipout;
 
 pub mod utils;
 pub use shipout::html::ImageOptions;

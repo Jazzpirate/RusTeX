@@ -807,7 +807,7 @@ pub fn pdfximage<ET:EngineTypes>(engine:&mut EngineReferences<ET>, tk:ET::Token)
     let mut filename = String::new();
     engine.read_braced_string(true,true,&tk,&mut filename)?;
     let file = engine.filesystem.get(&filename);
-    let img = match match image::io::Reader::open(file.path()) {
+    let img = match match image::ImageReader::open(file.path()) {
         Ok(x) => x,
         _ => {
             engine.general_error("Unknown type of image".into())?;

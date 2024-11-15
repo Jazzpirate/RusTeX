@@ -108,7 +108,7 @@ impl<C:Character,A:Clone> CSNameMap<C,InternedCSName<C>,A> for CSNameVec<C,A> {
         self.0[idx].take()
     }
     fn into_iter(self) -> impl Iterator<Item=(InternedCSName<C>,A)> {
-        self.0.into_iter().enumerate().filter_map(|(i,x)| x.map(|x| ((NonZeroU32::new(i as u32).unwrap(),PhantomData),x)))
+        self.0.into_iter().enumerate().filter_map(|(i,x)| x.map(|x| ((NonZeroU32::new((i + 1) as u32).unwrap(),PhantomData),x)))
     }
 }
 

@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::{any::Any, fmt::Display};
 use ansi_term::Color::{Black, Blue, Green, Red, White, Yellow};
 use tex_engine::engine::utils::outputs::Outputs;
 
-pub trait OutputCont {
+pub trait OutputCont:Any {
     fn message(&self,text:String);
     fn errmessage(&self,text:String);
     fn file_open(&self,text:String);
@@ -12,6 +12,7 @@ pub trait OutputCont {
     fn write_16(&self,text:String);
     fn write_neg1(&self,text:String);
     fn write_other(&self,text:String);
+    fn as_any(self:Box<Self>) -> Box<dyn Any>;
 }
 
 pub enum RusTeXOutput {

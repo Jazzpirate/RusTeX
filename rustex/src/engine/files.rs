@@ -19,6 +19,12 @@ impl RusTeXFileSystem {
         ret.inner.envs.extend(envs);
         ret
     }
+    pub fn add_file(&mut self,path:PathBuf,file_content:&str) {
+        self.inner.add_file(path, file_content);
+    }
+    pub fn add_envs<I:IntoIterator<Item=(String,String)>>(&mut self,envs:I) {
+        self.inner.envs.extend(envs);
+    }
 }
 
 impl FileSystem for RusTeXFileSystem {
@@ -78,9 +84,10 @@ impl FileSystem for RusTeXFileSystem {
         self.inner.write(idx,string,newlinechar,aux)
     }
 
-    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(&mut self, idx:u8,
-                                                                                handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
-                                                                                state:&ET::State, cont:F
+    fn read<ET:EngineTypes<Char=<Self::File as File>::Char>,F:FnMut(ET::Token)>(
+        &mut self, idx:u8,
+        handler:&mut <ET::CSName as CSName<ET::Char>>::Handler,
+        state:&ET::State, cont:F
     ) -> TeXResult<(),ET> {
         self.inner.read::<ET,F>(idx,handler,state,cont)
     }

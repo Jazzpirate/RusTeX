@@ -389,6 +389,15 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
                     self.primitive_toks.insert(name,old);
                 }
                 StateChange::Command {name,old} => {
+/*
+                    {
+                        let dpname = aux.memory.cs_interner().resolve(&name);
+                        let dpname = dpname.to_string();
+                        if dpname.starts_with("c_stex_module_") && dpname.ends_with("_notations_prop") {
+                            println!("\n\n Resetting {dpname} to {}",old.as_ref().map(|c| c.meaning(aux.memory.cs_interner(),&self.catcodes,self.escape_char).to_string()).unwrap_or_else(|| "(NONE)".to_string()));
+                        }
+                    }
+*/
                     if trace {
                         match old {
                             None => aux.outputs.write_neg1(
@@ -1004,6 +1013,15 @@ impl<ET:EngineTypes> State<ET> for DefaultState<ET>  {
     }
     fn set_command(&mut self, aux:&EngineAux<ET>, name: ET::CSName, cmd: Option<TeXCommand<ET>>, globally: bool) {
         self.change_field(globally,|s,g| {
+/*
+            {
+                let dpname = aux.memory.cs_interner().resolve(&name);
+                let dpname = dpname.to_string();
+                if dpname.starts_with("c_stex_module_") && dpname.ends_with("_notations_prop") {
+                    println!("\n\n Setting {dpname} to {} \n(globally: {g})\n",cmd.as_ref().map(|c| c.meaning(aux.memory.cs_interner(),&s.catcodes,s.escape_char).to_string()).unwrap_or_else(|| "(NONE)".to_string()));
+                }
+            }
+ */
             let old = match cmd {
                 None => {
                     let o = s.commands.remove(&name);

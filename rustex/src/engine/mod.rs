@@ -1,6 +1,6 @@
 use std::fmt::Display;
-use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use extension::RusTeXExtension;
 use fonts::Fontsystem;
@@ -22,7 +22,6 @@ use tex_engine::engine::filesystem::FileSystem;
 use tex_engine::pdflatex::PDFTeXEngine;
 use tex_engine::engine::state::State as OrigState;
 use tex_engine::tex::catcodes::AT_LETTER_SCHEME;
-use tex_engine::tex::nodes::boxes::TeXBox;
 use nodes::RusTeXNode;
 use output::RusTeXOutput;
 use crate::shipout;
@@ -50,7 +49,6 @@ pub mod output;
 
 pub type Extension = RusTeXExtension;
 pub(crate) type Font = tex_engine::engine::fontsystem::TfmFont<i32,Dim32,InternedCSName<u8>>;
-pub(crate) type Bx = TeXBox<Types>;
 pub(crate) type SRef = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
 pub(crate) type Refs<'a,'b> = &'a mut EngineReferences<'b,Types>;
 pub(crate) type CSName = InternedCSName<u8>;
@@ -196,21 +194,32 @@ pub struct Settings {
     engine: DefaultEngine<Types>
 }*/
 pub type RusTeXEngine = DefaultEngine<Types>;
-impl RusTeXEngineT for RusTeXEngine {
 
-    fn initialize(log:bool) { let _ = get_engine(log); }
+mod sealed {
+    pub trait Sealed {}
+}
+impl sealed::Sealed for RusTeXEngine {}
 
-    fn get() -> Self { get_engine(false) }
+pub trait RusTeXEngineExt:sealed::Sealed {
+    fn run_string(&mut self,file:PathBuf,content:&str) -> Option<TeXError<Types>>;
+    fn do_result(&mut self,result:Option<TeXError<Types>>,settings:Settings)  -> CompilationResult;
+}
 
-    fn run<S:AsRef<str>>(&mut self,file:S,settings:Settings) -> CompilationResult {
-        use std::fmt::Write;
-        let res = match self.do_file_pdf(file.as_ref(),shipout::shipout) {
+impl RusTeXEngineExt for RusTeXEngine {
+
+    fn run_string(&mut self,file:PathBuf,content:&str) -> Option<TeXError<Types>> {
+        let s = file.display().to_string();
+        self.filesystem.set_pwd(file.parent().unwrap().to_path_buf());
+        self.filesystem.add_file(file,content);
+        match self.do_file_pdf(&s,shipout::shipout) {
             Ok(_) => None,
             Err(e) => {
                 self.aux.outputs.errmessage(format!("{}\n\nat {}",e,self.mouth.current_sourceref().display(&self.filesystem)));
                 Some(e)
             }
-        };
+        }
+    }
+    fn do_result(&mut self,result:Option<TeXError<Types>>,settings:Settings)  -> CompilationResult {
         let out = std::mem::take(&mut self.aux.extension.state.output);
         let css = std::mem::take(&mut self.aux.extension.css);
         let font_data = std::mem::take(&mut self.aux.extension.state.font_data);
@@ -220,62 +229,28 @@ impl RusTeXEngineT for RusTeXEngine {
         let top = std::mem::take(&mut self.aux.extension.top);
         let metas = std::mem::take(&mut self.aux.extension.metas);
         CompilationResult {
-            out, error:res,css,font_data,top_font,top_width,top,metas,page_width,
+            out, error:result,css,font_data,top_font,top_width,top,metas,page_width,
             sourcerefs:settings.sourcerefs,img:settings.image_options
         }
+    }
 
-        /*
+}
 
-        let mut ret = String::new();
-        let (fonts,glyphs) = {
-            let mut refs = self.get_engine_refs();
-            let (fonts,glyphs) = shipout::state::split_state(&mut refs, |engine, state| {
-                let mut page = make_page(engine, state, |_, state| {
-                    for c in out { state.push_child(c) };Ok(())
-                }).unwrap();
-                page.classes = vec!("rustex-body".into());
-                let topfont = state.fonts.first().unwrap().clone();
+impl RusTeXEngineT for RusTeXEngine {
 
-                ret.write_str("<!DOCTYPE html>\n<html lang=\"en\"").unwrap();
-                for (k,v) in engine.aux.extension.top.iter() {
-                    write!(ret," {}=\"{}\"",k,v).unwrap();
-                }
-                ret.write_str(" prefix=\"").unwrap();
-                for (k,v) in engine.aux.extension.namespaces.iter() {
-                    write!(ret,"{}: {} ",k,v).unwrap();
-                }
-                ret.write_str("\">\n<head>\t<meta charset=\"UTF-8\">\n").unwrap();
-                for m in engine.aux.extension.metas.iter() {
-                    ret.write_str("\t<meta").unwrap();
-                    for (k,v) in m.iter() {
-                        write!(ret," {}=\"{}\"",k,v).unwrap();
-                    }
-                    ret.write_str(">\n").unwrap();
-                }
-                ret.write_str(&format!("\t<title>{}</title>\n",
-                    Path::new(file.as_ref()).file_stem().unwrap().to_str().unwrap()
-                )).unwrap();
-                ret.write_str("\t<link rel=\"stylesheet\" type=\"text/css\" href=\"file:///home/jazzpirate/work/Software/sTeX/RusTeXNew/rustex/src/resources/rustex.css\">\n").unwrap();
-                for c in engine.aux.extension.css_files.iter() {
-                    ret.write_str(&format!("\t<link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">\n",c)).unwrap();
-                }
-                for l in &state.fontlinks {
-                    ret.write_str(&format!("\t<link rel=\"stylesheet\" href=\"{}\">\n",l)).unwrap();
-                }
-                ret.write_str("</head>\n<body>\n").unwrap();
+    fn initialize(log:bool) { let _ = get_engine(log); }
 
-                let dp = page.displayable(&engine.fontsystem.glyphmaps, engine.filesystem, *state.widths.first().unwrap(), &topfont, sourcerefs);
-                write!(ret, "{}", dp).unwrap();
-                ret.write_str("\n</body>\n</html>").unwrap();
-                for k in dp.get_missings() {
-                    state.missing_fonts.insert(k);
-                }
-                (std::mem::take(&mut state.missing_fonts), std::mem::take(&mut state.missing_glyphs))
-            });
-            (fonts,glyphs)
+    fn get() -> Self { get_engine(false) }
+
+    fn run<S:AsRef<str>>(&mut self,file:S,settings:Settings) -> CompilationResult {
+        let res = match self.do_file_pdf(file.as_ref(),shipout::shipout) {
+            Ok(_) => None,
+            Err(e) => {
+                self.aux.outputs.errmessage(format!("{}\n\nat {}",e,self.mouth.current_sourceref().display(&self.filesystem)));
+                Some(e)
+            }
         };
-
-         */
+        self.do_result(res,settings)
     }
 
     fn do_file<S:AsRef<str>>(file:S,settings:Settings) -> CompilationResult {

@@ -101,8 +101,25 @@ impl<C:Character> Clone for NoOutputFileSystem<C> {
         interner:self.interner.clone()
     } }
 }
+impl<C:Character> NoOutputFileSystem<C> {
+    pub fn add_file(&mut self,path:PathBuf,file_content:&str) {
+        let string = if path.starts_with(&self.kpse.pwd) {
+            format!("./{}", path.strip_prefix(&self.kpse.pwd).unwrap().display())
+        } else {
+            path.display().to_string()
+        };
+        let source = StringLineSource::make_lines(file_content.bytes());
+        let f = VirtualFile {
+            path,
+            source:Some(source.into()),pipe:false,exists:true,
+            id:Some(self.interner.get_or_intern(string))
+        };
+        self.files.insert(f.path.clone(),f.clone());
+    }
+}
 impl<C:Character> FileSystem for NoOutputFileSystem<C> {
     type File = VirtualFile<C>;
+
     fn new(pwd:PathBuf) -> Self {
         let mut envs = HMap::default();
         envs.insert("PWD".to_string(),pwd.display().to_string());
