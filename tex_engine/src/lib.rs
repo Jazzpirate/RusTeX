@@ -48,15 +48,15 @@ Feel free to contact me [on github](https://github.com/Jazzpirate) if you have q
 #![doc(html_root_url = "https://docs.rs")]
 #![allow(clippy::type_complexity)]
 
-pub mod utils;
+pub mod commands;
 pub mod engine;
 pub mod tex;
-pub mod commands;
+pub mod utils;
 
 #[cfg(doc)]
 pub mod doc;
 
-#[cfg(feature="pdflatex")]
+#[cfg(feature = "pdflatex")]
 pub mod pdflatex;
 
 #[cfg(test)]
@@ -65,14 +65,16 @@ pub mod tests;
 
 /// Default `pub use` prelude for the crate
 pub mod prelude {
+    pub use crate::engine::mouth::Mouth;
+    pub use crate::engine::stomach::TeXMode;
+    pub use crate::engine::{DefaultEngine, EngineTypes, PlainTeXEngine, TeXEngine};
     pub use crate::tex::catcodes::{CategoryCode, CategoryCodeScheme, CommandCode};
     pub use crate::tex::characters::{Character, CharacterMap};
-    pub use crate::tex::tokens::Token;
-    pub use crate::tex::tokens::control_sequences::{CSName,CSHandler,ResolvedCSName,InternedCSName};
+    pub use crate::tex::nodes::{horizontal::HNode, math::MathNode, vertical::VNode, NodeTrait};
+    pub use crate::tex::tokens::control_sequences::{
+        CSHandler, CSName, InternedCSName, ResolvedCSName,
+    };
     pub use crate::tex::tokens::token_lists::{CharWrite, TokenList};
-    pub use crate::engine::{EngineTypes,TeXEngine,PlainTeXEngine,DefaultEngine};
-    pub use crate::engine::stomach::TeXMode;
+    pub use crate::tex::tokens::Token;
     pub use crate::utils::errors::ErrorHandler;
-    pub use crate::engine::mouth::Mouth;
-    pub use crate::tex::nodes::{NodeTrait,vertical::VNode,horizontal::HNode,math::MathNode};
 }

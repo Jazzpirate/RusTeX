@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
-use tex_engine::engine::filesystem::{File, FileSystem};
 use crate::engine::{Font, Types};
 use std::fmt::Write;
 use std::path::Path;
 use tex_engine::engine::fontsystem::Font as FontT;
-use tex_engine::pdflatex::nodes::{NumOrName, PDFColor};
+use tex_engine::pdflatex::nodes::{NumOrName, PDFColor, PDFImage};
 use tex_engine::tex::nodes::boxes::{HBoxInfo, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::math::MathClass;
 use tex_engine::utils::HMap;
@@ -79,6 +78,7 @@ macro_rules! node {
     };
     (@STYLES? $self:ident;$tag:expr; style:$style:block $($tk:tt)*) => {
         let mut in_style = false;
+        #[allow(unused_mut)]
         let mut needs_span:Option<i32> = None;
         macro_rules! style {
             (!$s:ident; ($a:expr)=$v:expr) => {{
@@ -96,6 +96,7 @@ macro_rules! node {
                 write!($self.f,"{}:{};",$a,$v)?;
             }};
         }
+        #[allow(unused_macros)]
         macro_rules! width {
             ($v:expr) => {
                 if $v == 0 {style!("width"="0");} else if $v != $self.width {
@@ -179,35 +180,35 @@ macro_rules! node {
 
 impl CompilationDisplay<'_,'_> {
     pub fn display(&mut self,
-        metas:&Vec<VecMap<String,String>>,
+        metas:&[VecMap<String,String>],
         top:&VecMap<String,String>,
-        css:&Vec<CSS>,
+        css:&[CSS],
         page_width:i32,
-        out:&Vec<ShipoutNodeV>
+        out:&[ShipoutNodeV]
     ) -> std::fmt::Result {
         self.f.write_str("<!DOCTYPE html>\n<html lang=\"en\"")?;
         for (k,v) in top.iter() {
             write!(self.f," {}=\"{}\"",k,v)?;
         }
         self.f.write_str(">\n<head>\t<meta charset=\"UTF-8\">\n")?;
-        for m in metas.into_iter() {
+        for m in metas {
             write!(self.f,"\t<meta")?;
             for (k,v) in m.iter() {
                 write!(self.f," {}=\"{}\"",k,v)?;
             }
             self.f.write_str(">\n")?;
         }
-        write!(self.f,"\t<link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">\n",RUSTEX_CSS_URL)?;
+        writeln!(self.f,"\t<link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">",RUSTEX_CSS_URL)?;
         for c in css.iter() {
             match c {
-                CSS::File(s) => write!(self.f,"\t<link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">\n",s)?,
-                CSS::Literal(s) => write!(self.f,"\t<style>\n{}</style>\n",s)?
+                CSS::File(s) => writeln!(self.f,"\t<link rel=\"stylesheet\" type=\"text/css\" href=\"{}\">",s)?,
+                CSS::Literal(s) => writeln!(self.f,"\t<style>\n{s}</style>")?
             }
         }
         for (name,d) in self.font_data.iter(){//.filter_map(|d| d.1.web.as_ref().map(|s| s.as_ref().ok()).flatten()) {
             match &d.web {
-                Some((l,_))=> write!(self.f,"\t<link rel=\"stylesheet\" href=\"{l}\">\n")?,
-                None => write!(self.f,"\t<!-- Missing web font for {name} -->\n")?,
+                Some((l,_))=> writeln!(self.f,"\t<link rel=\"stylesheet\" href=\"{l}\">")?,
+                None => writeln!(self.f,"\t<!-- Missing web font for {name} -->")?,
             }
         }
         self.f.write_str("</head>")?;
@@ -322,7 +323,10 @@ impl CompilationDisplay<'_,'_> {
         } else {
             let old = std::mem::replace(&mut self.font,font.clone());
             if children.len() == 1 {
-                self.font_attrs(&old,|s,a,b| Ok(s.styles.insert(a.into(),b.into())))?;
+                self.font_attrs(&old,|s,a,b| {
+                    s.styles.insert(a.into(),b);
+                    Ok(())
+                })?;
                 for c in children { f(self,c)? }
             } else {
                 node!(self <<node; class="rustex-contents"?(node!="mrow" && node !="g") style:{
@@ -444,7 +448,7 @@ impl CompilationDisplay<'_,'_> {
             Ok(())
         }
         ShipoutNodeV::Paragraph { children, alignment,
-            parskip, line_skip, left_skip, right_skip,
+            parskip:_, line_skip:_, left_skip, right_skip,
             width, sref,..} => {
             self.do_indent()?;
             self.indent += 1;
@@ -606,7 +610,7 @@ impl CompilationDisplay<'_,'_> {
                 node!(s <math class="rustex-math" ref=sref {
                     node!(s !<mrow {
                         for c in children {
-                           s.do_indent()?;s.do_math(c,None,false)?
+                           s.do_indent()?;s.do_math(c,None/*,false */)?
                         }
                     }/>);
                 }/>);
@@ -626,8 +630,22 @@ impl CompilationDisplay<'_,'_> {
             }
         }
         ShipoutNodeH::Img(img) => {
-            match &self.image {
-                ImageOptions::AsIs => {
+            match (&self.image,&img.img) {
+                (ImageOptions::AsIs,PDFImage::PDF(imgfile)) => {
+                    let width = img.width().0;
+                    let height = img.height().0;
+                    let path = format!("{}-rustex.png",img.filepath.display());
+
+                    node!(self <img "src"=path;
+                        "width"=Self::dim_to_string(width);
+                        "height"=Self::dim_to_string(height);
+                    />>);
+                    if !std::path::Path::new(&path).exists() {
+                        let _ = imgfile.save_with_format(path, image::ImageFormat::Png);
+                    }
+                    Ok(())
+                }
+                (ImageOptions::AsIs,_) => {
                     let width = img.width().0;
                     let height = img.height().0;
                     node!(self <img "src"=img.filepath.display();
@@ -636,7 +654,7 @@ impl CompilationDisplay<'_,'_> {
                     />>);
                     Ok(())
                 }
-                ImageOptions::ModifyURL(f) => {
+                (ImageOptions::ModifyURL(f),_) => {
                     let width = img.width().0;
                     let height = img.height().0;
                     node!(self <img "src"=f(&img.filepath);
@@ -674,22 +692,22 @@ impl CompilationDisplay<'_,'_> {
         }
     }
 
-    fn do_math(&mut self,c:&ShipoutNodeM,cls:Option<MathClass>,cramped:bool) -> std::fmt::Result { match c {
+    fn do_math(&mut self,c:&ShipoutNodeM,cls:Option<MathClass>/*,cramped:bool */) -> std::fmt::Result { match c {
         ShipoutNodeM::Common(Common::Literal(s)) => self.f.write_str(s),
         ShipoutNodeM::Common(Common::WithLink {href,children,..}) => {
             node!(self !<mrow "href"=href; {
-                for c in children { self.do_math(c,cls,cramped)? }
+                for c in children { self.do_math(c,cls/*,cramped*/)? }
             }/>);
             Ok(())
         }
         ShipoutNodeM::Common(Common::WithColor {color,children,..}) =>
-            self.do_color("mrow",color,children,|s,n| s.do_math(n,cls,cramped)),
+            self.do_color("mrow",color,children,|s,n| s.do_math(n,cls/*,cramped*/)),
         ShipoutNodeM::Common(Common::WithAnnotation {attrs,styles,children,..}) => {
-            self.do_annotations("mrow",attrs,styles,children,|s,n| s.do_math(n,cls,cramped))
+            self.do_annotations("mrow",attrs,styles,children,|s,n| s.do_math(n,cls/*,cramped*/))
         }
         ShipoutNodeM::Common(Common::WithFont{font,children,..}) => {
             // TODO check if this is right - maybe move it down to the next non-math-node...?
-            self.do_font("mrow",font,children,|s,n| s.do_math(n,cls,cramped))
+            self.do_font("mrow",font,children,|s,n| s.do_math(n,cls/*,cramped*/))
         }
         ShipoutNodeM::Common(Common::PDFDest(n)) => {
             match n {
@@ -712,12 +730,12 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::WithClass {class,children,..} => {
             if children.len() == 1 {
-                self.do_math(children.first().unwrap(),Some(*class),cramped)
+                self.do_math(children.first().unwrap(),Some(*class)/*,cramped*/)
             } else {
                 let (cls,lspace,rspace) = Self::cls(*class);
                 node!(self !<mrow class=cls; "lspace"=lspace; "rspace"=rspace; {
                     for c in children {
-                        self.do_math(c, Some(*class),cramped)?
+                        self.do_math(c, Some(*class)/*,cramped*/)?
                     }
                 }/>);
                 Ok(())
@@ -727,13 +745,15 @@ impl CompilationDisplay<'_,'_> {
             let oldwd = self.width;
             let wd = info.assigned_width().unwrap_or_else(|| info.computed_width().unwrap_or_default()).0;
             node!(self !<mtext class="rustex-math-escape" ref=sref style:{
-                if wd>0 {
-                    self.width = wd;
-                    let wd = Self::dim_to_string(wd);
-                    style!("width"=wd);
-                    style!("--rustex-curr-width"=wd);
-                } else if wd == 0 {
-                    style!("width"="0");
+                match wd {
+                    0 => style!("width"="0"),
+                    x if x > 0 => {
+                        self.width = wd;
+                        let wd = Self::dim_to_string(wd);
+                        style!("width"=wd);
+                        style!("--rustex-curr-width"=wd);
+                    }
+                    _ => ()
                 }
             } {
                 self.do_hbox(sref,info,children)?
@@ -745,13 +765,15 @@ impl CompilationDisplay<'_,'_> {
             let oldwd = self.width;
             let wd = info.assigned_width().unwrap_or_else(|| info.computed_width().unwrap_or_default()).0;
             node!(self !<mtext class="rustex-math-escape" ref=sref style:{
-                if wd>0 {
-                    self.width = wd;
-                    let wd = Self::dim_to_string(wd);
-                    style!("width"=wd);
-                    style!("--rustex-curr-width"=wd);
-                } else if wd == 0 {
-                    style!("width"="0");
+                match wd {
+                    0 => style!("width"="0"),
+                    x if x > 0 => {
+                        self.width = wd;
+                        let wd = Self::dim_to_string(wd);
+                        style!("width"=wd);
+                        style!("--rustex-curr-width"=wd);
+                    }
+                    _ => ()
                 }
             } {
                 self.do_vbox(sref,info,children,false)?;
@@ -762,13 +784,15 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeM::VCenter {sref,width,children,..} => {
             let oldwd = self.width;
             node!(self !<mtext class="rustex-math-escape" ref=sref style:{
-                if *width>0 {
-                    self.width = *width;
-                    let wd = Self::dim_to_string(*width);
-                    style!("width"=wd);
-                    style!("--rustex-curr-width"=wd);
-                } else if *width == 0 {
-                    style!("width"="0");
+                match *width {
+                    0 => style!("width"="0"),
+                    x if x > 0 => {
+                        self.width = *width;
+                        let wd = Self::dim_to_string(*width);
+                        style!("width"=wd);
+                        style!("--rustex-curr-width"=wd);
+                    }
+                    _ => ()
                 }
             } {
                 node!(self <div class="rustex-vcenter-container" {
@@ -797,7 +821,7 @@ impl CompilationDisplay<'_,'_> {
             />);
             Ok(())
         }
-        ShipoutNodeM::Glyph {char,cramped} => {
+        ShipoutNodeM::Glyph {char,cramped:_} => {
             // TODO cramped
             let (tag,cls,lspace,rspace) = match cls {
                 Some(MathClass::Ord)| None => {
@@ -818,13 +842,13 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::Sup{base, sup,limits} => {
             node!(self !<<if *limits {"mover"} else {"msup"}; {
-                self.do_math(base,None,cramped)?;
+                self.do_math(base,None/*,cramped*/)?;
                 if sup.len() == 1 {
-                    self.do_math(sup.first().unwrap(),None,cramped)?;
+                    self.do_math(sup.first().unwrap(),None/*,cramped*/)?;
                 } else {
                     node!(self !<mrow {
                         for c in sup.iter() {
-                            self.do_math(c,None,cramped)?;
+                            self.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                 }
@@ -833,13 +857,13 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::Sub{base, sub,limits} => {
             node!(self !<<if *limits {"munder"} else {"msub"}; {
-                self.do_math(base,None,cramped)?;
+                self.do_math(base,None/*,cramped*/)?;
                 if sub.len() == 1 {
-                    self.do_math(sub.first().unwrap(),None,cramped)?;
+                    self.do_math(sub.first().unwrap(),None/*,cramped*/)?;
                 } else {
                     node!(self !<mrow {
                         for c in sub.iter() {
-                            self.do_math(c,None,cramped)?;
+                            self.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                 }
@@ -852,7 +876,7 @@ impl CompilationDisplay<'_,'_> {
                     node!(self !<mo class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
                 }
                 for c in children {
-                    self.do_math(c,None,cramped)?
+                    self.do_math(c,None/*,cramped*/)?
                 }
                 if let Some(Ok(c)) = right {
                     node!(self !<mo class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
@@ -871,22 +895,22 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::SubSup{base, sub,sup,limits} => {
             node!(self !<<if *limits {"munderover"} else {"msubsup"}; {
-                self.do_math(base,None,cramped)?;
+                self.do_math(base,None/*,cramped*/)?;
                 if sub.len() == 1 {
-                    self.do_math(sub.first().unwrap(),None,cramped)?;
+                    self.do_math(sub.first().unwrap(),None/*,cramped*/)?;
                 } else {
                     node!(self !<mrow {
                         for c in sub.iter() {
-                            self.do_math(c,None,cramped)?;
+                            self.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                 }
                 if sup.len() == 1 {
-                    self.do_math(sup.first().unwrap(),None,cramped)?;
+                    self.do_math(sup.first().unwrap(),None/*,cramped*/)?;
                 } else {
                     node!(self !<mrow {
                         for c in sup.iter() {
-                            self.do_math(c,None,cramped)?;
+                            self.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                 }
@@ -904,19 +928,19 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::Over{sref,sep,left,right,top,bottom,..} => {
             let inner = move |s:&mut Self| {
-                node!(s !<mfrac ref=sref "linethickness"=sep.map(|s| Self::dim_to_string(s)).unwrap_or_default(); {
+                node!(s !<mfrac ref=sref "linethickness"=sep.map(Self::dim_to_string).unwrap_or_default(); {
                     node!(s !<mrow {
                         for c in top.iter() {
-                            s.do_math(c,None,cramped)?;
+                            s.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                     node!(s !<mrow {
                         for c in bottom.iter() {
-                            s.do_math(c,None,cramped)?;
+                            s.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                 }/>);
-                Ok(())
+                Ok::<_,std::fmt::Error>(())
             };
             match (left,right) {
                 (None,None) => inner(self)?,
@@ -935,11 +959,11 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeM::Underline {children,..} => {
             if children.len() == 1 {
                 self.styles.insert("text-decoration".into(),"underline".into());
-                self.do_math(children.first().unwrap(),cls,cramped)
+                self.do_math(children.first().unwrap(),cls/*,cramped*/)
             } else {
                 node!(self !<mrow style:"text-decoration"="underline"; {
                     for c in children {
-                        self.do_math(c,cls,cramped)?;
+                        self.do_math(c,cls/*,cramped*/)?;
                     }
                 }/>);
                 Ok(())
@@ -948,11 +972,11 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeM::Overline {children,..} => {
             if children.len() == 1 {
                 self.styles.insert("text-decoration".into(),"overline".into());
-                self.do_math(children.first().unwrap(),cls,cramped)
+                self.do_math(children.first().unwrap(),cls/*,cramped*/)
             } else {
                 node!(self !<mrow style:"text-decoration"="overline"; {
                     for c in children {
-                        self.do_math(c,cls,cramped)?;
+                        self.do_math(c,cls/*,cramped*/)?;
                     }
                 }/>);
                 Ok(())
@@ -961,11 +985,11 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeM::Accent { accent,children,..} => {
             node!(self !<mover {
                 if children.len() == 1 {
-                    self.do_math(children.first().unwrap(),None,cramped)?
+                    self.do_math(children.first().unwrap(),None/*,cramped*/)?
                 } else {
                     node!(self !<mrow {
                         for c in children {
-                            self.do_math(c,None,cramped)?;
+                            self.do_math(c,None/*,cramped*/)?;
                         }
                     }/>);
                 }
@@ -984,14 +1008,28 @@ impl CompilationDisplay<'_,'_> {
         ShipoutNodeM::Radical {children,..} => {
             node!(self <msqrt {
                 for c in children {
-                    self.do_math(c,None,cramped)?;
+                    self.do_math(c,None/*,cramped*/)?;
                 }
             }/>);
             Ok(())
         }
         ShipoutNodeM::Img(img) => {
-            match &self.image {
-                ImageOptions::AsIs => {
+            match (&self.image,&img.img) {
+                (ImageOptions::AsIs,PDFImage::PDF(imgfile)) => {
+                    let width = img.width().0;
+                    let height = img.height().0;
+                    let path = format!("{}-rustex.png",img.filepath.display());
+
+                    node!(self <img "src"=path;
+                        "width"=Self::dim_to_string(width);
+                        "height"=Self::dim_to_string(height);
+                    />>);
+                    if !std::path::Path::new(&path).exists() {
+                        let _ = imgfile.save_with_format(path, image::ImageFormat::Png);
+                    }
+                    Ok(())
+                }
+                (ImageOptions::AsIs,_) => {
                     let width = img.width().0;
                     let height = img.height().0;
                     node!(self <img "src"=img.filepath.display();
@@ -1000,7 +1038,7 @@ impl CompilationDisplay<'_,'_> {
                 />>);
                     Ok(())
                 }
-                ImageOptions::ModifyURL(f) => {
+                (ImageOptions::ModifyURL(f),_) => {
                     let width = img.width().0;
                     let height = img.height().0;
                     node!(self <img "src"=f(&img.filepath);
@@ -1026,7 +1064,7 @@ impl CompilationDisplay<'_,'_> {
             }
             Ok(())
         }
-        ShipoutNodeTable::Common(Common::WithFont {children,font,..}) => {
+        ShipoutNodeTable::Common(Common::WithFont {children,/*font,*/..}) => {
             for c in children {
                 // TODO insert font
                 self.do_row(c)?;
@@ -1164,7 +1202,7 @@ impl CompilationDisplay<'_,'_> {
                     }
                 }/>)
             } />);
-            Ok(())
+            Ok::<_,std::fmt::Error>(())
         };
         match (info.raised(),info.moved_left()) {
             (Some(r),None) => {
@@ -1214,7 +1252,7 @@ impl CompilationDisplay<'_,'_> {
                             slf.do_v(c,false)?;
                         }
                     }/>);
-                    Ok(())
+                    Ok::<_,std::fmt::Error>(())
                 };
                 if let Some(h) = ht {
                     node!(slf <div class="rustex-vbox-height-container" style:"height"=Self::dim_to_string(h);{
@@ -1222,7 +1260,7 @@ impl CompilationDisplay<'_,'_> {
                     }/>);
                 } else { inner(slf)?}
             }/>);
-            Ok(())
+            Ok::<_,std::fmt::Error>(())
         };
         match (info.raised(),info.moved_left()) {
             (Some(r),None) => {
@@ -1251,13 +1289,13 @@ impl CompilationDisplay<'_,'_> {
             _ => "rustex-vtop-container",
         };
         let inner = move |slf:&mut Self| {
-            node!(slf <div class=cls; style:{
+            node!(slf <div class=cls; ref=sref style:{
                 if let Some(bottom) = bottom {
                     style!("margin-bottom"=Self::dim_to_string(bottom))
                 }
                 if let Some(wd) = wd { width!(wd) }
             } {
-                let mut inner = move |slf:&mut Self| {
+                let inner = move |slf:&mut Self| {
                     node!(slf <div class="rustex-vtop" style:{
                         match to {
                             Some(i) if i < 0 => {
@@ -1272,7 +1310,7 @@ impl CompilationDisplay<'_,'_> {
                             slf.do_v(c,false)?;
                         }
                     }/>);
-                    Ok(())
+                    Ok::<_,std::fmt::Error>(())
                 };
                 if let Some(h) = ht {
                     node!(slf <div class="rustex-vtop-height-container" style:"height"=Self::dim_to_string(h); {
@@ -1280,7 +1318,7 @@ impl CompilationDisplay<'_,'_> {
                     }/>);
                 } else { inner(slf)?}
             }/>);
-            Ok(())
+            Ok::<_,std::fmt::Error>(())
         };
 
 
@@ -1377,769 +1415,10 @@ impl Display for Escaped<'_> {
             //'"' => self.f.write_str("&quot;"),
             //'\'' => self.f.write_str("&apos;"),
             Char(c) => f.write_char(*c),
-            Str(s) if s.contains(&TRIGGER) => {
+            Str(s) if s.contains(TRIGGER) => {
                 f.write_str(&s.replace('<',"&lt;").replace('>',"&gt;").replace('&',"&amp;"))
             }
             Str(s) => f.write_str(s)
         }
     }
 }
-
-/*
-
-fn dim_to_px(d:i32) -> f32{
-    d as f32 / 65536.0 * 1.5
-}
-
-
-pub(crate) fn dim_to_num(d:i32) -> String {
-    format!("{:.5}",dim_to_px(d)).trim_end_matches('0').trim_end_matches('.').to_string()
-}
-
-
-pub(crate) fn dim_to_string(d:Dim32) -> String {
-    dim_to_num(d.0) + "px"
-}
-
-
-pub(crate) fn mudim_to_string(d:Mu) -> String {
-    format!("{:.5}",(d.0 as f32) / 18.0 / 65536.0).trim_end_matches('0').trim_end_matches('.').to_string() + "em"
-}
-
-type Ref = SourceReference<<<Types as EngineTypes>::File as File>::SourceRefID>;
-
-pub struct Escaper<'a,W:Write>(&'a mut W);
-impl<'a,W:Write> Write for Escaper<'a,W> {
-    fn write_char(&mut self, c: char) -> std::fmt::Result {
-        match c {
-            '<' => self.0.write_str("&lt;"),
-            '>' => self.0.write_str("&gt;"),
-            '&' => self.0.write_str("&amp;"),
-            //'"' => self.f.write_str("&quot;"),
-            //'\'' => self.f.write_str("&apos;"),
-            _ => self.0.write_char(c)
-        }
-    }
-    fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        for c in s.chars() { self.write_char(c)? }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub enum HTMLChild {
-    Node(HTMLNode),
-    Text(String),
-    Comment(String),
-    HRule{width:Option<Dim32>,height:Dim32,bottom:Option<Dim32>,color:PDFColor,start:SRef,end:SRef},
-    VRuleS {width:Dim32,font_size:Option<Dim32>,color:PDFColor,start:SRef,end:SRef},
-    VRuleC {width:Dim32,height:Dim32,depth:Option<Dim32>,color:PDFColor,start:SRef,end:SRef},
-    Image {width:Dim32,height:Dim32,filepath:PathBuf}
-    //Glyph(Glyph),Space,EscapedSpace
-}
-impl HTMLChild {
-    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,missings:&mut HashSet<String>,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HTMLChild::Node(n) => n.display_fmt(store, files, missings,indent, curr_width, in_font,do_refs, f),
-            HTMLChild::Text(string) => f.write_str(string),
-            HTMLChild::Comment(s) => f.write_str(s),
-            HTMLChild::HRule { width, height, bottom, color, start, end } => {
-                write!(f, "<div class=\"rustex-hrule\" style=\"height:{};{}\"><div style=\"background:{};height:{};{}\" {}></div></div>",
-                       dim_to_string(*height),
-                       match width {
-                           None => "min-width:100%".to_string(),
-                           Some(w) => format!("--rustex-scale-width:{};", (w.0 as f32) / (curr_width.0 as f32))
-                       },
-                       color,
-                       dim_to_string(*height),
-                       match bottom {
-                           None => "".to_string(),
-                           Some(b) => format!("margin-bottom:{};", dim_to_string(*b))
-                       },
-                       SourceRange(start, end, files,do_refs)
-                )
-            },
-            HTMLChild::VRuleS { width, font_size, color, start, end } => {
-                write!(f,"<div class=\"rustex-vrule\" style=\"--rustex-this-width:{};{};background:{};\" {}></div>",
-                       dim_to_string(*width),
-                    match font_size {
-                        Some(font_size) => format!("min-height:{}",dim_to_string(*font_size)),
-                        _ => "align-self:stretch".to_string()
-                    },
-                    color,
-                    SourceRange(start,end,files,do_refs)
-                )
-            }
-            HTMLChild::VRuleC { width, height, depth, color, start, end } => {
-                write!(f,
-                       "<div class=\"rustex-vrule-container\" style=\"height:{};--rustex-this-width:{};\" {}><div style=\"{}background:{};\"></div></div>",
-                        dim_to_string(*height),
-                       dim_to_string(*width),
-                        SourceRange(start,end,files,do_refs),
-                       /*match depth {
-                           None => "-0.5ex".to_string(),
-                           Some(d) => dim_to_string(-*d)
-                       },*/
-                       match depth {
-                           None => format!("height:calc(0.5ex + {});margin-bottom:-0.5ex;", dim_to_string(*height)),
-                           Some(d) => format!("margin-bottom:{};", dim_to_string(-*d))
-                       },
-                       color
-                )
-            }
-            HTMLChild::Image { width, height, filepath } => {
-                write!(f, "<img src=\"{}\" width=\"{}\" height=\"{}\"/>",
-                       filepath.display(),
-                       dim_to_string(*width),
-                       dim_to_string(*height),
-                )
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct HTMLNode {
-    pub tag:HTMLTag,
-    pub children:Vec<HTMLChild>,
-    uses_font:bool,
-    pub(crate) uses_color:bool,
-    pub color:Option<PDFColor>,
-    pub font:Option<(Font,bool)>, // true = absolute, false = relative
-    pub width:Option<(Dim32,bool)>, // true = absolute, false = relative
-    pub classes:Vec<Cow<'static,str>>,
-    pub attrs:VecMap<Cow<'static,str>,String>,
-    pub styles:VecMap<Cow<'static,str>,Cow<'static,str>>,
-    pub sourceref:Option<(Ref,Ref)>,
-}
-
-impl HTMLNode {
-    pub fn reopened(&self) -> Self {
-        HTMLNode {
-            tag:self.tag.clone(),
-            children:Vec::new(),
-            uses_font:self.uses_font,
-            uses_color:self.uses_color,
-            color:self.color.clone(),
-            font:self.font.clone(),
-            width:self.width.clone(),
-            classes:self.classes.clone(),
-            attrs:self.attrs.clone(),
-            styles:self.styles.clone(),
-            sourceref:self.sourceref.clone()
-        }
-    }
-    pub fn new(tag:HTMLTag) -> Self {
-        HTMLNode {
-            tag,
-            children:Vec::new(),
-            uses_font:false,
-            uses_color:false,
-            color:None,font:None,
-            width:None,
-            classes:Vec::new(),
-            attrs:VecMap::default(),
-            styles:VecMap::default(),
-            sourceref:None
-        }
-    }
-    pub fn page() -> Self {
-        HTMLNode {
-            tag:HTMLTag::Page,
-            children:Vec::new(),
-            uses_font:false,
-            uses_color:false,
-            color:None,font:None,
-            width:None,
-            classes:vec!("rustex-page".into()),
-            attrs:VecMap::default(),
-            styles:VecMap::default(),
-            sourceref:None
-        }
-    }
-    pub fn push_glyph(&mut self,mode:ShipoutMode,g:Glyph) {
-        match self.children.last_mut() {
-            Some(HTMLChild::Text(string)) => {
-                write!(Escaper(string),"{}",g).unwrap();
-            }
-            _ => {
-                let mut s = String::new();
-                write!(Escaper(&mut s),"{}",g).unwrap();
-                self.push_child(mode,HTMLChild::Text(s));
-            }
-        }
-    }
-    pub fn push_space(&mut self,mode:ShipoutMode) {
-        match self.children.last_mut() {
-            Some(HTMLChild::Text(string)) if string.ends_with(char::is_whitespace) => {
-                string.push_str("&nbsp;");
-            }
-            Some(HTMLChild::Text(string)) => {
-                string.push(' ');
-            }
-            _ => {
-                self.push_child(mode,HTMLChild::Text(" ".to_string()));
-            }
-        }
-    }
-    pub fn paragraph(start:SRef,end:SRef,width:Dim32) -> Self {
-        HTMLNode {
-            tag:HTMLTag::Paragraph,
-            children:Vec::new(),
-            uses_font:false,
-            uses_color:false,
-            color:None,font:None,
-            sourceref:Some((start,end)),
-            width:Some((width,false)),
-            classes:vec!("rustex-paragraph".into()),
-            attrs:VecMap::default(),
-            styles:VecMap::default(),
-        }
-    }
-    pub fn push_comment<D:Display>(&mut self,d:D) {
-        match self.children.last_mut() {
-            Some(HTMLChild::Comment(string)) => {
-                write!(string,"{}",d).unwrap();
-            }
-            _ => {
-                let mut s = String::new();
-                write!(s,"{}",d).unwrap();
-                self.children.push(HTMLChild::Comment(s));
-            }
-        }
-    }
-    pub fn push_string<D:Display>(&mut self,d:D,mode:ShipoutMode,escape:bool) {
-        match self.children.last_mut() {
-            Some(HTMLChild::Text(string)) => {
-                if escape {
-                    write!(Escaper(string),"{}",d).unwrap();
-                } else {
-                    write!(string,"{}",d).unwrap();
-                }
-            }
-            _ => {
-                let mut s = String::new();
-                if escape {
-                    write!(Escaper(&mut s),"{}",d).unwrap();
-                } else {
-                    write!(s,"{}",d).unwrap();
-                }
-                self.push_child(mode,HTMLChild::Text(s));
-            }
-        }
-    }
-    pub fn push_child(&mut self,mode:ShipoutMode,ch:HTMLChild) {
-        if mode == ShipoutMode::SVG {
-            self.children.push(ch)
-        } else {
-            match ch {
-                t @ HTMLChild::Text { .. } => {
-                    if mode != ShipoutMode::Math && self.font.is_none() { self.uses_font = true }
-                    if self.color.is_none() { self.uses_color = true }
-                    self.children.push(t);
-                }
-                HTMLChild::Node(n) => return self.push_open_node(mode, n),
-                o => self.children.push(o)
-            }
-        }
-    }
-
-    pub fn push_open_node(&mut self,mode:ShipoutMode,n:HTMLNode) {
-        if self.color.is_none() {
-            self.uses_color = self.uses_color || n.uses_color;
-        }
-        if self.font.is_none() {
-            self.uses_font = self.uses_font || n.uses_font;
-        }
-        n.close(mode,&mut self.children);
-    }
-    pub fn close(self,mode:ShipoutMode,parent:&mut Vec<HTMLChild>) {
-        match self.tag {
-            HTMLTag::FontChange(_) => close_font(self,mode,parent),
-            HTMLTag::ColorChange(_) => close_color(self,mode,parent),
-            HTMLTag::Annot(_,None) => close_annot(self,mode,parent),
-            HTMLTag::Invisible(_) => close_invisible(self,mode,parent),
-            _ if self.children.len() == 1 => match &self.children[0] {
-                HTMLChild::Node(n) if matches!(n.tag,HTMLTag::FontChange(_)|HTMLTag::ColorChange(_)|HTMLTag::Invisible(_))
-                    => merge_annotation(self, mode, parent),
-                _ => parent.push(HTMLChild::Node(self))
-            },
-            _ => parent.push(HTMLChild::Node(self))
-        }
-    }
-    pub fn displayable<'a>(&'a self,store:&'a FontStore,files:&'a RusTeXFileSystem,width:Dim32,font:&'a Font,do_refs:bool) -> DisplayableNode<'a> {
-        DisplayableNode {node:self,files,store,width,font,do_refs,missing_fonts:Mutex::new(HashSet::new())}
-    }
-    pub fn display_fmt(&self,store:&FontStore,files:&RusTeXFileSystem,missings:&mut HashSet<String>,indent:usize,curr_width:Dim32,in_font:&Font,do_refs:bool,f:&mut Formatter<'_>) -> std::fmt::Result {
-        write!(f,"<{}",self.tag)?;
-        let (widthcls,widthsstyle,wd,scaled) = if let Some((wd,abs)) = self.width {
-            if wd == Dim32(0) {
-                (None,Some("max-width:0;".to_string()),curr_width,false)
-            } else if wd < Dim32(0) {
-                (None,Some(format!("max-width:0;margin-right:{};",dim_to_string(wd))),curr_width,false)
-            } else if abs {
-                (Some("rustex-withwidth"),Some(format!("--rustex-this-width:{};",dim_to_num(wd.0))),wd,false)
-            } else {
-                let pctg = wd.0 as f32 / (curr_width.0 as f32);
-                (Some("rustex-scalewidth"),Some(format!("--rustex-scale-width:{};",format!("{:.2}",pctg))),wd,true)
-            }
-        } else { (None,None,curr_width,false) };
-
-        if !self.classes.is_empty() || widthcls.is_some() {
-            f.write_str(" class=\"")?;
-            let mut i = self.classes.iter();
-            if let Some(c) = widthcls {
-                f.write_str(c)?
-            } else {
-                f.write_str(i.next().unwrap())?;
-            }
-            for c in i {
-                write!(f," {}",c)?;
-            }
-            f.write_char('"')?;
-        }
-        if !self.attrs.is_empty() {
-            for (k,v) in self.attrs.iter() {
-                write!(f," {}=\"{}\"",k,v)?;
-            }
-        }
-        let (font,font_style,missing) = if let Some((ref f,abs)) = self.font {
-            if !abs && in_font == f {
-                (in_font,None,None)
-            } else {
-                let (a, b) = font_attributes(store, &f, missings,if abs { None } else { Some(in_font) });
-                (f, a, b)
-            }
-        } else { (in_font,None,None) };
-
-        if !self.styles.is_empty() || widthsstyle.is_some() || font_style.is_some() || self.color.is_some() {
-            f.write_str(" style=\"")?;
-            if let Some(s) = font_style {
-                f.write_str(&s)?;
-            }
-            if let Some(wd) = widthsstyle {
-                f.write_str(&wd)?;
-            }
-            if let Some(c) = self.color {
-                write!(f,"color:{};",c)?;
-            }
-            for (k,v) in self.styles.iter() {
-                write!(f,"{}:{};",k,v)?;
-            }
-            f.write_char('"')?;
-        }
-        if do_refs {
-            if let Some((start, end)) = &self.sourceref {
-                f.write_char(' ')?;
-                do_sourceref(files, start, end, f)?;
-            }
-        }
-        f.write_char('>')?;
-        if scaled {
-            f.write_str("<span>")?;
-        }
-        if let Some(missing) = missing {
-            f.write_str(&missing)?;
-        }
-        for c in &self.children {
-            if self.tag.allow_linebreak() {
-                do_indent(indent+2,f)?;
-            }
-            c.display_fmt(store,files,missings,indent+2,wd,font,do_refs,f)?;
-        }
-        if scaled {
-            f.write_str("</span>")?;
-        }
-        if self.tag.allow_linebreak() {
-            do_indent(indent,f)?;
-        }
-        write!(f,"</{}>",self.tag)
-    }
-}
-
-fn close_invisible(mut node:HTMLNode,mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
-    node.tag = HTMLTag::Invisible(mode);
-    node.styles.insert("visibility".into(),"hidden".into());
-    if node.children.len() == 1 {
-        match node.children.first().unwrap() {
-            HTMLChild::Node(_) => {
-                if let Some(HTMLChild::Node(mut n)) = node.children.pop() {
-                    if node.attrs.iter().any(|(k,_)| {
-                        n.attrs.contains_key(k)
-                    }) {
-                        node.children.push(HTMLChild::Node(n));
-                        parent.push(HTMLChild::Node(node));
-                        return
-                    }
-                    for (k,v) in node.attrs {
-                        n.attrs.insert(k,v);
-                    }
-                    if let (Some(c),None) = (node.color,n.color) {
-                        n.color = Some(c);
-                        n.uses_color = false;
-                    }
-                    if let (Some(c),None) = (node.font,&n.font) {
-                        n.font = Some(c);
-                        n.uses_font = false;
-                    }
-                    for s in node.styles {
-                        n.styles.insert(s.0,s.1);
-                    }
-                    n.styles.insert("visibility".into(),"hidden".into());
-                    parent.push(HTMLChild::Node(n));
-                } else {unreachable!()}
-            }
-            _ => parent.push(HTMLChild::Node(node))
-        }
-    } else {
-        parent.push(HTMLChild::Node(node));
-    }
-}
-
-fn close_annot(mut node:HTMLNode,mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
-    if node.children.len() == 1 {
-        match node.children.first().unwrap() {
-            HTMLChild::Node(_) => {
-                if let Some(HTMLChild::Node(mut n)) = node.children.pop() {
-                    if node.attrs.iter().any(|(k,_)| {
-                        n.attrs.contains_key(k)
-                    }) {
-                        node.children.push(HTMLChild::Node(n));
-                        parent.push(HTMLChild::Node(node));
-                        return
-                    }
-                    for (k,v) in node.attrs {
-                        n.attrs.insert(k,v);
-                    }
-                    if let (Some(c),None) = (node.color,n.color) {
-                        n.color = Some(c);
-                        n.uses_color = false;
-                    }
-                    if let (Some(c),None) = (node.font,&n.font) {
-                        n.font = Some(c);
-                        n.uses_font = false;
-                    }
-                    for s in node.styles {
-                        n.styles.insert(s.0,s.1);
-                    }
-                    parent.push(HTMLChild::Node(n));
-                } else {unreachable!()}
-            }
-            _ => parent.push(HTMLChild::Node(node))
-        }
-    } else {
-        match &mut node.tag {
-            HTMLTag::Annot(m,_) => {
-                *m = mode;
-                parent.push(HTMLChild::Node(node));
-            }
-            _ => unreachable!()
-        }
-    }
-}
-
-fn merge_annotation(mut node:HTMLNode, _mode:ShipoutMode, parent:&mut Vec<HTMLChild>) {
-    match node.children.pop() {
-        Some(HTMLChild::Node(n)) if matches!(n.tag,HTMLTag::ColorChange(_)|HTMLTag::FontChange(_)) => {
-            if n.attrs.iter().any(|(k,_)| {
-                node.attrs.contains_key(k)
-            }) {
-                node.children.push(HTMLChild::Node(n));
-                parent.push(HTMLChild::Node(node));
-                return
-            }
-            for (k,v) in n.attrs {
-                node.attrs.insert(k,v);
-            }
-            if n.color.is_some() {
-                node.color = n.color;
-                node.uses_color = false;
-            }
-            if n.font.is_some() {
-                node.font = n.font;
-                node.uses_font = false;
-            }
-            for s in n.styles {
-                node.styles.insert(s.0,s.1);
-            }
-            node.children = n.children;
-            parent.push(HTMLChild::Node(node));
-        }
-        Some(HTMLChild::Node(n)) if matches!(n.tag,HTMLTag::Invisible(_)) => {
-            node.styles.insert("visibility".into(),"hidden".into());
-            node.children = n.children;
-            parent.push(HTMLChild::Node(node));
-        }
-        _ => unreachable!()
-    }
-}
-
-fn close_font(mut annot:HTMLNode,mode:ShipoutMode,parent:&mut Vec<HTMLChild>) {
-    let mut has_text = false;
-    let num = annot.children.iter().filter(|c| match c {
-        HTMLChild::Node(n) => n.uses_font,
-        HTMLChild::Text {..} => {has_text = true ;true},
-        _ => false
-    }).count();
-    match num {
-        0 => parent.extend(annot.children),
-        1 if !has_text => {
-            if let Some(c) = annot.children.iter_mut().find_map(|c| match c {
-                HTMLChild::Node(n) if n.uses_font => Some(n),
-                _ => None
-            }) {
-                assert!(c.font.is_none());
-                c.font = annot.font;
-                c.uses_font = false;
-            }
-            parent.extend(annot.children);
-        }
-        _ => match &mut annot.tag {
-            HTMLTag::FontChange(m) => {
-                *m = mode;
-                parent.push(HTMLChild::Node(annot));
-            }
-            _ => unreachable!()
-        }
-    }
-}
-
-fn close_color(mut annot:HTMLNode,mode:ShipoutMode,parent:&mut Vec<HTMLChild>) {
-    let mut has_text = false;
-    let num = annot.children.iter().filter(|c| match c {
-        HTMLChild::Node(n) => n.uses_color,
-        HTMLChild::Text {..} => {has_text = true ;true},
-        _ => false
-    }).count();
-    match num {
-        0 => parent.extend(annot.children),
-        1 if !has_text => {
-            if let Some(c) = annot.children.iter_mut().find_map(|c| match c {
-                HTMLChild::Node(n) if n.uses_color => Some(n),
-                _ => None
-            }) {
-                assert!(c.color.is_none());
-                c.uses_color = false;
-                c.color = annot.color;
-            }
-            parent.extend(annot.children);
-        }
-        _ => match &mut annot.tag {
-            HTMLTag::ColorChange(m) => {
-                *m = mode;
-                parent.push(HTMLChild::Node(annot));
-            }
-            _ => unreachable!()
-        }
-    }
-}
-
-
-pub struct DisplayableNode<'a> {
-    node:&'a HTMLNode,
-    files:&'a RusTeXFileSystem,
-    store:&'a FontStore,
-    width:Dim32,
-    font:&'a Font,
-    missing_fonts:Mutex<HashSet<String>>,
-    do_refs:bool
-}
-impl<'a> DisplayableNode<'a> {
-    pub fn get_missings(mut self) -> HashSet<String> {
-        std::mem::take(self.missing_fonts.get_mut().unwrap())
-    }
-}
-impl<'a> Display for DisplayableNode<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut hs = self.missing_fonts.lock().unwrap();
-        self.node.display_fmt(self.store,self.files,&mut *hs,0,self.width,self.font,self.do_refs,f)
-    }
-}
-
-#[derive(Debug,PartialEq,Eq,Clone)]
-pub enum HTMLTag {
-    Page,Paragraph,
-    VBoxContainer,VBoxHeight,VBox,
-    VTopContainer,VTopHeight,VTop,
-    VCenterContainer,VCenter,
-    HBoxContainer,HBox,Display,Raise,MoveLeft,
-    HAlign,HBody,HRow,HCell,NoAlignH,
-    FontChange(ShipoutMode),ColorChange(ShipoutMode),Link(ShipoutMode),
-    Annot(ShipoutMode,Option<String>),
-    Invisible(ShipoutMode),
-    Matrix(ShipoutMode),
-    Dest(ShipoutMode),
-    Math,MathGroup,Mo,Mi,MUnderOver,MUnder,MOver,MSubSup,MSub,MSup,MFrac,MSqrt,
-    MathEscape,
-    SvgWrap,SvgG(String),SvgTop,SvgForeign,EscapeSvg
-}
-impl HTMLTag {
-    fn allow_linebreak(&self) -> bool {
-        use HTMLTag::*;
-        match self {
-            HBoxContainer | HBox | Paragraph | Mi | Mo => false,
-            FontChange(m) | ColorChange(m) | Link(m) |
-            Matrix(m) | Annot(m,_) | Invisible(m) => !m.is_h(),
-            _ => true
-        }
-    }
-    /*fn is_math(&self) -> bool {
-        use HTMLTag::*;
-        match self {
-            Math | MathGroup | Mo | Mi | MUnderOver | MUnder | MOver | MSubSup | MSub | MSup | MathEscape | MFrac | MSqrt => true,
-            _ => false
-        }
-    }*/
-}
-impl Display for HTMLTag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use HTMLTag::*;
-        match self {
-            Page => f.write_str("article"),
-            Paragraph | VBoxContainer | VBoxHeight | VBox | VTopContainer | VTopHeight | VTop |
-            HBoxContainer | HBox | Display | Raise | MoveLeft | VCenterContainer | VCenter |
-            SvgWrap | EscapeSvg => f.write_str("div"),
-            Math => f.write_str("math"),
-            MathGroup => f.write_str("mrow"),
-            MathEscape => f.write_str("mtext"),
-            MFrac => f.write_str("mfrac"),
-            HAlign => f.write_str("table"),
-            HBody => f.write_str("tbody"),
-            HRow => f.write_str("tr"),
-            HCell => f.write_str("td"),
-            NoAlignH => f.write_str("td"),
-            SvgG(s) => f.write_str(s),
-            SvgTop => f.write_str("svg"),
-            SvgForeign => f.write_str("foreignObject"),
-            Mo => f.write_str("mo"),
-            Mi => f.write_str("mi"),
-            MUnderOver => f.write_str("munderover"),
-            MUnder => f.write_str("munder"),
-            MOver => f.write_str("mover"),
-            MSubSup => f.write_str("msubsup"),
-            MSub => f.write_str("msub"),
-            MSup => f.write_str("msup"),
-            MSqrt => f.write_str("msqrt"),
-            FontChange(mode) | ColorChange(mode) | Annot(mode,None) | Matrix(mode) | Invisible(mode) => {
-                if *mode == ShipoutMode::Math { f.write_str("mrow") }
-                else if *mode == ShipoutMode::SVG { f.write_str("g") }
-                else { f.write_str("span") }
-            }
-            Annot(_,Some(s)) => f.write_str(s),
-            Link(mode) => {
-                if *mode == ShipoutMode::Math { f.write_str("mrow") }
-                else if *mode == ShipoutMode::SVG { f.write_str("g") }
-                else { f.write_str("a") }
-            }
-            Dest(mode) => {
-                if *mode == ShipoutMode::Math { f.write_str("mspace") }
-                else if *mode == ShipoutMode::SVG { f.write_str("g") }
-                else { f.write_str("a") }
-            }
-        }
-    }
-}
-
-fn do_indent(indent:usize,f:&mut Formatter<'_>) -> std::fmt::Result {
-    f.write_char('\n')?;
-    for _ in 0..indent { f.write_str("  ")?;}
-    Ok(())
-}
-
-fn font_attributes(store:&FontStore, font:&Font,missings:&mut HashSet<String>,parent:Option<&Font>) -> (Option<String>,Option<String>) {
-    match parent {
-        Some(f) if !f.filename().ends_with("nullfont") => {
-            let old = store.get_info(f.filename());
-            let old = if let Some(old) = old { old } else { return simple_font(store,missings,font) };
-
-            let mut first = String::new();
-            let size = ((font.get_at().0 as f32 / (f.get_at().0 as f32)) * 100.0).round();
-            if size != 100.0 {
-                write!(first,"font-size:{}%;",size).unwrap();
-            }
-
-            let new = store.get_info(font.filename());
-            let new = if let Some(new) = new { new } else {
-                missings.insert(font.filename().to_string());
-                return (if first.is_empty() {None} else {Some(first)},Some(format!("<!-- Unknown web font for {} -->",font.filename())))
-            };
-            if new.styles.has(FontModifier::Capitals) && !old.styles.has(FontModifier::Capitals) {
-                first.push_str("font-variant:small-caps;");
-            } else if old.styles.has(FontModifier::Capitals) && !new.styles.has(FontModifier::Capitals) {
-                first.push_str("font-variant:normal;");
-            }
-            if new.styles.has(FontModifier::Bold) && !old.styles.has(FontModifier::Bold) {
-                first.push_str("font-weight:bold;");
-            } else if old.styles.has(FontModifier::Bold) && !new.styles.has(FontModifier::Bold) {
-                first.push_str("font-weight:normal;");
-            }
-            if new.styles.has(FontModifier::Italic) && !old.styles.has(FontModifier::Italic) {
-                first.push_str("font-style:italic;");
-            } else if new.styles.has(FontModifier::Oblique) && !old.styles.has(FontModifier::Oblique) {
-                first.push_str("font-style:oblique;");
-            } else if (old.styles.has(FontModifier::Italic) || old.styles.has(FontModifier::Oblique)) && !(new.styles.has(FontModifier::Italic) || new.styles.has(FontModifier::Oblique)) {
-                first.push_str("font-style:normal;");
-            }
-            let second = match (old.weblink,new.weblink) {
-                (Some((name,_)),Some((newname,_))) if name == newname => None,
-                (_,Some((name,_))) => {
-                    write!(first,"font-family:{};",name).unwrap();
-                    None
-                }
-                (_,None) => {
-                    missings.insert(font.filename().to_string());
-                    Some(format!("<!-- Unknown web font for {} -->",font.filename()))
-                }
-            };
-            (if first.is_empty() { None } else { Some(first) },second)
-        },
-        _ => simple_font(store,missings,font)
-    }
-}
-
-fn simple_font(store:&FontStore,missings:&mut HashSet<String>, font:&Font) -> (Option<String>,Option<String>) {
-    match store.get_info(font.filename()) {
-        None => (None,if font.filename().ends_with("nullfont") {None} else {
-            missings.insert(font.filename().to_string());
-            Some(format!("<!-- Unknown web font for {} -->",font.filename()))
-        }),
-        Some(info) => {
-            let mut s = String::new();
-            write!(s,"font-size:{};",dim_to_string(font.get_at())).unwrap();
-            if info.styles.has(FontModifier::Capitals){ s.push_str("font-variant:small-caps;"); }
-            else { s.push_str("font-variant:normal;");}
-            if info.styles.has(FontModifier::Bold) { s.push_str("font-weight:bold;"); }
-            else { s.push_str("font-weight:normal;"); }
-            if info.styles.has(FontModifier::Italic) { s.push_str("font-style:italic;"); }
-            else if info.styles.has(FontModifier::Oblique) { s.push_str("font-style:oblique;"); }
-            else { s.push_str("font-style:normal;");}
-            match info.weblink {
-                None if s.is_empty() => (None,if font.filename().ends_with("nullfont") {None} else {
-                    missings.insert(font.filename().to_string());
-                    Some(format!("<!-- Unknown web font for {} -->",font.filename()))
-                }),
-                None => (Some(s),if font.filename().ends_with("nullfont") {None} else {
-                    missings.insert(font.filename().to_string());
-                    Some(format!("<!-- Unknown web font for {} -->",font.filename()))
-                }),
-                Some((name,_)) => {
-                    write!(s,"font-family:{};",name).unwrap();
-                    (Some(s),None)
-                }
-            }
-        }
-    }
-}
-
-fn do_sourceref(files:&RusTeXFileSystem,start:&SRef,end:&SRef,f:&mut Formatter<'_>) -> std::fmt::Result {
-    write!(f,"data-rustex-sourceref=\"{}#({};{}):({};{})\"",files.ref_str(start.file),start.line,start.column,end.line,end.column)
-}
-
-struct SourceRange<'a>(&'a SRef,&'a SRef,&'a RusTeXFileSystem,bool);
-impl<'a> Display for SourceRange<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.3 {do_sourceref(self.2,self.0,self.1,f) } else {Ok(())}
-    }
-}
-
- */

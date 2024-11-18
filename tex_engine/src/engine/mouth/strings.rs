@@ -3,14 +3,14 @@ use crate::tex::characters::{TextLine, TextLineSource};
 use crate::utils::errors::InvalidCharacter;
 
 /// An [`InputTokenizer`] is in one of three states
-#[derive(Copy,Clone,PartialEq,Eq,Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum MouthState {
     /// Beginning of line
     NewLine,
     /// After a space (or control sequence)
     SkipBlank,
     /// In the middle of a line
-    MidLine
+    MidLine,
 }
 
 /** Takes a [`TextLineSource`] and lazily turns it into [`Token`]s, given a [`CategoryCodeScheme`] and an optional
@@ -55,47 +55,52 @@ assert_eq!(next.command_code(), CommandCode::Space);
 assert!(tokenizer.get_next::<T>(&mut cs_handler,cc,eol).unwrap().is_none()); // EOF
 ```
 */
-#[derive(Clone,Debug)]
-pub struct InputTokenizer<C:Character,S:TextLineSource<C>> {
-    pub state : MouthState,
-    line : usize,
-    col : usize,
-    current_line:TextLine<C>,
-    pub source:S,
-    pub(crate) eof:bool,
-    tempstr:Vec<C>
+#[derive(Clone, Debug)]
+pub struct InputTokenizer<C: Character, S: TextLineSource<C>> {
+    pub state: MouthState,
+    line: usize,
+    col: usize,
+    current_line: TextLine<C>,
+    pub source: S,
+    pub(crate) eof: bool,
+    tempstr: Vec<C>,
 }
 
 type Csh<T> = <<T as Token>::CS as CSName<<T as Token>::Char>>::Handler;
 
-impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
+impl<C: Character, S: TextLineSource<C>> InputTokenizer<C, S> {
     /// Create a new [`InputTokenizer`] from a [`TextLineSource`]
-    pub fn new(mut source:S) -> Self {
+    pub fn new(mut source: S) -> Self {
         Self {
             state: MouthState::NewLine,
             line: 1,
             col: 0,
-            current_line:source.get_line().unwrap_or(TextLine::default()),
+            current_line: source.get_line().unwrap_or(TextLine::default()),
             source,
             eof: false,
-            tempstr:Vec::new()
+            tempstr: Vec::new(),
         }
     }
     /// The current line
 
-    pub fn line(&self) -> usize { self.line }
+    pub fn line(&self) -> usize {
+        self.line
+    }
     /// The current column
 
-    pub fn column(&self) -> usize { self.col + 1 }
+    pub fn column(&self) -> usize {
+        self.col + 1
+    }
     /// whether the file end has been reached
 
     pub fn eof(&self) -> bool {
         self.eof
     }
 
-
     fn get_char(&mut self) -> Option<C> {
-        if self.col >= self.current_line.len() {None} else {
+        if self.col >= self.current_line.len() {
+            None
+        } else {
             let next = self.current_line[self.col];
             self.col += 1;
             Some(next)
@@ -104,13 +109,13 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
 
     /// `\readline` - read a line of input as [`Character`]s of [`CategoryCode::Other`] (except for ` `, which has
     /// [`Space`](CategoryCode::Space)) and passing each token to the given function.
-    pub fn readline<T:Token<Char=C>,F:FnMut(T)>(&mut self,mut f:F) {
+    pub fn readline<T: Token<Char = C>, F: FnMut(T)>(&mut self, mut f: F) {
         while self.col < self.current_line.len() {
             let next = self.current_line[self.col];
             self.col += 1;
             match next.try_into() {
                 Ok(b' ') => f(T::space()),
-                _ => f(T::from_char_cat(next,CommandCode::Other))
+                _ => f(T::from_char_cat(next, CommandCode::Other)),
             }
         }
         self.next_line();
@@ -119,18 +124,26 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
     /// `\read` - read a line of input as [`Character`]s in the currenct [`CategoryCodeScheme`], respecting
     /// braces ([`CategoryCode::BeginGroup`] and [`EndGroup`](CategoryCode::EndGroup)) and passing each token to the
     /// given function.
-    pub fn read<T:Token<Char=C>,F:FnMut(T)>(&mut self, handler:&mut Csh<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>, mut f:F) -> Result<(),InvalidCharacter<C>> {
+    pub fn read<T: Token<Char = C>, F: FnMut(T)>(
+        &mut self,
+        handler: &mut Csh<T>,
+        cc: &CategoryCodeScheme<C>,
+        endline: Option<C>,
+        mut f: F,
+    ) -> Result<(), InvalidCharacter<C>> {
         let mut ingroups = 0;
-        let mut ret: Result<(),InvalidCharacter<C>> = Ok(());
+        let mut ret: Result<(), InvalidCharacter<C>> = Ok(());
         let line = self.line;
         while self.line == line || ingroups > 0 {
             match self.get_char() {
                 None => {
-                    if self.eof {return ret }
+                    if self.eof {
+                        return ret;
+                    }
                     if let Some(n) = self.return_endline::<T>(cc, endline, handler.par()) {
                         f(n)
                     }
-                    return ret
+                    return ret;
                 }
                 Some(c) => match self.check_char::<T>(handler, cc, endline, c) {
                     Ok(None) if self.line == line || ingroups > 0 => (),
@@ -144,10 +157,10 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                         f(tk)
                     }
                     Err(i) => {
-                        f(T::from_char_cat(i.0,CommandCode::Other));
+                        f(T::from_char_cat(i.0, CommandCode::Other));
                         ret = Err(i)
                     }
-                }
+                },
             }
         }
         ret
@@ -155,20 +168,37 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
 
     /// Get the next [`Token`] from the [`InputTokenizer`] (if not empty). Throws [`InvalidCharacter`]
     /// on encountering a character of code [`CategoryCode::Invalid`].
-    pub fn get_next<T:Token<Char=C>>(&mut self, handler: &mut Csh<T>, cc: &CategoryCodeScheme<C>, endline: Option<C>) -> Result<Option<T>,InvalidCharacter<C>> {
+    pub fn get_next<T: Token<Char = C>>(
+        &mut self,
+        handler: &mut Csh<T>,
+        cc: &CategoryCodeScheme<C>,
+        endline: Option<C>,
+    ) -> Result<Option<T>, InvalidCharacter<C>> {
         loop {
             match self.get_char() {
                 None if self.eof => return Ok(None),
-                None => if let Some(e) = self.return_endline::<T>(cc, endline, handler.par()) {
-                    //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
-                    return Ok(Some(e))
+                None => {
+                    if let Some(e) = self.return_endline::<T>(cc, endline, handler.par()) {
+                        //debug_log!(trace=>"Returning endline {}",e.printable(&interner));
+                        return Ok(Some(e));
+                    }
                 }
-                Some(c) => if let Some(t) = self.check_char::<T>(handler, cc, endline, c)? { return Ok(Some(t)) }
+                Some(c) => {
+                    if let Some(t) = self.check_char::<T>(handler, cc, endline, c)? {
+                        return Ok(Some(t));
+                    }
+                }
             };
         }
     }
 
-    fn check_char<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>, c:C) -> Result<Option<T>,InvalidCharacter<C>> {
+    fn check_char<T: Token<Char = C>>(
+        &mut self,
+        handler: &mut Csh<T>,
+        cc: &CategoryCodeScheme<C>,
+        endline: Option<C>,
+        c: C,
+    ) -> Result<Option<T>, InvalidCharacter<C>> {
         use CategoryCode::*;
         match cc.get(c) {
             EOL if self.state == MouthState::NewLine => {
@@ -194,12 +224,12 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                 Some(c) => self.check_char::<T>(handler, cc, endline, c),
                 None => {
                     self.state = MouthState::MidLine;
-                    Ok(Some(T::from_char_cat(c,CommandCode::Superscript)))
+                    Ok(Some(T::from_char_cat(c, CommandCode::Superscript)))
                 }
-            }
+            },
             cc => {
                 self.state = MouthState::MidLine;
-                Ok(Some(T::from_char_cat(c,(*cc).into())))
+                Ok(Some(T::from_char_cat(c, (*cc).into())))
             }
         }
     }
@@ -216,20 +246,25 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         }
     }
 
-    fn do_par<T:Token<Char=C>>(&mut self,par:T::CS) -> T {
+    fn do_par<T: Token<Char = C>>(&mut self, par: T::CS) -> T {
         if self.current_line.is_empty() {
             while let Some(line) = self.source.get_line() {
                 self.line += 1;
                 if !line.is_empty() {
                     self.current_line = line;
-                    break
+                    break;
                 }
             }
         }
         T::from_cs(par)
     }
 
-    fn return_endline<T:Token<Char=C>>(&mut self,cc: &CategoryCodeScheme<C>, endline: Option<C>,par:T::CS) -> Option<T> {
+    fn return_endline<T: Token<Char = C>>(
+        &mut self,
+        cc: &CategoryCodeScheme<C>,
+        endline: Option<C>,
+        par: T::CS,
+    ) -> Option<T> {
         use CategoryCode::*;
         self.next_line();
         let ret = match endline {
@@ -240,14 +275,19 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                 EOL if self.state == MouthState::NewLine => Some(self.do_par(par)),
                 EOL => Some(T::space()),
                 Ignored | Invalid | Comment => None,
-                o => Some(T::from_char_cat(c,(*o).into()))
-            }
+                o => Some(T::from_char_cat(c, (*o).into())),
+            },
         };
         self.state = MouthState::NewLine;
         ret
     }
 
-    fn get_escape<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, endline:Option<C>) -> T {
+    fn get_escape<T: Token<Char = C>>(
+        &mut self,
+        handler: &mut Csh<T>,
+        cc: &CategoryCodeScheme<C>,
+        endline: Option<C>,
+    ) -> T {
         let name = match self.get_char() {
             None => {
                 self.next_line();
@@ -259,26 +299,29 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                         handler.cs_from_chars(&self.tempstr)
                     }
                 }
-            },
-            Some(next) => self.check_escape::<T>(handler, cc, next)
+            }
+            Some(next) => self.check_escape::<T>(handler, cc, next),
         };
         T::from_cs(name)
     }
 
-    fn check_escape<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, next:C) -> T::CS {
+    fn check_escape<T: Token<Char = C>>(
+        &mut self,
+        handler: &mut Csh<T>,
+        cc: &CategoryCodeScheme<C>,
+        next: C,
+    ) -> T::CS {
         use CategoryCode::*;
         match cc.get(next) {
-            Superscript => {
-                match self.maybe_superscript(next) {
-                    Some(c) => self.check_escape::<T>(handler, cc, c),
-                    None => {
-                        self.state = MouthState::MidLine;
-                        self.tempstr.clear();
-                        self.tempstr.push(next);
-                        handler.cs_from_chars(&self.tempstr)
-                    }
+            Superscript => match self.maybe_superscript(next) {
+                Some(c) => self.check_escape::<T>(handler, cc, c),
+                None => {
+                    self.state = MouthState::MidLine;
+                    self.tempstr.clear();
+                    self.tempstr.push(next);
+                    handler.cs_from_chars(&self.tempstr)
                 }
-            }
+            },
             Letter => self.get_cs_name::<T>(handler, cc, next),
             _ => {
                 self.state = MouthState::MidLine;
@@ -289,7 +332,12 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
         }
     }
 
-    fn get_cs_name<T:Token<Char=C>>(&mut self, handler:&mut Csh<T>, cc:&CategoryCodeScheme<C>, first:C) -> T::CS {
+    fn get_cs_name<T: Token<Char = C>>(
+        &mut self,
+        handler: &mut Csh<T>,
+        cc: &CategoryCodeScheme<C>,
+        first: C,
+    ) -> T::CS {
         self.tempstr.clear();
         self.tempstr.push(first);
         self.state = MouthState::SkipBlank;
@@ -305,47 +353,84 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                             _ => {
                                 self.col = curr;
                                 self.col -= 1;
-                                break
+                                break;
                             }
                         }
                     }
                     _ => {
                         self.col -= 1;
-                        break
+                        break;
                     }
-                }
+                },
             }
         }
         handler.cs_from_chars(&self.tempstr)
     }
 
-
     fn cond(i: C) -> bool {
-        (Into::<C>::into(48u8) <= i && i <= Into::<C>::into(57u8)) ||
-            (Into::<C>::into(97u8) <= i && i <= Into::<C>::into(102u8))
+        (Into::<C>::into(48u8) <= i && i <= Into::<C>::into(57u8))
+            || (Into::<C>::into(97u8) <= i && i <= Into::<C>::into(102u8))
     }
 
-    fn maybe_superscript(&mut self, firstsup:C) -> Option<C> {
+    fn maybe_superscript(&mut self, firstsup: C) -> Option<C> {
         match self.get_char() {
             None => None,
             Some(c) if c != firstsup => {
                 self.col -= 1;
                 None
             }
-            Some(_) => {
-                match self.get_char() {
+            Some(_) => match self.get_char() {
+                None => {
+                    self.col -= 1;
+                    None
+                }
+                Some(first) => match self.get_char() {
                     None => {
-                        self.col -= 1;
-                        None
+                        if first < (128).into() {
+                            let u: u8 = match first.try_into() {
+                                Ok(u) => u,
+                                Err(_) => {
+                                    self.col -= 1;
+                                    return None;
+                                }
+                            };
+                            let ch: C = (if u < 64 { u + 64 } else { u - 64 }).into();
+                            Some(ch)
+                        } else {
+                            self.col -= 2;
+                            None
+                        }
                     }
-                    Some(first) => match self.get_char() {
-                        None => {
+                    Some(second) => {
+                        if Self::cond(first) && Self::cond(second) {
+                            let ufirst: u8 = match first.try_into() {
+                                Ok(u) => u,
+                                Err(_) => {
+                                    self.col -= 2;
+                                    return None;
+                                }
+                            };
+                            let usecond: u8 = match second.try_into() {
+                                Ok(u) => u,
+                                Err(_) => {
+                                    self.col -= 2;
+                                    return None;
+                                }
+                            };
+                            let char = u8::from_str_radix(
+                                std::str::from_utf8(&[ufirst, usecond]).unwrap(),
+                                16,
+                            )
+                            .unwrap();
+                            Some(char.into())
+                        } else {
+                            self.col -= 1;
                             if first < (128).into() {
-                                let u : u8 = match first.try_into() {
+                                let u: u8 = match first.try_into() {
                                     Ok(u) => u,
                                     Err(_) => {
-                                        self.col -= 1;
-                                        return None
+                                        self.col -= 2;
+                                        return None;
                                     }
                                 };
                                 let ch: C = (if u < 64 { u + 64 } else { u - 64 }).into();
@@ -355,64 +440,26 @@ impl<C:Character,S:TextLineSource<C>> InputTokenizer<C,S> {
                                 None
                             }
                         }
-                        Some(second) => {
-                            if Self::cond(first) && Self::cond(second) {
-                                let ufirst : u8 = match first.try_into() {
-                                    Ok(u) => u,
-                                    Err(_) => {
-                                        self.col -= 2;
-                                        return None
-                                    }
-                                };
-                                let usecond : u8 = match second.try_into() {
-                                    Ok(u) => u,
-                                    Err(_) => {
-                                        self.col -= 2;
-                                        return None
-                                    }
-                                };
-                                let char = u8::from_str_radix(
-                                    std::str::from_utf8(&[ufirst, usecond]).unwrap(),
-                                    16
-                                ).unwrap();
-                                Some(char.into())
-                            } else {
-                                self.col -= 1;
-                                if first < (128).into() {
-                                    let u: u8 = match first.try_into() {
-                                        Ok(u) => u,
-                                        Err(_) => {
-                                            self.col -= 2;
-                                            return None
-                                        }
-                                    };
-                                    let ch: C = (if u < 64 { u + 64 } else { u - 64 }).into();
-                                    Some(ch)
-                                } else {
-                                    self.col -= 2;
-                                    None
-                                }
-                            }
-                        }
                     }
-                }
-            }
+                },
+            },
         }
     }
 
     /// Only useful for debugging purposes: Print the next `len` [`Character`]s to the given [`Write`](std::fmt::Write)r.
-    pub fn preview<W:std::fmt::Write>(&self,len:&mut usize,mut f: W) -> std::fmt::Result {
+    pub fn preview<W: std::fmt::Write>(&self, len: &mut usize, mut f: W) -> std::fmt::Result {
         if self.current_line.is_empty() {
-            return Ok(())
+            return Ok(());
         }
         if self.current_line.len() > self.col {
             for c in &self.current_line[self.col..] {
-                *len -=1;
+                *len -= 1;
                 c.display_fmt(&mut f);
-                if *len == 0 {return Ok(())}
+                if *len == 0 {
+                    return Ok(());
+                }
             }
         }
         Ok(())
     }
-
 }

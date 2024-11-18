@@ -27,14 +27,15 @@ path = "src/lib.rs"
 
 [features]
 default = []
-pdflatex = ["md5","image","regex"]
-pdfium = ["pdflatex","pdfium-render"]
+pdflatex = ["dep:md5","dep:image","dep:regex"]
+pdfium = ["pdflatex","dep:pdfium-render","dep:reqwest","dep:flate2","dep:tar"]
 multithreaded = []
-pdfium-static = ["pdflatex","pdfium-render/static"]
+#pdfium-static = ["pdflatex","pdfium","pdfium-render/static","dep:reqwest","dep:flate2","dep:tar"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 #[build-dependencies]
+
 #bindgen = "0.59"
 #pkg-config = "0.3"
 
@@ -42,26 +43,28 @@ pdfium-static = ["pdflatex","pdfium-render/static"]
 env_logger = "0.11"
 
 [dependencies]
-lazy_static = "1.5"
+lazy_static = "1"
 log={version="0.4",features=["kv_unstable"]}
 #ahash = "0.8"
 rustc-hash = "2"
-string-interner = "0.17"
+string-interner = "0.18"
 chrono = "0.4"
-array-init = "2.1"
+array-init = "2"
 arrayvec = "0.7"
 shared_vector = "0.4"
-walkdir = "2.5"
-path-dedot = "3.1"
+walkdir = "2"
+path-dedot = "3"
 const_for = "0.1"
-thiserror = "1"
-either = "1.13"
+thiserror = "2"
+either = "1"
 #pdfium-render = "0.8.11" #, features = ["static"] }
 
 md5 = { version = "0.7",optional = true }
 image = { version = "0.25",optional = true }
 regex = { version="1.10",optional = true }
-pdfium-render = {version="0.8.24", optional = true }
+pdfium-render = {version="0.8.26",features=["image_025"], optional = true }
 
-
+reqwest = { version = "0.12", features = ["blocking"],optional=true }
+flate2 = {version="1.0",optional=true}
+tar = {version="0.4",optional=true}
 

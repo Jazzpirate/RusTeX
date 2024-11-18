@@ -1,106 +1,114 @@
 /*! A TeX engine combines all the necessary components into a struct capable of compiling a TeX file into
     some output format.
 */
-use std::convert::Infallible;
-use std::fmt::Debug;
-use chrono::{Datelike,Timelike};
-use crate::engine::gullet::{DefaultGullet, Gullet};
-use crate::engine::utils::memory::MemoryManager;
-use crate::engine::mouth::{DefaultMouth, Mouth};
-use crate::engine::state::State;
-use crate::engine::stomach::{Stomach, DefaultStomach};
-use crate::tex;
-use crate::tex::catcodes::CommandCode;
-use crate::commands::{TeXCommand, ResolvedToken};
 use crate::commands::primitives::PRIMITIVES;
+use crate::commands::{ResolvedToken, TeXCommand};
 use crate::engine::filesystem::{File, FileSystem, VirtualFile};
 use crate::engine::fontsystem::{Font, FontSystem, TfmFont, TfmFontSystem};
+use crate::engine::gullet::{DefaultGullet, Gullet};
+use crate::engine::mouth::{DefaultMouth, Mouth};
+use crate::engine::state::State;
+use crate::engine::stomach::{DefaultStomach, Stomach};
+use crate::engine::utils::memory::MemoryManager;
 use crate::engine::utils::outputs::{LogOutputs, Outputs};
+use crate::tex;
+use crate::tex::catcodes::CommandCode;
 use crate::tex::characters::Character;
-use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
-use crate::tex::nodes::CustomNodeTrait;
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::numerics::{Dim32, Mu, MuDim, Numeric, NumSet, TeXDimen, TeXInt};
+use crate::tex::nodes::CustomNodeTrait;
+use crate::tex::numerics::{Dim32, Mu, MuDim, NumSet, Numeric, TeXDimen, TeXInt};
+use crate::tex::tokens::control_sequences::{CSName, InternedCSName};
 use crate::tex::tokens::Token;
-use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXResult,TeXError};
+use crate::utils::errors::{ErrorHandler, ErrorThrower, TeXError, TeXResult};
+use chrono::{Datelike, Timelike};
+use std::convert::Infallible;
+use std::fmt::Debug;
 
 pub mod filesystem;
+pub mod fontsystem;
+pub mod gullet;
 pub mod mouth;
 pub mod state;
-pub mod gullet;
 pub mod stomach;
 pub mod utils;
-pub mod fontsystem;
 
 /**
     The types that an engine needs to implement. To reduce overhad in function signature,
     we bundle all of them into a single trait and pass that around.
 */
-pub trait EngineTypes:Sized+Copy+Clone+Debug+'static {
+pub trait EngineTypes: Sized + Copy + Clone + Debug + 'static {
     type Char: Character;
     type CSName: CSName<Self::Char>;
-    #[cfg(feature="multithreaded")]
+    #[cfg(feature = "multithreaded")]
     type Token: Token<Char = Self::Char, CS = Self::CSName> + Send + Sync;
-    #[cfg(not(feature="multithreaded"))]
+    #[cfg(not(feature = "multithreaded"))]
     type Token: Token<Char = Self::Char, CS = Self::CSName>;
     type Extension: EngineExtension<Self>;
-    #[cfg(feature="multithreaded")]
-    type File: File<Char=Self::Char> + Send + Sync;
-    #[cfg(not(feature="multithreaded"))]
-    type File: File<Char=Self::Char>;
-    type FileSystem: FileSystem<File=Self::File>;
-    type Int:TeXInt;
-    type Dim:TeXDimen + Numeric<Self::Int>;
-    type MuDim:MuDim + Numeric<Self::Int>;
-    type Num: crate::tex::numerics::NumSet<Int = Self::Int,Dim=Self::Dim,MuDim=Self::MuDim>;
+    #[cfg(feature = "multithreaded")]
+    type File: File<Char = Self::Char> + Send + Sync;
+    #[cfg(not(feature = "multithreaded"))]
+    type File: File<Char = Self::Char>;
+    type FileSystem: FileSystem<File = Self::File>;
+    type Int: TeXInt;
+    type Dim: TeXDimen + Numeric<Self::Int>;
+    type MuDim: MuDim + Numeric<Self::Int>;
+    type Num: crate::tex::numerics::NumSet<Int = Self::Int, Dim = Self::Dim, MuDim = Self::MuDim>;
     type State: State<Self>;
     type Outputs: Outputs;
     type Mouth: Mouth<Self>;
-    type Gullet:Gullet<Self>;
-    type Stomach:Stomach<Self>;
-    type ErrorHandler:ErrorHandler<Self>;
-    type CustomNode:CustomNodeTrait<Self>;
-    type Font:Font<Char=Self::Char,Int=Self::Int, Dim=Self::Dim,CS=Self::CSName>;
-    type FontSystem: FontSystem<Font=Self::Font,Char=Self::Char,Int=Self::Int,Dim=Self::Dim,CS=Self::CSName>;
+    type Gullet: Gullet<Self>;
+    type Stomach: Stomach<Self>;
+    type ErrorHandler: ErrorHandler<Self>;
+    type CustomNode: CustomNodeTrait<Self>;
+    type Font: Font<Char = Self::Char, Int = Self::Int, Dim = Self::Dim, CS = Self::CSName>;
+    type FontSystem: FontSystem<
+        Font = Self::Font,
+        Char = Self::Char,
+        Int = Self::Int,
+        Dim = Self::Dim,
+        CS = Self::CSName,
+    >;
 }
 /// Auxiliary components passed around to [`PrimitiveCommand`](crate::commands::PrimitiveCommand)s.
-pub struct EngineAux<ET:EngineTypes> {
+pub struct EngineAux<ET: EngineTypes> {
     /// memory management and interning of control sequence names
-    pub memory:MemoryManager<ET::Token>,
+    pub memory: MemoryManager<ET::Token>,
     /// error handling
-    pub error_handler:ET::ErrorHandler,
+    pub error_handler: ET::ErrorHandler,
     /// printing to logs or the terminal
-    pub outputs:ET::Outputs,
+    pub outputs: ET::Outputs,
     /// start time of the current job
-    pub start_time:chrono::DateTime<chrono::Local>,
+    pub start_time: chrono::DateTime<chrono::Local>,
     /// `\jobname`
-    pub jobname:String,
+    pub jobname: String,
     /// extension components
-    pub extension:ET::Extension
+    pub extension: ET::Extension,
 }
 
-struct Colon<'c,ET:EngineTypes> {
-    out:Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) -> TeXResult<(),ET> + 'c>
+struct Colon<'c, ET: EngineTypes> {
+    out: Box<dyn FnMut(&mut EngineReferences<ET>, VNode<ET>) -> TeXResult<(), ET> + 'c>,
 }
-impl<'c,ET:EngineTypes> Colon<'c,ET> {
-    fn new<F:FnMut(&mut EngineReferences<ET>, VNode<ET>) -> TeXResult<(),ET> + 'c>(f:F) -> Self {
-        Colon { out:Box::new(f) }
+impl<'c, ET: EngineTypes> Colon<'c, ET> {
+    fn new<F: FnMut(&mut EngineReferences<ET>, VNode<ET>) -> TeXResult<(), ET> + 'c>(f: F) -> Self {
+        Colon { out: Box::new(f) }
     }
-    fn out(&mut self,engine:&mut EngineReferences<ET>, n: VNode<ET>) -> TeXResult<(),ET> {
-        (self.out)(engine,n)
+    fn out(&mut self, engine: &mut EngineReferences<ET>, n: VNode<ET>) -> TeXResult<(), ET> {
+        (self.out)(engine, n)
     }
 }
-impl <'c,ET:EngineTypes> Default for Colon<'c,ET> {
+impl<'c, ET: EngineTypes> Default for Colon<'c, ET> {
     fn default() -> Self {
-        Colon { out:Box::new(|_,_|Ok(())) }
+        Colon {
+            out: Box::new(|_, _| Ok(())),
+        }
     }
 }
 
-impl <ET:EngineTypes> EngineReferences<'_,ET> {
+impl<ET: EngineTypes> EngineReferences<'_, ET> {
     /// ships out the [`VNode`], passing it on to the provided continuation.
-    pub fn shipout(&mut self,n: VNode<ET>) -> TeXResult<(),ET> {
+    pub fn shipout(&mut self, n: VNode<ET>) -> TeXResult<(), ET> {
         let mut colon = std::mem::take(&mut self.colon);
-        let r = colon.out(self,n);
+        let r = colon.out(self, n);
         self.colon = colon;
         r
     }
@@ -112,19 +120,19 @@ impl <ET:EngineTypes> EngineReferences<'_,ET> {
     that all the components are *independent*, and avoid "Cannot borrow as mutable because already borrowed as
     immutable" errors.
 */
-pub struct EngineReferences<'et,ET:EngineTypes> {
-    pub state:&'et mut ET::State,
-    pub mouth:&'et mut ET::Mouth,
-    pub gullet:&'et mut ET::Gullet,
-    pub stomach:&'et mut ET::Stomach,
-    pub filesystem:&'et mut ET::FileSystem,
-    pub fontsystem:&'et mut ET::FontSystem,
-    colon:Colon<'et,ET>,
-    pub aux:&'et mut EngineAux<ET>
+pub struct EngineReferences<'et, ET: EngineTypes> {
+    pub state: &'et mut ET::State,
+    pub mouth: &'et mut ET::Mouth,
+    pub gullet: &'et mut ET::Gullet,
+    pub stomach: &'et mut ET::Stomach,
+    pub filesystem: &'et mut ET::FileSystem,
+    pub fontsystem: &'et mut ET::FontSystem,
+    colon: Colon<'et, ET>,
+    pub aux: &'et mut EngineAux<ET>,
 }
 
 /// Example implementation of [`EngineTypes`] for a plain TeX engine.
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct DefaultPlainTeXEngineTypes;
 impl EngineTypes for DefaultPlainTeXEngineTypes {
     type Char = u8;
@@ -144,50 +152,117 @@ impl EngineTypes for DefaultPlainTeXEngineTypes {
     type CustomNode = Infallible;
     type ErrorHandler = ErrorThrower<Self>;
     type Stomach = DefaultStomach<Self>;
-    type Font = TfmFont<i32,Dim32,InternedCSName<u8>>;
-    type FontSystem = TfmFontSystem<i32,Dim32,InternedCSName<u8>>;
+    type Font = TfmFont<i32, Dim32, InternedCSName<u8>>;
+    type FontSystem = TfmFontSystem<i32, Dim32, InternedCSName<u8>>;
 }
 
 /// A [`TeXEngine`] combines all necessary components (see [`EngineTypes`]) to compile a TeX file into some output format.
-pub trait TeXEngine:Sized {
-    type Types:EngineTypes;
+pub trait TeXEngine: Sized {
+    type Types: EngineTypes;
     /// Returns mutable references to the components of the engine.
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
     /// Initializes the engine with a file, e.g. `latex.ltx` or `pdftex.cfg`.
-    fn init_file(&mut self,s:&str) -> TeXResult<(),Self::Types> {
-        log::debug!("Initializing with file {}",s);
+    fn init_file(&mut self, s: &str) -> TeXResult<(), Self::Types> {
+        log::debug!("Initializing with file {}", s);
         let mut comps = self.get_engine_refs();
         comps.aux.start_time = chrono::Local::now();
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.year,comps.aux.start_time.year().into(),true);
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.month,(comps.aux.start_time.month() as i32).into(),true);
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.day,(comps.aux.start_time.day() as i32).into(),true);
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.time,(((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),true);
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.year,
+            comps.aux.start_time.year().into(),
+            true,
+        );
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.month,
+            (comps.aux.start_time.month() as i32).into(),
+            true,
+        );
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.day,
+            (comps.aux.start_time.day() as i32).into(),
+            true,
+        );
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.time,
+            (((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),
+            true,
+        );
         let file = comps.filesystem.get(s);
-        comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+        comps.aux.jobname = file
+            .path()
+            .with_extension("")
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
         comps.push_file(file);
         comps.top_loop()
     }
 
-    fn run<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(),Self::Types>>(&mut self, f:F) -> TeXResult<(),Self::Types> {
+    fn run<
+        F: FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(), Self::Types>,
+    >(
+        &mut self,
+        f: F,
+    ) -> TeXResult<(), Self::Types> {
         let mut comps = self.get_engine_refs();
         comps.aux.start_time = chrono::Local::now();
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.year,comps.aux.start_time.year().into(),true);
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.month,(comps.aux.start_time.month() as i32).into(),true);
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.day,(comps.aux.start_time.day() as i32).into(),true);
-        comps.state.set_primitive_int(comps.aux,PRIMITIVES.time,(((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),true);
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.year,
+            comps.aux.start_time.year().into(),
+            true,
+        );
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.month,
+            (comps.aux.start_time.month() as i32).into(),
+            true,
+        );
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.day,
+            (comps.aux.start_time.day() as i32).into(),
+            true,
+        );
+        comps.state.set_primitive_int(
+            comps.aux,
+            PRIMITIVES.time,
+            (((comps.aux.start_time.hour() * 60) + comps.aux.start_time.minute()) as i32).into(),
+            true,
+        );
         comps.push_every(PRIMITIVES.everyjob);
         comps.colon = Colon::new(f);
         comps.top_loop()
     }
 
     /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
-    fn do_file_default<F:FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(),Self::Types>>(&mut self, s:&str, f:F) -> TeXResult<(),Self::Types> {
-        log::debug!("Running file {}",s);
+    fn do_file_default<
+        F: FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(), Self::Types>,
+    >(
+        &mut self,
+        s: &str,
+        f: F,
+    ) -> TeXResult<(), Self::Types> {
+        log::debug!("Running file {}", s);
         {
             let mut comps = self.get_engine_refs();
             let file = comps.filesystem.get(s);
-            comps.filesystem.set_pwd(file.path().parent().unwrap().to_path_buf());
-            comps.aux.jobname = file.path().with_extension("").file_name().unwrap().to_str().unwrap().to_string();
+            comps
+                .filesystem
+                .set_pwd(file.path().parent().unwrap().to_path_buf());
+            comps.aux.jobname = file
+                .path()
+                .with_extension("")
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
             comps.push_file(file);
         }
         self.run(f)
@@ -198,12 +273,14 @@ pub trait TeXEngine:Sized {
         let mag = PRIMITIVES.mag;
         let fam = PRIMITIVES.fam;
         let refs = self.get_engine_refs();
-        refs.state.set_primitive_int(refs.aux,mag, (1000).into(),true);
-        refs.state.set_primitive_int(refs.aux,fam, (-1).into(),true);
+        refs.state
+            .set_primitive_int(refs.aux, mag, (1000).into(), true);
+        refs.state
+            .set_primitive_int(refs.aux, fam, (-1).into(), true);
     }
 
     /// Initialize the engine by processing `plain.tex`.
-    fn initialize_plain_tex(&mut self) -> TeXResult<(),Self::Types> {
+    fn initialize_plain_tex(&mut self) -> TeXResult<(), Self::Types> {
         self.initialize_tex_primitives();
         self.init_file("plain.tex")
     }
@@ -215,21 +292,21 @@ pub trait TeXEngine:Sized {
     }
 
     /// Initialize the engine by processing `eplain.tex`.
-    fn initialize_eplain_tex(&mut self) -> TeXResult<(),Self::Types> {
+    fn initialize_eplain_tex(&mut self) -> TeXResult<(), Self::Types> {
         self.initialize_etex_primitives();
         self.init_file("eplain.tex")
     }
 
     /// Initialized the engine by processing `latex.ltx`. Only call this (for modern LaTeX setups)
     /// after calling [`initialize_etex_primitives`](TeXEngine::initialize_etex_primitives) first.
-    fn load_latex(&mut self) -> TeXResult<(),Self::Types> {
+    fn load_latex(&mut self) -> TeXResult<(), Self::Types> {
         self.init_file("latex.ltx")
     }
 }
 
 /// Default implementation of a [`TeXEngine`] for the provided [`EngineTypes`].
-pub struct DefaultEngine<ET:EngineTypes> {
-    pub aux:EngineAux<ET>,
+pub struct DefaultEngine<ET: EngineTypes> {
+    pub aux: EngineAux<ET>,
     pub state: ET::State,
     pub filesystem: ET::FileSystem,
     pub fontsystem: ET::FontSystem,
@@ -237,33 +314,34 @@ pub struct DefaultEngine<ET:EngineTypes> {
     pub gullet: ET::Gullet,
     pub stomach: ET::Stomach,
 }
-impl<ET:EngineTypes> Default for DefaultEngine<ET> {
-
+impl<ET: EngineTypes> Default for DefaultEngine<ET> {
     fn default() -> Self {
         let mut memory = MemoryManager::default();
         let mut aux = EngineAux {
             outputs: ET::Outputs::new(),
             error_handler: ET::ErrorHandler::new(),
-            start_time:chrono::Local::now(),
+            start_time: chrono::Local::now(),
             extension: ET::Extension::new(&mut memory),
             memory,
-            jobname: String::new()
+            jobname: String::new(),
         };
         let fontsystem = ET::FontSystem::new(&mut aux);
-        let mut state = ET::State::new(fontsystem.null(),&mut aux);
-        let mut mouth = ET::Mouth::new(&mut aux,&mut state);
-        let gullet = ET::Gullet::new(&mut aux,&mut state,&mut mouth);
-        let stomach = ET::Stomach::new(&mut aux,&mut state);
+        let mut state = ET::State::new(fontsystem.null(), &mut aux);
+        let mut mouth = ET::Mouth::new(&mut aux, &mut state);
+        let gullet = ET::Gullet::new(&mut aux, &mut state, &mut mouth);
+        let stomach = ET::Stomach::new(&mut aux, &mut state);
         Self {
             state,
             aux,
             fontsystem,
             filesystem: ET::FileSystem::new(crate::utils::PWD.to_path_buf()),
-            mouth,gullet,stomach
+            mouth,
+            gullet,
+            stomach,
         }
     }
 }
-impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
+impl<ET: EngineTypes> TeXEngine for DefaultEngine<ET> {
     type Types = ET;
     fn get_engine_refs(&mut self) -> EngineReferences<ET> {
         EngineReferences {
@@ -274,7 +352,7 @@ impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
             mouth: &mut self.mouth,
             gullet: &mut self.gullet,
             stomach: &mut self.stomach,
-            colon: Colon::default()
+            colon: Colon::default(),
         }
     }
 }
@@ -282,26 +360,27 @@ impl<ET:EngineTypes> TeXEngine for DefaultEngine<ET> {
 pub type PlainTeXEngine = DefaultEngine<DefaultPlainTeXEngineTypes>;
 
 /** Additional components we want to add to a [`EngineReferences`] can be implemented here.
-    Notably, `()` extends this trait if we don't need any additional components.
- */
-pub trait EngineExtension<ET:EngineTypes> {
-    fn new(memory:&mut MemoryManager<ET::Token>) -> Self;
+   Notably, `()` extends this trait if we don't need any additional components.
+*/
+pub trait EngineExtension<ET: EngineTypes> {
+    fn new(memory: &mut MemoryManager<ET::Token>) -> Self;
 }
-impl<ET:EngineTypes<Extension=()>> EngineExtension<ET> for () {
-    fn new(_memory:&mut MemoryManager<ET::Token>) -> Self { }
+impl<ET: EngineTypes<Extension = ()>> EngineExtension<ET> for () {
+    fn new(_memory: &mut MemoryManager<ET::Token>) -> Self {}
 }
 
-impl<ET:EngineTypes> EngineReferences<'_,ET> {
+impl<ET: EngineTypes> EngineReferences<'_, ET> {
     /// Runs the provided closure and prints the result to `\write-1` iff `\tracingcommands > 0`.
-    pub fn trace_command<D:std::fmt::Display,F:FnOnce(&mut Self) -> D>(&mut self, f:F) {
-        let trace = self.state.get_primitive_int(PRIMITIVES.tracingcommands) > <ET::Num as NumSet>::Int::default();
+    pub fn trace_command<D: std::fmt::Display, F: FnOnce(&mut Self) -> D>(&mut self, f: F) {
+        let trace = self.state.get_primitive_int(PRIMITIVES.tracingcommands)
+            > <ET::Num as NumSet>::Int::default();
         if trace {
             let d = f(self);
-            self.aux.outputs.write_neg1(format_args!("{{{}}}",d));
+            self.aux.outputs.write_neg1(format_args!("{{{}}}", d));
         }
     }
     /// Entry point for compilation. This function is called by [`TeXEngine::do_file_default`].
-    pub fn top_loop(&mut self) -> TeXResult<(),ET> {
+    pub fn top_loop(&mut self) -> TeXResult<(), ET> {
         crate::expand_loop!(ET::Stomach::every_top(self) => token => {
             if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next(false).unwrap();continue}
         }; self,

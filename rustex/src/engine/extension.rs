@@ -10,6 +10,7 @@ use tex_engine::prelude::CSHandler;
 use crate::shipout::state::ShipoutState;
 use crate::utils::VecMap;
 
+#[allow(clippy::upper_case_acronyms)]
 pub enum CSS {
     File(String),
     Literal(String)
@@ -90,7 +91,7 @@ impl PDFExtension<Types> for RusTeXExtension {
     }
 
 
-    fn pdfium_direct(&mut self) -> &mut Option<Pdfium> {
+    fn pdfium_direct(&mut self) -> &mut Option<Option<Pdfium>> {
         self.pdf.pdfium_direct()
     }
 }

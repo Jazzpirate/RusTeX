@@ -1,15 +1,14 @@
 /*! Methods for [`PrimitiveCommand`]s and for registering new ones */
-use std::sync::RwLock;
-use either::Either;
-use lazy_static::lazy_static;
-use crate::commands::{TeXCommand, CommandScope, PrimitiveCommand};
-use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
+use crate::commands::{CommandScope, PrimitiveCommand, TeXCommand};
 use crate::engine::state::State;
+use crate::engine::{EngineReferences, EngineTypes, TeXEngine};
 use crate::prelude::Character;
 use crate::tex::nodes::boxes::{BoxInfo, TeXBox};
 use crate::tex::numerics::{MuSkip, Skip};
 use crate::utils::HMap;
-
+use either::Either;
+use lazy_static::lazy_static;
+use std::sync::RwLock;
 
 macro_rules! cmtodos {
     ($engine:ident,$($name:ident),*) => {
@@ -25,241 +24,361 @@ macro_rules! cmstodos {
 
 macro_rules! cmtodo {
     ($engine:ident,$name:ident) => {{
-        let command = $crate::commands::PrimitiveCommand::SimpleExpandable(
-            |e,_| e.general_error(format!("Not yet implemented: \\{} at {}",
+        let command = $crate::commands::PrimitiveCommand::SimpleExpandable(|e, _| {
+            e.general_error(format!(
+                "Not yet implemented: \\{} at {}",
                 stringify!($name),
                 crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
             ))
-        );
+        });
         let refs = $engine.get_engine_refs();
-        refs.state.register_primitive(refs.aux,stringify!($name),command);
+        refs.state
+            .register_primitive(refs.aux, stringify!($name), command);
     }};
 }
 
 macro_rules! cmstodo {
     ($engine:ident,$name:ident) => {{
         let command = $crate::commands::PrimitiveCommand::Unexpandable {
-            scope:$crate::commands::CommandScope::Any,
-            apply:|e,_| e.general_error(format!("Not yet implemented: \\{} at {}",
-                stringify!($name),
-                $crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
-            ))
+            scope: $crate::commands::CommandScope::Any,
+            apply: |e, _| {
+                e.general_error(format!(
+                    "Not yet implemented: \\{} at {}",
+                    stringify!($name),
+                    $crate::engine::mouth::Mouth::current_sourceref(e.mouth).display(e.filesystem)
+                ))
+            },
         };
         let refs = $engine.get_engine_refs();
-        refs.state.register_primitive(refs.aux,stringify!($name),command);
+        refs.state
+            .register_primitive(refs.aux, stringify!($name), command);
     }};
 }
 
-pub(crate) use cmtodos;
-pub(crate) use cmstodos;
-pub(crate) use cmtodo;
-pub(crate) use cmstodo;
 use crate::tex::nodes::WhatsitFunction;
 use crate::utils::errors::TeXResult;
+pub(crate) use cmstodo;
+pub(crate) use cmstodos;
+pub(crate) use cmtodo;
+pub(crate) use cmtodos;
 
 /// Creates a new expandable primitive and registers it with the engine.
-pub fn register_expandable<E:TeXEngine>(
-    engine:&mut E,
-    name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,&mut Vec<<E::Types as EngineTypes>::Token>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>) {
+pub fn register_expandable<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    f: fn(
+        &mut EngineReferences<E::Types>,
+        &mut Vec<<E::Types as EngineTypes>::Token>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<(), E::Types>,
+) {
     let command = PrimitiveCommand::Expandable(f);
     let refs = engine.get_engine_refs();
-    refs.state.register_primitive(refs.aux,name,command);
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new simple expandable primitive (which does not produce new tokens) and registers it with the engine.
-pub fn register_simple_expandable<E:TeXEngine>(
-    engine:&mut E,
-    name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>) {
+pub fn register_simple_expandable<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    f: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<(), E::Types>,
+) {
     let command = PrimitiveCommand::SimpleExpandable(f);
     let refs = engine.get_engine_refs();
-    refs.state.register_primitive(refs.aux,name,command);
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new conditional primitive and registers it with the engine.
-pub fn register_conditional<E:TeXEngine>(
-    engine:&mut E,
-    name:&'static str,
-    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<bool,E::Types>) {
+pub fn register_conditional<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    f: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<bool, E::Types>,
+) {
     let command = PrimitiveCommand::Conditional(f);
     let refs = engine.get_engine_refs();
-    refs.state.register_primitive(refs.aux,name,command);
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new unexpandable primitive and registers it with the engine.
-pub fn register_unexpandable<E:TeXEngine>(
-    engine:&mut E,
-    name:&'static str,
+pub fn register_unexpandable<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
     scope: CommandScope,
-    f:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>) {
-    let command = PrimitiveCommand::Unexpandable { scope, apply:f };
+    f: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<(), E::Types>,
+) {
+    let command = PrimitiveCommand::Unexpandable { scope, apply: f };
     let refs = engine.get_engine_refs();
-    refs.state.register_primitive(refs.aux,name,command)
+    refs.state.register_primitive(refs.aux, name, command)
 }
 
 /// Creates a new primitive named integer value and registers it with the engine.
-pub fn register_primitive_int<E:TeXEngine>(engine:&mut E,names:&[&'static str]) {
+pub fn register_primitive_int<E: TeXEngine>(engine: &mut E, names: &[&'static str]) {
     let refs = engine.get_engine_refs();
     for name in names {
-        refs.state.register_primitive(refs.aux,name,PrimitiveCommand::PrimitiveInt);
+        refs.state
+            .register_primitive(refs.aux, name, PrimitiveCommand::PrimitiveInt);
     }
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) an
 ///integer value and registers it with the engine.
-pub fn register_int<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<<E::Types as EngineTypes>::Int,E::Types>,
-    assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
+pub fn register_int<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    read: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<<E::Types as EngineTypes>::Int, E::Types>,
+    assign: Option<
+        for<'a, 'b> fn(
+            &'a mut EngineReferences<'b, E::Types>,
+            <E::Types as EngineTypes>::Token,
+            bool,
+        ) -> TeXResult<(), E::Types>,
+    >,
 ) {
     let refs = engine.get_engine_refs();
-    let command = PrimitiveCommand::Int { read,assign };
-    refs.state.register_primitive(refs.aux,name,command);
+    let command = PrimitiveCommand::Int { read, assign };
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// dimension value and registers it with the engine.
-pub fn register_dim<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<<E::Types as EngineTypes>::Dim,E::Types>,
-                                 assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
+pub fn register_dim<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    read: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<<E::Types as EngineTypes>::Dim, E::Types>,
+    assign: Option<
+        for<'a, 'b> fn(
+            &'a mut EngineReferences<'b, E::Types>,
+            <E::Types as EngineTypes>::Token,
+            bool,
+        ) -> TeXResult<(), E::Types>,
+    >,
 ) {
     let refs = engine.get_engine_refs();
-    let command = PrimitiveCommand::Dim { read,assign };
-    refs.state.register_primitive(refs.aux,name,command);
+    let command = PrimitiveCommand::Dim { read, assign };
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// skip value and registers it with the engine.
-pub fn register_skip<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Skip<<E::Types as EngineTypes>::Dim>,E::Types>,
-                                 assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
+pub fn register_skip<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    read: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<Skip<<E::Types as EngineTypes>::Dim>, E::Types>,
+    assign: Option<
+        for<'a, 'b> fn(
+            &'a mut EngineReferences<'b, E::Types>,
+            <E::Types as EngineTypes>::Token,
+            bool,
+        ) -> TeXResult<(), E::Types>,
+    >,
 ) {
     let refs = engine.get_engine_refs();
-    let command = PrimitiveCommand::Skip { read,assign };
-    refs.state.register_primitive(refs.aux,name,command);
+    let command = PrimitiveCommand::Skip { read, assign };
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// muskip value and registers it with the engine.
-pub fn register_muskip<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<MuSkip<<E::Types as EngineTypes>::MuDim>,E::Types>,
-                                  assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
+pub fn register_muskip<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    read: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<MuSkip<<E::Types as EngineTypes>::MuDim>, E::Types>,
+    assign: Option<
+        for<'a, 'b> fn(
+            &'a mut EngineReferences<'b, E::Types>,
+            <E::Types as EngineTypes>::Token,
+            bool,
+        ) -> TeXResult<(), E::Types>,
+    >,
 ) {
     let refs = engine.get_engine_refs();
-    let command = PrimitiveCommand::MuSkip { read,assign };
-    refs.state.register_primitive(refs.aux,name,command);
+    let command = PrimitiveCommand::MuSkip { read, assign };
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive command that yields (and optionally assigns) a
 /// font value and registers it with the engine.
-pub fn register_font<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                    read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<<E::Types as EngineTypes>::Font,E::Types>,
-                                    assign:Option<for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>>
+pub fn register_font<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    read: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<<E::Types as EngineTypes>::Font, E::Types>,
+    assign: Option<
+        for<'a, 'b> fn(
+            &'a mut EngineReferences<'b, E::Types>,
+            <E::Types as EngineTypes>::Token,
+            bool,
+        ) -> TeXResult<(), E::Types>,
+    >,
 ) {
     let refs = engine.get_engine_refs();
-    let command = PrimitiveCommand::FontCmd { read,assign };
-    refs.state.register_primitive(refs.aux,name,command);
+    let command = PrimitiveCommand::FontCmd { read, assign };
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive command that yields a
 /// box and registers it with the engine.
-pub fn register_box<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                  read:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Either<Option<TeXBox<E::Types>>,BoxInfo<E::Types>>,E::Types>
+pub fn register_box<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    read: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<Either<Option<TeXBox<E::Types>>, BoxInfo<E::Types>>, E::Types>,
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Box(read);
-    refs.state.register_primitive(refs.aux,name,command);
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive assignment command.
-pub fn register_assignment<E:TeXEngine>(engine:&mut E,name:&'static str,
-                                 assign:for<'a,'b> fn(&'a mut EngineReferences<'b,E::Types>,<E::Types as EngineTypes>::Token,bool) -> TeXResult<(),E::Types>
+pub fn register_assignment<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    assign: for<'a, 'b> fn(
+        &'a mut EngineReferences<'b, E::Types>,
+        <E::Types as EngineTypes>::Token,
+        bool,
+    ) -> TeXResult<(), E::Types>,
 ) {
     let refs = engine.get_engine_refs();
     let command = PrimitiveCommand::Assignment(assign);
-    refs.state.register_primitive(refs.aux,name,command);
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// Creates a new primitive named dimension and registers it with the engine.
-pub fn register_primitive_dim<E:TeXEngine>(engine:&mut E,names:&[&'static str]) {
+pub fn register_primitive_dim<E: TeXEngine>(engine: &mut E, names: &[&'static str]) {
     let refs = engine.get_engine_refs();
     for name in names {
-        refs.state.register_primitive(refs.aux,name,PrimitiveCommand::PrimitiveDim);
+        refs.state
+            .register_primitive(refs.aux, name, PrimitiveCommand::PrimitiveDim);
     }
 }
 
 /// Creates a new primitive named skip and registers it with the engine.
-pub fn register_primitive_skip<E:TeXEngine>(engine:&mut E,names:&[&'static str]) {
+pub fn register_primitive_skip<E: TeXEngine>(engine: &mut E, names: &[&'static str]) {
     let refs = engine.get_engine_refs();
     for name in names {
-        refs.state.register_primitive(refs.aux,name,PrimitiveCommand::PrimitiveSkip);
+        refs.state
+            .register_primitive(refs.aux, name, PrimitiveCommand::PrimitiveSkip);
     }
 }
 
 /// Creates a new primitive named skip and registers it with the engine.
-pub fn register_primitive_muskip<E:TeXEngine>(engine:&mut E,names:&[&'static str]) {
+pub fn register_primitive_muskip<E: TeXEngine>(engine: &mut E, names: &[&'static str]) {
     let refs = engine.get_engine_refs();
     for name in names {
-        refs.state.register_primitive(refs.aux,name,PrimitiveCommand::PrimitiveMuSkip);
+        refs.state
+            .register_primitive(refs.aux, name, PrimitiveCommand::PrimitiveMuSkip);
     }
 }
 
 /// Creates a new primitive named token register and registers it with the engine.
-pub fn register_primitive_toks<E:TeXEngine>(engine:&mut E,names:&[&'static str]) {
+pub fn register_primitive_toks<E: TeXEngine>(engine: &mut E, names: &[&'static str]) {
     let refs = engine.get_engine_refs();
     for name in names {
-        refs.state.register_primitive(refs.aux,name,PrimitiveCommand::PrimitiveToks);
+        refs.state
+            .register_primitive(refs.aux, name, PrimitiveCommand::PrimitiveToks);
     }
 }
 
 /// Creates a new "Whatsit" primitive and registers it with the engine.
-pub fn register_whatsit<E:TeXEngine>(
-    engine:&mut E,
-    name:&'static str,
-    get:fn(&mut EngineReferences<E::Types>, <E::Types as EngineTypes>::Token)
-             -> TeXResult<Option<Box<WhatsitFunction<E::Types>>>,E::Types>,
-    immediate:fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<(),E::Types>,
-    the:Option<fn(&mut EngineReferences<E::Types>,<E::Types as EngineTypes>::Token) -> TeXResult<Vec<<E::Types as EngineTypes>::Token>,E::Types>>
+pub fn register_whatsit<E: TeXEngine>(
+    engine: &mut E,
+    name: &'static str,
+    get: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<Option<Box<WhatsitFunction<E::Types>>>, E::Types>,
+    immediate: fn(
+        &mut EngineReferences<E::Types>,
+        <E::Types as EngineTypes>::Token,
+    ) -> TeXResult<(), E::Types>,
+    the: Option<
+        fn(
+            &mut EngineReferences<E::Types>,
+            <E::Types as EngineTypes>::Token,
+        ) -> TeXResult<Vec<<E::Types as EngineTypes>::Token>, E::Types>,
+    >,
 ) {
-    let command = PrimitiveCommand::Whatsit { get,immediate, the };
+    let command = PrimitiveCommand::Whatsit {
+        get,
+        immediate,
+        the,
+    };
     let refs = engine.get_engine_refs();
-    refs.state.register_primitive(refs.aux,name,command);
+    refs.state.register_primitive(refs.aux, name, command);
 }
 
 /// A store for all primitive commands.
 #[derive(Clone)]
-pub struct PrimitiveCommands<ET:EngineTypes> {
+pub struct PrimitiveCommands<ET: EngineTypes> {
     commands: Vec<TeXCommand<ET>>,
-    names:HMap<&'static str,u16>
+    names: HMap<&'static str, u16>,
 }
-impl<ET:EngineTypes> Default for PrimitiveCommands<ET> {
+impl<ET: EngineTypes> Default for PrimitiveCommands<ET> {
     fn default() -> Self {
         Self {
             commands: Vec::new(),
-            names: HMap::default()
+            names: HMap::default(),
         }
     }
 }
-impl<ET:EngineTypes> PrimitiveCommands<ET> {
+impl<ET: EngineTypes> PrimitiveCommands<ET> {
     /// Registers a new primitive command.
-    pub fn register(&mut self,name:&'static str,cmd: PrimitiveCommand<ET>) -> PrimitiveIdentifier {
+    pub fn register(
+        &mut self,
+        name: &'static str,
+        cmd: PrimitiveCommand<ET>,
+    ) -> PrimitiveIdentifier {
         let id = PRIMITIVES.new_id(name);
         let idx = id.as_u16() as usize;
         if idx >= self.commands.len() {
-            self.commands.resize(idx+1, TeXCommand::Primitive{name:id,cmd:PrimitiveCommand::Relax});
+            self.commands.resize(
+                idx + 1,
+                TeXCommand::Primitive {
+                    name: id,
+                    cmd: PrimitiveCommand::Relax,
+                },
+            );
         }
-        self.commands[idx] = TeXCommand::Primitive{name:id,cmd};
-        self.names.insert(name,idx as u16);
+        self.commands[idx] = TeXCommand::Primitive { name: id, cmd };
+        self.names.insert(name, idx as u16);
         id
     }
     /// Return the primitive command with the given identifier.
-    pub fn get_id(&self,id:PrimitiveIdentifier) -> Option<&TeXCommand<ET>> {
+    pub fn get_id(&self, id: PrimitiveIdentifier) -> Option<&TeXCommand<ET>> {
         let idx = id.as_u16() as usize;
         self.commands.get(idx)
     }
     /// Return the [`PrimitiveIdentifier`] of the primitive command with the given name.
-    pub fn get_name(&self,s:&str) -> Option<PrimitiveIdentifier> {
-        self.names.get(s).and_then(|&u| PrimitiveIdentifier::try_from_u16(u))
+    pub fn get_name(&self, s: &str) -> Option<PrimitiveIdentifier> {
+        self.names
+            .get(s)
+            .and_then(|&u| PrimitiveIdentifier::try_from_u16(u))
     }
 }
 
@@ -268,89 +387,97 @@ impl<ET:EngineTypes> PrimitiveCommands<ET> {
 ///
 /// It is never necessary to instantiate a new [`PrimitiveInterner`]; instead, use the global [`PRIMITIVES`](static@PRIMITIVES) instance.
 pub struct PrimitiveInterner {
-    interner:RwLock<string_interner::StringInterner<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, rustc_hash::FxBuildHasher>>,
-    pub globaldefs:PrimitiveIdentifier,
-    pub relax:PrimitiveIdentifier,
-    pub mag:PrimitiveIdentifier,
-    pub fam:PrimitiveIdentifier,
-    pub ifcase:PrimitiveIdentifier,
-    pub tracingifs:PrimitiveIdentifier,
-    pub tracingassigns:PrimitiveIdentifier,
-    pub tracingcommands:PrimitiveIdentifier,
-    pub tracinggroups:PrimitiveIdentifier,
-    pub tracingrestores:PrimitiveIdentifier,
-    pub r#else:PrimitiveIdentifier,
-    pub fi:PrimitiveIdentifier,
-    pub or:PrimitiveIdentifier,
-    pub global:PrimitiveIdentifier,
-    pub long:PrimitiveIdentifier,
-    pub outer:PrimitiveIdentifier,
-    pub protected:PrimitiveIdentifier,
-    pub def:PrimitiveIdentifier,
-    pub edef:PrimitiveIdentifier,
-    pub xdef:PrimitiveIdentifier,
-    pub gdef:PrimitiveIdentifier,
-    pub everyeof:PrimitiveIdentifier,
-    pub everyhbox:PrimitiveIdentifier,
-    pub everyvbox:PrimitiveIdentifier,
-    pub everyjob:PrimitiveIdentifier,
-    pub count:PrimitiveIdentifier,
-    pub noexpand:PrimitiveIdentifier,
-    pub unexpanded:PrimitiveIdentifier,
-    pub endcsname:PrimitiveIdentifier,
-    pub the:PrimitiveIdentifier,
-    pub toks:PrimitiveIdentifier,
-    pub vsize:PrimitiveIdentifier,
-    pub output:PrimitiveIdentifier,
-    pub badness:PrimitiveIdentifier,
-    pub outputpenalty:PrimitiveIdentifier,
-    pub dimen:PrimitiveIdentifier,
-    pub skip:PrimitiveIdentifier,
-    pub everypar:PrimitiveIdentifier,
-    pub indent:PrimitiveIdentifier,
-    pub noindent:PrimitiveIdentifier,
-    pub hangindent:PrimitiveIdentifier,
-    pub hangafter:PrimitiveIdentifier,
-    pub leftskip:PrimitiveIdentifier,
-    pub rightskip:PrimitiveIdentifier,
-    pub hsize:PrimitiveIdentifier,
-    pub pdfpagewidth:PrimitiveIdentifier,
-    pub everymath:PrimitiveIdentifier,
-    pub everydisplay:PrimitiveIdentifier,
-    pub char:PrimitiveIdentifier,
-    pub tabskip:PrimitiveIdentifier,
-    pub cr:PrimitiveIdentifier,
-    pub crcr:PrimitiveIdentifier,
-    pub everycr:PrimitiveIdentifier,
-    pub span:PrimitiveIdentifier,
-    pub noalign:PrimitiveIdentifier,
-    pub omit:PrimitiveIdentifier,
-    pub baselineskip:PrimitiveIdentifier,
-    pub lineskip:PrimitiveIdentifier,
-    pub lineskiplimit:PrimitiveIdentifier,
-    pub parindent:PrimitiveIdentifier,
-    pub hrule:PrimitiveIdentifier,
-    pub vrule:PrimitiveIdentifier,
-    pub vskip:PrimitiveIdentifier,
-    pub hskip:PrimitiveIdentifier,
-    pub vfil:PrimitiveIdentifier,
-    pub hfil:PrimitiveIdentifier,
-    pub vfill:PrimitiveIdentifier,
-    pub hfill:PrimitiveIdentifier,
-    pub parskip:PrimitiveIdentifier,
-    pub delimiter:PrimitiveIdentifier,
-    pub abovedisplayskip:PrimitiveIdentifier,
-    pub belowdisplayskip:PrimitiveIdentifier,
-    pub iffalse:PrimitiveIdentifier,
-    pub iftrue:PrimitiveIdentifier,
-    pub year:PrimitiveIdentifier,
-    pub month:PrimitiveIdentifier,
-    pub day:PrimitiveIdentifier,
-    pub time:PrimitiveIdentifier,
+    interner: RwLock<
+        string_interner::StringInterner<
+            string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>,
+            rustc_hash::FxBuildHasher,
+        >,
+    >,
+    pub globaldefs: PrimitiveIdentifier,
+    pub relax: PrimitiveIdentifier,
+    pub mag: PrimitiveIdentifier,
+    pub fam: PrimitiveIdentifier,
+    pub ifcase: PrimitiveIdentifier,
+    pub tracingifs: PrimitiveIdentifier,
+    pub tracingassigns: PrimitiveIdentifier,
+    pub tracingcommands: PrimitiveIdentifier,
+    pub tracinggroups: PrimitiveIdentifier,
+    pub tracingrestores: PrimitiveIdentifier,
+    pub r#else: PrimitiveIdentifier,
+    pub fi: PrimitiveIdentifier,
+    pub or: PrimitiveIdentifier,
+    pub global: PrimitiveIdentifier,
+    pub long: PrimitiveIdentifier,
+    pub outer: PrimitiveIdentifier,
+    pub protected: PrimitiveIdentifier,
+    pub def: PrimitiveIdentifier,
+    pub edef: PrimitiveIdentifier,
+    pub xdef: PrimitiveIdentifier,
+    pub gdef: PrimitiveIdentifier,
+    pub everyeof: PrimitiveIdentifier,
+    pub everyhbox: PrimitiveIdentifier,
+    pub everyvbox: PrimitiveIdentifier,
+    pub everyjob: PrimitiveIdentifier,
+    pub count: PrimitiveIdentifier,
+    pub noexpand: PrimitiveIdentifier,
+    pub unexpanded: PrimitiveIdentifier,
+    pub endcsname: PrimitiveIdentifier,
+    pub the: PrimitiveIdentifier,
+    pub toks: PrimitiveIdentifier,
+    pub vsize: PrimitiveIdentifier,
+    pub output: PrimitiveIdentifier,
+    pub badness: PrimitiveIdentifier,
+    pub outputpenalty: PrimitiveIdentifier,
+    pub dimen: PrimitiveIdentifier,
+    pub skip: PrimitiveIdentifier,
+    pub everypar: PrimitiveIdentifier,
+    pub indent: PrimitiveIdentifier,
+    pub noindent: PrimitiveIdentifier,
+    pub hangindent: PrimitiveIdentifier,
+    pub hangafter: PrimitiveIdentifier,
+    pub leftskip: PrimitiveIdentifier,
+    pub rightskip: PrimitiveIdentifier,
+    pub hsize: PrimitiveIdentifier,
+    pub pdfpagewidth: PrimitiveIdentifier,
+    pub everymath: PrimitiveIdentifier,
+    pub everydisplay: PrimitiveIdentifier,
+    pub char: PrimitiveIdentifier,
+    pub tabskip: PrimitiveIdentifier,
+    pub cr: PrimitiveIdentifier,
+    pub crcr: PrimitiveIdentifier,
+    pub everycr: PrimitiveIdentifier,
+    pub span: PrimitiveIdentifier,
+    pub noalign: PrimitiveIdentifier,
+    pub omit: PrimitiveIdentifier,
+    pub baselineskip: PrimitiveIdentifier,
+    pub lineskip: PrimitiveIdentifier,
+    pub lineskiplimit: PrimitiveIdentifier,
+    pub parindent: PrimitiveIdentifier,
+    pub hrule: PrimitiveIdentifier,
+    pub vrule: PrimitiveIdentifier,
+    pub vskip: PrimitiveIdentifier,
+    pub hskip: PrimitiveIdentifier,
+    pub vfil: PrimitiveIdentifier,
+    pub hfil: PrimitiveIdentifier,
+    pub vfill: PrimitiveIdentifier,
+    pub hfill: PrimitiveIdentifier,
+    pub parskip: PrimitiveIdentifier,
+    pub delimiter: PrimitiveIdentifier,
+    pub abovedisplayskip: PrimitiveIdentifier,
+    pub belowdisplayskip: PrimitiveIdentifier,
+    pub iffalse: PrimitiveIdentifier,
+    pub iftrue: PrimitiveIdentifier,
+    pub year: PrimitiveIdentifier,
+    pub month: PrimitiveIdentifier,
+    pub day: PrimitiveIdentifier,
+    pub time: PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
-        let mut interner = string_interner::StringInterner::<string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>, rustc_hash::FxBuildHasher>::new();
+        let mut interner = string_interner::StringInterner::<
+            string_interner::backend::StringBackend<string_interner::symbol::SymbolU16>,
+            rustc_hash::FxBuildHasher,
+        >::new();
         let globaldefs = PrimitiveIdentifier(interner.get_or_intern_static("globaldefs"));
         let relax = PrimitiveIdentifier(interner.get_or_intern_static("relax"));
         let mag = PrimitiveIdentifier(interner.get_or_intern_static("mag"));
@@ -421,33 +548,103 @@ impl PrimitiveInterner {
         let hfill = PrimitiveIdentifier(interner.get_or_intern_static("hfill"));
         let parskip = PrimitiveIdentifier(interner.get_or_intern_static("parskip"));
         let delimiter = PrimitiveIdentifier(interner.get_or_intern_static("delimiter"));
-        let abovedisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("abovedisplayskip"));
-        let belowdisplayskip = PrimitiveIdentifier(interner.get_or_intern_static("belowdisplayskip"));
+        let abovedisplayskip =
+            PrimitiveIdentifier(interner.get_or_intern_static("abovedisplayskip"));
+        let belowdisplayskip =
+            PrimitiveIdentifier(interner.get_or_intern_static("belowdisplayskip"));
         let iffalse = PrimitiveIdentifier(interner.get_or_intern_static("iffalse"));
         let iftrue = PrimitiveIdentifier(interner.get_or_intern_static("iftrue"));
         let year = PrimitiveIdentifier(interner.get_or_intern_static("year"));
         let month = PrimitiveIdentifier(interner.get_or_intern_static("month"));
         let day = PrimitiveIdentifier(interner.get_or_intern_static("day"));
         let time = PrimitiveIdentifier(interner.get_or_intern_static("time"));
-        PrimitiveInterner{
-            interner:RwLock::new(interner),
-            globaldefs, relax, mag, fam, ifcase, tracingifs, tracingassigns, tracingcommands,
-            tracinggroups, r#else, fi, or, global, long, outer, protected, def, edef, xdef,
-            gdef,everyeof,count,tracingrestores,noexpand,endcsname,unexpanded,the,toks,
-            everyhbox,everyvbox,everyjob,vsize,output,badness,outputpenalty,dimen,skip,
-            everypar,indent,noindent,hangindent,hangafter,leftskip,rightskip,hsize,
-            pdfpagewidth,everymath,everydisplay,char,tabskip,cr,crcr,everycr,span,
-            noalign,omit,baselineskip,lineskip,lineskiplimit,parindent,hrule,vrule,
-            vskip,hskip,vfil,hfil,vfill,hfill,parskip,delimiter,abovedisplayskip,
-            belowdisplayskip,iffalse,iftrue,year,month,day,time
+        PrimitiveInterner {
+            interner: RwLock::new(interner),
+            globaldefs,
+            relax,
+            mag,
+            fam,
+            ifcase,
+            tracingifs,
+            tracingassigns,
+            tracingcommands,
+            tracinggroups,
+            r#else,
+            fi,
+            or,
+            global,
+            long,
+            outer,
+            protected,
+            def,
+            edef,
+            xdef,
+            gdef,
+            everyeof,
+            count,
+            tracingrestores,
+            noexpand,
+            endcsname,
+            unexpanded,
+            the,
+            toks,
+            everyhbox,
+            everyvbox,
+            everyjob,
+            vsize,
+            output,
+            badness,
+            outputpenalty,
+            dimen,
+            skip,
+            everypar,
+            indent,
+            noindent,
+            hangindent,
+            hangafter,
+            leftskip,
+            rightskip,
+            hsize,
+            pdfpagewidth,
+            everymath,
+            everydisplay,
+            char,
+            tabskip,
+            cr,
+            crcr,
+            everycr,
+            span,
+            noalign,
+            omit,
+            baselineskip,
+            lineskip,
+            lineskiplimit,
+            parindent,
+            hrule,
+            vrule,
+            vskip,
+            hskip,
+            vfil,
+            hfil,
+            vfill,
+            hfill,
+            parskip,
+            delimiter,
+            abovedisplayskip,
+            belowdisplayskip,
+            iffalse,
+            iftrue,
+            year,
+            month,
+            day,
+            time,
         }
     }
 
-    fn new_id(&self, s:&'static str) -> PrimitiveIdentifier {
+    fn new_id(&self, s: &'static str) -> PrimitiveIdentifier {
         let mut lock = self.interner.write().unwrap();
         PrimitiveIdentifier(lock.get_or_intern_static(s))
     }
-
 }
 lazy_static!(
     /// The global [`PrimitiveInterner`].
@@ -455,15 +652,15 @@ lazy_static!(
 );
 
 /// A `Copy` identifier for a primitive command. Small and fast to compare.
-#[derive(Copy,Clone,PartialEq,Eq,Hash,Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct PrimitiveIdentifier(string_interner::symbol::SymbolU16);
 impl PrimitiveIdentifier {
     /// Returns a struct implementing [`Display`](std::fmt::Display) for the given [`PrimitiveIdentifier`], and
     /// optional `\escapechar` that will be prefixed - e.g.
     /// `println!(`[`PRIMITIVES`](static@PRIMITIVES)`.the.`[`display`](Self::display)`(Some('\\'))`
     /// will print `\the`.
-    pub fn display<C:Character>(self,escapechar:Option<C>) -> impl std::fmt::Display {
-        PrintableIdentifier(self,escapechar)
+    pub fn display<C: Character>(self, escapechar: Option<C>) -> impl std::fmt::Display {
+        PrintableIdentifier(self, escapechar)
     }
     /// Returns the `u16` value of the identifier.
     pub fn as_u16(&self) -> u16 {
@@ -471,20 +668,20 @@ impl PrimitiveIdentifier {
         self.0.to_usize() as u16
     }
     /// Returns the identifier for the given `u16` value, if it exists.
-    pub fn try_from_u16(u:u16) -> Option<Self> {
+    pub fn try_from_u16(u: u16) -> Option<Self> {
         use string_interner::Symbol;
         string_interner::symbol::SymbolU16::try_from_usize(u as usize).map(PrimitiveIdentifier)
     }
 }
 
-struct PrintableIdentifier<C:Character>(PrimitiveIdentifier,Option<C>);
-impl<C:Character> std::fmt::Display for PrintableIdentifier<C> {
-    fn fmt(&self,f:&mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+struct PrintableIdentifier<C: Character>(PrimitiveIdentifier, Option<C>);
+impl<C: Character> std::fmt::Display for PrintableIdentifier<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let lock = PRIMITIVES.interner.read().unwrap();
         match self.1 {
             None => (),
-            Some(c) => c.display_fmt(f)
+            Some(c) => c.display_fmt(f),
         }
-        write!(f,"{}",lock.resolve(self.0.0).unwrap())
+        write!(f, "{}", lock.resolve(self.0 .0).unwrap())
     }
 }

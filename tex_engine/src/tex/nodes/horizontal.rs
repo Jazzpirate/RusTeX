@@ -1,23 +1,23 @@
 /*! Nodes allowed in horizontal lists. */
-use crate::engine::EngineTypes;
 use crate::engine::filesystem::{File, SourceRef, SourceReference};
 use crate::engine::fontsystem::{Font, FontSystem};
-use crate::tex::tokens::token_lists::TokenList;
-use crate::tex::nodes::{BoxTarget, display_do_indent, Leaders, NodeTrait, NodeType, WhatsitNode};
+use crate::engine::EngineTypes;
+use crate::tex::characters::Character;
 use crate::tex::nodes::boxes::{HBoxInfo, TeXBox};
 use crate::tex::nodes::math::MathGroup;
 use crate::tex::nodes::vertical::VNode;
-use crate::tex::characters::Character;
-use crate::tex::numerics::TeXDimen;
+use crate::tex::nodes::{display_do_indent, BoxTarget, Leaders, NodeTrait, NodeType, WhatsitNode};
 use crate::tex::numerics::Skip;
+use crate::tex::numerics::TeXDimen;
+use crate::tex::tokens::token_lists::TokenList;
 
 /// A horizontal list node.
-#[derive(Clone,Debug)]
-pub enum HNode<ET:EngineTypes> {
+#[derive(Clone, Debug)]
+pub enum HNode<ET: EngineTypes> {
     /// A penalty node, as produced by `\penalty`.
     Penalty(i32),
     /// A mark node, as produced by `\mark`.
-    Mark(usize,TokenList<ET::Token>),
+    Mark(usize, TokenList<ET::Token>),
     /// A whatsit node, as produced by `\special`, `\write`, etc.
     Whatsit(WhatsitNode<ET>),
     /// A glue node, as produced by `\hskip`.
@@ -39,20 +39,20 @@ pub enum HNode<ET:EngineTypes> {
     /// A box node, as produced by `\hbox`, `\vbox`, `\vtop`, etc.
     Box(TeXBox<ET>),
     /// A rule node, as produced by `\vrule`.
-    VRule{
+    VRule {
         /// The *provided* width of the rule.
-        width:Option<ET::Dim>,
+        width: Option<ET::Dim>,
         /// The *provided* height of the rule.
-        height:Option<ET::Dim>,
+        height: Option<ET::Dim>,
         /// The *provided* depth of the rule.
-        depth:Option<ET::Dim>,
+        depth: Option<ET::Dim>,
         /// The source reference for the start of the rule.
-        start:SourceRef<ET>,
+        start: SourceRef<ET>,
         /// The source reference for the end of the rule.
-        end:SourceRef<ET>
+        end: SourceRef<ET>,
     },
     /// An insertion node, as produced by `\insert`.
-    Insert(usize,Box<[VNode<ET>]>),
+    Insert(usize, Box<[VNode<ET>]>),
     /// A vadjust node, as produced by `\vadjust`; its contents will migrate to the surrounding vertical list eventually.
     VAdjust(Box<[VNode<ET>]>),
     /// A math list, as produced by `$...$` or `$$...$$`.
@@ -60,100 +60,108 @@ pub enum HNode<ET:EngineTypes> {
     /// A character node, as produced by a character.
     Char {
         /// The character.
-        char:ET::Char,
+        char: ET::Char,
         /// The current font
-        font:<ET::FontSystem as FontSystem>::Font
+        font: <ET::FontSystem as FontSystem>::Font,
     },
     /// An `\accent` node.
     Accent {
         /// The accent character.
-        accent:ET::Char,
+        accent: ET::Char,
         /// The lower character.
-        char:ET::Char,
+        char: ET::Char,
         /// The current font
-        font:<ET::FontSystem as FontSystem>::Font
+        font: <ET::FontSystem as FontSystem>::Font,
     },
     /// A custom node.
     Custom(ET::CustomNode),
 }
 
-impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
+impl<ET: EngineTypes> NodeTrait<ET> for HNode<ET> {
     fn display_fmt(&self, indent: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HNode::Penalty(p) => {
-                display_do_indent(indent,f)?;
-                write!(f, "<penalty:{}>",p)
-            },
+                display_do_indent(indent, f)?;
+                write!(f, "<penalty:{}>", p)
+            }
             HNode::Leaders(l) => l.display_fmt(indent, f),
             HNode::Box(b) => b.display_fmt(indent, f),
             HNode::Mark(i, _) => {
-                display_do_indent(indent,f)?;
-                write!(f, "<mark:{}>",i)
-            },
-            HNode::VRule { width, height, depth, .. } => {
+                display_do_indent(indent, f)?;
+                write!(f, "<mark:{}>", i)
+            }
+            HNode::VRule {
+                width,
+                height,
+                depth,
+                ..
+            } => {
                 write!(f, "<vrule")?;
                 if let Some(w) = width {
-                    write!(f, " width={}",w)?;
+                    write!(f, " width={}", w)?;
                 }
                 if let Some(h) = height {
-                    write!(f, " height={}",h)?;
+                    write!(f, " height={}", h)?;
                 }
                 if let Some(d) = depth {
-                    write!(f, " depth={}",d)?;
+                    write!(f, " depth={}", d)?;
                 }
                 write!(f, ">")
-            },
-            HNode::Insert(n,ch) => {
-                display_do_indent(indent,f)?;
-                write!(f,"<insert {}>",n)?;
+            }
+            HNode::Insert(n, ch) => {
+                display_do_indent(indent, f)?;
+                write!(f, "<insert {}>", n)?;
                 for c in ch.iter() {
                     c.display_fmt(indent + 2, f)?;
                 }
-                display_do_indent(indent,f)?;
-                write!(f,"</insert>")
-            },
+                display_do_indent(indent, f)?;
+                write!(f, "</insert>")
+            }
             HNode::VAdjust(ls) => {
-                display_do_indent(indent,f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("<vadjust>")?;
                 for c in ls.iter() {
-                    c.display_fmt(indent+2, f)?;
+                    c.display_fmt(indent + 2, f)?;
                 }
-                display_do_indent(indent,f)?;
+                display_do_indent(indent, f)?;
                 f.write_str("</vadjust>")
-            },
-            HNode::MathGroup(mg) => {
-                mg.display_fmt(indent, f)
             }
+            HNode::MathGroup(mg) => mg.display_fmt(indent, f),
             HNode::Char { char, .. } => {
                 char.display_fmt(f);
                 Ok(())
-            },
+            }
             HNode::Accent { accent, char, .. } => {
-                write!(f,"<accent accent=\"{}\" char=\"{}\" />",accent.display(),char.display())
+                write!(
+                    f,
+                    "<accent accent=\"{}\" char=\"{}\" />",
+                    accent.display(),
+                    char.display()
+                )
             }
             HNode::Whatsit(w) => {
-                display_do_indent(indent,f)?;
-                write!(f, "{:?}",w)
+                display_do_indent(indent, f)?;
+                write!(f, "{:?}", w)
             }
-            HNode::HSkip(s) => write!(f, "<hskip:{}>",s),
+            HNode::HSkip(s) => write!(f, "<hskip:{}>", s),
             HNode::HFil => write!(f, "<hfil>"),
             HNode::HFill => write!(f, "<hfill>"),
             HNode::HFilneg => write!(f, "<hfilneg>"),
             HNode::Hss => write!(f, "<hss>"),
             HNode::Space => write!(f, "<space>"),
-            HNode::HKern(d) => write!(f, "<hkern:{}>",d),
-            HNode::Custom(n) => n.display_fmt(indent, f)
+            HNode::HKern(d) => write!(f, "<hkern:{}>", d),
+            HNode::Custom(n) => n.display_fmt(indent, f),
         }
     }
     fn height(&self) -> ET::Dim {
         match self {
             HNode::Box(b) => b.height(),
             HNode::VRule { height, .. } => height.unwrap_or_default(),
-            HNode::Char { char,font } => font.get_ht(*char),
+            HNode::Char { char, font } => font.get_ht(*char),
             HNode::Leaders(l) => l.height(),
             HNode::MathGroup(mg) => mg.height(),
             HNode::Custom(n) => n.height(),
-            HNode::Accent { char, font,.. } => {
+            HNode::Accent { char, font, .. } => {
                 font.get_ht(*char) // TODO
             }
             _ => ET::Dim::default(),
@@ -162,23 +170,23 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
     fn width(&self) -> ET::Dim {
         match self {
             HNode::Box(b) => b.width(),
-            HNode::Char { char,font } => font.get_wd(*char),
+            HNode::Char { char, font } => font.get_wd(*char),
             HNode::VRule { width, .. } => width.unwrap_or(ET::Dim::from_sp(26214)),
             HNode::Leaders(l) => l.width(),
             HNode::MathGroup(mg) => mg.width(),
             HNode::Custom(n) => n.width(),
             HNode::HKern(d) => *d,
             HNode::HSkip(s) => s.base,
-            HNode::Accent { char, font,.. } => font.get_wd(*char),
+            HNode::Accent { char, font, .. } => font.get_wd(*char),
             HNode::Space => ET::Dim::from_sp(65536 * 5), // TODO heuristic; use spacefactor instead
-            _=> ET::Dim::default(),
+            _ => ET::Dim::default(),
         }
     }
     fn depth(&self) -> ET::Dim {
         match self {
             HNode::Box(b) => b.depth(),
-            HNode::Char { char,font } => font.get_dp(*char),
-            HNode::Accent{ char, font,.. } => font.get_dp(*char),
+            HNode::Char { char, font } => font.get_dp(*char),
+            HNode::Accent { char, font, .. } => font.get_dp(*char),
             HNode::VRule { depth, .. } => depth.unwrap_or_default(),
             HNode::Leaders(l) => l.depth(),
             HNode::MathGroup(mg) => mg.depth(),
@@ -189,18 +197,23 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
     fn nodetype(&self) -> NodeType {
         match self {
             HNode::Penalty(_) => NodeType::Penalty,
-            HNode::VRule {..} => NodeType::Rule,
+            HNode::VRule { .. } => NodeType::Rule,
             HNode::Box(b) => b.nodetype(),
             HNode::Char { .. } => NodeType::Char,
             HNode::HKern(_) => NodeType::Kern,
             HNode::Insert(..) => NodeType::Insertion,
             HNode::VAdjust(_) => NodeType::Adjust,
-            HNode::MathGroup{..} => NodeType::Math,
+            HNode::MathGroup { .. } => NodeType::Math,
             HNode::Mark(_, _) => NodeType::Mark,
             HNode::Whatsit(_) => NodeType::WhatsIt,
-            HNode::Accent {..} => NodeType::Char,
+            HNode::Accent { .. } => NodeType::Char,
             HNode::Leaders(_) => NodeType::Glue,
-            HNode::HSkip(_) | HNode::Space | HNode::HFil | HNode::HFill | HNode::HFilneg | HNode::Hss => NodeType::Glue,
+            HNode::HSkip(_)
+            | HNode::Space
+            | HNode::HFil
+            | HNode::HFill
+            | HNode::HFilneg
+            | HNode::Hss => NodeType::Glue,
             HNode::Custom(n) => n.nodetype(),
         }
     }
@@ -208,7 +221,7 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
         match self {
             HNode::Mark(_, _) => true,
             HNode::Custom(n) => n.opaque(),
-            _ => false
+            _ => false,
         }
     }
 
@@ -217,19 +230,19 @@ impl<ET:EngineTypes> NodeTrait<ET> for HNode<ET> {
             HNode::VRule { start, end, .. } => Some((start, end)),
             HNode::Box(b) => b.sourceref(),
             HNode::MathGroup(mg) => mg.sourceref(),
-            _ => None
+            _ => None,
         }
     }
 }
 
 /// The kinds of horizontal lists that can occur.
 /// TODO: rethink this
-#[derive(Clone,Debug)]
-pub enum HorizontalNodeListType<ET:EngineTypes> {
+#[derive(Clone, Debug)]
+pub enum HorizontalNodeListType<ET: EngineTypes> {
     /// A paragraph; will ultimately be broken into lines.
     Paragraph(SourceReference<<ET::File as File>::SourceRefID>),
     /// A horizontal box.
-    Box(HBoxInfo<ET>,SourceRef<ET>,BoxTarget<ET>),
+    Box(HBoxInfo<ET>, SourceRef<ET>, BoxTarget<ET>),
     /// A `\valign` list
     VAlign,
     /// A row in an `\halign`. The source ref indicates the start of the row.
@@ -237,5 +250,5 @@ pub enum HorizontalNodeListType<ET:EngineTypes> {
     /// A cell in an `\halign`. The source ref indicates the start of the cell.
     /// The `u8` indicates the number of *additional* columns spanned by this cell
     /// (so by default 0).
-    HAlignCell(SourceRef<ET>,u8),
+    HAlignCell(SourceRef<ET>, u8),
 }
