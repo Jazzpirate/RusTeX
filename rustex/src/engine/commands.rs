@@ -16,7 +16,7 @@ use tex_engine::prelude::*;
 use tex_engine::engine::mouth::Mouth;
 use tex_engine::utils::errors::TeXError;
 use crate::engine::extension::CSS;
-use crate::utils::VecMap;
+use crate::utils::{VecMap, VecSet};
 
 pub fn register_primitives_preinit(engine:&mut DefaultEngine<Types>) {
     register_simple_expandable(engine,CLOSE_FONT,close_font);
@@ -60,13 +60,13 @@ fn html_literal(engine:Refs,token:CompactToken) -> Res<()> {
 fn css_link(engine:Refs,token:CompactToken) -> Res<()> {
     let mut file = String::new();
     engine.read_braced_string(true,true,&token,&mut file)?;
-    engine.aux.extension.css.push(CSS::File(file));
+    engine.aux.extension.css.insert(CSS::File(file));
     Ok(())
 }
 fn css_literal(engine:Refs,token:CompactToken) -> Res<()> {
     let mut literal = String::new();
     engine.read_braced_string(true,true,&token,&mut literal)?;
-    engine.aux.extension.css.push(CSS::Literal(literal));
+    engine.aux.extension.css.insert(CSS::Literal(literal));
     Ok(())
 }
 
@@ -87,7 +87,7 @@ fn meta(engine:Refs,token:CompactToken) -> Res<()> {
     while !s.is_empty() {
         let key = if let Some(i) = s.find('=') {
             let (n,v) = s.split_at(i);
-            s = &v[1..].trim_start();
+            s = v[1..].trim_start();
             n.trim()
         } else { todo!() };
         let delim = if s.starts_with('"') {
@@ -116,7 +116,7 @@ fn annot_top(engine:Refs,token:CompactToken) -> Res<()> {
     while !s.is_empty() {
         let key = if let Some(i) = s.find('=') {
             let (n,v) = s.split_at(i);
-            s = &v[1..].trim_start();
+            s = v[1..].trim_start();
             n.trim()
         } else { todo!() };
         let delim = if s.starts_with('"') {
@@ -136,44 +136,64 @@ fn annot_top(engine:Refs,token:CompactToken) -> Res<()> {
     Ok(())
 }
 
-fn node_begin(engine:Refs,token:CompactToken) -> Res<()> {
+fn parse_annotations(s:&str) -> Res<(VecMap<String,String>,VecMap<String,String>,VecSet<String>)> {
     let mut attrs = VecMap::default();
     let mut styles = VecMap::default();
-    let start = engine.mouth.start_ref();
-    let mut tag = String::new();
-    engine.read_braced_string(true,true,&token,&mut tag)?;
-    let mut str = String::new();
-    engine.read_braced_string(true,true,&token,&mut str)?;
-    let mut s = str[..].trim();
+    let mut classes = VecSet::default();
+    let mut s = s.trim();
     while !s.is_empty() {
         let style = if s.starts_with("style:") {
             s = &s[6..];
-            true
-        } else {false};
+            Some(true)
+        } else if s.starts_with("class:") {
+            s = &s[6..];
+            Some(false)
+        } else {None};
         let key = if let Some(i) = s.find('=') {
             let (n,v) = s.split_at(i);
-            s = &v[1..].trim_start();
+            s = v[1..].trim_start();
             n.trim()
-        } else { todo!() };
+        } else {
+            return Err(TeXError::General("Invalid annotation".to_string()))
+        };
         let delim = if s.starts_with('"') {
             s = &s[1..];
             '"'
         } else if s.starts_with('\'') {
             s = &s[1..];
             '\''
-        } else { todo!() };
+        } else {
+            return Err(TeXError::General("Invalid annotation".to_string()))
+        };
         let val = if let Some(i) = s.find(delim) {
             let (v,r) = s.split_at(i);
             s = r[1..].trim_start();
             v.trim()
-        } else { todo!() };
-        if style {
+        } else {
+            return Err(TeXError::General("Invalid annotation".to_string()))
+        };
+        if style == Some(true) {
             styles.insert(key.to_string(),val.to_string());
+        } else if style == Some(false) {
+            if !val.is_empty() {
+                return Err(TeXError::General("Invalid class annotation".to_string()))
+            }
+            classes.insert(key.to_string());
         } else {
             attrs.insert(key.to_string(),val.to_string());
         }
     }
-    let node = RusTeXNode::AnnotBegin{attrs,styles,start,tag:Some(tag)};
+    Ok((attrs,styles,classes))
+}
+
+fn node_begin(engine:Refs,token:CompactToken) -> Res<()> {
+    let start = engine.mouth.start_ref();
+    let mut tag = String::new();
+    engine.read_braced_string(true,true,&token,&mut tag)?;
+    let mut str = String::new();
+    engine.read_braced_string(true,true,&token,&mut str)?;
+    let (attrs,styles,classes) = parse_annotations(&str)?;
+    let node = RusTeXNode::AnnotBegin{attrs,styles,start,classes,tag:Some(tag)};
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
     Ok(())
 }
@@ -188,47 +208,11 @@ fn invisible_end(engine:Refs,_token:CompactToken) -> Res<()> {
     Ok(())
 }
 fn annot_begin(engine:Refs,token:CompactToken) -> Res<()> {
-    let mut attrs = VecMap::default();
-    let mut styles = VecMap::default();
     let start = engine.mouth.start_ref();
     let mut str = String::new();
     engine.read_braced_string(true,true,&token,&mut str)?;
-    let mut s = str[..].trim();
-    while !s.is_empty() {
-        let style = if s.starts_with("style:") {
-            s = &s[6..];
-            true
-        } else {false};
-        let key = if let Some(i) = s.find('=') {
-            let (n,v) = s.split_at(i);
-            s = &v[1..].trim_start();
-            n.trim()
-        } else {
-            return Err(TeXError::General("Invalid annotation".to_string()))
-        };
-        let delim = if s.starts_with('"') {
-            s = &s[1..];
-            '"'
-        } else if s.starts_with('\'') {
-            s = &s[1..];
-            '\''
-        } else {
-            return Err(TeXError::General("Invalid annotation".to_string()))
-        };
-        let val = if let Some(i) = s.find(delim) {
-            let (v,r) = s.split_at(i);
-            s = r[1..].trim_start();
-            v.trim()
-        } else {
-            return Err(TeXError::General("Invalid annotation".to_string()))
-        };
-        if style {
-            styles.insert(key.to_string(),val.to_string());
-        } else {
-            attrs.insert(key.to_string(),val.to_string());
-        }
-    }
-    let node = RusTeXNode::AnnotBegin{attrs,styles,start,tag:None};
+    let (attrs,styles,classes) = parse_annotations(&str)?;
+    let node = RusTeXNode::AnnotBegin{attrs,styles,start,classes,tag:None};
     add_node!(RusTeXStomach;engine, VNode::Custom(node),HNode::Custom(node),MathNode::Custom(node));
     Ok(())
 }

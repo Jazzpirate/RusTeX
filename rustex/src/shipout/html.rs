@@ -12,7 +12,7 @@ use tex_glyphs::fontstyles::FontModifier;
 use crate::engine::extension::CSS;
 use crate::RUSTEX_CSS_URL;
 use crate::shipout::state::{Alignment, CharOrStr, Common, FontData, ShipoutNodeH, ShipoutNodeHRow, ShipoutNodeM, ShipoutNodeSVG, ShipoutNodeTable, ShipoutNodeV, SourceRef};
-use crate::utils::{Flex, VecMap};
+use crate::utils::{Flex, VecMap, VecSet};
 
 #[derive(Default)]
 pub enum ImageOptions {
@@ -56,6 +56,10 @@ macro_rules! node {
     };
     (@ATTRS $self:ident;$tag:expr; class=$cls:literal $($tk:tt)*) => {
         write!($self.f," class=\"{}\"",$cls)?;
+        node!(@ATTRS $self;$tag; $($tk)*);
+    };
+    (@ATTRS $self:ident;$tag:expr; class=$cls:expr;? $($tk:tt)*) => {
+        if (!$cls.is_empty()) {write!($self.f," class=\"{}\"",$cls)?;}
         node!(@ATTRS $self;$tag; $($tk)*);
     };
     (@ATTRS $self:ident;$tag:expr; class=$cls:expr; $($tk:tt)*) => {
@@ -205,11 +209,15 @@ impl CompilationDisplay<'_,'_> {
                 CSS::Literal(s) => writeln!(self.f,"\t<style>\n{s}</style>")?
             }
         }
+        let mut fonts = VecSet::default();
         for (name,d) in self.font_data.iter(){//.filter_map(|d| d.1.web.as_ref().map(|s| s.as_ref().ok()).flatten()) {
             match &d.web {
-                Some((l,_))=> writeln!(self.f,"\t<link rel=\"stylesheet\" href=\"{l}\">")?,
+                Some((l,_))=> fonts.insert(l),
                 None => writeln!(self.f,"\t<!-- Missing web font for {name} -->")?,
             }
+        }
+        for font in fonts {//.filter_map(|d| d.1.web.as_ref().map(|s| s.as_ref().ok()).flatten()) {
+            writeln!(self.f,"\t<link rel=\"stylesheet\" href=\"{font}\">")?
         }
         self.f.write_str("</head>")?;
         write!(self.f,"<body class=\"rustex-body\" style=\"--rustex-text-width:{};--rustex-page-width:{};",
@@ -339,10 +347,16 @@ impl CompilationDisplay<'_,'_> {
             Ok(())
         }
     }
-    fn do_annotations<N>(&mut self,node:&'static str,
+    fn do_annotations<N>(&mut self,node:&str,
         attrs:&VecMap<Cow<'static,str>,Cow<'static,str>>,
         styles:&VecMap<Cow<'static,str>,Cow<'static,str>>,
+        classes:&[Cow<'static,str>],
         children:&Vec<N>,mut f:impl FnMut(&mut Self,&N) -> std::fmt::Result) -> std::fmt::Result {
+        let class_str = || if classes.is_empty() {
+            if node == "mrow" || node == "g" {Cow::Borrowed("")} else {Cow::Borrowed("rustex_contents")}
+        } else {
+            Cow::Owned(classes.join(" "))
+        };
         if !attrs.iter().any(|(k,_)| self.attrs.get(k).is_some()) {
             for (k,v) in attrs.iter() {
                 self.attrs.insert(k.clone(),v.clone());
@@ -350,18 +364,18 @@ impl CompilationDisplay<'_,'_> {
             for (k,v) in styles.iter() {
                 self.styles.insert(k.clone(),v.clone());
             }
-            node!(self <<node; class="rustex-contents"?(node!="mrow" && node !="g") {
+            node!(self <<node; class=class_str();? {
                 for c in children { f(self,c)? }
             }/>);
         } else {
-            node!(self <<node; class="rustex-contents"?(node!="mrow" && node !="g") {
+            node!(self <<node; class=class_str();? {
                 for (k,v) in attrs.iter() {
                     self.attrs.insert(k.clone(),v.clone());
                 }
                 for (k,v) in styles.iter() {
                     self.styles.insert(k.clone(),v.clone());
                 }
-                node!(self <<node; class="rustex-contents"?(node!="mrow" && node !="g") {
+                node!(self <<node; class=class_str();? {
                     for c in children { f(self,c)? }
                 }/>);
             }/>);
@@ -371,11 +385,11 @@ impl CompilationDisplay<'_,'_> {
 
     fn do_v(&mut self,c:&ShipoutNodeV,top:bool) -> std::fmt::Result { match c {
         ShipoutNodeV::Common(Common::WithColor {color,children,..}) =>
-            self.do_color("span",color,children,|s,n| s.do_v(n,top)),
+            self.do_color("div",color,children,|s,n| s.do_v(n,top)),
         ShipoutNodeV::Common(Common::WithFont {font,children,..}) =>
-            self.do_font("span",font,children,|s,n| s.do_v(n,top)),
-        ShipoutNodeV::Common(Common::WithAnnotation {attrs,styles,children,..}) => {
-            self.do_annotations("span",attrs,styles,children,|s,n| s.do_v(n,top))
+            self.do_font("div",font,children,|s,n| s.do_v(n,top)),
+        ShipoutNodeV::Common(Common::WithAnnotation {attrs,styles,classes,children,tag,..}) => {
+            self.do_annotations(tag.as_ref().map_or("div",|s| s.as_str()),attrs,styles,&classes.inner,children,|s,n| s.do_v(n,top))
         }
         ShipoutNodeV::Common(Common::Literal(s)) => self.f.write_str(s),
         ShipoutNodeV::Common(Common::WithLink {href,children,..}) => {
@@ -496,8 +510,8 @@ impl CompilationDisplay<'_,'_> {
             self.do_color("span",color,children,|s,n| s.do_h(n,escape)),
         ShipoutNodeH::Common(Common::WithFont {font,children,..}) =>
             self.do_font("span",font,children,|s,n| s.do_h(n,escape)),
-        ShipoutNodeH::Common(Common::WithAnnotation {attrs,styles,children,..}) =>
-            self.do_annotations("span",attrs,styles,children,|s,n| s.do_h(n,escape)),
+        ShipoutNodeH::Common(Common::WithAnnotation {attrs,styles,classes,children,tag,..}) =>
+            self.do_annotations(tag.as_ref().map_or("span",|s| s.as_str()),attrs,styles,&classes.inner,children,|s,n| s.do_h(n,escape)),
         ShipoutNodeH::Common(Common::Literal(s)) => self.f.write_str(s),
         ShipoutNodeH::Common(Common::WithLink {href,children,..}) => {
             node!(self <a "href"=href;{
@@ -702,8 +716,8 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeM::Common(Common::WithColor {color,children,..}) =>
             self.do_color("mrow",color,children,|s,n| s.do_math(n,cls/*,cramped*/)),
-        ShipoutNodeM::Common(Common::WithAnnotation {attrs,styles,children,..}) => {
-            self.do_annotations("mrow",attrs,styles,children,|s,n| s.do_math(n,cls/*,cramped*/))
+        ShipoutNodeM::Common(Common::WithAnnotation {attrs,styles,classes,children,tag,..}) => {
+            self.do_annotations(tag.as_ref().map_or("mrow",|s| s.as_str()),attrs,styles,&classes.inner,children,|s,n| s.do_math(n,cls/*,cramped*/))
         }
         ShipoutNodeM::Common(Common::WithFont{font,children,..}) => {
             // TODO check if this is right - maybe move it down to the next non-math-node...?
@@ -1148,8 +1162,8 @@ impl CompilationDisplay<'_,'_> {
         }
         ShipoutNodeSVG::Common(Common::WithColor {color,children,..}) =>
             self.do_color("g",color,children,|s,n| s.do_svg_node(n)),
-        ShipoutNodeSVG::Common(Common::WithAnnotation {attrs,styles,children,..}) => {
-            self.do_annotations("g",attrs,styles,children,|s,n| s.do_svg_node(n))
+        ShipoutNodeSVG::Common(Common::WithAnnotation {attrs,styles,classes,children,..}) => {
+            self.do_annotations("g",attrs,styles,&classes.inner,children,|s,n| s.do_svg_node(n))
         }
         ShipoutNodeSVG::Common(Common::HBox {sref,info:info@HBoxInfo::HBox {..},children,..}) => {
             let wd = info.computed_width().map(|d| d.0).unwrap_or_default();

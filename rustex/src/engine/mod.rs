@@ -35,7 +35,7 @@ use tex_engine::utils::HMap;
 use crate::engine::extension::CSS;
 use crate::shipout::html::{CompilationDisplay, ImageOptions};
 use crate::shipout::state::{FontData, ShipoutNodeV};
-use crate::utils::VecMap;
+use crate::utils::{VecMap, VecSet};
 
 pub mod fonts;
 pub mod files;
@@ -141,7 +141,7 @@ pub struct CompilationResult {
     metas:Vec<VecMap<String,String>>,
     top:VecMap<String,String>,
     img:ImageOptions,
-    css: Vec<CSS>
+    css: VecSet<CSS>
 }
 impl CompilationResult {
     pub fn write_out(&self,path:&Path) -> std::io::Result<()> {
@@ -160,7 +160,7 @@ impl Display for CompilationResult {
             sourcerefs:self.sourcerefs,font_data:&self.font_data,
             image:&self.img,f
         };
-        dsp.display(&self.metas,&self.top,&self.css,self.page_width,&self.out)
+        dsp.display(&self.metas,&self.top,&self.css.inner,self.page_width,&self.out)
     }
 }
 

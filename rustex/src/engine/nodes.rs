@@ -7,7 +7,7 @@ use tex_engine::tex::nodes::boxes::TeXBox;
 use tex_engine::tex::numerics::{Dim32, Skip};
 use crate::engine::{Font, SRef, Types};
 use crate::engine::state::RusTeXState;
-use crate::utils::VecMap;
+use crate::utils::{VecMap, VecSet};
 
 #[derive(Debug,Clone,Default,PartialEq)]
 pub struct LineSkip {
@@ -61,7 +61,8 @@ pub enum RusTeXNode {
         tag:Option<String>,
         start:SRef,
         attrs : VecMap<String,String>,
-        styles: VecMap<String,String>
+        styles: VecMap<String,String>,
+        classes: VecSet<String>
     },
     InvisibleBegin,InvisibleEnd,
     AnnotEnd(SRef),

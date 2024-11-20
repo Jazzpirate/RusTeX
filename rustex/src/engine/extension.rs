@@ -8,9 +8,10 @@ use tex_engine::tex::catcodes::DEFAULT_SCHEME_U8;
 use tex_engine::tex::tokens::CompactToken;
 use tex_engine::prelude::CSHandler;
 use crate::shipout::state::ShipoutState;
-use crate::utils::VecMap;
+use crate::utils::{VecMap, VecSet};
 
 #[allow(clippy::upper_case_acronyms)]
+#[derive(Clone,Debug,PartialEq,Eq)]
 pub enum CSS {
     File(String),
     Literal(String)
@@ -31,7 +32,7 @@ pub struct RusTeXExtension {
     pub(crate) namespaces:VecMap<String,String>,
     pub(crate) metas:Vec<VecMap<String,String>>,
     pub(crate) top:VecMap<String,String>,
-    pub(crate) css:Vec<CSS>,
+    pub(crate) css:VecSet<CSS>,
 }
 impl RusTeXExtension {
     pub(crate) fn push(&mut self) {
@@ -60,7 +61,7 @@ impl EngineExtension<Types> for RusTeXExtension {
             namespaces,
             metas:vec!(),
             top:VecMap::default(),
-            css:vec!(),
+            css:VecSet::default(),
         };
         ret.gobbletwo.long = true;
         ret

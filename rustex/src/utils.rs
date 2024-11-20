@@ -118,9 +118,43 @@ impl AddAssign for Margin {
     }
 }
 
-#[derive(Clone,Default,Debug)]
-pub struct VecSet<K> {
+#[derive(Clone,Debug,PartialEq)]
+pub struct VecSet<K:PartialEq> {
     pub inner: Vec<K>,
+}
+impl<K:PartialEq> Default for VecSet<K> {
+    #[inline]
+    fn default() -> Self {
+        Self { inner: Vec::new() }
+    }
+}
+impl<K:PartialEq> VecSet<K> {
+    #[inline]
+    pub fn contains(&self, key: &K) -> bool {
+        self.inner.contains(key)
+    }
+    #[inline]
+    pub fn insert(&mut self, key: K) {
+        if !self.inner.contains(&key) {
+            self.inner.push(key);
+        }
+    }
+}
+impl<K:PartialEq> IntoIterator for VecSet<K> {
+    type Item = K;
+    type IntoIter = std::vec::IntoIter<K>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
+    }
+}
+impl<K:PartialEq> FromIterator<K> for VecSet<K> {
+    fn from_iter<T: IntoIterator<Item = K>>(iter: T) -> Self {
+        let mut set = VecSet::default();
+        for item in iter {
+            set.insert(item);
+        }
+        set
+    }
 }
 
 #[derive(Clone)]

@@ -149,6 +149,7 @@ pub(crate) enum ShipoutWrapper {
         start:SRef,
         attrs:VecMap<Cow<'static,str>,Cow<'static,str>>,
         styles:VecMap<Cow<'static,str>,Cow<'static,str>>,
+        classes:VecSet<Cow<'static,str>>,
         tag:Option<String>
     },
     SVG {
@@ -184,8 +185,8 @@ impl ShipoutWrapper {
             ShipoutWrapper::Color(c) => Common::with_color(c,nodes),
             ShipoutWrapper::Font(f) => Common::with_font(engine,fonts,f,nodes),
             ShipoutWrapper::Link(href) => Ok(Common::with_link(href,nodes)),
-            ShipoutWrapper::Annotation{attrs,styles,tag,..} =>
-                Ok(Common::with_annotation(attrs,styles,tag,nodes)),
+            ShipoutWrapper::Annotation{attrs,styles,classes,tag,..} =>
+                Ok(Common::with_annotation(attrs,styles,classes,tag,nodes)),
             ShipoutWrapper::Matrix {scale,rotate,skewx,skewy} => Ok(Common::with_matrix(scale,rotate,skewx,skewy,nodes)),
             _ => unreachable!()
         }
@@ -508,8 +509,8 @@ impl<'a,'b,Mode:ShipoutModeT> Shipout<'a,'b,Mode> {
         ShipoutWrapper::close(self,WrapperKind::Font)
     }
     #[inline(always)]
-    pub(crate) fn open_annot(&mut self,start:SRef,attrs:VecMap<Cow<'static,str>,Cow<'static,str>>,styles:VecMap<Cow<'static,str>,Cow<'static,str>>,tag:Option<String>) {
-        let oldwrap = std::mem::replace(&mut self.wrapper,ShipoutWrapper::Annotation{start,attrs,styles,tag});
+    pub(crate) fn open_annot(&mut self,start:SRef,attrs:VecMap<Cow<'static,str>,Cow<'static,str>>,styles:VecMap<Cow<'static,str>,Cow<'static,str>>,classes:VecSet<Cow<'static,str>>,tag:Option<String>) {
+        let oldwrap = std::mem::replace(&mut self.wrapper,ShipoutWrapper::Annotation{start,attrs,styles,classes,tag});
         self.previous.push((Mode::NodeType::into_nodes(std::mem::take(&mut self.nodes)),oldwrap))
     }
     #[inline(always)]
@@ -1182,12 +1183,12 @@ impl ShipoutNodes {
     }
     fn clone_new(&self) -> Self {
         match self {
-            ShipoutNodes::V(v) => ShipoutNodes::V(Vec::new()),
-            ShipoutNodes::H(v) => ShipoutNodes::H(Vec::new()),
-            ShipoutNodes::HRow(v) => ShipoutNodes::HRow(Vec::new()),
-            ShipoutNodes::Math(v) => ShipoutNodes::Math(Vec::new()),
-            ShipoutNodes::SVG(v) => ShipoutNodes::SVG(Vec::new()),
-            ShipoutNodes::Table(v) => ShipoutNodes::Table(Vec::new())
+            ShipoutNodes::V(_) => ShipoutNodes::V(Vec::new()),
+            ShipoutNodes::H(_) => ShipoutNodes::H(Vec::new()),
+            ShipoutNodes::HRow(_) => ShipoutNodes::HRow(Vec::new()),
+            ShipoutNodes::Math(_) => ShipoutNodes::Math(Vec::new()),
+            ShipoutNodes::SVG(_) => ShipoutNodes::SVG(Vec::new()),
+            ShipoutNodes::Table(_) => ShipoutNodes::Table(Vec::new())
         }
     }
 }
@@ -1678,6 +1679,7 @@ pub(crate) enum Common<T:ShipoutNodeT> {
     WithAnnotation {
         attrs:VecMap<Cow<'static,str>,Cow<'static,str>>,
         styles:VecMap<Cow<'static,str>,Cow<'static,str>>,
+        classes:VecSet<Cow<'static,str>>,
         tag:Option<String>,
         children:Vec<T>,
         uses_color:bool,
@@ -1761,6 +1763,7 @@ impl<T:ShipoutNodeT> Common<T> {
     fn with_annotation(
         attrs:VecMap<Cow<'static,str>,Cow<'static,str>>,
         styles:VecMap<Cow<'static,str>,Cow<'static,str>>,
+        classes:VecSet<Cow<'static,str>>,
         tag:Option<String>,
         nodes:Vec<T>
     ) -> Self {
@@ -1771,7 +1774,7 @@ impl<T:ShipoutNodeT> Common<T> {
             uses_font = uses_font || c.uses_previous_font();
             if uses_color && uses_font { break }
         }
-        Common::WithAnnotation{children:nodes,attrs,styles,tag,uses_color,uses_font}
+        Common::WithAnnotation{children:nodes,attrs,styles,classes,tag,uses_color,uses_font}
     }
     fn uses_previous_color(&self) -> bool {
         match self {
