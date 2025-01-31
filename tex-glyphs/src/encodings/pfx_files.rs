@@ -3,7 +3,7 @@ use crate::{Glyph, GlyphList};
 use crate::glyphs::UNDEFINED_LIST;
 use crate::parsing::Parser;
 
-pub(crate) fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> Option<GlyphList> {
+pub fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> Option<GlyphList> {
     let disas = match std::str::from_utf8(std::process::Command::new("t1disasm")
         .args(vec![f]).output().expect("t1disasm not found!")
         .stdout.as_slice()) {
@@ -12,10 +12,11 @@ pub(crate) fn parse_pfb(f:&str,mods:&mut ModifierSeq) -> Option<GlyphList> {
     };
     let mut s = Parser::new(&disas);
     let _ = s.read_until_strs(&["dict begin","dict dup begin"]);
-    if s.is_empty() { panic!("Empty pfb file!"); }
+    assert!(!s.is_empty(),"Empty pfb file!");
     parse_dict(&mut s,mods)
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn parse_dict(s:&mut Parser<'_>,mods:&mut ModifierSeq) -> Option<GlyphList> {
     if parse_dict_header(s,mods) {
         return Some(crate::STANDARD_ENCODING.clone())

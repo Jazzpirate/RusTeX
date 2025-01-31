@@ -26,6 +26,8 @@ where
     <Self::Types as EngineTypes>::File: FileWithMD5,
     <Self::Types as EngineTypes>::Font: FontWithLpRp,
 {
+    /// #### Errors
+    /// on LaTeX errors
     fn do_file_pdf<
         F: FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(), Self::Types>,
     >(
@@ -37,6 +39,8 @@ where
         self.do_file_default(s, f)
     }
 
+    /// #### Errors
+    /// on LaTeX errors
     fn initialize_pdflatex(&mut self) -> TeXResult<(), Self::Types> {
         self.initialize_etex_primitives();
         commands::register_pdftex_primitives(self);
@@ -50,12 +54,12 @@ pub trait FileWithMD5: File {
 }
 impl<C: Character> FileWithMD5 for VirtualFile<C> {
     fn md5(&self) -> md5::Digest {
-        match &self.source {
-            None => match std::fs::read(&self.path) {
-                Ok(v) => md5::compute(v),
-                Err(_) => md5::compute(""),
-            },
-            Some(s) => {
+        self.source.as_ref().map_or_else(
+            || std::fs::read(&self.path).map_or_else(
+                |_| md5::compute(""),
+                md5::compute
+            ),
+            |s| {
                 let v: Vec<u8> = s
                     .iter()
                     .flat_map(|v| v.iter().map(|c| c.to_char().to_string().into_bytes()))
@@ -63,7 +67,7 @@ impl<C: Character> FileWithMD5 for VirtualFile<C> {
                     .collect();
                 md5::compute(v)
             }
-        }
+        )
     }
 }
 
@@ -76,26 +80,20 @@ pub trait FontWithLpRp: Font {
 
 impl<I: TeXInt, D: TeXDimen + Numeric<I>, CS: CSName<u8>> FontWithLpRp for TfmFont<I, D, CS> {
     fn get_lp(&self, c: Self::Char) -> I {
-        let v = &mut self.muts.write().unwrap().lps;
-        match v.get(&c) {
-            Some(d) => *d,
-            None => I::default(),
-        }
+        let v = &mut self.muts.write().expect("Error mutating font data").lps;
+        v.get(&c).copied().unwrap_or_default()
     }
     fn set_lp(&mut self, c: Self::Char, d: I) {
-        let v = &mut self.muts.write().unwrap().lps;
+        let v = &mut self.muts.write().expect("Error mutating font data").lps;
         v.insert(c, d);
     }
 
     fn get_rp(&self, c: Self::Char) -> I {
-        let v = &mut self.muts.write().unwrap().rps;
-        match v.get(&c) {
-            Some(d) => *d,
-            None => I::default(),
-        }
+        let v = &mut self.muts.write().expect("Error mutating font data").rps;
+        v.get(&c).copied().unwrap_or_default()
     }
     fn set_rp(&mut self, c: Self::Char, d: I) {
-        let v = &mut self.muts.write().unwrap().rps;
+        let v = &mut self.muts.write().expect("Error mutating font data").rps;
         v.insert(c, d);
     }
 }

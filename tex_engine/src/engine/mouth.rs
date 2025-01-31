@@ -59,6 +59,7 @@ pub trait Mouth<ET: EngineTypes> {
     /// Get the next [`Token`] from the [`Mouth`].
     /// This method should not be called directly, but rather through [`EngineReferences::get_next`]
     /// or [`Gullet::get_next_opt`](crate::engine::gullet::Gullet::get_next).
+    /// #### Errors
     fn get_next(
         &mut self,
         aux: &mut EngineAux<ET>,
@@ -70,6 +71,7 @@ pub trait Mouth<ET: EngineTypes> {
     /// in `\def`.
     /// This method should not be called directly, but rather through [`EngineReferences::iterate`]
     /// or [`Gullet::iterate`](crate::engine::gullet::Gullet::iterate).
+    /// #### Errors
     fn iterate<R, E, F: FnMut(&mut EngineAux<ET>, ET::Token) -> TeXResult<Option<R>, ET>>(
         &mut self,
         aux: &mut EngineAux<ET>,
@@ -81,6 +83,7 @@ pub trait Mouth<ET: EngineTypes> {
         E: Fn(&EngineAux<ET>, &ET::State, &mut Self) -> TeXResult<(), ET>;
     /// `\endinput` - removes the last file from the [`Mouth`] without inserting `\everyeof` or an [`EOF`](crate::tex::catcodes::CommandCode::EOF)
     /// [`Token`].
+    /// #### Errors
     fn endinput(
         &mut self,
         aux: &mut EngineAux<ET>,
@@ -114,6 +117,7 @@ pub trait Mouth<ET: EngineTypes> {
     ///[`Token`] is encountered and returns that. Useful whenever a group is to be taken; e.g. when reading macro arguments.
     /// This method should not be called directly, but rather through [`EngineReferences::read_until_endgroup`]
     /// or [`Gullet::read_until_endgroup`](crate::engine::gullet::Gullet::read_until_endgroup).
+    /// #### Errors
     fn read_until_endgroup<E, F: FnMut(&mut EngineAux<ET>, ET::Token) -> TeXResult<(), ET>>(
         &mut self,
         aux: &mut EngineAux<ET>,
@@ -156,6 +160,8 @@ pub trait Mouth<ET: EngineTypes> {
         cc: &CategoryCodeScheme<ET::Char>,
         esc: Option<ET::Char>,
     ) -> String;
+
+    fn file_trace(&self) -> impl Iterator<Item=SourceReference<<ET::File as File>::SourceRefID>> + '_;
 }
 
 enum TokenSource<T: Token, F: File<Char = T::Char>> {
@@ -169,6 +175,7 @@ enum TokenSource<T: Token, F: File<Char = T::Char>> {
 /// is done with that information
 /// is to print a corresponding number of `.`s if `\tracingcommands` is set. By omitting that and just concatenating
 /// all expansions into a single Vec from which to `pop()`, we gain a massive speedup.
+    /// #### Errors
 pub struct DefaultMouth<ET: EngineTypes> {
     inputs: Vec<TokenSource<ET::Token, ET::File>>,
     args: Option<[Vec<ET::Token>; 9]>,
@@ -190,10 +197,22 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         for s in self.inputs.drain(..) {
             if let TokenSource::Vec(mut v) = s {
                 v.clear();
-                self.vecs.push(v)
+                self.vecs.push(v);
             }
         }
         self.start_ref.clear();
+    }
+
+    fn file_trace(&self) -> impl Iterator<Item=SourceReference<<ET::File as File>::SourceRefID>> + '_ { 
+        self.inputs.iter().rev().filter_map(|s|
+            if let TokenSource::File(f, id) = s {
+                Some(SourceReference {
+                    file: *id,
+                    line: f.line(),
+                    column: f.column(),
+                })
+            } else { None }
+        )
     }
 
     fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID> {
@@ -226,11 +245,11 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
             }
             Some(TokenSource::Vec(v)) if v.is_empty() => {
                 if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
-                    self.vecs.push(v)
+                    self.vecs.push(v);
                 } else {
                     unreachable!()
                 }
-                self.update_start_ref()
+                self.update_start_ref();
             }
             _ => (),
         }
@@ -245,8 +264,8 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 
     fn return_args(&mut self, mut exp: [Vec<ET::Token>; 9]) {
-        for a in exp.iter_mut() {
-            a.clear()
+        for a in &mut exp {
+            a.clear();
         }
         self.args = Some(exp);
     }
@@ -297,14 +316,14 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 
     fn push_exp(&mut self, exp: &TokenList<ET::Token>) {
-        self.with_list(|v| v.extend(exp.0.iter().rev().cloned()))
+        self.with_list(|v| v.extend(exp.0.iter().rev().cloned()));
     }
 
     fn push_vec(&mut self, exp: Vec<ET::Token>) {
-        self.with_list(|v| v.extend(exp.into_iter().rev()))
+        self.with_list(|v| v.extend(exp.into_iter().rev()));
     }
     fn push_slice_rev(&mut self, exp: &[ET::Token]) {
-        self.with_list(|v| v.extend(exp.iter().cloned()))
+        self.with_list(|v| v.extend(exp.iter().cloned()));
     }
 
     fn push_string(&mut self, s: StringLineSource<ET::Char>) {
@@ -313,7 +332,7 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     }
 
     fn requeue(&mut self, t: ET::Token) {
-        self.with_list(|v| v.push(t))
+        self.with_list(|v| v.push(t));
     }
 
     fn push_file(&mut self, f: ET::File) {

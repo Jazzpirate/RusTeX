@@ -11,13 +11,16 @@ impl Glyph {
     /// # use tex_glyphs::glyphs::Glyph;
     /// assert_eq!(&Glyph::get("Gamma").to_string(),"Γ");
     /// ```
-    pub fn name(&self) -> GlyphName { GlyphName(&self.0) }
+    #[must_use]
+    pub const fn name(&self) -> GlyphName { GlyphName(&self.0) }
     /// Get the undefined glyph (i.e. the glyph with name `.undefined`).
-    pub fn undefined() -> Self {
-        Glyph(GlyphI::S(0))
+    #[must_use]
+    pub const fn undefined() -> Self {
+        Self(GlyphI::S(0))
     }
     /// Whether this glyph is defined.
-    pub fn is_defined(&self) -> bool {
+    #[must_use]
+    pub const fn is_defined(&self) -> bool {
         match self.0 {
             GlyphI::S(i) => i != 0,
             GlyphI::Undefined(_) => false,
@@ -30,19 +33,18 @@ impl Glyph {
     /// # use tex_glyphs::glyphs::Glyph;
     /// assert_eq!(Glyph::lookup("Γ").unwrap(),Glyph::get("Gamma"));
     /// ```
+    #[must_use]
     pub fn lookup(s:&str) -> Option<Self> {
-        crate::GLYPH_LOOKUP.get(s).map(|g| Glyph(GlyphI::S(*g)))
+        crate::GLYPH_LOOKUP.get(s).map(|g| Self(GlyphI::S(*g)))
     }
 
     /// Returns the glyph with the given name or the undefined glyph if no such glyph exists.
     pub fn get<S:AsRef<str>>(s:S) -> Self {
         let s = s.as_ref();
-        match get_i(s) {
-            Some(g) => g,
-            None => {
-                Glyph(GlyphI::Undefined(s.into()))
-            }
-        }
+        get_i(s).map_or_else(
+            || Self(GlyphI::Undefined(s.into())),
+            |g| g
+        )
     }
 }
 impl Display for Glyph {
@@ -61,10 +63,12 @@ impl Debug for Glyph {
 pub struct GlyphList(pub(crate) [Glyph; 256]);
 impl GlyphList {
     /// Get the glyph at the given index.
+    #[must_use]
     pub fn get(&self, c:u8) -> Glyph {
         self.0[c as usize].clone()
     }
     /// Whether this is the undefined glyph list, where every glyph is undefined.
+    #[must_use]
     pub fn is_defined(&self) -> bool {
         *self == UNDEFINED_LIST
     }
@@ -73,13 +77,13 @@ impl GlyphList {
 
 /// Utility struct for displaying the name of a [`Glyph`] (e.g. `uni0041`, `A` or `Gamma`).
 pub struct GlyphName<'a>(&'a GlyphI);
-impl<'a> Display for GlyphName<'a> {
+impl Display for GlyphName<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             GlyphI::S(i) => f.write_str(crate::GLYPH_NAMES[*i as usize]),
             GlyphI::Unicode(c) => write!(f,"uni{:04X}",*c as u32),
             GlyphI::Ls(ls) => {
-                for g in ls.iter() {
+                for g in ls {
                     Display::fmt(&GlyphName(g),f)?;
                 }
                 Ok(())
@@ -99,15 +103,15 @@ pub(crate) enum GlyphI {
 impl Display for GlyphI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GlyphI::S(i) => Display::fmt(&crate::GLYPH_LIST[*i as usize],f),
-            GlyphI::Unicode(c) => f.write_char(*c),
-            GlyphI::Ls(ls) => {
-                for g in ls.iter() {
+            Self::S(i) => Display::fmt(&crate::GLYPH_LIST[*i as usize],f),
+            Self::Unicode(c) => f.write_char(*c),
+            Self::Ls(ls) => {
+                for g in ls {
                     Display::fmt(g,f)?;
                 }
                 Ok(())
             }
-            GlyphI::Undefined(_) => f.write_str("???")
+            Self::Undefined(_) => f.write_str("???")
         }
     }
 }
@@ -115,13 +119,14 @@ impl Display for GlyphI {
 pub(crate) const UNDEFINED:Glyph = Glyph(GlyphI::S(0));
 pub(crate) const UNDEFINED_LIST: GlyphList = GlyphList([UNDEFINED; 256]);
 
+#[allow(clippy::cognitive_complexity)]
 fn get_i(s:&str) -> Option<Glyph> {
     match crate::GLYPH_MAP.get(s) {
         Some(g) => Some(Glyph(GlyphI::S(*g))),
         None if s.starts_with('.') => get_i(&s[1..]),
-        None if s.contains('.') => match s.find('.') {
-            Some(i) => get_i(&s[..i]),
-            _ => unreachable!()
+        None if s.contains('.') => {
+            let Some(i) = s.find('.') else {unreachable!()};
+            get_i(&s[..i])
         }
         None if s.ends_with("_SC") => {
             get_i(&s[..s.len()-3]) // TODO - remove or convert to smallcaps?
@@ -158,8 +163,8 @@ fn get_i(s:&str) -> Option<Glyph> {
             get_i(&s[1..s.len()-1]),
         None if s.contains('_') => {
             let rets = s.split('_').filter(|v| !v.is_empty()).map(get_i).collect::<Vec<_>>();
-            if rets.iter().any(|o| o.is_none()) {return None}
-            Some(Glyph(GlyphI::Ls(rets.into_iter().map(|o| o.unwrap().0).collect())))
+            if rets.iter().any(Option::is_none) {return None}
+            Some(Glyph(GlyphI::Ls(rets.into_iter().map(|o| o.unwrap_or_else(|| unreachable!()).0).collect())))
         }
         None if s.starts_with("uni") => {
             match parse_unicode(&s[3..]) {
@@ -184,21 +189,6 @@ fn get_i(s:&str) -> Option<Glyph> {
         None if s.starts_with("aux") =>
             get_i(&s[3..]),
         _ => None
-/*
-        None if s.starts_with("LinearA") => UNDEFINED.clone(),
-        None if s.starts_with("internalchar") ||
-            s.starts_with("CYR") ||
-            s.starts_with("cyr") => UNDEFINED.clone(),
-        None if s.starts_with("sym") => UNDEFINED.clone(),
-        None if s[1..].chars().all(|c| c.is_ascii_digit()) &&
-            (s.starts_with('a') || s.starts_with('c') || s.starts_with('d')) =>
-            UNDEFINED.clone(),
-        None if s[1..].chars().all(|c| c.is_ascii_hexdigit()) && s.starts_with('k') =>
-            UNDEFINED.clone(),
-        None =>
-            UNDEFINED.clone()
-
- */
     }
 }
 
@@ -215,7 +205,7 @@ fn parse_unicode(s:&str) -> Option<Result<char,Box<[GlyphI]>>> {
         return parse_one(s).map(Ok)
     }
     if s.len() % 4 == 0 {
-        let mut v = vec!();
+        let mut v = Vec::new();
         while !s.is_empty() {
             match parse_one(&s[..4]) {
                 Some(c) => {

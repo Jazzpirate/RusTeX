@@ -180,10 +180,11 @@ mod tests {
     fn get_store() -> FontInfoStore<String,fn(&str) -> String> {
         FontInfoStore::new(|s| {
             std::str::from_utf8(std::process::Command::new("kpsewhich")
-                .args(vec!(s)).output().expect("kpsewhich not found!")
-                .stdout.as_slice()).unwrap().trim().to_string()
+                .args(vec![s]).output().expect("kpsewhich not found!")
+                .stdout.as_slice()).expect("unexpected kpsewhich output").trim().to_string()
         })
     }
+
     #[test]
     fn test_encodings() {
         let mut es = get_store();
@@ -192,10 +193,10 @@ mod tests {
     }
     #[test]
     fn print_table() {
-        env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().unwrap();
+        env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().expect("failed to initialize tests");
         let mut es = get_store();
-        log::info!("cmr10:\n{}",es.display_encoding("cmr10").unwrap());
-        log::info!("cmbx10:\n{}",es.display_encoding("cmbx10").unwrap());
+        log::info!("cmr10:\n{}",es.display_encoding("cmr10").expect("cmr10 not found"));
+        log::info!("cmbx10:\n{}",es.display_encoding("cmbx10").expect("cmbx not found"));
         /*
         log::info!("ptmr7t:\n{}",es.display_encoding("ptmr7t").unwrap());
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());

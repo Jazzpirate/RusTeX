@@ -26,9 +26,9 @@ thesis  0:15
 fn main() {
     //profile()
     //thesis()
-    //run()
+    run()
     //test()
-    temp_test()
+    //temp_test()
     //notes()
     //test2()
     //test_all()
@@ -106,12 +106,12 @@ fn test_all() {
                 dones.push(f);
                 std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
             }
-            Some(e) => {
+            Some((e,_)) => {
                 println!("Errored");
                 panic!(
                     "Errored: {}\n{}\n\n",//Missing glyphs: {}\nMissing web fonts: {}",
                     f.display(),
-                    e.to_string() /*,
+                    e /*,
                     missing_glyphs
                         .into_iter()
                         .map(|(x, c, y)| format!("({},{},{})", x, c, y))
@@ -155,7 +155,7 @@ fn test() {
             image_options:Default::default()
         }
     );
-    ret.write_out(&Path::new("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html"))
+    ret.write_out(Path::new("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html"))
     .unwrap();
 }
 
@@ -164,7 +164,7 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex",
-        "/home/jazzpirate/work/MathHub/sTeX/DemoExamples/source/simple.tex",
+        "/home/jazzpirate/work/MathHub/courses/FAU/AI/problems/source/fol/prob/tableau4.en.tex",
         Settings {
             verbose:true,
             log:true,
@@ -174,8 +174,8 @@ fn temp_test() {
     );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
-    ret.write_out(&Path::new(
-        "/home/jazzpirate/work/MathHub/sTeX/DemoExamples/source/simple.tex.html"
+    ret.write_out(Path::new(
+        "/home/jazzpirate/rustex.out.html"
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html"
     ))
     .unwrap();
@@ -192,7 +192,7 @@ fn thesis() {
             image_options:Default::default()
         }
     );
-    ret.write_out(&Path::new("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html"))
+    ret.write_out(Path::new("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html"))
         .unwrap();
 }
 
@@ -209,14 +209,13 @@ fn notes() {
         }
     );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/CompLog/source/kr/tikz/axioms2.tex",true,true,true);
-    ret.write_out(&Path::new(
+    ret.write_out(Path::new(
         "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html"
     )).unwrap();
 }
 
 fn profile() {
     use tex_engine::engine::filesystem::FileSystem;
-    use tex_engine::engine::state::State;
     println!("Profiling...");
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let mut engine = DefaultEngine::<Types>::default();
@@ -227,7 +226,7 @@ fn profile() {
     engine.init_file("pdftexconfig.tex").unwrap();
     let state = engine.state.clone();
     for _ in 0..30 {
-        engine.load_latex();
+        let _ = engine.load_latex();
         engine.state = state.clone();
         engine.filesystem = RusTeXFileSystem::new(tex_engine::utils::PWD.to_path_buf());
     }
@@ -291,7 +290,7 @@ fn run() {
                     image_options:Default::default()
                 }
             );
-            ret.write_out(&Path::new(&o)).unwrap();
+            ret.write_out(Path::new(&o)).unwrap();
         }
         _ => {
             println!("No input/output file given. Testing latex.ltx...");
@@ -302,7 +301,6 @@ fn run() {
 }
 
 fn test_latex_ltx() {
-    use tex_engine::engine::state::State;
     let mut engine = DefaultEngine::<Types>::default();
     RusTeX::engine::commands::register_primitives_preinit(&mut engine);
 
@@ -313,5 +311,5 @@ fn test_latex_ltx() {
     engine.initialize_etex_primitives();
     register_pdftex_primitives(&mut engine);
     engine.init_file("pdftexconfig.tex").unwrap();
-    engine.load_latex();
+    let _ = engine.load_latex();
 }

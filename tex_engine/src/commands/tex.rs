@@ -774,7 +774,7 @@ pub fn global<ET: EngineTypes>(
             return engine.general_error(format!("Illegal command after `\\global`: {s}"))
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 pub fn outer<ET: EngineTypes>(
     engine: &mut EngineReferences<ET>,
@@ -807,7 +807,7 @@ pub fn outer<ET: EngineTypes>(
             return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 
 pub fn long<ET: EngineTypes>(
@@ -841,7 +841,7 @@ pub fn long<ET: EngineTypes>(
             return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 
 macro_rules! modify_num {
@@ -905,7 +905,7 @@ pub fn advance<ET: EngineTypes>(
         |a, e| Ok(a + e.read_dim(false, &tk)?),
         |a, e| Ok(a + e.read_skip(false, &tk)?)
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 pub fn divide<ET: EngineTypes>(
     engine: &mut EngineReferences<ET>,
@@ -937,7 +937,7 @@ pub fn divide<ET: EngineTypes>(
             Ok(a / b)
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 pub fn multiply<ET: EngineTypes>(
     engine: &mut EngineReferences<ET>,
@@ -957,7 +957,7 @@ pub fn multiply<ET: EngineTypes>(
             Ok(a * b)
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 
 pub fn r#else<ET: EngineTypes>(
@@ -1646,7 +1646,7 @@ pub fn immediate<ET: EngineTypes>(
         ResolvedToken::Tk {char,code} => return ET::Stomach::do_char(engine,token,char,code),
         ResolvedToken::Cmd(Some(TeXCommand::Char {char,code})) => return ET::Stomach::do_char(engine,token,*char,*code),
         ResolvedToken::Cmd(None) =>
-            return TeXError::undefined(engine.aux,engine.state,engine.mouth,token),
+            return TeXError::undefined(engine.aux,engine.state,engine.mouth,&token),
         ResolvedToken::Cmd(Some(c)) => {
             crate::do_cmd!(engine,token,c);
             return Ok(())
@@ -1980,7 +1980,7 @@ pub fn meaning<ET: EngineTypes>(
             if let Some(c) = engine.state.get_escape_char() {
                 f.push_char(c);
             }
-            write!(f, "undefined").unwrap();
+            write!(f, "undefined")?;
         }
         ResolvedToken::Cmd(Some(cmd)) => cmd
             .meaning(
@@ -1988,8 +1988,8 @@ pub fn meaning<ET: EngineTypes>(
                 engine.state.get_catcode_scheme(),
                 engine.state.get_escape_char(),
             )
-            .write_chars(&mut f),
-        ResolvedToken::Tk { char, code, .. } => code.meaning(char, f),
+            .write_chars(&mut f)?,
+        ResolvedToken::Tk { char, code, .. } => code.meaning(char, f)?,
     }
     Ok(())
 }
@@ -2228,6 +2228,7 @@ const ROMAN: &[(u8, i64)] = &[
     (b'v', 2),
     (b'i', 5),
 ];
+#[allow(clippy::many_single_char_names)]
 pub fn romannumeral<ET: EngineTypes>(
     engine: &mut EngineReferences<ET>,
     exp: &mut Vec<ET::Token>,
@@ -2899,9 +2900,8 @@ pub fn lastbox<ET: EngineTypes>(
                     VNode::Box(_) => {
                         if let VNode::Box(bi) = children.remove(i) {
                             return Ok(either::Left(Some(bi)));
-                        } else {
-                            unreachable!()
                         }
+                        unreachable!()
                     }
                     _ => return Ok(either::Left(None)),
                 }

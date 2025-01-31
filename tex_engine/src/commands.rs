@@ -59,10 +59,10 @@ impl<I: TeXInt> ActiveConditional<I> {
     /// The (original, primitive) name of the conditional.
     pub fn name(&self) -> PrimitiveIdentifier {
         match self {
-            ActiveConditional::Unfinished(n) => *n,
-            ActiveConditional::Case(_) => PRIMITIVES.ifcase,
-            ActiveConditional::True(n) => *n,
-            ActiveConditional::Else(n) => *n,
+            Self::Case(_) => PRIMITIVES.ifcase,
+            Self::True(n) |
+            Self::Unfinished(n) |
+            Self::Else(n) => *n,
         }
     }
 }
@@ -98,7 +98,7 @@ pub enum TeXCommand<ET: EngineTypes> {
 }
 impl<ET: EngineTypes> TeXCommand<ET> {
     /// returns a helper struct for displaying the `\meaning` of this command; implements [`Display`].
-    pub fn meaning<'a>(
+    pub const fn meaning<'a>(
         &'a self,
         int: &'a <<ET::Token as Token>::CS as CSName<ET::Char>>::Handler,
         cc: &'a CategoryCodeScheme<ET::Char>,
@@ -113,6 +113,8 @@ impl<ET: EngineTypes> TeXCommand<ET> {
     }
 
     /// implements `\the` for this command, e.g. `\the\count0` or `\the\font`.
+    /// #### Errors
+    /// If self is not allowed after `\the`
     pub fn the<F: FnMut(&mut EngineAux<ET>, &ET::State, &mut ET::Gullet, ET::Token)>(
         &self,
         engine: &mut EngineReferences<ET>,
@@ -122,59 +124,53 @@ impl<ET: EngineTypes> TeXCommand<ET> {
         use crate::tex::tokens::token_lists::Otherize;
         use std::fmt::Write;
         match self {
-            TeXCommand::IntRegister(u) => {
+            Self::IntRegister(u) => {
                 let val = engine.state.get_int_register(*u);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            TeXCommand::DimRegister(u) => {
+            Self::DimRegister(u) => {
                 let val = engine.state.get_dim_register(*u);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            TeXCommand::SkipRegister(u) => {
+            Self::SkipRegister(u) => {
                 let val = engine.state.get_skip_register(*u);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            TeXCommand::MuSkipRegister(u) => {
+            Self::MuSkipRegister(u) => {
                 let val = engine.state.get_muskip_register(*u);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            TeXCommand::CharDef(c) => {
+            Self::CharDef(c) => {
                 let val: u64 = (*c).into();
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            TeXCommand::MathChar(u) => {
+            Self::MathChar(u) => {
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    u
+                    "{u}"
                 )?;
             }
-            TeXCommand::ToksRegister(u) => {
+            Self::ToksRegister(u) => {
                 for t in &engine.state.get_toks_register(*u).0 {
-                    cont(engine.aux, engine.state, engine.gullet, t.clone())
+                    cont(engine.aux, engine.state, engine.gullet, t.clone());
                 }
             }
-            TeXCommand::Font(fnt) => {
+            Self::Font(fnt) => {
                 let t = fnt.name();
                 cont(
                     engine.aux,
@@ -183,7 +179,7 @@ impl<ET: EngineTypes> TeXCommand<ET> {
                     ET::Token::from_cs(t.clone()),
                 );
             }
-            TeXCommand::Primitive { name, cmd } => return cmd.the(engine, token, *name, cont),
+            Self::Primitive { name, cmd } => return cmd.the(engine, token, *name, cont),
             o => engine.general_error(format!(
                 "You can't use {} after \\the",
                 o.meaning(
@@ -291,6 +287,8 @@ pub enum PrimitiveCommand<ET: EngineTypes> {
 }
 impl<ET: EngineTypes> PrimitiveCommand<ET> {
     /// implements `\the` for this command, e.g. `\the\count0` or `\the\font`.
+    /// #### Errors
+    /// If self is not allowed after `\the`
     pub fn the<F: FnMut(&mut EngineAux<ET>, &ET::State, &mut ET::Gullet, ET::Token)>(
         &self,
         engine: &mut EngineReferences<ET>,
@@ -301,76 +299,68 @@ impl<ET: EngineTypes> PrimitiveCommand<ET> {
         use crate::tex::tokens::token_lists::Otherize;
         use std::fmt::Write;
         match self {
-            PrimitiveCommand::Int { read, .. } => {
+            Self::Int { read, .. } => {
                 let val = read(engine, token)?;
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::Dim { read, .. } => {
+            Self::Dim { read, .. } => {
                 let val = read(engine, token)?;
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::Skip { read, .. } => {
+            Self::Skip { read, .. } => {
                 let val = read(engine, token)?;
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::MuSkip { read, .. } => {
+            Self::MuSkip { read, .. } => {
                 let val = read(engine, token)?;
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::PrimitiveInt => {
+            Self::PrimitiveInt => {
                 let val = engine.state.get_primitive_int(name);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::PrimitiveDim => {
+            Self::PrimitiveDim => {
                 let val = engine.state.get_primitive_dim(name);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::PrimitiveSkip => {
+            Self::PrimitiveSkip => {
                 let val = engine.state.get_primitive_skip(name);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::PrimitiveMuSkip => {
+            Self::PrimitiveMuSkip => {
                 let val = engine.state.get_primitive_muskip(name);
                 write!(
                     Otherize::new(&mut |t| cont(engine.aux, engine.state, engine.gullet, t)),
-                    "{}",
-                    val
+                    "{val}"
                 )?;
             }
-            PrimitiveCommand::PrimitiveToks => {
+            Self::PrimitiveToks => {
                 for t in &engine.state.get_primitive_tokens(name).0 {
-                    cont(engine.aux, engine.state, engine.gullet, t.clone())
+                    cont(engine.aux, engine.state, engine.gullet, t.clone());
                 }
             }
-            PrimitiveCommand::FontCmd { read, .. } => {
+            Self::FontCmd { read, .. } => {
                 let fnt = read(engine, token)?;
                 let t = fnt.name();
                 cont(
@@ -380,15 +370,15 @@ impl<ET: EngineTypes> PrimitiveCommand<ET> {
                     ET::Token::from_cs(t.clone()),
                 );
             }
-            PrimitiveCommand::Whatsit { the: Some(the), .. } => {
+            Self::Whatsit { the: Some(the), .. } => {
                 for t in the(engine, token)? {
-                    cont(engine.aux, engine.state, engine.gullet, t)
+                    cont(engine.aux, engine.state, engine.gullet, t);
                 }
             }
             _ if name == PRIMITIVES.toks => {
                 let u = engine.read_register_index(false, &token)?;
                 for t in &engine.state.get_toks_register(u).0 {
-                    cont(engine.aux, engine.state, engine.gullet, t.clone())
+                    cont(engine.aux, engine.state, engine.gullet, t.clone());
                 }
             }
             _ => engine.general_error(format!(
@@ -407,68 +397,69 @@ pub struct Meaning<'a, ET: EngineTypes> {
     cc: &'a CategoryCodeScheme<ET::Char>,
     escapechar: Option<ET::Char>,
 }
-impl<'a, ET: EngineTypes> Meaning<'a, ET> {
+impl<ET: EngineTypes> Meaning<'_, ET> {
     /// Write the meaning directly to a [`CharWrite`].
-    pub fn write_chars<W: CharWrite<ET::Char, ET::CSName>>(&self, f: &mut W) {
+    /// #### Errors
+    /// Formatting error (should never happen)
+    pub fn write_chars<W: CharWrite<ET::Char, ET::CSName>>(&self, f: &mut W) -> std::fmt::Result {
         match self.cmd {
             TeXCommand::Macro(m) => m.meaning_char(self.int, self.cc, self.escapechar, f),
             TeXCommand::Char { char, code } => code.meaning(*char, f),
             TeXCommand::CharDef(c) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "char\"{:X}", Into::<u64>::into(*c)).unwrap();
+                write!(f, "char\"{:X}", Into::<u64>::into(*c))
             }
             TeXCommand::MathChar(u) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "mathchar\"{:X}", u).unwrap();
+                write!(f, "mathchar\"{u:X}")
             }
             TeXCommand::Font(i) => {
-                write!(f, "select font ").unwrap();
-                i.display(self.int, f).unwrap();
+                write!(f, "select font ")?;
+                i.display(self.int, f)
             }
             TeXCommand::IntRegister(i) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "count{}", i).unwrap();
+                write!(f, "count{i}")
             }
             TeXCommand::DimRegister(i) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "dimen{}", i).unwrap();
+                write!(f, "dimen{i}")
             }
             TeXCommand::SkipRegister(i) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "skip{}", i).unwrap();
+                write!(f, "skip{i}")
             }
             TeXCommand::MuSkipRegister(i) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "muskip{}", i).unwrap();
+                write!(f, "muskip{i}")
             }
             TeXCommand::ToksRegister(i) => {
                 if let Some(e) = self.escapechar {
-                    f.push_char(e)
+                    f.push_char(e);
                 }
-                write!(f, "toks{}", i).unwrap();
+                write!(f, "toks{i}")
             }
             TeXCommand::Primitive { name, .. } => {
-                write!(f, "{}", name.display(self.escapechar)).unwrap();
+                write!(f, "{}", name.display(self.escapechar))
             }
         }
     }
 }
-impl<'a, ET: EngineTypes> Display for Meaning<'a, ET> {
+impl<ET: EngineTypes> Display for Meaning<'_, ET> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.write_chars(&mut StringCharWrite::new(f));
-        Ok(())
+        self.write_chars(&mut StringCharWrite::new(f))
     }
 }
 
@@ -498,6 +489,8 @@ pub struct Macro<T: Token> {
 impl<T: Token> Macro<T> {
     /// Convenience method for creating a new macro from a signature and expansion as strings; given the provided [`CategoryCodeScheme`].
     /// Allows for e.g. `as_point = Macro::new(int,`[`&DEFAULT_SCHEME_U8`](crate::tex::catcodes::DEFAULT_SCHEME_U8)`,"#1#2","(#1,#2)")`.
+    /// #### Errors
+    /// on invalid tex strings
     pub fn new<Sig: AsRef<str>, Exp: AsRef<str>, ET: EngineTypes<Token = T, Char = T::Char>>(
         int: &mut <T::CS as CSName<T::Char>>::Handler,
         cc: &CategoryCodeScheme<T::Char>,
@@ -517,7 +510,7 @@ impl<T: Token> Macro<T> {
         let expsrc: StringLineSource<T::Char> = exp.into();
         let mut expsrc = InputTokenizer::new(expsrc);
         while let Some(t) = expsrc.get_next(int, cc, None)? {
-            parser.do_expansion_token::<ET>(t)?
+            parser.do_expansion_token::<ET>(t)?;
         }
         Ok(parser.close(false, false, false))
     }
@@ -537,42 +530,42 @@ impl<T: Token> Macro<T> {
         }
     }
     /// Write the meaning directly to a [`CharWrite`].
+    /// #### Errors
+    /// Formatting error (should never happen)
     pub fn meaning_char<F: CharWrite<T::Char, T::CS>>(
         &self,
         int: &<T::CS as CSName<T::Char>>::Handler,
         cc: &CategoryCodeScheme<T::Char>,
         escapechar: Option<T::Char>,
         f: &mut F,
-    ) {
+    ) -> std::fmt::Result {
         if self.protected {
             if let Some(e) = escapechar {
-                f.push_char(e)
+                f.push_char(e);
             }
-            write!(f, "protected ").unwrap();
+            write!(f, "protected ")?;
         }
         if self.long {
             if let Some(e) = escapechar {
-                f.push_char(e)
+                f.push_char(e);
             }
-            write!(f, "long ").unwrap();
+            write!(f, "long ")?;
         }
         if self.outer {
             if let Some(e) = escapechar {
-                f.push_char(e)
+                f.push_char(e);
             }
-            write!(f, "outer ").unwrap();
+            write!(f, "outer ")?;
         }
-        write!(f, "macro:").unwrap();
+        write!(f, "macro:")?;
         self.signature
             .params
             .display(int, cc, escapechar, false)
-            .fmt_cw(f)
-            .unwrap();
-        write!(f, "->").unwrap();
+            .fmt_cw(f)?;
+        write!(f, "->")?;
         self.expansion
             .display(int, cc, escapechar, true)
             .fmt_cw(f)
-            .unwrap();
     }
 }
 
@@ -582,15 +575,14 @@ struct MacroMeaning<'a, T: Token> {
     cc: &'a CategoryCodeScheme<T::Char>,
     escapechar: Option<T::Char>,
 }
-impl<'a, T: Token> Display for MacroMeaning<'a, T> {
+impl<T: Token> Display for MacroMeaning<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.cmd.meaning_char(
             self.int,
             self.cc,
             self.escapechar,
             &mut StringCharWrite::new(f),
-        );
-        Ok(())
+        )
     }
 }
 

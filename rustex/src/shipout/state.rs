@@ -1853,10 +1853,10 @@ impl From<String> for CharOrStr {
 }
 
 #[derive(Debug,Clone)]
-pub(crate) struct FontData {
-    pub(crate) web:Option<(String,String)>,
-    pub(crate) missing:VecSet<(String,u8)>,
-    pub(crate) modifiers:Option<ModifierSeq>
+pub struct FontData {
+    pub web:Option<(String,String)>,
+    pub missing:VecSet<(String,u8)>,
+    pub modifiers:Option<ModifierSeq>
 }
 impl FontData {
     fn new(name:&str, store:&mut FontStore) -> Self {
@@ -1876,6 +1876,7 @@ impl FontData {
         }
     }
     fn missing_glyph(&mut self,name:GlyphName,char:u8) {
+        self.missing.insert((name.to_string(),char));
         /*
             let s = match state.mode() {
             ShipoutMode::H{..} | ShipoutMode::Par => "span",

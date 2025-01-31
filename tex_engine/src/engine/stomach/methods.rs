@@ -102,7 +102,7 @@ pub fn assign_toks_register<ET: EngineTypes>(
             return read_tokens(engine,token,cont);
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, token.clone())?;
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &token)?;
     Ok(())
 }
 
@@ -196,7 +196,7 @@ pub fn assign_primitive_toks<ET: EngineTypes>(
             read!();
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, token.clone())?;
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &token)?;
     Ok(())
 }
 
@@ -367,7 +367,7 @@ fn do_word<ET: EngineTypes>(
         ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) =>
             end!(ET::Stomach::do_char(engine,token,*char,*code)?),
         ResolvedToken::Cmd(None) => {
-            TeXError::undefined(engine.aux,engine.state,engine.mouth,token.clone())?;
+            TeXError::undefined(engine.aux,engine.state,engine.mouth,&token)?;
             end!(())
         }
         ResolvedToken::Cmd(Some(cmd)) => {
@@ -985,7 +985,7 @@ pub fn do_output<ET: EngineTypes>(
         crate::expand!(ET;engine,next;
             ResolvedToken::Tk { char, code } => do_char(engine, next, char, code)?,
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => do_char(engine, next, *char, *code)?,
-            ResolvedToken::Cmd(None) => TeXError::undefined(engine.aux,engine.state,engine.mouth,next)?,
+            ResolvedToken::Cmd(None) => TeXError::undefined(engine.aux,engine.state,engine.mouth,&next)?,
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(ET;engine,next,cmd)
         );
     }

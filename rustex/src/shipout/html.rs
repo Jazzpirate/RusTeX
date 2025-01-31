@@ -764,7 +764,7 @@ impl CompilationDisplay<'_,'_> {
                     x if x > 0 => {
                         self.width = wd;
                         let wd = Self::dim_to_string(wd);
-                        style!("width"=wd);
+                        style!("min-width"=wd);
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()
@@ -784,7 +784,7 @@ impl CompilationDisplay<'_,'_> {
                     x if x > 0 => {
                         self.width = wd;
                         let wd = Self::dim_to_string(wd);
-                        style!("width"=wd);
+                        style!("min-width"=wd);
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()
@@ -803,7 +803,7 @@ impl CompilationDisplay<'_,'_> {
                     x if x > 0 => {
                         self.width = *width;
                         let wd = Self::dim_to_string(*width);
-                        style!("width"=wd);
+                        style!("min-width"=wd);
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()

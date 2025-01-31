@@ -76,15 +76,15 @@ pub fn read_arguments<ET: EngineTypes>(
                     engine.aux,
                     engine.state,
                     engine.mouth,
-                    o,
-                    next.clone(),
-                    token.clone(),
+                    &o,
+                    next,
+                    token,
                 )?,
                 None => TeXError::file_end_while_use(
                     engine.aux,
                     engine.state,
                     engine.mouth,
-                    token.clone(),
+                    token,
                 )?,
             },
         }
@@ -140,7 +140,7 @@ fn read_delimited_argument<ET: EngineTypes>(
                 continue;
             }
             CommandCode::Escape if !long && t.is_cs(&par) => {
-                TeXError::paragraph_ended(engine.aux, engine.state, engine.mouth, token.clone())?
+                TeXError::paragraph_ended(engine.aux, engine.state, engine.mouth, token)?
             }
             _ => (),
         }
@@ -173,7 +173,7 @@ fn read_argument<ET: EngineTypes>(
     long: bool,
     token: &ET::Token,
 ) -> TeXResult<(), ET> {
-    let eof = |a: &_, s: &_, m: &mut _| TeXError::file_end_while_use(a, s, m, token.clone());
+    let eof = |a: &_, s: &_, m: &mut _| TeXError::file_end_while_use(a, s, m, token);
     loop {
         let t = match engine.mouth.get_next(engine.aux, engine.state)? {
             Some(t) => t,
@@ -182,7 +182,7 @@ fn read_argument<ET: EngineTypes>(
                     engine.aux,
                     engine.state,
                     engine.mouth,
-                    token.clone(),
+                    token,
                 )?;
                 continue;
             }
@@ -501,7 +501,7 @@ pub fn read_string<ET: EngineTypes>(
             write!(ret,"{}",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))?;
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token.clone())
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token)
 }
 
 /// Default implementation for [`Gullet::read_maybe_braced_string`].
@@ -557,7 +557,7 @@ pub fn read_maybe_braced_string<ET: EngineTypes>(
             write!(ret,"{}",token.display(engine.aux.memory.cs_interner(),engine.state.get_catcode_scheme(),engine.state.get_escape_char()))?;
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token.clone())
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token)
 }
 
 fn is_ascii_digit(u: u8) -> bool {
@@ -620,10 +620,10 @@ pub fn read_numeric<ET: EngineTypes>(
             )))
         }
         ResolvedToken::Cmd(None) =>
-            TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
+            TeXError::undefined(engine.aux,engine.state,engine.mouth,&token)?,
         ResolvedToken::Cmd(Some(cmd)) => return Ok(NumContinuation{is_negative,next:either::Right((cmd.clone(),token))})
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token.clone())?;
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &in_token)?;
     Ok(NumContinuation {
         is_negative,
         next: either::Left(b'0'),
@@ -1205,7 +1205,7 @@ fn read_unit_or_dim<ET: EngineTypes>(
         }
         ResolvedToken::Cmd(Some(cmd)) => return read_unit_cmd(engine,float,cmd.clone(),token),
         ResolvedToken::Cmd(None) =>
-            TeXError::undefined(engine.aux,engine.state,engine.mouth,token)?,
+            TeXError::undefined(engine.aux,engine.state,engine.mouth,&token)?,
     );
     TeXError::missing_unit(engine.aux, engine.state, engine.mouth)?;
     Ok(ET::Dim::from_float(engine, float, b"pt"))

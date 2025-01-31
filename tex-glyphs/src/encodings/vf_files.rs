@@ -1,11 +1,12 @@
 use crate::parsing::Parser;
 
-pub(crate) struct VFGlyphMap{
+pub struct VFGlyphMap{
     pub deps:Vec<Box<str>>,
     pub maps:[Vec<(u8,u8)>;256]
 }
 
-pub(crate) fn parse_vf(f:&str) -> Option<VFGlyphMap> {
+#[allow(clippy::cast_possible_truncation)]
+pub fn parse_vf(f:&str) -> Option<VFGlyphMap> {
     let disas = match std::str::from_utf8(std::process::Command::new("vftovp")
         .args(vec![f]).output().expect("vftovp not found!")
         .stdout.as_slice()) {
@@ -22,7 +23,7 @@ pub(crate) fn parse_vf(f:&str) -> Option<VFGlyphMap> {
         let name = s.read_until(')');
         if deps.len() <= idx { deps.resize(idx + 1,"".into());}
         deps[idx] = name.into();
-        s.read_until_parens()
+        s.read_until_parens();
     }
     let mut maps = array_init::array_init::<_,Vec<(u8,u8)>,256>(|_| Vec::new());
     while s.0.contains("(CHARACTER") {

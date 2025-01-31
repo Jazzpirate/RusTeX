@@ -27,6 +27,7 @@ pub enum FontModifier {
 
 /// A sequence of font modifiers, encoded as bitfields
 #[derive(Copy,Clone,Debug,PartialEq,Eq,Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ModifierSeq {
     pub(crate) blackboard:bool,
     pub(crate) fraktur:bool,
@@ -40,43 +41,54 @@ pub struct ModifierSeq {
 }
 impl ModifierSeq {
 
+    #[inline]
     fn blackboard() -> Self {
         Self{blackboard:true,..Default::default()}
     }
 
+    #[inline]
     fn fraktur() -> Self {
         Self{fraktur:true,..Default::default()}
     }
 
+    #[inline]
     fn script() -> Self {
         Self{script:true,..Default::default()}
     }
 
+    #[inline]
     fn bold() -> Self {
         Self{bold:true,..Default::default()}
     }
 
+    #[inline]
     fn capitals() -> Self {
         Self{capitals:true,..Default::default()}
     }
 
+    #[inline]
     fn monospaced() -> Self {
         Self{monospaced:true,..Default::default()}
     }
 
+    #[inline]
     fn italic() -> Self {
         Self{italic:true,..Default::default()}
     }
 
+    #[inline]
     fn oblique() -> Self {
         Self{oblique:true,..Default::default()}
     }
 
+    #[inline]
     fn sans_serif() -> Self {
         Self{sans_serif:true,..Default::default()}
     }
 
     /// And empty sequence of modifiers
+    #[must_use]
+    #[inline]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -97,7 +109,9 @@ impl ModifierSeq {
     }
 
     /// Whether this sequence contains the given modifier
-    pub fn has(&self, m:FontModifier) -> bool {
+    #[must_use]
+    #[inline]
+    pub const fn has(&self, m:FontModifier) -> bool {
         match m {
             FontModifier::Blackboard => self.blackboard,
             FontModifier::Fraktur => self.fraktur,
@@ -111,7 +125,8 @@ impl ModifierSeq {
         }
     }
 
-    fn iter<F:FnMut(&Map<char,char>)>(&self,mut f:F) {
+    #[inline]
+    fn map<F:FnMut(&Map<char,char>)>(&self,mut f:F) {
         if self.has(FontModifier::Blackboard) {f(&BLACKBOARD);}
         if self.has(FontModifier::Fraktur) {f(&FRAKTUR);}
         if self.has(FontModifier::Script) {f(&SCRIPT);}
@@ -136,11 +151,11 @@ pub struct CharConverter<'a,S:AsRef<str>> {
     maps: ModifierSeq,
     iter:&'a S
 }
-impl<'a,S:AsRef<str>> Display for CharConverter<'a,S> {
+impl<S:AsRef<str>> Display for CharConverter<'_,S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let chars = self.iter.as_ref().chars();
         for mut c in chars {
-            self.maps.iter(|m| {
+            self.maps.map(|m| {
                 if let Some(nc) = m.get(&c) {
                     c = *nc;
                 }
@@ -159,7 +174,7 @@ pub trait FontModifiable {
     /// Apply the given modifiers to this object.
     fn apply<'a>(self,mods:ModifierSeq) -> CharConverter<'a,Self::R> where Self:'a;
     /// Add the given modifiers to this object.
-    fn apply_modifiers<'a>(self,mods:&'a [FontModifier]) -> CharConverter<'a,Self::R> where Self:'a, Self: Sized {
+    fn apply_modifiers<'a>(self,mods:&'a [FontModifier]) -> CharConverter<'a,Self::R> where Self:'a + Sized {
         self.apply(mods.into())
     }
     /// Applies the [`Blackboard`](FontModifier::Blackboard) modifier.
@@ -182,7 +197,7 @@ pub trait FontModifiable {
     fn make_sans<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
 }
 
-impl<'a,S:AsRef<str>> FontModifiable for &'a S {
+impl<S:AsRef<str>> FontModifiable for &'_ S {
     type R=S;
     fn apply<'b>(self,mods:ModifierSeq) -> CharConverter<'b,S> where Self:'b {
         CharConverter {
@@ -246,7 +261,7 @@ impl<'a,S:AsRef<str>> FontModifiable for &'a S {
     }
 }
 
-impl<'a,S:AsRef<str>> FontModifiable for CharConverter<'a,S> {
+impl<S:AsRef<str>> FontModifiable for CharConverter<'_,S> {
     type R=S;
     fn apply<'b>(mut self, mods: ModifierSeq) -> CharConverter<'b, Self::R> where Self: 'b {
         self.maps = mods;

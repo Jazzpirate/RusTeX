@@ -281,7 +281,7 @@ pub enum CommandCode {
     Argument = 14,
 }
 impl CommandCode {
-    pub fn meaning<C: Character, CS: CSName<C>, W: CharWrite<C, CS>>(&self, c: C, mut f: W) {
+    pub fn meaning<C: Character, CS: CSName<C>, W: CharWrite<C, CS>>(&self, c: C, mut f: W) -> std::fmt::Result {
         match self {
             CommandCode::BeginGroup => write!(f, "begin-group character "),
             CommandCode::EndGroup => write!(f, "end-group character "),
@@ -290,14 +290,14 @@ impl CommandCode {
             CommandCode::Superscript => write!(f, "superscript character "),
             CommandCode::Subscript => write!(f, "subscript character "),
             CommandCode::Space => {
-                write!(f, "blank space  ").unwrap();
-                return;
+                write!(f, "blank space  ")?;
+                return Ok(());
             }
             CommandCode::Letter => write!(f, "the letter "),
             _ => write!(f, "the character "),
-        }
-        .unwrap();
+        }?;
         f.push_char(c);
+        Ok(())
     }
     pub const fn as_byte(self) -> u8 {
         use CommandCode::*;

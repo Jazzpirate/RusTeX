@@ -132,8 +132,8 @@ fn get_engine(log:bool) -> DefaultEngine<Types> {
 
 pub struct CompilationResult {
     out:Vec<ShipoutNodeV>,
-    pub error:Option<TeXError<Types>>,
-    font_data:HMap<Box<str>,FontData>,
+    pub error:Option<(TeXError<Types>,Vec<FileTrace>)>,
+    pub font_data:HMap<Box<str>,FontData>,
     top_font:Font,
     top_width:i32,
     page_width:i32,
@@ -220,6 +220,15 @@ impl RusTeXEngineExt for RusTeXEngine {
         }
     }
     fn do_result(&mut self,result:Option<TeXError<Types>>,settings:Settings)  -> CompilationResult {
+        let result = result.map(|e| {
+            let filetrace = self.mouth.file_trace().filter_map(|sr| {
+                let id = sr.file?;
+                let file = self.filesystem.ref_str(Some(id));
+                let file = self.filesystem.inner.kpse.pwd.join(file).canonicalize().ok()?;
+                Some(FileTrace {file,line:sr.line as u32, col:sr.column as u32})
+            }).collect::<Vec<_>>();
+            (e,filetrace)
+        });
         let out = std::mem::take(&mut self.aux.extension.state.output);
         let css = std::mem::take(&mut self.aux.extension.css);
         let font_data = std::mem::take(&mut self.aux.extension.state.font_data);
@@ -234,6 +243,13 @@ impl RusTeXEngineExt for RusTeXEngine {
         }
     }
 
+}
+
+#[derive(Debug,Clone)]
+pub struct FileTrace {
+    pub file:PathBuf,
+    pub line:u32,
+    pub col:u32
 }
 
 impl RusTeXEngineT for RusTeXEngine {

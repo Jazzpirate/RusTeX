@@ -350,7 +350,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
                 return Ok(self.fontsystem.null())
             }
         );
-        TeXError::file_end_while_use(self.aux, self.state, self.mouth, token.clone())?;
+        TeXError::file_end_while_use(self.aux, self.state, self.mouth, token)?;
         Ok(self.fontsystem.null())
     }
 }

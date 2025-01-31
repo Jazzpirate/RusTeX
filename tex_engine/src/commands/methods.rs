@@ -596,7 +596,7 @@ fn read_align_preamble<ET: EngineTypes>(
                             engine.aux,
                             engine.state,
                             engine.mouth,
-                            in_token.clone(),
+                            in_token,
                         )?;
                         continue;
                     }
@@ -606,7 +606,7 @@ fn read_align_preamble<ET: EngineTypes>(
             _ => cols.push(next),
         }
     }
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token.clone())?;
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, in_token)?;
     Ok(cols.build(in_token.clone()))
 }
 
@@ -636,7 +636,7 @@ pub(in crate::commands) fn start_align_row<ET: EngineTypes>(
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Horizontal {
-                            children:vec!(),
+                            children:Vec::new(),
                             tp:HorizontalNodeListType::Box(HBoxInfo::HAlignRow,engine.mouth.start_ref(),BoxTarget::new(
                                 move |engine,l| {
                                     if let TeXBox::H {children,info:HBoxInfo::HAlignRow,..} = l  {
@@ -649,7 +649,7 @@ pub(in crate::commands) fn start_align_row<ET: EngineTypes>(
                             ))
                         },
                         _ => NodeList::Vertical {
-                            children:vec!(),
+                            children:Vec::new(),
                             tp:VerticalNodeListType::Box(VBoxInfo::VAlignColumn,engine.mouth.start_ref(),BoxTarget::new(
                                 move |engine,l| {
                                     if let TeXBox::V {children,info:VBoxInfo::VAlignColumn,..} = l  {
@@ -669,11 +669,11 @@ pub(in crate::commands) fn start_align_row<ET: EngineTypes>(
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
-                            children:vec!(),
+                            children:Vec::new(),
                             tp:VerticalNodeListType::VAlignColumn(engine.mouth.start_ref())
                         },
                         _ => NodeList::Horizontal {
-                            children:vec!(),
+                            children:Vec::new(),
                             tp:HorizontalNodeListType::HAlignRow(engine.mouth.start_ref())
                         }
                     }
@@ -686,11 +686,11 @@ pub(in crate::commands) fn start_align_row<ET: EngineTypes>(
                 engine.stomach.data_mut().open_lists.push(
                     match mode {
                         BoxType::Vertical => NodeList::Vertical {
-                            children:vec!(),
+                            children:Vec::new(),
                             tp:VerticalNodeListType::VAlignColumn(engine.mouth.start_ref())
                         },
                         _ => NodeList::Horizontal {
-                            children:vec!(),
+                            children:Vec::new(),
                             tp:HorizontalNodeListType::HAlignRow(engine.mouth.start_ref())
                         }
                     }
@@ -701,11 +701,14 @@ pub(in crate::commands) fn start_align_row<ET: EngineTypes>(
             }
         );
     }
+    let Some(ad) = engine.gullet.get_align_data() else {
+        return Err(TeXError::General("Not in align".to_string()))
+    };
     TeXError::file_end_while_use(
         engine.aux,
         engine.state,
         engine.mouth,
-        engine.gullet.get_align_data().unwrap().token.clone(),
+        &ad.token,
     )
 }
 
@@ -1240,15 +1243,14 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
             }
             ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
                 let num = self.state.get_delcode(char);
-                if num == ET::Int::default() {return Ok(None)} else {
-                    return Ok(Some(match Delimiter::from_int(num,self.state) {
+                if num == ET::Int::default() {return Ok(None)} 
+                return Ok(Some(match Delimiter::from_int(num,self.state) {
                     either::Left(d) => d,
                     either::Right((d,i)) => {
                         self.general_error(format!("Bad delimiter code ({})",i))?;
                         d
                     }
                 }))
-                };
             }
             _ => return Err(TeXError::General("Unexpected token for delimiter\nTODO: Better error message".to_string()))
         );

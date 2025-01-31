@@ -2,8 +2,8 @@ use crate::{Glyph, GlyphList};
 use crate::glyphs::UNDEFINED_LIST;
 use crate::parsing::Parser;
 
-pub(crate) fn parse_enc(f:&str) -> Vec<(Box<str>, GlyphList)> {
-    let file = std::fs::read_to_string(f).unwrap();
+pub fn parse_enc(f:&str) -> Vec<(Box<str>, GlyphList)> {
+    let file = std::fs::read_to_string(f).expect("Error reading .enc file");
     let mut s = Parser::new(&file);
     let mut ret = Vec::new();
     while !s.is_empty() {
@@ -27,7 +27,7 @@ fn parse_glyphlist(s:&mut Parser<'_>) -> GlyphList {
         }
         if s.starts_with('%') { s.skip_until_endline();continue }
         if s.starts_with('/') {
-            if curr > 255 { panic!("Too many glyphs in glyphlist!"); }
+            assert!(curr <= 255,"Too many glyphs in glyphlist!");
             s.skip(1);
             let name = s.read_until_ws_or('/');
             ret.0[curr] = Glyph::get(name);
@@ -35,7 +35,7 @@ fn parse_glyphlist(s:&mut Parser<'_>) -> GlyphList {
         }
     }
     s.drop("def");
-    if curr == 0 { panic!("Empty glyphlist!"); }
-    if curr < 20 { panic!("Too few glyphs in glyphlist!"); }
+    assert!(curr>0,"Empty glyphlist!");
+    assert!(curr>=20,"Too few glyphs in glyphlist!");
     ret
 }

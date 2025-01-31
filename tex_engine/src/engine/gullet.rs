@@ -623,7 +623,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
     ) -> TeXResult<ET::Token, ET> {
         self.gullet
             .read_until_endgroup(self.mouth, self.aux, self.state, cont, |a, s, m| {
-                TeXError::file_end_while_use(a, s, m, in_token.clone())
+                TeXError::file_end_while_use(a, s, m, in_token)
             })
     }
     /// Yields [`Token`]s from the input stream until an [`EndGroup`](CommandCode::EndGroup)-token is encountered, expanding
@@ -661,7 +661,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
                     self.aux,
                     self.state,
                     self.mouth,
-                    in_token.clone(),
+                    in_token,
                 )?,
             }
         }
@@ -744,7 +744,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
                     }
                 },
                 None => {
-                    TeXError::file_end_while_use(self.aux, self.state, self.mouth, token.clone())?
+                    TeXError::file_end_while_use(self.aux, self.state, self.mouth, token)?
                 }
             }
         }

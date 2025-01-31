@@ -512,7 +512,7 @@ pub fn protected<ET: EngineTypes>(
             return Err(TeXError::General(format!("You can't use a prefix with '{}'",s)))
         }
     );
-    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, tk)
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &tk)
 }
 
 pub fn readline<ET: EngineTypes>(

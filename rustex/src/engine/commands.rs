@@ -136,11 +136,11 @@ fn annot_top(engine:Refs,token:CompactToken) -> Res<()> {
     Ok(())
 }
 
-fn parse_annotations(s:&str) -> Res<(VecMap<String,String>,VecMap<String,String>,VecSet<String>)> {
+fn parse_annotations(orig:&str) -> Res<(VecMap<String,String>,VecMap<String,String>,VecSet<String>)> {
     let mut attrs = VecMap::default();
     let mut styles = VecMap::default();
     let mut classes = VecSet::default();
-    let mut s = s.trim();
+    let mut s = orig.trim();
     while !s.is_empty() {
         let style = if s.starts_with("style:") {
             s = &s[6..];
@@ -154,7 +154,7 @@ fn parse_annotations(s:&str) -> Res<(VecMap<String,String>,VecMap<String,String>
             s = v[1..].trim_start();
             n.trim()
         } else {
-            return Err(TeXError::General("Invalid annotation".to_string()))
+            return Err(TeXError::General(format!("Invalid annotation: {orig}")))
         };
         let delim = if s.starts_with('"') {
             s = &s[1..];
@@ -163,14 +163,14 @@ fn parse_annotations(s:&str) -> Res<(VecMap<String,String>,VecMap<String,String>
             s = &s[1..];
             '\''
         } else {
-            return Err(TeXError::General("Invalid annotation".to_string()))
+            return Err(TeXError::General(format!("Invalid annotation: {orig}")))
         };
         let val = if let Some(i) = s.find(delim) {
             let (v,r) = s.split_at(i);
             s = r[1..].trim_start();
             v.trim()
         } else {
-            return Err(TeXError::General("Invalid annotation".to_string()))
+            return Err(TeXError::General(format!("Invalid annotation: {orig}")))
         };
         if style == Some(true) {
             styles.insert(key.to_string(),val.to_string());

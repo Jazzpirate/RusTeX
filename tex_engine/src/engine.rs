@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)]
 /*! A TeX engine combines all the necessary components into a struct capable of compiling a TeX file into
     some output format.
 */
@@ -96,7 +97,7 @@ impl<'c, ET: EngineTypes> Colon<'c, ET> {
         (self.out)(engine, n)
     }
 }
-impl<'c, ET: EngineTypes> Default for Colon<'c, ET> {
+impl<ET: EngineTypes> Default for Colon<'_, ET> {
     fn default() -> Self {
         Colon {
             out: Box::new(|_, _| Ok(())),
@@ -106,6 +107,8 @@ impl<'c, ET: EngineTypes> Default for Colon<'c, ET> {
 
 impl<ET: EngineTypes> EngineReferences<'_, ET> {
     /// ships out the [`VNode`], passing it on to the provided continuation.
+    /// #### Errors
+    /// On LaTeX errors in Whatsits (e.g. non-immediate `\write`s)
     pub fn shipout(&mut self, n: VNode<ET>) -> TeXResult<(), ET> {
         let mut colon = std::mem::take(&mut self.colon);
         let r = colon.out(self, n);
@@ -162,6 +165,9 @@ pub trait TeXEngine: Sized {
     /// Returns mutable references to the components of the engine.
     fn get_engine_refs(&mut self) -> EngineReferences<Self::Types>;
     /// Initializes the engine with a file, e.g. `latex.ltx` or `pdftex.cfg`.
+    /// #### Errors
+    /// On TeX errors in init files
+    #[allow(clippy::cast_possible_wrap)]
     fn init_file(&mut self, s: &str) -> TeXResult<(), Self::Types> {
         log::debug!("Initializing with file {}", s);
         let mut comps = self.get_engine_refs();
@@ -191,18 +197,17 @@ pub trait TeXEngine: Sized {
             true,
         );
         let file = comps.filesystem.get(s);
-        comps.aux.jobname = file
-            .path()
-            .with_extension("")
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
+        let Some(filename) = file.path().file_stem().and_then(|s| s.to_str().map(ToString::to_string)) else {
+            return Err(TeXError::General(format!("Invalid init file {s}")))
+        };
+        comps.aux.jobname = filename;
         comps.push_file(file);
         comps.top_loop()
     }
 
+    /// #### Errors
+    /// On TeX errors in init files
+    #[allow(clippy::cast_possible_wrap)]
     fn run<
         F: FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(), Self::Types>,
     >(
@@ -241,6 +246,9 @@ pub trait TeXEngine: Sized {
     }
 
     /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
+    /// 
+    /// #### Errors
+    /// On TeX errors
     fn do_file_default<
         F: FnMut(&mut EngineReferences<Self::Types>, VNode<Self::Types>) -> TeXResult<(), Self::Types>,
     >(
@@ -252,17 +260,16 @@ pub trait TeXEngine: Sized {
         {
             let mut comps = self.get_engine_refs();
             let file = comps.filesystem.get(s);
+            let Some(parent) = file.path().parent() else {
+                return Err(TeXError::General(format!("Invalid file {s}")))
+            };
             comps
                 .filesystem
-                .set_pwd(file.path().parent().unwrap().to_path_buf());
-            comps.aux.jobname = file
-                .path()
-                .with_extension("")
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string();
+                .set_pwd(parent.to_path_buf());
+            let Some(filename) = file.path().file_stem().and_then(|s| s.to_str().map(ToString::to_string)) else {
+                return Err(TeXError::General(format!("Invalid init file {s}")))
+            };
+            comps.aux.jobname = filename;
             comps.push_file(file);
         }
         self.run(f)
@@ -280,6 +287,8 @@ pub trait TeXEngine: Sized {
     }
 
     /// Initialize the engine by processing `plain.tex`.
+    /// #### Errors
+    /// On TeX errors
     fn initialize_plain_tex(&mut self) -> TeXResult<(), Self::Types> {
         self.initialize_tex_primitives();
         self.init_file("plain.tex")
@@ -292,6 +301,8 @@ pub trait TeXEngine: Sized {
     }
 
     /// Initialize the engine by processing `eplain.tex`.
+    /// #### Errors
+    /// On TeX errors
     fn initialize_eplain_tex(&mut self) -> TeXResult<(), Self::Types> {
         self.initialize_etex_primitives();
         self.init_file("eplain.tex")
@@ -299,6 +310,8 @@ pub trait TeXEngine: Sized {
 
     /// Initialized the engine by processing `latex.ltx`. Only call this (for modern LaTeX setups)
     /// after calling [`initialize_etex_primitives`](TeXEngine::initialize_etex_primitives) first.
+    /// #### Errors
+    /// On TeX errors
     fn load_latex(&mut self) -> TeXResult<(), Self::Types> {
         self.init_file("latex.ltx")
     }
@@ -376,17 +389,22 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
             > <ET::Num as NumSet>::Int::default();
         if trace {
             let d = f(self);
-            self.aux.outputs.write_neg1(format_args!("{{{}}}", d));
+            self.aux.outputs.write_neg1(format_args!("{{{d}}}"));
         }
     }
     /// Entry point for compilation. This function is called by [`TeXEngine::do_file_default`].
+    /// #### Errors
+    /// On TeX errors
     pub fn top_loop(&mut self) -> TeXResult<(), ET> {
         crate::expand_loop!(ET::Stomach::every_top(self) => token => {
-            if token.is_primitive() == Some(PRIMITIVES.noexpand) {self.get_next(false).unwrap();continue}
+            if token.is_primitive() == Some(PRIMITIVES.noexpand) {
+                let _ = self.get_next(false);
+                continue
+            }
         }; self,
             ResolvedToken::Tk { char, code } => ET::Stomach::do_char(self, token, char, code)?,
             ResolvedToken::Cmd(Some(TeXCommand::Char {char, code})) => ET::Stomach::do_char(self, token, *char, *code)?,
-            ResolvedToken::Cmd(None) => TeXError::undefined(self.aux,self.state,self.mouth,token)?,
+            ResolvedToken::Cmd(None) => TeXError::undefined(self.aux,self.state,self.mouth,&token)?,
             ResolvedToken::Cmd(Some(cmd)) => crate::do_cmd!(self,token,cmd)
         );
         Ok(())
@@ -511,11 +529,14 @@ macro_rules! do_cmd {
             $crate::commands::TeXCommand::MathChar(u) =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,Some($token)),
             $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Relax,..} => (),
-            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Int { .. },name} |
-            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Dim { .. },name} |
-            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Skip { .. },name} |
-            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::MuSkip { .. },name} |
-            $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::FontCmd { .. },name} =>
+            $crate::commands::TeXCommand::Primitive{
+                cmd:$crate::commands::PrimitiveCommand::Int { .. } |
+                    $crate::commands::PrimitiveCommand::Dim { .. } |
+                    $crate::commands::PrimitiveCommand::Skip { .. } |
+                    $crate::commands::PrimitiveCommand::MuSkip { .. } |
+                    $crate::commands::PrimitiveCommand::FontCmd { .. }
+                ,name
+            } =>
             TeXError::not_allowed_in_mode($engine.aux,$engine.state,$engine.mouth,*name,
                 <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
             )?,

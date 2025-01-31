@@ -866,6 +866,6 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
             }
             _ => return Err(TeXError::General("Begingroup or math character expected\nTODO: Better error message".to_string()))
         );
-        TeXError::file_end_while_use(self.aux, self.state, self.mouth, in_token.clone())
+        TeXError::file_end_while_use(self.aux, self.state, self.mouth, in_token)
     }
 }
