@@ -1004,9 +1004,9 @@ impl<'a,'b> Shipout<'a,'b,Math> {
         };
         Ok(cos)
     }
-    pub(crate) fn do_mathchar(&mut self, char:u8, font:Font,cramped:bool) {
+    pub(crate) fn do_mathchar(&mut self, char:u8, font:Font,cramped:bool,display:bool) {
         match self.do_mathchar_i(char,&font) {
-            Ok(cos) => self.push(ShipoutNodeM::Glyph{char:cos,cramped}),
+            Ok(cos) => self.push(ShipoutNodeM::Glyph{char:cos,cramped,display}),
             Err(name) => self.push(ShipoutNodeM::MissingGlyph {font_name:font.filename().into(),char,name:name.into()})
         }
     }
@@ -1377,7 +1377,7 @@ impl From<Common<Self>> for ShipoutNodeH {
 #[derive(Clone,Debug)]
 pub(crate) enum ShipoutNodeM {
     MissingGlyph {name:Box<str>,char:u8,font_name:Box<str>},
-    Glyph{char:CharOrStr,cramped:bool},
+    Glyph{char:CharOrStr,cramped:bool,display:bool},
     Space,
     Phantom{width:i32,height:i32,depth:i32},
     VRule {width:Option<Dim32>,height:Option<Dim32>,depth:Option<Dim32>},

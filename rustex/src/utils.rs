@@ -26,7 +26,7 @@ impl Flex {
 impl Add for Flex {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        let r = match (self,other) {
+        match (self,other) {
             (Flex::Fixed(a),Flex::Fixed(b)) => Flex::Fixed(a+b),
             (Flex::Fil(a),Flex::Fil(b)) => Flex::Fil(a+b),
             (Flex::Fill(a),Flex::Fill(b)) => Flex::Fill(a+b),
@@ -37,8 +37,7 @@ impl Add for Flex {
             (Flex::Fill(a),Flex::Fixed(_)|Flex::Fil(_)) => Flex::Fill(a),
             (_,Flex::Filll(b)) => Flex::Filll(b),
             (Flex::Filll(a),_) => Flex::Filll(a),
-        };
-        if r.is_zero() { Flex::Fixed(0) } else { r }
+        }
     }
 }
 impl From<StretchShrink<Dim32>> for Flex {
@@ -81,7 +80,7 @@ impl Margin {
         Self {base:0,stretch:Flex::Filll(1),shrink:Flex::Fixed(0)}
     }
     pub(crate) fn ss() -> Self {
-        Self {base:0,stretch:Flex::Fixed(1),shrink:Flex::Fixed(1)}
+        Self {base:0,stretch:Flex::Fil(1),shrink:Flex::Fil(1)}
     }
     pub(crate) fn is_zero(&self) -> bool {
         self.base == 0 && self.stretch.is_zero() && self.shrink.is_zero()

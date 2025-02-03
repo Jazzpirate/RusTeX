@@ -595,29 +595,29 @@ Sed facilisis eget enim in varius.}
 \section{Skips, Fills and Kerns}
 
 \block{\cs{hfil}, \cs{hfill}, \cs{hss}}{
-\hbox to 200pt{ \showhinner{Foo} \cs{hss} \hss }
-\hbox to 200pt{ \hss \cs{hss} \showhinner{Foo} \cs{hss} \hss }
-\hbox to 200pt{ \hss \cs{hss} \showhinner{Foo} \cs{hss} }
-\hbox to 200pt{ \showhinner{Foo} \cs{hfil} \hfil }
-\hbox to 200pt{ \hss \cs{hss} \showhinner{Foo} \cs{hfil} \hfil }
-\hbox to 200pt{ \hfill \cs{hfill} \showhinner{Foo} \cs{hss} \hss }
-\hbox to 200pt{ \hfill \cs{hfill} \showhinner{Foo} \cs{hfil} \hfil }
-\hbox to 200pt{ \hfill \cs{hfill} \showhinner{Foo} }
+\showhto{200pt}{ \showhinner{Foo} \cs{hss} \hss }
+\showhto{200pt}{ \hss \cs{hss} \showhinner{Foo} \cs{hss} \hss }
+\showhto{200pt}{ \hss \cs{hss} \showhinner{Foo} \cs{hss} }
+\showhto{200pt}{ \showhinner{Foo} \cs{hfil} \hfil }
+\showhto{200pt}{ \hss \cs{hss} \showhinner{Foo} \cs{hfil} \hfil }
+\showhto{200pt}{ \hfill \cs{hfill} \showhinner{Foo} \cs{hss} \hss }
+\showhto{200pt}{ \hfill \cs{hfill} \showhinner{Foo} \cs{hfil} \hfil }
+\showhto{200pt}{ \hfill \cs{hfill} \showhinner{Foo} }
 }
 \conclude{\cs{hfil}$=$\cs{hss}; \cs{hfill}$>$\cs{hfil}}
 
 \block{\cs{vfil}, \cs{vfill}, \cs{vss}}{\showh{
-  \vbox to 150pt{ \showvinner{\hbox{Foo}}  \hbox{\cs{vss}} \vss }
+  \showvto{150pt}{ \showvinner{\hbox{Foo}}  \hbox{\cs{vss}} \vss }
   \hskip20pt
-  \vbox to 150pt{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} \hbox{\cs{vss}} \vss }
+  \showvto{150pt}{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} \hbox{\cs{vss}} \vss }
   \hskip20pt
-  \vbox to 150pt{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} }
+  \showvto{150pt}{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} }
   \hskip20pt
-  \vbox to 150pt{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} \hbox{\cs{vfil}} \vfil }
+  \showvto{150pt}{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} \hbox{\cs{vfil}} \vfil }
   \hskip20pt
-  \vbox to 150pt{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} \hbox{\cs{vfill}} \vfill }
+  \showvto{150pt}{ \vss \hbox{\cs{vss}} \showvinner{\hbox{Foo}} \hbox{\cs{vfill}} \vfill }
   \hskip20pt
-  \vbox to 150pt{ \vfill \hbox{\cs{vfill}} \showvinner{\hbox{Foo}} \hbox{\cs{vfil}} \vfil }
+  \showvto{150pt}{ \vfill \hbox{\cs{vfill}} \showvinner{\hbox{Foo}} \hbox{\cs{vfil}} \vfil }
 }}
 \conclude{Analogously: \cs{vfil}$=$\cs{vss}; \cs{vfill}$>$\cs{vfil}}
 \pagebreak

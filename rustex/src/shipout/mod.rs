@@ -11,7 +11,7 @@ use tex_engine::tex::numerics::{Dim32, Skip};
 use tex_engine::engine::stomach::methods::ParLineSpec;
 use tex_engine::tex::nodes::boxes::{HBoxInfo, TeXBox, ToOrSpread, VBoxInfo};
 use tex_engine::tex::nodes::horizontal::HNode;
-use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus};
+use tex_engine::tex::nodes::math::{MathAtom, MathFontStyle, MathGroup, MathKernel, MathNode, MathNucleus, MathStyle, MathStyleType};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::utils::errors::TeXError;
 use crate::engine::nodes::{LineSkip, RusTeXNode};
@@ -535,7 +535,7 @@ impl Shipout<'_,'_,Math> {
     fn do_kernel(&mut self, kernel:MathKernel<Types,MathFontStyle<Types>>) -> Result<(),Option<MathNode<Types,MathFontStyle<Types>>>> {
         match kernel {
             MathKernel::Char {char,style} =>
-                self.do_mathchar(char,style.font,style.cramped),
+                self.do_mathchar(char,style.font,style.cramped,style.style == MathStyleType::Display),
             MathKernel::List {children,..} =>
                 self.do_mathlist(&mut children.into())?,
             MathKernel::Empty => (),

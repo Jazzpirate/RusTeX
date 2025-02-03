@@ -691,6 +691,7 @@ pub fn close_box<ET: EngineTypes>(
                 start,
                 end: engine.mouth.current_sourceref(),
             };
+            bx.width();bx.height();bx.depth();
             add_box(engine, bx, target)?
         }
         Some(NodeList::Vertical {
@@ -724,6 +725,7 @@ pub fn close_box<ET: EngineTypes>(
                 end: engine.mouth.current_sourceref(),
                 preskip: None,
             };
+            bx.width();bx.height();bx.depth();
             add_box(engine, bx, target)?
         }
         _ => unreachable!(),

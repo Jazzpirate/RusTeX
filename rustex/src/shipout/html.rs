@@ -74,6 +74,10 @@ macro_rules! node {
         write!($self.f," {}=\"{}\"",$a,$v)?;
         node!(@ATTRS $self;$tag; $($tk)*);
     };
+    (@ATTRS $self:ident;$tag:expr; ?($v:expr) $($tk:tt)*) => {
+        if let Some((k,v)) = $v {write!($self.f," {}=\"{}\"",k,v)?;}
+        node!(@ATTRS $self;$tag; $($tk)*);
+    };
     (@ATTRS $self:ident;$tag:expr; $($tk:tt)*) => {
         for (k,v) in std::mem::take(&mut $self.attrs) {
             write!($self.f," {}=\"{}\"",k,v)?
@@ -425,7 +429,16 @@ impl CompilationDisplay<'_,'_> {
                         style!("margin-top"="auto"),
                     _ => ()
                 }
-            }/>);Ok(())
+            }/>);
+            match m.stretch {
+                Flex::Fill(_) => {node!(self !<div class="rustex-vskip" style:"margin-top"="auto";/>);}
+                Flex::Filll(_) => {
+                    node!(self !<div class="rustex-vskip" style:"margin-top"="auto";/>);
+                    node!(self !<div class="rustex-vskip" style:"margin-top"="auto";/>);
+                }
+                _ => ()
+            }
+            Ok(())
         }
         ShipoutNodeV::Common(Common::VBox {sref,info:info@VBoxInfo::VBox {..},children,..}) => {
             self.do_indent()?;self.do_vbox(sref,info,children,top)
@@ -547,6 +560,14 @@ impl CompilationDisplay<'_,'_> {
                     _ => ()
                 }
             }/>);
+            match m.stretch {
+                Flex::Fill(_) => {node!(self <div class="rustex-hskip" style:"margin-right"="auto";/>);}
+                Flex::Filll(_) => {
+                    node!(self <div class="rustex-hskip" style:"margin-right"="auto";/>);
+                    node!(self <div class="rustex-hskip" style:"margin-right"="auto";/>);
+                }
+                _ => ()
+            }
             Ok(())
         }
         ShipoutNodeH::Common(Common::SVG {sref, minx,maxx,miny,maxy,children,..}) => {
@@ -603,7 +624,7 @@ impl CompilationDisplay<'_,'_> {
             if self.attrs.is_empty() && self.styles.is_empty() {
                 Display::fmt(&Escaped(c), self.f)?
             } else {
-                node!(self <span {Display::fmt(&Escaped(c), self.f)?}/>)
+                node!(self <span class="rustex-contents" {Display::fmt(&Escaped(c), self.f)?}/>)
             }
             Ok(())
         },
@@ -694,15 +715,15 @@ impl CompilationDisplay<'_,'_> {
         _ => todo!("{c:?}")
     }}
 
-    fn cls(cls:MathClass) -> (&'static str,&'static str,&'static str) {
+    fn cls(cls:MathClass) -> &'static str {
         match cls {
-            MathClass::Ord => ("rustex-math-ord","0","0"),
-            MathClass::Op => ("rustex-math-op","0.15em","0.15em"),
-            MathClass::Bin => ("rustex-math-bin","0.15em","0.15em"),
-            MathClass::Rel => ("rustex-math-rel","0.2em","0.2em"),
-            MathClass::Open => ("rustex-math-open","0","0"),
-            MathClass::Close => ("rustex-math-close","0","0"),
-            MathClass::Punct => ("rustex-math-punct","0","0.15em")
+            MathClass::Ord => "rustex-math-ord",
+            MathClass::Op => "rustex-math-op",
+            MathClass::Bin => "rustex-math-bin",
+            MathClass::Rel => "rustex-math-rel",
+            MathClass::Open => "rustex-math-open",
+            MathClass::Close => "rustex-math-close",
+            MathClass::Punct => "rustex-math-punct"
         }
     }
 
@@ -732,22 +753,28 @@ impl CompilationDisplay<'_,'_> {
             }
             Ok(())
         }
-        ShipoutNodeM::MSkip{base,mu} if !*mu => {
+        /*ShipoutNodeM::MSkip{base,mu} if !*mu => {
             self.do_indent()?;
             node!(self !<mspace class="rustex-mkern" "width"=Self::dim_to_string(*base);/>);
             Ok(())
-        }
+        }*/
         ShipoutNodeM::MSkip{base,..} => {
             self.do_indent()?;
-            node!(self !<mspace class="rustex-mkern" "width"=Self::mu_to_string(*base);/>);
+            if *base > 0 {
+                node!(self !<mspace class="rustex-mkern" "width"=Self::mu_to_string(*base);/>);
+            } else {
+                let s = Self::mu_to_string(*base -  8 * 65536);
+                node!(self !<mspace class="rustex-mkern" "width"="0"; style:"margin-right"=s;/>);
+
+            }
             Ok(())
         }
         ShipoutNodeM::WithClass {class,children,..} => {
             if children.len() == 1 {
                 self.do_math(children.first().unwrap(),Some(*class)/*,cramped*/)
             } else {
-                let (cls,lspace,rspace) = Self::cls(*class);
-                node!(self !<mrow class=cls; "lspace"=lspace; "rspace"=rspace; {
+                let cls = Self::cls(*class);
+                node!(self !<mrow class=cls; {
                     for c in children {
                         self.do_math(c, Some(*class)/*,cramped*/)?
                     }
@@ -771,6 +798,26 @@ impl CompilationDisplay<'_,'_> {
                 }
             } {
                 self.do_hbox(sref,info,children)?
+            }/>);
+            self.width = oldwd;
+            Ok(())
+        }
+        ShipoutNodeM::Common(Common::VBox {sref,info:info@VBoxInfo::VTop {..},children,..}) => {
+            let oldwd = self.width;
+            let wd = info.assigned_width().unwrap_or_else(|| info.computed_width().unwrap_or_default()).0;
+            node!(self !<mtext class="rustex-math-escape" ref=sref style:{
+                match wd {
+                    0 => style!("width"="0"),
+                    x if x > 0 => {
+                        self.width = wd;
+                        let wd = Self::dim_to_string(wd);
+                        style!("min-width"=wd);
+                        style!("--rustex-curr-width"=wd);
+                    }
+                    _ => ()
+                }
+            } {
+                self.do_vtop(sref,info,children,false)?;
             }/>);
             self.width = oldwd;
             Ok(())
@@ -835,19 +882,24 @@ impl CompilationDisplay<'_,'_> {
             />);
             Ok(())
         }
-        ShipoutNodeM::Glyph {char,cramped:_} => {
-            // TODO cramped
-            let (tag,cls,lspace,rspace) = match cls {
+        ShipoutNodeM::Glyph {char,cramped,display} => {
+            match cls {
                 Some(MathClass::Ord)| None => {
-                    let (cls,lspace,rspace) = Self::cls(MathClass::Ord);
-                    ("mi",cls,lspace,rspace)
+                    node!(self <mi class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
+                }
+                _ if *cramped => {
+                    node!(self <mo class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
+                }
+                Some(MathClass::Op) if *display => {
+                    node!(self <mo class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                }
+                Some(MathClass::Op) => {
+                    node!(self <mo class=Self::cls(MathClass::Op); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
                 }
                 Some(o) => {
-                    let (cls,lspace,rspace) = Self::cls(o);
-                    ("mo",cls,lspace,rspace)
+                    node!(self <mo class=Self::cls(o); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
                 }
             };
-            node!(self <<tag; class=cls; "lspace"=lspace; "rspace"=rspace;{Display::fmt(&Escaped(char), self.f)?}/>);
             Ok(())
         }
         ShipoutNodeM::Space => {
@@ -855,7 +907,9 @@ impl CompilationDisplay<'_,'_> {
             Ok(())
         }
         ShipoutNodeM::Sup{base, sup,limits} => {
-            node!(self !<<if *limits {"mover"} else {"msup"}; {
+            node!(self !<<if *limits {"mover"} else {"msup"}; 
+            ?(if *limits {Some(("displaystyle","true"))} else {None})
+            {
                 self.do_math(base,None/*,cramped*/)?;
                 if sup.len() == 1 {
                     self.do_math(sup.first().unwrap(),None/*,cramped*/)?;
@@ -870,7 +924,9 @@ impl CompilationDisplay<'_,'_> {
             Ok(())
         }
         ShipoutNodeM::Sub{base, sub,limits} => {
-            node!(self !<<if *limits {"munder"} else {"msub"}; {
+            node!(self !<<if *limits {"munder"} else {"msub"}; 
+            ?(if *limits {Some(("displaystyle","true"))} else {None})
+            {
                 self.do_math(base,None/*,cramped*/)?;
                 if sub.len() == 1 {
                     self.do_math(sub.first().unwrap(),None/*,cramped*/)?;
@@ -908,7 +964,9 @@ impl CompilationDisplay<'_,'_> {
             Ok(())
         }
         ShipoutNodeM::SubSup{base, sub,sup,limits} => {
-            node!(self !<<if *limits {"munderover"} else {"msubsup"}; {
+            node!(self !<<if *limits {"munderover"} else {"msubsup"}; 
+                ?(if *limits {Some(("displaystyle","true"))} else {None})
+            {
                 self.do_math(base,None/*,cramped*/)?;
                 if sub.len() == 1 {
                     self.do_math(sub.first().unwrap(),None/*,cramped*/)?;
@@ -1008,7 +1066,7 @@ impl CompilationDisplay<'_,'_> {
                     }/>);
                 }
                 match accent {
-                    Ok(c) => node!(self !<mo {Display::fmt(&Escaped(c),self.f)?}/>),
+                    Ok(c) => node!(self !<mo "stretchy"="false"; {Display::fmt(&Escaped(c),self.f)?}/>),
                     Err((_,c,fnt)) =>
                         node!(self !<mtext class="rustex-missing" "title"=format_args!("Missing Glyph {c} in {fnt}");/>)
                 }
@@ -1210,7 +1268,7 @@ impl CompilationDisplay<'_,'_> {
                         "rustex-hbox rustex-withwidth",
                     _ => "rustex-hbox"
                 };
-                node!(s <div class=cls; style:{ if let Some(w) = to {width!(w)}} {
+                node!(s <div class=cls; style:{if to.is_some() {style!("justify-content"="space-between")}; if let Some(w) = to {width!(w)}} {
                     for c in children {
                         s.do_h(c,true)?;
                     }
@@ -1293,7 +1351,8 @@ impl CompilationDisplay<'_,'_> {
     }
 
     fn do_vtop(&mut self,sref:&SourceRef,info:&VBoxInfo<Types>,children:&Vec<ShipoutNodeV>,top:bool) -> std::fmt::Result {
-        let (wd,ht,bottom,to) = get_box_dims_v(top,info);
+        //let (wd,ht,bottom,to) = get_box_dims_v(top,info);
+        let (wd,ht,bottom,to) = get_box_dims_vtop(&info);
         let cls = match wd {
             Some(i) if i != 0 && i != self.width =>
                 "rustex-vtop-container rustex-scalewidth",
@@ -1304,8 +1363,8 @@ impl CompilationDisplay<'_,'_> {
         };
         let inner = move |slf:&mut Self| {
             node!(slf <div class=cls; ref=sref style:{
-                if let Some(bottom) = bottom {
-                    style!("margin-bottom"=Self::dim_to_string(bottom))
+                if let Some(ht) = ht {
+                    style!("height"=Self::dim_to_string(ht))
                 }
                 if let Some(wd) = wd { width!(wd) }
             } {
@@ -1326,8 +1385,11 @@ impl CompilationDisplay<'_,'_> {
                     }/>);
                     Ok::<_,std::fmt::Error>(())
                 };
-                if let Some(h) = ht {
-                    node!(slf <div class="rustex-vtop-height-container" style:"height"=Self::dim_to_string(h); {
+                if let Some(bottom) = bottom {
+                    node!(slf <div class="rustex-vtop-height-container" style:{
+                        style!("bottom"=Self::dim_to_string(bottom));
+                        style!("margin-top"=Self::dim_to_string(bottom));
+                    } {
                         inner(slf)?
                     }/>);
                 } else { inner(slf)?}
@@ -1354,6 +1416,30 @@ impl CompilationDisplay<'_,'_> {
 
 }
 
+fn get_box_dims_vtop(info:&VBoxInfo<Types>) -> (Option<i32>,Option<i32>,Option<i32>,Option<i32>) {
+    let wd = match info.assigned_width() {
+        Some(w) =>  Some(w.0),
+        /*_ if top => match info.computed_width() {
+            Some(w) if w.0 < 0 => Some(0),
+            _ => None
+        }*/
+        _ => None
+    };
+    let to = match info.to_or_scaled() {
+        Some(ToOrSpread::To(d)) => Some(d.0),
+        Some(ToOrSpread::Spread(s)) => Some(s.0 + info.computed_height().map(|d| d.0).unwrap_or(0)),
+        _ => None
+    };
+    if info.assigned_height().is_none() && info.assigned_depth().is_none() {
+        return (wd,None,None,to)
+    }
+    let full_height = info.assigned_height().or_else(|| info.computed_height()).unwrap_or_default().0
+        + info.assigned_depth().or_else(|| info.computed_depth()).unwrap_or_default().0;
+    let bottom = if let Some(ht) = info.assigned_height() {
+        Some(ht.0 - info.computed_height().map_or(0, |d| d.0))
+    } else {None };  //info.assigned_height().or_else(|| info.computed_height()).unwrap_or_default().0 - info.computed_height().map_or(0, |d| d.0);
+    (wd,Some(full_height),bottom,to)
+}
 
 fn get_box_dims_v(top:bool,info:&VBoxInfo<Types>) -> (Option<i32>,Option<i32>,Option<i32>,Option<i32>) {
     let wd = match info.assigned_width() {

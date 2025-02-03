@@ -1062,12 +1062,28 @@ pub(crate) fn do_math_class<ET: EngineTypes>(
 ) -> TeXResult<(), ET> {
     engine.read_char_or_math_group(
         in_token,
-        |_, engine, mc| {
-            ET::Stomach::add_node_m(engine, MathNode::Atom(mc.to_atom()));
+        |(), engine, mc| {
+            let mut atom = mc.to_atom();
+            if let Some(cls) = cls {
+                let MathNucleus::Simple{ cls:ocls,..} = &mut atom.nucleus else {unreachable!() };
+                *ocls = cls;
+            }
+            ET::Stomach::add_node_m(engine, MathNode::Atom(atom));
             Ok(())
         },
-        move |_| {
-            ListTarget::<ET, _>::new(move |engine, children, start| {
+        move |()| {
+            ListTarget::<ET, _>::new(move |engine, mut children, start| {
+                if children.len() == 1 {
+                    let mut child = children.pop().unwrap_or_else(|| unreachable!());
+                    if let Some(cls) = cls {
+                        if let MathNode::Atom(MathAtom{sub:None,sup:None,nucleus:MathNucleus::Simple{cls:ocls,..}}) = &mut child {
+                            *ocls = cls;
+                        }
+                    }
+                    ET::Stomach::add_node_m(engine, child);
+                    return Ok(());
+                }
+
                 let node = MathNode::Atom(MathAtom {
                     sub: None,
                     sup: None,
