@@ -26,8 +26,8 @@ thesis  0:15
 fn main() {
     //profile()
     //thesis()
-    //run()
-    test()
+    run()
+    //test()
     //temp_test()
     //notes()
     //test2()
