@@ -196,7 +196,8 @@ span {display:contents;}
 .rustex-vskip, .rustex-vkern {
     display: block;
 }
-.rustex-mskip {}
+
+/*.rustex-mskip {}*/
 
 .rustex-vss {
     display:block;margin-top: auto;margin-bottom: auto;
@@ -220,47 +221,45 @@ span {display:contents;}
     padding-left: 0;
     padding-right: 0;
 }
-.rustex-math-op {
-   /* padding-left: 0.15em;
+
+mrow.rustex-math-op {
+   padding-left: 0.15em;
     padding-right: 0.15em;
     + .rustex-math-op { padding-left: 0; }
     &:has(+ .rustex-math-op) { padding-right: 0; }
     &:first-child { padding-left: 0; }
-    &:last-child { padding-right: 0; } */
-}
-msubsup {
-    padding-right:0;
+    &:last-child { padding-right: 0; }
 }
 
-.rustex-math-bin {
-    /*padding-left: 0.15em;
+mrow.rustex-math-bin {
+    padding-left: 0.15em;
     padding-right: 0.15em;
     + .rustex-math-bin { padding-left: 0; }
     &:has(+ .rustex-math-bin) { padding-right: 0; }
     &:first-child { padding-left: 0; }
-    &:last-child { padding-right: 0; } */
+    &:last-child { padding-right: 0; }
 }
-.rustex-math-rel {
-    /*padding-left: 0.2em;
+mrow.rustex-math-rel {
+    padding-left: 0.2em;
     padding-right: 0.2em;
     + .rustex-math-rel { padding-left: 0; }
     &:has(+ .rustex-math-rel) { padding-right: 0; }
     &:first-child { padding-left: 0; }
-    &:last-child { padding-right: 0; }*/
+    &:last-child { padding-right: 0; }
 }
-.rustex-math-punct {
-    /*padding-left: 0;
+mrow.rustex-math-punct {
+    padding-left: 0;
     padding-right: 0.15em;
     &:has(+ .rustex-math-punct) { padding-right: 0; }
-    &:last-child { padding-right: 0; }*/
+    &:last-child { padding-right: 0; }
 }
 
-* + .rustex-mkern {
+/* * + .rustex-mkern {
     padding-left:0;
 }
 .rustex-mkern + * {
     padding-right:0;
-}
+}*/
 
 .rustex-display {
     text-align:center;
@@ -282,73 +281,6 @@ msubsup {
         writing-mode: initial;
     }
 }
-
-/* inline-flex avoids weird vertical gaps in e.g. footnote markers */
-/*
-mtext {
-    letter-spacing: initial;
-    word-spacing: initial;
-    display: inline-flex;
-}
-mtext > {display:initial}
-mtext * {
-    font-size: inherit;
-    writing-mode: initial;
-}
-
-mi { position: relative}
-mo {position: relative;padding-left: 0;padding-right: 0}
-msub > :nth-child(2), msup > :nth-child(2) {font-size:inherit}
-mfrac > * {font-size: inherit}
-mover > :not(:first-child), munder > :not(:first-child) {font-size:inherit}
-mtd {padding:0;text-align: start}
-
- */
-
-/*
-
-.rustex-vbox, .rustex-vtop, .rustex-vcenter,.rustex-foreign {
-    display:inline-flex;
-    flex-direction: column;
-}
-
-.rustex-hbox, .rustex-vbox, .rustex-vtop, .rustex-vcenter {
-    overflow: visible;
-    text-align: left;
-}
-
-.rustex-hbox, .rustex-hbox-no-space {
-    display:inline-flex;
-    white-space: pre;
-    width: min-content;
-    height: min-content;
-    align-items: baseline;
-}
-
-.rustex-display-vcenter {
-    text-align:center;
-    display:block;
-    align-self: center;
-    margin-top: 5px;
-    margin-bottom: 5px;
-    width: 100%;
-    min-width: 100%;
-}
-
-.rustex-hbox-no-space > .rustex-space-in-hbox, .rustex-hbox-no-space > span > .rustex-space-in-hbox, .rustex-hbox-no-space > span > span > .rustex-space-in-hbox {
-    margin:0;
-}
-.rustex-hbox > .rustex-text, .rustex-hbox > span > .rustex-text, .rustex-hbox > span > span > .rustex-text, .rustex-hbox > span > span > span > .rustex-text {
-    display:inline-block;
-    margin-bottom:1.2px;
-}
-
-
-.rustex-paragraph > .rustex-text, .rustex-paragraph > span > .rustex-text, .rustex-paragraph > span > span > .rustex-text, .rustex-paragraph > span > span > span > .rustex-text  { display:contents; }
-
- */
-
-
 
 /* --------------------------------------------------- Tables ------------------------------------------------------- */
 
@@ -389,12 +321,6 @@ mtd {padding:0;text-align: start}
     justify-content: flex-start;
     grid-column: span var(--rustex-align-num);
 }
-/*
-.rustex-halign-cell > .rustex-space-in-hbox, .rustex-halign-cell > span > .rustex-space-in-hbox, .rustex-halign-cell > span > span > .rustex-space-in-hbox {
-    margin:0;
-}
-
- */
 
 /* --------------------------------------------------- Others ------------------------------------------------------- */
 

@@ -361,8 +361,6 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
                     _ => {
                         if let Some(TokenSource::Vec(v)) = self.inputs.pop() {
                             self.vecs.push(v);
-                        } else {
-                            unreachable!()
                         }
                     }
                 },

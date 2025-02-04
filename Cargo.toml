@@ -20,6 +20,9 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
+[profile.bench]
+strip = "none"
+
 [workspace.dependencies]
 tex_engine = { path = "tex_engine",version = "0.1.0" }
 tex-glyphs = { path = "tex-glyphs",version = "0.1.1" }
