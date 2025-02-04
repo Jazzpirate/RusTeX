@@ -19,25 +19,25 @@ pub mod test_utils {
             .filter_level(log::LevelFilter::Trace)
             .try_init();
     }
-    
+
     pub fn debug() {
         env_logger::builder()
             .filter_level(log::LevelFilter::Debug)
             .try_init();
     }
-    
+
     pub fn info() {
         env_logger::builder()
             .filter_level(log::LevelFilter::Info)
             .try_init();
     }
-    
+
     pub fn warn() {
         env_logger::builder()
             .filter_level(log::LevelFilter::Warn)
             .try_init();
     }
-    
+
     pub fn error() {
         env_logger::builder()
             .filter_level(log::LevelFilter::Error)
@@ -124,7 +124,6 @@ fn tokenizer() {
         .unwrap()
         .is_none()); // EOF
 }
-
 
 #[test]
 fn carlisle() {

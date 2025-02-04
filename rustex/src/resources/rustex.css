@@ -218,48 +218,82 @@ span {display:contents;}
 }
 
 .rustex-math-ord, .rustex-math-open, .rustex-math-close, .rustex-math-cramped {
-    padding-left: 0;
-    padding-right: 0;
+    /*padding-left: 0;
+    padding-right: 0;*/
 }
 
-mrow.rustex-math-op {
-   padding-left: 0.15em;
+.rustex-math-op {
+    &:has(+ .rustex-math-ord) { padding-right: 0.15em;}
+    /*padding-left: 0.15em;
     padding-right: 0.15em;
     + .rustex-math-op { padding-left: 0; }
     &:has(+ .rustex-math-op) { padding-right: 0; }
     &:first-child { padding-left: 0; }
-    &:last-child { padding-right: 0; }
+    &:last-child { padding-right: 0; }*/
+}
+.rustex-math-ord, .rustex-math-open, .rustex-math-close {
+    + .rustex-math-op { padding-left: 0.15em; }
+    + .rustex-math-bin { padding-left: 0.15em; }
+    + .rustex-math-rel { padding-left: 0.2em; }
 }
 
-mrow.rustex-math-bin {
-    padding-left: 0.15em;
+.rustex-math-bin {
+    &:has(+ .rustex-math-ord) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-rel) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-op) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-open) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-close) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-punct) { padding-right: 0.15em;}
+
+    + .rustex-math-op { padding-left: 0.15em; }
+    + .rustex-math-rel { padding-left: 0.2em; }
+    /*padding-left: 0.15em;
     padding-right: 0.15em;
     + .rustex-math-bin { padding-left: 0; }
     &:has(+ .rustex-math-bin) { padding-right: 0; }
     &:first-child { padding-left: 0; }
-    &:last-child { padding-right: 0; }
+    &:last-child { padding-right: 0; }*/
 }
-mrow.rustex-math-rel {
-    padding-left: 0.2em;
+.rustex-math-rel {
+    &:has(+ .rustex-math-ord) { padding-right: 0.2em;}
+    &:has(+ .rustex-math-bin) { padding-right: 0.2em;}
+    &:has(+ .rustex-math-op) { padding-right: 0.2em;}
+    &:has(+ .rustex-math-open) { padding-right: 0.2em;}
+    &:has(+ .rustex-math-close) { padding-right: 0.2em;}
+    &:has(+ .rustex-math-punct) { padding-right: 0.2em;}
+
+    + .rustex-math-op { padding-left: 0.15em; }
+    + .rustex-math-bin { padding-left: 0.15em; }
+    /*padding-left: 0.2em;
     padding-right: 0.2em;
     + .rustex-math-rel { padding-left: 0; }
     &:has(+ .rustex-math-rel) { padding-right: 0; }
     &:first-child { padding-left: 0; }
-    &:last-child { padding-right: 0; }
+    &:last-child { padding-right: 0; }*/
 }
-mrow.rustex-math-punct {
-    padding-left: 0;
+.rustex-math-punct {
+    &:has(+ .rustex-math-ord) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-rel) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-op) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-open) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-close) { padding-right: 0.15em;}
+    &:has(+ .rustex-math-bin) { padding-right: 0.15em;}
+
+    + .rustex-math-op { padding-left: 0.15em; }
+    + .rustex-math-bin { padding-left: 0.15em; }
+    + .rustex-math-rel { padding-left: 0.2em; }
+    /*padding-left: 0;
     padding-right: 0.15em;
     &:has(+ .rustex-math-punct) { padding-right: 0; }
-    &:last-child { padding-right: 0; }
+    &:last-child { padding-right: 0; }*/
 }
 
-/* * + .rustex-mkern {
+* + .rustex-mkern {
     padding-left:0;
 }
 .rustex-mkern + * {
     padding-right:0;
-}*/
+}
 
 .rustex-display {
     text-align:center;
@@ -281,6 +315,37 @@ mrow.rustex-math-punct {
         writing-mode: initial;
     }
 }
+/*
+munder > :not(:first-child) {
+    math-depth: inherit;
+    math-style: inherit;
+}
+
+mover > :not(:first-child) {
+    math-depth: inherit;
+    math-style: inherit;
+}
+
+munderover > :not(:first-child) {
+    math-depth: inherit;
+    math-style: inherit;
+}
+
+msub > :not(:first-child) {
+    math-depth: inherit;
+    math-style: inherit;
+}
+
+msup > :not(:first-child) {
+    math-depth: inherit;
+    math-style: inherit;
+}
+
+msubsup > :not(:first-child) {
+    math-depth: inherit;
+    math-style: inherit;
+}
+*/
 
 /* --------------------------------------------------- Tables ------------------------------------------------------- */
 

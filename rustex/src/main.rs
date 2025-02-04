@@ -14,9 +14,9 @@ use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;
 use tex_engine::pdflatex::PlainPDFTeXEngine;
-use RusTeX::engine::Types;
 use RusTeX::engine::files::RusTeXFileSystem;
 use RusTeX::engine::output::RusTeXOutput;
+use RusTeX::engine::Types;
 
 /*
 notes   5:31
@@ -26,8 +26,8 @@ thesis  0:15
 fn main() {
     //profile()
     //thesis()
-    run()
-    //test()
+    //run()
+    test()
     //temp_test()
     //notes()
     //test2()
@@ -55,8 +55,11 @@ fn test_all() {
         dones.push(PathBuf::from(line));
     }
     let len = allfiles.len();
-    let allfiles: Vec<_> = allfiles.into_iter().enumerate().filter(|(_,x)| !dones.contains(x)).collect();
-
+    let allfiles: Vec<_> = allfiles
+        .into_iter()
+        .enumerate()
+        .filter(|(_, x)| !dones.contains(x))
+        .collect();
 
     println!("Testing {} files", allfiles.len());
     //let mut missing_glyphs = HashSet::new();
@@ -104,25 +107,33 @@ fn test_all() {
                     PathBuf::from("/home/jazzpirate/temp/out").join(format!("{}.html", i + 1));
                 ret.write_out(&out).unwrap();
                 dones.push(f);
-                std::fs::write(files, dones.iter().map(|x| x.to_str().unwrap()).collect::<Vec<_>>().join("\n")).unwrap();
+                std::fs::write(
+                    files,
+                    dones
+                        .iter()
+                        .map(|x| x.to_str().unwrap())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap();
             }
-            Some((e,_)) => {
+            Some((e, _)) => {
                 println!("Errored");
                 panic!(
-                    "Errored: {}\n{}\n\n",//Missing glyphs: {}\nMissing web fonts: {}",
+                    "Errored: {}\n{}\n\n", //Missing glyphs: {}\nMissing web fonts: {}",
                     f.display(),
                     e /*,
-                    missing_glyphs
-                        .into_iter()
-                        .map(|(x, c, y)| format!("({},{},{})", x, c, y))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    missing_fonts
-                        .into_iter()
-                        .map(|x| x.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                        */
+                      missing_glyphs
+                          .into_iter()
+                          .map(|(x, c, y)| format!("({},{},{})", x, c, y))
+                          .collect::<Vec<_>>()
+                          .join(", "),
+                      missing_fonts
+                          .into_iter()
+                          .map(|x| x.to_string())
+                          .collect::<Vec<_>>()
+                          .join(", ")
+                          */
                 );
             }
         }
@@ -130,17 +141,17 @@ fn test_all() {
     //let mut missing_glyphs: Vec<_> = missing_glyphs.into_iter().collect();
     //missing_glyphs.sort_by(|a, b| a.2.cmp(&b.2));
     println!(
-        "Finished \\o/\n\n",//Missing glyphs: {}\nMissing web fonts: {}",
-        /*missing_glyphs
-            .into_iter()
-            .map(|(x, c, y)| format!("({},{},{})", x, c, y))
-            .collect::<Vec<_>>()
-            .join(", "),
-        missing_fonts
-            .into_iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")*/
+        "Finished \\o/\n\n", //Missing glyphs: {}\nMissing web fonts: {}",
+                             /*missing_glyphs
+                                 .into_iter()
+                                 .map(|(x, c, y)| format!("({},{},{})", x, c, y))
+                                 .collect::<Vec<_>>()
+                                 .join(", "),
+                             missing_fonts
+                                 .into_iter()
+                                 .map(|x| x.to_string())
+                                 .collect::<Vec<_>>()
+                                 .join(", ")*/
     );
 }
 
@@ -149,13 +160,15 @@ fn test() {
     let ret = RusTeXEngine::do_file(
         "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.tex",
         Settings {
-            verbose:false,
-            log:true,
-            sourcerefs:true,
-            image_options:Default::default()
-        }
+            verbose: false,
+            log: true,
+            sourcerefs: true,
+            image_options: Default::default(),
+        },
     );
-    ret.write_out(Path::new("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html"))
+    ret.write_out(Path::new(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/test.html",
+    ))
     .unwrap();
 }
 
@@ -167,18 +180,17 @@ fn temp_test() {
         //"/home/jazzpirate/work/MathHub/courses/FAU/AI/problems/source/fol/prob/tableau4.en.tex",
         "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/tmptest.tex",
         Settings {
-            verbose:true,
-            log:true,
-            sourcerefs:true,
-            image_options:Default::default()
-        }
+            verbose: true,
+            log: true,
+            sourcerefs: true,
+            image_options: Default::default(),
+        },
     );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     ret.write_out(Path::new(
         //"/home/jazzpirate/rustex.out.html"
-        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/tmptest.html"
-        //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html"
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/tmptest.html", //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html"
     ))
     .unwrap();
 }
@@ -188,14 +200,16 @@ fn thesis() {
     let ret = RusTeXEngine::do_file(
         "/home/jazzpirate/work/LaTeX/Papers/19 - Thesis/thesis.tex",
         Settings {
-            verbose:false,
-            log:true,
-            sourcerefs:true,
-            image_options:Default::default()
-        }
+            verbose: false,
+            log: true,
+            sourcerefs: true,
+            image_options: Default::default(),
+        },
     );
-    ret.write_out(Path::new("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html"))
-        .unwrap();
+    ret.write_out(Path::new(
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/thesis.html",
+    ))
+    .unwrap();
 }
 
 fn notes() {
@@ -204,16 +218,17 @@ fn notes() {
     let ret = RusTeXEngine::do_file(
         "/home/jazzpirate/work/MathHub/MiKoMH/AI/source/course/notes/notes.tex",
         Settings {
-            verbose:false,
-            log:true,
-            sourcerefs:true,
-            image_options:Default::default()
-        }
+            verbose: false,
+            log: true,
+            sourcerefs: true,
+            image_options: Default::default(),
+        },
     );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/CompLog/source/kr/tikz/axioms2.tex",true,true,true);
     ret.write_out(Path::new(
-        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html"
-    )).unwrap();
+        "/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/ainotes.html",
+    ))
+    .unwrap();
 }
 
 fn profile() {
@@ -286,11 +301,11 @@ fn run() {
             let ret = RusTeXEngine::do_file(
                 i.as_str(),
                 Settings {
-                    verbose:params.verbose,
-                    log:params.console,
-                    sourcerefs:params.sourcerefs,
-                    image_options:Default::default()
-                }
+                    verbose: params.verbose,
+                    log: params.console,
+                    sourcerefs: params.sourcerefs,
+                    image_options: Default::default(),
+                },
             );
             ret.write_out(Path::new(&o)).unwrap();
         }

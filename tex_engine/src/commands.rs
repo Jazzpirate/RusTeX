@@ -60,9 +60,7 @@ impl<I: TeXInt> ActiveConditional<I> {
     pub fn name(&self) -> PrimitiveIdentifier {
         match self {
             Self::Case(_) => PRIMITIVES.ifcase,
-            Self::True(n) |
-            Self::Unfinished(n) |
-            Self::Else(n) => *n,
+            Self::True(n) | Self::Unfinished(n) | Self::Else(n) => *n,
         }
     }
 }
@@ -563,9 +561,7 @@ impl<T: Token> Macro<T> {
             .display(int, cc, escapechar, false)
             .fmt_cw(f)?;
         write!(f, "->")?;
-        self.expansion
-            .display(int, cc, escapechar, true)
-            .fmt_cw(f)
+        self.expansion.display(int, cc, escapechar, true).fmt_cw(f)
     }
 }
 

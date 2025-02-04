@@ -29,7 +29,7 @@ fn main() {
 
         let lib_dir = out_dir.join("lib");
         let lib_path = lib_dir.join(lib_name);
-        
+
         if !lib_path.exists() {
             std::fs::create_dir_all(&lib_dir).expect("Could not create lib dir");
             let download_url = format!("{BASE_URL}/chromium/{PDFIUM_VERSION}/pdfium-{platform}.tgz");

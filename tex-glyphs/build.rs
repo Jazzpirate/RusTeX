@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufRead;
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
 
-static GLYPH_MAP : &[u8] = include_bytes!("src/resources/glyphmap.txt");
+static GLYPH_MAP: &[u8] = include_bytes!("src/resources/glyphmap.txt");
 static PATCHES: &str = include_str!("src/resources/patches.md");
 //static MISSING : &str = include_str!("src/resources/missing.txt");
 
@@ -14,10 +14,10 @@ struct State {
     glyphmap: phf_codegen::Map<String>,
     glyphlookup: phf_codegen::Map<String>,
     done_glyphs: Vec<String>,
-    build_glyphlist:Vec<String>,
+    build_glyphlist: Vec<String>,
     idx: u16,
-    build_map:HashMap<String,u16>,
-    reader: std::io::Lines<std::io::BufReader<&'static [u8]>>
+    build_map: HashMap<String, u16>,
+    reader: std::io::Lines<std::io::BufReader<&'static [u8]>>,
 }
 
 impl State {
@@ -31,9 +31,9 @@ impl State {
             idx: 0u16,
             build_map: HashMap::new(),
             reader: std::io::BufReader::new(GLYPH_MAP).lines(),
-            build_glyphlist: vec![".notdef".to_string()]
+            build_glyphlist: vec![".notdef".to_string()],
         };
-        st.build_map.insert(".notdef".to_string(),0);
+        st.build_map.insert(".notdef".to_string(), 0);
         // known unknowns
         /*for m in MISSING.split(' ') {
             st.glyphmap.entry(m.to_string(),"0");
@@ -42,11 +42,11 @@ impl State {
         while let Some(Ok(line)) = st.reader.next() {
             st.do_line(&line);
         }
-        
+
         st
     }
 
-    fn do_line(&mut self,line:&str) {
+    fn do_line(&mut self, line: &str) {
         self.idx += 1;
         let split = line.find(' ').unwrap_or_else(|| unreachable!());
         let glyphname = line[..split].to_string();
@@ -55,18 +55,19 @@ impl State {
             match self.reader.next() {
                 Some(Ok(s)) if s.is_empty() => glyphcode = "\\n".to_string(),
                 Some(Ok(s)) => {
-                    self.do_name_code(glyphname,&glyphcode);
+                    self.do_name_code(glyphname, &glyphcode);
                     return self.do_line(&s);
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
-        self.do_name_code(glyphname,&glyphcode);
+        self.do_name_code(glyphname, &glyphcode);
     }
-    fn do_name_code(&mut self,glyphname:String,glyphcode:&String) {
+    fn do_name_code(&mut self, glyphname: String, glyphcode: &String) {
         if !self.done_glyphs.contains(glyphcode) {
             self.done_glyphs.push(glyphcode.clone());
-            self.glyphlookup.entry(glyphcode.clone(), &format!("{}", self.idx));
+            self.glyphlookup
+                .entry(glyphcode.clone(), &format!("{}", self.idx));
         }
         self.glyphlist.push_str(&format!(",{glyphcode:?}"));
         self.glyphnames.push_str(&format!(",{glyphname:?}"));
@@ -76,93 +77,120 @@ impl State {
     }
 }
 
-
-#[derive(Copy,Clone,Debug,PartialEq,Eq,Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ModifierSeq {
-    blackboard:bool,
-    fraktur:bool,
-    script:bool,
-    bold:bool,
-    capitals:bool,
-    monospaced:bool,
-    italic:bool,
-    oblique:bool,
-    sans_serif:bool,
+    blackboard: bool,
+    fraktur: bool,
+    script: bool,
+    bold: bool,
+    capitals: bool,
+    monospaced: bool,
+    italic: bool,
+    oblique: bool,
+    sans_serif: bool,
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 struct FontMap {
     modifiers: ModifierSeq,
-    table:Option<String>,
-    fontmap:Option<(String,String)>
+    table: Option<String>,
+    fontmap: Option<(String, String)>,
 }
-struct TableParser{
-    s:&'static str,
-    map:HashMap<String,FontMap>,
-    tables:Vec<(String,[String;256])>,
-    glyphmap:HashMap<String,u16>,
-    glyphlist:Vec<String>
+struct TableParser {
+    s: &'static str,
+    map: HashMap<String, FontMap>,
+    tables: Vec<(String, [String; 256])>,
+    glyphmap: HashMap<String, u16>,
+    glyphlist: Vec<String>,
 }
 impl TableParser {
-    fn get(glyphmap:HashMap<String,u16>,glyphlist:Vec<String>) -> Self {
-        let mut patch =  PATCHES.trim_start();
-        patch = patch[patch.find("<!--- START -->").unwrap_or_else(|| unreachable!()) + 15..].trim_start();
+    fn get(glyphmap: HashMap<String, u16>, glyphlist: Vec<String>) -> Self {
+        let mut patch = PATCHES.trim_start();
+        patch = patch[patch
+            .find("<!--- START -->")
+            .unwrap_or_else(|| unreachable!())
+            + 15..]
+            .trim_start();
         patch = patch[patch.find('\n').unwrap_or_else(|| unreachable!())..].trim_start();
         patch = patch[patch.find('\n').unwrap_or_else(|| unreachable!())..].trim_start();
-        assert!(patch.starts_with('|'),"???: {patch}");
-        let mut ret = Self{s:patch,map:HashMap::default(),tables:Vec::new(),glyphmap,glyphlist};
+        assert!(patch.starts_with('|'), "???: {patch}");
+        let mut ret = Self {
+            s: patch,
+            map: HashMap::default(),
+            tables: Vec::new(),
+            glyphmap,
+            glyphlist,
+        };
         loop {
-            if !ret.read_line() {break}
+            if !ret.read_line() {
+                break;
+            }
         }
         assert!(ret.s.starts_with("<!--- END -->"));
 
-        ret.s = ret.s[ret.s.find("<!--- START -->").unwrap_or_else(|| unreachable!()) + 15..].trim_start();
+        ret.s = ret.s[ret
+            .s
+            .find("<!--- START -->")
+            .unwrap_or_else(|| unreachable!())
+            + 15..]
+            .trim_start();
         loop {
-            if !ret.read_table() {break}
+            if !ret.read_table() {
+                break;
+            }
         }
         assert!(ret.s.starts_with("<!--- END -->"));
         ret
     }
     fn read_table(&mut self) -> bool {
-        if !self.s.starts_with('-') {return false}
+        if !self.s.starts_with('-') {
+            return false;
+        }
         self.s = self.s[1..].trim_start();
         let idx = self.s.find('\n').unwrap_or_else(|| unreachable!());
-        let (mut name,rest) = self.s.split_at(idx);
-        if name.ends_with('\r') {name = &name[..name.len()-1]}
+        let (mut name, rest) = self.s.split_at(idx);
+        if name.ends_with('\r') {
+            name = &name[..name.len() - 1]
+        }
         self.s = rest[1..].trim_start();
         assert!(self.s.starts_with('|'));
         self.s = self.s[self.s.find('\n').unwrap_or_else(|| unreachable!())..].trim_start();
         self.s = self.s[self.s.find('\n').unwrap_or_else(|| unreachable!())..].trim_start();
         assert!(self.s.starts_with('|'));
-        let mut table = array_init::array_init::<_,String,256>(|_| String::new());
+        let mut table = array_init::array_init::<_, String, 256>(|_| String::new());
         for i in 0usize..16 {
             self.skip_field();
             for j in 0usize..16 {
-                table[i*16 + j] = self.read_glyph();
+                table[i * 16 + j] = self.read_glyph();
             }
             self.s = self.s[1..].trim_start();
         }
-        self.tables.push((name.to_string(),table));
+        self.tables.push((name.to_string(), table));
         true
     }
     fn read_glyph(&mut self) -> String {
         assert!(self.s.starts_with('|'));
         self.s = self.s[1..].trim_start();
 
-        if self.s.starts_with('|') {return "UNDEFINED".to_string()}
+        if self.s.starts_with('|') {
+            return "UNDEFINED".to_string();
+        }
         if self.s.starts_with("\\u") {
-            let u = u32::from_str_radix(&self.s[2..6],16).unwrap_or_else(|_| unreachable!());
+            let u = u32::from_str_radix(&self.s[2..6], 16).unwrap_or_else(|_| unreachable!());
             self.s = self.s[6..].trim_start();
             assert!(self.s.starts_with('|'));
-            return format!("Glyph(GlyphI::Unicode({:?}))",char::from_u32(u).unwrap_or_else(|| unreachable!()));
+            return format!(
+                "Glyph(GlyphI::Unicode({:?}))",
+                char::from_u32(u).unwrap_or_else(|| unreachable!())
+            );
         }
         if self.s.starts_with('/') {
             let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
-            let (glyph,rest) = self.s.split_at(idx);
+            let (glyph, rest) = self.s.split_at(idx);
             self.s = rest;
             let i = self.glyphmap.get(glyph).unwrap_or_else(|| unreachable!());
-            return format!("Glyph(GlyphI::S({i}))")
+            return format!("Glyph(GlyphI::S({i}))");
         }
         if self.s.starts_with('`') {
             self.s = &self.s[1..];
@@ -174,9 +202,18 @@ impl TableParser {
                     self.s = self.s.trim_start();
                     assert!(self.s.starts_with('|'));
                     if ret.chars().count() == 1 {
-                        return format!("Glyph(GlyphI::Unicode({:?}))",ret.chars().next().unwrap_or_else(|| unreachable!()))
+                        return format!(
+                            "Glyph(GlyphI::Unicode({:?}))",
+                            ret.chars().next().unwrap_or_else(|| unreachable!())
+                        );
                     }
-                    let i = self.glyphlist.iter().enumerate().find(|p| p.1 == &ret).unwrap_or_else(|| unreachable!()).0;
+                    let i = self
+                        .glyphlist
+                        .iter()
+                        .enumerate()
+                        .find(|p| p.1 == &ret)
+                        .unwrap_or_else(|| unreachable!())
+                        .0;
                     return format!("Glyph(GlyphI::S({i}))");
                 }
                 if n == '\\' {
@@ -188,7 +225,7 @@ impl TableParser {
                 }
             }
         }
-        panic!("Unexpected glyph in table: {}",self.s);
+        panic!("Unexpected glyph in table: {}", self.s);
     }
     fn skip_field(&mut self) {
         assert!(self.s.starts_with('|'));
@@ -197,49 +234,68 @@ impl TableParser {
         self.s = &self.s[idx..];
     }
     fn read_line(&mut self) -> bool {
-        if !self.s.starts_with('|') {return false}
+        if !self.s.starts_with('|') {
+            return false;
+        }
         self.s = &self.s[1..];
         let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
-        let (names,rest) = self.s.split_at(idx);
+        let (names, rest) = self.s.split_at(idx);
         self.s = rest[1..].trim_start();
-        let names = names.split(',').map(|d| d.trim().to_string()).collect::<Vec<_>>();
+        let names = names
+            .split(',')
+            .map(|d| d.trim().to_string())
+            .collect::<Vec<_>>();
 
         let mut modifiers = ModifierSeq::default();
         let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
-        let (mods,rest) = self.s.split_at(idx);
+        let (mods, rest) = self.s.split_at(idx);
         self.s = rest[1..].trim_start();
-        for b in mods.trim().as_bytes() { match b {
-            b'B' => modifiers.blackboard = true,
-            b'f' => modifiers.fraktur = true,
-            b'S' => modifiers.script = true,
-            b'b' => modifiers.bold = true,
-            b'c' => modifiers.capitals = true,
-            b'm' => modifiers.monospaced = true,
-            b'i' => modifiers.italic = true,
-            b'o' => modifiers.oblique = true,
-            b's' => modifiers.sans_serif = true,
-            _ => panic!("Unexpected modifier in patches.md: {}, {}",b,self.s)
-        }}
+        for b in mods.trim().as_bytes() {
+            match b {
+                b'B' => modifiers.blackboard = true,
+                b'f' => modifiers.fraktur = true,
+                b'S' => modifiers.script = true,
+                b'b' => modifiers.bold = true,
+                b'c' => modifiers.capitals = true,
+                b'm' => modifiers.monospaced = true,
+                b'i' => modifiers.italic = true,
+                b'o' => modifiers.oblique = true,
+                b's' => modifiers.sans_serif = true,
+                _ => panic!("Unexpected modifier in patches.md: {}, {}", b, self.s),
+            }
+        }
 
         let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
-        let (table,rest) = self.s.split_at(idx);
+        let (table, rest) = self.s.split_at(idx);
         self.s = rest[1..].trim_start();
         let table = table.trim();
-        let table = if table.is_empty() {None} else {Some(table.to_string())};
-
-        let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
-        let (font,rest) = self.s.split_at(idx);
-        self.s = rest[1..].trim_start();
-        let font = font.trim();
-        let fontmap = if font.is_empty() {None} else {
-            let idx = font.rfind(char::is_whitespace).unwrap_or_else(|| unreachable!());
-            let (name,link) = font.split_at(idx);
-            Some((name.trim().to_string(),link.trim().to_string()))
+        let table = if table.is_empty() {
+            None
+        } else {
+            Some(table.to_string())
         };
 
-        let map = FontMap{modifiers,table,fontmap};
+        let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
+        let (font, rest) = self.s.split_at(idx);
+        self.s = rest[1..].trim_start();
+        let font = font.trim();
+        let fontmap = if font.is_empty() {
+            None
+        } else {
+            let idx = font
+                .rfind(char::is_whitespace)
+                .unwrap_or_else(|| unreachable!());
+            let (name, link) = font.split_at(idx);
+            Some((name.trim().to_string(), link.trim().to_string()))
+        };
+
+        let map = FontMap {
+            modifiers,
+            table,
+            fontmap,
+        };
         for n in names {
-            self.map.insert(n,map.clone());
+            self.map.insert(n, map.clone());
         }
 
         true
@@ -249,60 +305,94 @@ impl TableParser {
 fn main() {
     let st = State::go();
 
-    let path = Path::new(&std::env::var("OUT_DIR").unwrap_or_else(|_| unreachable!())).join("codegen.rs");
+    let path =
+        Path::new(&std::env::var("OUT_DIR").unwrap_or_else(|_| unreachable!())).join("codegen.rs");
     let mut file = std::io::BufWriter::new(File::create(path).unwrap_or_else(|_| unreachable!()));
-    writeln!(file,"use crate::glyphs::{{GlyphI,UNDEFINED}};").unwrap_or_else(|_| unreachable!());
-    writeln!(&mut file,
+    writeln!(file, "use crate::glyphs::{{GlyphI,UNDEFINED}};").unwrap_or_else(|_| unreachable!());
+    writeln!(
+        &mut file,
         "static GLYPH_LIST: [&str;{}] = {}];",
-        st.idx+1,st.glyphlist
-    ).unwrap();
-    writeln!(&mut file,
-      "static GLYPH_NAMES: [&str;{}] = {}];",
-      st.idx+1,st.glyphnames
-    ).unwrap();
+        st.idx + 1,
+        st.glyphlist
+    )
+    .unwrap();
+    writeln!(
+        &mut file,
+        "static GLYPH_NAMES: [&str;{}] = {}];",
+        st.idx + 1,
+        st.glyphnames
+    )
+    .unwrap();
     writeln!(
         &mut file,
         "static GLYPH_MAP: phf::Map<&'static str, u16> = {};",
         st.glyphmap.build()
-    ).unwrap();
+    )
+    .unwrap();
     writeln!(
         &mut file,
         "static GLYPH_LOOKUP: phf::Map<&'static str, u16> = {};",
         st.glyphlookup.build()
-    ).unwrap();
+    )
+    .unwrap();
 
-    let parser = TableParser::get(st.build_map,st.build_glyphlist);
+    let parser = TableParser::get(st.build_map, st.build_glyphlist);
 
-    let path = Path::new(&std::env::var("OUT_DIR").unwrap_or_else(|_| unreachable!())).join("codegen_patch.rs");
-    let mut patchfile = std::io::BufWriter::new(File::create(path).unwrap_or_else(|_| unreachable!()));
-    writeln!(&mut patchfile,"{{").unwrap_or_else(|_| unreachable!());
-    for (name,val) in parser.map {
-        writeln!(&mut patchfile,"patch(&mut map,\"{}\",{:?},{:?},{:?});",name,
-               val.modifiers,
-               val.table.map(|n| parser.tables.iter().enumerate().find(|p| p.1.0 == n).unwrap_or_else(|| unreachable!()).0),
-               val.fontmap
-        ).unwrap();
+    let path = Path::new(&std::env::var("OUT_DIR").unwrap_or_else(|_| unreachable!()))
+        .join("codegen_patch.rs");
+    let mut patchfile =
+        std::io::BufWriter::new(File::create(path).unwrap_or_else(|_| unreachable!()));
+    writeln!(&mut patchfile, "{{").unwrap_or_else(|_| unreachable!());
+    for (name, val) in parser.map {
+        writeln!(
+            &mut patchfile,
+            "patch(&mut map,\"{}\",{:?},{:?},{:?});",
+            name,
+            val.modifiers,
+            val.table.map(|n| parser
+                .tables
+                .iter()
+                .enumerate()
+                .find(|p| p.1 .0 == n)
+                .unwrap_or_else(|| unreachable!())
+                .0),
+            val.fontmap
+        )
+        .unwrap();
     }
-    writeln!(&mut patchfile,"}}").unwrap_or_else(|_| unreachable!());
+    writeln!(&mut patchfile, "}}").unwrap_or_else(|_| unreachable!());
 
-    let tbl = &parser.tables.iter().find(|p| p.0 == "PostScript Standard Encoding").unwrap_or_else(|| unreachable!()).1;
-    writeln!(&mut file,"const STANDARD_ENCODING: GlyphList = GlyphList([").unwrap_or_else(|_| unreachable!());
+    let tbl = &parser
+        .tables
+        .iter()
+        .find(|p| p.0 == "PostScript Standard Encoding")
+        .unwrap_or_else(|| unreachable!())
+        .1;
+    writeln!(
+        &mut file,
+        "const STANDARD_ENCODING: GlyphList = GlyphList(["
+    )
+    .unwrap_or_else(|_| unreachable!());
     for t in tbl {
-        writeln!(&mut file,"    {t},").unwrap_or_else(|_| unreachable!());
+        writeln!(&mut file, "    {t},").unwrap_or_else(|_| unreachable!());
     }
-    writeln!(&mut file,"]);").unwrap_or_else(|_| unreachable!());
+    writeln!(&mut file, "]);").unwrap_or_else(|_| unreachable!());
 
-    writeln!(&mut file,"const PATCHED_TABLES: [GlyphList;{}] = [",parser.tables.len()).unwrap_or_else(|_| unreachable!());
-    for (_,table) in parser.tables {
-        writeln!(&mut file,"    GlyphList([").unwrap_or_else(|_| unreachable!());
+    writeln!(
+        &mut file,
+        "const PATCHED_TABLES: [GlyphList;{}] = [",
+        parser.tables.len()
+    )
+    .unwrap_or_else(|_| unreachable!());
+    for (_, table) in parser.tables {
+        writeln!(&mut file, "    GlyphList([").unwrap_or_else(|_| unreachable!());
         for t in table {
-            writeln!(&mut file,"        {t},").unwrap_or_else(|_| unreachable!());
+            writeln!(&mut file, "        {t},").unwrap_or_else(|_| unreachable!());
         }
-        writeln!(&mut file,"    ]),").unwrap_or_else(|_| unreachable!());
+        writeln!(&mut file, "    ]),").unwrap_or_else(|_| unreachable!());
     }
-    writeln!(&mut file,"];").unwrap_or_else(|_| unreachable!());
+    writeln!(&mut file, "];").unwrap_or_else(|_| unreachable!());
 
     //panic!("Here: Maps: {:?}\n\nTables: {:?}",parser.map,parser.tables);
     //panic!("Here: {}", glyphmap.display());
-
 }

@@ -80,12 +80,9 @@ pub fn read_arguments<ET: EngineTypes>(
                     next,
                     token,
                 )?,
-                None => TeXError::file_end_while_use(
-                    engine.aux,
-                    engine.state,
-                    engine.mouth,
-                    token,
-                )?,
+                None => {
+                    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, token)?
+                }
             },
         }
     }
@@ -178,12 +175,7 @@ fn read_argument<ET: EngineTypes>(
         let t = match engine.mouth.get_next(engine.aux, engine.state)? {
             Some(t) => t,
             None => {
-                TeXError::file_end_while_use(
-                    engine.aux,
-                    engine.state,
-                    engine.mouth,
-                    token,
-                )?;
+                TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, token)?;
                 continue;
             }
         };

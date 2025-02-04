@@ -506,7 +506,7 @@ Sed facilisis eget enim in varius.}
 \section{Math}
 
 \def\mymath{\alpha + \mathop{\red\int}_{t=1}^\infty \mathop{\blue\sum}_{x=0}^N f(t,x)^t_x
-  \alpha + \mathop{\red\int}_{t=1}^\infty \left\{\mathop{\blue\sum}_{x=0}^N f(t,x)^t_x\right. }
+  \alpha + \overbrace{\mathop{\red\int}_{t=1}^\infty \left\{\underbrace{\mathop{\blue\sum}_{x=0}^N f(t,x)^t_x}_{\text{where }f\colon A\to B}\right.}^{=0} }
 
 \block{\$ in Para}{
   \showpar{$\mymath$}

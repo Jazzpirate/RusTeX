@@ -1391,18 +1391,20 @@ pub struct MathChar<ET: EngineTypes> {
 impl<ET: EngineTypes> MathChar<ET> {
     /// Convert this into an unresolved [`MathAtom`].
     pub fn to_atom(self) -> MathAtom<ET, UnresolvedMathFontStyle<ET>> {
-        let kernel = MathNucleus::Simple {
+        MathAtom {
+            nucleus: self.to_nucleus(),
+            sup: None,
+            sub: None,
+        }
+    }
+    pub fn to_nucleus(self) -> MathNucleus<ET,UnresolvedMathFontStyle<ET>> {
+        MathNucleus::Simple {
             cls: self.cls,
             kernel: MathKernel::Char {
                 char: self.char,
                 style: self.style,
             },
             limits: None,
-        };
-        MathAtom {
-            nucleus: kernel,
-            sup: None,
-            sub: None,
         }
     }
     /// Create a new [`MathChar`] from a mathcode. If this was triggered by

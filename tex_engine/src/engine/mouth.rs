@@ -161,7 +161,9 @@ pub trait Mouth<ET: EngineTypes> {
         esc: Option<ET::Char>,
     ) -> String;
 
-    fn file_trace(&self) -> impl Iterator<Item=SourceReference<<ET::File as File>::SourceRefID>> + '_;
+    fn file_trace(
+        &self,
+    ) -> impl Iterator<Item = SourceReference<<ET::File as File>::SourceRefID>> + '_;
 }
 
 enum TokenSource<T: Token, F: File<Char = T::Char>> {
@@ -175,7 +177,7 @@ enum TokenSource<T: Token, F: File<Char = T::Char>> {
 /// is done with that information
 /// is to print a corresponding number of `.`s if `\tracingcommands` is set. By omitting that and just concatenating
 /// all expansions into a single Vec from which to `pop()`, we gain a massive speedup.
-    /// #### Errors
+/// #### Errors
 pub struct DefaultMouth<ET: EngineTypes> {
     inputs: Vec<TokenSource<ET::Token, ET::File>>,
     args: Option<[Vec<ET::Token>; 9]>,
@@ -203,16 +205,20 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
         self.start_ref.clear();
     }
 
-    fn file_trace(&self) -> impl Iterator<Item=SourceReference<<ET::File as File>::SourceRefID>> + '_ { 
-        self.inputs.iter().rev().filter_map(|s|
+    fn file_trace(
+        &self,
+    ) -> impl Iterator<Item = SourceReference<<ET::File as File>::SourceRefID>> + '_ {
+        self.inputs.iter().rev().filter_map(|s| {
             if let TokenSource::File(f, id) = s {
                 Some(SourceReference {
                     file: *id,
                     line: f.line(),
                     column: f.column(),
                 })
-            } else { None }
-        )
+            } else {
+                None
+            }
+        })
     }
 
     fn current_sourceref(&self) -> SourceReference<<ET::File as File>::SourceRefID> {

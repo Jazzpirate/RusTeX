@@ -1,9 +1,9 @@
 /*! Font modifiers - e.g. bold, fraktur, italic, etc. */
+use phf::{phf_map, Map};
 use std::fmt::{Display, Write};
-use phf::{Map, phf_map};
 
 /// A font modifier
-#[derive(Copy,Clone,Debug,PartialEq,Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FontModifier {
     /// Blackboard (e.g. `𝔸`)
     Blackboard = 0,
@@ -26,64 +26,90 @@ pub enum FontModifier {
 }
 
 /// A sequence of font modifiers, encoded as bitfields
-#[derive(Copy,Clone,Debug,PartialEq,Eq,Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ModifierSeq {
-    pub(crate) blackboard:bool,
-    pub(crate) fraktur:bool,
-    pub(crate) script:bool,
-    pub(crate) bold:bool,
-    pub(crate) capitals:bool,
-    pub(crate) monospaced:bool,
-    pub(crate) italic:bool,
-    pub(crate) oblique:bool,
-    pub(crate) sans_serif:bool,
+    pub(crate) blackboard: bool,
+    pub(crate) fraktur: bool,
+    pub(crate) script: bool,
+    pub(crate) bold: bool,
+    pub(crate) capitals: bool,
+    pub(crate) monospaced: bool,
+    pub(crate) italic: bool,
+    pub(crate) oblique: bool,
+    pub(crate) sans_serif: bool,
 }
 impl ModifierSeq {
-
     #[inline]
     fn blackboard() -> Self {
-        Self{blackboard:true,..Default::default()}
+        Self {
+            blackboard: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn fraktur() -> Self {
-        Self{fraktur:true,..Default::default()}
+        Self {
+            fraktur: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn script() -> Self {
-        Self{script:true,..Default::default()}
+        Self {
+            script: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn bold() -> Self {
-        Self{bold:true,..Default::default()}
+        Self {
+            bold: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn capitals() -> Self {
-        Self{capitals:true,..Default::default()}
+        Self {
+            capitals: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn monospaced() -> Self {
-        Self{monospaced:true,..Default::default()}
+        Self {
+            monospaced: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn italic() -> Self {
-        Self{italic:true,..Default::default()}
+        Self {
+            italic: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn oblique() -> Self {
-        Self{oblique:true,..Default::default()}
+        Self {
+            oblique: true,
+            ..Default::default()
+        }
     }
 
     #[inline]
     fn sans_serif() -> Self {
-        Self{sans_serif:true,..Default::default()}
+        Self {
+            sans_serif: true,
+            ..Default::default()
+        }
     }
 
     /// And empty sequence of modifiers
@@ -94,7 +120,7 @@ impl ModifierSeq {
     }
 
     /// Add a modifier to this sequence
-    pub fn add(&mut self, m:FontModifier) {
+    pub fn add(&mut self, m: FontModifier) {
         match m {
             FontModifier::Blackboard => self.blackboard = true,
             FontModifier::Fraktur => self.fraktur = true,
@@ -111,7 +137,7 @@ impl ModifierSeq {
     /// Whether this sequence contains the given modifier
     #[must_use]
     #[inline]
-    pub const fn has(&self, m:FontModifier) -> bool {
+    pub const fn has(&self, m: FontModifier) -> bool {
         match m {
             FontModifier::Blackboard => self.blackboard,
             FontModifier::Fraktur => self.fraktur,
@@ -126,19 +152,35 @@ impl ModifierSeq {
     }
 
     #[inline]
-    fn map<F:FnMut(&Map<char,char>)>(&self,mut f:F) {
-        if self.has(FontModifier::Blackboard) {f(&BLACKBOARD);}
-        if self.has(FontModifier::Fraktur) {f(&FRAKTUR);}
-        if self.has(FontModifier::Script) {f(&SCRIPT);}
-        if self.has(FontModifier::Bold) {f(&BOLD);}
-        if self.has(FontModifier::Capitals) {f(&CAPITAL);}
-        if self.has(FontModifier::Monospaced) {f(&MONOSPACED);}
-        if self.has(FontModifier::Italic) || self.has(FontModifier::Oblique) {f(&ITALIC);}
-        if self.has(FontModifier::SansSerif) {f(&SANS);}
+    fn map<F: FnMut(&Map<char, char>)>(&self, mut f: F) {
+        if self.has(FontModifier::Blackboard) {
+            f(&BLACKBOARD);
+        }
+        if self.has(FontModifier::Fraktur) {
+            f(&FRAKTUR);
+        }
+        if self.has(FontModifier::Script) {
+            f(&SCRIPT);
+        }
+        if self.has(FontModifier::Bold) {
+            f(&BOLD);
+        }
+        if self.has(FontModifier::Capitals) {
+            f(&CAPITAL);
+        }
+        if self.has(FontModifier::Monospaced) {
+            f(&MONOSPACED);
+        }
+        if self.has(FontModifier::Italic) || self.has(FontModifier::Oblique) {
+            f(&ITALIC);
+        }
+        if self.has(FontModifier::SansSerif) {
+            f(&SANS);
+        }
     }
 }
 impl From<&[FontModifier]> for ModifierSeq {
-    fn from(mods:&[FontModifier]) -> Self {
+    fn from(mods: &[FontModifier]) -> Self {
         let mut s = Self::empty();
         for m in mods {
             s.add(*m);
@@ -147,11 +189,11 @@ impl From<&[FontModifier]> for ModifierSeq {
     }
 }
 /// A wrapper struct that applies a sequence of font modifiers to a string
-pub struct CharConverter<'a,S:AsRef<str>> {
+pub struct CharConverter<'a, S: AsRef<str>> {
     maps: ModifierSeq,
-    iter:&'a S
+    iter: &'a S,
 }
-impl<S:AsRef<str>> Display for CharConverter<'_,S> {
+impl<S: AsRef<str>> Display for CharConverter<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let chars = self.iter.as_ref().chars();
         for mut c in chars {
@@ -170,148 +212,234 @@ impl<S:AsRef<str>> Display for CharConverter<'_,S> {
 /// that implements `AsRef<str>`, and for [`CharConverter`] for chaining.
 pub trait FontModifiable {
     /// The base type of this object; usually `Self`
-    type R:AsRef<str>;
+    type R: AsRef<str>;
     /// Apply the given modifiers to this object.
-    fn apply<'a>(self,mods:ModifierSeq) -> CharConverter<'a,Self::R> where Self:'a;
+    fn apply<'a>(self, mods: ModifierSeq) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Add the given modifiers to this object.
-    fn apply_modifiers<'a>(self,mods:&'a [FontModifier]) -> CharConverter<'a,Self::R> where Self:'a + Sized {
+    fn apply_modifiers<'a>(self, mods: &'a [FontModifier]) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a + Sized,
+    {
         self.apply(mods.into())
     }
     /// Applies the [`Blackboard`](FontModifier::Blackboard) modifier.
-    fn make_blackboard<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_blackboard<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Fraktur`](FontModifier::Fraktur) modifier.
-    fn make_fraktur<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_fraktur<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Script`](FontModifier::Script) modifier.
-    fn make_script<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_script<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Bold`](FontModifier::Bold) modifier.
-    fn make_bold<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_bold<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Capitals`](FontModifier::Capitals) modifier.
-    fn make_smallcaps<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_smallcaps<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Monospaced`](FontModifier::Monospaced) modifier.
-    fn make_monospaced<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_monospaced<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Italic`](FontModifier::Italic) modifier.
-    fn make_italic<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_italic<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`Oblique`](FontModifier::Oblique) modifier.
-    fn make_oblique<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_oblique<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
     /// Applies the [`SansSerif`](FontModifier::SansSerif) modifier.
-    fn make_sans<'a>(self) -> CharConverter<'a,Self::R> where Self:'a;
+    fn make_sans<'a>(self) -> CharConverter<'a, Self::R>
+    where
+        Self: 'a;
 }
 
-impl<S:AsRef<str>> FontModifiable for &'_ S {
-    type R=S;
-    fn apply<'b>(self,mods:ModifierSeq) -> CharConverter<'b,S> where Self:'b {
+impl<S: AsRef<str>> FontModifiable for &'_ S {
+    type R = S;
+    fn apply<'b>(self, mods: ModifierSeq) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: mods,
-            iter:self
+            iter: self,
         }
     }
-    fn make_blackboard<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_blackboard<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::blackboard(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_fraktur<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_fraktur<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::fraktur(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_script<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_script<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::script(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_bold<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_bold<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::bold(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_smallcaps<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_smallcaps<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::capitals(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_monospaced<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_monospaced<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::monospaced(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_italic<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_italic<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::italic(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_oblique<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_oblique<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::oblique(),
-            iter:self
+            iter: self,
         }
     }
-    fn make_sans<'b>(self) -> CharConverter<'b,S> where Self:'b {
+    fn make_sans<'b>(self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         CharConverter {
             maps: ModifierSeq::sans_serif(),
-            iter:self
+            iter: self,
         }
     }
 }
 
-impl<S:AsRef<str>> FontModifiable for CharConverter<'_,S> {
-    type R=S;
-    fn apply<'b>(mut self, mods: ModifierSeq) -> CharConverter<'b, Self::R> where Self: 'b {
+impl<S: AsRef<str>> FontModifiable for CharConverter<'_, S> {
+    type R = S;
+    fn apply<'b>(mut self, mods: ModifierSeq) -> CharConverter<'b, Self::R>
+    where
+        Self: 'b,
+    {
         self.maps = mods;
         self
     }
-    fn apply_modifiers<'b>(mut self,mods:&'b [FontModifier]) -> CharConverter<'b,S> where Self:'b {
+    fn apply_modifiers<'b>(mut self, mods: &'b [FontModifier]) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         for m in mods {
             self.maps.add(*m);
         }
         self
     }
-    fn make_blackboard<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_blackboard<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Blackboard);
         self
     }
-    fn make_fraktur<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_fraktur<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Fraktur);
         self
     }
-    fn make_script<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_script<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Script);
         self
     }
-    fn make_bold<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_bold<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Bold);
         self
     }
-    fn make_smallcaps<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_smallcaps<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Capitals);
         self
     }
-    fn make_monospaced<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_monospaced<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Monospaced);
         self
     }
-    fn make_italic<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_italic<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Italic);
         self
     }
-    fn make_oblique<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_oblique<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::Oblique);
         self
     }
-    fn make_sans<'b>(mut self) -> CharConverter<'b,S> where Self:'b {
+    fn make_sans<'b>(mut self) -> CharConverter<'b, S>
+    where
+        Self: 'b,
+    {
         self.maps.add(FontModifier::SansSerif);
         self
     }
 }
 
-static BLACKBOARD: Map<char,char> = phf_map! {
+static BLACKBOARD: Map<char, char> = phf_map! {
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     //     => '𝕒𝕓𝕔𝕕𝕖𝕗𝕘𝕙𝕚𝕛𝕜𝕝𝕞𝕟𝕠𝕡𝕢𝕣𝕤𝕥𝕦𝕧𝕨𝕩𝕪𝕫𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡'
     'a' => '𝕒','b' => '𝕓','c' => '𝕔','d' => '𝕕','e' => '𝕖','f' => '𝕗','g' => '𝕘',
@@ -325,7 +453,7 @@ static BLACKBOARD: Map<char,char> = phf_map! {
     '4' => '𝟜','5' => '𝟝','6' => '𝟞','7' => '𝟟','8' => '𝟠','9' => '𝟡'
 };
 
-static MONOSPACED: Map<char,char> = phf_map! {
+static MONOSPACED: Map<char, char> = phf_map! {
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     //     => '𝚊𝚋𝚌𝚍𝚎𝚏𝚐𝚑𝚒𝚓𝚔𝚕𝚖𝚗𝚘𝚙𝚚𝚛𝚜𝚝𝚞𝚟𝚠𝚡𝚢𝚣𝙰𝙱𝙲𝙳𝙴𝙵𝙶𝙷𝙸𝙹𝙺𝙻𝙼𝙽𝙾𝙿𝚀𝚁𝚂𝚃𝚄𝚅𝚆𝚇𝚈𝚉0𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿'
     'a' => '𝚊','b' => '𝚋','c' => '𝚌','d' => '𝚍','e' => '𝚎','f' => '𝚏','g' => '𝚐',
@@ -339,7 +467,7 @@ static MONOSPACED: Map<char,char> = phf_map! {
     '4' => '𝟺','5' => '𝟻','6' => '𝟼','7' => '𝟽','8' => '𝟾','9' => '𝟿'
 };
 
-static CAPITAL: Map<char,char> = phf_map! {
+static CAPITAL: Map<char, char> = phf_map! {
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
     //     => 'ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢ𝖠𝖡𝖢𝖣𝖤𝖥𝖦𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹'
     'a' => 'ᴀ','b' => 'ʙ','c' => 'ᴄ','d' => 'ᴅ','e' => 'ᴇ','f' => 'ғ','g' => 'ɢ',
@@ -352,7 +480,7 @@ static CAPITAL: Map<char,char> = phf_map! {
     'X' => '𝖷','Y' => '𝖸','Z' => '𝖹'
 };
 
-static SCRIPT: Map<char,char> = phf_map! {
+static SCRIPT: Map<char, char> = phf_map! {
      // roman
      //'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
      //     => '𝒶𝒷𝒸𝒹ℯ𝒻ℊ𝒽𝒾𝒿𝓀𝓁𝓂𝓃ℴ𝓅𝓆𝓇𝓈𝓉𝓊𝓋𝓌𝓍𝓎𝓏𝒜ℬ𝒞𝒟ℰℱ𝒢ℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒰𝒱𝒲𝒳𝒴𝒵'
@@ -377,7 +505,7 @@ static SCRIPT: Map<char,char> = phf_map! {
     '𝐗' => '𝓧', '𝐘' => '𝓨', '𝐙' => '𝓩'
 };
 
-static FRAKTUR: Map<char,char> = phf_map! {
+static FRAKTUR: Map<char, char> = phf_map! {
     // roman
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
     //     => '𝔞𝔟𝔠𝔡𝔢𝔣𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷𝔄𝔅ℭ𝔇𝔈𝔉𝔊ℌℑ𝔍𝔎𝔏𝔐𝔑𝔒𝔓𝔔ℜ𝔖𝔗𝔘𝔙𝔚𝔛𝔜ℨ'
@@ -402,7 +530,7 @@ static FRAKTUR: Map<char,char> = phf_map! {
     '𝐗' => '𝖃','𝐘' => '𝖄','𝐙' => '𝖅'
 };
 
-static SANS: Map<char,char> = phf_map! {
+static SANS: Map<char, char> = phf_map! {
     // roman
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     //     => '𝖺𝖻𝖼𝖽𝖾𝖿𝗀𝗁𝗂𝗃𝗄𝗅𝗆𝗇𝗈𝗉𝗊𝗋𝗌𝗍𝗎𝗏𝗐𝗑𝗒𝗓𝖠𝖡𝖢𝖣𝖤𝖥𝖦𝖧𝖨𝖩𝖪𝖫𝖬𝖭𝖮𝖯𝖰𝖱𝖲𝖳𝖴𝖵𝖶𝖷𝖸𝖹𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫'
@@ -463,7 +591,7 @@ static SANS: Map<char,char> = phf_map! {
     '𝝓' => '𝟇','𝝔' => '𝟈','𝝕' => '𝟉',
 };
 
-static BOLD: Map<char,char> = phf_map! {
+static BOLD: Map<char, char> = phf_map! {
     // roman
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789Γ∆ΘΛΞΠϴΣΥΦΨΩαβγδεζηθικλμνξπρστυφχψω∂ϵϑϰϕϱϖ'
     //     => '𝐚𝐛𝐜𝐝𝐞𝐟𝐠𝐡𝐢𝐣𝐤𝐥𝐦𝐧𝐨𝐩𝐪𝐫𝐬𝐭𝐮𝐯𝐰𝐱𝐲𝐳𝐀𝐁𝐂𝐃𝐄𝐅𝐆𝐇𝐈𝐉𝐊𝐋𝐌𝐍𝐎𝐏𝐐𝐑𝐒𝐓𝐔𝐕𝐖𝐗𝐘𝐙𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗𝚪𝚫𝚯𝚲𝚵𝚷𝚹𝚺𝚼𝚽𝚿𝛀𝛂𝛃𝛄𝛅𝛆𝛇𝛈𝛉𝛊𝛋𝛌𝛍𝛎𝛏𝛑𝛒𝛔𝛕𝛖𝛗𝛘𝛙𝛚𝛛𝛜𝛝𝛞𝛟𝛠𝛡'
@@ -546,7 +674,7 @@ static BOLD: Map<char,char> = phf_map! {
     '𝘟' => '𝙓','𝘠' => '𝙔','𝘡' => '𝙕',
 };
 
-static ITALIC: Map<char,char> = phf_map! {
+static ITALIC: Map<char, char> = phf_map! {
     // roman
     // 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZΓ∆ΘΛΞΠϴΣΥΦΨΩαβγδεζηθικλμνξπρστυφχψω∂ϵϑϰϕϱϖ'
     //     => '𝑎𝑏𝑐𝑑𝑒𝑓𝑔ℎ𝑖𝑗𝑘𝑙𝑚𝑛𝑜𝑝𝑞𝑟𝑠𝑡𝑢𝑣𝑤𝑥𝑦𝑧𝐴𝐵𝐶𝐷𝐸𝐹𝐺𝐻𝐼𝐽𝐾𝐿𝑀𝑁𝑂𝑃𝑄𝑅𝑆𝑇𝑈𝑉𝑊𝑋𝑌𝑍𝛤𝛥𝛩𝛬𝛯𝛱𝛳𝛴𝛶𝛷𝛹𝛺𝛼𝛽𝛾𝛿𝜀𝜁𝜂𝜃𝜄𝜅𝜆𝜇𝜈𝜉𝜋𝜌𝜎𝜏𝜐𝜑𝜒𝜓𝜔𝜕𝜖𝜗𝜘𝜙𝜚𝜛'
@@ -610,7 +738,6 @@ static ITALIC: Map<char,char> = phf_map! {
     '𝞆' => '𝟀','𝞇' => '𝟁','𝞈' => '𝟂','𝞉' => '𝟃','𝞊' => '𝟄','𝞋' => '𝟅','𝞌' => '𝟆',
     '𝞍' => '𝟇','𝞎' => '𝟈','𝞏' => '𝟉',
 };
-
 
 /*
 static SCRIPT: Map<char,char> = phf_map! {

@@ -197,8 +197,12 @@ pub trait TeXEngine: Sized {
             true,
         );
         let file = comps.filesystem.get(s);
-        let Some(filename) = file.path().file_stem().and_then(|s| s.to_str().map(ToString::to_string)) else {
-            return Err(TeXError::General(format!("Invalid init file {s}")))
+        let Some(filename) = file
+            .path()
+            .file_stem()
+            .and_then(|s| s.to_str().map(ToString::to_string))
+        else {
+            return Err(TeXError::General(format!("Invalid init file {s}")));
         };
         comps.aux.jobname = filename;
         comps.push_file(file);
@@ -246,7 +250,7 @@ pub trait TeXEngine: Sized {
     }
 
     /// Compile a `.tex` file. All finished pages are passed to the provided continuation.
-    /// 
+    ///
     /// #### Errors
     /// On TeX errors
     fn do_file_default<
@@ -261,13 +265,15 @@ pub trait TeXEngine: Sized {
             let mut comps = self.get_engine_refs();
             let file = comps.filesystem.get(s);
             let Some(parent) = file.path().parent() else {
-                return Err(TeXError::General(format!("Invalid file {s}")))
+                return Err(TeXError::General(format!("Invalid file {s}")));
             };
-            comps
-                .filesystem
-                .set_pwd(parent.to_path_buf());
-            let Some(filename) = file.path().file_stem().and_then(|s| s.to_str().map(ToString::to_string)) else {
-                return Err(TeXError::General(format!("Invalid init file {s}")))
+            comps.filesystem.set_pwd(parent.to_path_buf());
+            let Some(filename) = file
+                .path()
+                .file_stem()
+                .and_then(|s| s.to_str().map(ToString::to_string))
+            else {
+                return Err(TeXError::General(format!("Invalid init file {s}")));
             };
             comps.aux.jobname = filename;
             comps.push_file(file);

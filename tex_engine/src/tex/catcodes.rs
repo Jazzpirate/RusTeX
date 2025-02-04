@@ -281,7 +281,11 @@ pub enum CommandCode {
     Argument = 14,
 }
 impl CommandCode {
-    pub fn meaning<C: Character, CS: CSName<C>, W: CharWrite<C, CS>>(&self, c: C, mut f: W) -> std::fmt::Result {
+    pub fn meaning<C: Character, CS: CSName<C>, W: CharWrite<C, CS>>(
+        &self,
+        c: C,
+        mut f: W,
+    ) -> std::fmt::Result {
         match self {
             CommandCode::BeginGroup => write!(f, "begin-group character "),
             CommandCode::EndGroup => write!(f, "end-group character "),

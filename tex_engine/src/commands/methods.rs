@@ -702,14 +702,9 @@ pub(in crate::commands) fn start_align_row<ET: EngineTypes>(
         );
     }
     let Some(ad) = engine.gullet.get_align_data() else {
-        return Err(TeXError::General("Not in align".to_string()))
+        return Err(TeXError::General("Not in align".to_string()));
     };
-    TeXError::file_end_while_use(
-        engine.aux,
-        engine.state,
-        engine.mouth,
-        &ad.token,
-    )
+    TeXError::file_end_while_use(engine.aux, engine.state, engine.mouth, &ad.token)
 }
 
 pub(in crate::commands) fn open_align_cell<ET: EngineTypes>(
@@ -1065,7 +1060,9 @@ pub(crate) fn do_math_class<ET: EngineTypes>(
         |(), engine, mc| {
             let mut atom = mc.to_atom();
             if let Some(cls) = cls {
-                let MathNucleus::Simple{ cls:ocls,..} = &mut atom.nucleus else {unreachable!() };
+                let MathNucleus::Simple { cls: ocls, .. } = &mut atom.nucleus else {
+                    unreachable!()
+                };
                 *ocls = cls;
             }
             ET::Stomach::add_node_m(engine, MathNode::Atom(atom));
@@ -1076,7 +1073,12 @@ pub(crate) fn do_math_class<ET: EngineTypes>(
                 if children.len() == 1 {
                     let mut child = children.pop().unwrap_or_else(|| unreachable!());
                     if let Some(cls) = cls {
-                        if let MathNode::Atom(MathAtom{sub:None,sup:None,nucleus:MathNucleus::Simple{cls:ocls,..}}) = &mut child {
+                        if let MathNode::Atom(MathAtom {
+                            sub: None,
+                            sup: None,
+                            nucleus: MathNucleus::Simple { cls: ocls, .. },
+                        }) = &mut child
+                        {
                             *ocls = cls;
                         }
                     }
@@ -1259,7 +1261,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
             }
             ResolvedToken::Tk{char,code:CommandCode::Letter|CommandCode::Other,..} => {
                 let num = self.state.get_delcode(char);
-                if num == ET::Int::default() {return Ok(None)} 
+                if num == ET::Int::default() {return Ok(None)}
                 return Ok(Some(match Delimiter::from_int(num,self.state) {
                     either::Left(d) => d,
                     either::Right((d,i)) => {

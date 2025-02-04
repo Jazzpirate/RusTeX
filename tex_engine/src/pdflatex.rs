@@ -55,10 +55,7 @@ pub trait FileWithMD5: File {
 impl<C: Character> FileWithMD5 for VirtualFile<C> {
     fn md5(&self) -> md5::Digest {
         self.source.as_ref().map_or_else(
-            || std::fs::read(&self.path).map_or_else(
-                |_| md5::compute(""),
-                md5::compute
-            ),
+            || std::fs::read(&self.path).map_or_else(|_| md5::compute(""), md5::compute),
             |s| {
                 let v: Vec<u8> = s
                     .iter()
@@ -66,7 +63,7 @@ impl<C: Character> FileWithMD5 for VirtualFile<C> {
                     .flatten()
                     .collect();
                 md5::compute(v)
-            }
+            },
         )
     }
 }

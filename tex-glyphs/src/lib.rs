@@ -151,21 +151,20 @@ If you notice any mistakes, feel free to open a pull request for these files.
 #![allow(text_direction_codepoint_in_literal)]
 #![warn(missing_docs)]
 
-pub mod fontstyles;
 pub mod encodings;
-mod parsing;
+pub mod fontstyles;
 pub mod glyphs;
+mod parsing;
 
-use crate::glyphs::{Glyph,GlyphList};
+use crate::glyphs::{Glyph, GlyphList};
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
-
 #[cfg(test)]
 mod tests {
-    use crate::encodings::FontInfoStore;
-    use super::*;
     use super::fontstyles::{FontModifiable, FontModifier};
+    use super::*;
+    use crate::encodings::FontInfoStore;
     #[test]
     fn test_glyphmap() {
         assert_eq!(Glyph::get("AEacute").to_string(), "Ǽ");
@@ -175,28 +174,56 @@ mod tests {
         assert_eq!(Glyph::get("zukatakana").to_string(), "ズ");
         assert_eq!("test".make_bold().to_string(), "𝐭𝐞𝐬𝐭");
         assert_eq!("test".make_bold().make_sans().to_string(), "𝘁𝗲𝘀𝘁");
-        assert_eq!("test".apply_modifiers(&[FontModifier::SansSerif,FontModifier::Bold]).to_string(), "𝘁𝗲𝘀𝘁");
+        assert_eq!(
+            "test"
+                .apply_modifiers(&[FontModifier::SansSerif, FontModifier::Bold])
+                .to_string(),
+            "𝘁𝗲𝘀𝘁"
+        );
     }
-    fn get_store() -> FontInfoStore<String,fn(&str) -> String> {
+    fn get_store() -> FontInfoStore<String, fn(&str) -> String> {
         FontInfoStore::new(|s| {
-            std::str::from_utf8(std::process::Command::new("kpsewhich")
-                .args(vec![s]).output().expect("kpsewhich not found!")
-                .stdout.as_slice()).expect("unexpected kpsewhich output").trim().to_string()
+            std::str::from_utf8(
+                std::process::Command::new("kpsewhich")
+                    .args(vec![s])
+                    .output()
+                    .expect("kpsewhich not found!")
+                    .stdout
+                    .as_slice(),
+            )
+            .expect("unexpected kpsewhich output")
+            .trim()
+            .to_string()
         })
     }
 
     #[test]
     fn test_encodings() {
         let mut es = get_store();
-        let names = es.all_encs().take(50).map(|e| e.tfm_name.clone()).collect::<Vec<_>>();
-        for n in names { es.get_glyphlist(n); }
+        let names = es
+            .all_encs()
+            .take(50)
+            .map(|e| e.tfm_name.clone())
+            .collect::<Vec<_>>();
+        for n in names {
+            es.get_glyphlist(n);
+        }
     }
     #[test]
     fn print_table() {
-        env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().expect("failed to initialize tests");
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .try_init()
+            .expect("failed to initialize tests");
         let mut es = get_store();
-        log::info!("cmr10:\n{}",es.display_encoding("cmr10").expect("cmr10 not found"));
-        log::info!("cmbx10:\n{}",es.display_encoding("cmbx10").expect("cmbx not found"));
+        log::info!(
+            "cmr10:\n{}",
+            es.display_encoding("cmr10").expect("cmr10 not found")
+        );
+        log::info!(
+            "cmbx10:\n{}",
+            es.display_encoding("cmbx10").expect("cmbx not found")
+        );
         /*
         log::info!("ptmr7t:\n{}",es.display_encoding("ptmr7t").unwrap());
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());
@@ -207,33 +234,33 @@ mod tests {
         log::info!("MnSymbolE10:\n{}",es.display_encoding("MnSymbolE10").unwrap());
          */
     }
-/*
-    #[test]
-    fn vfs() {
-        env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().unwrap();
-        use tex_engine::engine::filesystem::kpathsea::*;
-        let mut store = encodings::EncodingStore::new(|s| {
-            match KPATHSEA.which(s).map(|s| s.to_str().map(|s| s.to_string())).flatten() {
-                Some(s) => s,
-                _ => "".into()
-            }
-        });
-        let vfs = &KPATHSEA.post.clone();
-        for v in vfs.values() {
-            match v.extension() {
-                Some(e) if e == "vf" => {
-                    let name = v.file_stem().unwrap().to_str().unwrap();
-                    log::info!("{}",v.display());
-                    match store.display_encoding(name) {
-                        Some(s) => log::info!("{}",s),
-                        None => log::info!("Failed!")
-                    }
-                    print!("");
-                }
-                _ => ()
-            }
-        }
-    }
+    /*
+       #[test]
+       fn vfs() {
+           env_logger::builder().filter_level(log::LevelFilter::Debug).try_init().unwrap();
+           use tex_engine::engine::filesystem::kpathsea::*;
+           let mut store = encodings::EncodingStore::new(|s| {
+               match KPATHSEA.which(s).map(|s| s.to_str().map(|s| s.to_string())).flatten() {
+                   Some(s) => s,
+                   _ => "".into()
+               }
+           });
+           let vfs = &KPATHSEA.post.clone();
+           for v in vfs.values() {
+               match v.extension() {
+                   Some(e) if e == "vf" => {
+                       let name = v.file_stem().unwrap().to_str().unwrap();
+                       log::info!("{}",v.display());
+                       match store.display_encoding(name) {
+                           Some(s) => log::info!("{}",s),
+                           None => log::info!("Failed!")
+                       }
+                       print!("");
+                   }
+                   _ => ()
+               }
+           }
+       }
 
- */
+    */
 }

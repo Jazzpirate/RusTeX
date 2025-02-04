@@ -462,48 +462,62 @@ pub enum PDFLiteralOption {
     Page,
 }
 
-
-#[cfg(all(target_os="windows",feature="pdfium"))]
+#[cfg(all(target_os = "windows", feature = "pdfium"))]
 const PDFIUM_NAME: &str = "pdfium.dll";
-#[cfg(all(not(target_os="windows"),feature="pdfium"))]
+#[cfg(all(not(target_os = "windows"), feature = "pdfium"))]
 const PDFIUM_NAME: &str = "libpdfium.so";
 
 #[cfg(feature = "pdfium")]
-fn download_pdfium(lib_dir:&std::path::Path) {
+fn download_pdfium(lib_dir: &std::path::Path) {
     const PDFIUM_VERSION: &str = "6721";
-    const BASE_URL: &str = "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium";
+    const BASE_URL: &str =
+        "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium";
 
-    #[cfg(all(target_os="windows",target_arch="x86_64"))]
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     const PLATFORM: &str = "win-x64";
-    #[cfg(all(target_os="windows",target_arch="x86"))]
+    #[cfg(all(target_os = "windows", target_arch = "x86"))]
     const PLATFORM: &str = "win-x86";
-    #[cfg(all(target_os="linux",target_arch="x86_64"))]
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     const PLATFORM: &str = "linux-x64";
-    #[cfg(all(target_os="linux",target_arch="aarch64"))]
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     const PLATFORM: &str = "linux-arm64";
-    #[cfg(all(target_os="macos",target_arch="x86_64"))]
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     const PLATFORM: &str = "mac-x64";
-    #[cfg(all(target_os="macos",target_arch="aarch64"))]
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     const PLATFORM: &str = "mac-arm64";
 
     let _ = std::fs::create_dir_all(lib_dir);
     let download_url = format!("{BASE_URL}/{PDFIUM_VERSION}/pdfium-{PLATFORM}.tgz");
     let archive_path = lib_dir.join("pdfium.tgz");
     let mut response = reqwest::blocking::get(download_url).expect("Could not download pdfium");
-    let Ok(mut dest) = std::fs::File::create(&archive_path) else {return};
-    let Ok(_) = std::io::copy(&mut response, &mut dest) else {return};
-    let Ok(tar_gz) = std::fs::File::open(&archive_path) else {return};
+    let Ok(mut dest) = std::fs::File::create(&archive_path) else {
+        return;
+    };
+    let Ok(_) = std::io::copy(&mut response, &mut dest) else {
+        return;
+    };
+    let Ok(tar_gz) = std::fs::File::open(&archive_path) else {
+        return;
+    };
     let tar = flate2::read::GzDecoder::new(tar_gz);
     let mut archive = tar::Archive::new(tar);
-    let Ok(entries) = archive.entries() else {return};
+    let Ok(entries) = archive.entries() else {
+        return;
+    };
 
     for entry in entries {
-        let Ok(mut entry) = entry else {continue};
-        let Ok(entry_path) = entry.path() else {continue};
-        let Some(name) = entry_path.file_name() else {continue};
+        let Ok(mut entry) = entry else { continue };
+        let Ok(entry_path) = entry.path() else {
+            continue;
+        };
+        let Some(name) = entry_path.file_name() else {
+            continue;
+        };
         if name.to_str() == Some(PDFIUM_NAME) {
             let file_path = lib_dir.join(name);
-            let Ok(_) = entry.unpack(file_path) else {continue};
+            let Ok(_) = entry.unpack(file_path) else {
+                continue;
+            };
             break;
         }
     }
@@ -528,7 +542,6 @@ pub trait PDFExtension<ET: EngineTypes>: EngineExtension<ET> {
         match self.pdfium_direct() {
             Some(p) => p.as_ref(),
             r => {
-
                 let pdfium = Pdfium::bind_to_system_library().ok().or_else(|| {
                     std::env::current_exe().ok().and_then(|d| {
                         let lib_dir = d.parent()?.join("lib");
@@ -704,13 +717,7 @@ pub fn pdf_as_image<ET: EngineTypes, E: PDFExtension<ET>>(path: &Path, ext: &mut
             match pdfium.load_pdf_from_file(&path, None) {
                 Ok(doc) => {
                     let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
-                    match doc
-                        .pages()
-                        .iter()
-                        .next()
-                        .unwrap()
-                        .render_with_config(&cfg)
-                    {
+                    match doc.pages().iter().next().unwrap().render_with_config(&cfg) {
                         //.render_with_config(&cfg) {
                         Ok(bmp) => PDFImage::PDF(bmp.as_image()),
                         _ => PDFImage::None,

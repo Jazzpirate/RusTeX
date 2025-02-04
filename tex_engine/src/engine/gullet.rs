@@ -657,12 +657,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
         loop {
             match self.get_next(noexpand)? {
                 Some(t) => return Ok(t),
-                None => TeXError::file_end_while_use(
-                    self.aux,
-                    self.state,
-                    self.mouth,
-                    in_token,
-                )?,
+                None => TeXError::file_end_while_use(self.aux, self.state, self.mouth, in_token)?,
             }
         }
     }
@@ -743,9 +738,7 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
                         break;
                     }
                 },
-                None => {
-                    TeXError::file_end_while_use(self.aux, self.state, self.mouth, token)?
-                }
+                None => TeXError::file_end_while_use(self.aux, self.state, self.mouth, token)?,
             }
         }
         ET::Gullet::expand_until_endgroup(self, expand_protected, false, token, |a, s, t| {
