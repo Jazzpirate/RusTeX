@@ -693,11 +693,7 @@ impl CompilationDisplay<'_, '_> {
             }
             ShipoutNodeH::KernSkip(m) => {
                 node!(self <div class="rustex-hskip" style:{
-                if m.base.is_positive() {
-                    style!("width"=Self::dim_to_string(m.base))
-                } else {
-                    style!("margin-left"=Self::dim_to_string(m.base))
-                }
+                style!("margin-left"=Self::dim_to_string(m.base));
                 match m.stretch {
                     Flex::Fil(_) | Flex::Fill(_) | Flex::Filll(_) =>
                         style!("margin-right"="auto"),
@@ -988,13 +984,13 @@ impl CompilationDisplay<'_, '_> {
                 children,
                 ..
             }) => {
-                let oldwd = self.width;
+               /* let oldwd = self.width;
                 let wd = info
                     .assigned_width()
                     .unwrap_or_else(|| info.computed_width().unwrap_or_default())
-                    .0;
+                    .0; */
                 node!(self !<mtext class="rustex-math-escape" ref=sref style:{
-                match wd {
+               /* match wd {
                     0 => style!("width"="0"),
                     x if x > 0 => {
                         self.width = wd;
@@ -1003,11 +999,11 @@ impl CompilationDisplay<'_, '_> {
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()
-                }
+                } */
             } {
                 self.do_hbox(sref,info,children)?
             }/>);
-                self.width = oldwd;
+                //self.width = oldwd;
                 Ok(())
             }
             ShipoutNodeM::Common(Common::VBox {
@@ -1016,13 +1012,13 @@ impl CompilationDisplay<'_, '_> {
                 children,
                 ..
             }) => {
-                let oldwd = self.width;
+                /*let oldwd = self.width;
                 let wd = info
                     .assigned_width()
                     .unwrap_or_else(|| info.computed_width().unwrap_or_default())
-                    .0;
+                    .0;*/
                 node!(self !<mtext class="rustex-math-escape" ref=sref style:{
-                match wd {
+                /*match wd {
                     0 => style!("width"="0"),
                     x if x > 0 => {
                         self.width = wd;
@@ -1031,11 +1027,11 @@ impl CompilationDisplay<'_, '_> {
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()
-                }
+                }*/
             } {
                 self.do_vtop(sref,info,children,false)?;
             }/>);
-                self.width = oldwd;
+                //self.width = oldwd;
                 Ok(())
             }
             ShipoutNodeM::Common(Common::VBox {
@@ -1044,13 +1040,13 @@ impl CompilationDisplay<'_, '_> {
                 children,
                 ..
             }) => {
-                let oldwd = self.width;
+                /*let oldwd = self.width;
                 let wd = info
                     .assigned_width()
                     .unwrap_or_else(|| info.computed_width().unwrap_or_default())
-                    .0;
+                    .0;*/
                 node!(self !<mtext class="rustex-math-escape" ref=sref style:{
-                match wd {
+                /*match wd {
                     0 => style!("width"="0"),
                     x if x > 0 => {
                         self.width = wd;
@@ -1059,11 +1055,11 @@ impl CompilationDisplay<'_, '_> {
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()
-                }
+                }*/
             } {
                 self.do_vbox(sref,info,children,false)?;
             }/>);
-                self.width = oldwd;
+                //self.width = oldwd;
                 Ok(())
             }
             ShipoutNodeM::VCenter {
@@ -1079,7 +1075,7 @@ impl CompilationDisplay<'_, '_> {
                     x if x > 0 => {
                         self.width = *width;
                         let wd = Self::dim_to_string(*width);
-                        style!("min-width"=wd);
+                        style!("width"=wd);
                         style!("--rustex-curr-width"=wd);
                     }
                     _ => ()

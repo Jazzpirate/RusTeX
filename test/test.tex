@@ -6,6 +6,9 @@
 \usepackage[most]{tcolorbox}
 \usepackage{mdframed}
 
+\definecolor{mvgray}{gray}{0.89}
+\newcommand\mvbox[1]{\ifmmode \text{\colorbox{mvgray}{#1}} \else \colorbox{mvgray}{#1} \fi}
+
 % ------------------------------------------------------------------
 
 \def\red{\textcolor{red}}
@@ -717,6 +720,18 @@ Sed facilisis eget enim in varius.}
 \end{tabular}
 }
 
+\block{In math}{
+    \[\begin{array}{lllll}
+      C_1 & : & \mathrm{formula} & & \\
+      C_2 & : & \mathrm{formula} & & \\
+      I & : & \mathrm{model} & = &
+      \mvbox{It maps $C_1$ to $T$ and $C_2$ to $F$.} \\
+      \mathtt{SatProp} & : & \alpha+\beta & = & \mvbox{Indeed, this can directly be seen} \\
+      & & & & \mvbox{by evaluating the truth table for} \\
+      & & & & \mvbox{ $\alpha+\beta+\gamma+\delta$.} \\
+    \end{array}\]
+}
+
 \section{Images}
 
 \includegraphics[scale=0.15]{example_triangle_1.png} 
@@ -847,11 +862,18 @@ bla bla \LaTeX{} bla bla
 }
 
 \block{empty boxes}{
-\hbox to 0pt {\hbox to 200pt{%
-  \setbox0\hbox{\vbox{\lorem}}
-  \wd0=0pt%
-  \vbox{\box0}
-}}
+	\hbox to 0pt {\hbox to 200pt{%
+		\setbox0\hbox{\vbox{\lorem}}
+		\wd0=0pt%
+		\vbox{\box0}
+	}}
+
+	\showhto{200pt}{%
+		\setbox0\hbox{\hskip 100pt}%
+		\wd0=0pt%
+		\box0%
+		Test 
+	}
 }
 
 \iffalse

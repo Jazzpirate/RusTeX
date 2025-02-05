@@ -1397,7 +1397,7 @@ impl<ET: EngineTypes> MathChar<ET> {
             sub: None,
         }
     }
-    pub fn to_nucleus(self) -> MathNucleus<ET,UnresolvedMathFontStyle<ET>> {
+    pub fn to_nucleus(self) -> MathNucleus<ET, UnresolvedMathFontStyle<ET>> {
         MathNucleus::Simple {
             cls: self.cls,
             kernel: MathKernel::Char {

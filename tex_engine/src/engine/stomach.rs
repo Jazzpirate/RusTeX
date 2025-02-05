@@ -323,7 +323,7 @@ pub trait Stomach<ET: EngineTypes /*<Stomach = Self>*/> {
                 TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
                     Self::add_node_h(engine, HNode::Whatsit(wi))
                 }
-                _ => Self::add_node_m(engine, MathNode::Whatsit(wi)),
+                TeXMode::InlineMath | TeXMode::DisplayMath => Self::add_node_m(engine, MathNode::Whatsit(wi)),
             }
         }
         Ok(())

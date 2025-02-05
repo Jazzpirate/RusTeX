@@ -12,7 +12,9 @@ use tex_engine::engine::stomach::Stomach;
 use tex_engine::engine::DefaultEngine;
 use tex_engine::prelude::*;
 use tex_engine::tex::nodes::horizontal::HNode;
-use tex_engine::tex::nodes::math::{MathAtom, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMarkers};
+use tex_engine::tex::nodes::math::{
+    MathAtom, MathClass, MathKernel, MathNode, MathNucleus, UnresolvedMarkers,
+};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::nodes::{ListTarget, NodeList};
 use tex_engine::tex::tokens::CompactToken;
@@ -85,18 +87,8 @@ pub fn register_primitives_postinit(engine: &mut DefaultEngine<Types>) {
         CommandScope::Any,
         invisible_end,
     );
-    register_unexpandable(
-        engine,
-        "underbrace",
-        CommandScope::MathOnly,
-        underbrace
-    );
-    register_unexpandable(
-        engine,
-        "overbrace",
-        CommandScope::MathOnly,
-        overbrace
-    );
+    register_unexpandable(engine, "underbrace", CommandScope::MathOnly, underbrace);
+    register_unexpandable(engine, "overbrace", CommandScope::MathOnly, overbrace);
     // if@rustex
     // rustex@directHTML
 }
@@ -341,119 +333,154 @@ pub fn close_font(engine: Refs, _token: CompactToken) -> Res<()> {
     Ok(())
 }
 
-
 // ------------------------------------------------------------------
 
 fn underbrace(engine: Refs, token: CompactToken) -> Res<()> {
     const LITERAL: &str = "<mo stretchy=\"true\">⏟</mo>";
     //engine.state.push(engine.aux, GroupType::Math, engine.mouth.line_number());
-    engine.read_char_or_math_group(&token,
-        |(),engine,char| {
-            let node = MathNode::Atom(
-                MathAtom {
-                    sup:None,
-                    sub:Some(Box::new([MathNode::Custom(RusTeXNode::Literal(LITERAL.to_string()))])),
-                    nucleus:MathNucleus::Simple {
-                        cls: char.cls,
-                        kernel: MathKernel::Char {
-                            char: char.char,
-                            style: char.style,
-                        },
-                        limits: Some(true),
-                    }
-                }
-            );
-            let node = MathNode::Atom(
-                MathAtom{sup:None,sub:None,nucleus:MathNucleus::Simple { cls: MathClass::Ord, limits:Some(true), 
-                    kernel: MathKernel::List { 
+    engine.read_char_or_math_group(
+        &token,
+        |(), engine, char| {
+            let node = MathNode::Atom(MathAtom {
+                sup: None,
+                sub: Some(Box::new([MathNode::Custom(RusTeXNode::Literal(
+                    LITERAL.to_string(),
+                ))])),
+                nucleus: MathNucleus::Simple {
+                    cls: char.cls,
+                    kernel: MathKernel::Char {
+                        char: char.char,
+                        style: char.style,
+                    },
+                    limits: Some(true),
+                },
+            });
+            let node = MathNode::Atom(MathAtom {
+                sup: None,
+                sub: None,
+                nucleus: MathNucleus::Simple {
+                    cls: MathClass::Ord,
+                    limits: Some(true),
+                    kernel: MathKernel::List {
                         start: engine.mouth.current_sourceref(),
-                        end:engine.mouth.current_sourceref(), children: Box::new([node]) } 
-                }}
-            );
+                        end: engine.mouth.current_sourceref(),
+                        children: Box::new([node]),
+                    },
+                },
+            });
             //engine.state.pop(engine.aux, engine.mouth);
-            RusTeXStomach::add_node_m(engine, node );
+            RusTeXStomach::add_node_m(engine, node);
             Ok(())
         },
         |()| {
-            ListTarget::<Types,_>::new(|engine,mut children,rf| {
-                children.insert(0,MathNode::Marker(UnresolvedMarkers::Display));
-                let node = MathNode::Atom(
-                    MathAtom {
-                        sup:None,
-                        sub:Some(Box::new([MathNode::Custom(RusTeXNode::Literal(LITERAL.to_string()))])),
-                        nucleus:MathNucleus::Simple {
-                            cls:MathClass::Ord,
-                            limits:Some(true),
-                            kernel:MathKernel::List{ start: rf, children: children.into(), end: engine.mouth.current_sourceref() }
-                        }
-                    }
-                );
-                let node = MathNode::Atom(
-                    MathAtom{sup:None,sub:None,nucleus:MathNucleus::Simple { cls: MathClass::Ord, limits:Some(true), 
-                        kernel: MathKernel::List { 
+            ListTarget::<Types, _>::new(|engine, mut children, rf| {
+                children.insert(0, MathNode::Marker(UnresolvedMarkers::Display));
+                let node = MathNode::Atom(MathAtom {
+                    sup: None,
+                    sub: Some(Box::new([MathNode::Custom(RusTeXNode::Literal(
+                        LITERAL.to_string(),
+                    ))])),
+                    nucleus: MathNucleus::Simple {
+                        cls: MathClass::Ord,
+                        limits: Some(true),
+                        kernel: MathKernel::List {
+                            start: rf,
+                            children: children.into(),
+                            end: engine.mouth.current_sourceref(),
+                        },
+                    },
+                });
+                let node = MathNode::Atom(MathAtom {
+                    sup: None,
+                    sub: None,
+                    nucleus: MathNucleus::Simple {
+                        cls: MathClass::Ord,
+                        limits: Some(true),
+                        kernel: MathKernel::List {
                             start: engine.mouth.current_sourceref(),
-                            end:engine.mouth.current_sourceref(), children: Box::new([node]) } 
-                    }}
-                );
+                            end: engine.mouth.current_sourceref(),
+                            children: Box::new([node]),
+                        },
+                    },
+                });
                 RusTeXStomach::add_node_m(engine, node);
                 Ok(())
             })
-        },()
+        },
+        (),
     )
 }
 fn overbrace(engine: Refs, token: CompactToken) -> Res<()> {
     const LITERAL: &str = "<mo stretchy=\"true\">⏞</mo>";
     RusTeXStomach::add_node_m(engine, MathNode::Marker(UnresolvedMarkers::Display));
-    engine.read_char_or_math_group(&token,
-        |(),engine,char| {
-            let node = MathNode::Atom(
-                MathAtom {
-                    sub:None,
-                    sup:Some(Box::new([MathNode::Custom(RusTeXNode::Literal(LITERAL.to_string()))])),
-                    nucleus:MathNucleus::Simple {
-                        cls: char.cls,
-                        kernel: MathKernel::Char {
-                            char: char.char,
-                            style: char.style,
-                        },
-                        limits: Some(true),
-                    }
-                }
-            );
-            let node = MathNode::Atom(
-                MathAtom{sup:None,sub:None,nucleus:MathNucleus::Simple { cls: MathClass::Ord, limits:Some(true), 
-                    kernel: MathKernel::List { 
+    engine.read_char_or_math_group(
+        &token,
+        |(), engine, char| {
+            let node = MathNode::Atom(MathAtom {
+                sub: None,
+                sup: Some(Box::new([MathNode::Custom(RusTeXNode::Literal(
+                    LITERAL.to_string(),
+                ))])),
+                nucleus: MathNucleus::Simple {
+                    cls: char.cls,
+                    kernel: MathKernel::Char {
+                        char: char.char,
+                        style: char.style,
+                    },
+                    limits: Some(true),
+                },
+            });
+            let node = MathNode::Atom(MathAtom {
+                sup: None,
+                sub: None,
+                nucleus: MathNucleus::Simple {
+                    cls: MathClass::Ord,
+                    limits: Some(true),
+                    kernel: MathKernel::List {
                         start: engine.mouth.current_sourceref(),
-                        end:engine.mouth.current_sourceref(), children: Box::new([node]) } 
-                }}
-            );
+                        end: engine.mouth.current_sourceref(),
+                        children: Box::new([node]),
+                    },
+                },
+            });
             RusTeXStomach::add_node_m(engine, node);
             Ok(())
         },
         |()| {
-            ListTarget::<Types,_>::new(|engine,mut children,rf| {
-                children.insert(0,MathNode::Marker(UnresolvedMarkers::Display));
-                let node = MathNode::Atom(
-                    MathAtom {
-                        sub:None,
-                        sup:Some(Box::new([MathNode::Custom(RusTeXNode::Literal(LITERAL.to_string()))])),
-                        nucleus:MathNucleus::Simple {
-                            cls:MathClass::Ord,
-                            limits:Some(true),
-                            kernel:MathKernel::List{ start: rf, children: children.into(), end: engine.mouth.current_sourceref() }
-                        }
-                    }
-                );
-                let node = MathNode::Atom(
-                    MathAtom{sup:None,sub:None,nucleus:MathNucleus::Simple { cls: MathClass::Ord, limits:Some(true), 
-                        kernel: MathKernel::List { 
+            ListTarget::<Types, _>::new(|engine, mut children, rf| {
+                children.insert(0, MathNode::Marker(UnresolvedMarkers::Display));
+                let node = MathNode::Atom(MathAtom {
+                    sub: None,
+                    sup: Some(Box::new([MathNode::Custom(RusTeXNode::Literal(
+                        LITERAL.to_string(),
+                    ))])),
+                    nucleus: MathNucleus::Simple {
+                        cls: MathClass::Ord,
+                        limits: Some(true),
+                        kernel: MathKernel::List {
+                            start: rf,
+                            children: children.into(),
+                            end: engine.mouth.current_sourceref(),
+                        },
+                    },
+                });
+                let node = MathNode::Atom(MathAtom {
+                    sup: None,
+                    sub: None,
+                    nucleus: MathNucleus::Simple {
+                        cls: MathClass::Ord,
+                        limits: Some(true),
+                        kernel: MathKernel::List {
                             start: engine.mouth.current_sourceref(),
-                            end:engine.mouth.current_sourceref(), children: Box::new([node]) } 
-                    }}
-                );
+                            end: engine.mouth.current_sourceref(),
+                            children: Box::new([node]),
+                        },
+                    },
+                });
                 RusTeXStomach::add_node_m(engine, node);
                 Ok(())
             })
-        },()
+        },
+        (),
     )
 }

@@ -146,13 +146,13 @@ span {display:contents;}
 }
 .rustex-vcenter-container {
     display:inline-block;
-    width: min-content;
+    width: 100%;
     height: min-content;
     white-space: initial;
     vertical-align: middle;
     > div {
         height: min-content;
-        width: 100%;
+        width: min-content;
         display: inline-flex;
         flex-direction: column;
         vertical-align: middle;
