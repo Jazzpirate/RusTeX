@@ -1188,13 +1188,13 @@ impl CompilationDisplay<'_, '_> {
             } => {
                 node!(self !<mrow ref=sref {
                 if let Some(Ok(c)) = left {
-                    node!(self !<mo "lspace"="0"; "rspace"="0";  class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
+                    node!(self <mo "lspace"="0"; "rspace"="0";  class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
                 }
                 for c in children {
                     self.do_math(c,None/*,cramped*/)?
                 }
                 if let Some(Ok(c)) = right {
-                    node!(self !<mo "lspace"="0"; "rspace"="0";  class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
+                    node!(self <mo "lspace"="0"; "rspace"="0";  class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
                 }
             }/>);
                 Ok(())
