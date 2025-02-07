@@ -151,7 +151,7 @@ impl TableParser {
         let idx = self.s.find('\n').unwrap_or_else(|| unreachable!());
         let (mut name, rest) = self.s.split_at(idx);
         if name.ends_with('\r') {
-            name = &name[..name.len() - 1]
+            name = &name[..name.len() - 1];
         }
         self.s = rest[1..].trim_start();
         assert!(self.s.starts_with('|'));

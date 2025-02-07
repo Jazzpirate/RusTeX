@@ -4,7 +4,7 @@ pub mod shipout;
 pub mod utils;
 pub use shipout::html::ImageOptions;
 
-const RUSTEX_CSS_URL: &str =
+pub const RUSTEX_CSS_URL: &str =
     "https://raw.githack.com/Jazzpirate/RusTeX/main/rustex/src/resources/rustex.css";
 
 #[cfg(test)]
