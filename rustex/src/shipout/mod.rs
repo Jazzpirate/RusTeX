@@ -988,7 +988,6 @@ impl Shipout<'_, '_, Math> {
                     }
                 }
             }
-            _ => todo!(),
         }
         Ok(())
     }

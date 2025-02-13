@@ -31,6 +31,7 @@ pub(crate) struct CompilationDisplay<'a, 'b> {
     pub(crate) indent: u8,
     pub(crate) color: PDFColor,
     pub(crate) font: Font,
+    pub(crate) in_link:bool,
     pub(crate) font_data: &'a HMap<Box<str>, FontData>,
     pub(crate) attrs: VecMap<Cow<'static, str>, Cow<'static, str>>,
     pub(crate) styles: VecMap<Cow<'static, str>, Cow<'static, str>>,
@@ -477,10 +478,16 @@ impl CompilationDisplay<'_, '_> {
                 |s, n| s.do_v(n, top),
             ),
             ShipoutNodeV::Common(Common::Literal(s)) => self.f.write_str(s),
+            ShipoutNodeV::Common(Common::WithLink { children, .. }) if self.in_link => {
+                for c in children { self.do_v(c,top)? }
+                Ok(())
+            }
             ShipoutNodeV::Common(Common::WithLink { href, children, .. }) => {
                 node!(self <a "href"=href;{
-                for c in children { self.do_v(c,top)? }
-            }/>);
+                    self.in_link = true;
+                    for c in children { self.do_v(c,top)? }
+                    self.in_link = false;
+                }/>);
                 Ok(())
             }
             ShipoutNodeV::Common(Common::WithMatrix {
@@ -498,7 +505,7 @@ impl CompilationDisplay<'_, '_> {
             }
             ShipoutNodeV::Common(Common::PDFDest(n)) => {
                 match n {
-                    NumOrName::Name(s) => node!(self !<a "id"=s; "name"=s;/>),
+                    NumOrName::Name(s) => node!(self !<a "id"=s;/>),
                     NumOrName::Num(n) => {
                         node!(self !<a "id"=format_args!("NUM_{}",n); "name"=format_args!("NUM_{}",n);/>)
                     }
@@ -663,10 +670,16 @@ impl CompilationDisplay<'_, '_> {
                 |s, n| s.do_h(n, escape),
             ),
             ShipoutNodeH::Common(Common::Literal(s)) => self.f.write_str(s),
+            ShipoutNodeH::Common(Common::WithLink { children, .. }) if self.in_link => {
+                for c in children { self.do_h(c,escape)? }
+                Ok(())
+            }
             ShipoutNodeH::Common(Common::WithLink { href, children, .. }) => {
                 node!(self <a "href"=href;{
-                for c in children { self.do_h(c,escape)? }
-            }/>);
+                    self.in_link = true;
+                    for c in children { self.do_h(c,escape)? }
+                    self.in_link = false;
+                }/>);
                 Ok(())
             }
             ShipoutNodeH::Common(Common::WithMatrix {

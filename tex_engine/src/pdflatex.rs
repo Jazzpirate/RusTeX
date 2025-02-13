@@ -17,6 +17,7 @@ use crate::tex::nodes::vertical::VNode;
 use crate::tex::numerics::{Dim32, Mu, Numeric, TeXDimen, TeXInt};
 use crate::tex::tokens::control_sequences::InternedCSName;
 use crate::utils::errors::{ErrorThrower, TeXResult};
+use md5::Digest;
 use nodes::{MinimalPDFExtension, PDFExtension, PDFNode};
 
 pub trait PDFTeXEngine: TeXEngine
@@ -50,21 +51,25 @@ where
 }
 
 pub trait FileWithMD5: File {
-    fn md5(&self) -> md5::Digest;
+    fn md5(&self) -> [u8;16];
 }
 impl<C: Character> FileWithMD5 for VirtualFile<C> {
-    fn md5(&self) -> md5::Digest {
-        self.source.as_ref().map_or_else(
-            || std::fs::read(&self.path).map_or_else(|_| md5::compute(""), md5::compute),
-            |s| {
-                let v: Vec<u8> = s
-                    .iter()
-                    .flat_map(|v| v.iter().map(|c| c.to_char().to_string().into_bytes()))
-                    .flatten()
-                    .collect();
-                md5::compute(v)
-            },
-        )
+    fn md5(&self) -> [u8;16] {
+        let mut hasher = md5::Md5::default();
+        if let Some(s) = self.source.as_ref() {
+            for r in s.iter() {
+                for c in r {
+                    let c = c.to_char();
+                    let mut dst = [0u8; 4];
+                    c.encode_utf8(&mut dst);
+                    let bts = &dst[.. c.len_utf8()];
+                    hasher.update(bts);
+                }
+            }
+        } else if let Ok(s) = std::fs::read(&self.path) {
+            hasher.update(&s);
+        }
+        hasher.finalize().into()
     }
 }
 

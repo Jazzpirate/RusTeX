@@ -1,3 +1,5 @@
+use md5::Digest;
+
 use super::nodes::{
     ColorStackAction, NumOrName, PDFAnnot, PDFBoxSpec, PDFCatalog, PDFColor, PDFDest, PDFExtension,
     PDFImage, PDFLiteral, PDFLiteralOption, PDFNode, PDFObj, PDFOutline, PDFStartLink, PDFXForm,
@@ -769,12 +771,19 @@ where
         engine.read_braced_string(true, true, &tk, &mut filename)?;
         let file = engine.filesystem.get(&filename);
         let mut t = Otherize::new(&mut f);
-        write!(t, "{:X}", file.md5())?
+        for i in file.md5() {
+            write!(t, "{i:02X}")?;
+        }
     } else {
         let mut str = String::new();
         engine.read_braced_string(false, true, &tk, &mut str)?;
         let mut t = Otherize::new(&mut f);
-        write!(t, "{:X}", md5::compute(str))?
+        let mut hasher = md5::Md5::default();
+        hasher.update(str.as_bytes());
+        let r : [u8;16] = hasher.finalize().into();
+        for i in r {
+            write!(t, "{i:02X}")?;
+        }
     }
     Ok(())
 }

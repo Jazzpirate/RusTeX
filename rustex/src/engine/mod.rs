@@ -162,6 +162,7 @@ impl Display for CompilationResult {
             font: self.top_font.clone(),
             width: self.top_width,
             indent: 0,
+            in_link: false,
             attrs: VecMap::default(),
             styles: VecMap::default(),
             sourcerefs: self.sourcerefs,
