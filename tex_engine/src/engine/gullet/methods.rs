@@ -1558,6 +1558,11 @@ fn read_stretch_float<ET: EngineTypes>(
             let scale = if is_negative {-ret} else {ret};
             return Ok(StretchShrink::Dim(base.scale_float(scale)))
         }
+        ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Dim{read,..},..})) => {
+            let base = read(engine,token)?;
+            let scale = if is_negative {-ret} else {ret};
+            return Ok(StretchShrink::Dim(base.scale_float(scale)))
+        }
         ResolvedToken::Cmd(Some(TeXCommand::DimRegister(u))) => {
             let base = engine.state.get_dim_register(*u);
             let scale = if is_negative {-ret} else {ret};
