@@ -344,7 +344,10 @@ impl<ET: EngineTypes> Mouth<ET> for DefaultMouth<ET> {
     fn push_file(&mut self, f: ET::File) {
         //self.clean();
         let id = f.sourceref();
-        let s = f.line_source().unwrap();
+        let s = match f.line_source() {
+            Ok(s) => s,
+            Err(p) => panic!("File {} has no line source",p.display())
+        };
         let rf = SourceReference {
             file: id,
             line: 0,

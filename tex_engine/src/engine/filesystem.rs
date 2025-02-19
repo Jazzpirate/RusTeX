@@ -78,7 +78,7 @@ pub trait File: std::fmt::Display + Clone + std::fmt::Debug + 'static {
     /// Returns the path of this file.
     fn path(&self) -> &Path;
     /// Returns a line source for this file. Used by a [`Mouth`](crate::engine::mouth::Mouth) to read from this file.
-    fn line_source(self) -> Option<Self::LineSource>;
+    fn line_source(self) -> Result<Self::LineSource,PathBuf>;
     /// Returns whether this file exists.
     fn exists(&self) -> bool {
         self.path().exists()
@@ -239,7 +239,7 @@ impl<C: Character> FileSystem for NoOutputFileSystem<C> {
             self.read_files.push(None);
         }
         match self.read_files.get_mut(idx as usize) {
-            Some(n) => *n = file.line_source().map(InputTokenizer::new),
+            Some(n) => *n = file.line_source().ok().map(InputTokenizer::new),
             _ => unreachable!(),
         }
     }
@@ -379,18 +379,20 @@ impl<C: Character> File for VirtualFile<C> {
     fn path(&self) -> &Path {
         &self.path
     }
-    fn line_source(self) -> Option<Self::LineSource> {
+    fn line_source(self) -> Result<Self::LineSource,PathBuf> {
         use std::io::BufRead;
         match self.source {
-            Some(src) => Some(VirtualFileLineSource {
+            Some(src) => Ok(VirtualFileLineSource {
                 path: self.path,
                 source: VirtualOrPhysicalFile::Virtual(src, 0),
             }),
             None => {
-                let f = std::fs::File::open(&self.path).ok()?;
+                let Some(f) = std::fs::File::open(&self.path).ok() else {
+                    return Err(self.path)
+                };
                 let f = std::io::BufReader::new(f);
                 let f = f.split(b'\n');
-                Some(VirtualFileLineSource {
+                Ok(VirtualFileLineSource {
                     path: self.path,
                     source: VirtualOrPhysicalFile::Physical(f),
                 })
