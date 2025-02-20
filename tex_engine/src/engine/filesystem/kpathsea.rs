@@ -571,8 +571,12 @@ impl PathParser {
     fn close_i<const LOG:bool>(v: Vec<(PathBuf, bool)>) -> HMap<String, PathBuf> {
         let mut ret = HMap::default();
         for (p, rec) in v.into_iter().rev() {
+            if LOG {
+                println!("Checking {} ({rec})",p.display());
+            }
             let len = p.to_str().unwrap().len() + 1;
             for e in walkdir::WalkDir::new(&p)
+                .follow_links(true)
                 .min_depth(1)
                 .into_iter()
                 .filter_map(|e| match e {
@@ -580,12 +584,13 @@ impl PathParser {
                         println!("ERROR: {e}");None
                     }
                     Err(e) => None,
-                    Ok(s) if s.path().as_os_str().to_str().unwrap().contains(".git") => None,
+                    Ok(s) if s.path().components().any(|c| c.as_os_str().to_str() == Some(".git")) => None,
                     Ok(e) => Some(e),
                 })
             {
                 let sub = &e.path().to_str().unwrap()[len..];
                 if sub.contains('.') {
+                    println!("Adding {} ({rec})",e.path().display());
                     let sub = sub.to_string();
                     let pb = e.path().to_path_buf();
                     if sub.ends_with(".tex") {
