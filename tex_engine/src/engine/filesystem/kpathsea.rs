@@ -157,8 +157,12 @@ pub struct KpathseaBase {
     /// The paths to search after the working directory.
     pub post: HMap<String, PathBuf>,
 }
+
+pub static LOG_KPATHSEA : std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 impl KpathseaBase {
     fn new() -> KpathseaBase {
+        let log = LOG_KPATHSEA.load(std::sync::atomic::Ordering::Relaxed);
         let locout = std::process::Command::new("kpsewhich")
             .args(vec!["-var-value", "SELFAUTOLOC"])
             .output()
@@ -177,8 +181,20 @@ impl KpathseaBase {
             } else {
                 std::env::vars().find(|x| x.0 == "HOME").unwrap().1
             };
+            if log {
+                println!("Variables:\n-------------------------");
+                for (k,v) in &vars {
+                    println!("{k}:   {v}");
+                }
+            }
 
             let paths = Self::paths_to_scan(&mut vars);
+            if log {
+                println!("-------------------------\nScan paths:\n-------------------------");
+                for p in &paths {
+                    println!("{}",p);
+                }
+            }
             let mut parser = PathParser {
                 vars,
                 diddot: false,
@@ -192,6 +208,18 @@ impl KpathseaBase {
             for s in paths {
                 parser.do_dir(&s);
             }
+
+            if log {
+                println!("-------------------------\nResolved paths:\n-------------------------");
+                for (p,_) in &parser.predot {
+                    println!("{}",p.display());
+                }
+                for (p,_) in &parser.postdot {
+                    println!("{}",p.display());
+                }
+                println!("-------------------------\n");
+            }
+
             parser.close()
         };
         KpathseaBase {
@@ -428,7 +456,7 @@ impl PathParser {
                 self.recdot = recurse;
                 continue;
             }
-            self.push_path(Path::new(&s), recurse)
+            self.push_path(Path::new(&s), recurse);
         }
     }
     fn push_path(&mut self, p: &Path, rec: bool) {

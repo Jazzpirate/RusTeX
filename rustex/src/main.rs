@@ -287,6 +287,20 @@ struct Parameters {
     /// profile
     #[clap(short, long, default_value_t = false)]
     profile: bool,
+
+    /// kpse
+    #[command(subcommand)]
+    kpse: Option<KpseArgs>,
+}
+
+#[derive(clap::Subcommand,Debug)]
+enum KpseArgs {
+    Kpse {
+        #[clap(long, default_value_t = false)]
+        log:bool,
+        #[arg(required = true)]
+        path:String
+    }
 }
 
 fn run() {
@@ -294,6 +308,10 @@ fn run() {
     let params = Parameters::parse();
     if params.profile {
         profile();
+        return;
+    }
+    if let Some(k) = params.kpse {
+        kpse(k);
         return;
     }
     match (params.input, params.output) {
@@ -329,4 +347,32 @@ fn test_latex_ltx() {
     register_pdftex_primitives(&mut engine);
     engine.init_file("pdftexconfig.tex").unwrap();
     let _ = engine.load_latex();
+}
+
+
+fn kpse(KpseArgs::Kpse {log,path}:KpseArgs) {
+    if log {
+        tex_engine::engine::filesystem::kpathsea::LOG_KPATHSEA.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    let kpse = tex_engine::engine::filesystem::kpathsea::Kpathsea::new(
+        std::env::current_dir().expect("Could not find current dir")
+    );
+    let r = kpse.kpsewhich(path);
+    if r.exists {
+        println!("{}",r.path.display());
+    }
+    
+    /*
+    fn filter(p:&Path) -> bool {
+        p.extension().is_none_or(|e| e.to_str().is_none_or(|e| e!= "vf" && e != "tfm" && e!="pfb"))
+    }
+    let kpse = &tex_engine::engine::filesystem::kpathsea::KPATHSEA;
+    println!("Directories:");
+    for (k,v) in &kpse.pre {
+        if filter(v) { println!("{k}:   {}",v.display()); }
+    }
+    for (k,v) in &kpse.post {
+        if filter(v) { println!("{k}:   {}",v.display()); }
+    }
+     */
 }
