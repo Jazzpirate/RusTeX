@@ -357,22 +357,20 @@ fn kpse(KpseArgs::Kpse {log,path}:KpseArgs) {
     let kpse = tex_engine::engine::filesystem::kpathsea::Kpathsea::new(
         std::env::current_dir().expect("Could not find current dir")
     );
-    let r = kpse.kpsewhich(path);
-    if r.exists {
-        println!("{}",r.path.display());
+    if log && path == "ALL" {
+        for (k,v) in &kpse.global.pre {
+            println!("{k}:   {}",v.display());
+        }
+        for (k,v) in &kpse.local {
+            println!("{k}:   {}",v.display());
+        }
+        for (k,v) in &kpse.global.post {
+            println!("{k}:   {}",v.display());
+        }
+    } else {
+        let r = kpse.kpsewhich(path);
+        if r.exists {
+            println!("{}",r.path.display());
+        }
     }
-    
-    /*
-    fn filter(p:&Path) -> bool {
-        p.extension().is_none_or(|e| e.to_str().is_none_or(|e| e!= "vf" && e != "tfm" && e!="pfb"))
-    }
-    let kpse = &tex_engine::engine::filesystem::kpathsea::KPATHSEA;
-    println!("Directories:");
-    for (k,v) in &kpse.pre {
-        if filter(v) { println!("{k}:   {}",v.display()); }
-    }
-    for (k,v) in &kpse.post {
-        if filter(v) { println!("{k}:   {}",v.display()); }
-    }
-     */
 }
