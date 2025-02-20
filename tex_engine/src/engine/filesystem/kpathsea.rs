@@ -590,7 +590,7 @@ impl PathParser {
             {
                 let sub = &e.path().to_str().unwrap()[len..];
                 if sub.contains('.') {
-                    println!("Adding {} ({rec})",e.path().display());
+                    if LOG { println!("Adding {} ({rec})",e.path().display()); }
                     let sub = sub.to_string();
                     let pb = e.path().to_path_buf();
                     if sub.ends_with(".tex") {
