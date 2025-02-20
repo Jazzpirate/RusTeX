@@ -210,17 +210,26 @@ impl KpathseaBase {
             }
 
             if log {
-                println!("-------------------------\nResolved paths:\n-------------------------");
-                for (p,_) in &parser.predot {
-                    println!("{}",p.display());
+                println!("-------------------------\nResolved variables:\n-------------------------");
+                for (k,v) in &parser.resolved_vars {
+                    let val = v.iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>().join("; ");
+                    println!("{k}:   {val}");
                 }
-                for (p,_) in &parser.postdot {
-                    println!("{}",p.display());
+                println!("-------------------------\nResolved paths:\n-------------------------");
+                for (p,b) in &parser.predot {
+                    println!("{} ({b})",p.display());
+                }
+                for (p,b) in &parser.postdot {
+                    println!("{} ({b})",p.display());
                 }
                 println!("-------------------------\n");
             }
 
-            parser.close()
+            let r = if log {parser.close::<true>()} else {parser.close::<false>()};
+            if log {
+                println!("-------------------------\n");
+            }
+            r
         };
         KpathseaBase {
             pre,
@@ -552,24 +561,27 @@ impl PathParser {
         }
         self.resolved_vars.get(key).unwrap()
     }
-    fn close(self) -> (HMap<String, PathBuf>, bool, HMap<String, PathBuf>) {
+    fn close<const LOG:bool>(self) -> (HMap<String, PathBuf>, bool, HMap<String, PathBuf>) {
         (
-            Self::close_i(self.predot),
+            Self::close_i::<LOG>(self.predot),
             self.recdot,
-            Self::close_i(self.postdot),
+            Self::close_i::<LOG>(self.postdot),
         )
     }
-    fn close_i(v: Vec<(PathBuf, bool)>) -> HMap<String, PathBuf> {
+    fn close_i<const LOG:bool>(v: Vec<(PathBuf, bool)>) -> HMap<String, PathBuf> {
         let mut ret = HMap::default();
         for (p, rec) in v.into_iter().rev() {
             let len = p.to_str().unwrap().len() + 1;
             for e in walkdir::WalkDir::new(&p)
                 .min_depth(1)
                 .into_iter()
-                .filter_map(|e| match e.ok() {
-                    None => None,
-                    Some(s) if s.path().as_os_str().to_str().unwrap().contains(".git") => None,
-                    Some(e) => Some(e),
+                .filter_map(|e| match e {
+                    Err(e) if LOG => {
+                        println!("ERROR: {e}");None
+                    }
+                    Err(e) => None,
+                    Ok(s) if s.path().as_os_str().to_str().unwrap().contains(".git") => None,
+                    Ok(e) => Some(e),
                 })
             {
                 let sub = &e.path().to_str().unwrap()[len..];
