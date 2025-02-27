@@ -471,6 +471,7 @@ pub struct PrimitiveInterner {
     pub month: PrimitiveIdentifier,
     pub day: PrimitiveIdentifier,
     pub time: PrimitiveIdentifier,
+    pub mathchar: PrimitiveIdentifier,
 }
 impl PrimitiveInterner {
     fn new() -> Self {
@@ -558,6 +559,7 @@ impl PrimitiveInterner {
         let month = PrimitiveIdentifier(interner.get_or_intern_static("month"));
         let day = PrimitiveIdentifier(interner.get_or_intern_static("day"));
         let time = PrimitiveIdentifier(interner.get_or_intern_static("time"));
+        let mathchar = PrimitiveIdentifier(interner.get_or_intern_static("mathchar"));
         PrimitiveInterner {
             interner: RwLock::new(interner),
             globaldefs,
@@ -638,6 +640,7 @@ impl PrimitiveInterner {
             month,
             day,
             time,
+            mathchar
         }
     }
 

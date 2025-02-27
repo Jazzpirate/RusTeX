@@ -532,7 +532,7 @@ macro_rules! do_cmd {
                 <$ET as EngineTypes>::Stomach::assign_primitive_muskip($engine,*name,false,$token)?,
             $crate::commands::TeXCommand::Primitive{name,cmd:$crate::commands::PrimitiveCommand::PrimitiveToks} =>
                 <$ET as EngineTypes>::Stomach::assign_primitive_toks($engine,$token,*name,false)?,
-            $crate::commands::TeXCommand::MathChar(u) =>
+            $crate::commands::TeXCommand::MathChar(u) if <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode().is_math() =>
                 <$ET as EngineTypes>::Stomach::do_mathchar($engine,*u,Some($token)),
             $crate::commands::TeXCommand::Primitive{cmd:$crate::commands::PrimitiveCommand::Relax,..} => (),
             $crate::commands::TeXCommand::Primitive{
@@ -543,9 +543,14 @@ macro_rules! do_cmd {
                     $crate::commands::PrimitiveCommand::FontCmd { .. }
                 ,name
             } =>
-            TeXError::not_allowed_in_mode($engine.aux,$engine.state,$engine.mouth,*name,
-                <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
-            )?,
+                TeXError::not_allowed_in_mode($engine.aux,$engine.state,$engine.mouth,*name,
+                    <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
+                )?,
+            $crate::commands::TeXCommand::MathChar(_) => 
+                TeXError::not_allowed_in_mode($engine.aux,$engine.state,$engine.mouth,
+                    $crate::commands::primitives::PRIMITIVES.mathchar,
+                    <$ET as EngineTypes>::Stomach::data_mut($engine.stomach).mode()
+                )?,
             $crate::commands::TeXCommand::Macro(_) |
             $crate::commands::TeXCommand::Primitive{ cmd:$crate::commands::PrimitiveCommand::Conditional { .. } |
                 $crate::commands::PrimitiveCommand::Expandable { .. } |
