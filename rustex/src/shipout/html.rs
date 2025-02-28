@@ -1371,7 +1371,7 @@ impl CompilationDisplay<'_, '_> {
             }/>);
                 Ok(())
             }
-            ShipoutNodeM::Img(img) => match (&self.image, &img.img) {
+            ShipoutNodeM::Img(img) => Ok(node!(self <mtext {match (&self.image, &img.img) {
                 (ImageOptions::AsIs, PDFImage::PDF(imgfile)) => {
                     let width = img.width().0;
                     let height = img.height().0;
@@ -1384,7 +1384,6 @@ impl CompilationDisplay<'_, '_> {
                     if !std::path::Path::new(&path).exists() {
                         let _ = imgfile.save_with_format(path, image::ImageFormat::Png);
                     }
-                    Ok(())
                 }
                 (ImageOptions::AsIs, _) => {
                     let width = img.width().0;
@@ -1393,7 +1392,6 @@ impl CompilationDisplay<'_, '_> {
                     "width"=Self::dim_to_string(width);
                     "height"=Self::dim_to_string(height);
                 />>);
-                    Ok(())
                 }
                 (ImageOptions::ModifyURL(f), _) => {
                     let width = img.width().0;
@@ -1402,10 +1400,9 @@ impl CompilationDisplay<'_, '_> {
                     "width"=Self::dim_to_string(width);
                     "height"=Self::dim_to_string(height);
                 />>);
-                    Ok(())
                 }
                 _ => todo!(),
-            },
+            }}/>)),
             _ => todo!("{c:?}"),
         }
     }
