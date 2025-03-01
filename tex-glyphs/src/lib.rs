@@ -224,6 +224,10 @@ mod tests {
             "cmbx10:\n{}",
             es.display_encoding("cmbx10").expect("cmbx not found")
         );
+        log::info!(
+            "wasy10:\n{}",
+            es.display_encoding("wasy10").expect("cmbx not found")
+        );
         /*
         log::info!("ptmr7t:\n{}",es.display_encoding("ptmr7t").unwrap());
         log::info!("ecrm1095:\n{}",es.display_encoding("ecrm1095").unwrap());

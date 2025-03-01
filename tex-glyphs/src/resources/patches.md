@@ -129,6 +129,9 @@ For example, the first line in the table below tells us that the`.tfm` files `cm
 | ts1-stix2text-bold, t1-stix2text-bold                                                                                                                                                                                                                                                                    | b         |                   | STIX Two Text https://fonts.googleapis.com/css2?family=STIX+Two+Text:wght@700                                                                                      |
 | ts1-stix2text-italic, t1-stix2text-italic, stix2-mathit                                                                                                                                                                                                                                                  | i         |                   | STIX Two Text https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital@1                                                                                        |
 | ts1-stix2text-bolditalic, t1-stix2text-bolditalic                                                                                                                                                                                                                                                        | bi        |                   | STIX Two Text https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@1,700                                                                               |
+| wasy5, wasy6, wasy7, wasy8, wasy9, wasy10                                                                                                                                                                                                                                                                |           | wasy              | Computer Modern Serif https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif/cmun-serif.css                                             |
+| wasyb10                                                                                                                                                                                                                                                                                                  | b         | wasy              | Computer Modern Serif https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif/cmun-serif.css                                             |
+| wasysl10                                                                                                                                                                                                                                                                                                 | o         | wasy              | Computer Modern Serif https://cdn.jsdelivr.net/gh/dreampulse/computer-modern-web-font@master/font/Serif/cmun-serif.css                                             |
 <!--- END -->
 
 
@@ -185,4 +188,26 @@ Before each table, a name is expected as a bullet point in a separate line, i.e.
 | **Dx** | `—`    |        |        |        |        |        |        |        |        |        |        |        |        |        |        |        |
 | **Ex** |        | `Æ`    |        | `ª`    |        |        |        |        | `Ł`    | `Ø`    | `Œ`    | `º`    |        |        |        |        |
 | **Fx** |        | `æ`    |        |        |        | `ı`    |        |        | `ł`    | `ø`    | `œ`    | `ß`    |        |        |        |        |
+
+- wasy
+
+| \_x\_  | 0        | 1    | 2          | 3    | 4      | 5            | 6      | 7     | 8 | 9       | A      | B         | C            | D    | E     | F         |
+|--------|----------|------|------------|------|--------|--------------|--------|-------|---|---------|--------|-----------|--------------|------|-------|-----------|
+| **0x** | /APLup   | `◁`  | `⊴`        | /rhd | `⊵`    | /therefore   |        |       |   |         |        |           | /quarternote |      |       |           |
+| **1x** |          |      | /lightning |      |        |              |        |       |   | /female | /male  | /currency |              |      |       | /diameter |
+| **2x** |          |      |            | `○`  |        |              | /earth |       |   |         |        |           | `🙂`         |      | /sun  | `🙁`      |
+| **3x** |          |      | `□`        | `◇`  |        | /lozenge     |        |       |   |         |        | /leadsto  | `⊏`          | `⊐`  |       |           |
+| **4x** |          |      |            |      |        |              |        |       |   |         |        |           |              |      | /Euro |           |
+| **5x** |          |      |            |      | /longs |              |        |       |   |         |        |           |              |      |       |           |
+| **6x** |          |      |            |      |        |              |        | /cent |   | /thorn  | /Thorn |           |              |      |       |           |
+| **7x** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **8x** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **9x** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **Ax** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **Bx** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **Cx** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **Dx** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **Ex** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+| **Fx** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+
 <!--- END -->
