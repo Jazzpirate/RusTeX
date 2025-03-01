@@ -1501,6 +1501,7 @@ impl<'a, 'b> Shipout<'a, 'b, Math> {
             Ok(cos) => self.push(ShipoutNodeM::Glyph {
                 char: cos,
                 cramped,
+                font,
                 display,
             }),
             Err(name) => self.push(ShipoutNodeM::MissingGlyph {
@@ -1943,6 +1944,7 @@ pub(crate) enum ShipoutNodeM {
     Glyph {
         char: CharOrStr,
         cramped: bool,
+        font:Font,
         display: bool,
     },
     Space,

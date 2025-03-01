@@ -177,26 +177,27 @@ impl TableParser {
             return "UNDEFINED".to_string();
         }
         if self.s.starts_with("\\u") {
-            let u = u32::from_str_radix(&self.s[2..6], 16).unwrap_or_else(|_| unreachable!());
+            let u = u32::from_str_radix(&self.s[2..6], 16).unwrap_or_else(|_| panic!("1"));
             self.s = self.s[6..].trim_start();
             assert!(self.s.starts_with('|'));
             return format!(
                 "Glyph(GlyphI::Unicode({:?}))",
-                char::from_u32(u).unwrap_or_else(|| unreachable!())
+                char::from_u32(u).unwrap_or_else(|| panic!("2"))
             );
         }
         if self.s.starts_with('/') {
-            let idx = self.s.find('|').unwrap_or_else(|| unreachable!());
+            let idx = self.s.find('|').unwrap_or_else(|| panic!("3"));
             let (glyph, rest) = self.s.split_at(idx);
+            let glyph = glyph[1..].trim();
             self.s = rest;
-            let i = self.glyphmap.get(glyph).unwrap_or_else(|| unreachable!());
+            let i = self.glyphmap.get(glyph).unwrap_or_else(|| panic!("Unknown glyph: {glyph}\n{:?}",self.glyphmap));
             return format!("Glyph(GlyphI::S({i}))");
         }
         if self.s.starts_with('`') {
             self.s = &self.s[1..];
             let mut ret = String::new();
             loop {
-                let n = self.s.chars().next().unwrap_or_else(|| unreachable!());
+                let n = self.s.chars().next().unwrap_or_else(|| panic!("5"));
                 self.s = &self.s[n.len_utf8()..];
                 if n == '`' {
                     self.s = self.s.trim_start();
@@ -204,7 +205,7 @@ impl TableParser {
                     if ret.chars().count() == 1 {
                         return format!(
                             "Glyph(GlyphI::Unicode({:?}))",
-                            ret.chars().next().unwrap_or_else(|| unreachable!())
+                            ret.chars().next().unwrap_or_else(|| panic!("6"))
                         );
                     }
                     let i = self
@@ -212,12 +213,12 @@ impl TableParser {
                         .iter()
                         .enumerate()
                         .find(|p| p.1 == &ret)
-                        .unwrap_or_else(|| unreachable!())
+                        .unwrap_or_else(|| panic!("7"))
                         .0;
                     return format!("Glyph(GlyphI::S({i}))");
                 }
                 if n == '\\' {
-                    let n = self.s.chars().next().unwrap_or_else(|| unreachable!());
+                    let n = self.s.chars().next().unwrap_or_else(|| panic!("8"));
                     ret.push(n);
                     self.s = &self.s[n.len_utf8()..];
                 } else {

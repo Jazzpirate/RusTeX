@@ -1127,23 +1127,24 @@ impl CompilationDisplay<'_, '_> {
             ShipoutNodeM::Glyph {
                 char,
                 cramped,
+                font,
                 display,
             } => {
                 match cls {
                     Some(MathClass::Ord) | None => {
-                        node!(self <mi class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mi /*"data-rustex-font"=font.filename();*/ class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
                     }
                     _ if *cramped => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0";/*"data-rustex-font"=font.filename();*/ class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
                     }
                     Some(MathClass::Op) if *display => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0";/*"data-rustex-font"=font.filename();*/ class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(char), self.f)?}/>);
                     }
                     Some(MathClass::Op) => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Op); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0";/*"data-rustex-font"=font.filename();*/ class=Self::cls(MathClass::Op); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
                     }
                     Some(o) => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(o); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0";/*"data-rustex-font"=font.filename();*/ class=Self::cls(o); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
                     }
                 };
                 Ok(())
