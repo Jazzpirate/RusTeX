@@ -468,6 +468,9 @@ const PDFIUM_NAME: &str = "pdfium.dll";
 const PDFIUM_NAME: &str = "libpdfium.so";
 
 #[cfg(feature = "pdfium")]
+static PDFIUM_LOCK : std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(feature = "pdfium")]
 fn download_pdfium(lib_dir: &std::path::Path) {
     const PDFIUM_VERSION: &str = "6721";
     const BASE_URL: &str =
@@ -542,6 +545,7 @@ pub trait PDFExtension<ET: EngineTypes>: EngineExtension<ET> {
         match self.pdfium_direct() {
             Some(p) => p.as_ref(),
             r => {
+                let Ok(_lock )= PDFIUM_LOCK.lock() else {return None};
                 let pdfium = Pdfium::bind_to_system_library().ok().or_else(|| {
                     std::env::current_exe().ok().and_then(|d| {
                         let lib_dir = d.parent()?.join("lib");
@@ -553,6 +557,7 @@ pub trait PDFExtension<ET: EngineTypes>: EngineExtension<ET> {
                     })
                 });
                 *r = Some(pdfium.map(Pdfium::new));
+                drop(_lock);
                 r.as_ref().unwrap_or_else(|| unreachable!()).as_ref()
             }
         }
