@@ -492,9 +492,9 @@ fn download_pdfium(lib_dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(lib_dir);
     let download_url = format!("{BASE_URL}/{PDFIUM_VERSION}/pdfium-{PLATFORM}.tgz");
     let archive_path = lib_dir.join("pdfium.tgz");
-    let mut response = reqwest::blocking::get(download_url) else {
+    let Ok(mut response) = reqwest::blocking::get(download_url) else {
         log::warn!("Could not download pdfium"); return 
-    }//.expect("Could not download pdfium");
+    };//.expect("Could not download pdfium");
     let Ok(mut dest) = std::fs::File::create(&archive_path) else {
         return;
     };
