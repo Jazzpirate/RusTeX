@@ -472,7 +472,7 @@ static PDFIUM_LOCK : std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(feature = "pdfium")]
 fn download_pdfium(lib_dir: &std::path::Path) {
-    const PDFIUM_VERSION: &str = "6721";
+    const PDFIUM_VERSION: &str = "6996";
     const BASE_URL: &str =
         "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium";
 
@@ -547,7 +547,10 @@ pub trait PDFExtension<ET: EngineTypes>: EngineExtension<ET> {
         match self.pdfium_direct() {
             Some(p) => p.as_ref(),
             r => {
-                let Ok(_lock )= PDFIUM_LOCK.lock() else {return None};
+                let Ok(lock )= PDFIUM_LOCK.lock() else {
+                    log::warn!("Could not lock PDFium lock");
+                    return None
+                };
                 let pdfium = Pdfium::bind_to_system_library().ok().or_else(|| {
                     std::env::current_exe().ok().and_then(|d| {
                         let lib_dir = d.parent()?.join("lib");
@@ -555,11 +558,13 @@ pub trait PDFExtension<ET: EngineTypes>: EngineExtension<ET> {
                         if !lib_path.exists() {
                             download_pdfium(&lib_dir);
                         }
-                        Pdfium::bind_to_library(&lib_path).ok()
+                        Pdfium::bind_to_library(&lib_path).map_err(|e|
+                            log::warn!("Could not bind to pdfium at {}: {e}",lib_path.display())
+                        ).ok()
                     })
                 });
                 *r = Some(pdfium.map(Pdfium::new));
-                drop(_lock);
+                drop(lock);
                 r.as_ref().unwrap_or_else(|| unreachable!()).as_ref()
             }
         }
@@ -718,22 +723,24 @@ impl<ET: EngineTypes> PDFXImage<ET> {
 #[cfg(feature = "pdfium")]
 pub fn pdf_as_image<ET: EngineTypes, E: PDFExtension<ET>>(path: &Path, ext: &mut E) -> PDFImage {
     use pdfium_render::prelude::PdfRenderConfig;
-    match ext.pdfium() {
-        None => PDFImage::None,
-        Some(pdfium) => {
-            match pdfium.load_pdf_from_file(&path, None) {
-                Ok(doc) => {
-                    let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
-                    match doc.pages().iter().next().unwrap().render_with_config(&cfg) {
-                        //.render_with_config(&cfg) {
-                        Ok(bmp) => PDFImage::PDF(bmp.as_image()),
-                        _ => PDFImage::None,
-                    }
-                }
-                _ => PDFImage::None,
-            }
-        }
-    }
+    let Some(pdfium) = ext.pdfium() else {
+        log::warn!("PDFium not loaded");
+        return PDFImage::None;
+    };
+    let Ok(pdf) = pdfium.load_pdf_from_file(&path, None) else {
+        log::warn!("Failed to load PDF file {}",path.display());
+        return PDFImage::None;
+    };
+    let cfg = PdfRenderConfig::new().scale_page_by_factor(5.0);
+    let pages = pdf.pages();
+    let r = if let Ok(bmp) = pages.iter().next().unwrap().render_with_config(&cfg) {
+        let img = bmp.as_image();
+        PDFImage::PDF(img)
+    } else {
+        log::warn!("Failed to render PDF file {}",path.display());
+        PDFImage::None
+    };
+    r
 }
 
 #[cfg(not(feature = "pdfium"))]

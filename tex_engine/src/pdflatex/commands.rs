@@ -1134,26 +1134,19 @@ where
     let mut filename = String::new();
     engine.read_braced_string(true, true, &tk, &mut filename)?;
     let file = engine.filesystem.get(&filename);
-    let img = match match image::ImageReader::open(file.path()) {
-        Ok(x) => x,
-        _ => {
+
+    let img = if file.path().extension().is_some_and(|ext| ext == "pdf") {
+        super::nodes::pdf_as_image(file.path(), &mut engine.aux.extension)
+    } else {
+        let Ok(img) = image::ImageReader::open(file.path()) else {
             engine.general_error("Unknown type of image".into())?;
             return Ok(());
-        }
-    }
-    .with_guessed_format()
-    .map(|i| i.decode())
-    {
-        Ok(Ok(x)) => PDFImage::Img(x),
-        _ => match file.path().extension() {
-            Some(s) if s == "pdf" => {
-                super::nodes::pdf_as_image(file.path(), &mut engine.aux.extension)
-            }
-            _ => {
-                engine.general_error("Unknown type of image".into())?;
-                return Ok(());
-            }
-        },
+        };
+        let Ok(Ok(img)) = img.with_guessed_format().map(image::ImageReader::decode) else {
+            engine.general_error("Unknown type of image".into())?;
+            return Ok(());
+        };
+        PDFImage::Img(img)
     };
     let img = PDFXImage {
         width,
