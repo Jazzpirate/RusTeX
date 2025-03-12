@@ -358,24 +358,8 @@ pub fn r#char<ET: EngineTypes>(
 ) -> TeXResult<(), ET> {
     let char = engine.read_charcode(false, &tk)?;
     match engine.stomach.data_mut().mode() {
-        TeXMode::DisplayMath | TeXMode::InlineMath => {
-            ET::Stomach::add_node_m(
-                engine,
-                MathNode::Atom(MathAtom {
-                    sup: None,
-                    sub: None,
-                    nucleus: MathNucleus::Simple {
-                        cls: MathClass::Ord,
-                        limits: None,
-                        kernel: MathKernel::Char {
-                            char,
-                            style: UnresolvedMathFontStyle::of_fam(0),
-                        },
-                    },
-                }),
-            );
-            Ok(())
-        }
+        TeXMode::DisplayMath | TeXMode::InlineMath =>
+            ET::Stomach::do_char_in_math(engine, char),
         _ => {
             let tk = <ET::Token as Token>::from_char_cat(char, CommandCode::Other);
             ET::Stomach::do_char(engine, tk, char, CommandCode::Other)

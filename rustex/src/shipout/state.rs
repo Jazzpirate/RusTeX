@@ -1500,6 +1500,7 @@ impl<'a, 'b> Shipout<'a, 'b, Math> {
         match self.do_mathchar_i(char, &font) {
             Ok(cos) => self.push(ShipoutNodeM::Glyph {
                 char: cos,
+                idx:char,
                 cramped,
                 font,
                 display,
@@ -1943,6 +1944,7 @@ pub(crate) enum ShipoutNodeM {
     },
     Glyph {
         char: CharOrStr,
+        idx:u8,
         cramped: bool,
         font:Font,
         display: bool,
