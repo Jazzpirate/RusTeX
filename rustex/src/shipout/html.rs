@@ -1090,6 +1090,7 @@ impl CompilationDisplay<'_, '_> {
                         let wd = Self::dim_to_string(*width);
                         style!("width"=wd);
                         style!("--rustex-curr-width"=wd);
+                        style!("--rustex-this-width"=wd);
                     }
                     _ => ()
                 }
