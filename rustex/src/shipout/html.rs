@@ -31,7 +31,7 @@ pub(crate) struct CompilationDisplay<'a, 'b> {
     pub(crate) indent: u8,
     pub(crate) color: PDFColor,
     pub(crate) font: Font,
-    pub(crate) in_link:bool,
+    pub(crate) in_link: bool,
     pub(crate) font_data: &'a HMap<Box<str>, FontData>,
     pub(crate) attrs: VecMap<Cow<'static, str>, Cow<'static, str>>,
     pub(crate) styles: VecMap<Cow<'static, str>, Cow<'static, str>>,
@@ -422,7 +422,7 @@ impl CompilationDisplay<'_, '_> {
                 if node == "mrow" || node == "g" {
                     Cow::Borrowed("")
                 } else {
-                    Cow::Borrowed("rustex_contents")
+                    Cow::Borrowed("rustex-contents")
                 }
             } else {
                 Cow::Owned(classes.join(" "))
@@ -479,7 +479,9 @@ impl CompilationDisplay<'_, '_> {
             ),
             ShipoutNodeV::Common(Common::Literal(s)) => self.f.write_str(s),
             ShipoutNodeV::Common(Common::WithLink { children, .. }) if self.in_link => {
-                for c in children { self.do_v(c,top)? }
+                for c in children {
+                    self.do_v(c, top)?
+                }
                 Ok(())
             }
             ShipoutNodeV::Common(Common::WithLink { href, children, .. }) => {
@@ -671,7 +673,9 @@ impl CompilationDisplay<'_, '_> {
             ),
             ShipoutNodeH::Common(Common::Literal(s)) => self.f.write_str(s),
             ShipoutNodeH::Common(Common::WithLink { children, .. }) if self.in_link => {
-                for c in children { self.do_h(c,escape)? }
+                for c in children {
+                    self.do_h(c, escape)?
+                }
                 Ok(())
             }
             ShipoutNodeH::Common(Common::WithLink { href, children, .. }) => {
@@ -997,7 +1001,7 @@ impl CompilationDisplay<'_, '_> {
                 children,
                 ..
             }) => {
-               /* let oldwd = self.width;
+                /* let oldwd = self.width;
                 let wd = info
                     .assigned_width()
                     .unwrap_or_else(|| info.computed_width().unwrap_or_default())
@@ -1128,8 +1132,8 @@ impl CompilationDisplay<'_, '_> {
             ShipoutNodeM::Glyph {
                 char,
                 cramped,
-                idx:_,
-                font:_,
+                idx: _,
+                font: _,
                 display,
             } => {
                 match cls {
@@ -1156,7 +1160,7 @@ impl CompilationDisplay<'_, '_> {
                 Ok(())
             }
             ShipoutNodeM::Sup { base, sup, limits } => {
-                node!(self !<<if *limits {"mover"} else {"msup"}; 
+                node!(self !<<if *limits {"mover"} else {"msup"};
             ?(if *limits {Some(("displaystyle","true"))} else {None})
             {
                 self.do_math(base,None/*,cramped*/)?;
@@ -1176,7 +1180,7 @@ impl CompilationDisplay<'_, '_> {
                 Ok(())
             }
             ShipoutNodeM::Sub { base, sub, limits } => {
-                node!(self !<<if *limits {"munder"} else {"msub"}; 
+                node!(self !<<if *limits {"munder"} else {"msub"};
             ?(if *limits {Some(("displaystyle","true"))} else {None})
             {
                 self.do_math(base,None/*,cramped*/)?;
@@ -1232,7 +1236,7 @@ impl CompilationDisplay<'_, '_> {
                 sup,
                 limits,
             } => {
-                node!(self !<<if *limits {"munderover"} else {"msubsup"}; 
+                node!(self !<<if *limits {"munderover"} else {"msubsup"};
                 ?(if *limits {Some(("displaystyle","true"))} else {None})
             {
                 self.do_math(base,None/*,cramped*/)?;
