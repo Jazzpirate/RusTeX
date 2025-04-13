@@ -142,7 +142,9 @@ pub(crate) struct ShipoutState {
     pub(crate) top_width: Option<i32>,
     pub(crate) page_width: Option<i32>,
     nullfont: Option<Font>,
-    wrappers: Vec<ShipoutWrapper>,
+    pub(crate) previous: Vec<(ShipoutNodes, ShipoutWrapper)>,
+    pub(crate) wrapper: ShipoutWrapper,
+    //wrappers: Vec<ShipoutWrapper>,
     pub(crate) font_data: HMap<Box<str>, FontData>, /*
                                                     pub(crate) output:Vec<HTMLChild>,
                                                     pub(crate) nodes:Vec<HTMLNode>,
@@ -217,7 +219,9 @@ impl ShipoutWrapper {
                 classes,
                 tag,
                 ..
-            } => Ok(Common::with_annotation(attrs, styles, classes, tag, nodes)),
+            } => Ok(
+                Common::with_annotation(attrs, styles, classes, tag, nodes)
+            ),
             ShipoutWrapper::Matrix {
                 scale,
                 rotate,
@@ -315,8 +319,7 @@ enum WrapperKind {
 impl WrapperKind {
     fn prec(self) -> u8 {
         match self {
-            WrapperKind::Color => 0,
-            WrapperKind::Font => 1,
+            WrapperKind::Color | WrapperKind::Font => 1,
             WrapperKind::Link => 5,
             WrapperKind::Annotation => 10,
             WrapperKind::SVG => 15,
@@ -380,7 +383,7 @@ impl ShipoutWrapper {
                 .push((ShipoutNodeSVG::into_nodes(nodes), wrapper));
         }
     }
-    fn close_all<Mode: ShipoutModeT>(state: &mut Shipout<Mode>) -> Vec<ShipoutWrapper> {
+    pub(crate) fn close_all<Mode: ShipoutModeT>(state: &mut Shipout<Mode>) -> Vec<ShipoutWrapper> {
         let mut reopen = Vec::new();
         loop {
             match state.wrapper.kind() {
@@ -472,7 +475,7 @@ impl ShipoutWrapper {
 pub(crate) struct Shipout<'a, 'b, Mode: ShipoutModeT> {
     pub(crate) engine: Refs<'a, 'b>,
     pub(crate) top_state: &'a mut ShipoutState,
-    wrapper: ShipoutWrapper,
+    pub(crate) wrapper: ShipoutWrapper,
     pub(crate) nodes: Vec<Mode::NodeType>,
     pub(crate) state: Mode,
     pub(crate) previous: Vec<(ShipoutNodes, ShipoutWrapper)>,
@@ -1522,7 +1525,9 @@ impl Default for ShipoutState {
             top_font: None,
             top_width: None,
             page_width: None,
-            wrappers: Vec::new(),
+            //wrappers: Vec::new(),
+            wrapper: ShipoutWrapper::None,
+            previous: Vec::new(),
             font_data: HMap::default(),
             /*
             output:Vec::new(),
@@ -1608,7 +1613,9 @@ impl ShipoutState {
     pub(crate) fn split_state<R, F: FnOnce(&mut Shipout<Top>) -> R>(engine: Refs, f: F) -> R {
         let mut state = std::mem::take(&mut engine.aux.extension.state);
         let output = std::mem::take(&mut state.output);
-        let wrappers = std::mem::take(&mut state.wrappers);
+        //let wrappers = std::mem::take(&mut state.wrappers);
+        let wrapper = std::mem::take(&mut state.wrapper);
+        let previous = std::mem::take(&mut state.previous);
         if state.nullfont.is_none() {
             state.nullfont = Some(engine.fontsystem.null())
         }
@@ -1636,20 +1643,25 @@ impl ShipoutState {
             nodes: output,
             state: Top,
             top_state: &mut state,
-            previous: Vec::new(),
-            wrapper: ShipoutWrapper::None,
+            previous,
+            wrapper,
         };
-        for r in wrappers.into_iter() {
+        /*for r in wrappers.into_iter() {
             let nodes = std::mem::take(&mut istate.nodes);
             let wrapper = std::mem::replace(&mut istate.wrapper, r);
             istate
                 .previous
                 .push((ShipoutNodeV::into_nodes(nodes), wrapper));
-        }
+        }*/
         let r = f(&mut istate);
-        let wrappers = ShipoutWrapper::close_all(&mut istate);
-        state.output = istate.nodes;
-        state.wrappers = wrappers;
+        //let wrappers = ShipoutWrapper::close_all(&mut istate);
+        //state.wrappers = wrappers;
+        let wrapper = std::mem::take(&mut istate.wrapper);
+        let previous = std::mem::take(&mut istate.previous);
+        let nodes = std::mem::take(&mut istate.nodes);
+        state.wrapper = wrapper;
+        state.previous = previous;
+        state.output = nodes;
         engine.aux.extension.state = state;
         r
     }

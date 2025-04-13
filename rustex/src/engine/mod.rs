@@ -1,7 +1,7 @@
 use crate::engine::extension::CSS;
 use crate::shipout;
 use crate::shipout::html::{CompilationDisplay, ImageOptions};
-use crate::shipout::state::{FontData, ShipoutNodeV};
+use crate::shipout::state::{FontData, Shipout, ShipoutNodeV, ShipoutWrapper, Top};
 use crate::utils::{VecMap, VecSet};
 use extension::RusTeXExtension;
 use fonts::Fontsystem;
@@ -244,7 +244,7 @@ impl RusTeXEngineExt for RusTeXEngine {
         self.filesystem
             .set_pwd(file.parent().unwrap().to_path_buf());
         self.filesystem.add_file(file, content);
-        match self.do_file_pdf(&s, shipout::shipout) {
+        let r = match self.do_file_pdf(&s, shipout::shipout) {
             Ok(_) => None,
             Err(e) => {
                 self.aux.outputs.errmessage(format!(
@@ -254,7 +254,26 @@ impl RusTeXEngineExt for RusTeXEngine {
                 ));
                 Some(e)
             }
+        };
+        {
+            let mut s = std::mem::take(&mut self.aux.extension.state);
+            let mut refs = self.get_engine_refs();
+            let mut istate = Shipout {
+                nodes: std::mem::take(&mut s.output),
+                state: Top,
+                wrapper: std::mem::take(&mut s.wrapper),
+                previous: std::mem::take(&mut s.previous),
+                top_state: &mut s,
+                engine: &mut refs,
+            };
+            let _ = ShipoutWrapper::close_all(&mut istate);
+            let nodes = std::mem::take(&mut istate.nodes);
+            drop(istate);
+            drop(refs);
+            s.output = nodes;
+            self.aux.extension.state = s;
         }
+        r
     }
     fn do_result(
         &mut self,
@@ -285,6 +304,24 @@ impl RusTeXEngineExt for RusTeXEngine {
                 .collect::<Vec<_>>();
             (e, filetrace)
         });
+        {
+            let mut s = std::mem::take(&mut self.aux.extension.state);
+            let mut refs = self.get_engine_refs();
+            let mut istate = Shipout {
+                nodes: std::mem::take(&mut s.output),
+                state: Top,
+                wrapper: std::mem::take(&mut s.wrapper),
+                previous: std::mem::take(&mut s.previous),
+                top_state: &mut s,
+                engine: &mut refs,
+            };
+            let _ = ShipoutWrapper::close_all(&mut istate);
+            let nodes = std::mem::take(&mut istate.nodes);
+            drop(istate);
+            drop(refs);
+            s.output = nodes;
+            self.aux.extension.state = s;
+        }
         let out = std::mem::take(&mut self.aux.extension.state.output);
         let css = std::mem::take(&mut self.aux.extension.css);
         let font_data = std::mem::take(&mut self.aux.extension.state.font_data);
