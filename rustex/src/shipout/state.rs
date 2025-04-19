@@ -219,9 +219,7 @@ impl ShipoutWrapper {
                 classes,
                 tag,
                 ..
-            } => Ok(
-                Common::with_annotation(attrs, styles, classes, tag, nodes)
-            ),
+            } => Ok(Common::with_annotation(attrs, styles, classes, tag, nodes)),
             ShipoutWrapper::Matrix {
                 scale,
                 rotate,
@@ -1477,8 +1475,7 @@ impl<'a, 'b> Shipout<'a, 'b, Math> {
         );
         Ok(r)
     }
-    pub(crate) fn do_mathchar_i(&mut self, char: u8, font: &Font) -> Result<CharOrStr, String> {
-        use tex_glyphs::fontstyles::FontModifiable;
+    pub(crate) fn do_mathchar_i(&mut self, char: u8, font: &Font) -> Result<ModifiedGlyph, String> {
         let fs = &mut self.engine.fontsystem.glyphmaps;
         let fontname = font.filename();
         let data = match self.top_state.font_data.entry(fontname.into()) {
@@ -1492,18 +1489,19 @@ impl<'a, 'b> Shipout<'a, 'b, Math> {
             return Err(glyph.name().to_string());
         }
         let modifiers = data.modifiers;
-        let cos: CharOrStr = if let Some(m) = modifiers {
+        Ok(ModifiedGlyph { modifiers, glyph })
+        /*let cos: CharOrStr = if let Some(m) = modifiers {
             glyph.to_string().apply(m).to_string().into()
         } else {
             glyph.to_string().into()
         };
-        Ok(cos)
+        Ok(cos)*/
     }
     pub(crate) fn do_mathchar(&mut self, char: u8, font: Font, cramped: bool, display: bool) {
         match self.do_mathchar_i(char, &font) {
             Ok(cos) => self.push(ShipoutNodeM::Glyph {
                 char: cos,
-                idx:char,
+                idx: char,
                 cramped,
                 font,
                 display,
@@ -1955,10 +1953,10 @@ pub(crate) enum ShipoutNodeM {
         font_name: Box<str>,
     },
     Glyph {
-        char: CharOrStr,
-        idx:u8,
+        char: ModifiedGlyph,
+        idx: u8,
         cramped: bool,
-        font:Font,
+        font: Font,
         display: bool,
     },
     Space,
@@ -1983,8 +1981,8 @@ pub(crate) enum ShipoutNodeM {
         top: Vec<Self>,
         bottom: Vec<Self>,
         sep: Option<i32>,
-        left: Option<Result<CharOrStr, (Box<str>, u8, Box<str>)>>,
-        right: Option<Result<CharOrStr, (Box<str>, u8, Box<str>)>>,
+        left: Option<Result<ModifiedGlyph, (Box<str>, u8, Box<str>)>>,
+        right: Option<Result<ModifiedGlyph, (Box<str>, u8, Box<str>)>>,
         uses_font: bool,
         uses_color: bool,
     },
@@ -2011,15 +2009,15 @@ pub(crate) enum ShipoutNodeM {
     },
     LeftRight {
         sref: SourceRef,
-        left: Option<Result<CharOrStr, (Box<str>, u8, Box<str>)>>,
-        right: Option<Result<CharOrStr, (Box<str>, u8, Box<str>)>>,
+        left: Option<Result<ModifiedGlyph, (Box<str>, u8, Box<str>)>>,
+        right: Option<Result<ModifiedGlyph, (Box<str>, u8, Box<str>)>>,
         children: Vec<Self>,
         uses_font: bool,
         uses_color: bool,
     },
-    Middle(Result<CharOrStr, (Box<str>, u8, Box<str>)>),
+    Middle(Result<ModifiedGlyph, (Box<str>, u8, Box<str>)>),
     Accent {
-        accent: Result<CharOrStr, (Box<str>, u8, Box<str>)>,
+        accent: Result<ModifiedGlyph, (Box<str>, u8, Box<str>)>,
         children: Vec<Self>,
         uses_font: bool,
         uses_color: bool,
@@ -2508,6 +2506,29 @@ impl Alignment {
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct ModifiedGlyph {
+    pub modifiers: Option<ModifierSeq>,
+    pub glyph: Glyph,
+}
+impl ModifiedGlyph {
+    #[inline]
+    pub fn as_combinator(&self) -> Option<tex_glyphs::Combinator> {
+        self.glyph.as_combinator()
+    }
+}
+// TODO this can be optimized (no String allocation!)
+impl std::fmt::Display for ModifiedGlyph {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use tex_glyphs::fontstyles::FontModifiable;
+        if let Some(m) = self.modifiers {
+            self.glyph.to_string().apply(m).fmt(f)
+        } else {
+            self.glyph.fmt(f)
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum CharOrStr {
     Char(char),
@@ -2528,6 +2549,12 @@ impl From<String> for CharOrStr {
         } else {
             CharOrStr::Str(s.into_boxed_str())
         }
+    }
+}
+impl From<&ModifiedGlyph> for CharOrStr {
+    // TODO optimize
+    fn from(value: &ModifiedGlyph) -> Self {
+        value.to_string().into()
     }
 }
 

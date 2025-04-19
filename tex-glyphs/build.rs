@@ -4,7 +4,7 @@ use std::io::BufRead;
 use std::io::Write;
 use std::path::Path;
 
-static GLYPH_MAP: &[u8] = include_bytes!("src/resources/glyphmap.txt");
+static GLYPH_MAP: &[u8] = include_bytes!("src/resources/glyphs.map");
 static PATCHES: &str = include_str!("src/resources/patches.md");
 //static MISSING : &str = include_str!("src/resources/missing.txt");
 
@@ -55,22 +55,22 @@ impl State {
             match self.reader.next() {
                 Some(Ok(s)) if s.is_empty() => glyphcode = "\\n".to_string(),
                 Some(Ok(s)) => {
-                    self.do_name_code(glyphname, &glyphcode);
+                    self.do_name_code(glyphname, glyphcode);
                     return self.do_line(&s);
                 }
                 _ => unreachable!(),
             }
         }
-        self.do_name_code(glyphname, &glyphcode);
+        self.do_name_code(glyphname, glyphcode);
     }
-    fn do_name_code(&mut self, glyphname: String, glyphcode: &String) {
-        if !self.done_glyphs.contains(glyphcode) {
-            self.done_glyphs.push(glyphcode.clone());
-            self.glyphlookup
-                .entry(glyphcode.clone(), &format!("{}", self.idx));
-        }
+
+    fn do_name_code(&mut self, glyphname: String, glyphcode: String) {
         self.glyphlist.push_str(&format!(",{glyphcode:?}"));
         self.glyphnames.push_str(&format!(",{glyphname:?}"));
+        if !self.done_glyphs.contains(&glyphcode) {
+            self.done_glyphs.push(glyphcode.clone());
+            self.glyphlookup.entry(glyphcode, &format!("{}", self.idx));
+        }
         self.build_map.insert(glyphname.clone(), self.idx);
         self.build_glyphlist.push(glyphname.clone());
         self.glyphmap.entry(glyphname, &format!("{}", self.idx));
@@ -190,7 +190,10 @@ impl TableParser {
             let (glyph, rest) = self.s.split_at(idx);
             let glyph = glyph[1..].trim();
             self.s = rest;
-            let i = self.glyphmap.get(glyph).unwrap_or_else(|| panic!("Unknown glyph: {glyph}\n{:?}",self.glyphmap));
+            let i = self
+                .glyphmap
+                .get(glyph)
+                .unwrap_or_else(|| panic!("Unknown glyph: {glyph}\n{:?}", self.glyphmap));
             return format!("Glyph(GlyphI::S({i}))");
         }
         if self.s.starts_with('`') {
@@ -304,6 +307,8 @@ impl TableParser {
 }
 
 fn main() {
+    println!("cargo::rerun-if-changed=src/resources/glyphs.map");
+    println!("cargo::rerun-if-changed=src/resources/patches.md");
     let st = State::go();
 
     let path =

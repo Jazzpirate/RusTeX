@@ -5,6 +5,46 @@ use std::fmt::{Debug, Display, Write};
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Glyph(pub(crate) GlyphI);
 
+/// A Combinator (e.g. negation slash, umlaut-dots etc.); can be applied to yield a new
+/// unicode character
+pub struct Combinator(char);
+impl Combinator {
+    /// Apply the combinator to a char
+    pub fn apply_char(&self, c: char) -> String {
+        use unicode_normalization::char::compose;
+        if let Some(c) = compose(c, self.0) {
+            c.to_string()
+        } else if self.0 == '\u{0338}' && c == ' ' {
+            "/".to_string()
+        } else {
+            let mut r = String::with_capacity(c.len_utf8() + self.0.len_utf8());
+            r.push(c);
+            r.push(self.0);
+            r
+        }
+    }
+
+    /// Apply the combinator to a string slice
+    pub fn apply_str(&self, s: &str) -> String {
+        let mut chars = s.chars();
+        let mut ret = if let Some(n) = chars.next() {
+            self.apply_char(n)
+        } else {
+            self.apply_char(' ')
+        };
+        for c in chars {
+            ret.push(c);
+        }
+        ret
+    }
+
+    /// Apply the combinator to a glyph
+    // TODO optimize
+    pub fn apply_glyph(&self, g: &Glyph) -> String {
+        self.apply_str(&g.to_string())
+    }
+}
+
 impl Glyph {
     /// Get the name of this glyph as a [`GlyphName`], e.g.
     /// ```
@@ -28,6 +68,12 @@ impl Glyph {
             GlyphI::Undefined(_) => false,
             _ => true,
         }
+    }
+
+    /// Convert this glyph to a [`Combinator`]
+    #[inline]
+    pub fn as_combinator(&self) -> Option<Combinator> {
+        self.0.as_combinator()
     }
 
     /// Lookup a glyph by *value*, i.e. `Glyph::lookup("Γ")` returns the glyph with name `Gamma`.
@@ -66,10 +112,10 @@ impl GlyphList {
     pub fn get(&self, c: u8) -> Glyph {
         self.0[c as usize].clone()
     }
-    /// Whether this is the undefined glyph list, where every glyph is undefined.
+    /// Returns false if this is the undefined glyph list, where every glyph is undefined.
     #[must_use]
     pub fn is_defined(&self) -> bool {
-        *self == UNDEFINED_LIST
+        *self != UNDEFINED_LIST
     }
 }
 
@@ -97,6 +143,43 @@ pub(crate) enum GlyphI {
     Unicode(char),
     Ls(Box<[GlyphI]>),
     Undefined(Box<str>),
+}
+impl GlyphI {
+    fn as_combinator(&self) -> Option<Combinator> {
+        use unicode_normalization::UnicodeNormalization;
+        match self {
+            Self::S(i) => {
+                let mut it = crate::GLYPH_LIST[*i as usize].nfd();
+                if it.next() == Some('◌') {
+                    it.next().and_then(|c| {
+                        if it.next().is_none() {
+                            Some(Combinator(c))
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                }
+            }
+            Self::Unicode(c) => {
+                let s = c.to_string();
+                let mut it = s.nfd();
+                if it.next() == Some('◌') {
+                    it.next().and_then(|c| {
+                        if it.next().is_none() {
+                            Some(Combinator(c))
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 }
 impl Display for GlyphI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

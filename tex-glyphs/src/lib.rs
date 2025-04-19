@@ -139,7 +139,7 @@ It also provides more direct methods, e.g. [`make_bold`](fontstyles::FontModifia
 The procedure above for determining glyphs and font modifiers is certainly not perfect; not just
 because `enc` and `pfa`/`pfb` files might contain wrong or unknown glyph names, but also because
 font modifiers are determined heuristically. For that reason, we provide a way to fix mistakes:
-1. The map from glyphnames to unicode is stored in the file [glyphmap.txt](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/glyphmap.txt)
+1. The map from glyphnames to unicode is stored in the file [glyphs.map](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/glyphs.map)
 2. Font modifiers, web font names and links, or even full glyph lists can be added
    to the markdown file [patches.md](https://github.com/Jazzpirate/RusTeX/blob/main/tex-glyphs/src/resources/patches.md),
    which additionally serves as a how-to guide for patching any mistakes you might find.
@@ -156,7 +156,8 @@ pub mod fontstyles;
 pub mod glyphs;
 mod parsing;
 
-use crate::glyphs::{Glyph, GlyphList};
+pub use crate::glyphs::{Combinator, Glyph, GlyphList};
+pub use encodings::FontInfoStore;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 

@@ -4,7 +4,7 @@ This crate tries to map codepoints in `.tfm` files to actual unicode characters.
 so by parsing the `pdftex.map` file, which contains a list of properties for each 
 `.tfm` file; in particular, it lists a `.enc` file and/or a `.pfa` or `.pfb` file.
 These contain (ideally) glyph names for each glyph in the font, which is then mapped to
-a unicode character by using the `glyphmap.txt` file, which contains a list of
+a unicode character by using the `glyphs.map` file, which contains a list of
 glyph names and their unicode character (one per line, separated by a space).
 
 Ideally, that would always yield the correct unicode character, but glyphnames are
@@ -142,9 +142,9 @@ For example, the first line in the table below tells us that the`.tfm` files `cm
 
 A glyph map is given as a 16x16 table of unicode characters. Each entry is either:
 - a unicode codepoint denoted by `\uXXXX`, where `XXXX` is a 4-digit hexadecimal number, or
-- a string enclosed in backticks, provided that *somewhere* in the `glyphmap.txt`, there is a named glyph mapping to that string
+- a string enclosed in backticks, provided that *somewhere* in the `glyphs.map`, there is a named glyph mapping to that string
   (likely always the case if it's a single character or a common ligature), or
-- the name of a glyph in the existing `glyphmap.txt` prefixed with `/`; e.g. `/Omega`, or
+- the name of a glyph in the existing `glyphs.map` prefixed with `/`; e.g. `/Omega`, or
 - empty; signifying that there is no glyph at that position. This is eqivalent to `/.notdef`.
 
 Before each table, a name is expected as a bullet point in a separate line, i.e. `- <name>`.

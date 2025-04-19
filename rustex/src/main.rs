@@ -2,18 +2,12 @@
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-//static GLOBAL: rpmalloc::RpMalloc = rpmalloc::RpMalloc;
-
-use std::collections::HashSet;
 use RusTeX::engine::{RusTeXEngine, RusTeXEngineT, Settings};
 
 use clap::Parser;
 use std::path::{Path, PathBuf};
-use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
-use tex_engine::commands::{CommandScope, PrimitiveCommand, TeXCommand};
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;
-use tex_engine::pdflatex::PlainPDFTeXEngine;
 use RusTeX::engine::files::RusTeXFileSystem;
 use RusTeX::engine::output::RusTeXOutput;
 use RusTeX::engine::Types;
@@ -164,6 +158,7 @@ fn test() {
             log: true,
             sourcerefs: true,
             image_options: Default::default(),
+            insert_font_info: true,
         },
     );
     ret.write_out(Path::new(
@@ -177,20 +172,21 @@ fn temp_test() {
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.tex",false,true,true);
     let ret = RusTeXEngine::do_file(
         //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex",
-        "/home/jazzpirate/work/MathHub/sTeX/DemoExamples/source/proof.tex",
+        "/home/jazzpirate/work/MathHub/courses/Jacobs/CompLog/source/setthy/slides/naive-setthy-intro.en.tex",
         //"/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/tmptest.tex",
         Settings {
             verbose: true,
             log: true,
             sourcerefs: true,
             image_options: Default::default(),
+            insert_font_info:true
         },
     );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/LaTeX/Papers/17 - Alignment Translation/macros/kwarc/workplan/workplan-template.tex",true,true,true);
     //std::fs::write("/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/numtest.html", &ret.out).unwrap();
     ret.write_out(Path::new(
         //"/home/jazzpirate/rustex.out.html"
-        "/home/jazzpirate/work/MathHub/sTeX/DemoExamples/source/proof.html"
+        "/home/jazzpirate/work/MathHub/courses/Jacobs/CompLog/source/setthy/slides/naive-setthy-intro.html",
         //"/home/jazzpirate/work/Software/sTeX/RusTeXNew/test/tmptest.html", //"/home/jazzpirate/work/MathHub/courses/UMR/GdMA/course/source/course/sec/Vorwort.de.tex.html"
     ))
     .unwrap();
@@ -205,6 +201,7 @@ fn thesis() {
             log: true,
             sourcerefs: true,
             image_options: Default::default(),
+            insert_font_info: false,
         },
     );
     ret.write_out(Path::new(
@@ -223,6 +220,7 @@ fn notes() {
             log: true,
             sourcerefs: true,
             image_options: Default::default(),
+            insert_font_info: false,
         },
     );
     //let ret = RusTeXEngine::do_file("/home/jazzpirate/work/MathHub/MiKoMH/CompLog/source/kr/tikz/axioms2.tex",true,true,true);
@@ -277,6 +275,10 @@ struct Parameters {
     #[clap(short, long, default_value_t = true)]
     sourcerefs: bool,
 
+    /// insert glyph attributes (for debugging)
+    #[clap(short, long, default_value_t = true)]
+    glyph_debug: bool,
+
     /// console log
     #[clap(short, long, default_value_t = true)]
     console: bool,
@@ -289,19 +291,36 @@ struct Parameters {
     #[clap(short, long, default_value_t = false)]
     profile: bool,
 
-    /// kpse
     #[command(subcommand)]
-    kpse: Option<KpseArgs>,
+    sub: Option<SubCmd>,
 }
 
-#[derive(clap::Subcommand,Debug)]
-enum KpseArgs {
+#[derive(clap::Subcommand, Debug)]
+enum SubCmd {
+    /// kpsewhich
     Kpse {
+        /// log kpathsea database debug info
         #[clap(long, default_value_t = false)]
-        log:bool,
+        log: bool,
+        /// the path to search for in the database
         #[arg(required = true)]
-        path:String
-    }
+        path: String,
+    },
+    /// font info
+    Font {
+        /// name of the font
+        #[arg(required = true)]
+        name: String,
+    },
+    /// glyph info
+    Glyph {
+        #[arg(short, long)]
+        font: Option<String>,
+        #[arg(short, long)]
+        index: Option<u8>,
+        #[arg(short, long)]
+        glyph_name: Option<String>,
+    },
 }
 
 fn run() {
@@ -311,9 +330,16 @@ fn run() {
         profile();
         return;
     }
-    if let Some(k) = params.kpse {
-        kpse(k);
-        return;
+    if let Some(k) = params.sub {
+        match k {
+            SubCmd::Kpse { log, path } => return kpse(log, path),
+            SubCmd::Font { name } => return do_font(name),
+            SubCmd::Glyph {
+                font,
+                index,
+                glyph_name,
+            } => return do_glyph(font, index, glyph_name),
+        }
     }
     match (params.input, params.output) {
         (Some(i), Some(o)) => {
@@ -324,6 +350,7 @@ fn run() {
                     log: params.console,
                     sourcerefs: params.sourcerefs,
                     image_options: Default::default(),
+                    insert_font_info: params.glyph_debug,
                 },
             );
             ret.write_out(Path::new(&o)).unwrap();
@@ -350,28 +377,78 @@ fn test_latex_ltx() {
     let _ = engine.load_latex();
 }
 
-
-fn kpse(KpseArgs::Kpse {log,path}:KpseArgs) {
+fn kpse(log: bool, path: String) {
     if log {
-        tex_engine::engine::filesystem::kpathsea::LOG_KPATHSEA.store(true, std::sync::atomic::Ordering::Relaxed);
+        tex_engine::engine::filesystem::kpathsea::LOG_KPATHSEA
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
     let kpse = tex_engine::engine::filesystem::kpathsea::Kpathsea::new(
-        std::env::current_dir().expect("Could not find current dir")
+        std::env::current_dir().expect("Could not find current dir"),
     );
     if log && path == "ALL" {
-        for (k,v) in &kpse.global.pre {
-            println!("{k}:   {}",v.display());
+        for (k, v) in &kpse.global.pre {
+            println!("{k}:   {}", v.display());
         }
-        for (k,v) in &kpse.local {
-            println!("{k}:   {}",v.display());
+        for (k, v) in &kpse.local {
+            println!("{k}:   {}", v.display());
         }
-        for (k,v) in &kpse.global.post {
-            println!("{k}:   {}",v.display());
+        for (k, v) in &kpse.global.post {
+            println!("{k}:   {}", v.display());
         }
     } else {
         let r = kpse.kpsewhich(path);
         if r.exists {
-            println!("{}",r.path.display());
+            println!("{}", r.path.display());
         }
+    }
+}
+
+fn do_font(s: String) {
+    let mut store =
+        tex_glyphs::FontInfoStore::new(
+            |s| match tex_engine::engine::filesystem::kpathsea::KPATHSEA.which(s) {
+                Some(p) => p.display().to_string(),
+                None => s.to_string(),
+            },
+        );
+    let Some(d) = store.display_encoding(&s) else {
+        println!("Font (encoding) not found!");
+        return;
+    };
+    println!("{d}");
+}
+
+fn do_glyph(font: Option<String>, index: Option<u8>, glyph_name: Option<String>) {
+    let glyph = match (font, index, glyph_name) {
+        (Some(f), Some(i), None) => {
+            let mut store = tex_glyphs::FontInfoStore::new(|s| {
+                match tex_engine::engine::filesystem::kpathsea::KPATHSEA.which(s) {
+                    Some(p) => p.display().to_string(),
+                    None => s.to_string(),
+                }
+            });
+            let ls = store.get_glyphlist(&f);
+            if !ls.is_defined() {
+                println!("Font {f} not found!");
+                return;
+            }
+            ls.get(i)
+        }
+        (None, None, Some(n)) => tex_glyphs::Glyph::get(n),
+        _ => {
+            println!(
+                "Invalid arguments: either --font and --index, or --glyph_name need to be provided"
+            );
+            return;
+        }
+    };
+    if !glyph.is_defined() {
+        println!("Glyph undefined");
+        return;
+    }
+    if let Some(comb) = glyph.as_combinator() {
+        println!("Diacritic {}", comb.apply_char(' '))
+    } else {
+        println!("Glyph {}: \"{}\"", glyph.name(), glyph);
     }
 }

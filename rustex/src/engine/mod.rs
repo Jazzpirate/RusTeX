@@ -145,6 +145,7 @@ pub struct CompilationResult {
     top: VecMap<String, String>,
     img: ImageOptions,
     css: VecSet<CSS>,
+    pub font_info: bool,
 }
 impl CompilationResult {
     pub fn write_out(&self, path: &Path) -> std::io::Result<()> {
@@ -168,6 +169,7 @@ impl Display for CompilationResult {
             sourcerefs: self.sourcerefs,
             font_data: &self.font_data,
             image: &self.img,
+            font_info: self.font_info,
             f,
         };
         dsp.display(
@@ -217,6 +219,7 @@ pub struct Settings {
     pub verbose: bool,
     pub log: bool,
     pub image_options: ImageOptions,
+    pub insert_font_info: bool,
 }
 
 /*pub struct RusTeXEngine {
@@ -359,6 +362,7 @@ impl RusTeXEngineExt for RusTeXEngine {
             metas,
             page_width,
             sourcerefs: settings.sourcerefs,
+            font_info: settings.insert_font_info,
             img: settings.image_options,
         }
     }

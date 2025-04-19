@@ -38,6 +38,7 @@ pub(crate) struct CompilationDisplay<'a, 'b> {
     pub(crate) sourcerefs: bool,
     pub(crate) image: &'a ImageOptions,
     pub(crate) f: &'a mut Formatter<'b>,
+    pub(crate) font_info: bool,
 }
 
 macro_rules! node {
@@ -985,13 +986,63 @@ impl CompilationDisplay<'_, '_> {
             } => {
                 if children.len() == 1 {
                     self.do_math(children.first().unwrap(), Some(*class) /*,cramped*/)
+                } else if children
+                    .iter()
+                    .all(|c| matches!(c, ShipoutNodeM::Glyph { .. }))
+                {
+                    let mut display = true;
+                    let mut cramped = true;
+                    let mut string = String::new();
+                    let mut glyphs = children.into_iter().map(|c| {
+                        let ShipoutNodeM::Glyph {
+                            char,
+                            cramped: c,
+                            display: d,
+                            ..
+                        } = c
+                        else {
+                            unreachable!()
+                        };
+                        display = display && *d;
+                        cramped = cramped && *c;
+                        char
+                    });
+                    // TODO optimize
+                    while let Some(glyph) = glyphs.next() {
+                        if let Some(comb) = glyph.as_combinator() {
+                            if let Some(next) = glyphs.next() {
+                                let mut s = comb.apply_glyph(&next.glyph);
+                                if let Some(m) = next.modifiers {
+                                    use tex_glyphs::fontstyles::FontModifiable;
+                                    s = s.apply(m).to_string();
+                                }
+                                string.push_str(&s);
+                            } else {
+                                write!(&mut string, "{glyph}")?;
+                            }
+                        } else {
+                            write!(&mut string, "{glyph}")?;
+                        }
+                    }
+                    let mi = matches!(class, MathClass::Ord);
+                    let stretchy = display && matches!(class, MathClass::Op);
+                    if mi {
+                        node!(self <mi class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&string.into()), self.f)?}/>);
+                    } else if cramped {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&string.into()), self.f)?}/>);
+                    } else if stretchy {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(&string.into()), self.f)?}/>);
+                    } else {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(*class); "stretchy"="false"; {Display::fmt(&Escaped(&string.into()), self.f)?}/>);
+                    }
+                    Ok(())
                 } else {
                     let cls = Self::cls(*class);
                     node!(self !<mrow class=cls; {
-                    for c in children {
-                        self.do_math(c, Some(*class)/*,cramped*/)?
-                    }
-                }/>);
+                        for c in children {
+                            self.do_math(c, Some(*class)/*,cramped*/)?
+                        }
+                    }/>);
                     Ok(())
                 }
             }
@@ -1132,25 +1183,50 @@ impl CompilationDisplay<'_, '_> {
             ShipoutNodeM::Glyph {
                 char,
                 cramped,
-                idx: _,
-                font: _,
+                idx,
+                font,
                 display,
+            } if self.font_info => {
+                match cls {
+                    Some(MathClass::Ord) | None => {
+                        node!(self <mi "data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string(); class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
+                    }
+                    _ if *cramped => {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; "data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string(); class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
+                    }
+                    Some(MathClass::Op) if *display => {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; "data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string(); class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
+                    }
+                    Some(MathClass::Op) => {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; "data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string(); class=Self::cls(MathClass::Op); "stretchy"="false"; {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
+                    }
+                    Some(o) => {
+                        node!(self <mo "lspace"="0"; "rspace"="0"; "data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string(); class=Self::cls(o); "stretchy"="false"; {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
+                    }
+                };
+                Ok(())
+            }
+            ShipoutNodeM::Glyph {
+                char,
+                cramped,
+                display,
+                ..
             } => {
                 match cls {
                     Some(MathClass::Ord) | None => {
-                        node!(self <mi /*"data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string();*/ class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mi class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
                     }
                     _ if *cramped => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; /*"data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string();*/ class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
                     }
                     Some(MathClass::Op) if *display => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; /*"data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string();*/ class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Op); "stretchy"="true"; {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
                     }
                     Some(MathClass::Op) => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; /*"data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string();*/ class=Self::cls(MathClass::Op); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(MathClass::Op); "stretchy"="false"; {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
                     }
                     Some(o) => {
-                        node!(self <mo "lspace"="0"; "rspace"="0"; /*"data-rustex-font"=font.filename();"data-rustex-glyph"=idx.to_string();*/ class=Self::cls(o); "stretchy"="false"; {Display::fmt(&Escaped(char), self.f)?}/>);
+                        node!(self <mo "lspace"="0"; "rspace"="0"; class=Self::cls(o); "stretchy"="false"; {Display::fmt(&Escaped(&char.into()), self.f)?}/>);
                     }
                 };
                 Ok(())
@@ -1208,13 +1284,13 @@ impl CompilationDisplay<'_, '_> {
             } => {
                 node!(self !<mrow ref=sref {
                 if let Some(Ok(c)) = left {
-                    node!(self <mo "lspace"="0"; "rspace"="0";  class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
+                    node!(self <mo "lspace"="0"; "rspace"="0";  class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(&c.into()),self.f)?} />);
                 }
                 for c in children {
                     self.do_math(c,None/*,cramped*/)?
                 }
                 if let Some(Ok(c)) = right {
-                    node!(self <mo "lspace"="0"; "rspace"="0";  class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
+                    node!(self <mo "lspace"="0"; "rspace"="0";  class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(&c.into()),self.f)?} />);
                 }
             }/>);
                 Ok(())
@@ -1222,7 +1298,7 @@ impl CompilationDisplay<'_, '_> {
             ShipoutNodeM::Middle(r) => {
                 match r {
                     Ok(c) => {
-                        node!(self <mo "lspace"="0"; "rspace"="0";  "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?}/>)
+                        node!(self <mo "lspace"="0"; "rspace"="0";  "stretchy"="true"; {Display::fmt(&Escaped(&c.into()),self.f)?}/>)
                     }
                     Err((_, char, font_name)) => {
                         node!(self <mtext class="rustex-missing" "title"=format_args!("Missing Glyph {char} in {font_name}");/>)
@@ -1305,11 +1381,11 @@ impl CompilationDisplay<'_, '_> {
                     (None, None) => inner(self)?,
                     _ => node!(self !<mrow {
                     if let Some(Ok(c)) = left {
-                        node!(self !<mo "lspace"="0"; "rspace"="0"; class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
+                        node!(self !<mo "lspace"="0"; "rspace"="0"; class="rustex-math-open" "stretchy"="true"; {Display::fmt(&Escaped(&c.into()),self.f)?} />);
                     }
                     inner(self)?;
                     if let Some(Ok(c)) = right {
-                        node!(self !<mo "lspace"="0"; "rspace"="0"; class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(c),self.f)?} />);
+                        node!(self !<mo "lspace"="0"; "rspace"="0"; class="rustex-math-close" "stretchy"="true"; {Display::fmt(&Escaped(&c.into()),self.f)?} />);
                     }
                 }/>),
                 }
@@ -1357,7 +1433,7 @@ impl CompilationDisplay<'_, '_> {
                     }/>);
                 }
                 match accent {
-                    Ok(c) => node!(self !<mo "lspace"="0"; "rspace"="0"; "stretchy"="false"; {Display::fmt(&Escaped(c),self.f)?}/>),
+                    Ok(c) => node!(self !<mo "lspace"="0"; "rspace"="0"; "stretchy"="false"; {Display::fmt(&Escaped(&c.into()),self.f)?}/>),
                     Err((_,c,fnt)) =>
                         node!(self !<mtext class="rustex-missing" "title"=format_args!("Missing Glyph {c} in {fnt}");/>)
                 }
@@ -1706,7 +1782,7 @@ impl CompilationDisplay<'_, '_> {
         sref: &SourceRef,
         info: &VBoxInfo<Types>,
         children: &Vec<ShipoutNodeV>,
-        top: bool,
+        _top: bool,
     ) -> std::fmt::Result {
         //let (wd,ht,bottom,to) = get_box_dims_v(top,info);
         let (wd, ht, bottom, to) = get_box_dims_vtop(&info);
