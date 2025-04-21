@@ -215,7 +215,9 @@ pub(crate) fn add_box<ET: EngineTypes>(
             TeXMode::Vertical | TeXMode::InternalVertical => {
                 ET::Stomach::add_node_v(engine, VNode::Box(bx))?
             }
-            TeXMode::InlineMath | TeXMode::DisplayMath => ET::Stomach::add_node_m(engine, bx.to_math()),
+            TeXMode::InlineMath | TeXMode::DisplayMath => {
+                ET::Stomach::add_node_m(engine, bx.to_math())
+            }
         }
     }
     Ok(())
@@ -466,14 +468,14 @@ fn close_math<ET: EngineTypes>(engine: &mut EngineReferences<ET>) -> TeXResult<(
             engine.state.pop(engine.aux, engine.mouth);
             ET::Stomach::add_node_h(engine, HNode::MathGroup(group));
         }
-        _ => unreachable!(),
+        _ => engine.general_error("Unexpeced end of math mode".to_string())?,
     }
     Ok(())
 }
 
 fn close_group_in_m<ET: EngineTypes>(engine: &mut EngineReferences<ET>) -> TeXResult<(), ET> {
     let ls = engine.stomach.data_mut().open_lists.pop();
-    if ! engine.stomach.data_mut().mode().is_math() {
+    if !engine.stomach.data_mut().mode().is_math() {
         return Err(TeXError::TooManyCloseBraces);
     }
     match ls {
