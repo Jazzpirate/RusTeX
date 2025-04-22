@@ -468,7 +468,7 @@ fn close_math<ET: EngineTypes>(engine: &mut EngineReferences<ET>) -> TeXResult<(
             engine.state.pop(engine.aux, engine.mouth);
             ET::Stomach::add_node_h(engine, HNode::MathGroup(group));
         }
-        _ => engine.general_error("Unexpeced end of math mode".to_string())?,
+        _ => engine.general_error("Unexpected end of math mode".to_string())?,
     }
     Ok(())
 }

@@ -4,7 +4,7 @@ use crate::shipout::state::{
     Alignment, CharOrStr, Common, FontData, ShipoutNodeH, ShipoutNodeHRow, ShipoutNodeM,
     ShipoutNodeSVG, ShipoutNodeTable, ShipoutNodeV, SourceRef,
 };
-use crate::utils::{Flex, VecMap, VecSet};
+use crate::utils::{Flex, Margin, VecMap, VecSet};
 use crate::RUSTEX_CSS_URL;
 use std::borrow::Cow;
 use std::fmt::Write;
@@ -828,30 +828,8 @@ impl CompilationDisplay<'_, '_> {
                 sref,
                 children,
                 ..
-            } => {
-                let inner = move |s: &mut Self| {
-                    node!(s <math class="rustex-math" ref=sref {
-                    node!(s !<mrow {
-                        for c in children {
-                           s.do_indent()?;s.do_math(c,None/*,false */)?
-                        }
-                    }/>);
-                }/>);
-                    Ok(())
-                };
+            } => self.math_list(display, sref, children),
 
-                match display {
-                    Some((above, below)) => {
-                        node!(self <div class="rustex-display"
-                        style:"margin-top"=Self::dim_to_string(above.base);
-                        style:"margin-bottom"=Self::dim_to_string(below.base);{
-                        inner(self)?
-                    }/>);
-                        Ok(())
-                    }
-                    None => inner(self),
-                }
-            }
             ShipoutNodeH::Img(img) => match (&self.image, &img.img) {
                 (ImageOptions::AsIs, PDFImage::PDF(imgfile)) => {
                     let width = img.width().0;
@@ -913,6 +891,78 @@ impl CompilationDisplay<'_, '_> {
             MathClass::Open => "rustex-math-open",
             MathClass::Close => "rustex-math-close",
             MathClass::Punct => "rustex-math-punct",
+        }
+    }
+
+    fn math_list(
+        &mut self,
+        display: &Option<(Margin, Margin)>,
+        sref: &SourceRef,
+        children: &[ShipoutNodeM],
+    ) -> std::fmt::Result {
+        if children.len() == 1 {
+            if let Some((sref, width, children, ..)) = children.iter().find_map(|e| {
+                if let ShipoutNodeM::VCenter {
+                    sref,
+                    width,
+                    children,
+                    uses_font,
+                    uses_color,
+                } = e
+                {
+                    Some((sref, width, children, uses_font, uses_color))
+                } else {
+                    None
+                }
+            }) {
+                let oldwd = self.width;
+                node!(self <div style:{
+                style!("display"="inline-flex");
+                match *width {
+                    0 => style!("width"="0"),
+                    x if x > 0 => {
+                        self.width = *width;
+                        let wd = Self::dim_to_string(*width);
+                        style!("width"=wd);
+                        style!("--rustex-curr-width"=wd);
+                        style!("--rustex-this-width"=wd);
+                    }
+                    _ => ()
+                }
+            } {
+                node!(self <div class="rustex-vcenter-container" ref=sref {
+                    node!(self <div {
+                        for c in children {
+                            self.do_v(c,false)?;
+                        }
+                    } />)
+                }/>);
+            }/>);
+                self.width = oldwd;
+                return Ok(());
+            }
+        }
+        let inner = move |s: &mut Self| {
+            node!(s <math class="rustex-math" ref=sref {
+            node!(s !<mrow {
+                for c in children {
+                   s.do_indent()?;s.do_math(c,None/*,false */)?
+                }
+            }/>);
+        }/>);
+            Ok(())
+        };
+
+        match display {
+            Some((above, below)) => {
+                node!(self <div class="rustex-display"
+                style:"margin-top"=Self::dim_to_string(above.base);
+                style:"margin-bottom"=Self::dim_to_string(below.base);{
+                inner(self)?
+            }/>);
+                Ok(())
+            }
+            None => inner(self),
         }
     }
 
@@ -1026,6 +1076,7 @@ impl CompilationDisplay<'_, '_> {
                     }
                     let mi = matches!(class, MathClass::Ord);
                     let stretchy = display && matches!(class, MathClass::Op);
+
                     if mi {
                         node!(self <mi class=Self::cls(MathClass::Ord); {Display::fmt(&Escaped(&string.into()), self.f)?}/>);
                     } else if cramped {
@@ -1966,9 +2017,9 @@ impl Display for Escaped<'_> {
             //'\'' => self.f.write_str("&apos;"),
             Char(c) => f.write_char(*c),
             Str(s) if s.contains(TRIGGER) => f.write_str(
-                &s.replace('<', "&lt;")
-                    .replace('>', "&gt;")
-                    .replace('&', "&amp;"),
+                &s.replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;"),
             ),
             Str(s) => f.write_str(s),
         }
