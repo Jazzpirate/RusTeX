@@ -312,7 +312,7 @@ pub fn mathcode_set<ET: EngineTypes>(
 ) -> TeXResult<(), ET> {
     let char = engine.read_charcode(false, &tk)?;
     let mut val = engine.read_int(true, &tk)?.into();
-    if val < 0 || val > u32::MAX.into() {
+    if val < 0 || val > 32768 {
         engine.general_error(format!("Illegal mathcode {val}"))?;
         val = 0;
     }
@@ -358,8 +358,7 @@ pub fn r#char<ET: EngineTypes>(
 ) -> TeXResult<(), ET> {
     let char = engine.read_charcode(false, &tk)?;
     match engine.stomach.data_mut().mode() {
-        TeXMode::DisplayMath | TeXMode::InlineMath =>
-            ET::Stomach::do_char_in_math(engine, char),
+        TeXMode::DisplayMath | TeXMode::InlineMath => ET::Stomach::do_char_in_math(engine, char),
         _ => {
             let tk = <ET::Token as Token>::from_char_cat(char, CommandCode::Other);
             ET::Stomach::do_char(engine, tk, char, CommandCode::Other)
@@ -1883,7 +1882,7 @@ pub fn mathchar<ET: EngineTypes>(
     tk: ET::Token,
 ) -> TeXResult<(), ET> {
     let i = engine.read_int(false, &tk)?.into();
-    if i < 0 || i > u32::MAX as i64 {
+    if i < 0 || i > 32767 as i64 {
         return engine.general_error(format!("Illegal math char: {i}"));
     }
     let i = i as u32;
@@ -3489,7 +3488,7 @@ pub fn mathaccent<ET: EngineTypes>(
     tk: ET::Token,
 ) -> TeXResult<(), ET> {
     let i = engine.read_int(false, &tk)?.into();
-    if i < 0 || i > u32::MAX as i64 {
+    if i < 0 || i > 32767 as i64 {
         return Err(TeXError::General(format!("Illegal math accent number {i}")));
     }
     let char = MathChar::from_u32(i as u32, engine.state, None);

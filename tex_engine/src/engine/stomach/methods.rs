@@ -283,6 +283,10 @@ pub fn do_char<ET: EngineTypes>(
         CommandCode::MathShift => open_math(engine)?,
         CommandCode::Other | CommandCode::Letter /*if engine.stomach.data_mut().mode().is_math()*/ => {
             let code = engine.state.get_mathcode(char);
+            if code == 32768 {
+                engine.mouth.requeue(ET::Token::from_char_cat(char, CommandCode::Active));
+                return Ok(())
+            }
             ET::Stomach::do_mathchar(engine, code, Some(token))
         }
         CommandCode::Superscript if engine.stomach.data_mut().mode().is_math() => {

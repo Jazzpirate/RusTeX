@@ -323,7 +323,9 @@ pub trait Stomach<ET: EngineTypes /*<Stomach = Self>*/> {
                 TeXMode::Horizontal | TeXMode::RestrictedHorizontal => {
                     Self::add_node_h(engine, HNode::Whatsit(wi))
                 }
-                TeXMode::InlineMath | TeXMode::DisplayMath => Self::add_node_m(engine, MathNode::Whatsit(wi)),
+                TeXMode::InlineMath | TeXMode::DisplayMath => {
+                    Self::add_node_m(engine, MathNode::Whatsit(wi))
+                }
             }
         }
         Ok(())
@@ -847,7 +849,12 @@ impl<ET: EngineTypes> EngineReferences<'_, ET> {
             },
             ResolvedToken::Cmd(Some(TeXCommand::Primitive{cmd:PrimitiveCommand::Relax,..})) => (),
             ResolvedToken::Tk {char,code:CommandCode::Other | CommandCode::Letter} => {
-                let mc = MathChar::from_u32(self.state.get_mathcode(char),self.state, Some(char));
+                let code = self.state.get_mathcode(char);
+                if code == 32768 {
+                    self.mouth.requeue(ET::Token::from_char_cat(char, CommandCode::Active));
+                    continue
+                }
+                let mc = MathChar::from_u32(code,self.state, Some(char));
                 return f(s,self,mc)
             },
             ResolvedToken::Cmd(Some(TeXCommand::MathChar(u))) => {

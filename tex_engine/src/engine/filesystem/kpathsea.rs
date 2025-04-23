@@ -158,7 +158,7 @@ pub struct KpathseaBase {
     pub post: HMap<String, PathBuf>,
 }
 
-pub static LOG_KPATHSEA : std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static LOG_KPATHSEA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 impl KpathseaBase {
     fn new() -> KpathseaBase {
@@ -183,7 +183,7 @@ impl KpathseaBase {
             };
             if log {
                 println!("Variables:\n-------------------------");
-                for (k,v) in &vars {
+                for (k, v) in &vars {
                     println!("{k}:   {v}");
                 }
             }
@@ -192,7 +192,7 @@ impl KpathseaBase {
             if log {
                 println!("-------------------------\nScan paths:\n-------------------------");
                 for p in &paths {
-                    println!("{}",p);
+                    println!("{}", p);
                 }
             }
             let mut parser = PathParser {
@@ -210,22 +210,32 @@ impl KpathseaBase {
             }
 
             if log {
-                println!("-------------------------\nResolved variables:\n-------------------------");
-                for (k,v) in &parser.resolved_vars {
-                    let val = v.iter().map(|v| String::from_utf8_lossy(v)).collect::<Vec<_>>().join("; ");
+                println!(
+                    "-------------------------\nResolved variables:\n-------------------------"
+                );
+                for (k, v) in &parser.resolved_vars {
+                    let val = v
+                        .iter()
+                        .map(|v| String::from_utf8_lossy(v))
+                        .collect::<Vec<_>>()
+                        .join("; ");
                     println!("{k}:   {val}");
                 }
                 println!("-------------------------\nResolved paths:\n-------------------------");
-                for (p,b) in &parser.predot {
-                    println!("{} ({b})",p.display());
+                for (p, b) in &parser.predot {
+                    println!("{} ({b})", p.display());
                 }
-                for (p,b) in &parser.postdot {
-                    println!("{} ({b})",p.display());
+                for (p, b) in &parser.postdot {
+                    println!("{} ({b})", p.display());
                 }
                 println!("-------------------------\n");
             }
 
-            let r = if log {parser.close::<true>()} else {parser.close::<false>()};
+            let r = if log {
+                parser.close::<true>()
+            } else {
+                parser.close::<false>()
+            };
             if log {
                 println!("-------------------------\n");
             }
@@ -561,18 +571,18 @@ impl PathParser {
         }
         self.resolved_vars.get(key).unwrap()
     }
-    fn close<const LOG:bool>(self) -> (HMap<String, PathBuf>, bool, HMap<String, PathBuf>) {
+    fn close<const LOG: bool>(self) -> (HMap<String, PathBuf>, bool, HMap<String, PathBuf>) {
         (
             Self::close_i::<LOG>(self.predot),
             self.recdot,
             Self::close_i::<LOG>(self.postdot),
         )
     }
-    fn close_i<const LOG:bool>(v: Vec<(PathBuf, bool)>) -> HMap<String, PathBuf> {
+    fn close_i<const LOG: bool>(v: Vec<(PathBuf, bool)>) -> HMap<String, PathBuf> {
         let mut ret = HMap::default();
         for (p, rec) in v.into_iter().rev() {
             if LOG {
-                println!("Checking {} ({rec})",p.display());
+                println!("Checking {} ({rec})", p.display());
             }
             let len = p.to_str().unwrap().len() + 1;
             for e in walkdir::WalkDir::new(&p)
@@ -581,16 +591,25 @@ impl PathParser {
                 .into_iter()
                 .filter_map(|e| match e {
                     Err(e) if LOG => {
-                        println!("ERROR: {e}");None
+                        println!("ERROR: {e}");
+                        None
                     }
-                    Err(e) => None,
-                    Ok(s) if s.path().components().any(|c| c.as_os_str().to_str() == Some(".git")) => None,
+                    Err(_) => None,
+                    Ok(s)
+                        if s.path()
+                            .components()
+                            .any(|c| c.as_os_str().to_str() == Some(".git")) =>
+                    {
+                        None
+                    }
                     Ok(e) => Some(e),
                 })
             {
                 let sub = &e.path().to_str().unwrap()[len..];
                 if sub.contains('.') {
-                    if LOG { println!("Adding {} ({rec})",e.path().display()); }
+                    if LOG {
+                        println!("Adding {} ({rec})", e.path().display());
+                    }
                     let sub = sub.to_string();
                     let pb = e.path().to_path_buf();
                     if sub.ends_with(".tex") {

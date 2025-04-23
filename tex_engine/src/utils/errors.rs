@@ -70,6 +70,12 @@ pub enum TeXError<ET: EngineTypes> {
     EndInsideGroup,
      */
 }
+impl<ET: EngineTypes> From<String> for TeXError<ET> {
+    #[inline]
+    fn from(value: String) -> Self {
+        Self::General(value)
+    }
+}
 
 macro_rules! throw {
     ($aux:expr,$state:expr,$mouth:expr,$f:ident($($arg:expr),*) => $err:expr) => {{
