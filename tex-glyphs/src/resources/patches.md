@@ -98,7 +98,7 @@ For example, the first line in the table below tells us that the`.tfm` files `cm
 | MnSymbolS5, MnSymbolS6, MnSymbolS7, MnSymbolS8, MnSymbolS9, MnSymbolS10, MnSymbolE10, MnSymbolS12                                                                                                                                                                                      | S         |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | MnSymbolS-Bold5, MnSymbolS-Bold6, MnSymbolS-Bold7, MnSymbolS-Bold8, MnSymbolS-Bold9, MnSymbolS-Bold10, MnSymbolS-Bold12                                                                                                                                                                | bS        |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | cmex5, cmex6, cmex7, cmex8, cmex9, cmex10, cmex12                                                                                                                                                                                                                                      |           |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
-| cmmi5, cmmi6, cmmi7, cmmi8, cmmi9, cmmi10, cmmi12                                                                                                                                                                                                                                      | i         |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
+| cmmi5, cmmi6, cmmi7, cmmi8, cmmi9, cmmi10, cmmi12                                                                                                                                                                                                                                      | i         | cmmix             | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | cmmib5, cmmib6, cmmib7, cmmib8, cmmib9, cmmib10, cmmib12                                                                                                                                                                                                                               | ib        |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | cmssi5, cmssi6, cmssi7, cmssi8, cmssi9, cmssi10, cmssi12                                                                                                                                                                                                                               | is        |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | msbm5, msbm6, msbm7, msbm8, msbm9, msbm10                                                                                                                                                                                                                                              | B         |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
@@ -212,5 +212,27 @@ Before each table, a name is expected as a bullet point in a separate line, i.e.
 | **Dx** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
 | **Ex** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
 | **Fx** |          |      |            |      |        |              |        |       |   |         |        |           |              |      |       |           |
+
+- cmmix
+
+| \_x\_  | 0   | 1   | 2    | 3   | 4   | 5   | 6   | 7   | 8   | 9   | A       | B    | C    | D    | E     | F     |
+|--------|-----|-----|------|-----|-----|-----|-----|-----|-----|-----|---------|------|------|------|-------|-------|
+| **0x** | /Gamma | /Delta | /Theta | /Lambda | /Xi | /Pi | /Sigma | /Upsilon | /Phi | /Psi | /Omega  | /alpha | /beta | /gamma | /delta | /epsilon1 | 
+| **1x** | /zeta | /eta | /theta | /iota | /kappa | /lambda | /mu | /nu | /xi | /pi | /rho    | /sigma | /tau | /upsilon | /phi | /chi | 
+| **2x** | /psi | /omega | /epsilon | /theta1 | /pi1 | /rho1 | /sigma1 | /phi1 | || `⇀`    ||||/triangleright | /triangleleft | 
+| **3x** | /zerooldstyle | /oneoldstyle | /twooldstyle | /threeoldstyle | /fouroldstyle | /fiveoldstyle | /sixoldstyle | /sevenoldstyle | /eightoldstyle | /nineoldstyle | /period | /comma | /less | /slash | /greater | /star | 
+| **4x** | /partialdiff | /A | /B | /C | /D | /E | /F | /G | /H | /I | /J      | /K | /L | /M | /N | /O | 
+| **5x** | /P | /Q | /R | /S | /T | /U | /V | /W | /X | /Y | /Z      | /flat | /natural | /sharp | /slurbelow | /slurabove | 
+| **6x** | /lscript | /a | /b | /c | /d | /e | /f | /g | /h | /i | /j      | /k | /l | /m | /n | /o | 
+| **7x** | /p | /q | /r | /s | /t | /u | /v | /w | /x | /y | /z      | /dotlessi | /dotlessj | /weierstrass | /vector | /tie | 
+| **8x** | /psi | |||||||||         ||||||
+| **9x** | ||||||||||         ||||||
+| **Ax** | /space | /Gamma | /Delta | /Theta | /Lambda | /Xi | /Pi | /Sigma | /Upsilon | /Phi | /Psi    | ||/Omega | /alpha | /beta | 
+| **Bx** | /gamma | /delta | /epsilon1 | /zeta | /eta | /theta | /iota | /kappa | /lambda | /mu | /nu     | /xi | /pi | /rho | /sigma | /tau | 
+| **Cx** | /upsilon | /phi | /chi | /psi | /tie | |||||         ||||||
+| **Dx** | ||||||||||         ||||||
+| **Ex** | ||||||||||         ||||||
+| **Fx** | ||||||||||         ||||||
+
 
 <!--- END -->
