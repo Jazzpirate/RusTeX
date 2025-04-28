@@ -1423,7 +1423,7 @@ impl<ET: EngineTypes> MathChar<ET> {
                 )
             } else {
                 let char = (mathcode & 0xFF) as u8; // num % (16 * 16)
-                let fam = ((mathcode >> 8) & 0x7) as u8; // (rest % 16)
+                let fam = ((mathcode >> 8) & 0xF) as u8; // (rest % 16)
                 let rest_fam_shifted = (mathcode >> 12) & 0xF; // (((rest - fam) / 16) % 16)
                 (rest_fam_shifted as u8, fam, char)
             }
