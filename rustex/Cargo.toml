@@ -34,8 +34,11 @@ workspace = true
 multithreaded = ["tex_engine/multithreaded"]
 
 [dependencies]
-tex_engine = { workspace = true, features = ["pdflatex", "pdfium"] }
-tex-glyphs = { workspace = true }
+tex_engine = { workspace = true, version = "0.1.2", features = [
+    "pdflatex",
+    "pdfium",
+] }
+tex-glyphs = { workspace = true, version = "0.1.2" }
 env_logger = "0.11"
 log = { version = "0.4", features = ["kv_unstable"] }
 ansi_term = "0.12"
