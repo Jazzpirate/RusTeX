@@ -99,6 +99,7 @@ fn get_state(log: bool) -> (RusTeXState, MemoryManager<CompactToken>) {
                 commands::register_primitives_preinit(&mut engine);
                 engine.initialize_pdflatex().unwrap();
                 commands::register_primitives_postinit(&mut engine);
+                engine.init_file("rustex_defs.def").unwrap();
                 *n = Some((engine.state.clone(), engine.aux.memory.clone()));
                 FONT_SYSTEM.with(|f| f.lock().unwrap().replace(engine.fontsystem.clone()));
                 //println!("Initialized in {:?}", start.elapsed());

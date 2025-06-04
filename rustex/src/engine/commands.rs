@@ -7,7 +7,7 @@ use tex_engine::add_node;
 use tex_engine::commands::primitives::{register_simple_expandable, register_unexpandable};
 use tex_engine::commands::{CommandScope, PrimitiveCommand};
 use tex_engine::engine::mouth::Mouth;
-use tex_engine::engine::state::{GroupType, State};
+use tex_engine::engine::state::State;
 use tex_engine::engine::stomach::Stomach;
 use tex_engine::engine::DefaultEngine;
 use tex_engine::prelude::*;
@@ -36,10 +36,10 @@ pub fn register_primitives_preinit(engine: &mut DefaultEngine<Types>) {
 }
 
 pub fn register_primitives_postinit(engine: &mut DefaultEngine<Types>) {
-    register_command(engine, true, "LaTeX", "",
+    /*register_command(engine, true, "LaTeX", "",
                      "L\\kern-.3em\\raise.5ex\\hbox{\\check@mathfonts\\fontsize\\sf@size\\z@\\math@fontsfalse\\selectfont A}\\kern-.15em\\TeX",
                      true, false
-    );
+    );*/
     crate::engine::pgf::register_pgf(engine);
     register_unexpandable(
         engine,
@@ -87,8 +87,18 @@ pub fn register_primitives_postinit(engine: &mut DefaultEngine<Types>) {
         CommandScope::Any,
         invisible_end,
     );
-    register_unexpandable(engine, "underbrace", CommandScope::MathOnly, underbrace);
-    register_unexpandable(engine, "overbrace", CommandScope::MathOnly, overbrace);
+    register_unexpandable(
+        engine,
+        "rustex@@underbrace",
+        CommandScope::MathOnly,
+        underbrace,
+    );
+    register_unexpandable(
+        engine,
+        "rustex@@overbrace",
+        CommandScope::MathOnly,
+        overbrace,
+    );
     // if@rustex
     // rustex@directHTML
 }

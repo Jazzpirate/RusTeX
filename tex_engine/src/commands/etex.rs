@@ -17,7 +17,7 @@ use crate::tex::characters::CharacterMap;
 use crate::tex::nodes::math::MathAtom;
 use crate::tex::nodes::math::{MathNode, MathNucleus};
 use crate::tex::nodes::{NodeList, NodeTrait};
-use crate::tex::numerics::{MuSkip, NumSet, Numeric, Skip};
+use crate::tex::numerics::{MuSkip, NumSet, Numeric, Skip, StretchShrink};
 use crate::tex::tokens::control_sequences::{CSHandler, ResolvedCSName};
 use crate::tex::tokens::token_lists::{CharWrite, Otherize};
 use crate::tex::tokens::{StandardToken, Token};
@@ -750,6 +750,59 @@ pub fn splitbotmarks<ET: EngineTypes>(
     Ok(())
 }
 
+pub fn glueshrinkorder<ET: EngineTypes>(
+    engine: &mut EngineReferences<ET>,
+    tk: ET::Token,
+) -> TeXResult<ET::Int, ET> {
+    let dim = engine.read_skip(false, &tk)?;
+    Ok(match dim.shrink {
+        None | Some(StretchShrink::Dim(_)) => ET::Int::from(0),
+        Some(StretchShrink::Fil(_)) => ET::Int::from(1),
+        Some(StretchShrink::Fill(_)) => ET::Int::from(2),
+        Some(StretchShrink::Filll(_)) => ET::Int::from(2),
+    })
+}
+pub fn gluestretchorder<ET: EngineTypes>(
+    engine: &mut EngineReferences<ET>,
+    tk: ET::Token,
+) -> TeXResult<ET::Int, ET> {
+    let dim = engine.read_skip(false, &tk)?;
+    Ok(match dim.stretch {
+        None | Some(StretchShrink::Dim(_)) => ET::Int::from(0),
+        Some(StretchShrink::Fil(_)) => ET::Int::from(1),
+        Some(StretchShrink::Fill(_)) => ET::Int::from(2),
+        Some(StretchShrink::Filll(_)) => ET::Int::from(2),
+    })
+}
+pub fn glueshrink<ET: EngineTypes>(
+    engine: &mut EngineReferences<ET>,
+    tk: ET::Token,
+) -> TeXResult<ET::Dim, ET> {
+    use crate::tex::numerics::TeXDimen;
+    let dim = engine.read_skip(false, &tk)?;
+    Ok(match dim.shrink {
+        None => ET::Dim::default(),
+        Some(StretchShrink::Dim(d)) => d,
+        Some(StretchShrink::Fil(i)) => ET::Dim::from_sp(i),
+        Some(StretchShrink::Fill(i)) => ET::Dim::from_sp(i),
+        Some(StretchShrink::Filll(i)) => ET::Dim::from_sp(i),
+    })
+}
+pub fn gluestretch<ET: EngineTypes>(
+    engine: &mut EngineReferences<ET>,
+    tk: ET::Token,
+) -> TeXResult<ET::Dim, ET> {
+    use crate::tex::numerics::TeXDimen;
+    let dim = engine.read_skip(false, &tk)?;
+    Ok(match dim.stretch {
+        None => ET::Dim::default(),
+        Some(StretchShrink::Dim(d)) => d,
+        Some(StretchShrink::Fil(i)) => ET::Dim::from_sp(i),
+        Some(StretchShrink::Fill(i)) => ET::Dim::from_sp(i),
+        Some(StretchShrink::Filll(i)) => ET::Dim::from_sp(i),
+    })
+}
+
 const PRIMITIVE_INTS: &[&str] = &[
     "savinghyphcodes",
     "tracingassigns",
@@ -777,11 +830,15 @@ pub fn register_etex_primitives<E: TeXEngine>(engine: &mut E) {
     register_int(engine, "currentgrouptype", currentgrouptype, None);
     register_int(engine, "lastnodetype", lastnodetype, None);
     register_int(engine, "eTeXversion", eTeXversion, None);
+    register_int(engine, "glueshrinkorder", glueshrinkorder, None);
+    register_int(engine, "gluestretchorder", gluestretchorder, None);
 
     register_dim(engine, "fontchardp", fontchardp, None);
     register_dim(engine, "fontcharht", fontcharht, None);
     register_dim(engine, "fontcharwd", fontcharwd, None);
     register_dim(engine, "fontcharic", fontcharic, None);
+    register_dim(engine, "glueshrink", glueshrink, None);
+    register_dim(engine, "gluestretch", gluestretch, None);
 
     register_assignment(engine, "protected", |e, cmd, g| {
         protected(e, cmd, false, false, false, g)
@@ -818,10 +875,6 @@ pub fn register_etex_primitives<E: TeXEngine>(engine: &mut E) {
     cmtodo!(engine, displaywidowpenalties);
     cmtodo!(engine, endL);
     cmtodo!(engine, endR);
-    cmtodo!(engine, glueshrink);
-    cmtodo!(engine, glueshrinkorder);
-    cmtodo!(engine, gluestretch);
-    cmtodo!(engine, gluestretchorder);
     cmtodo!(engine, gluetomu);
     cmtodo!(engine, interlinepenalties);
     cmtodo!(engine, lastlinefit);

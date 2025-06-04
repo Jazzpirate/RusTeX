@@ -7,11 +7,13 @@ use tex_engine::utils::errors::TeXResult;
 use tex_engine::utils::Ptr;
 
 static PGFSYS: &str = include_str!("../resources/pgfsys.def");
+static RUSTEX_DEFS: &str = include_str!("../resources/patches.tex");
 
 #[derive(Clone)]
 pub struct RusTeXFileSystem {
     pub(crate) inner: NoOutputFileSystem<u8>,
     pub(crate) svg: (<VirtualFile<u8> as File>::SourceRefID, Ptr<[TextLine<u8>]>),
+    pub(crate) defs: (<VirtualFile<u8> as File>::SourceRefID, Ptr<[TextLine<u8>]>),
 }
 impl RusTeXFileSystem {
     pub fn new_with_envs<I: IntoIterator<Item = (String, String)>>(pwd: PathBuf, envs: I) -> Self {
@@ -19,9 +21,11 @@ impl RusTeXFileSystem {
         ret.inner.envs.extend(envs);
         ret
     }
+
     pub fn add_file(&mut self, path: PathBuf, file_content: &str) {
         self.inner.add_file(path, file_content);
     }
+
     pub fn add_envs<I: IntoIterator<Item = (String, String)>>(&mut self, envs: I) {
         self.inner.envs.extend(envs);
     }
@@ -32,14 +36,19 @@ impl FileSystem for RusTeXFileSystem {
 
     fn new(pwd: PathBuf) -> Self {
         let mut inner = NoOutputFileSystem::new(pwd);
-        let id = inner
+        let svg_id = inner
             .interner
             .get_or_intern("<TEXINPUTS>/pgfsys-rustex.def");
+        let ext_id = inner.interner.get_or_intern("<TEXINPUTS>/rustex_defs.def");
         Self {
             inner,
             svg: (
-                Some(id),
+                Some(svg_id),
                 StringLineSource::make_lines(PGFSYS.as_bytes().iter().copied()).into(),
+            ),
+            defs: (
+                Some(ext_id),
+                StringLineSource::make_lines(RUSTEX_DEFS.as_bytes().iter().copied()).into(),
             ),
         }
     }
@@ -56,6 +65,14 @@ impl FileSystem for RusTeXFileSystem {
                 pipe: false,
                 exists: true,
                 source: Some(self.svg.1.clone()),
+            }
+        } else if sr.ends_with("rustex_defs.def") {
+            VirtualFile {
+                path: self.inner.kpse.pwd.join("rustex_defs.def"),
+                id: self.defs.0,
+                pipe: false,
+                exists: true,
+                source: Some(self.defs.1.clone()),
             }
         } else {
             self.inner.get(sr)

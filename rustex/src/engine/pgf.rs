@@ -14,7 +14,6 @@ use tex_engine::tex::nodes::horizontal::HNode;
 use tex_engine::tex::nodes::math::{MathAtom, MathKernel, MathNode, MathNucleus};
 use tex_engine::tex::nodes::vertical::VNode;
 use tex_engine::tex::tokens::CompactToken;
-use tex_engine::utils::HMap;
 
 pub(crate) fn register_pgf(engine: &mut DefaultEngine<Types>) {
     register_command(

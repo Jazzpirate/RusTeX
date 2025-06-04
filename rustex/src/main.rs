@@ -2,15 +2,15 @@
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-use RusTeX::engine::{RusTeXEngine, RusTeXEngineT, Settings};
+use rustex_lib::engine::{RusTeXEngine, RusTeXEngineT, Settings};
 
 use clap::Parser;
+use rustex_lib::engine::files::RusTeXFileSystem;
+use rustex_lib::engine::output::RusTeXOutput;
+use rustex_lib::engine::Types;
 use std::path::{Path, PathBuf};
 use tex_engine::engine::{DefaultEngine, TeXEngine};
 use tex_engine::pdflatex::commands::register_pdftex_primitives;
-use RusTeX::engine::files::RusTeXFileSystem;
-use RusTeX::engine::output::RusTeXOutput;
-use RusTeX::engine::Types;
 
 /*
 notes   5:31
@@ -235,7 +235,7 @@ fn profile() {
     println!("Profiling...");
     //env_logger::builder().filter_level(log::LevelFilter::Info).try_init();
     let mut engine = DefaultEngine::<Types>::default();
-    RusTeX::engine::commands::register_primitives_preinit(&mut engine);
+    rustex_lib::engine::commands::register_primitives_preinit(&mut engine);
     engine.aux.outputs = RusTeXOutput::Print(false);
     engine.initialize_etex_primitives();
     register_pdftex_primitives(&mut engine);
@@ -365,7 +365,7 @@ fn run() {
 
 fn test_latex_ltx() {
     let mut engine = DefaultEngine::<Types>::default();
-    RusTeX::engine::commands::register_primitives_preinit(&mut engine);
+    rustex_lib::engine::commands::register_primitives_preinit(&mut engine);
 
     //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingcommands,1,true);
     //engine.state.set_primitive_int(&mut engine.aux,PRIMITIVES.tracingifs,1,true);

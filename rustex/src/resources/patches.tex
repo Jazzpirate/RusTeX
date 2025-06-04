@@ -1,0 +1,14 @@
+\RequirePackage{filehook}
+\makeatletter
+\protected\def\LaTeX{L\kern-.3em\raise.5ex\hbox{\check@mathfonts\fontsize\sf@size\z@\math@fontsfalse\selectfont A}\kern-.15em\TeX}
+\let\underbrace\rustex@@underbrace
+\let\overbrace\rustex@@overbrace
+\AtEndOfPackageFile{framed}{
+    \renewenvironment{framed}{%
+        \par
+        \rustex@HTMLNode{div}{style:display="inline-block" style:border="1px solid black"}%
+    }{%
+        \par\rustex@annotateHTMLEnd
+    }
+}
+\makeatother

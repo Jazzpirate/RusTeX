@@ -1,6 +1,5 @@
 use crate::engine::state::RusTeXState;
 use crate::engine::{Font, SRef, Types};
-use crate::shipout::utils::MNode;
 use crate::utils::{VecMap, VecSet};
 use tex_engine::commands::primitives::PRIMITIVES;
 use tex_engine::engine::state::State;

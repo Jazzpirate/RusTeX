@@ -1,7 +1,7 @@
 # Patches for font-glyph-maps
 
 This crate tries to map codepoints in `.tfm` files to actual unicode characters. It does
-so by parsing the `pdftex.map` file, which contains a list of properties for each 
+so by parsing the `pdftex.map` file, which contains a list of properties for each
 `.tfm` file; in particular, it lists a `.enc` file and/or a `.pfa` or `.pfb` file.
 These contain (ideally) glyph names for each glyph in the font, which is then mapped to
 a unicode character by using the `glyphs.map` file, which contains a list of
@@ -16,8 +16,8 @@ values where the automatic process fails, in a conveniently human-readable and e
 format.
 
 Additionally, for some purposes - such as HTML conversion - we also want to know
-the "**font modifiers**" (bold, italic, smallcaps, etc.) of a `.tfm` font. 
-These are largely inferred from the name and/or potentially listed properties in the 
+the "**font modifiers**" (bold, italic, smallcaps, etc.) of a `.tfm` font.
+These are largely inferred from the name and/or potentially listed properties in the
 `.pfa` or `.pfb` file, but this is based on heuristics and might be wrong.
 
 This very file is parsed *at compile time* to generate the relevant code reflecting
@@ -38,12 +38,12 @@ The following table maps `.tfm` filenames to:
   - `f`: fraktur
 - A glyph table name listed below (optional), if we want to override the one
   generated from the `.pfb` or `.enc` file listed in the `.map` file
-- A font name and link to an external URL providing the font, e.g. for usage in 
+- A font name and link to an external URL providing the font, e.g. for usage in
   HTML (optional)
 
 Multiple `.tfm` filenames are allowed; separated by `,`; leading whitespaces are ignored.
 
-For example, the first line in the table below tells us that the`.tfm` files `cmssbx12`, `cmssbx17`, 
+For example, the first line in the table below tells us that the`.tfm` files `cmssbx12`, `cmssbx17`,
 `cmssbx8`, and `cmssbx9` are all bold sans-serif fonts (`bs`), use the glyph table `computer modern 1`
 (see next section), and are available as the web-compatible font `Latin Modern Sans` at the given URL.
 
@@ -95,6 +95,7 @@ For example, the first line in the table below tells us that the`.tfm` files `cm
 | ec-lmcsco10                                                                                                                                                                                                                                                                            | co        |                   | LMRomanCaps10 https://fonts.cdnfonts.com/css/latin-modern-roman                                                                                                    |
 | ec-lmtt8, ec-lmtt9, ec-lmtt10, ec-lmtt12, rm-lmtt8, rm-lmtt9, rm-lmtt10, rm-lmtt12                                                                                                                                                                                                     | m         |                   | LMMono10 https://fonts.cdnfonts.com/css/latin-modern-mono                                                                                                          |
 | ec-lmtti10                                                                                                                                                                                                                                                                             | mi        |                   | LMMonoSlant10 https://fonts.cdnfonts.com/css/latin-modern-mono                                                                                                     |
+| MnSymbolD9, MnSymbolD10, MnSymbolE7, MnSymbolF9, MnSymbolF10, MnSymbolC9, MnSymbolC10, MnSymbolC7                                                                                                                                                                                                   |           |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | MnSymbolS5, MnSymbolS6, MnSymbolS7, MnSymbolS8, MnSymbolS9, MnSymbolS10, MnSymbolE10, MnSymbolS12                                                                                                                                                                                      | S         |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | MnSymbolS-Bold5, MnSymbolS-Bold6, MnSymbolS-Bold7, MnSymbolS-Bold8, MnSymbolS-Bold9, MnSymbolS-Bold10, MnSymbolS-Bold12                                                                                                                                                                | bS        |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
 | cmex5, cmex6, cmex7, cmex8, cmex9, cmex10, cmex12                                                                                                                                                                                                                                      |           |                   | Latin Modern Math https://fonts.cdnfonts.com/css/latin-modern-math                                                                                                 |
@@ -174,7 +175,7 @@ Before each table, a name is expected as a bullet point in a separate line, i.e.
 - PostScript Standard Encoding
 
 | \_x\_  | 0      | 1      | 2      | 3      | 4      | 5      | 6      | 7      | 8      | 9      | A      | B      | C      | D      | E      | F      |
-|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------| 
+|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|--------|
 | **0x** | \u0000 | \u0001 | \u0002 | \u0003 | \u0004 | \u0005 | \u0006 | \u0007 | \u0008 | \u0009 | \u000A | \u000B | \u000C | \u000D | \u000E | \u000F |
 | **1x** | \u0010 | \u0011 | \u0012 | \u0013 | \u0014 | \u0015 | \u0016 | \u0017 | \u0018 | \u0019 | \u001A | \u001B | \u001C | \u001D | \u001E | \u001F |
 | **2x** | ` `    | `!`    | `"`    | `#`    | `$`    | `%`    | `&`    | `'`    | `(`    | `)`    | `*`    | `+`    | `,`    | `-`    | `.`    | `/`    |
@@ -217,18 +218,18 @@ Before each table, a name is expected as a bullet point in a separate line, i.e.
 
 | \_x\_  | 0   | 1   | 2    | 3   | 4   | 5   | 6   | 7   | 8   | 9   | A       | B    | C    | D    | E     | F     |
 |--------|-----|-----|------|-----|-----|-----|-----|-----|-----|-----|---------|------|------|------|-------|-------|
-| **0x** | /Gamma | /Delta | /Theta | /Lambda | /Xi | /Pi | /Sigma | /Upsilon | /Phi | /Psi | /Omega  | /alpha | /beta | /gamma | /delta | /epsilon1 | 
-| **1x** | /zeta | /eta | /theta | /iota | /kappa | /lambda | /mu | /nu | /xi | /pi | /rho    | /sigma | /tau | /upsilon | /phi | /chi | 
-| **2x** | /psi | /omega | /epsilon | /theta1 | /pi1 | /rho1 | /sigma1 | /phi1 | || `⇀`    ||||/triangleright | /triangleleft | 
-| **3x** | /zerooldstyle | /oneoldstyle | /twooldstyle | /threeoldstyle | /fouroldstyle | /fiveoldstyle | /sixoldstyle | /sevenoldstyle | /eightoldstyle | /nineoldstyle | /period | /comma | /less | /slash | /greater | /star | 
-| **4x** | /partialdiff | /A | /B | /C | /D | /E | /F | /G | /H | /I | /J      | /K | /L | /M | /N | /O | 
-| **5x** | /P | /Q | /R | /S | /T | /U | /V | /W | /X | /Y | /Z      | /flat | /natural | /sharp | /slurbelow | /slurabove | 
-| **6x** | /lscript | /a | /b | /c | /d | /e | /f | /g | /h | /i | /j      | /k | /l | /m | /n | /o | 
-| **7x** | /p | /q | /r | /s | /t | /u | /v | /w | /x | /y | /z      | /dotlessi | /dotlessj | /weierstrass | /vector | /tie | 
+| **0x** | /Gamma | /Delta | /Theta | /Lambda | /Xi | /Pi | /Sigma | /Upsilon | /Phi | /Psi | /Omega  | /alpha | /beta | /gamma | /delta | /epsilon1 |
+| **1x** | /zeta | /eta | /theta | /iota | /kappa | /lambda | /mu | /nu | /xi | /pi | /rho    | /sigma | /tau | /upsilon | /phi | /chi |
+| **2x** | /psi | /omega | /epsilon | /theta1 | /pi1 | /rho1 | /sigma1 | /phi1 | || `⇀`    ||||/triangleright | /triangleleft |
+| **3x** | /zerooldstyle | /oneoldstyle | /twooldstyle | /threeoldstyle | /fouroldstyle | /fiveoldstyle | /sixoldstyle | /sevenoldstyle | /eightoldstyle | /nineoldstyle | /period | /comma | /less | /slash | /greater | /star |
+| **4x** | /partialdiff | /A | /B | /C | /D | /E | /F | /G | /H | /I | /J      | /K | /L | /M | /N | /O |
+| **5x** | /P | /Q | /R | /S | /T | /U | /V | /W | /X | /Y | /Z      | /flat | /natural | /sharp | /slurbelow | /slurabove |
+| **6x** | /lscript | /a | /b | /c | /d | /e | /f | /g | /h | /i | /j      | /k | /l | /m | /n | /o |
+| **7x** | /p | /q | /r | /s | /t | /u | /v | /w | /x | /y | /z      | /dotlessi | /dotlessj | /weierstrass | /vector | /tie |
 | **8x** | /psi | |||||||||         ||||||
 | **9x** | ||||||||||         ||||||
-| **Ax** | /space | /Gamma | /Delta | /Theta | /Lambda | /Xi | /Pi | /Sigma | /Upsilon | /Phi | /Psi    | ||/Omega | /alpha | /beta | 
-| **Bx** | /gamma | /delta | /epsilon1 | /zeta | /eta | /theta | /iota | /kappa | /lambda | /mu | /nu     | /xi | /pi | /rho | /sigma | /tau | 
+| **Ax** | /space | /Gamma | /Delta | /Theta | /Lambda | /Xi | /Pi | /Sigma | /Upsilon | /Phi | /Psi    | ||/Omega | /alpha | /beta |
+| **Bx** | /gamma | /delta | /epsilon1 | /zeta | /eta | /theta | /iota | /kappa | /lambda | /mu | /nu     | /xi | /pi | /rho | /sigma | /tau |
 | **Cx** | /upsilon | /phi | /chi | /psi | /tie | |||||         ||||||
 | **Dx** | ||||||||||         ||||||
 | **Ex** | ||||||||||         ||||||
