@@ -2,6 +2,14 @@
 name = "rustex_lib"
 version = "0.1.0"
 edition = "2021"
+authors = ["Dennis Müller <d.mueller@kwarc.info>"]
+description = "A crate for converting TeX/pdfTeX to HTML"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/FlexiFormal/RusTeX/tree/main/tex-glyphs"
+keywords = ["tex", "latex", "rustex"]
+readme = "README.md"
+categories = ["encoding", "data-structures"]
+exclude = [".idea/*", "build.rs", "resources/*", "target/*"]
 
 [lib]
 crate-type = ["lib"]
